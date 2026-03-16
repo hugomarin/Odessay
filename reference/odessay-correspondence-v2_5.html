@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odessay — Correspondence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      hsl(38,12%,98%);
+  --sb:      hsl(0,0%,100%);
+  --muted:   hsl(38,8%,93%);
+  --muted-h: hsl(38,8%,90%);
+  --border:  hsl(38,8%,90%);
+  --ink:     hsl(25,18%,10%);
+  --ink-2:   hsl(25,12%,22%);
+  --ink-3:   hsl(25,10%,38%);
+  --ink-4:   hsl(25,8%,52%);
+  --cursor:  hsl(22,55%,38%);
+}
+html, body { height: 100%; background: var(--bg); font-family: system-ui,-apple-system,sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar { width: 292px; flex-shrink: 0; background: var(--sb); border-right: 0.5px solid var(--border); display: flex; flex-direction: column; overflow: hidden; transition: width 0.3s cubic-bezier(0.4,0,0.15,1); min-width: 0; }
+.sb-bottom { overflow: hidden; }
+.sidebar.mini { width: 52px; }
+.sidebar.mini .sb-logo { opacity: 0; width: 0; overflow: hidden; }
+.sidebar.mini .btn-new { justify-content: center; padding: 0; width: 32px; height: 32px; border-radius: 8px; background: var(--ink); color: white; margin: 0 auto; }
+.sidebar.mini .btn-new-label { opacity: 0; width: 0; overflow: hidden; display: none; }
+.sidebar.mini .nav-label { opacity: 0; width: 0; overflow: hidden; display: none; }
+.sidebar.mini .nav-item { justify-content: center; padding: 10px 0; gap: 0; }
+.sidebar.mini .nav-chev { opacity: 0; width: 0; overflow: hidden; display: none; }
+.sidebar.mini .sub-items { display: none; }
+.sidebar.mini .section-lbl { opacity: 0; height: 0; padding: 0; overflow: hidden; }
+.sidebar.mini .recent-item { display: none; }
+.sidebar.mini .user-info { opacity: 0; width: 0; overflow: hidden; display: none; }
+.sidebar.mini .user-bar { justify-content: center; padding: 4px; margin: 0 auto; }
+.sidebar.mini .user-bar svg { display: none; }
+.sidebar.mini .sb-bottom { padding: 8px 0; display: flex; justify-content: center; }
+.sidebar.mini .sb-actions { padding: 8px 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.sb-top { height: 46px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.sb-logo { font-family: 'Lora',serif; font-size: 17px; color: var(--ink); white-space: nowrap; transition: opacity 0.25s; }
+.icon-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; color: var(--ink-3); background: transparent; border: none; transition: background 0.12s; flex-shrink: 0; }
+.icon-btn:hover { background: var(--muted-h); }
+.sb-actions { padding: 8px 10px; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.btn-new { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 8px; background: transparent; color: var(--ink); border: none; cursor: pointer; font-family: system-ui; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; transition: background 0.18s; }
+.btn-new:hover { background: var(--muted-h); }
+.btn-new-label { transition: opacity 0.25s; }
+.nav-scroll { flex: 1; overflow-y: auto; padding: 6px 10px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 15px; color: var(--ink-2); white-space: nowrap; overflow: hidden; transition: background 0.18s, color 0.18s; }
+.nav-item:hover { background: var(--muted-h); }
+.nav-item.active { background: var(--muted); color: var(--ink); font-weight: 500; }
+.nav-label { transition: opacity 0.25s; flex: 1; }
+.nav-chev { color: var(--ink-4); transition: transform 0.28s cubic-bezier(0.4,0,0.15,1); flex-shrink: 0; }
+.nav-item.open .nav-chev { transform: rotate(90deg); }
+.sub-items { overflow: hidden; max-height: 0; transition: max-height 0.32s cubic-bezier(0.4,0,0.15,1); }
+.sub-items.open { max-height: 200px; }
+.sub-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 34px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink-3); transition: background 0.15s, color 0.15s; }
+.sub-item:hover { background: var(--muted-h); color: var(--ink-2); }
+.sub-item.active { color: var(--ink-2); font-weight: 500; background: transparent; }
+.section-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); padding: 12px 10px 4px; }
+.recent-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; transition: background 0.15s; }
+.recent-item:hover { background: var(--muted-h); }
+.recent-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sb-bottom { flex-shrink: 0; border-top: 0.5px solid var(--border); padding: 8px 10px; }
+.user-bar { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background 0.12s; }
+.user-bar:hover { background: var(--muted-h); }
+.av-sm { width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.user-info { flex: 1; overflow: hidden; transition: opacity 0.25s; }
+.user-name { font-size: 13px; font-weight: 500; color: var(--ink); }
+
+/* ── Main ── */
+.main { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+/* ── Topbar ── */
+.topbar { height: 46px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; padding: 0 32px; justify-content: space-between; flex-shrink: 0; background: var(--bg); }
+.tb-left { display: flex; align-items: center; gap: 10px; }
+.tb-back { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; transition: color 0.15s; }
+.tb-back:hover { color: var(--ink-3); }
+.tb-div { width: 0.5px; height: 14px; background: var(--border); }
+.tb-title { font-family: 'Lora', serif; font-size: 15px; color: var(--ink-2); }
+.tb-right { display: flex; align-items: center; gap: 8px; }
+.tb-pill { display: flex; align-items: center; gap: 5px; padding: 0 10px; height: 26px; border-radius: 13px; font-size: 11px; font-weight: 500; font-family: system-ui; white-space: nowrap; }
+.tb-pill.your-turn { background: hsl(22,55%,92%); color: var(--cursor); }
+
+/* ── Participants bar ── */
+.part-bar { height: 46px; padding: 0 32px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; background: var(--sb); }
+.part-left { display: flex; align-items: center; gap: 10px; }
+.part-avatars { display: flex; }
+.part-av { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: white; border: 2px solid var(--sb); margin-left: -7px; flex-shrink: 0; }
+.part-av:first-child { margin-left: 0; }
+.part-names { font-size: 13px; color: var(--ink-3); font-family: system-ui; }
+.part-right { display: flex; align-items: center; gap: 16px; }
+.part-stat { font-size: 12px; color: var(--ink-4); font-family: system-ui; }
+.part-stat b { color: var(--ink-3); font-weight: 500; }
+
+/* ── Sequence view (horizontal scroll of mini-docs) ── */
+.sequence-view { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+.seq-scroll-area { flex: 1; overflow-y: auto; padding: 32px 32px 48px; }
+
+/* Timeline connector */
+.seq-timeline { display: flex; align-items: flex-start; gap: 0; position: relative; }
+.seq-line { position: absolute; left: 20px; top: 32px; bottom: 0; width: 0.5px; background: var(--border); z-index: 0; }
+
+.seq-list { display: flex; flex-direction: column; gap: 0; width: 100%; max-width: 680px; margin: 0 auto; }
+
+/* Mini document card */
+.mini-doc {
+  display: flex; gap: 20px; align-items: flex-start;
+  padding: 0 0 32px 0; position: relative; z-index: 1;
+  cursor: pointer;
+}
+.mini-doc:last-of-type { padding-bottom: 0; }
+
+/* Avatar column */
+.md-avatar-col { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 0; }
+.md-av { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; border: 3px solid var(--bg); transition: transform 0.18s; }
+.mini-doc:hover .md-av { transform: scale(1.05); }
+
+/* Document card */
+.md-card {
+  flex: 1; max-width: 560px;
+  background: var(--sb); border: 0.5px solid var(--border);
+  border-radius: 10px; overflow: hidden;
+  transition: box-shadow 0.22s, border-color 0.22s, transform 0.22s;
+}
+.mini-doc:hover .md-card {
+  border-color: hsl(38,8%,78%);
+  box-shadow: 0 6px 32px 0 hsla(25,18%,12%,0.08);
+  transform: translateY(-1px);
+}
+.md-card.mine { }
+.md-card.unread { }
+
+/* Card top */
+.md-card-top { padding: 20px 24px 16px; }
+.md-byline { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.md-author { font-size: 13px; font-weight: 600; color: var(--ink-2); font-family: system-ui; display: flex; align-items: center; gap: 6px; }
+.md-mine-tag { font-size: 10px; font-weight: 500; color: var(--cursor); background: hsl(22,55%,93%); padding: 1px 6px; border-radius: 4px; }
+.md-new-tag { font-size: 10px; font-weight: 600; color: hsl(220,50%,40%); background: hsl(220,50%,92%); padding: 1px 6px; border-radius: 4px; }
+.md-date { font-size: 11px; color: var(--ink-4); font-family: system-ui; }
+.md-title { font-family: 'Lora', serif; font-size: 22px; font-weight: 500; color: var(--ink); line-height: 1.2; margin-bottom: 10px; }
+.md-excerpt { font-family: system-ui, sans-serif; font-size: 14px; color: var(--ink-2); line-height: 1.65; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Card bottom */
+.md-card-bottom { padding: 12px 24px; border-top: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: transparent; }
+.md-meta { display: flex; align-items: center; gap: 10px; }
+.md-words { font-size: 12px; color: var(--ink-3); font-family: system-ui; }
+.md-open { font-size: 12px; font-weight: 500; color: var(--ink-3); font-family: system-ui; display: flex; align-items: center; gap: 5px; transition: color 0.15s; }
+.mini-doc:hover .md-open { color: var(--ink-2); }
+
+/* Reply card */
+.reply-card {
+  display: flex; gap: 20px; align-items: flex-start;
+  padding-top: 8px; position: relative; z-index: 1;
+}
+.reply-doc {
+  flex: 1; max-width: 560px;
+  border: 0.5px dashed var(--border);
+  border-radius: 10px; padding: 20px;
+  background: transparent; cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, transform 0.18s;
+}
+.reply-doc:hover { border-color: var(--cursor); background: white; transform: translateY(-1px); }
+.reply-inner { display: flex; align-items: center; gap: 14px; }
+.reply-text { font-family: 'Lora', serif; font-size: 14px; font-style: italic; color: var(--ink-4); flex: 1; line-height: 1.5; }
+.reply-doc:hover .reply-text { color: var(--ink-3); }
+.reply-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 18px; border-radius: 9px;
+  background: var(--cursor); color: white; border: none;
+  font-size: 13px; font-weight: 500; font-family: system-ui;
+  cursor: pointer; white-space: nowrap;
+  transition: opacity 0.15s; flex-shrink: 0;
+}
+.reply-btn:hover { opacity: 0.88; }
+
+/* ── Reading view (full screen) ── */
+.reading-view {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  display: none; flex-direction: column;
+  animation: readIn 0.3s cubic-bezier(0.4,0,0.15,1) both;
+}
+.reading-view.open { display: flex; }
+
+@keyframes readIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Reading chrome */
+.reading-chrome {
+  height: 46px; border-bottom: 0.5px solid var(--border);
+  display: flex; align-items: center; padding: 0 40px;
+  justify-content: space-between; flex-shrink: 0;
+  background: var(--bg);
+}
+.reading-back { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; transition: color 0.15s; }
+.reading-back:hover { color: var(--ink-3); }
+.reading-nav { display: flex; align-items: center; gap: 12px; }
+.reading-nav-btn { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-4); background: transparent; border: none; cursor: pointer; font-family: system-ui; padding: 5px 10px; border-radius: 7px; transition: background 0.12s, color 0.12s; }
+.reading-nav-btn:hover { background: var(--muted); color: var(--ink-2); }
+.reading-nav-pos { font-size: 12px; color: var(--ink-4); font-family: system-ui; }
+.reading-tools { display: flex; align-items: center; gap: 6px; }
+.reading-tool { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 7px; border: none; background: transparent; cursor: pointer; color: var(--ink-4); transition: background 0.12s, color 0.12s; }
+.reading-tool:hover { background: var(--muted); color: var(--ink-2); }
+.reading-tool.active { background: var(--muted); color: var(--ink); }
+
+/* Reading content */
+.reading-content { flex: 1; overflow-y: auto; }
+.reading-inner { max-width: 680px; margin: 0 auto; padding: 60px 40px 80px; }
+
+/* Author block */
+.reading-author { display: flex; align-items: center; gap: 12px; margin-bottom: 40px; }
+.reading-av { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white; flex-shrink: 0; }
+.reading-author-name { font-size: 14px; font-weight: 500; color: var(--ink-2); font-family: system-ui; }
+.reading-author-date { font-size: 13px; color: var(--ink-4); font-family: system-ui; margin-top: 1px; }
+
+/* Reading typography */
+.reading-title { font-family: 'Lora', serif; font-size: 32px; font-weight: 500; color: var(--ink); line-height: 1.18; letter-spacing: -0.02em; margin-bottom: 36px; }
+.reading-body { font-family: system-ui, sans-serif; font-size: 18px; line-height: 1.85; color: var(--ink); }
+.reading-body p { margin-bottom: 1.6em; }
+.reading-body p:last-child { margin-bottom: 0; }
+.reading-body blockquote { border-left: 2px solid var(--ink-3); margin: 1.8em 0; padding: 0.3em 0 0.3em 1.4em; color: var(--ink-2); font-family: 'Lora', serif; font-style: italic; font-size: 19px; }
+
+/* Margin notes panel */
+.margin-panel { width: 0; flex-shrink: 0; overflow: hidden; transition: width 0.3s cubic-bezier(0.4,0,0.15,1); border-left: 0.5px solid var(--border); background: var(--sb); }
+.margin-panel.open { width: 260px; }
+.margin-inner { width: 260px; padding: 20px 16px; }
+.margin-title { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 14px; font-family: system-ui; }
+.margin-note { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 0.5px solid var(--border); }
+.margin-note:last-child { border-bottom: none; }
+.margin-quote { font-family: 'Lora', serif; font-size: 12px; font-style: italic; color: var(--ink-4); margin-bottom: 6px; line-height: 1.5; border-left: 2px solid var(--border); padding-left: 8px; }
+.margin-text { font-size: 12px; color: var(--ink-2); line-height: 1.5; font-family: system-ui; }
+.margin-add { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; padding: 6px 0; transition: color 0.12s; }
+.margin-add:hover { color: var(--ink-3); }
+
+/* Reading layout */
+.reading-main { display: flex; flex: 1; overflow: hidden; }
+.reading-scroll { flex: 1; overflow-y: auto; }
+
+/* Highlight simulation */
+.hl { background: hsl(45,90%,88%); border-radius: 2px; cursor: pointer; }
+.hl:hover { background: hsl(45,90%,80%); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* ── Margins & Highlights ── */
+
+/* Selection popup */
+.selection-popup {
+  position: fixed; z-index: 300;
+  background: var(--ink); border-radius: 9px;
+  padding: 5px 4px; display: none;
+  gap: 2px; align-items: center;
+  box-shadow: 0 4px 20px 0 hsla(25,18%,12%,0.18);
+  animation: popIn 0.15s cubic-bezier(0.4,0,0.15,1) both;
+}
+.selection-popup.visible { display: flex; }
+@keyframes popIn { from{opacity:0;transform:translateY(4px)scale(0.95)} to{opacity:1;transform:translateY(0)scale(1)} }
+.sel-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 6px; border: none;
+  background: transparent; color: white; cursor: pointer;
+  font-size: 12px; font-weight: 500; font-family: system-ui;
+  white-space: nowrap; transition: background 0.12s;
+}
+.sel-btn:hover { background: hsla(255,255%,255%,0.12); }
+.sel-divider { width: 0.5px; height: 18px; background: hsla(255,255%,255%,0.15); margin: 0 2px; }
+
+/* Highlights in text */
+.hl {
+  background: hsl(45,90%,86%); border-radius: 2px;
+  cursor: pointer; position: relative;
+  transition: background 0.12s;
+}
+.hl:hover { background: hsl(45,90%,78%); }
+.hl.has-note { border-bottom: 1.5px solid hsl(35,70%,55%); }
+
+/* Inline margin note (appears in reading panel) */
+.margin-panel { width: 0; flex-shrink: 0; overflow: hidden; transition: width 0.32s cubic-bezier(0.4,0,0.15,1); border-left: 0.5px solid var(--border); background: var(--sb); }
+.margin-panel.open { width: 280px; }
+.margin-inner { width: 280px; padding: 24px 18px; overflow-y: auto; height: 100%; }
+.margin-panel-title { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 20px; font-family: system-ui; display: flex; align-items: center; justify-content: space-between; }
+.margin-count { font-size: 10px; font-weight: 700; background: var(--muted); color: var(--ink-4); padding: 1px 6px; border-radius: 10px; letter-spacing: 0; text-transform: none; }
+
+/* Margin entry */
+.margin-entry { margin-bottom: 20px; position: relative; }
+.margin-entry::before { content:''; position:absolute; left:-10px; top:0; bottom:0; width:2px; background:hsl(45,70%,75%); border-radius:2px; }
+.me-passage {
+  font-family: 'Lora', serif; font-size: 12px; font-style: italic;
+  color: var(--ink-4); line-height: 1.55; margin-bottom: 8px;
+  padding-bottom: 8px; border-bottom: 0.5px solid var(--border);
+}
+.me-note {
+  font-family: system-ui; font-size: 13px; color: var(--ink-2);
+  line-height: 1.55; width: 100%; border: none; outline: none;
+  background: transparent; resize: none; min-height: 40px;
+  font-family: system-ui; padding: 0;
+}
+.me-note::placeholder { color: var(--ink-4); font-style: italic; }
+.me-note-empty { font-size: 12px; color: var(--ink-4); font-family: system-ui; font-style: italic; cursor: pointer; }
+.me-note-empty:hover { color: var(--ink-3); }
+
+/* Empty margins state */
+.margin-empty { padding: 32px 0; text-align: center; }
+.margin-empty-icon { color: var(--ink-4); opacity: 0.3; margin-bottom: 10px; }
+.margin-empty-text { font-size: 12px; color: var(--ink-4); line-height: 1.6; font-family: system-ui; }
+
+/* Margin tool active state */
+.reading-tool.margin-active { background: hsl(45,70%,90%); color: hsl(35,60%,32%); }
+
+/* Share margins btn */
+.share-margins-btn {
+  width: 100%; margin-top: 20px; padding: 10px; border-radius: 8px;
+  border: 0.5px dashed var(--border); background: transparent;
+  font-size: 12px; color: var(--ink-4); cursor: pointer;
+  font-family: system-ui; transition: border-color 0.15s, color 0.15s, background 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+}
+.share-margins-btn:hover { border-color: var(--ink-3); color: var(--ink-3); background: transparent; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sb-top">
+      <span class="sb-logo">Odessay</span>
+      <button class="icon-btn" onclick="document.getElementById('sidebar').classList.toggle('mini')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      </button>
+    </div>
+    <div class="sb-actions">
+      <button class="btn-new"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="btn-new-label">New writing</span></button>
+      <div class="nav-item" style="margin-top:2px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><span class="nav-label">Search</span></div>
+    </div>
+    <div class="nav-scroll">
+      <div class="nav-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span class="nav-label">Desk</span></div>
+      <div class="nav-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg><span class="nav-label">Collections</span><svg class="nav-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      <div class="nav-item active open" onclick="this.classList.toggle('open');document.getElementById('sub-corr').classList.toggle('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+        <span class="nav-label">Correspondences</span>
+        <svg class="nav-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="sub-items open" id="sub-corr">
+        <div class="sub-item active"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>On silence and attention</div>
+        <div class="sub-item"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>On showing up</div>
+      </div>
+      <div class="nav-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg><span class="nav-label">Shared</span></div>
+      <div class="section-lbl">Recent</div>
+      <div class="recent-item"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span class="recent-title">On silence between two people</span></div>
+    </div>
+    <div class="sb-bottom">
+      <div class="user-bar"><div class="av-sm">HM</div><div class="user-info"><div class="user-name">Hugo Marín</div></div><svg style="color:var(--ink-4);flex-shrink:0;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div>
+    </div>
+  </nav>
+
+  <!-- Sequence view -->
+  <div class="main" id="sequence-view">
+    <div class="topbar">
+      <div class="tb-left">
+        <button class="tb-back"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Correspondences</button>
+        <div class="tb-div"></div>
+        <span class="tb-title">On silence and attention</span>
+      </div>
+      <div class="tb-right">
+        <span class="tb-pill your-turn">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+          Your turn
+        </span>
+      </div>
+    </div>
+
+    <div class="part-bar">
+      <div class="part-left">
+        <div class="part-avatars">
+          <div class="part-av" style="background:var(--ink);">HM</div>
+          <div class="part-av" style="background:hsl(200,40%,40%);">MA</div>
+          <div class="part-av" style="background:hsl(280,30%,45%);">LC</div>
+        </div>
+        <span class="part-names">Hugo Marín, Mario Ávila, Laura Castillo</span>
+      </div>
+      <div class="part-right">
+        <span class="part-stat"><b>4</b> writings</span>
+        <span class="part-stat"><b>2,840</b> words</span>
+        <span class="part-stat">Since <b>Feb 18</b></span>
+      </div>
+    </div>
+
+    <div class="sequence-view">
+      <div class="seq-scroll-area">
+        <div style="position:relative;">
+          <!-- Thread line -->
+          <div style="position:absolute;left:20px;top:40px;bottom:80px;width:0.5px;background:var(--border);z-index:0;"></div>
+
+          <div class="seq-list">
+
+            <!-- Doc 1 — Hugo -->
+            <div class="mini-doc" onclick="openReading(0)">
+              <div class="md-avatar-col">
+                <div class="md-av" style="background:var(--ink);">HM</div>
+              </div>
+              <div class="md-card mine">
+                <div class="md-card-top">
+                  <div class="md-byline">
+                    <div class="md-author">Hugo Marín <span class="md-mine-tag">you</span></div>
+                    <span class="md-date">Feb 18, 2026</span>
+                  </div>
+                  <div class="md-title">On silence between two people who know each other well</div>
+                  <div class="md-excerpt">There is a silence that unsettles and another that rests. The difference is not in its duration but in what each person brings to that blank space that opens between two people who have known each other long enough to stop pretending.</div>
+                </div>
+                <div class="md-card-bottom">
+                  <div class="md-meta"><span class="md-words">864 words</span></div>
+                  <span class="md-open">Open to read <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Doc 2 — Mario -->
+            <div class="mini-doc" onclick="openReading(1)">
+              <div class="md-avatar-col">
+                <div class="md-av" style="background:hsl(200,40%,40%);">MA</div>
+              </div>
+              <div class="md-card">
+                <div class="md-card-top">
+                  <div class="md-byline">
+                    <div class="md-author">Mario Ávila</div>
+                    <span class="md-date">Mar 2, 2026</span>
+                  </div>
+                  <div class="md-title">On rolling and what patience actually means</div>
+                  <div class="md-excerpt">What you wrote about waiting stayed with me for days. There's something in the idea that attention can be a form of generosity — I kept thinking about the mat, about what it means to really receive your partner's weight instead of immediately resisting.</div>
+                </div>
+                <div class="md-card-bottom">
+                  <div class="md-meta"><span class="md-words">612 words</span></div>
+                  <span class="md-open">Open to read <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Doc 3 — Laura (new) -->
+            <div class="mini-doc" onclick="openReading(2)">
+              <div class="md-avatar-col">
+                <div class="md-av" style="background:hsl(280,30%,45%);">LC</div>
+              </div>
+              <div class="md-card unread">
+                <div class="md-card-top">
+                  <div class="md-byline">
+                    <div class="md-author">Laura Castillo <span class="md-new-tag">New</span></div>
+                    <span class="md-date">Mar 10, 2026</span>
+                  </div>
+                  <div class="md-title">The problem with being understood</div>
+                  <div class="md-excerpt">Reading both of you, I keep coming back to something that neither of you named directly but that I feel underneath both texts: the discomfort of being truly received. Being understood is exposing. It means someone has done work on you.</div>
+                </div>
+                <div class="md-card-bottom">
+                  <div class="md-meta"><span class="md-words">748 words</span></div>
+                  <span class="md-open" style="color:hsl(220,50%,50%);">Read now <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Reply -->
+            <div class="reply-card">
+              <div class="md-avatar-col">
+                <div class="md-av" style="background:var(--ink);opacity:0.4;">HM</div>
+              </div>
+              <div class="reply-doc" onclick="startReply()">
+                <div class="reply-inner">
+                  <span class="reply-text">Laura just wrote. What do you want to say back?</span>
+                  <button class="reply-btn">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+                    Write a response
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Reading view (full screen overlay) ── -->
+<div class="reading-view" id="reading-view">
+  <div class="reading-chrome">
+    <button class="reading-back" onclick="closeReading()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      On silence and attention
+    </button>
+    <div class="reading-nav">
+      <button class="reading-nav-btn" id="btn-prev" onclick="navigateReading(-1)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Previous
+      </button>
+      <span class="reading-nav-pos" id="reading-pos">1 of 3</span>
+      <button class="reading-nav-btn" id="btn-next" onclick="navigateReading(1)">
+        Next
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+    <div class="reading-tools">
+      <button class="reading-tool" title="Highlight" onclick="toggleTool(this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </button>
+      <button class="reading-tool" title="Notes" onclick="toggleMarginPanel()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+      </button>
+      <button class="reading-tool" title="Reply" onclick="startReply()" style="color:var(--cursor);">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="reading-main">
+    <div class="reading-scroll" id="reading-scroll">
+      <div class="reading-content">
+        <div class="reading-inner" id="reading-inner">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+    <div class="margin-panel" id="margin-panel">
+      <div class="margin-inner" id="margin-inner">
+        <div class="margin-panel-title">
+          Margins
+          <span class="margin-count" id="margin-count">2</span>
+        </div>
+        <div id="margin-entries">
+          <div class="margin-entry">
+            <div class="me-passage">"attention is the rarest and purest form of generosity"</div>
+            <textarea class="me-note" rows="2" placeholder="What does this build in you...">Weil — check source. Is this from Waiting for God? The word "rarest" is doing a lot of work here.</textarea>
+          </div>
+          <div class="margin-entry">
+            <div class="me-passage">"holding space without filling it"</div>
+            <textarea class="me-note" rows="2" placeholder="What does this build in you...">This is the key distinction. Presence vs occupation. I want to use this in my response.</textarea>
+          </div>
+        </div>
+        <button class="share-margins-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share these margins with Hugo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const writings = [
+  {
+    author: 'Hugo Marín', mine: true, date: 'Feb 18, 2026', words: '864 words',
+    av: 'HM', avColor: 'var(--ink)',
+    title: 'On silence between two people who know each other well',
+    body: `<p>There is a silence that unsettles and another that rests. The difference is not in its duration but in what each person brings to that blank space that opens between two people who have known each other long enough to stop pretending.</p>
+<p>I have been thinking about this for weeks — since the afternoon we sat on the terrace and said almost nothing for an hour, and I left feeling like we had spoken more honestly than in any conversation we'd had in months.</p>
+<p>Most people confuse attention with response. We think that paying attention means reacting — nodding, asking follow-up questions, offering our own story in return. But there is another kind of attention that works differently. It holds space without filling it.</p>
+<p>The philosopher <span class="hl">Simone Weil wrote that attention is the rarest and purest form of generosity</span>. She meant something specific: the capacity to receive what another person is, without immediately translating it into something familiar. Without making it about you.</p>
+<p>I write this because I couldn't say it then. Not because the words weren't there — they were — but because saying them would have required me to be present in a way I wasn't ready for.</p>
+<p>Writing is the conversation I have with myself about the conversations I couldn't finish out loud. There is something in the delay that helps. The letter that arrives three days after the event it describes. The note left on the table before someone wakes up. Time changes what can be said — not because the truth changes, but because we do.</p>`
+  },
+  {
+    author: 'Mario Ávila', mine: false, date: 'Mar 2, 2026', words: '612 words',
+    av: 'MA', avColor: 'hsl(200,40%,40%)',
+    title: 'On rolling and what patience actually means',
+    body: `<p>What you wrote about waiting stayed with me for days. There's something in the idea that attention can be a form of generosity — I kept thinking about the mat, about what it means to really receive your partner's weight instead of immediately resisting or redirecting it.</p>
+<p>In BJJ we talk about "feeling" the other person — not just their physical position but their intention, their timing, what they're about to do before they do it. The best practitioners I've trained with have this quality of patient attention that feels almost meditative. They're not reacting. They're receiving.</p>
+<p>But here's what I've been sitting with: there's a version of this that looks like attention but is actually disconnection. The stillness that comes not from presence but from absence. I've been guilty of this on the mat and off it — mistaking my own withdrawal for receptiveness.</p>
+<blockquote>The gap between understanding and doing is not a gap of knowledge. It's a gap of willingness.</blockquote>
+<p>What you described — leaving the terrace feeling spoken to despite the silence — I think that's what it looks like when two people are genuinely receiving each other rather than waiting for their turn. It's rare. Most conversations are two monologues with shared punctuation.</p>`
+  },
+  {
+    author: 'Laura Castillo', mine: false, date: 'Mar 10, 2026', words: '748 words',
+    av: 'LC', avColor: 'hsl(280,30%,45%)',
+    title: 'The problem with being understood',
+    body: `<p>Reading both of you, I keep coming back to something that neither of you named directly but that I feel underneath both texts: the discomfort of being truly received.</p>
+<p>Hugo, you wrote about not being ready to be present. Mario, you wrote about mistaking withdrawal for receptiveness. What I hear in both is a kind of protective distance — not cruelty, not indifference, but the very human impulse to stay slightly unreachable even in intimacy.</p>
+<p>I think this is what makes genuine attention so rare. It's not just that we don't know how to give it — it's that we're often not sure we want to receive it. <span class="hl">Being understood is exposing. It means someone has done work on you.</span> It means you owe them the acknowledgment that they got it right.</p>
+<p>And sometimes you're not ready to be gotten right. Sometimes the misunderstanding is the comfort.</p>
+<p>What I want to say — and I'm not sure I have the right words yet — is that the silence you described, Hugo, might have been less about attention and more about permission. You were both giving each other permission to not be performing. And that's something different. That's closer to what I'd call rest.</p>
+<blockquote>The most intimate thing two people can do is agree, without saying so, to stop trying to explain themselves.</blockquote>`
+  }
+];
+
+let currentIdx = 0;
+
+function openReading(idx) {
+  currentIdx = idx;
+  renderReading();
+  document.getElementById('reading-view').classList.add('open');
+  document.getElementById('reading-scroll').scrollTop = 0;
+}
+
+function closeReading() {
+  document.getElementById('reading-view').classList.remove('open');
+}
+
+function navigateReading(dir) {
+  currentIdx = Math.max(0, Math.min(writings.length - 1, currentIdx + dir));
+  renderReading();
+  document.getElementById('reading-scroll').scrollTop = 0;
+}
+
+function renderReading() {
+  const w = writings[currentIdx];
+  document.getElementById('reading-pos').textContent = (currentIdx + 1) + ' of ' + writings.length;
+  document.getElementById('btn-prev').style.opacity = currentIdx === 0 ? '0.3' : '1';
+  document.getElementById('btn-next').style.opacity = currentIdx === writings.length - 1 ? '0.3' : '1';
+
+  document.getElementById('reading-inner').innerHTML = `
+    <div class="reading-author">
+      <div class="reading-av" style="background:${w.avColor};">${w.av}</div>
+      <div>
+        <div class="reading-author-name">${w.author}${w.mine ? ' <span style="font-size:11px;color:var(--cursor);background:hsl(22,55%,93%);padding:1px 6px;border-radius:4px;font-weight:500;">you</span>' : ''}</div>
+        <div class="reading-author-date">${w.date} · ${w.words}</div>
+      </div>
+    </div>
+    <div class="reading-title">${w.title}</div>
+    <div class="reading-body">${w.body}</div>
+  `;
+}
+
+function toggleMarginPanel() {
+  const panel = document.getElementById('margin-panel');
+  panel.classList.toggle('open');
+  const tool = document.querySelector('.reading-tool[title="Notes"]');
+  if (tool) tool.classList.toggle('margin-active', panel.classList.contains('open'));
+}
+
+function toggleTool(btn) {
+  btn.classList.toggle('active');
+}
+
+function startReply() {
+  closeReading();
+}
+
+
+// ── Margin / highlight system ──
+let savedRange = null;
+let marginCount = 2;
+
+document.addEventListener('mouseup', (e) => {
+  if (e.target.closest('#selection-popup')) return;
+  const sel = window.getSelection();
+  const popup = document.getElementById('selection-popup');
+
+  if (sel && sel.toString().trim().length > 8) {
+    const range = sel.getRangeAt(0);
+    // Only inside reading body
+    if (!range.commonAncestorContainer.closest || 
+        !range.commonAncestorContainer.parentElement?.closest('.reading-body')) {
+      popup.classList.remove('visible');
+      return;
+    }
+    savedRange = range.cloneRange();
+    const rect = range.getBoundingClientRect();
+    popup.style.left = (rect.left + rect.width / 2 - 80) + 'px';
+    popup.style.top = (rect.top - 48 + window.scrollY) + 'px';
+    popup.classList.add('visible');
+  } else {
+    if (!e.target.closest('#selection-popup')) {
+      popup.classList.remove('visible');
+    }
+  }
+});
+
+function markSelection() {
+  if (!savedRange) return;
+  applyHighlight(savedRange, false);
+  document.getElementById('selection-popup').classList.remove('visible');
+  window.getSelection().removeAllRanges();
+}
+
+function annotateSelection() {
+  if (!savedRange) return;
+  const text = savedRange.toString().trim();
+  applyHighlight(savedRange, true);
+  document.getElementById('selection-popup').classList.remove('visible');
+  window.getSelection().removeAllRanges();
+  addMarginEntry(text, true);
+  // Open panel if not open
+  const panel = document.getElementById('margin-panel');
+  if (!panel.classList.contains('open')) toggleMarginPanel();
+}
+
+function applyHighlight(range, hasNote) {
+  const mark = document.createElement('mark');
+  mark.className = 'hl' + (hasNote ? ' has-note' : '');
+  try { range.surroundContents(mark); } catch(e) {
+    // Fallback for complex selections
+    const frag = range.extractContents();
+    mark.appendChild(frag);
+    range.insertNode(mark);
+  }
+}
+
+function addMarginEntry(passageText, focus) {
+  marginCount++;
+  document.getElementById('margin-count').textContent = marginCount;
+  const entry = document.createElement('div');
+  entry.className = 'margin-entry';
+  entry.innerHTML = `
+    <div class="me-passage">"${passageText.length > 80 ? passageText.slice(0,80) + '…' : passageText}"</div>
+    <textarea class="me-note" rows="2" placeholder="What does this build in you..."  autofocus></textarea>
+  `;
+  const entries = document.getElementById('margin-entries');
+  entries.appendChild(entry);
+  if (focus) {
+    setTimeout(() => entry.querySelector('textarea').focus(), 100);
+  }
+  // Scroll panel to bottom
+  const inner = document.getElementById('margin-inner');
+  setTimeout(() => inner.scrollTop = inner.scrollHeight, 150);
+}
+
+// ESC to close reading
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeReading();
+  if (e.key === 'ArrowRight') navigateReading(1);
+  if (e.key === 'ArrowLeft') navigateReading(-1);
+});
+</script>
+
+<!-- Selection popup -->
+<div class="selection-popup" id="selection-popup">
+  <button class="sel-btn" onclick="markSelection()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    Mark
+  </button>
+  <div class="sel-divider"></div>
+  <button class="sel-btn" onclick="annotateSelection()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+    Annotate
+  </button>
+</div>
+
+</body>
+</html>

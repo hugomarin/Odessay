@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odessay — Reading with Margins</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      hsl(38,12%,98%);
+  --sb:      hsl(0,0%,100%);
+  --muted:   hsl(38,8%,93%);
+  --muted-h: hsl(38,8%,90%);
+  --border:  hsl(38,8%,90%);
+  --ink:     hsl(25,18%,10%);
+  --ink-2:   hsl(25,12%,22%);
+  --ink-3:   hsl(25,10%,38%);
+  --ink-4:   hsl(25,8%,52%);
+  --cursor:  hsl(22,55%,38%);
+  --hl:      hsl(45,90%,84%);
+  --hl-note: hsl(35,80%,55%);
+}
+html, body { height: 100%; background: var(--bg); font-family: system-ui,-apple-system,sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+/* ── Layout ── */
+.layout { display: flex; height: 100vh; flex-direction: column; }
+
+/* ── Chrome ── */
+.chrome {
+  height: 46px; border-bottom: 0.5px solid var(--border);
+  display: flex; align-items: center; padding: 0 32px;
+  justify-content: space-between; flex-shrink: 0;
+  background: var(--bg);
+}
+.chrome-left { display: flex; align-items: center; gap: 10px; }
+.chrome-back { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; transition: color 0.15s; }
+.chrome-back:hover { color: var(--ink-3); }
+.chrome-div { width: 0.5px; height: 14px; background: var(--border); }
+.chrome-title { font-size: 13px; color: var(--ink-3); font-family: system-ui; }
+.chrome-nav { display: flex; align-items: center; gap: 6px; }
+.chrome-nav-btn { display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 7px; border: none; background: transparent; font-size: 12px; color: var(--ink-4); cursor: pointer; font-family: system-ui; transition: background 0.12s, color 0.12s; }
+.chrome-nav-btn:hover { background: var(--muted); color: var(--ink-2); }
+.chrome-nav-pos { font-size: 12px; color: var(--ink-4); padding: 0 4px; }
+.chrome-tools { display: flex; align-items: center; gap: 4px; }
+.chrome-tool {
+  width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; border: none; background: transparent;
+  cursor: pointer; color: var(--ink-4); transition: background 0.12s, color 0.12s;
+  position: relative;
+}
+.chrome-tool:hover { background: var(--muted); color: var(--ink-2); }
+.chrome-tool.active { background: hsl(45,70%,88%); color: hsl(35,60%,30%); }
+.chrome-tool .tool-badge {
+  position: absolute; top: 4px; right: 4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--cursor); border: 1.5px solid var(--bg);
+  display: none;
+}
+.chrome-tool.has-margins .tool-badge { display: block; }
+.chrome-reply {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 14px; height: 32px; border-radius: 8px;
+  background: var(--cursor); color: white; border: none;
+  font-size: 12px; font-weight: 500; font-family: system-ui;
+  cursor: pointer; transition: opacity 0.15s; margin-left: 4px;
+}
+.chrome-reply:hover { opacity: 0.88; }
+
+/* ── Reading area ── */
+.reading-area { flex: 1; display: flex; overflow: hidden; }
+
+/* Main text column */
+.text-col { flex: 1; overflow-y: auto; }
+.text-inner { max-width: 660px; margin: 0 auto; padding: 56px 40px 80px; }
+
+/* Author */
+.reading-author { display: flex; align-items: center; gap: 12px; margin-bottom: 44px; padding-bottom: 24px; border-bottom: 0.5px solid var(--border); }
+.reading-av { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: white; flex-shrink: 0; }
+.reading-author-name { font-size: 14px; font-weight: 500; color: var(--ink-2); font-family: system-ui; margin-bottom: 2px; }
+.reading-author-date { font-size: 12px; color: var(--ink-4); font-family: system-ui; }
+
+/* Typography */
+.reading-title { font-family: 'Lora', serif; font-size: 30px; font-weight: 500; color: var(--ink); line-height: 1.2; letter-spacing: -0.01em; margin-bottom: 32px; }
+.reading-body { font-family: system-ui, sans-serif; font-size: 17px; line-height: 1.85; color: var(--ink); }
+.reading-body p { margin-bottom: 1.55em; }
+.reading-body p:last-child { margin-bottom: 0; }
+.reading-body blockquote { border-left: 2px solid var(--ink-3); margin: 1.8em 0; padding: 0.2em 0 0.2em 1.4em; color: var(--ink-2); font-family: 'Lora', serif; font-style: italic; font-size: 18px; line-height: 1.65; }
+
+/* Highlights */
+.hl {
+  background: var(--hl); border-radius: 2px;
+  cursor: pointer; transition: background 0.15s;
+}
+.hl:hover { background: hsl(45,90%,76%); }
+.hl.annotated { border-bottom: 1.5px solid var(--hl-note); }
+.hl.active { background: hsl(45,90%,74%); }
+
+/* ── Selection popup ── */
+.sel-popup {
+  position: fixed; z-index: 400;
+  background: var(--ink); border-radius: 10px;
+  padding: 4px; display: flex; gap: 1px; align-items: center;
+  box-shadow: 0 6px 24px 0 hsla(25,18%,12%,0.22);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  transform: translateY(4px);
+}
+.sel-popup.visible { opacity: 1; pointer-events: all; transform: translateY(0); }
+.sel-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 7px; border: none;
+  background: transparent; color: white; cursor: pointer;
+  font-size: 12px; font-weight: 500; font-family: system-ui;
+  white-space: nowrap; transition: background 0.12s;
+}
+.sel-btn:hover { background: hsla(255,100%,100%,0.1); }
+.sel-sep { width: 0.5px; height: 20px; background: hsla(255,100%,100%,0.15); flex-shrink: 0; }
+
+/* ── Margin panel ── */
+.margin-col {
+  width: 0; flex-shrink: 0; overflow: hidden;
+  border-left: 0.5px solid transparent;
+  transition: width 0.32s cubic-bezier(0.4,0,0.15,1), border-color 0.32s;
+  background: var(--sb);
+}
+.margin-col.open { width: 296px; border-left-color: var(--border); }
+.margin-col-inner { width: 296px; height: 100%; display: flex; flex-direction: column; }
+
+/* Panel header */
+.mp-head {
+  height: 46px; padding: 0 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 0.5px solid var(--border); flex-shrink: 0;
+}
+.mp-head-title { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-4); display: flex; align-items: center; gap: 8px; }
+.mp-count { font-size: 10px; font-weight: 700; background: var(--muted); color: var(--ink-4); padding: 2px 6px; border-radius: 10px; letter-spacing: 0; text-transform: none; }
+.mp-share {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--ink-4); cursor: pointer;
+  background: transparent; border: none; font-family: system-ui;
+  transition: color 0.12s;
+}
+.mp-share:hover { color: var(--ink-3); }
+
+/* Entries scroll */
+.mp-scroll { flex: 1; overflow-y: auto; padding: 16px 0; }
+
+/* Empty state */
+.mp-empty { padding: 40px 20px; text-align: center; }
+.mp-empty-icon { color: var(--ink-4); opacity: 0.25; margin-bottom: 12px; }
+.mp-empty-text { font-size: 13px; color: var(--ink-4); line-height: 1.6; font-family: system-ui; }
+.mp-empty-hint { font-size: 12px; color: var(--ink-4); opacity: 0.7; margin-top: 8px; font-family: system-ui; font-style: italic; }
+
+/* Margin entry */
+.mp-entry {
+  padding: 14px 20px 16px;
+  border-bottom: 0.5px solid var(--border);
+  cursor: pointer; transition: background 0.12s;
+  position: relative;
+}
+.mp-entry:last-child { border-bottom: none; }
+.mp-entry:hover { background: var(--muted); }
+.mp-entry.focused { background: hsl(45,55%,97%); }
+.mp-entry::before {
+  content: ''; position: absolute; left: 0; top: 14px; bottom: 14px;
+  width: 2px; background: var(--hl-note); border-radius: 0 2px 2px 0;
+  opacity: 0; transition: opacity 0.15s;
+}
+.mp-entry.has-note::before { opacity: 1; }
+.mp-entry.focused::before { opacity: 1; background: var(--cursor); }
+
+.mp-passage {
+  font-family: 'Lora', serif; font-size: 12px; font-style: italic;
+  color: var(--ink-4); line-height: 1.55; margin-bottom: 10px;
+  padding-bottom: 10px; border-bottom: 0.5px solid var(--border);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.mp-note-wrap { position: relative; }
+.mp-note {
+  width: 100%; border: none; outline: none; background: transparent;
+  resize: none; font-family: system-ui; font-size: 13px;
+  color: var(--ink-2); line-height: 1.6; min-height: 32px;
+  padding: 0; display: block;
+}
+.mp-note::placeholder { color: var(--ink-4); font-style: italic; }
+.mp-note-placeholder {
+  font-size: 13px; color: var(--ink-4); font-style: italic;
+  font-family: system-ui; line-height: 1.6; cursor: text;
+}
+
+/* Entry actions */
+.mp-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; opacity: 0; transition: opacity 0.15s; }
+.mp-entry:hover .mp-actions, .mp-entry.focused .mp-actions { opacity: 1; }
+.mp-action { font-size: 11px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; transition: color 0.12s; }
+.mp-action:hover { color: var(--ink-3); }
+.mp-action.delete:hover { color: hsl(0,55%,50%); }
+
+/* Share footer */
+.mp-footer { flex-shrink: 0; padding: 14px 20px; border-top: 0.5px solid var(--border); }
+.mp-share-btn {
+  width: 100%; padding: 10px; border-radius: 9px;
+  border: 0.5px dashed var(--border); background: transparent;
+  font-size: 12px; color: var(--ink-4); cursor: pointer;
+  font-family: system-ui; transition: border-color 0.15s, color 0.15s, background 0.15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.mp-share-btn:hover { border-color: var(--cursor); color: var(--cursor); background: hsl(22,55%,97%); }
+
+/* ── Inline annotation bubble (appears next to highlighted text) ── */
+.anno-bubble {
+  position: fixed; z-index: 350;
+  background: var(--sb); border: 0.5px solid var(--border);
+  border-radius: 12px; padding: 14px 16px; width: 260px;
+  box-shadow: 0 8px 32px 0 hsla(25,18%,12%,0.1);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+  transform: translateY(6px);
+}
+.anno-bubble.visible { opacity: 1; pointer-events: all; transform: translateY(0); }
+.anno-passage { font-family: 'Lora', serif; font-size: 11px; font-style: italic; color: var(--ink-4); line-height: 1.5; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 0.5px solid var(--border); }
+.anno-textarea {
+  width: 100%; border: none; outline: none; background: transparent;
+  resize: none; font-family: system-ui; font-size: 13px;
+  color: var(--ink); line-height: 1.6; min-height: 60px;
+}
+.anno-textarea::placeholder { color: var(--ink-4); font-style: italic; }
+.anno-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.anno-cancel { font-size: 12px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; }
+.anno-save { font-size: 12px; font-weight: 500; color: white; background: var(--ink); padding: 5px 12px; border-radius: 6px; border: none; cursor: pointer; font-family: system-ui; transition: opacity 0.12s; }
+.anno-save:hover { opacity: 0.85; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Chrome -->
+  <div class="chrome">
+    <div class="chrome-left">
+      <button class="chrome-back">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        On silence and attention
+      </button>
+      <div class="chrome-div"></div>
+      <span class="chrome-title">Laura Castillo · Mar 10, 2026</span>
+    </div>
+    <div class="chrome-nav">
+      <button class="chrome-nav-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Previous
+      </button>
+      <span class="chrome-nav-pos">3 of 3</span>
+      <button class="chrome-nav-btn" style="opacity:0.3;">
+        Next
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+    <div class="chrome-tools">
+      <button class="chrome-tool has-margins active" id="tool-margins" onclick="toggleMarginPanel()" title="Margins">
+        <div class="tool-badge"></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+      </button>
+      <button class="chrome-reply" onclick="">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+        Write a response
+      </button>
+    </div>
+  </div>
+
+  <!-- Reading area -->
+  <div class="reading-area">
+
+    <!-- Text -->
+    <div class="text-col" id="text-col">
+      <div class="text-inner">
+
+        <div class="reading-author">
+          <div class="reading-av" style="background:hsl(280,30%,45%);">LC</div>
+          <div>
+            <div class="reading-author-name">Laura Castillo</div>
+            <div class="reading-author-date">Mar 10, 2026 · 748 words</div>
+          </div>
+        </div>
+
+        <div class="reading-title">The problem with being understood</div>
+
+        <div class="reading-body" id="reading-body">
+          <p>Reading both of you, I keep coming back to something that neither of you named directly but that I feel underneath both texts: <mark class="hl annotated" data-id="1">the discomfort of being truly received</mark>. Not misunderstood — that's its own problem — but received fully, accurately, with the weight you actually carry.</p>
+
+          <p>Hugo, you wrote about not being ready to be present. Mario, you wrote about mistaking withdrawal for receptiveness. What I hear in both is a kind of protective distance — not cruelty, not indifference, but the very human impulse to stay slightly unreachable even in intimacy.</p>
+
+          <p>I think this is what makes genuine attention so rare. It's not just that we don't know how to give it — it's that we're often not sure we want to receive it. <mark class="hl" data-id="2">Being understood is exposing. It means someone has done work on you. It means you owe them the acknowledgment that they got it right.</mark></p>
+
+          <p>And sometimes you're not ready to be gotten right. Sometimes the misunderstanding is the comfort. The version of you that others carry — slightly wrong, slightly softer or harder than you are — is easier to live with than the accurate one.</p>
+
+          <blockquote>The most intimate thing two people can do is agree, without saying so, to stop trying to explain themselves.</blockquote>
+
+          <p>What I want to say — and I'm not sure I have the right words yet — is that the silence you described, Hugo, might have been less about attention and more about permission. You were both giving each other permission to not be performing. And that's something different. That's closer to what I'd call rest.</p>
+
+          <p>Permission is not the same as understanding. You can give someone permission to be opaque, to be inconsistent, to arrive without explanation — without ever truly knowing them. And maybe that's the more sustainable form of intimacy. Not the kind that sees you fully, but the kind that doesn't require you to be seen.</p>
+
+          <p>I've been sitting with this distinction for days and I'm not sure I've landed anywhere. But I think it matters for what we're trying to do here — in this correspondence, in Odessay, in the act of writing to each other at all. What are we asking for when we invite someone to read what we wrote? Understanding? Or permission?</p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Margin panel -->
+    <div class="margin-col open" id="margin-col">
+      <div class="margin-col-inner">
+        <div class="mp-head">
+          <div class="mp-head-title">
+            Margins
+            <span class="mp-count" id="mp-count">2</span>
+          </div>
+          <button class="mp-share">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Share
+          </button>
+        </div>
+
+        <div class="mp-scroll" id="mp-scroll">
+          <div class="mp-entry has-note focused" data-id="1" onclick="focusEntry(this,'1')">
+            <div class="mp-passage">"the discomfort of being truly received"</div>
+            <div class="mp-note-wrap">
+              <textarea class="mp-note" rows="3" placeholder="What does this build in you...">This is the sentence the whole text is built on. "Truly received" — not read, not understood in the abstract, but received. Like a letter that lands.</textarea>
+            </div>
+            <div class="mp-actions">
+              <button class="mp-action delete" onclick="deleteEntry(event,'1')">Delete</button>
+            </div>
+          </div>
+
+          <div class="mp-entry" data-id="2" onclick="focusEntry(this,'2')">
+            <div class="mp-passage">"Being understood is exposing. It means someone has done work on you. It means you owe them the acknowledgment that they got it right."</div>
+            <div class="mp-note-wrap">
+              <div class="mp-note-placeholder" onclick="activateNote(this)">What does this build in you...</div>
+            </div>
+            <div class="mp-actions">
+              <button class="mp-action delete" onclick="deleteEntry(event,'2')">Delete</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="mp-footer">
+          <button class="mp-share-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Share margins with Hugo & Mario
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Selection popup -->
+<div class="sel-popup" id="sel-popup">
+  <button class="sel-btn" onclick="doMark()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    Mark
+  </button>
+  <div class="sel-sep"></div>
+  <button class="sel-btn" onclick="doAnnotate()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></svg>
+    Annotate
+  </button>
+</div>
+
+<!-- Annotation bubble -->
+<div class="anno-bubble" id="anno-bubble">
+  <div class="anno-passage" id="anno-passage"></div>
+  <textarea class="anno-textarea" id="anno-textarea" placeholder="What does this build in you..." rows="3"></textarea>
+  <div class="anno-actions">
+    <button class="anno-cancel" onclick="cancelAnnotation()">Cancel</button>
+    <button class="anno-save" onclick="saveAnnotation()">Save to margins</button>
+  </div>
+</div>
+
+<script>
+let savedRange = null;
+let pendingPassage = '';
+let entryCount = 2;
+const entries = {}; // id → {passage, note}
+
+// Pre-populate existing
+entries['1'] = { passage: '"the discomfort of being truly received"', note: 'This is the sentence the whole text is built on. "Truly received" — not read, not understood in the abstract, but received. Like a letter that lands.' };
+entries['2'] = { passage: '"Being understood is exposing. It means someone has done work on you."', note: '' };
+
+// ── Selection handling ──
+document.addEventListener('mouseup', (e) => {
+  if (e.target.closest('#sel-popup') || e.target.closest('#anno-bubble')) return;
+  const sel = window.getSelection();
+  const popup = document.getElementById('sel-popup');
+  if (sel && sel.toString().trim().length > 6) {
+    const node = sel.getRangeAt(0).commonAncestorContainer;
+    const inBody = node.nodeType === 3
+      ? node.parentElement?.closest('#reading-body')
+      : node.closest?.('#reading-body');
+    if (!inBody) { popup.classList.remove('visible'); return; }
+    savedRange = sel.getRangeAt(0).cloneRange();
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    popup.style.left = Math.max(8, rect.left + rect.width/2 - 80) + 'px';
+    popup.style.top = (rect.top - 52) + 'px';
+    popup.classList.add('visible');
+  } else {
+    popup.classList.remove('visible');
+  }
+});
+
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#sel-popup') && !e.target.closest('#anno-bubble')) {
+    document.getElementById('sel-popup').classList.remove('visible');
+  }
+});
+
+// ── Mark (highlight only) ──
+function doMark() {
+  if (!savedRange) return;
+  const text = savedRange.toString().trim();
+  applyMark(savedRange, false);
+  document.getElementById('sel-popup').classList.remove('visible');
+  window.getSelection().removeAllRanges();
+}
+
+// ── Annotate ──
+function doAnnotate() {
+  if (!savedRange) return;
+  pendingPassage = savedRange.toString().trim();
+  const rect = savedRange.getBoundingClientRect();
+  const bubble = document.getElementById('anno-bubble');
+  document.getElementById('anno-passage').textContent = '"' + pendingPassage.slice(0,120) + (pendingPassage.length > 120 ? '…' : '') + '"';
+  document.getElementById('anno-textarea').value = '';
+
+  // Position bubble near selection but inside viewport
+  let left = rect.left;
+  let top = rect.bottom + 10;
+  if (left + 268 > window.innerWidth - 16) left = window.innerWidth - 276;
+  if (top + 180 > window.innerHeight - 16) top = rect.top - 190;
+  bubble.style.left = Math.max(8, left) + 'px';
+  bubble.style.top = top + 'px';
+
+  applyMark(savedRange, true);
+  document.getElementById('sel-popup').classList.remove('visible');
+  window.getSelection().removeAllRanges();
+
+  bubble.classList.add('visible');
+  setTimeout(() => document.getElementById('anno-textarea').focus(), 50);
+}
+
+function cancelAnnotation() {
+  document.getElementById('anno-bubble').classList.remove('visible');
+  pendingPassage = '';
+}
+
+function saveAnnotation() {
+  const note = document.getElementById('anno-textarea').value.trim();
+  const bubble = document.getElementById('anno-bubble');
+  bubble.classList.remove('visible');
+  addMarginEntry(pendingPassage, note, true);
+  pendingPassage = '';
+}
+
+// ── Apply highlight mark ──
+function applyMark(range, annotated) {
+  entryCount++;
+  const id = 'e' + entryCount;
+  const mark = document.createElement('mark');
+  mark.className = 'hl' + (annotated ? ' annotated' : '');
+  mark.dataset.id = id;
+  mark.addEventListener('click', () => highlightClick(id));
+  try {
+    range.surroundContents(mark);
+  } catch(e) {
+    const frag = range.extractContents();
+    mark.appendChild(frag);
+    range.insertNode(mark);
+  }
+  return id;
+}
+
+// ── Add margin entry ──
+function addMarginEntry(passage, note, focus) {
+  const id = 'e' + entryCount;
+  entries[id] = { passage, note };
+
+  const count = document.getElementById('mp-count');
+  count.textContent = parseInt(count.textContent) + 1;
+
+  const entry = document.createElement('div');
+  entry.className = 'mp-entry' + (note ? ' has-note' : '');
+  entry.dataset.id = id;
+  entry.addEventListener('click', () => focusEntry(entry, id));
+  entry.innerHTML = `
+    <div class="mp-passage">"${passage.slice(0,120)}${passage.length > 120 ? '…' : ''}"</div>
+    <div class="mp-note-wrap">
+      <textarea class="mp-note" rows="2" placeholder="What does this build in you...">${note}</textarea>
+    </div>
+    <div class="mp-actions">
+      <button class="mp-action delete" onclick="deleteEntry(event,'${id}')">Delete</button>
+    </div>
+  `;
+  document.getElementById('mp-scroll').appendChild(entry);
+
+  // Open panel if closed
+  const col = document.getElementById('margin-col');
+  if (!col.classList.contains('open')) toggleMarginPanel();
+
+  // Scroll to new entry
+  setTimeout(() => {
+    entry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (focus) entry.querySelector('textarea')?.focus();
+  }, 100);
+}
+
+// ── Highlight click → focus entry ──
+function highlightClick(id) {
+  const entry = document.querySelector(`.mp-entry[data-id="${id}"]`);
+  if (!entry) return;
+  if (!document.getElementById('margin-col').classList.contains('open')) toggleMarginPanel();
+  setTimeout(() => {
+    entry.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    focusEntry(entry, id);
+  }, 50);
+}
+
+// ── Focus entry ──
+function focusEntry(el, id) {
+  document.querySelectorAll('.mp-entry').forEach(e => e.classList.remove('focused'));
+  el.classList.add('focused');
+  // Highlight corresponding mark
+  document.querySelectorAll('.hl').forEach(h => h.classList.remove('active'));
+  document.querySelectorAll(`.hl[data-id="${id}"]`).forEach(h => h.classList.add('active'));
+}
+
+// ── Activate placeholder ──
+function activateNote(placeholder) {
+  const wrap = placeholder.parentElement;
+  const ta = document.createElement('textarea');
+  ta.className = 'mp-note';
+  ta.rows = 2;
+  ta.placeholder = 'What does this build in you...';
+  wrap.replaceChild(ta, placeholder);
+  ta.focus();
+  wrap.closest('.mp-entry').classList.add('has-note');
+}
+
+// ── Delete entry ──
+function deleteEntry(e, id) {
+  e.stopPropagation();
+  const entry = document.querySelector(`.mp-entry[data-id="${id}"]`);
+  if (entry) { entry.style.opacity = '0'; entry.style.transition = 'opacity 0.2s'; setTimeout(() => entry.remove(), 200); }
+  document.querySelectorAll(`.hl[data-id="${id}"]`).forEach(h => {
+    const parent = h.parentNode;
+    while (h.firstChild) parent.insertBefore(h.firstChild, h);
+    parent.removeChild(h);
+  });
+  const count = document.getElementById('mp-count');
+  count.textContent = Math.max(0, parseInt(count.textContent) - 1);
+}
+
+// ── Toggle margin panel ──
+function toggleMarginPanel() {
+  const col = document.getElementById('margin-col');
+  const tool = document.getElementById('tool-margins');
+  col.classList.toggle('open');
+  tool.classList.toggle('active', col.classList.contains('open'));
+}
+
+// ESC
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.getElementById('sel-popup').classList.remove('visible');
+    document.getElementById('anno-bubble').classList.remove('visible');
+  }
+});
+</script>
+</body>
+</html>

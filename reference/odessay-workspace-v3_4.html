@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odessay — Escritorio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      hsl(38,12%,98%);
+  --sb:      hsl(0,0%,100%);
+  --muted:   hsl(38,8%,93%);
+  --muted-h: hsl(38,8%,90%);
+  --border:  hsl(38,8%,90%);
+  --ink:     hsl(25,18%,10%);
+  --ink-2:   hsl(25,12%,22%);
+  --ink-3:   hsl(25,10%,38%);
+  --ink-4:   hsl(25,8%,52%);
+  --cursor:  hsl(22,55%,38%);
+}
+html, body { height: 100%; background: var(--bg); font-family: system-ui,-apple-system,sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar { width: 292px; flex-shrink: 0; background: var(--sb); border-right: 0.5px solid var(--border); display: flex; flex-direction: column; overflow: hidden; transition: width 0.3s cubic-bezier(0.4,0,0.15,1); }
+.sidebar.mini { width: 52px; }
+.sb-top { height: 46px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.sb-logo { font-family: 'Lora',serif; font-size: 17px; color: var(--ink); white-space: nowrap; transition: opacity 0.25s; }
+.sidebar.mini .sb-logo { opacity: 0; width: 0; overflow: hidden; }
+.icon-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; color: var(--ink-3); background: transparent; border: none; transition: background 0.12s; flex-shrink: 0; }
+.icon-btn:hover { background: var(--muted-h); }
+.sb-actions { padding: 8px 10px; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.btn-new { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 8px; background: transparent; color: var(--ink); border: none; cursor: pointer; font-family: system-ui; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; transition: background 0.18s; }
+.btn-new:hover { background: var(--muted-h); }
+.btn-new-label { transition: opacity 0.25s; }
+.sidebar.mini .btn-new { justify-content: center; padding: 9px; background: var(--ink); color: white; width: 34px; margin: 0 auto; }
+.sidebar.mini .btn-new-label { opacity: 0; width: 0; overflow: hidden; }
+.nav-scroll { flex: 1; overflow-y: auto; padding: 6px 10px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 15px; color: var(--ink-2); white-space: nowrap; overflow: hidden; transition: background 0.18s, color 0.18s; }
+.nav-item:hover { background: var(--muted-h); color: var(--ink); }
+.nav-item.active { background: var(--muted); color: var(--ink); font-weight: 500; }
+.nav-label { transition: opacity 0.25s; flex: 1; }
+.sidebar.mini .nav-label { opacity: 0; width: 0; }
+.sidebar.mini .nav-item { justify-content: center; padding: 10px; gap: 0; }
+.nav-chev { color: var(--ink-4); transition: transform 0.28s cubic-bezier(0.4,0,0.15,1); flex-shrink: 0; }
+.nav-item.open .nav-chev { transform: rotate(90deg); }
+.sidebar.mini .nav-chev { opacity: 0; width: 0; }
+.sub-items { overflow: hidden; max-height: 0; transition: max-height 0.32s cubic-bezier(0.4,0,0.15,1); }
+.sub-items.open { max-height: 200px; }
+.sidebar.mini .sub-items { display: none; }
+.sub-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 34px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink-3); transition: background 0.15s, color 0.15s; }
+.sub-item:hover { background: var(--muted-h); color: var(--ink-2); }
+.section-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); padding: 12px 10px 4px; transition: opacity 0.25s; }
+.sidebar.mini .section-lbl { opacity: 0; height: 0; padding: 0; }
+.recent-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; transition: background 0.15s, color 0.15s; }
+.recent-item:hover { background: var(--muted-h); color: var(--ink-2); }
+.recent-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sidebar.mini .recent-item { display: none; }
+.sb-bottom { flex-shrink: 0; border-top: 0.5px solid var(--border); padding: 8px 10px; }
+.user-bar { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background 0.12s; }
+.user-bar:hover { background: var(--muted-h); }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.user-info { flex: 1; overflow: hidden; transition: opacity 0.25s; }
+.sidebar.mini .user-info { opacity: 0; width: 0; }
+.sidebar.mini .user-bar { justify-content: center; width: 34px; margin: 0 auto; padding: 6px; }
+.user-name { font-size: 13px; font-weight: 500; color: var(--ink); }
+
+/* ── Main ── */
+.main { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+
+/* Topbar */
+.topbar { height: 46px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; padding: 0 36px; justify-content: space-between; flex-shrink: 0; background: var(--bg); }
+.topbar-title { font-family: 'Lora', serif; font-size: 15px; color: var(--ink-2); }
+.tb-right { display: flex; align-items: center; gap: 8px; }
+.tb-btn { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 28px; border-radius: 7px; border: 0.5px solid var(--border); background: transparent; font-family: system-ui; font-size: 12px; color: var(--ink-3); cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.tb-btn:hover { background: var(--muted); color: var(--ink-2); }
+
+/* ── Hero ── */
+.hero { padding: 24px 36px 20px; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.hero-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.hero-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-4); }
+.hero-new { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; transition: color 0.15s; }
+.hero-new:hover { color: var(--ink-3); }
+.hero-scroll { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; -ms-overflow-style: none; scrollbar-width: none; padding-bottom: 2px; }
+.hero-scroll::-webkit-scrollbar { display: none; }
+
+.dc {
+  flex-shrink: 0; width: 220px; scroll-snap-align: start;
+  background: var(--sb); border: 0.5px solid var(--border);
+  border-radius: 10px; padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  cursor: pointer; transition: box-shadow 0.2s, border-color 0.2s;
+}
+.dc:hover { border-color: hsl(38,8%,80%); box-shadow: 0 3px 16px 0 hsla(25,18%,12%,0.06); }
+.dc.active { border-top: 2px solid var(--cursor); }
+.dc-status { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-4); }
+.dc.active .dc-status { color: var(--cursor); }
+.dc-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: var(--ink); line-height: 1.3; }
+.dc-excerpt { font-family: system-ui, sans-serif; font-size: 12px; color: var(--ink-3); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+.dc-foot { display: flex; align-items: center; justify-content: space-between; padding-top: 8px; border-top: 0.5px solid var(--border); margin-top: auto; }
+.dc-meta { font-size: 11px; color: var(--ink-4); }
+.dc-btn { font-size: 11px; font-weight: 500; color: var(--cursor); background: hsl(22,55%,93%); border: none; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-family: system-ui; transition: opacity 0.15s; }
+.dc-btn:hover { opacity: 0.85; }
+.dc.new-dc { border: 0.5px dashed var(--border); background: transparent; align-items: center; justify-content: center; gap: 6px; color: var(--ink-4); }
+.dc.new-dc:hover { border-color: var(--ink-3); background: var(--muted); color: var(--ink-3); }
+
+/* ── Table area ── */
+.table-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Filter bar */
+.filter-bar {
+  height: 46px; padding: 0 36px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0; gap: 8px;
+}
+.filters { display: flex; align-items: center; gap: 4px; }
+.f-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 12px; height: 28px; border-radius: 7px;
+  border: none; background: transparent;
+  font-family: system-ui; font-size: 12px; font-weight: 500;
+  color: var(--ink-4); cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.f-btn:hover { background: var(--muted); color: var(--ink-2); }
+.f-btn.on { background: var(--ink); color: white; }
+.f-btn.on svg { stroke: white; }
+.f-count { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 10px; background: hsl(220,50%,92%); color: hsl(220,50%,40%); }
+.f-btn.on .f-count { background: hsla(255,255%,255%,0.2); color: white; }
+
+.filter-right { display: flex; align-items: center; gap: 8px; }
+.search-wrap { display: flex; align-items: center; gap: 7px; background: var(--muted); border-radius: 7px; padding: 5px 10px; }
+.search-input { background: transparent; border: none; outline: none; font-family: system-ui; font-size: 12px; color: var(--ink-2); width: 140px; }
+.search-input::placeholder { color: var(--ink-4); }
+
+/* ── Table ── */
+.table-scroll { flex: 1; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; }
+
+/* Group date headers */
+.date-group th {
+  padding: 20px 36px 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-4);
+  background: var(--bg);
+  border-bottom: 0.5px solid var(--border);
+}
+
+thead.col-heads th {
+  padding: 11px 16px; text-align: left;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-4);
+  border-bottom: 0.5px solid var(--border);
+  background: var(--bg); position: sticky; top: 0; z-index: 5;
+  white-space: nowrap;
+}
+thead.col-heads th:first-child { padding-left: 36px; width: 20px; }
+thead.col-heads th.writing-col { padding-left: 20px; }
+thead.col-heads th:last-child { padding-right: 36px; }
+
+tbody tr { cursor: pointer; transition: background 0.15s; }
+tbody tr:hover td { background: var(--muted); }
+tbody tr.hidden { display: none; }
+
+td {
+  padding: 18px 16px; vertical-align: middle;
+  border-bottom: 0.5px solid var(--border);
+}
+tbody tr:last-child td { border-bottom: none; }
+td.dot-col { padding-left: 36px; padding-right: 0; width: 20px; border-bottom: none !important; }
+td.writing-col { padding-left: 20px; }
+td:last-child { padding-right: 36px; }
+
+/* Writing column */
+.td-writing { min-width: 280px; }
+.td-title {
+  font-family: 'Lora', serif; font-size: 15px; font-weight: 500;
+  color: var(--ink); line-height: 1.3; margin-bottom: 5px;
+}
+.td-excerpt {
+  font-family: system-ui, sans-serif; font-size: 12px;
+  color: var(--ink-3); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; max-width: 420px; line-height: 1.5;
+}
+
+/* State — single unified column */
+.state-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 500; padding: 5px 10px;
+  border-radius: 6px; white-space: nowrap; font-family: system-ui;
+}
+.state-badge.new-reply  { background: hsl(22,55%,92%);  color: var(--cursor); }
+.state-badge.waiting    { background: hsl(45,60%,91%);  color: hsl(35,55%,32%); }
+.state-badge.replied    { background: hsl(140,30%,91%); color: hsl(140,40%,32%); }
+.state-badge.shared-in  { background: hsl(220,40%,92%); color: hsl(220,50%,40%); }
+.state-badge.read       { background: var(--muted);     color: var(--ink-4); }
+
+/* Person */
+.td-person { display: flex; align-items: center; gap: 9px; white-space: nowrap; }
+.sm-avatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: white;
+  flex-shrink: 0; font-family: system-ui;
+}
+.td-person-name { font-size: 13px; color: var(--ink-2); font-family: system-ui; }
+
+/* Date */
+.td-date { font-size: 13px; color: var(--ink-4); font-family: system-ui; white-space: nowrap; }
+
+/* Dot */
+.new-dot { width: 6px; height: 6px; border-radius: 50%; background: hsl(220,50%,55%); display: inline-block; }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar — same as editor -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sb-top">
+      <span class="sb-logo">Odessay</span>
+      <button class="icon-btn" onclick="document.getElementById('sidebar').classList.toggle('mini')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      </button>
+    </div>
+
+    <div class="sb-actions">
+      <button class="btn-new" data-tip="New writing">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="btn-new-label">New writing</span>
+      </button>
+      <div class="nav-item" data-tip="Search" style="margin-top:2px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span class="nav-label">Search</span>
+      </div>
+    </div>
+
+    <div class="nav-scroll">
+      <!-- Desk — active -->
+      <div class="nav-item active" data-tip="Desk">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Desk</span>
+      </div>
+
+      <!-- Collections -->
+      <div class="nav-item" data-tip="Collections" onclick="this.classList.toggle('open');document.getElementById('sub-col').classList.toggle('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+        <span class="nav-label">Collections</span>
+        <svg class="nav-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="sub-items" id="sub-col">
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Reflections
+        </div>
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Sent letters
+        </div>
+        <div class="sub-item" style="color:var(--ink-4);">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New collection
+        </div>
+      </div>
+
+      <!-- Correspondences -->
+      <div class="nav-item" data-tip="Correspondences" onclick="this.classList.toggle('open');document.getElementById('sub-corr').classList.toggle('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+        <span class="nav-label">Correspondences</span>
+        <svg class="nav-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="sub-items" id="sub-corr">
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+          With Mario
+        </div>
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+          With Rodrigo
+        </div>
+      </div>
+
+      <!-- Shared -->
+      <div class="nav-item" data-tip="Shared">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span class="nav-label">Shared</span>
+        <span style="width:6px;height:6px;border-radius:50%;background:hsl(220,50%,55%);flex-shrink:0;"></span>
+      </div>
+
+      <!-- Recent -->
+      <div class="section-lbl">Recent</div>
+      <div class="recent-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span class="recent-title">On silence between two people</span>
+      </div>
+      <div class="recent-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span class="recent-title">Letter I never sent</span>
+      </div>
+      <div class="recent-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span class="recent-title">Notes on waiting</span>
+      </div>
+    </div>
+
+    <!-- User -->
+    <div class="sb-bottom">
+      <div class="user-bar">
+        <div class="avatar">HM</div>
+        <div class="user-info"><div class="user-name">Hugo Marín</div></div>
+        <svg style="color:var(--ink-4);flex-shrink:0;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title">Desk</span>
+
+    </div>
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-head">
+        <span class="hero-label">In progress · <span style="font-weight:400;letter-spacing:0;text-transform:none;color:var(--ink-4);">4 drafts</span></span>
+        <button class="hero-new">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New writing
+        </button>
+      </div>
+      <div class="hero-scroll">
+        <div class="dc active">
+          <div class="dc-status">Editing now</div>
+          <div class="dc-title">On silence between two people who know each other well</div>
+          <div class="dc-excerpt">There is a silence that unsettles and another that rests. The difference is not in its duration...</div>
+          <div class="dc-foot"><span class="dc-meta">Today · 864 w</span></div>
+        </div>
+        <div class="dc">
+          <div class="dc-status">Draft</div>
+          <div class="dc-title">Notes on waiting</div>
+          <div class="dc-excerpt">Waiting is its own kind of presence. Not emptiness but a particular quality of attention...</div>
+          <div class="dc-foot"><span class="dc-meta">Feb 24 · 312 w</span></div>
+        </div>
+        <div class="dc">
+          <div class="dc-status">Draft</div>
+          <div class="dc-title">Things I could not say out loud</div>
+          <div class="dc-excerpt">Some things are easier to write. Not because writing makes them less true...</div>
+          <div class="dc-foot"><span class="dc-meta">Feb 3 · 188 w</span></div>
+        </div>
+        <div class="dc">
+          <div class="dc-status">Draft</div>
+          <div class="dc-title">The weight of an unsent message</div>
+          <div class="dc-excerpt">I wrote you something last week. It sat in my drafts for four days before I read it again...</div>
+          <div class="dc-foot"><span class="dc-meta">Jan 28 · 241 w</span></div>
+        </div>
+        <div class="dc new-dc">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <span style="font-size:13px;font-family:system-ui;">New writing</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter bar + table -->
+    <div class="table-area">
+      <div class="filter-bar">
+        <div class="filters">
+          <button class="f-btn on" onclick="filter('all',this)">All activity</button>
+          <button class="f-btn" onclick="filter('correspondence',this)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+            Correspondence
+          </button>
+          <button class="f-btn" onclick="filter('response',this)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            With responses
+          </button>
+          <button class="f-btn" onclick="filter('received',this)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+            Received
+            <span class="f-count">2</span>
+          </button>
+        </div>
+        <div class="filter-right">
+          <div class="search-wrap">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="search-input" type="text" placeholder="Filter activity..."/>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead class="col-heads">
+            <tr>
+              <th class="" style="width:20px;"></th>
+              <th class="writing-col">Writing</th>
+              <th>State</th>
+              <th>With</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+
+            <!-- Group: Today -->
+            <tr class="date-group"><th colspan="5">Today</th></tr>
+
+            <tr data-type="correspondence received">
+              <td class="dot-col"><span class="new-dot"></span></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">On rolling and what patience actually means</div>
+                <div class="td-excerpt">What you wrote about waiting stayed with me for days. There's something in the idea that attention can be a form of generosity...</div>
+              </td>
+              <td><span class="state-badge new-reply">New reply — Mario</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(200,40%,40%);">MA</div><span class="td-person-name">Mario Ávila</span></div></td>
+              <td class="td-date">2h ago</td>
+            </tr>
+
+            <tr data-type="received">
+              <td class="dot-col"><span class="new-dot"></span></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">A letter for someone who has been reading too fast</div>
+                <div class="td-excerpt">I kept thinking about what you said at the workshop — that speed is the first thing we sacrifice when we start to care less...</div>
+              </td>
+              <td><span class="state-badge shared-in">Shared with me</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(280,30%,45%);">LC</div><span class="td-person-name">Laura Castillo</span></div></td>
+              <td class="td-date">Yesterday</td>
+            </tr>
+
+            <!-- Group: This week -->
+            <tr class="date-group"><th colspan="5">This week</th></tr>
+
+            <tr data-type="correspondence">
+              <td class="dot-col"></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">On showing up</div>
+                <div class="td-excerpt">There's a version of consistency that's actually avoidance — doing the same thing not because it matters but because it's safe...</div>
+              </td>
+              <td><span class="state-badge waiting">Waiting reply</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(150,30%,38%);">RV</div><span class="td-person-name">Rodrigo Vega</span></div></td>
+              <td class="td-date">Mar 12</td>
+            </tr>
+
+            <tr data-type="response">
+              <td class="dot-col"></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">On distance and care</div>
+                <div class="td-excerpt">There are people we love from a distance — not because we choose distance but because closeness would change what we love about them...</div>
+              </td>
+              <td><span class="state-badge replied">Replied</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(200,40%,40%);">MA</div><span class="td-person-name">Mario Ávila</span></div></td>
+              <td class="td-date">Mar 10</td>
+            </tr>
+
+            <!-- Group: Earlier -->
+            <tr class="date-group"><th colspan="5">Earlier</th></tr>
+
+            <tr data-type="correspondence">
+              <td class="dot-col"></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">Notes to no one</div>
+                <div class="td-excerpt">I'm writing this because I need to say it somewhere. Not to you specifically, but to the idea of someone who might understand...</div>
+              </td>
+              <td><span class="state-badge waiting">Waiting reply</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(260,30%,42%);">CM</div><span class="td-person-name">Carlos Mora</span></div></td>
+              <td class="td-date">Feb 28</td>
+            </tr>
+
+            <tr data-type="response">
+              <td class="dot-col"></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">A letter for someone who needs no advice</div>
+                <div class="td-excerpt">I write this not because I think you need it, but because I needed to say it. Sometimes the writing is for the writer first...</div>
+              </td>
+              <td><span class="state-badge replied">2 responses</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(280,30%,45%);">LC</div><span class="td-person-name">Laura Castillo</span></div></td>
+              <td class="td-date">Feb 22</td>
+            </tr>
+
+            <tr data-type="response">
+              <td class="dot-col"></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">What attention actually means</div>
+                <div class="td-excerpt">I have been thinking about what it means to pay attention. Not to notice things, but to give them the weight they deserve...</div>
+              </td>
+              <td><span class="state-badge replied">Replied</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(150,30%,38%);">RV</div><span class="td-person-name">Rodrigo Vega</span></div></td>
+              <td class="td-date">Feb 18</td>
+            </tr>
+
+            <tr data-type="received">
+              <td class="dot-col"></td>
+              <td class="td-writing writing-col">
+                <div class="td-title">Re: on showing up</div>
+                <div class="td-excerpt">There's a version of consistency that's avoidance — doing the same thing not because it matters but because it's safe and familiar...</div>
+              </td>
+              <td><span class="state-badge read">Read</span></td>
+              <td><div class="td-person"><div class="sm-avatar" style="background:hsl(150,30%,38%);">RV</div><span class="td-person-name">Rodrigo Vega</span></div></td>
+              <td class="td-date">Mar 12</td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function filter(type, btn) {
+  document.querySelectorAll('.f-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const rows = document.querySelectorAll('#tbody tr:not(.date-group)');
+  rows.forEach(row => {
+    if (type === 'all') { row.classList.remove('hidden'); return; }
+    const t = row.dataset.type || '';
+    row.classList.toggle('hidden', !t.includes(type));
+  });
+  // Hide date group headers if all their rows are hidden
+  document.querySelectorAll('.date-group').forEach(group => {
+    let next = group.nextElementSibling;
+    let allHidden = true;
+    while (next && !next.classList.contains('date-group')) {
+      if (!next.classList.contains('hidden')) allHidden = false;
+      next = next.nextElementSibling;
+    }
+    group.classList.toggle('hidden', allHidden);
+  });
+}
+</script>
+</body>
+</html>

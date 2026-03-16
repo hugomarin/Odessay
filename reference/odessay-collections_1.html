@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odessay — Collections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      hsl(38,12%,98%);
+  --sb:      hsl(0,0%,100%);
+  --muted:   hsl(38,8%,93%);
+  --muted-h: hsl(38,8%,90%);
+  --border:  hsl(38,8%,90%);
+  --ink:     hsl(25,18%,10%);
+  --ink-2:   hsl(25,12%,22%);
+  --ink-3:   hsl(25,10%,38%);
+  --ink-4:   hsl(25,8%,52%);
+  --cursor:  hsl(22,55%,38%);
+}
+html, body { height: 100%; background: var(--bg); font-family: system-ui,-apple-system,sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar { width: 292px; flex-shrink: 0; background: var(--sb); border-right: 0.5px solid var(--border); display: flex; flex-direction: column; overflow: hidden; transition: width 0.3s cubic-bezier(0.4,0,0.15,1); }
+.sidebar.mini { width: 52px; }
+.sb-top { height: 46px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.sb-logo { font-family: 'Lora',serif; font-size: 17px; color: var(--ink); white-space: nowrap; transition: opacity 0.25s; }
+.sidebar.mini .sb-logo { opacity: 0; width: 0; overflow: hidden; }
+.icon-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; color: var(--ink-3); background: transparent; border: none; transition: background 0.12s; flex-shrink: 0; }
+.icon-btn:hover { background: var(--muted-h); }
+.sb-actions { padding: 8px 10px; border-bottom: 0.5px solid var(--border); flex-shrink: 0; }
+.btn-new { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border-radius: 8px; background: transparent; color: var(--ink); border: none; cursor: pointer; font-family: system-ui; font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; transition: background 0.18s; }
+.btn-new:hover { background: var(--muted-h); }
+.btn-new-label { transition: opacity 0.25s; }
+.sidebar.mini .btn-new { justify-content: center; padding: 9px; background: var(--ink); color: white; width: 34px; margin: 0 auto; }
+.sidebar.mini .btn-new-label { opacity: 0; width: 0; overflow: hidden; }
+.nav-scroll { flex: 1; overflow-y: auto; padding: 6px 10px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 15px; color: var(--ink-2); white-space: nowrap; overflow: hidden; transition: background 0.18s, color 0.18s; }
+.nav-item:hover { background: var(--muted-h); color: var(--ink); }
+.nav-item.active { background: var(--muted); color: var(--ink); font-weight: 500; }
+.nav-label { transition: opacity 0.25s; flex: 1; }
+.sidebar.mini .nav-label { opacity: 0; width: 0; }
+.sidebar.mini .nav-item { justify-content: center; padding: 10px; gap: 0; }
+.nav-chev { color: var(--ink-4); transition: transform 0.28s cubic-bezier(0.4,0,0.15,1); flex-shrink: 0; }
+.nav-item.open .nav-chev { transform: rotate(90deg); }
+.sidebar.mini .nav-chev { opacity: 0; width: 0; }
+.sub-items { overflow: hidden; max-height: 0; transition: max-height 0.32s cubic-bezier(0.4,0,0.15,1); }
+.sub-items.open { max-height: 300px; }
+.sidebar.mini .sub-items { display: none; }
+.sub-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px 7px 34px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink-3); transition: background 0.15s, color 0.15s; }
+.sub-item:hover { background: var(--muted-h); color: var(--ink-2); }
+.sub-item.active { background: var(--muted); color: var(--ink-2); font-weight: 500; }
+.section-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); padding: 12px 10px 4px; transition: opacity 0.25s; }
+.sidebar.mini .section-lbl { opacity: 0; height: 0; padding: 0; }
+.recent-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; transition: background 0.15s, color 0.15s; }
+.recent-item:hover { background: var(--muted-h); color: var(--ink-2); }
+.recent-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sidebar.mini .recent-item { display: none; }
+.sb-bottom { flex-shrink: 0; border-top: 0.5px solid var(--border); padding: 8px 10px; }
+.user-bar { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; transition: background 0.12s; }
+.user-bar:hover { background: var(--muted-h); }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: white; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.user-info { flex: 1; overflow: hidden; transition: opacity 0.25s; }
+.sidebar.mini .user-info { opacity: 0; width: 0; }
+.sidebar.mini .user-bar { justify-content: center; width: 34px; margin: 0 auto; padding: 6px; }
+.user-name { font-size: 13px; font-weight: 500; color: var(--ink); }
+
+/* ── Main ── */
+.main { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.topbar { height: 46px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; padding: 0 36px; justify-content: space-between; flex-shrink: 0; background: var(--bg); }
+.topbar-title { font-family: 'Lora', serif; font-size: 15px; color: var(--ink-2); }
+.tb-right { display: flex; align-items: center; gap: 8px; }
+.tb-btn { display: flex; align-items: center; gap: 6px; padding: 0 12px; height: 28px; border-radius: 7px; border: 0.5px solid var(--border); background: transparent; font-family: system-ui; font-size: 12px; color: var(--ink-3); cursor: pointer; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.tb-btn:hover { background: var(--muted); color: var(--ink-2); }
+.tb-btn.primary { background: var(--ink); color: white; border-color: transparent; }
+.tb-btn.primary:hover { opacity: 0.87; }
+
+/* ── Content ── */
+.content { flex: 1; overflow-y: auto; }
+
+/* ── Uncategorized banner ── */
+.uncategorized-banner {
+  margin: 24px 36px 0;
+  border-radius: 12px;
+  border: 0.5px solid hsl(22,40%,84%);
+  background: hsl(22,55%,97%);
+  overflow: hidden;
+}
+.ub-head {
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer;
+}
+.ub-head-left { display: flex; align-items: center; gap: 10px; }
+.ub-icon { color: var(--cursor); }
+.ub-title { font-size: 13px; font-weight: 600; color: var(--ink-2); font-family: system-ui; }
+.ub-count { font-size: 12px; color: var(--ink-3); font-family: system-ui; }
+.ub-ai-suggestion {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px 12px;
+  border-top: 0.5px solid hsl(22,40%,88%);
+  background: hsl(22,55%,95%);
+}
+.ub-ai-icon { color: var(--cursor); flex-shrink: 0; }
+.ub-ai-text { font-size: 12px; color: var(--ink-2); line-height: 1.5; font-family: system-ui; flex: 1; }
+.ub-ai-text strong { font-weight: 600; }
+.ub-ai-btn {
+  font-size: 11px; font-weight: 600; color: var(--cursor);
+  background: white; border: 0.5px solid hsl(22,40%,80%);
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  font-family: system-ui; white-space: nowrap;
+  transition: background 0.15s;
+}
+.ub-ai-btn:hover { background: hsl(22,55%,93%); }
+
+/* ── Organize panel (uncategorized writings) ── */
+.organize-panel {
+  margin: 0 36px;
+  border: 0.5px solid hsl(22,40%,84%);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.4s cubic-bezier(0.4,0,0.15,1);
+}
+.organize-panel.open { max-height: 600px; }
+
+/* Organize toolbar */
+.organize-toolbar {
+  padding: 10px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: hsl(22,30%,96%);
+  border-bottom: 0.5px solid hsl(22,40%,88%);
+}
+.organize-toolbar-left { display: flex; align-items: center; gap: 8px; }
+.select-all {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--ink-3); cursor: pointer;
+  background: transparent; border: none; font-family: system-ui;
+}
+.org-count { font-size: 12px; color: var(--ink-4); font-family: system-ui; }
+.assign-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 6px;
+  background: var(--ink); color: white; border: none;
+  font-size: 12px; font-weight: 500; font-family: system-ui;
+  cursor: pointer; opacity: 0.4; transition: opacity 0.15s;
+}
+.assign-btn.active { opacity: 1; }
+
+/* Writing cards in organize mode */
+.organize-list { max-height: 480px; overflow-y: auto; }
+.org-item {
+  display: grid;
+  grid-template-columns: 32px 1fr auto auto;
+  align-items: start; gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 0.5px solid hsl(22,40%,90%);
+  transition: background 0.12s; cursor: pointer;
+}
+.org-item:last-child { border-bottom: none; }
+.org-item:hover { background: hsl(22,55%,96%); }
+.org-item.selected { background: hsl(22,55%,94%); }
+
+/* Checkbox */
+.org-check {
+  width: 18px; height: 18px; border-radius: 5px;
+  border: 1.5px solid var(--border); background: white;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; margin-top: 2px; transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+}
+.org-item.selected .org-check { border-color: var(--cursor); background: var(--cursor); }
+.org-item.selected .org-check svg { display: block; }
+.org-check svg { display: none; }
+
+/* Preview */
+.org-preview { min-width: 0; }
+.org-filename { font-size: 11px; color: var(--ink-4); font-family: system-ui; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.org-excerpt { font-family: 'Lora', serif; font-size: 13px; color: var(--ink); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.org-meta { font-size: 11px; color: var(--ink-4); font-family: system-ui; margin-top: 4px; display: flex; gap: 8px; }
+
+/* AI suggestion pill */
+.ai-suggest {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 9px; border-radius: 5px;
+  background: hsl(22,55%,93%); border: 0.5px solid hsl(22,40%,82%);
+  font-size: 11px; font-weight: 500; color: var(--cursor);
+  white-space: nowrap; cursor: pointer; font-family: system-ui;
+  transition: background 0.12s;
+}
+.ai-suggest:hover { background: hsl(22,55%,88%); }
+.ai-suggest-label { font-size: 9px; font-weight: 700; letter-spacing: 0.05em; opacity: 0.7; }
+
+/* Collection dropdown */
+.col-assign {
+  position: relative;
+}
+.col-dropdown {
+  display: none; position: absolute; right: 0; top: 28px;
+  background: white; border: 0.5px solid var(--border);
+  border-radius: 10px; box-shadow: 0 8px 24px 0 hsla(25,18%,12%,0.1);
+  z-index: 100; min-width: 160px; overflow: hidden;
+  animation: menuIn 0.15s ease both;
+}
+.col-dropdown.open { display: block; }
+.col-dropdown-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; cursor: pointer; font-size: 13px;
+  color: var(--ink-2); font-family: system-ui;
+  transition: background 0.1s;
+}
+.col-dropdown-item:hover { background: var(--muted); }
+.col-dropdown-item.new { color: var(--ink-4); border-top: 0.5px solid var(--border); }
+
+/* ── Collections grid ── */
+.collections-section { padding: 28px 36px 48px; }
+.cs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.cs-title { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-4); }
+.cs-new { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-4); cursor: pointer; background: transparent; border: none; font-family: system-ui; transition: color 0.15s; }
+.cs-new:hover { color: var(--ink-3); }
+
+.col-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.col-card {
+  padding: 16px; border-radius: 12px;
+  background: var(--sb); border: 0.5px solid var(--border);
+  cursor: pointer; transition: border-color 0.18s, box-shadow 0.18s;
+}
+.col-card:hover { border-color: hsl(38,8%,80%); box-shadow: 0 3px 16px 0 hsla(25,18%,12%,0.05); }
+.cc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.cc-icon { color: var(--ink-4); }
+.cc-name { font-size: 14px; font-weight: 500; color: var(--ink); font-family: system-ui; }
+.cc-count { font-size: 11px; color: var(--ink-4); font-family: system-ui; margin-bottom: 10px; }
+.cc-previews { display: flex; flex-direction: column; gap: 5px; border-top: 0.5px solid var(--border); padding-top: 10px; }
+.cc-preview-item {
+  font-family: 'Lora', serif; font-size: 12px; color: var(--ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  line-height: 1.4;
+}
+.col-card.new-col {
+  border: 0.5px dashed var(--border); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; color: var(--ink-4); min-height: 120px;
+}
+.col-card.new-col:hover { border-color: var(--ink-3); background: var(--muted); color: var(--ink-3); }
+
+@keyframes menuIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ── Expandable collections ── */
+  .coll-block {
+    border: 0.5px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+    margin-bottom: 8px;
+    background: var(--sb);
+  }
+  .coll-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 13px 16px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .coll-header:hover { background: var(--muted); }
+  .coll-header-left { display: flex; align-items: center; gap: 9px; }
+  .coll-chev {
+    color: var(--ink-4); flex-shrink: 0;
+    transition: transform 0.25s cubic-bezier(0.4,0,0.15,1);
+  }
+  .coll-chev.open { transform: rotate(90deg); }
+  .coll-name { font-size: 14px; font-weight: 500; color: var(--ink); font-family: system-ui; }
+  .coll-count {
+    font-size: 11px; font-weight: 500;
+    background: var(--muted); color: var(--ink-4);
+    padding: 1px 7px; border-radius: 10px; font-family: system-ui;
+  }
+  .coll-new-btn {
+    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; border: none; background: transparent;
+    cursor: pointer; color: var(--ink-4);
+    transition: background 0.12s, color 0.12s; opacity: 0;
+  }
+  .coll-header:hover .coll-new-btn { opacity: 1; }
+  .coll-new-btn:hover { background: var(--muted-h); color: var(--ink-2); }
+
+  .coll-writings {
+    max-height: 0; overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4,0,0.15,1);
+    border-top: 0.5px solid transparent;
+  }
+  .coll-writings.open {
+    max-height: 2000px;
+    border-top-color: var(--border);
+  }
+
+  .coll-writing-item {
+    padding: 14px 16px 14px 40px;
+    border-bottom: 0.5px solid var(--border);
+    cursor: pointer; transition: background 0.12s;
+  }
+  .coll-writing-item:last-of-type { border-bottom: none; }
+  .coll-writing-item:hover { background: var(--muted); }
+  .cwi-title { font-family: 'Lora', serif; font-size: 14px; font-weight: 500; color: var(--ink); line-height: 1.3; margin-bottom: 4px; }
+  .cwi-excerpt { font-family: system-ui, sans-serif; font-size: 12px; color: var(--ink-3); line-height: 1.5; margin-bottom: 7px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .cwi-meta { display: flex; align-items: center; gap: 8px; }
+  .cwi-badge { font-size: 10px; font-weight: 500; padding: 2px 6px; border-radius: 4px; font-family: system-ui; }
+  .cwi-badge.draft { background: var(--muted); color: var(--ink-4); }
+  .cwi-badge.done { background: hsl(140,30%,91%); color: hsl(140,40%,30%); }
+  .cwi-badge.shared { background: hsl(220,40%,92%); color: hsl(220,50%,40%); }
+  .cwi-date { font-size: 11px; color: var(--ink-4); font-family: system-ui; }
+  .cwi-words { font-size: 11px; color: var(--ink-4); font-family: system-ui; }
+
+  .coll-show-more {
+    padding: 11px 16px 11px 40px;
+    font-size: 12px; color: var(--ink-4); cursor: pointer;
+    font-family: system-ui; transition: color 0.12s, background 0.12s;
+  }
+  .coll-show-more:hover { color: var(--ink-3); background: var(--muted); }
+
+  .coll-new-block {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px; border-radius: 10px;
+    border: 0.5px dashed var(--border); background: transparent;
+    font-size: 13px; color: var(--ink-4); cursor: pointer;
+    font-family: system-ui; transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .coll-new-block:hover { border-color: var(--ink-3); color: var(--ink-3); background: var(--muted); }
+
+  /* Remove old col-grid styles that are no longer needed */
+  .cs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cs-title { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-4); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sb-top">
+      <span class="sb-logo">Odessay</span>
+      <button class="icon-btn" onclick="document.getElementById('sidebar').classList.toggle('mini')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
+      </button>
+    </div>
+    <div class="sb-actions">
+      <button class="btn-new">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span class="btn-new-label">New writing</span>
+      </button>
+      <div class="nav-item" style="margin-top:2px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <span class="nav-label">Search</span>
+      </div>
+    </div>
+    <div class="nav-scroll">
+      <div class="nav-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Desk</span>
+      </div>
+      <div class="nav-item active open" onclick="this.classList.toggle('open');document.getElementById('sub-col').classList.toggle('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+        <span class="nav-label">Collections</span>
+        <svg class="nav-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="sub-items open" id="sub-col">
+        <div class="sub-item" style="color:hsl(22,55%,38%);font-weight:500;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--cursor)"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Uncategorized <span style="font-size:10px;background:hsl(22,55%,92%);color:var(--cursor);padding:1px 5px;border-radius:4px;font-weight:600;margin-left:2px;">23</span>
+        </div>
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Reflections
+        </div>
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Sent letters
+        </div>
+        <div class="sub-item">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          BJJ notes
+        </div>
+      </div>
+      <div class="nav-item" onclick="this.classList.toggle('open');document.getElementById('sub-corr').classList.toggle('open')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M4 6H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>
+        <span class="nav-label">Correspondences</span>
+        <svg class="nav-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="sub-items" id="sub-corr">
+        <div class="sub-item">With Mario</div>
+        <div class="sub-item">With Rodrigo</div>
+      </div>
+      <div class="nav-item">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        <span class="nav-label">Shared</span>
+      </div>
+      <div class="section-lbl">Recent</div>
+      <div class="recent-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span class="recent-title">On silence between two people</span>
+      </div>
+      <div class="recent-item">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);flex-shrink:0;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <span class="recent-title">Notes on waiting</span>
+      </div>
+    </div>
+    <div class="sb-bottom">
+      <div class="user-bar">
+        <div class="avatar">HM</div>
+        <div class="user-info"><div class="user-name">Hugo Marín</div></div>
+        <svg style="color:var(--ink-4);flex-shrink:0;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title">Collections</span>
+      <div class="tb-right">
+<button class="tb-btn primary" onclick="">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New collection
+        </button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- Uncategorized banner -->
+      <div class="uncategorized-banner">
+        <div class="ub-head" onclick="toggleOrganize()">
+          <div class="ub-head-left">
+            <svg class="ub-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span class="ub-title">23 writings without a collection</span>
+            <span class="ub-count">— click to organize</span>
+          </div>
+          <svg id="ub-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4);transition:transform 0.25s;"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="ub-ai-suggestion">
+          <svg class="ub-ai-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg>
+          <span class="ub-ai-text">The editor found <strong>4 possible groups</strong> among your uncategorized writings: reflections on attention, BJJ practice notes, letters never sent, and philosophical fragments. <strong>Review suggestions →</strong></span>
+          <button class="ub-ai-btn" onclick="toggleOrganize()">Organize with AI</button>
+        </div>
+      </div>
+
+      <!-- Organize panel -->
+      <div class="organize-panel" id="organize-panel">
+        <div class="organize-toolbar">
+          <div class="organize-toolbar-left">
+            <button class="select-all" onclick="toggleSelectAll()">
+              <div id="select-all-check" style="width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;background:white;">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none;" id="select-all-svg"><polyline points="20 6 9 17 4 12"/></svg>
+              </div>
+              Select all
+            </button>
+            <span class="org-count" id="selected-count">0 selected</span>
+          </div>
+          <button class="assign-btn" id="assign-btn" onclick="openAssignDropdown()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+            Add to collection
+            <div id="assign-dropdown" class="col-dropdown" style="position:fixed;">
+              <div class="col-dropdown-item" onclick="assignToCollection('Reflections')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Reflections
+              </div>
+              <div class="col-dropdown-item" onclick="assignToCollection('Sent letters')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Sent letters
+              </div>
+              <div class="col-dropdown-item" onclick="assignToCollection('BJJ notes')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                BJJ notes
+              </div>
+              <div class="col-dropdown-item new">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                New collection...
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div class="organize-list">
+
+          <div class="org-item" onclick="toggleSelect(this)">
+            <div class="org-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="org-preview">
+              <div class="org-filename">notas-silencio-marzo.txt</div>
+              <div class="org-excerpt">Hay un silencio que incomoda y hay otro que descansa. La diferencia no está en la duración sino en lo que cada quien trae a ese espacio en blanco que se abre entre dos personas que se conocen bien.</div>
+              <div class="org-meta"><span>Mar 8</span><span>312 words</span></div>
+            </div>
+            <div class="ai-suggest" onclick="event.stopPropagation();acceptSuggestion(this,'Reflections')">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+              <span class="ai-suggest-label">AI</span>Reflections
+            </div>
+          </div>
+
+          <div class="org-item" onclick="toggleSelect(this)">
+            <div class="org-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="org-preview">
+              <div class="org-filename">Untitled 47</div>
+              <div class="org-excerpt">Rolling today with the purple belt. He passed my guard three times in the same way and each time I knew what was coming and still couldn't stop it. There's something about that gap between understanding and doing.</div>
+              <div class="org-meta"><span>Feb 28</span><span>188 words</span></div>
+            </div>
+            <div class="ai-suggest" onclick="event.stopPropagation();acceptSuggestion(this,'BJJ notes')">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+              <span class="ai-suggest-label">AI</span>BJJ notes
+            </div>
+          </div>
+
+          <div class="org-item" onclick="toggleSelect(this)">
+            <div class="org-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="org-preview">
+              <div class="org-filename">carta-que-nunca-envie.md</div>
+              <div class="org-excerpt">Empecé a escribir esto hace tres días. No sé si te lo voy a enviar. Quizás lo que necesito no es que lo leas sino que exista — que haya un lugar donde esto esté dicho aunque sea solo para mí.</div>
+              <div class="org-meta"><span>Feb 21</span><span>441 words</span></div>
+            </div>
+            <div class="ai-suggest" onclick="event.stopPropagation();acceptSuggestion(this,'Sent letters')">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+              <span class="ai-suggest-label">AI</span>Sent letters
+            </div>
+          </div>
+
+          <div class="org-item" onclick="toggleSelect(this)">
+            <div class="org-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="org-preview">
+              <div class="org-filename">fragment-davidson-language.txt</div>
+              <div class="org-excerpt">Davidson's argument about radical interpretation assumes that we can identify mental states independently of linguistic behavior. But if meaning is holistic, the very possibility of identifying beliefs presupposes a background of shared...</div>
+              <div class="org-meta"><span>Feb 15</span><span>623 words</span></div>
+            </div>
+            <div class="ai-suggest" onclick="event.stopPropagation();acceptSuggestion(this,'Reflections')">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+              <span class="ai-suggest-label">AI</span>Reflections
+            </div>
+          </div>
+
+          <div class="org-item" onclick="toggleSelect(this)">
+            <div class="org-check"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+            <div class="org-preview">
+              <div class="org-filename">Untitled</div>
+              <div class="org-excerpt">La espera es una forma de presencia. No es vacío sino una calidad particular de atención — el cuerpo alerta, la mente suspendida entre lo que fue y lo que puede venir.</div>
+              <div class="org-meta"><span>Feb 10</span><span>97 words</span></div>
+            </div>
+            <div class="ai-suggest" onclick="event.stopPropagation();acceptSuggestion(this,'Reflections')">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/></svg>
+              <span class="ai-suggest-label">AI</span>Reflections
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Collections expandable -->
+      <div class="collections-section">
+        <div class="cs-head">
+          <span class="cs-title">Your collections</span>
+        </div>
+
+        <!-- Collection: Reflections -->
+        <div class="coll-block" id="coll-reflections">
+          <div class="coll-header" onclick="toggleColl('reflections')">
+            <div class="coll-header-left">
+              <svg class="coll-chev" id="chev-reflections" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4)"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+              <span class="coll-name">Reflections</span>
+              <span class="coll-count">8</span>
+            </div>
+            <button class="coll-new-btn" onclick="event.stopPropagation()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div class="coll-writings" id="writings-reflections">
+            <div class="coll-writing-item" onclick="">
+              <div class="cwi-title">On silence between two people who know each other well</div>
+              <div class="cwi-excerpt">There is a silence that unsettles and another that rests. The difference is not in its duration but in what each person brings...</div>
+              <div class="cwi-meta"><span class="cwi-badge done">Done</span><span class="cwi-date">Mar 8</span><span class="cwi-words">864 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">What attention actually means</div>
+              <div class="cwi-excerpt">I have been thinking about what it means to pay attention. Not to notice things, but to give them the weight they deserve.</div>
+              <div class="cwi-meta"><span class="cwi-badge done">Done</span><span class="cwi-date">Feb 18</span><span class="cwi-words">512 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">On distance and care</div>
+              <div class="cwi-excerpt">There are people we love from a distance — not because we choose distance but because closeness would change what we love about them.</div>
+              <div class="cwi-meta"><span class="cwi-badge draft">Draft</span><span class="cwi-date">Feb 10</span><span class="cwi-words">388 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">Notes on waiting</div>
+              <div class="cwi-excerpt">Waiting is its own kind of presence. Not emptiness but a particular quality of attention.</div>
+              <div class="cwi-meta"><span class="cwi-badge draft">Draft</span><span class="cwi-date">Jan 24</span><span class="cwi-words">312 w</span></div>
+            </div>
+            <div class="coll-show-more" onclick="showMore('reflections',this)">Show 4 more</div>
+          </div>
+        </div>
+
+        <!-- Collection: Sent letters -->
+        <div class="coll-block" id="coll-sent">
+          <div class="coll-header" onclick="toggleColl('sent')">
+            <div class="coll-header-left">
+              <svg class="coll-chev" id="chev-sent" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4)"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+              <span class="coll-name">Sent letters</span>
+              <span class="coll-count">5</span>
+            </div>
+            <button class="coll-new-btn" onclick="event.stopPropagation()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div class="coll-writings" id="writings-sent">
+            <div class="coll-writing-item">
+              <div class="cwi-title">On the day you left</div>
+              <div class="cwi-excerpt">I keep thinking about what you said. Not the words exactly — I've already lost those — but the weight of the thing you were trying to say.</div>
+              <div class="cwi-meta"><span class="cwi-badge shared">Shared</span><span class="cwi-date">Mar 1</span><span class="cwi-words">621 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">What I meant to say</div>
+              <div class="cwi-excerpt">After our last conversation I realized I had said everything except the one thing that mattered.</div>
+              <div class="cwi-meta"><span class="cwi-badge shared">Shared</span><span class="cwi-date">Jan 15</span><span class="cwi-words">448 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">Sunday morning</div>
+              <div class="cwi-excerpt">I woke up thinking about what you said about patience. Not patience as waiting — patience as a form of respect for the process.</div>
+              <div class="cwi-meta"><span class="cwi-badge shared">Shared</span><span class="cwi-date">Feb 10</span><span class="cwi-words">290 w</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Collection: BJJ notes -->
+        <div class="coll-block" id="coll-bjj">
+          <div class="coll-header" onclick="toggleColl('bjj')">
+            <div class="coll-header-left">
+              <svg class="coll-chev" id="chev-bjj" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-4)"><path d="M2 3h4v18H2z"/><path d="M7 3h4v18H7z"/><path d="M14 3l4 18"/><path d="M12 3l4 18"/><line x1="2" y1="21" x2="22" y2="21"/></svg>
+              <span class="coll-name">BJJ notes</span>
+              <span class="coll-count">12</span>
+            </div>
+            <button class="coll-new-btn" onclick="event.stopPropagation()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          <div class="coll-writings" id="writings-bjj">
+            <div class="coll-writing-item">
+              <div class="cwi-title">On rolling and patience</div>
+              <div class="cwi-excerpt">You asked me why I keep going back to the mat even when it's not working. I've been thinking about that for days.</div>
+              <div class="cwi-meta"><span class="cwi-badge done">Done</span><span class="cwi-date">Mar 10</span><span class="cwi-words">534 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">The guard pass problem</div>
+              <div class="cwi-excerpt">I think I finally understand what I've been doing wrong. It's not technical — it's attentional. I'm watching the wrong thing.</div>
+              <div class="cwi-meta"><span class="cwi-badge done">Done</span><span class="cwi-date">Mar 6</span><span class="cwi-words">412 w</span></div>
+            </div>
+            <div class="coll-writing-item">
+              <div class="cwi-title">What showing up means</div>
+              <div class="cwi-excerpt">There's a version of consistency that's actually avoidance — doing the same thing not because it matters but because it's safe and familiar.</div>
+              <div class="cwi-meta"><span class="cwi-badge draft">Draft</span><span class="cwi-date">Feb 20</span><span class="cwi-words">188 w</span></div>
+            </div>
+            <div class="coll-show-more" onclick="showMore('bjj',this)">Show 9 more</div>
+          </div>
+        </div>
+
+        <!-- New collection -->
+        <div class="coll-new-block">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New collection
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+
+function toggleColl(id) {
+  const writings = document.getElementById('writings-' + id);
+  const chev = document.getElementById('chev-' + id);
+  writings.classList.toggle('open');
+  chev.classList.toggle('open');
+}
+
+function showMore(id, btn) {
+  btn.style.display = 'none';
+}
+
+let selectedCount = 0;
+let allSelected = false;
+
+function toggleOrganize() {
+  const panel = document.getElementById('organize-panel');
+  const chev = document.getElementById('ub-chev');
+  panel.classList.toggle('open');
+  chev.style.transform = panel.classList.contains('open') ? 'rotate(180deg)' : 'rotate(0deg)';
+}
+
+function toggleSelect(row) {
+  row.classList.toggle('selected');
+  selectedCount = document.querySelectorAll('.org-item.selected').length;
+  document.getElementById('selected-count').textContent = selectedCount + ' selected';
+  const btn = document.getElementById('assign-btn');
+  btn.classList.toggle('active', selectedCount > 0);
+}
+
+function toggleSelectAll() {
+  allSelected = !allSelected;
+  document.querySelectorAll('.org-item').forEach(item => {
+    item.classList.toggle('selected', allSelected);
+  });
+  const check = document.getElementById('select-all-check');
+  const svg = document.getElementById('select-all-svg');
+  check.style.background = allSelected ? 'var(--cursor)' : 'white';
+  check.style.borderColor = allSelected ? 'var(--cursor)' : 'var(--border)';
+  svg.style.display = allSelected ? 'block' : 'none';
+  selectedCount = allSelected ? document.querySelectorAll('.org-item').length : 0;
+  document.getElementById('selected-count').textContent = selectedCount + ' selected';
+  document.getElementById('assign-btn').classList.toggle('active', allSelected);
+}
+
+function openAssignDropdown() {
+  if (selectedCount === 0) return;
+  const dd = document.getElementById('assign-dropdown');
+  const btn = document.getElementById('assign-btn');
+  const rect = btn.getBoundingClientRect();
+  dd.style.top = (rect.bottom + 6) + 'px';
+  dd.style.right = (window.innerWidth - rect.right) + 'px';
+  dd.style.left = 'auto';
+  dd.classList.toggle('open');
+}
+
+function assignToCollection(name) {
+  document.querySelectorAll('.org-item.selected').forEach(item => {
+    item.style.opacity = '0.4';
+    item.style.pointerEvents = 'none';
+    item.style.transition = 'opacity 0.3s';
+  });
+  document.getElementById('assign-dropdown').classList.remove('open');
+  const count = document.querySelector('.ub-count');
+  const remaining = parseInt(document.querySelector('.ub-title').textContent) - selectedCount;
+  document.querySelector('.ub-title').textContent = remaining + ' writings without a collection';
+  selectedCount = 0;
+  document.getElementById('selected-count').textContent = '0 selected';
+  document.getElementById('assign-btn').classList.remove('active');
+}
+
+function acceptSuggestion(btn, collection) {
+  const row = btn.closest('.org-item');
+  row.style.opacity = '0.4';
+  row.style.pointerEvents = 'none';
+  row.style.transition = 'opacity 0.3s';
+  btn.textContent = '✓ ' + collection;
+  btn.style.background = 'hsl(140,30%,88%)';
+  btn.style.color = 'hsl(140,40%,30%)';
+  btn.style.borderColor = 'hsl(140,30%,78%)';
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#assign-btn')) {
+    document.getElementById('assign-dropdown').classList.remove('open');
+  }
+});
+</script>
+</body>
+</html>
