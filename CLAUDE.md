@@ -25,7 +25,7 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 | `docs/odessay-editor.md` | Editor TipTap: extensiones, shortcuts, auto-save, modales, layout. Referencia técnica del componente más crítico. |
 | `docs/odessay-ai-editor.md` | Spec del AI editor residente |
 | `docs/odessay-margenes.md` | Sistema de márgenes (highlight y anotación en lectura) |
-| `skills/skill-design-vistas.md` | Especificación visual por vista: valores exactos de Sidebar, Desk, Collections, Correspondences, Reading, Editor + checklists de validación |
+| `skills/skill-design-vistas/SKILL.md` | Especificación visual por vista: valores exactos de Sidebar, Desk, Collections, Correspondences, Reading, Editor + checklists de validación |
 | `docs/odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |
 
 ---
@@ -34,14 +34,14 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 
 | Skill | Cuándo usarlo |
 |-------|---------------|
-| `skills/skill-design.md` | **Siempre antes de construir UI.** Tokens de color, tipografía, ShadCN, iconos, transiciones, reglas invariables. |
-| `skills/skill-design-vistas.md` | **Leer antes de implementar cada vista.** Valores exactos de padding, tamaños y comportamiento por pantalla + checklists de validación. Companion de skill-design. |
-| `skills/skill-frontend.md` | Arquitectura React, estructura de archivos, naming BEM, TipTap, Server/Client components, performance, accesibilidad. Leer después de skill-design. |
-| `skills/skill-backend.md` | API routes, Supabase, local-first, Claude API, Resend, manejo de errores. |
-| `skills/skill-database.md` | Supabase, RLS policies, migraciones, índices. |
-| `skills/skill-code-review.md` | **Siempre antes de abrir un PR.** Checklist completo de calidad, velocidad y seguridad. |
-| `skills/skill-product-manager.md` | Criterios de producto, creación y ejecución de issues. |
-| `skills/skill-ux-testing.md` | Testing de UX, flujos E2E con Playwright. |
+| `skills/skill-design/SKILL.md` | **Siempre antes de construir UI.** Tokens de color, tipografía, ShadCN, iconos, transiciones, reglas invariables. |
+| `skills/skill-design-vistas/SKILL.md` | **Leer antes de implementar cada vista.** Valores exactos de padding, tamaños y comportamiento por pantalla + checklists de validación. Companion de skill-design. |
+| `skills/skill-frontend/SKILL.md` | Arquitectura React, estructura de archivos, naming BEM, TipTap, Server/Client components, performance, accesibilidad. Leer después de skill-design. |
+| `skills/skill-backend/SKILL.md` | API routes, Supabase, local-first, Claude API, Resend, manejo de errores. |
+| `skills/skill-database/SKILL.md` | Supabase, RLS policies, migraciones, índices. |
+| `skills/skill-code-review/SKILL.md` | **Siempre antes de abrir un PR.** Checklist completo de calidad, velocidad y seguridad. |
+| `skills/skill-product-manager/SKILL.md` | Criterios de producto, creación y ejecución de issues. |
+| `skills/skill-ux-testing/SKILL.md` | Testing de UX, flujos E2E con Playwright. |
 
 ---
 
