@@ -47,19 +47,48 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 
 ## Prototipos visuales de referencia
 
-La carpeta `reference/` contiene los prototipos HTML canónicos. Son la fuente visual más fiable:
+La carpeta `reference/` contiene los prototipos HTML interactivos y sus screenshots. Son la fuente visual más fiable para entender layout, comportamiento y valores de componentes.
 
-| Archivo | Vista |
-|---------|-------|
-| `odessay-editor-v6_26.html` | Editor — prototipo canónico actual |
-| `odessay-workspace-v3_4.html` | Desk |
-| `odessay-collections_1.html` | Collections |
-| `odessay-correspondence-v2_5.html` | Correspondences |
-| `odessay-reading-margins_2.html` | Reading view + Márgenes |
+**Regla general:** Cuando hay conflicto entre un prototipo y un documento de texto, el documento de texto prevalece. Los prototipos pueden tener diferencias menores respecto al diseño final — siempre validar contra `skill-design.md` y `skill-design-vistas.md`.
 
-**Cuando hay conflicto entre un prototipo HTML y un documento de texto, el documento de texto prevalece.**
+**Excepción conocida:** El editor (`editor.html`) usa ink-3/ink-4 más claros que el resto. Usar los valores de `skill-design.md` en toda la implementación.
 
-**Excepción conocida:** Los valores de ink-3/ink-4 en el editor (`odessay-editor-v6_26.html`) son más claros que en el resto. Usar los valores más oscuros documentados en `skill-design.md` — mayor contraste, mejor legibilidad.
+### Módulos compartidos — reutilizar, nunca recrear
+
+El Sidebar y el Topbar son componentes globales compartidos entre todas las vistas. **No se crea un sidebar nuevo por vista ni un topbar nuevo por vista.** Se implementan una vez y se reutilizan. Los prototipos muestran el mismo sidebar en todas las vistas porque es el mismo componente.
+
+Comportamiento de sidebar por contexto:
+- **Desk, Collections, Correspondences, Shared:** sidebar expandido (292px) por defecto.
+- **Editor:** sidebar en modo mini (52px) por defecto — el espacio es del texto.
+- El usuario puede colapsar/expandir en cualquier vista. El estado persiste en sesión.
+
+### Mapa de archivos de referencia
+
+**Prototipos HTML** — abrir en browser para interactividad completa:
+
+| Archivo HTML | Vista | Qué muestra |
+|---|---|---|
+| `reference/desk.html` | Desk | Hero con draft cards, filter bar, tabla de actividad |
+| `reference/collections.html` | Collections | Banner uncategorized, AI suggestions, collections expandibles |
+| `reference/correspondences.html` | Correspondences | Thread con mini-docs, participants bar, reply prompt |
+| `reference/editor.html` | Editor | Sidebar mini, layout de tres columnas, panels, statusbar |
+| `reference/reading.html` | Reading + Márgenes | Vista de lectura standalone, highlights, panel de márgenes |
+
+**Screenshots** — referencia rápida sin abrir browser:
+
+| Archivo PNG | Qué muestra |
+|---|---|
+| `reference/desk.png` | Desk completo: hero (4 cards) + filter bar + tabla agrupada por fecha |
+| `reference/collections.png` | Collections: banner terracota + AI strip + collections expandibles |
+| `reference/correspondences-thread.png` | Hilo: participants bar + 3 mini-docs + reply prompt |
+| `reference/reading-full.png` | Reading view sin sidebar, writing completo, sin márgenes |
+| `reference/reading-margins-panel.png` | Reading view con panel de márgenes abierto (296px) |
+| `reference/reading-selection-popup.png` | Popup de selección activo + márgenes + anotaciones |
+| `reference/editor-default.png` | Editor con sidebar mini, sin panels secundarios |
+| `reference/editor-list-panel.png` | Editor con list panel abierto (colección Reflections) |
+| `reference/editor-properties.png` | Editor con panel Properties (status, visibility, collections, correspondencia) |
+| `reference/editor-link-modal.png` | Modal "Insert link" sobre el editor |
+| `reference/editor-notes.png` | Editor con panel Notes (footnotes del writing) |
 
 ---
 
@@ -94,7 +123,7 @@ La carpeta `reference/` contiene los prototipos HTML canónicos. Son la fuente v
 3. Leer `skill-design.md` → tokens visuales
 4. Leer `skill-design-vistas.md` → valores exactos del Desk
 5. Leer `skill-frontend.md` → arquitectura de componentes, naming
-6. Implementar contra el prototipo `odessay-workspace-v3_4.html`
+6. Implementar contra el prototipo `reference/desk.html`
 7. Antes de PR: leer `skill-code-review.md`
 
 **Para implementar un endpoint de API:**

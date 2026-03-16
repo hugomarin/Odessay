@@ -7,13 +7,11 @@ description: Sistema de diseño visual de Odessay. Usa este skill siempre que va
 
 Este skill define la lógica visual completa de Odessay. Todo lo que se construya visualmente parte de aquí. No se toman decisiones de diseño fuera de este documento — si algo no está definido, se pregunta antes de inventar.
 
-Los archivos HTML de referencia visual son prototipos que documentan el comportamiento validado.
+Los archivos HTML en `/reference/` son prototipos interactivos que documentan el comportamiento validado. Sus screenshots están listados con descripción completa en `CLAUDE.md`. Los prototipos pueden tener diferencias menores respecto al diseño final — este documento y `skill-design-vistas.md` son la especificación oficial.
 
-**Antes de implementar cualquier vista, leer `skill-design-vistas.md`** — contiene:
-- Valores exactos de cada componente por vista (padding, font-size, colores, border-radius)
-- Checklist de validación por vista para verificar que la implementación coincide con la referencia
-- Mapa de archivos HTML de referencia y sus caveats
-- La inconsistencia de ink-3/ink-4 entre el editor y el resto de vistas
+**Antes de implementar cualquier vista, leer `skill-design-vistas.md`** — contiene valores exactos de padding, tamaños, colores y comportamiento por vista, más checklists de validación.
+
+**Módulos compartidos — reutilizar, nunca recrear:** Sidebar y Topbar son componentes globales. No se implementan de nuevo por vista. El editor abre con sidebar mini (52px) por defecto. El resto de vistas abren con sidebar expandido (292px).
 
 ---
 
