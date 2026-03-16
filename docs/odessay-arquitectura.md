@@ -172,7 +172,7 @@ El usuario **nunca espera a Supabase**. La base local es la fuente de verdad ope
 
 Cada writing tiene: `id`, `updated_at`, `version`, `sync_status`, `deleted_at`.
 
-Para desktop (Tauri/Electron): SQLite vía el runtime nativo. Para web: IndexedDB o localStorage como caché local con sync a Supabase.
+Para desktop (Tauri/Electron): SQLite vía el runtime nativo. Para web: IndexedDB como caché local con sync a Supabase.
 
 ---
 

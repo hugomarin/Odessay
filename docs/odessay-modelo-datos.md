@@ -179,7 +179,9 @@ Highlights y anotaciones que el lector crea al leer writings ajenos. Son escritu
 | anchor_text | text | not null | Copia del texto marcado al momento del highlight. Protege contra ediciones del writing |
 | note | text | nullable | Anotación del lector. Null = solo highlight sin nota |
 | shared | boolean | not null, default false | Si el lector eligió compartir este margen con el autor del writing |
+| shared_at | timestamptz | nullable | Cuándo se compartió. Null si aún es privado |
 | created_at | timestamptz | default now() | |
+| updated_at | timestamptz | default now() | |
 
 **Inmutabilidad post-compartido:** Los writings compartidos en correspondencia son inmutables una vez enviados, lo que protege los anclajes `anchor_start`/`anchor_end`. `anchor_text` es la copia defensiva.
 

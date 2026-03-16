@@ -79,7 +79,7 @@ Referencia: skill-backend.md (sección: Arquitectura local-first), odessay-model
 **Build /desk — personal writing desk** `[frontend, backend]`
 Vista principal del autor. Tres secciones: Hero con cards horizontales de drafts activos (In progress), filter bar (All activity / Correspondence / With responses / Received), tabla de actividad agrupada por fecha con columnas Writing | State | With | Date. Acceso a crear nuevo writing desde el sidebar. Notificaciones sutiles de nuevas respuestas o cartas recibidas. Datos se leen primero desde base local.
 Dependencias: Implement auto-save — local-first.
-Referencia: odessay-arquitectura.md (sección: Desk), odessay-design-spec.md.
+Referencia: odessay-arquitectura.md (sección: Desk), skill-design-vistas.md (sección: Desk).
 
 **Implement writing states and private visibility** `[backend, frontend]`
 Estados draft/finished como dimensiones independientes de visibilidad. Controles en el editor para cambiar estado. Visibilidad private por default al crear. Writing solo visible para el autor cuando es private.

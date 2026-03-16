@@ -34,7 +34,7 @@ Responder a un writing siempre crea un nuevo writing con `parent_id` apuntando a
 
 1. Desde `/desk`, clic en nuevo writing → llega a `/write`.
 2. Editor TipTap limpio. Título opcional. Empieza a escribir.
-3. Auto-save con debounce (1-2 seg sin actividad). Writing se crea como `draft` + `private`.
+3. Auto-save local-first: cada cambio se persiste inmediatamente en la base local (SQLite/IndexedDB). El sync a Supabase ocurre en background con debounce de 1.5s. Writing se crea como `draft` + `private`.
 4. Escribe por párrafos. En pausas naturales (fin de párrafo + ~8-15 seg), la AI editor puede intervenir con una observación al margen.
 5. El autor puede descartar la observación o atenderla. Sigue escribiendo.
 6. Cuando quiere, cambia el estado a `finished` y/o ajusta la visibilidad.
@@ -125,7 +125,7 @@ Desde el editor o desde `/desk`, el autor cambia la visibilidad de un writing. L
 El sidebar tiene dos estados. La transición entre estados es suave y coordinada (300ms).
 
 **Expandido (292px total = 52px rail + 240px contenido):**
-El usuario ve: logo, New writing, Search, Home, Collections (expandible), Correspondences (expandible), Shared, Recent writings, avatar abajo.
+El usuario ve: logo, New writing, Search, Desk, Collections (expandible), Correspondences (expandible), Shared, Recent writings, avatar abajo.
 
 **Colapsado a solo iconos (52px):**
 Se activa al hacer click en el toggle del sidebar o al abrir una colección. Los iconos permanecen en la misma posición X — solo el texto desaparece. Tooltips al hover.
@@ -160,10 +160,10 @@ Se activa al hacer click en el toggle del sidebar o al abrir una colección. Los
 El formato se aplica siempre sobre texto seleccionado o en la posición del cursor.
 
 ### Via shortcuts (mecanismo primario)
-Ver tabla completa en `odessay-editor.md`. Los principales: `⌘B` negrita, `⌘I` cursiva, `⌘U` subrayado, `⌘K` enlace.
+Ver tabla completa en `odessay-editor.md`. Los principales: `⌘B` negrita, `⌘I` cursiva, `⌘K` enlace.
 
 ### Via topbar
-La topbar fija muestra: selector de estilo (Normal/H1/H2/H3/Quote), B, I, tachado, U, separador, blockquote, lista sin orden, lista numerada, separador, enlace, footnote.
+La topbar fija muestra: selector de estilo (Normal/H1/H2/H3/Quote), B, I, separador, blockquote, lista sin orden, lista numerada, separador, enlace, footnote.
 
 ### Via modales
 Tres acciones abren modal: enlace (`⌘K`), blockquote (botón o `⌘⇧B`), footnote (botón). Los modales tienen overlay crema con blur. La selección se preserva y se restaura al confirmar. Ver detalles en `odessay-editor.md`.
@@ -196,7 +196,7 @@ La vista de una correspondencia es principalmente una **interfaz de lectura**, n
 
 1. El autor hace click en cualquier mini-documento.
 2. Se abre la **vista de lectura** — pantalla completa, fondo crema, sin chrome innecesario.
-3. La vista muestra: autor con avatar, fecha, título en Lora 32px, cuerpo en sans-serif 18px/1.85 line-height.
+3. La vista muestra: autor con avatar, fecha, título en Lora 30px, cuerpo en Geist Sans 17px/1.85 line-height.
 4. Tres herramientas en la topbar: highlight (marcar pasajes), notas al margen, responder.
 5. Navegación entre writings del hilo con Previous/Next y flechas del teclado. ESC para volver a la secuencia.
 

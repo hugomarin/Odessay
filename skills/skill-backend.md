@@ -59,7 +59,7 @@ El auto-save es local-first. La secuencia es siempre: guardar en base local → 
 - El endpoint de sync debe ser idempotente. Usa `version` para detectar conflictos.
 - El indicador visual en statusbar refleja el estado del sync remoto, nunca el del save local (que ya ocurrió).
 
-Referencia de implementación: `skill-frontend.md` (sección: Local-first en el cliente).
+Referencia de implementación: `skill-frontend.md` (sección: Editor TipTap).
 
 ## Manejo de errores
 

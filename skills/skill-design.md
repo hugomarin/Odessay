@@ -371,6 +371,7 @@ Nunca dos botones del mismo color en el mismo modal.
 - Nunca emojis en ninguna parte de la interfaz
 - Nunca `transition: all`
 - Siempre `strokeWidth={1.5}` en iconos Lucide
-- Siempre `max-w-[660px] mx-auto` en áreas de escritura y lectura
+- `max-w-[660px] mx-auto` en áreas de **lectura** (reading view, espacio público)
+- `max-w-[860px] mx-auto` en el **editor** (área de escritura)
 - Siempre `font-sans` o `font-lora` explícito en componentes ShadCN
 - Bordes siempre `0.5px` — nunca `1px` o `border` de Tailwind por defecto

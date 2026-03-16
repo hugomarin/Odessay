@@ -132,8 +132,6 @@ El editor no muestra toolbar flotante al seleccionar texto — decisión deliber
 |--------|-----|---------------|
 | Negrita | `⌘B` | `Ctrl+B` |
 | Cursiva | `⌘I` | `Ctrl+I` |
-| Subrayado | `⌘U` | `Ctrl+U` |
-| Tachado | `⌘⇧X` | `Ctrl+Shift+X` |
 | Enlace | `⌘K` | `Ctrl+K` |
 
 ### Estructura
