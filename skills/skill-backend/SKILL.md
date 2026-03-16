@@ -119,30 +119,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 - Emails simples, limpios, coherentes con la marca. No HTML pesado.
 - En staging, usa dominio de testing. Verifica que los emails no lleguen a usuarios reales.
 
-## Auto-save
+## Auto-save y sincronización
 
-El auto-save es local-first. La secuencia es siempre: guardar en base local → enqueue sync remoto. Nunca al revés.
+El auto-save es local-first. Secuencia invariable: guardar en base local (inmediato, sin debounce) → enqueue sync remoto (background, debounce 1.5s, backoff exponencial en retry).
 
-- **Paso 1 — Local (inmediato):** `onUpdate` de TipTap escribe directamente en SQLite/IndexedDB local. Sin debounce. Sin latencia. El usuario nunca ve espera.
-- **Paso 2 — Remoto (background):** Un sync worker encola la mutación y hace PATCH a la API con `body_json`, `body_text`, `updated_at`, `version`. Debounce de 1.5 segundos. Reintentos silenciosos con backoff exponencial si falla.
-- El endpoint de sync es idempotente. El campo `version` se incrementa en cada PATCH pero no se usa para bloquear escrituras.
-- El indicador visual en statusbar refleja el estado del sync remoto, nunca el del save local (que ya ocurrió).
+El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins silencioso** — no se bloquean escrituras, no hay UI de resolución. El campo `version` se incrementa como auditoría, no como control de concurrencia.
 
-Referencia de implementación: `skill-frontend.md` (sección: Editor TipTap).
-
-## Conflictos de sincronización
-
-**Estrategia: last-write-wins silencioso.**
-
-El sistema no bloquea escrituras por conflicto de versión. La última escritura que llega al servidor gana, sin notificar al usuario. Esto es una decisión deliberada para esta fase:
-
-- El caso de conflicto real (mismo writing, dos dispositivos, edición simultánea) es estadísticamente infrecuente en un producto epistolar — los writings se trabajan en sesiones, no en tiempo real colaborativo.
-- Interrumpir al usuario con un diálogo de resolución de conflictos sería más disruptivo que la pérdida ocasional de unos pocos caracteres.
-- La copia local siempre existe — el usuario nunca pierde su versión del dispositivo activo.
-
-**Lo que se hace con `version`:** Se incrementa en cada PATCH como campo de auditoría. Se puede usar en el futuro para detectar anomalías o para mostrar historial de versiones si el producto lo requiere. No se usa para rechazar escrituras ahora.
-
-**Lo que no se hace:** No hay UI de resolución de conflictos. No hay toast de aviso. No hay merge automático. Si en una fase futura el producto requiere edición multi-dispositivo frecuente, se revisará esta decisión.
+**Spec completa de sync:** `docs/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
 
 ## Observabilidad
 

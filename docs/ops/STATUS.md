@@ -55,7 +55,7 @@ Decisiones arquitectónicas resueltas durante la fase de documentación, con su 
 |---|---|
 | Local-first con IndexedDB (no localStorage) | `docs/core/odessay-arquitectura.md` |
 | body_json como fuente de verdad (no body_markdown) | `docs/core/odessay-modelo-datos.md` |
-| Last-write-wins silencioso para conflictos de sync | `skills/skill-backend/SKILL.md` §Conflictos |
+| Last-write-wins silencioso para conflictos de sync | `docs/features/odessay-sync.md` §Conflictos |
 | ShadCN tres capas de adaptación | `skills/skill-design/SKILL.md` §ShadCN |
 | TanStack Query + Zustand (2 slices únicamente) | `skills/skill-frontend/SKILL.md` §Estado |
 | Validación con react-hook-form + Zod, onBlur | `skills/skill-frontend/SKILL.md` §Validación |
@@ -64,16 +64,20 @@ Decisiones arquitectónicas resueltas durante la fase de documentación, con su 
 
 ---
 
-## Gaps documentales conocidos
+## Cobertura de features en docs/features/
 
-Features de complejidad significativa sin doc propio en `docs/features/`. La ausencia de doc no bloquea el desarrollo pero aumenta el riesgo de inconsistencia entre agentes.
+Todos los features de complejidad significativa tienen doc propio. Un issue que toque cualquiera de estos features debe leer el doc correspondiente antes de implementar.
 
-| Feature | Complejidad | Qué falta documentar |
-|---------|-------------|----------------------|
-| `correspondencias` | Alta | Thread visual, participants bar, sequence view, cómo se crea la correspondencia al primera respuesta, estados del hilo |
-| `collections` | Media | AI suggestions (trigger, formato, aceptar/rechazar), banner uncategorized, expansión/colapso, gestión de writings dentro de colección |
-
-Cuando un issue toque estos features, crear el doc antes de implementar.
+| Feature | Doc | Trigger en config.json |
+|---------|-----|------------------------|
+| Editor TipTap | `docs/features/odessay-editor.md` | `editor` |
+| AI editor residente | `docs/features/odessay-ai-editor.md` | `ai-editor` |
+| Highlights y márgenes | `docs/features/odessay-margenes.md` | `reading-view` |
+| Correspondencias | `docs/features/odessay-correspondencias.md` | `correspondencias` |
+| Collections | `docs/features/odessay-collections.md` | `collections` |
+| Sync local-first | `docs/features/odessay-sync.md` | `sync` |
+| Invitaciones | `docs/features/odessay-invitaciones.md` | `invitaciones` |
+| Espacio público | `docs/features/odessay-espacio-publico.md` | `espacio-publico` |
 
 ---
 

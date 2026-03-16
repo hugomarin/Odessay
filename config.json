@@ -66,6 +66,41 @@
       "trigger": "reading-view"
     },
     {
+      "path": "docs/features/odessay-correspondencias.md",
+      "type": "feature",
+      "description": "Spec completa de correspondencias: creación automática, thread visual (participants bar, mini-docs, reply prompt), reading view, estados del turno, modelo de datos.",
+      "scope": "conditional",
+      "trigger": "correspondencias"
+    },
+    {
+      "path": "docs/features/odessay-collections.md",
+      "type": "feature",
+      "description": "Spec completa de collections: banner uncategorized, AI suggestions (formato y contrato), bulk categorization, expandable collections, visibilidad pública.",
+      "scope": "conditional",
+      "trigger": "collections"
+    },
+    {
+      "path": "docs/features/odessay-sync.md",
+      "type": "feature",
+      "description": "Spec de sync local-first: interfaz LocalDB, flujo auto-save (local inmediato → remoto background), debounce, backoff exponencial, last-write-wins, estados del statusbar.",
+      "scope": "conditional",
+      "trigger": "sync"
+    },
+    {
+      "path": "docs/features/odessay-invitaciones.md",
+      "type": "feature",
+      "description": "Spec de invitaciones: flujo del autor, flujo del invitado, landing /invite/{token}, estados (pending/accepted/expired), email transaccional Resend, asociación a cuenta existente.",
+      "scope": "conditional",
+      "trigger": "invitaciones"
+    },
+    {
+      "path": "docs/features/odessay-espacio-publico.md",
+      "type": "feature",
+      "description": "Spec del espacio público: /{username} vista dual (pública vs propia), /{username}/{slug} writing público, slug generation, SEO/OG, contexto de correspondencia en lectura pública.",
+      "scope": "conditional",
+      "trigger": "espacio-publico"
+    },
+    {
       "path": "docs/ops/STATUS.md",
       "type": "ops",
       "description": "Estado actual del codebase: qué está construido, qué no existe, decisiones tomadas, gaps documentales conocidos.",
@@ -211,11 +246,12 @@
       "documents": [
         { "path": "docs/features/odessay-editor.md", "scope": "conditional", "trigger": "editor" },
         { "path": "docs/features/odessay-ai-editor.md", "scope": "conditional", "trigger": "ai-editor" },
-        { "path": "docs/features/odessay-margenes.md", "scope": "reference", "trigger": "reading-view" }
-      ],
-      "gaps": [
-        { "feature": "correspondencias", "status": "sin doc de feature — complejidad alta (thread, participants, sequence view)" },
-        { "feature": "collections", "status": "sin doc de feature — complejidad media (AI suggestions, expandable, uncategorized)" }
+        { "path": "docs/features/odessay-margenes.md", "scope": "reference", "trigger": "reading-view" },
+        { "path": "docs/features/odessay-correspondencias.md", "scope": "conditional", "trigger": "correspondencias" },
+        { "path": "docs/features/odessay-collections.md", "scope": "conditional", "trigger": "collections" },
+        { "path": "docs/features/odessay-sync.md", "scope": "conditional", "trigger": "sync" },
+        { "path": "docs/features/odessay-invitaciones.md", "scope": "conditional", "trigger": "invitaciones" },
+        { "path": "docs/features/odessay-espacio-publico.md", "scope": "conditional", "trigger": "espacio-publico" }
       ]
     },
     {
@@ -287,6 +323,30 @@
     ],
     "reading-view": [
       "docs/features/odessay-margenes.md"
+    ],
+    "correspondencias": [
+      "docs/features/odessay-correspondencias.md",
+      "docs/core/odessay-modelo-datos.md",
+      "skills/skill-frontend/SKILL.md"
+    ],
+    "collections": [
+      "docs/features/odessay-collections.md",
+      "docs/core/odessay-modelo-datos.md",
+      "skills/skill-frontend/SKILL.md"
+    ],
+    "sync": [
+      "docs/features/odessay-sync.md",
+      "skills/skill-backend/SKILL.md"
+    ],
+    "invitaciones": [
+      "docs/features/odessay-invitaciones.md",
+      "docs/core/odessay-modelo-datos.md",
+      "skills/skill-backend/SKILL.md"
+    ],
+    "espacio-publico": [
+      "docs/features/odessay-espacio-publico.md",
+      "docs/core/odessay-modelo-datos.md",
+      "skills/skill-frontend/SKILL.md"
     ],
     "ux-testing": [
       "skills/skill-ux-testing/SKILL.md"

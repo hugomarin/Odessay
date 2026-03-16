@@ -1,9 +1,13 @@
 # ODESSAY — Flujos de usuario
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `docs/core/odessay-fundacional.md` para la visión, `docs/core/odessay-stack.md` para tecnologías, `docs/core/odessay-modelo-datos.md` para el schema, y `docs/core/odessay-paginas.md` para la arquitectura de páginas.
+Lee `odessay-fundacional.md` para la visión, `odessay-stack.md` para tecnologías, `odessay-modelo-datos.md` para el schema, y `odessay-paginas.md` para la arquitectura de páginas.
 
-El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `docs/core/odessay-paginas.md` §Mecanismo universal de respuesta.
+---
+
+## Principio: responder es siempre el mismo mecanismo
+
+Responder a un writing siempre crea un nuevo writing con `parent_id` apuntando al original. Da igual cómo se llegó al texto (compartido, público, dentro de una correspondencia). El camino siempre es `/write?reply_to={id}`.
 
 ---
 
@@ -30,7 +34,7 @@ El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `
 
 1. Desde `/desk`, clic en nuevo writing → llega a `/write`.
 2. Editor TipTap limpio. Título opcional. Empieza a escribir.
-3. Auto-save local-first: cada cambio se persiste inmediatamente en la base local (SQLite/IndexedDB). El sync a Supabase ocurre en background con debounce de 1.5s. Writing se crea como `draft` + `private`.
+3. Auto-save con debounce (1-2 seg sin actividad). Writing se crea como `draft` + `private`.
 4. Escribe por párrafos. En pausas naturales (fin de párrafo + ~8-15 seg), la AI editor puede intervenir con una observación al margen.
 5. El autor puede descartar la observación o atenderla. Sigue escribiendo.
 6. Cuando quiere, cambia el estado a `finished` y/o ajusta la visibilidad.
@@ -121,7 +125,7 @@ Desde el editor o desde `/desk`, el autor cambia la visibilidad de un writing. L
 El sidebar tiene dos estados. La transición entre estados es suave y coordinada (300ms).
 
 **Expandido (292px total = 52px rail + 240px contenido):**
-El usuario ve: logo, New writing, Search, Desk, Collections (expandible), Correspondences (expandible), Shared, Recent writings, avatar abajo.
+El usuario ve: logo, New writing, Search, Home, Collections (expandible), Correspondences (expandible), Shared, Recent writings, avatar abajo.
 
 **Colapsado a solo iconos (52px):**
 Se activa al hacer click en el toggle del sidebar o al abrir una colección. Los iconos permanecen en la misma posición X — solo el texto desaparece. Tooltips al hover.
@@ -156,10 +160,10 @@ Se activa al hacer click en el toggle del sidebar o al abrir una colección. Los
 El formato se aplica siempre sobre texto seleccionado o en la posición del cursor.
 
 ### Via shortcuts (mecanismo primario)
-Ver tabla completa en `odessay-editor.md`. Los principales: `⌘B` negrita, `⌘I` cursiva, `⌘K` enlace.
+Ver tabla completa en `odessay-editor.md`. Los principales: `⌘B` negrita, `⌘I` cursiva, `⌘U` subrayado, `⌘K` enlace.
 
 ### Via topbar
-La topbar fija muestra: selector de estilo (Normal/H1/H2/H3/Quote), B, I, separador, blockquote, lista sin orden, lista numerada, separador, enlace, footnote.
+La topbar fija muestra: selector de estilo (Normal/H1/H2/H3/Quote), B, I, tachado, U, separador, blockquote, lista sin orden, lista numerada, separador, enlace, footnote.
 
 ### Via modales
 Tres acciones abren modal: enlace (`⌘K`), blockquote (botón o `⌘⇧B`), footnote (botón). Los modales tienen overlay crema con blur. La selección se preserva y se restaura al confirmar. Ver detalles en `odessay-editor.md`.
@@ -174,29 +178,102 @@ Al insertar un footnote se crea automáticamente una sección al final del docum
 
 ## 9. Leer una correspondencia
 
-La vista de una correspondencia es principalmente una **interfaz de lectura**, no de escritura. El autor recibe cada writing del hilo con la misma dignidad que cualquier carta: pantalla completa, tipografía protagonista, herramientas de highlight y márgenes disponibles antes de responder.
+*(Flujo definido en sesión de diseño — marzo 2026)*
 
-La correspondencia se navega como secuencia de mini-documentos conectados por una línea vertical. Cada writing se abre en una reading view completa. El turno activo ("Your turn" / "Waiting") orienta al autor sobre quién escribe ahora.
+La vista de una correspondencia es principalmente una **interfaz de lectura**, no de escritura. Su propósito es que el autor reciba con dignidad y atención lo que otros escribieron para él, y que el conjunto de writings del hilo sea navegable como una secuencia de documentos de igual peso.
 
-**Spec completa:** `docs/features/odessay-correspondencias.md`
+### Vista de secuencia
+
+1. El autor entra a una correspondencia desde el sidebar o desde el Desk.
+2. Ve una secuencia vertical de mini-documentos — uno por cada writing del hilo.
+3. Cada mini-documento muestra: avatar del autor, nombre, badge si es propio ("you") o nuevo ("New"), título en Lora, extracto de las primeras líneas, palabras, fecha.
+4. Una línea vertical sutil conecta visualmente los documentos como un hilo de pensamiento.
+5. Al fondo: el prompt de respuesta con el nombre del último autor que escribió.
+6. La barra superior muestra los participantes con avatares apilados, total de writings, palabras acumuladas, y desde cuándo existe la correspondencia.
+7. Un badge "Your turn" / "Waiting" indica el estado del turno en el diálogo.
+
+### Abrir un writing para leer
+
+1. El autor hace click en cualquier mini-documento.
+2. Se abre la **vista de lectura** — pantalla completa, fondo crema, sin chrome innecesario.
+3. La vista muestra: autor con avatar, fecha, título en Lora 32px, cuerpo en sans-serif 18px/1.85 line-height.
+4. Tres herramientas en la topbar: highlight (marcar pasajes), notas al margen, responder.
+5. Navegación entre writings del hilo con Previous/Next y flechas del teclado. ESC para volver a la secuencia.
+
+### Herramientas de lectura
+
+**Highlight:** el autor puede seleccionar texto y marcarlo. Los highlights se muestran en fondo ámbar sutil. No son comentarios públicos — son anotaciones privadas del lector.
+
+**Notas al margen:** panel lateral que se abre con el botón de notas. Muestra los highlights del documento con el texto marcado en itálica y la nota del lector debajo. El autor puede añadir notas desde este panel.
+
+**Responder:** el icono de la pluma (AI editor, terracota) en la topbar de lectura inicia una respuesta. Lleva al editor con el contexto de la correspondencia. Es la acción fundacional — el botón terracota como señal de acción con peso semántico.
+
+### Por qué Correspondences es lectura, no escritura
+
+Una correspondencia es un intercambio de documentos de igual peso. Cada writing — el del autor, el de quien responde — merece el mismo espacio y la misma dignidad. La vista de lectura es el equivalente de recibir una carta física y leerla con atención: sin distracciones, con tiempo, con la posibilidad de subrayar y anotar antes de responder.
+
+Esto distingue Odessay de los sistemas de mensajería: no hay jerarquía entre el texto "original" y las "respuestas". Todos son writings. Todos se leen en el mismo espacio sagrado.
 
 ---
 
 ## 10. Collections — organizar, no leer
 
-Collections es una interfaz de **organización y gestión**, no de lectura. El autor llega aquí para clasificar su archivo, no para leer sus writings.
+*(Flujo definido en sesión de diseño — marzo 2026)*
 
-El flujo central: un banner permanente señala los writings sin clasificar. El AI sugiere agrupaciones (no las aplica). El autor acepta sugerencias por item o hace bulk assign con checkbox. Las colecciones existentes son expandibles en la misma vista — sin navegación a otra página.
+Collections es una interfaz de **organización y gestión**, no de lectura. El autor llega a Collections cuando quiere clasificar su archivo, no cuando quiere leer sus writings.
 
-**Spec completa:** `docs/features/odessay-collections.md`
+### El problema que resuelve
+
+Los autores acumulan writings sin clasificar — especialmente al importar desde otros sistemas (iA Writer, archivos .md, .txt). Los archivos llegan con nombres técnicos ("Untitled 47", "notas-reunion-2024.txt") que no dicen nada sobre el contenido. Abrir cada archivo para saber qué es no es práctico.
+
+Collections resuelve esto con:
+1. **Preview sin apertura** — cada writing muestra el extracto de las primeras líneas, la fecha y las palabras. El nombre del archivo es secundario; el contenido es lo que permite reconocer qué es.
+2. **Bulk categorization** — el autor puede seleccionar múltiples writings y asignarlos a una colección de una sola vez.
+3. **AI como propuesta** — el AI editor lee el contenido de los writings sin clasificar y sugiere categorías. El autor acepta o rechaza cada sugerencia. El AI no categoriza automáticamente.
+
+### Flujo de organización
+
+1. Banner permanente "N writings without a collection" en la parte superior de Collections.
+2. El AI muestra su análisis: "Found 4 possible groups among your uncategorized writings."
+3. El autor abre el panel y ve la lista de writings sin clasificar con extractos.
+4. Cada writing tiene un pill "AI → Reflections" con la sugerencia del AI. Click para aceptar.
+5. O el autor selecciona varios con checkbox y usa "Add to collection" para clasificarlos en bulk.
+6. Los writings clasificados desaparecen suavemente de la lista.
+
+### Colecciones expandibles
+
+Las colecciones existentes son expandibles directamente en la vista — un click en el nombre muestra todos sus writings con título, extracto, estado y fecha. Sin navegación a otra página. El autor puede ver el contenido de toda su biblioteca desde una sola vista.
 
 
 ---
 
 ## 11. Leer con márgenes
 
-Los márgenes son el espacio de escritura que emerge mientras se lee. No son comentarios ni feedback — son escritura en gestación. El lector selecciona pasajes, los marca o los anota en un panel lateral. Por defecto son privados; el lector puede elegir compartirlos con el autor como texto paralelo.
+*(Flujo definido en sesión de diseño — marzo 2026)*
 
-Cuando va a responder, sus márgenes están disponibles en el editor como materia prima: el lector decide qué incorporar y cómo.
+Los márgenes son el espacio de escritura que emerge mientras se lee. No son comentarios ni feedback — son escritura en gestación. El lector construye su propio pensamiento al margen del texto ajeno.
 
-**Spec completa:** `docs/features/odessay-margenes.md`
+### Flujo de marcado
+
+1. El lector selecciona un pasaje en la vista de lectura.
+2. Aparece un popup mínimo con dos acciones: **Marcar** o **Anotar**.
+3. **Marcar** — el pasaje queda con fondo ámbar. Sin texto adicional.
+4. **Anotar** — se abre un campo de texto en el margen. El lector escribe lo que ese fragmento le construye.
+5. Las anotaciones no interrumpen el texto. Viven en el margen derecho o en el panel lateral.
+
+### Panel de márgenes
+
+- Se abre desde el icono de notas en la topbar de lectura.
+- Muestra todos los pasajes marcados del writing actual.
+- El pasaje marcado en itálica como referencia, la anotación debajo.
+- Es un espacio de escritura activo — el lector puede seguir construyendo mientras el texto está visible.
+
+### De márgenes a respuesta
+
+Cuando el lector va a responder, sus márgenes están disponibles en el editor como panel lateral. Son materia prima — el lector decide qué incorporar y cómo. La respuesta sale de una lectura atenta, no de la nada.
+
+### Compartir márgenes
+
+Por defecto los márgenes son privados. El lector puede elegir compartirlos con el autor — no como comentarios inline, sino como un texto paralelo recibido con la misma dignidad que cualquier writing.
+
+Caso de uso académico: el autor pide explícitamente a alguien que lea con márgenes activos. El revisor comparte lo que fue construyendo. El autor recibe una lectura anotada que no corrige su texto — construye a su lado.
