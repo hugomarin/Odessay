@@ -82,6 +82,8 @@ test('user can write and auto-save a writing', async ({ page }) => {
 
 ## Checklist antes de entregar
 
+Este checklist cubre la validación de UX durante la implementación. Antes de abrir el PR, usar `skill-code-review.md` para la validación completa.
+
 - [ ] ¿El flujo completo funciona sin fricción?
 - [ ] ¿Los estados de error tienen mensajes amables?
 - [ ] ¿Auto-save funciona y se verifica con reload?

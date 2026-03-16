@@ -28,7 +28,7 @@ El backend de Odessay es invisible para el usuario. Debe ser rápido, seguro y s
 ## Autenticación
 
 - Supabase Auth con email + contraseña.
-- Middleware de Next.js para proteger rutas privadas. Redirect a `/login` si no hay sesión.
+- Middleware de Next.js para proteger rutas privadas — implementación en `skill-frontend.md` (sección: Rutas protegidas).
 - El trigger `on_auth_user_created` crea el profile automáticamente.
 - Sesión disponible en Server Components vía `createServerClient`.
 
@@ -52,10 +52,14 @@ El backend de Odessay es invisible para el usuario. Debe ser rápido, seguro y s
 
 ## Auto-save
 
-- El auto-save es un PATCH a la API que actualiza `body_json`, `body_text`, y `updated_at`.
-- El endpoint debe ser idempotente y rápido. El usuario no debe notar latencia.
-- No bloquees la UI mientras se guarda. Fire-and-forget con retry silencioso si falla.
-- Debounce de 1-2 segundos en el cliente antes de llamar.
+El auto-save es local-first. La secuencia es siempre: guardar en base local → enqueue sync remoto. Nunca al revés.
+
+- **Paso 1 — Local (inmediato):** `onUpdate` de TipTap escribe directamente en SQLite/IndexedDB local. Sin debounce. Sin latencia. El usuario nunca ve espera.
+- **Paso 2 — Remoto (background):** Un sync worker encola la mutación y hace PATCH a la API con `body_json`, `body_text`, `updated_at`, `version`. Debounce de 1.5 segundos. Reintentos silenciosos con backoff exponencial si falla.
+- El endpoint de sync debe ser idempotente. Usa `version` para detectar conflictos.
+- El indicador visual en statusbar refleja el estado del sync remoto, nunca el del save local (que ya ocurrió).
+
+Referencia de implementación: `skill-frontend.md` (sección: Local-first en el cliente).
 
 ## Manejo de errores
 
@@ -85,6 +89,8 @@ Nunca agregues un `NEXT_PUBLIC_` sin confirmar que el valor es seguro para expon
 
 ## Checklist antes de entregar
 
+Este checklist cubre lo específico de backend durante la implementación. Antes de abrir el PR, usar `skill-code-review.md` para la validación completa.
+
 - [ ] ¿Toda ruta protegida verifica autenticación?
 - [ ] ¿Input validado con Zod?
 - [ ] ¿No hay API keys expuestas al cliente?
@@ -92,3 +98,4 @@ Nunca agregues un `NEXT_PUBLIC_` sin confirmar que el valor es seguro para expon
 - [ ] ¿Errores manejados con mensajes amables?
 - [ ] ¿El AI editor nunca genera texto en el response?
 - [ ] ¿Variables de entorno correctas para el ambiente (staging/prod)?
+- [ ] ¿El auto-save guarda local primero, sync remoto en background?

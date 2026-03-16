@@ -80,6 +80,8 @@ Antes de cualquier operación, lee `/docs/odessay-modelo-datos.md`. Las entidade
 
 ## Checklist antes de entregar
 
+Este checklist cubre lo específico de base de datos durante la implementación. Antes de abrir el PR, usar `skill-code-review.md` para la validación completa.
+
 - [ ] ¿La migración tiene rollback documentado?
 - [ ] ¿RLS cubre todos los casos (private/shared/public)?
 - [ ] ¿Los triggers funcionan en staging?

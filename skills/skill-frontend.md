@@ -376,6 +376,8 @@ CSS transitions por defecto (ver `skill-design.md`). `framer-motion` solo para l
 
 ## Checklist antes de entregar
 
+Este checklist cubre lo específico de frontend durante la implementación. Antes de abrir el PR, usar `skill-code-review.md` para la validación completa.
+
 ### Velocidad
 - [ ] ¿El editor está aislado? ¿Un keystroke no re-renderiza el sidebar ni paneles?
 - [ ] ¿El auto-save guarda local primero, sync remoto después?
