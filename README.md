@@ -1,186 +1,276 @@
-# Odessay
+# Framework de desarrollo autónomo con agentes de código
 
-Una plataforma de escritura epistolar donde el texto recupera su dignidad, el lector es destinatario y no consumidor, y la inteligencia artificial cuida lo que escribís en lugar de escribir por vos.
+Un sistema de documentación estructurada que permite a agentes de código construir productos de software con mínima intervención humana en las decisiones de implementación.
 
----
-
-## El producto
-
-Odessay existe porque ningún espacio digital actual es un santuario para escribir. Notes es utilitario. Google Docs es laboral. Las redes convierten todo en contenido que necesita likes. Hay herramientas para producir y escenarios para ser visto — pero ningún lugar para escribir con amor, con tiempo, con la intención de que cada palabra merezca ser leída.
-
-Odessay es ese lugar. Un espacio epistolar digital para personas que piensan escribiendo: escritores, filósofos, humanistas, artistas. Personas que ya lo hacen de forma improvisada — emails largos a un amigo, Google Docs compartidos, mensajes de WhatsApp de 47 párrafos — pero sin una herramienta que esté a la altura de su intención.
-
-El producto tiene tres modos:
-
-**Escribir** — el editor es el centro. TipTap sobre ProseMirror, tipografía epistolar (Lora), AI que observa y nunca interrumpe. El texto es el protagonista; la interfaz es el escenario que lo sirve.
-
-**Leer** — un writing puede ser privado, compartido con personas específicas, o público. Leer activa los márgenes: un sistema de highlights y anotaciones que son materia prima para la respuesta, no feedback. La respuesta es otra carta, con el mismo peso y dignidad que el envío.
-
-**Organizar** — el escritorio (Desk) y las colecciones (Collections) son el sistema de gestión. El AI editor ayuda a sugerir agrupaciones. La correspondencia (Correspondences) es el hilo epistolar que emerge cuando dos personas se responden.
+Desarrollado y validado en Odessay — una plataforma de escritura epistolar construida completamente por agentes de código. Este repositorio es la instancia de referencia del framework.
 
 ---
 
-## Stack tecnológico
+## El problema
 
-| Capa | Tecnología | Decisión |
-|------|-----------|----------|
-| Framework | Next.js 15 (App Router) | Server Components por default. SSR para rutas públicas. |
-| UI | React 19 + TypeScript strict | Sin `any`. |
-| Styling | Tailwind CSS + ShadCN/UI | ShadCN se adapta por tokens, no por reescritura. |
-| Editor | TipTap (ProseMirror) | Headless, siempre aislado del árbol de React. |
-| Base de datos | Supabase (PostgreSQL + Auth + Realtime) | Capa remota, no operativa. |
-| Local-first | IndexedDB (web) / SQLite (desktop) | El usuario nunca espera a Supabase. |
-| AI | Claude API (Anthropic) | El AI editor observa — nunca genera texto por el autor. |
-| Email transaccional | Resend | Invitaciones epistolares. |
-| Tipografía | Lora + Geist Sans | Lora para lo epistolar. Geist Sans para lo funcional. Nunca mezclar en el mismo elemento. |
+Un agente de código sin documentación suficiente improvisa. La improvisación no es aleatoria — es localmente coherente pero globalmente inconsistente. Un agente elige un patrón de estado, el siguiente elige otro. Uno inventa un nombre de tabla, el siguiente inventa uno diferente. Cada agente produce código que tiene sentido dentro de su sesión pero no encaja con lo que construyó el anterior.
 
-La arquitectura es local-first: cada acción escribe primero en la base local (IndexedDB/SQLite), y un sync queue sincroniza con Supabase en background. El usuario escribe sin latencia.
+El resultado no es un codebase con bugs — es un codebase con contradicciones estructurales que se acumulan hasta que ningún agente (ni humano) puede mantenerlo.
+
+La solución no es supervisar más. Es documentar mejor.
+
+Si un agente puede responder las preguntas críticas del proyecto sin ambigüedad, puede construir sin improvisar. Si alguna pregunta no tiene respuesta, el agente inventa la suya — y esa invención se convierte en decisión técnica no deliberada.
 
 ---
 
-## Estructura de documentación
+## El framework
 
-Este repositorio es la especificación completa del producto. El codebase de la aplicación no existe todavía — todo lo que está construido es la documentación que permite que agentes de código construyan Odessay de forma autónoma y consistente.
+El framework tiene tres capas que resuelven problemas distintos: la jerarquía documental define dónde vive cada tipo de conocimiento; el modelo MECE garantiza que ese conocimiento es completo sin ser redundante; el protocolo de agentes define cómo navegan ese conocimiento de forma eficiente.
+
+---
+
+## Capa 1 — Jerarquía documental
+
+La documentación se organiza en cuatro tipos con responsabilidades distintas:
 
 ```
 docs/
-  core/       → Verdades estables del producto. Todo agente las lee siempre.
-  features/   → Spec de cada feature. On-demand según el issue.
-  ops/        → Estado vivo y operación de agentes. Pre-flight obligatorio.
-framework/    → Framework MECE genérico, transferible a otros proyectos.
+  core/       → Verdades estables. Todo agente las lee siempre.
+  features/   → Specs de features con complejidad propia. On-demand.
+  ops/        → Estado vivo y operación. Pre-flight obligatorio.
+framework/    → Este framework. Transferible, no específico del proyecto.
 skills/       → Instrucciones de implementación por dominio.
-reference/    → Prototipos HTML interactivos y screenshots. Referencia visual canónica.
-config.json   → Registro completo de documentos y rutas de acceso para agentes.
+reference/    → Prototipos y referencias visuales.
 ```
 
-### docs/core/ — siempre leer
+### docs/core/ — lo que define el producto
 
-| Documento | Propósito |
-|-----------|-----------|
-| `odessay-fundacional.md` | Visión, por qué existe, para quién, principios. |
-| `odessay-arquitectura.md` | Arquitectura técnica y navegación. Referencia definitiva. |
-| `odessay-stack.md` | Stack confirmado, convenciones, ambientes. |
-| `odessay-modelo-datos.md` | Schema completo de Supabase. |
-| `odessay-paginas.md` | Cada ruta/página: layout, comportamiento, notas. |
-| `odessay-flujos.md` | Flujos de usuario detallados (secciones 1–11). |
+Los documentos core responden qué es el producto y cómo está construido. Son las verdades que no cambian sprint a sprint. Un agente que no los leyó no entiende el producto.
 
-### docs/features/ — on-demand
+En la práctica contienen: visión y principios (`fundacional.md`), arquitectura técnica (`arquitectura.md`), stack y convenciones (`stack.md`), schema de datos (`modelo-datos.md`), rutas y páginas (`paginas.md`), flujos de usuario (`flujos.md`).
 
-| Documento | Feature |
-|-----------|---------|
-| `odessay-editor.md` | Editor TipTap, extensions, shortcuts, auto-save, FootnoteExtension. |
-| `odessay-ai-editor.md` | AI editor residente: spec completa de comportamiento. |
-| `odessay-margenes.md` | Sistema de highlights y anotaciones en lectura. |
+### docs/features/ — lo que define cada feature complejo
+
+Los docs de feature responden cómo funciona una parte específica del producto con complejidad no evidente. No todos los features necesitan doc propio — solo los que tienen comportamiento suficientemente específico como para que un agente lo maneje mal sin instrucciones explícitas.
+
+La ausencia de un doc en `features/` no es solo un gap de documentación — es un indicador de riesgo: el agente que toque ese feature tomará decisiones de diseño sin referencia.
+
+### docs/ops/ — lo que define la operación del agente
+
+Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`STATUS.md`), y en qué orden construir (`roadmap.md`).
+
+`STATUS.md` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
 
 ### skills/ — instrucciones de implementación
 
-| Skill | Cuándo |
-|-------|--------|
-| `skill-design/SKILL.md` | Tokens, tipografía, ShadCN, reglas visuales. Siempre antes de construir UI. |
-| `skill-design/vistas.md` | Valores exactos por vista + checklists. Companion de skill-design. |
-| `skill-frontend/SKILL.md` | Arquitectura React, TipTap, estado, naming, performance. |
-| `skill-backend/SKILL.md` | API routes, Supabase, sync, Claude API, observabilidad. |
-| `skill-database/SKILL.md` | Migraciones, RLS policies, índices. |
-| `skill-product-manager/SKILL.md` | Creación de issues, template, proof of work. |
-| `skill-code-review/SKILL.md` | Checklist pre-PR. Siempre antes de abrir un PR. |
-| `skill-ux-testing/SKILL.md` | Testing E2E con Playwright. |
+Los skills son instructivos, no descriptivos. Donde los docs de `core/` y `features/` describen qué existe y cómo funciona, los skills instruyen cómo construirlo: patrones de código, convenciones, checklists, decisiones de implementación.
+
+Un skill tiene un archivo principal (`SKILL.md`) y puede tener archivos companion dentro de la misma carpeta para aspectos más granulares. El companion no es un skill independiente — es una referencia que el skill principal indexa. Ejemplo: `skill-design/SKILL.md` (sistema de diseño completo) + `skill-design/vistas.md` (valores exactos por vista).
 
 ---
 
-## Metodología: desarrollo autónomo con agentes de código
+## Capa 2 — Modelo MECE
 
-Odessay se construye principalmente por agentes de código (Claude, Cursor, agentes con MCP) con mínima intervención humana en las decisiones de implementación. La documentación no es complementaria al desarrollo — es la condición de posibilidad del desarrollo autónomo.
+El principio MECE (Mutuamente Excluyente, Colectivamente Exhaustivo) aplicado a documentación técnica: cada pregunta tiene respuesta en exactamente un lugar, y el conjunto de preguntas cubre todo lo que el agente puede necesitar saber.
 
-### El problema que resuelve
+**Mutuamente excluyente** — si dos documentos responden lo mismo, hay contradicción latente. En el momento en que divergen — y divergirán — el agente tiene que elegir cuál creer. Esa elección no es técnica: es aleatoria.
 
-Sin documentación estructurada, un agente de código improvisa en cada decisión ambigua. La improvisación produce inconsistencia: un agente elige un patrón de estado, el siguiente elige otro. Un agente inventa un nombre de tabla, el siguiente inventa uno diferente. La acumulación de improvisaciones produce una codebase que nadie — ni humano ni agente — puede mantener.
+**Colectivamente exhaustivo** — si alguna pregunta no tiene respuesta, el agente improvisa. La improvisación en esa área se convierte en decisión de arquitectura no deliberada.
 
-La solución no es supervisar más — es documentar mejor.
+### Las 10 preguntas
 
-### Framework MECE para documentación de agentes
+Todo proyecto que usa este framework debe responder estas preguntas antes de empezar a desarrollar:
 
-El proyecto usa un framework propio basado en el principio MECE (Mutuamente Excluyente, Colectivamente Exhaustivo), adaptado para documentación técnica autónoma.
+**1. ¿Para qué existe esto y para quién?**
+Visión, problema que resuelve, usuario objetivo, principios no negociables. Sin esto, el agente no puede decidir qué no construir.
+*Documento tipo: `fundacional.md` — narrativo, lo escribe el dueño del producto.*
 
-El framework parte de una pregunta: ¿qué necesita saber un agente para tomar cualquier decisión sin improvisar? La respuesta son 10 preguntas que el proyecto debe responder completamente:
+**2. ¿Qué ve y hace el usuario?**
+Flujos de usuario, páginas, rutas, comportamiento en cada interacción, estados vacíos y de error.
+*Documentos tipo: `paginas.md` + `flujos.md`*
 
-1. ¿Para qué existe esto y para quién?
-2. ¿Qué ve y hace el usuario?
-3. ¿Cómo se ve exactamente?
-4. ¿Qué datos existen y cómo se modelan?
-5. ¿Cómo está organizado el código?
-6. ¿Cómo funciona cada feature crítico?
-7. ¿Cómo se implementa el backend?
-8. ¿Qué existe hoy en el codebase?
-9. ¿Cómo opera el agente en este proyecto?
-10. ¿Cómo sé que terminé?
+**3. ¿Cómo se ve exactamente?**
+Tokens de diseño, componentes y variantes, valores exactos por vista, prototipos. El agente no interpreta — tiene los valores.
+*Documentos tipo: `skill-design/SKILL.md` + `skill-design/vistas.md` + `reference/`*
 
-Cada pregunta tiene exactamente un lugar donde vive su respuesta. Si dos documentos responden lo mismo, hay contradicción latente. Si alguna pregunta no tiene respuesta, el agente improvisa.
+**4. ¿Qué datos existen y cómo se modelan?**
+Schema de base de datos, tipos, relaciones, políticas de acceso. Sin esto, el agente define su propio schema y el producto se fragmenta.
+*Documento tipo: `modelo-datos.md`*
 
-El framework está documentado en `framework/framework-mece.md` como un sistema transferible — se puede aplicar a cualquier proyecto de software, no solo a Odessay.
+**5. ¿Cómo está organizado el código?**
+Stack, estructura de carpetas, naming conventions, patrones de componentes, gestión de estado. Define cómo se escribe, no solo qué se escribe.
+*Documentos tipo: `stack.md` + `arquitectura.md` + `skill-frontend/SKILL.md`*
 
-### config.json como cartografía de agentes
+**6. ¿Cómo funciona cada parte crítica?**
+Specs técnicas de los componentes más complejos o únicos del producto. No todos los componentes la necesitan — solo los que tienen comportamiento no evidente.
+*Documentos tipo: uno por componente crítico en `docs/features/`*
 
-`config.json` no es solo configuración — es el mapa de navegación del proyecto para agentes. Tiene dos responsabilidades distintas:
+**7. ¿Cómo se implementa el backend?**
+Patrones de API, autenticación, base de datos, manejo de errores, servicios externos. El agente no define su propio estilo de API.
+*Documentos tipo: `skill-backend/SKILL.md` + `skill-database/SKILL.md`*
 
-**Registry** — inventario completo de todo documento que existe, con su descripción, tipo y scope. Un documento que no está en el registry es un nodo huérfano: existe en disco pero ningún agente tiene ruta para llegar a él. El pre-flight script detecta huérfanos en ambas direcciones (registry → disco y disco → registry).
+**8. ¿Qué existe hoy en el codebase?**
+Estado actual: qué está construido, qué no existe, decisiones tomadas que no están en el código. Sin esto, el agente asume que nada existe o que todo existe.
+*Documento tipo: `STATUS.md` — se actualiza con cada PR significativo.*
 
-**Questions** — índice temático orientado a tareas. Mapea cada una de las 10 preguntas MECE al documento que la responde, con el scope de lectura (always, conditional, reference) y el trigger que la activa.
+**9. ¿Cómo opera el agente en este proyecto?**
+Variables de entorno, cómo levantar el proyecto, tools requeridos, permisos, Git, protocolo de escalación.
+*Documento tipo: `SETUP.md` — el primer doc que lee el agente.*
 
-### Protocolo de lectura por scope
+**10. ¿Cómo sé que terminé?**
+Estructura de issues ejecutables, Definition of Done verificable, validaciones que el agente puede correr, criterios de revisión.
+*Documentos tipo: `skill-product-manager/SKILL.md` + `skill-code-review/SKILL.md`*
 
-Los documentos tienen tres scopes que determinan cuándo los lee un agente:
+### Cómo auditar el framework de un proyecto
 
-**always** — se lee antes de cualquier tarea, sin excepción. Son 7 documentos: fundacional, arquitectura, stack, STATUS, SETUP, skill-product-manager, skill-code-review.
+**Test de exhaustividad:** para cada una de las 10 preguntas, ¿existe un documento que la responde sin ambigüedad? Si no → gap. No empezar a desarrollar hasta que todos los gaps sean conscientemente aceptados.
 
-**conditional** — se lee cuando el issue activa su trigger. El issue declara `areas_affected` y config.json mapea cada área a sus documentos. Un agente que trabaja en backend no carga los flujos de usuario; uno que trabaja en frontend no carga el skill de base de datos.
+**Test de exclusividad:** para cada documento, ¿cuál pregunta responde principalmente? Si responde dos igualmente → probablemente necesita dividirse. Si dos documentos responden la misma → probablemente hay solapamiento o uno establece precedencia.
 
-**reference** — se consulta al llegar a esa parte del trabajo. No se lee al inicio. `odessay-margenes.md` es reference: solo importa si el issue toca la reading view.
+### Señales de un framework incompleto
+
+Un agente que improvisa en estas áreas indica un gap específico:
+
+- Elige tecnologías no especificadas → falta Q5 o Q7
+- Diseña pantallas que no coinciden con el producto → falta Q3
+- Crea tablas o campos no documentados → falta Q4
+- Duplica trabajo ya hecho → falta Q8
+- Se bloquea en configuración → falta Q9
+- Nunca termina o termina distinto cada vez → falta Q10
+- Agrega funcionalidad no pedida → falta Q1
+
+---
+
+## Capa 3 — Protocolo de agentes
+
+### config.json como cartografía dual
+
+`config.json` tiene dos responsabilidades que se complementan:
+
+**Registry** — inventario completo de todo documento que existe en el proyecto. Un documento que no está en el registry es un **nodo huérfano**: existe en disco pero ningún agente tiene ruta para llegar a él. El agente no sabe lo que no sabe — el contenido huérfano genera gaps de contexto silenciosos.
+
+**Questions** — índice temático orientado a tareas. Mapea cada una de las 10 preguntas MECE al documento que la responde, con su scope de lectura.
+
+La distinción es importante: el registry responde "¿qué existe?", las questions responden "¿qué leer para hacer X?". Un proyecto puede tener ambos bien formados o solo uno. Un registry sin questions obliga al agente a decidir qué leer. Questions sin registry permite que existan nodos huérfanos.
+
+```json
+{
+  "registry": [
+    {
+      "path": "docs/core/arquitectura.md",
+      "type": "core",
+      "description": "Qué contiene y para qué sirve — en una oración.",
+      "scope": "always"
+    }
+  ],
+  "questions": [
+    {
+      "id": 5,
+      "question": "¿Cómo está organizado el código?",
+      "documents": [
+        { "path": "docs/core/arquitectura.md", "scope": "always" }
+      ]
+    }
+  ]
+}
+```
+
+### Detección automática de nodos huérfanos
+
+El pre-flight script verifica en ambas direcciones — registry → disco y disco → registry:
+
+```js
+// a) Declarado en registry pero no existe en disco
+config.registry.forEach(doc => {
+  if (!fs.existsSync(doc.path)) orphans.push({ problem: 'roto', path: doc.path });
+});
+
+// b) Existe en disco pero no está en registry (nodo huérfano)
+const registryPaths = new Set(config.registry.map(d => d.path));
+walkDirs(['docs', 'framework', 'skills']).forEach(file => {
+  if (!registryPaths.has(file)) orphans.push({ problem: 'huérfano', path: file });
+});
+```
+
+Si el script encuentra problemas, el agente no empieza. La integridad del mapa es condición de trabajo.
+
+### Tres scopes de lectura
+
+Cada documento tiene un scope que determina cuándo lo lee el agente:
+
+**`always`** — se lee antes de cualquier tarea, sin excepción. Son los documentos que definen el proyecto: visión, arquitectura, stack, estado actual, operación, criterio de entrega. Típicamente 6–8 documentos.
+
+**`conditional`** — se lee cuando el issue activa su trigger. El issue declara `areas_affected` y el sistema mapea cada área a sus documentos. Un agente trabajando en backend no carga los flujos de UX. Un agente en frontend no carga el skill de base de datos. Esto reduce el contexto irrelevante y hace la lectura proporcional al trabajo.
+
+**`reference`** — se consulta al llegar a esa parte del trabajo, no al inicio. Para specs muy granulares de componentes específicos que solo importan cuando el issue los toca directamente.
+
+```json
+"triggers": {
+  "frontend": ["docs/core/paginas.md", "skills/skill-design/SKILL.md", "skills/skill-frontend/SKILL.md"],
+  "backend":  ["docs/core/modelo-datos.md", "skills/skill-backend/SKILL.md"],
+  "editor":   ["docs/features/editor.md"]
+}
+```
+
+### Protocolo de lectura en cuatro pasos
+
+**Paso 1 — Pre-flight.** Correr el script de integridad. Leer `SETUP.md` y `STATUS.md`. Si falta algo requerido, documentar el bloqueo y escalar — no improvisar.
+
+**Paso 2 — Contexto base.** Leer todos los documentos `always`. Sin excepción. Son el piso de contexto que hace coherente cualquier decisión posterior.
+
+**Paso 3 — Contexto condicional.** Leer los documentos activados por los triggers del issue.
+
+**Paso 4 — Pre-PR.** Antes de abrir un PR, leer `skill-product-manager` y `skill-code-review`.
+
+### WORKFLOW.md — instrucciones de issue específico
+
+Para issues con contexto o restricciones que van más allá de los docs estándar, se crea un `WORKFLOW.md` en la raíz de la rama. Sobreescribe `agent.md` para esa rama únicamente. Se borra al mergear — el historial vive en el PR.
+
+El patrón resuelve la tensión entre instrucciones globales (docs) e instrucciones puntuales (el issue específico): los docs no se contaminan con contexto temporal, y el agente tiene acceso a las instrucciones exactas para esa tarea.
+
+---
+
+## Prácticas de entrega
 
 ### Hermetic testing
 
-Los tests corren con `npm test` sin dependencias externas. Supabase se mockea, fetch se intercepta con MSW, los datos de prueba viven en fixtures del repo. Un agente que rompe tests en CI tiene un problema — no el ambiente.
+Los tests corren con `npm test` sin dependencias externas. Supabase se mockea, fetch se intercepta (MSW), los datos de prueba viven en fixtures del repo. Un test que pasa localmente pero falla en CI porque "hay datos en staging" está roto por diseño — no es deuda técnica, es el issue.
+
+Tests E2E con Playwright son la excepción: corren contra staging, separados del CI básico.
 
 ### Proof of work en PRs
 
-Antes de mover un issue a "In Review", el agente pega el output de `npm run typecheck && npm run lint && npm test` en la descripción del PR. Sin ese output, el PR no se revisa. Esto elimina la categoría de bugs "funciona en mi máquina".
+Antes de mover un issue a revisión, el agente pega el output de `npm run typecheck && npm run lint && npm test` en la descripción del PR. Sin ese output el PR no se revisa. Elimina la categoría de bugs "funciona en mi máquina" y hace la validación trazable.
 
-### WORKFLOW.md por issue
+### Actualización de STATUS.md con cada PR
 
-Para issues con contexto o restricciones específicas que van más allá de los docs estándar, se crea un `WORKFLOW.md` en la raíz de la rama. Sobreescribe `agent.md` para esa rama únicamente. Se borra al mergear. El historial vive en el PR, no en el repo.
-
----
-
-## Decisiones no negociables
-
-**Local-first.** El usuario nunca espera a Supabase. La base local es la fuente de verdad operativa. Supabase es la copia remota sincronizada.
-
-**Editor aislado.** Un keystroke en el editor no re-renderiza el sidebar, paneles de AI, ni ningún componente externo.
-
-**AI no genera texto.** El AI editor observa, señala, pregunta. Nunca escribe por el autor. Si la respuesta del modelo es SILENCIO, no se envía nada al cliente.
-
-**Simplicidad radical.** Si el issue no lo pidió, no se agrega UI. Cada píxel existe por una razón.
-
-**Tipografía y bordes.** Bordes siempre `0.5px`. Iconos siempre `strokeWidth={1.5}`. Lora para lo epistolar, Geist Sans para lo funcional.
+Cada PR significativo agrega una fila a `STATUS.md`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
 
 ---
 
-## Estado actual
+## Aplicar el framework a un proyecto nuevo
 
-**Fase 0 — Cimientos completada.** La documentación fundacional está completa. El codebase de la aplicación no existe todavía. La Fase 1 (Escribir: editor, auto-save, Desk) es el próximo bloque de trabajo.
+**1. Crear la estructura de carpetas:**
 
-Ver `docs/ops/STATUS.md` para el estado detallado y `docs/ops/odessay-roadmap.md` para el plan completo de fases.
+```
+docs/core/         → Q1, Q2, Q4, Q5
+docs/features/     → Q6
+docs/ops/          → Q8, Q9
+framework/         → este framework
+skills/            → Q3, Q5, Q7, Q10
+reference/         → Q3
+config.json
+CLAUDE.md
+agent.md
+```
+
+**2. Completar las 10 preguntas** — redactar un documento por pregunta antes de escribir una línea de código. Las preguntas 1, 2 y 3 las responde el dueño del producto, no el agente.
+
+**3. Registrar todo en config.json** — registry + questions. Correr el pre-flight para confirmar integridad bidireccional.
+
+**4. Auditar con los dos tests** — exhaustividad (¿alguna pregunta sin respuesta?) y exclusividad (¿algún overlap entre documentos?).
+
+**5. Definir triggers** — mapear cada área de trabajo (`frontend`, `backend`, `editor`, etc.) a sus documentos en `config.json → triggers`.
 
 ---
 
-## Para agentes de código
+## Lo que el framework no reemplaza
 
-Leer en este orden antes de tocar cualquier archivo:
+El framework garantiza que el agente tiene todo lo que necesita para ejecutar. No garantiza que lo documentado sea correcto ni que el producto valga la pena construir. La calidad del producto depende de la calidad de la documentación — especialmente de las preguntas 1, 2 y 3, que ningún agente puede completar por el dueño del producto.
 
-1. `config.json` — pre-flight: verificar integridad del registry
-2. `docs/ops/SETUP.md` — entorno, herramientas, permisos, Git
-3. `docs/ops/STATUS.md` — qué existe hoy
-4. `docs/core/odessay-fundacional.md` — qué es el producto
-5. `docs/core/odessay-arquitectura.md` — cómo está organizado
-6. `docs/core/odessay-stack.md` — con qué está construido
-7. Docs condicionales según `config.json → triggers` del issue
-8. `skills/skill-product-manager/SKILL.md` y `skills/skill-code-review/SKILL.md` antes del PR
+Un framework perfecto con una visión equivocada produce un producto equivocado con consistencia perfecta.
