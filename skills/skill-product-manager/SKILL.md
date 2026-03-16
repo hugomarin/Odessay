@@ -114,20 +114,29 @@ Cada mensaje incluye el ID del issue al final: `feat: implement auto-save deboun
 Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
 
 ### Validation
-[LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen según el tipo de issue:
+[LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
 
-Si el issue toca funcionalidad de interacción en el browser:
+**Checks obligatorios en todo issue:**
+```bash
+npm run typecheck   # debe pasar sin errores
+npm run lint        # debe pasar sin errores
+npm test            # debe pasar sin dependencias externas (ver §Hermetic testing en SETUP.md)
+```
+Pegar el output de estos tres comandos en la descripción del PR. Sin este output, el PR no está completo.
+
+**Si el issue toca funcionalidad de interacción en el browser:**
 - Usa Playwright MCP para recorrer el flujo completo que el issue habilita.
 - Verifica que no hay errores en consola del browser durante el flujo.
 - Verifica estados de carga, errores y casos edge definidos en Requirements.
+- Pegar screenshot o log del resultado en el PR.
 
-Si el issue toca base de datos:
+**Si el issue toca base de datos:**
 - Usa Supabase MCP para verificar que el schema resultante coincide con lo especificado.
 - Verifica que las RLS policies permiten y bloquean acceso según las reglas definidas.
-- Verifica que los datos en staging reflejan el comportamiento esperado.
+- Pegar el output de la verificación en el PR.
 
-Si el issue es de infra, configuración o documentación, no se requiere Playwright ni Supabase MCP.
-Verifica que el resultado es funcional según lo que corresponda al tipo de issue.
+**Si el issue es de infra, configuración o documentación:**
+No se requiere Playwright ni Supabase MCP. Verificar que el resultado es funcional y documentar cómo se verificó.
 
 ### Definition of Done
 Condiciones que deben ser verdaderas para cerrar el issue. Escritas en prosa. Sin checklists.

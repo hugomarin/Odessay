@@ -110,10 +110,17 @@ Modificar schema:
 
 ---
 
-## 8) Criterio de entrega
+## 8) WORKFLOW.md — instrucciones específicas por issue
+
+Si el issue requiere contexto o restricciones adicionales más allá de los docs estándar, crear un `WORKFLOW.md` en la raíz de la rama. Sobreescribe `agent.md` para esa rama únicamente. Se borra al mergear. Ver `docs/SETUP.md` §WORKFLOW.md para el formato.
+
+---
+
+## 9) Criterio de entrega
 
 Un cambio está listo cuando:
 - Respeta los documentos y skills aplicables.
 - No rompe decisiones no negociables.
-- Incluye validación funcional del flujo afectado.
+- `npm run typecheck` y `npm run lint` pasan sin errores — output pegado en el PR.
+- Tests relevantes corren y pasan con `npm test` sin dependencias externas.
 - Está listo para PR bajo `skills/skill-code-review/SKILL.md`.

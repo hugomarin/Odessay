@@ -31,9 +31,27 @@ Cada PR debe incluir:
 
 ---
 
+## Proof of work — obligatorio antes de abrir PR
+
+Pegar en la descripción del PR el output de:
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
+Sin estos tres outputs en el PR, el review no empieza.
+
+---
+
 ## Checklist de calidad
 
-### Velocidad — verificar primero
+### Tests — verificar primero
+- [ ] `npm test` pasa sin errores y sin dependencias externas (sin Supabase real, sin red).
+- [ ] Los nuevos tests usan mocks para Supabase y fixtures para datos. No conectan a staging.
+- [ ] Si el issue introduce funcionalidad nueva, existe al menos un test que la cubre.
+- [ ] Los tests E2E con Playwright corren separados de los unitarios (`npm run test:e2e`).
+
+### Velocidad — verificar segundo
 - [ ] ¿El editor sigue aislado? ¿Un keystroke no re-renderiza el sidebar ni paneles?
 - [ ] ¿El auto-save guarda local primero, sync remoto en background?
 - [ ] ¿Ninguna operación de AI bloquea el flujo de escritura?

@@ -39,6 +39,25 @@ git branch       # debe estar en la rama del issue, no en main
 
 ---
 
+## Hermetic testing
+
+**Principio no negociable desde Fase 1:** los tests deben correr con `npm test` sin ninguna dependencia externa — sin Supabase real, sin red, sin datos de producción. Un agente no puede validar su propio trabajo si los tests necesitan un servicio externo para pasar.
+
+**Qué significa en la práctica:**
+
+- **Supabase:** usar `supabase-js` con un cliente mockeado en tests. No conectar a la base de datos real en ningún test unitario ni de componente.
+- **Fetch / API calls:** interceptar con `msw` (Mock Service Worker) o equivalente. Los tests no hacen llamadas de red reales.
+- **Datos:** usar factories o fixtures definidos en `/tests/fixtures/`. No depender de datos en staging.
+- **Variables de entorno:** los tests usan valores dummy definidos en `.env.test`. No necesitan `.env.local`.
+
+**Qué sí puede conectar a servicios reales:**
+- Tests E2E con Playwright (corren contra staging, no contra el entorno de CI básico).
+- Scripts de migración de base de datos (no son tests — son operaciones de infra).
+
+Si un test falla en CI pero pasa localmente porque "hay datos en staging", ese test está roto por diseño. Arreglarlo es parte del issue, no deuda técnica posterior.
+
+---
+
 ## Variables de entorno
 
 Crear `.env.local` en la raíz del proyecto. Nunca commitear este archivo (está en `.gitignore`).
@@ -181,17 +200,39 @@ gh pr list --state open                # ver PRs abiertos y qué archivos tocan
 
 Si un PR abierto toca los mismos archivos que el issue que vas a empezar: comentar en el issue de Linear y esperar a que el PR se mergee antes de continuar. No trabajar en paralelo sobre los mismos archivos.
 
+### WORKFLOW.md — instrucciones específicas por issue
+
+Inspirado en Symphony: si un issue requiere comportamiento del agente diferente al default (contexto extra, restricciones adicionales, pasos de validación específicos), el agente puede crear un `WORKFLOW.md` en la raíz de la rama antes de empezar.
+
+Este archivo sobreescribe `agent.md` para esa rama únicamente. Se commitea como parte del PR y se borra al mergear a main — nunca llega a producción.
+
+```markdown
+# WORKFLOW.md — ODY-XX
+
+## Contexto adicional
+Este issue toca el componente FootnoteExtension. Leer odessay-editor.md §FootnoteExtension antes de empezar.
+
+## Restricciones específicas
+No modificar el schema de ProseMirror de nodos ya existentes.
+
+## Validación requerida
+Correr el test suite de extensiones TipTap antes de mover a In Review.
+```
+
+Si el issue no tiene particularidades, no se crea WORKFLOW.md. Es una herramienta para casos donde el contexto del issue justifica instrucciones extra — no un trámite obligatorio.
+
 ### Flujo completo de entrega
 
 ```
 1. Crear rama desde main actualizado
 2. Mover issue a In Progress en Linear
-3. Desarrollar con commits atómicos
-4. Push al branch remoto al terminar cada subtarea
-5. Ejecutar validaciones (typecheck, lint, tests)
-6. Abrir PR con descripción del issue
-7. Mover issue a In Review en Linear
-8. Actualizar STATUS.md con el entregable completado
+3. Crear WORKFLOW.md si el issue lo justifica
+4. Desarrollar con commits atómicos
+5. Push al branch remoto al terminar cada subtarea
+6. Ejecutar validaciones (typecheck, lint, tests) — pegar output en el PR
+7. Abrir PR con descripción del issue
+8. Mover issue a In Review en Linear
+9. Actualizar STATUS.md con el entregable completado
 ```
 
 ---
