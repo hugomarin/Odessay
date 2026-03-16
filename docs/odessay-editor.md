@@ -41,6 +41,36 @@ Si se importa Markdown con features no soportadas (HTML inline, footnotes extend
 
 ---
 
+## Modo Markdown — vista de fuente
+
+El toggle **Rich / Markdown** en la topbar (zona izquierda, junto a los botones de formato) permite ver y editar el Markdown crudo del writing.
+
+### Visual
+
+- **Fuente:** Geist Mono, mismo size que el cuerpo en modo rico (18px). Sin syntax highlighting — texto plano monocromático.
+- **Color:** `--ink-1` sobre el mismo fondo del editor (sin cambio de fondo).
+- **Layout:** Mismo max-width (860px) y padding (64px 56px 80px) que el modo rico. No es un panel separado ni una vista modal — ocupa exactamente el mismo espacio.
+- **Scroll:** Texto fluye verticalmente. Sin números de línea. Sin wrap forzado a columna estrecha.
+
+### Comportamiento del toggle
+
+- El toggle es un segmented control de dos estados: **Rich** y **Markdown**. El estado activo tiene fondo `--ink-5` o equivalente (ver referencia en imagen — borde con fondo tenue).
+- Al activar Markdown: el JSON del editor se serializa a Markdown con `tiptap-markdown` y se muestra en un `<textarea>` controlado.
+- Al activar Rich: el contenido del textarea se pasa al parser de `tiptap-markdown` y se re-hidrata el editor TipTap. La selección y posición del cursor se pierden — comportamiento esperado y aceptable.
+- El switch es instantáneo — sin animación, sin loading state.
+
+### Botones de formato en modo Markdown
+
+Los botones de la topbar (Bold, Italic, etc.) permanecen visibles pero con `opacity: 0.35` y `pointer-events: none`. No se ocultan — el toggle no cambia el layout de la topbar. El usuario ve que están inactivos, no que desaparecieron.
+
+### Auto-save en modo Markdown
+
+El auto-save continúa funcionando. En modo Markdown el guardado local ocurre en cada `onChange` del textarea con debounce de 800ms (no inmediato como en modo rico, porque el JSON no está disponible hasta el re-parse). El status bar muestra "Saving..." / "Saved" igual que en modo rico.
+
+**Nota de implementación:** Al guardar en modo Markdown, se hace un re-parse silencioso a JSON para mantener `body_json` actualizado como fuente de verdad. El textarea edita el Markdown — no el JSON directamente.
+
+---
+
 ## Motor: TipTap
 
 TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo completamente headless — sin estilos ni toolbar propios. Todo el diseño y comportamiento es custom de Odessay.
@@ -317,3 +347,67 @@ El `body` es un `contenteditable` gestionado por TipTap. No interactuar con el D
 El conteo de palabras se calcula desde `editor.storage.characterCount.words()` (extensión CharacterCount). Se actualiza en cada `onUpdate`.
 
 Las notas al pie son una sección especial al final del documento. El agente debe asegurarse de que existe exactamente una sección `.footnotes` por documento y de que los números son secuenciales y consistentes entre los superíndices y las entradas de la sección.
+
+---
+
+## FootnoteExtension — Spec técnica
+
+Extensión custom de TipTap. No existe en el ecosistema oficial — se implementa desde cero como una extensión de nodo.
+
+### Nodos ProseMirror que define
+
+```
+footnote-ref     — nodo inline, atómico. Renderiza como superíndice "[n]" en el cuerpo del writing.
+footnote-section — nodo de bloque, al final del documento. Contiene los footnote-item.
+footnote-item    — nodo de bloque, dentro de footnote-section. Renderiza como "n. texto de la nota".
+```
+
+`footnote-ref` y `footnote-item` comparten un atributo `id` (número entero, empieza en 1). La consistencia entre superíndices y entradas de la sección se mantiene siempre — si se elimina un `footnote-ref`, su `footnote-item` correspondiente se elimina también, y todos los números posteriores se reordenan.
+
+### Comandos que expone
+
+```ts
+editor.commands.addFootnote(text: string)
+// Inserta un footnote-ref en la posición actual del cursor.
+// Crea o localiza el footnote-section al final del documento.
+// Agrega un footnote-item con el texto dado.
+// Asigna el número secuencial correcto a ambos nodos.
+
+editor.commands.removeFootnote(id: number)
+// Elimina el footnote-ref con ese id y su footnote-item.
+// Reordena todos los ids posteriores.
+```
+
+### Serialización Markdown
+
+`tiptap-markdown` requiere un serializer custom para estos nodos. El formato de salida es compatible con Markdown extendido (estilo Pandoc/MultiMarkdown):
+
+```markdown
+Texto del cuerpo con una nota.[^1]
+
+[^1]: Texto de la nota al pie.
+```
+
+Al importar Markdown con `[^n]`: si `FootnoteExtension` está cargada, los parsea como `footnote-ref` y `footnote-item`. Si no está cargada, `tiptap-markdown` los trata como texto plano (comportamiento documentado en §Markdown que excede el subconjunto).
+
+### Renderizado visual
+
+**`footnote-ref` en el cuerpo:**
+- Geist Sans 11px, `vertical-align: super`
+- Color `--ink-3`
+- No es un link clickeable — es texto decorativo. El número es el vínculo visual.
+
+**`footnote-section`:**
+- Separada del cuerpo por un borde `0.5px --border` de 48px de ancho (no full-width — evoca el separador tipográfico clásico de notas al pie).
+- `margin-top: 48px`, `padding-top: 16px`
+
+**`footnote-item`:**
+- Geist Sans 13px, `--ink-3`, `line-height: 1.6`
+- Formato: `1. Texto de la nota.`
+- El número no es editable directamente — se gestiona por la extensión.
+
+### Integración con el modal
+
+El modal de footnote (ver §Modales de formato) llama a `editor.commands.addFootnote(text)` al confirmar. No hay interacción directa del usuario con los nodos de ProseMirror — todo pasa por el comando.
+
+Al hacer click en un `footnote-item` existente, se abre el mismo modal prellenado con el texto actual para editar. El id no cambia — solo el texto.

@@ -32,6 +32,8 @@ TypeScript — strict mode, sin `any`
 Tailwind CSS — única herramienta de styling
 ShadCN/UI — componentes accesibles, personalizados solo en colores, tipografía, bordes y sombras vía tokens CSS
 TipTap — editor headless
+TanStack Query — server data, cache y loading states
+Zustand — sync state y AI state (solo estos dos slices)
 Lucide React — iconografía (strokeWidth={1.5} siempre)
 Geist Sans + Lora — tipografía (ver skill-design.md)
 ```
@@ -58,27 +60,69 @@ const { content, setContent } = useWritingStore()
 <Editor value={content} onChange={setContent} />
 ```
 
-### Estado segmentado — cuatro dominios separados
+### Estado segmentado — cuatro dominios, cuatro herramientas
 
-Nunca un store global monolítico. Cuatro dominios distintos que no se mezclan:
+Nunca un store global monolítico. Cada dominio tiene su herramienta y no se mezclan.
+
+```
+Dominio          Herramienta         Razón
+──────────────────────────────────────────────────────────────────
+Document state   TipTap interno      Un keystroke no sale del editor
+UI state         useState local      Efímero, no necesita store global
+Server data      TanStack Query      Cache, revalidación, loading automático
+Sync state       Zustand (slice)     Compartido entre editor y statusbar
+AI state         Zustand (slice)     Compartido entre editor y panel AI
+```
+
+**Document state — TipTap únicamente**
+El JSON del documento y el conteo de palabras viven dentro de TipTap. Nunca se sincronizan a un store externo en tiempo real. El editor comunica hacia afuera solo a través de callbacks debounced.
 
 ```ts
-// 1. Estado del documento — solo TipTap lo escribe
-//    Lee: editor. Escribe: editor. Nadie más.
-type DocumentState = { body_json: JSONContent; body_text: string; word_count: number }
-
-// 2. Estado de UI — efímero, local al componente
-//    sidebar abierto/cerrado, panel activo, filtro seleccionado
-type UIState = { sidebarMini: boolean; activePanel: 'notes' | 'ai' | 'properties' | null }
-
-// 3. Estado de sync — refleja lo que está en la base local y en la nube
-//    Nunca bloquea la UI. Solo informa.
-type SyncState = { status: 'saved' | 'saving' | 'pending' | 'error'; last_saved_at: Date }
-
-// 4. Estado de AI — completamente asíncrono y desacoplado
-//    Las observaciones del AI nunca interrumpen el flujo de escritura
-type AIState = { observations: Observation[]; loading: boolean }
+// Solo esto sale del editor hacia afuera — y solo con debounce
+type EditorOutput = { body_json: JSONContent; body_text: string; word_count: number }
 ```
+
+**UI state — `useState` local**
+Sidebar expandido/mini, panel activo, filtro seleccionado, modal abierto. Estado de componente, no store. Si un estado de UI necesita cruzar más de dos niveles de componentes, se revisa la arquitectura antes de mover a Zustand.
+
+**Server data — TanStack Query**
+Writings, correspondencias, collections, margins — todo lo que viene de Supabase o de la base local. TanStack Query maneja cache, loading, error y revalidación. No hay `useEffect` para fetching.
+
+```ts
+// ✓ Correcto
+const { data: writings, isLoading } = useQuery({
+  queryKey: ['writings', { status: 'draft' }],
+  queryFn: () => localDB.getWritings({ status: 'draft' }),
+})
+
+// ✗ Incorrecto
+const [writings, setWritings] = useState([])
+useEffect(() => { fetchWritings().then(setWritings) }, [])
+```
+
+**Sync state y AI state — Zustand, dos slices separados**
+Son los únicos estados que se comparten entre componentes sin relación directa (editor ↔ statusbar para sync, editor ↔ panel AI para observaciones).
+
+```ts
+// store/sync.ts
+type SyncState = {
+  status: 'saved' | 'saving' | 'pending' | 'error'
+  lastSavedAt: Date | null
+  setSaving: () => void
+  setSaved: () => void
+  setError: () => void
+}
+
+// store/ai.ts
+type AIState = {
+  observations: Observation[]
+  loading: boolean
+  addObservation: (obs: Observation) => void
+  dismissObservation: (id: string) => void
+}
+```
+
+Zustand no se usa para nada más. Si aparece la tentación de agregar un tercer slice, revisar si TanStack Query o useState local resuelven el problema.
 
 ### Carga diferida — solo lo esencial en la primera carga
 
@@ -345,6 +389,138 @@ Auto-save local: inmediato. Sync remoto: debounce 1500ms. Sin indicador agresivo
 **Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta), `Strike` (fuera del subconjunto epistolar). No agregar sin revisar `odessay-editor.md`.
 
 Shortcuts: `⌘B`, `⌘I`, `⌘K`, `⌘⌥1/2/3`, `⌘⇧F`. Sin toolbar flotante al seleccionar.
+
+---
+
+## Estados transversales de UI
+
+Estos tres estados aparecen en todas las vistas. Se implementan de la misma forma en todas partes — sin inventar variaciones por vista.
+
+### Carga — Skeletons
+
+Nunca spinners. Los skeletons replican la estructura del contenido que van a mostrar, con las mismas dimensiones y espaciado. El usuario no ve un estado genérico — ve la forma exacta de lo que está cargando.
+
+```tsx
+// ✓ Correcto — skeleton que replica la estructura real
+function DeskHeroSkeleton() {
+  return (
+    <div className="flex gap-3">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="w-[220px] h-[140px] rounded-[10px] bg-muted animate-pulse" />
+      ))}
+    </div>
+  )
+}
+
+// ✗ Incorrecto — spinner genérico
+<div className="flex justify-center"><Spinner /></div>
+```
+
+Reglas de skeleton:
+- `bg-muted animate-pulse` siempre — sin variaciones de color
+- `border-radius` igual al componente final
+- Mismas dimensiones que el componente real (width, height, gap)
+- No texto, no iconos — solo forma
+
+TanStack Query expone `isLoading` para el primer fetch y `isFetching` para refetch. Los skeletons se muestran solo en `isLoading` — los refetch son silenciosos.
+
+### Vacío — Empty states
+
+Cada vista con contenido listable tiene un empty state. La estructura es siempre la misma: descripción breve de la sección + botón de primera acción cuando aplica.
+
+```tsx
+function EmptyState({ description, action }: { description: string; action?: { label: string; onClick: () => void } }) {
+  return (
+    <div className="flex flex-col items-center gap-4 py-16 text-center">
+      <p className="font-lora italic text-[15px] text-ink-3 max-w-[280px] leading-relaxed">
+        {description}
+      </p>
+      {action && (
+        <Button onClick={action.onClick}>{action.label}</Button>
+      )}
+    </div>
+  )
+}
+```
+
+Texto en Lora italic, `ink-3`. Tono calmo, epistolar — no cheerful ni startup. El botón usa el default (tinta oscura), nunca terracota para una primera acción vacía.
+
+Mensajes por vista:
+
+| Vista | Descripción | Botón |
+|---|---|---|
+| `/desk` sin writings | "Your writings will appear here." | "Start writing" |
+| `/desk` tabla sin actividad | "No recent activity." | — |
+| `/collections` sin collections | "Organize your writings into collections." | "New collection" |
+| `/correspondences` sin hilos | "Your correspondences will appear here." | — |
+| `/shared` sin compartidos | "Nothing has been shared with you yet." | — |
+| Collection vacía | "This collection has no writings yet." | "Add writings" |
+
+### Errores — Toast
+
+Los errores que el usuario necesita saber se muestran como toast. Los errores que no lo requieren (sync en background, errores de AI) son silenciosos — se loggean server-side y no interrumpen.
+
+```tsx
+// Usar el componente Toast de ShadCN con hook useToast
+const { toast } = useToast()
+
+// Llamar cuando hay un error que el usuario debe saber
+toast({
+  description: "Couldn't save your writing. We'll keep trying.",
+  duration: 4000,
+})
+```
+
+Reglas de toast:
+- Posición: bottom-center
+- Duración: 4 segundos, sin "dismiss" manual
+- Sin título, solo `description`
+- Sin iconos
+- El estilo viene del token system vía ShadCN — fondo `--ink`, texto `--bg` (configurado en Capa 2 de `toast.tsx`)
+- Mensaje en inglés, tono humano, primera persona plural ("We couldn't...")
+- Nunca mostrar mensajes técnicos (`error.message` del servidor va al log, no al usuario)
+
+Errores que **sí** muestran toast: fallo al compartir, fallo al crear collection, fallo al cargar una correspondencia, fallo de autenticación inesperado.
+
+Errores que **no** muestran toast: fallo de sync remoto (el statusbar lo refleja sutilmente), silencio del AI editor, fallo de refetch en background.
+
+### Validación de formularios
+
+Aplica a `/login`, `/signup`, `/settings` y cualquier formulario futuro. Patrón único — sin variaciones por vista.
+
+**Cuándo validar:**
+- `onBlur` — la validación se dispara al salir del campo. No se interrumpe al usuario mientras escribe.
+- Excepción: `username` valida `onChange` con debounce de 600ms para comprobar disponibilidad en tiempo real.
+- Al hacer submit: se validan todos los campos que no hayan sido tocados aún.
+
+**Estado de error:**
+- Mensaje inline bajo el campo. Geist Sans 12px `--destructive`.
+- El borde del input cambia a `--destructive` (Capa 3, `className` en el punto de uso).
+- Nunca toast para errores de validación — son locales al campo, no eventos globales.
+
+**Estado válido:**
+- Sin indicador visual positivo. La ausencia de error es suficiente.
+- No hay checkmark verde, no hay borde verde. La sobriedad del diseño aplica a la validación también.
+
+**Campos requeridos:**
+- Sin asterisco. Todos los campos de un formulario son requeridos por contexto — el asterisco es ruido.
+- El mensaje de error al intentar enviar vacío: "This field is required." (simple, sin dramatismo).
+
+**Implementación:**
+- Usar `react-hook-form` + `zod` para todos los formularios. No implementar validación manual.
+- El schema Zod es la fuente de verdad de las reglas. Los mensajes de error se definen en el schema.
+
+```ts
+const signupSchema = z.object({
+  display_name: z.string().min(1, 'This field is required.').max(80),
+  username: z.string()
+    .min(3, 'At least 3 characters.')
+    .max(30)
+    .regex(/^[a-zA-Z0-9_]+$/, 'Only letters, numbers, and underscores.'),
+  email: z.string().email('Enter a valid email.'),
+  password: z.string().min(8, 'At least 8 characters.'),
+})
+```
 
 ---
 

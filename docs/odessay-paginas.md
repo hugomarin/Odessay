@@ -48,11 +48,27 @@ Página de llegada para invitados. Muestra la carta-invitación si existe. Lleva
 
 ### `/login`
 
-Email + contraseña. Limpio.
+Componente base: `npx shadcn@latest add login-02`. Layout dividido 50/50:
+
+**Panel izquierdo (formulario):** Fondo `--paper-1`. Logo "Odessay" en Lora arriba a la izquierda. Formulario centrado verticalmente con campos Email y Password. Botón primario "Login" ancho completo. Link "Forgot your password?" junto al label de Password. Link "Don't have an account? Sign up" debajo del botón.
+
+**Panel derecho (decorativo):** Fondo `--muted`. Fragmento del manifiesto de Odessay en Lora italic `--ink-3`, centrado. No es imagen — es texto. Esto refuerza la identidad epistolar desde el primer contacto.
+
+**Sin OAuth.** No hay "Login with GitHub" ni ningún proveedor externo — solo email + contraseña vía Supabase Auth.
+
+**Errores:** Inline bajo el campo que falla. Geist Sans 13px `--destructive`. Sin toast — el error de credenciales no es un evento global.
 
 ### `/signup`
 
-Email, contraseña, username, display_name. Si llega desde `/invite/{token}`, el email puede venir prellenado y la invitación se asocia al nuevo perfil.
+Misma estructura que `/login` con `login-02`. Panel derecho idéntico (manifiesto).
+
+**Campos en un solo formulario:** Display name, Username, Email, Password. En ese orden — lo personal primero, lo técnico después.
+
+Validación en tiempo real para username: disponibilidad y formato (solo letras, números, guiones bajos). Feedback inline inmediato — verde si disponible, rojo si tomado.
+
+Botón "Create account" ancho completo. Link "Already have an account? Log in" debajo.
+
+Si llega desde `/invite/{token}`: el campo email viene prellenado y deshabilitado. La invitación se asocia al nuevo perfil al completar el signup.
 
 ---
 
@@ -112,6 +128,24 @@ Los writings agrupados en esta collection. Filtrable por estado y visibilidad.
 
 Lista de correspondencias donde el usuario participa (como autor del writing raíz o como autor de alguna respuesta en el árbol). Ordenadas por actividad reciente.
 
+**Layout:** Misma estructura que el Desk — topbar + área de contenido con max-width 860px. Sin sidebar secondary.
+
+**Topbar:** Título de sección "Correspondences" en Geist Sans 15px `--ink-2`. Sin filtros en la primera fase — se añadirán cuando el volumen lo justifique.
+
+**Lista:** Tabla con una fila por correspondencia. Columnas:
+
+| Columna | Contenido |
+|---------|-----------|
+| Título | Título del writing raíz. Lora 15px `--ink`. Truncado si excede el ancho. |
+| Con | Avatares apilados de los participantes (mismo estilo que la participants bar del thread). Máximo 3 visibles + contador "+N". |
+| Writings | Número de writings en el árbol. Geist Sans 13px `--ink-3`. |
+| Última actividad | Fecha relativa (Today, Yesterday, 12 Mar). Geist Sans 13px `--ink-4`. |
+| Estado | Badge solo si hay algo no leído: "Your turn" en terracota claro. Sin badge si está al día. |
+
+Cada fila es clickeable → navega a `/correspondences/{id}`.
+
+**Estado vacío:** "No tienes correspondencias todavía. Cuando alguien responda a uno de tus writings, aparecerá aquí." Texto Lora italic `--ink-3`, centrado. Sin botón de acción — las correspondencias se inician desde el editor, no desde esta vista.
+
 ### `/correspondences/{id}` — Una correspondencia
 
 Vista del árbol completo de writings. Muestra la narrativa de la correspondencia: qué se escribió primero, qué vino después, quién respondió a quién. Navegación entre los writings del árbol. Aquí se ve el conocimiento horizontal formándose.
@@ -122,7 +156,22 @@ Writings donde otros me incluyeron en `writing_shares`. Puedo leerlos y, si `can
 
 ### `/settings` — Configuración
 
-Perfil (username, display_name, bio), cuenta (email, contraseña), preferencias.
+Página sencilla de una sola columna. Sin tabs ni secciones colapsables — todo visible en scroll vertical. Dividida en dos grupos semánticos separados por un borde `0.5px`:
+
+**Perfil**
+- `display_name` — Nombre que se muestra públicamente. Input text.
+- `username` — Identificador único en la URL. Input text. Validación en tiempo real: disponibilidad y formato (solo letras, números, guiones bajos). Cambiar el username rompe la URL pública existente — se muestra advertencia antes de guardar.
+- `avatar` — Imagen de perfil. Upload directo o URL. Vista previa circular. Sin crop forzado (se centra el cuadrado).
+- `bio` — Descripción libre. Textarea de altura fija (no expansible). Máximo 280 caracteres con contador visible.
+- `date_of_birth` — Fecha de nacimiento. Input date. No se muestra públicamente — solo para contexto interno o futuras funcionalidades.
+
+**Cuenta**
+- `email` — Email actual visible (read-only). Botón "Cambiar email" que abre confirmación y envía link de verificación al nuevo email.
+- Contraseña — No se muestra el valor actual. Botón "Cambiar contraseña" que envía email de reset (flujo estándar de Supabase Auth).
+
+**Guardar:** Botón primario al final de cada grupo. Los cambios de perfil se guardan juntos. Email y contraseña tienen su propio flujo de confirmación.
+
+**Sin preferencias de la aplicación en esta fase.** Si se agregan en el futuro, se añaden como un tercer grupo.
 
 ---
 
