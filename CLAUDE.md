@@ -25,7 +25,7 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 | `docs/odessay-editor.md` | Editor TipTap: extensiones, shortcuts, auto-save, modales, layout. Referencia técnica del componente más crítico. |
 | `docs/odessay-ai-editor.md` | Spec del AI editor residente |
 | `docs/odessay-margenes.md` | Sistema de márgenes (highlight y anotación en lectura) |
-| `docs/odessay-design-spec.md` | Especificación visual exacta por vista: padding, colores, tipografía, comportamiento |
+| `skills/skill-design-vistas.md` | Especificación visual por vista: valores exactos de Sidebar, Desk, Collections, Correspondences, Reading, Editor + checklists de validación |
 | `docs/odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |
 
 ---
@@ -34,7 +34,8 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 
 | Skill | Cuándo usarlo |
 |-------|---------------|
-| `skills/skill-design.md` | **Siempre antes de construir UI.** Tokens de color, tipografía, ShadCN, iconos, transiciones, modales, layout global. |
+| `skills/skill-design.md` | **Siempre antes de construir UI.** Tokens de color, tipografía, ShadCN, iconos, transiciones, reglas invariables. |
+| `skills/skill-design-vistas.md` | **Leer antes de implementar cada vista.** Valores exactos de padding, tamaños y comportamiento por pantalla + checklists de validación. Companion de skill-design. |
 | `skills/skill-frontend.md` | Arquitectura React, estructura de archivos, naming BEM, TipTap, Server/Client components, performance, accesibilidad. Leer después de skill-design. |
 | `skills/skill-backend.md` | API routes, Supabase, local-first, Claude API, Resend, manejo de errores. |
 | `skills/skill-database.md` | Supabase, RLS policies, migraciones, índices. |
@@ -91,7 +92,7 @@ La carpeta `reference/` contiene los prototipos HTML canónicos. Son la fuente v
 1. Leer `odessay-fundacional.md` → entender el modo "Organizar"
 2. Leer `odessay-arquitectura.md` → entender la estructura de navegación
 3. Leer `skill-design.md` → tokens visuales
-4. Leer `odessay-design-spec.md` → valores exactos del Desk
+4. Leer `skill-design-vistas.md` → valores exactos del Desk
 5. Leer `skill-frontend.md` → arquitectura de componentes, naming
 6. Implementar contra el prototipo `odessay-workspace-v3_4.html`
 7. Antes de PR: leer `skill-code-review.md`

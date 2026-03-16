@@ -9,7 +9,7 @@ Este skill define la lógica visual completa de Odessay. Todo lo que se construy
 
 Los archivos HTML de referencia visual son prototipos que documentan el comportamiento validado.
 
-**Antes de implementar cualquier vista, leer `odessay-design-spec.md`** — contiene:
+**Antes de implementar cualquier vista, leer `skill-design-vistas.md`** — contiene:
 - Valores exactos de cada componente por vista (padding, font-size, colores, border-radius)
 - Checklist de validación por vista para verificar que la implementación coincide con la referencia
 - Mapa de archivos HTML de referencia y sus caveats
