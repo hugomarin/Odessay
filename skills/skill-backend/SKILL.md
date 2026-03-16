@@ -146,7 +146,7 @@ El sistema no bloquea escrituras por conflicto de versión. La última escritura
 
 ## Observabilidad
 
-El setup completo de observabilidad está en `docs/SETUP.md` §Observabilidad. Resumen para el agente:
+El setup completo de observabilidad está en `docs/ops/SETUP.md` §Observabilidad. Resumen para el agente:
 
 - **Sentry:** captura errores de cliente y excepciones en API routes. Requerido desde Fase 1. Sin Sentry, los errores en producción son invisibles. Configuración: `npx @sentry/wizard@latest -i nextjs`.
 - **Logging estructurado:** todos los errores server-side llevan contexto (`userId`, `writingId`, operación). Sin contexto el log es inútil.

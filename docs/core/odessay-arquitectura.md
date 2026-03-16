@@ -140,22 +140,6 @@ Ver `odessay-editor.md` para spec completa.
 
 ---
 
-## Márgenes — sistema de anotación en lectura
-
-Los márgenes son el espacio de escritura que emerge mientras se lee. No son comentarios — son escritura en gestación.
-
-**Flujo:**
-1. El lector selecciona texto en la reading view
-2. Popup mínimo: **Mark** (highlight ámbar) o **Annotate** (abre burbuja de anotación)
-3. Las anotaciones viven en el panel lateral derecho (296px)
-4. Por defecto son privadas. El lector puede elegir compartirlas con el autor.
-
-**Semántica:** Las anotaciones son materia prima para la respuesta — no feedback. Cuando el lector va a responder, sus márgenes están disponibles como contexto en el editor.
-
-Ver `odessay-margenes.md` para spec completa y schema.
-
----
-
 ## Arquitectura de datos — local-first
 
 ```
@@ -176,20 +160,7 @@ Para desktop (Tauri/Electron): SQLite vía el runtime nativo. Para web: IndexedD
 
 ---
 
-## Modelo de datos — referencia rápida
-
-Schema completo en `odessay-modelo-datos.md`.
-
-| Entidad | Tabla | Nota |
-|---------|-------|------|
-| Usuario | `profiles` + `auth.users` | Supabase Auth |
-| Texto | `writings` | Estados: draft/finished. Visibilidades: private/shared/public |
-| Hilo epistolar | `correspondences` | Se crea en la primera respuesta |
-| Agrupación | `collections` | Organización personal del autor |
-| Permisos | `writing_shares` | Acceso específico por usuario |
-| AI | `ai_observations` | Observaciones del agente editor |
-| Márgenes | `margins` | Highlights y anotaciones de lectura |
-| Invitaciones | `invitations` | Token único para nuevos usuarios |
+Schema de entidades en `docs/core/odessay-modelo-datos.md`.
 
 ---
 

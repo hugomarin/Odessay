@@ -9,19 +9,57 @@
 Antes de tocar un archivo, un agente debe confirmar que tiene todo lo necesario. Si algún item falta, no empezar — documentar el bloqueo en el issue de Linear y escalar.
 
 ```bash
-# 1. Verificar que el framework está completo — todos los documentos declarados en config.json existen
+# 1. Verificar integridad del registry — detecta nodos huérfanos en ambas direcciones:
+#    a) docs declarados en registry que no existen en disco
+#    b) docs en disco que no están declarados en registry (contenido sin conexión)
 node -e "
 const config = require('./config.json');
 const fs = require('fs');
+const path = require('path');
+const glob = require('fs');
+
+// a) Registry → disco: verificar que todo lo declarado existe
 const missing = [];
-config.questions.forEach(q => {
-  const docs = q.documents || [];
-  docs.forEach(doc => {
-    if (!doc.endsWith('/') && !fs.existsSync(doc)) missing.push({ q: q.id, doc });
-  });
+config.registry.forEach(doc => {
+  if (!doc.path.endsWith('/') && !fs.existsSync(doc.path)) {
+    missing.push({ problem: 'declarado pero no existe en disco', path: doc.path });
+  }
 });
-if (missing.length) { console.error('GAPS:', missing); process.exit(1); }
-else console.log('Framework completo — todos los documentos existen.');
+
+// b) Disco → registry: verificar que todo lo que existe está declarado
+const registryPaths = new Set(config.registry.map(d => d.path));
+const scanDirs = ['docs/core', 'docs/features', 'docs/ops', 'framework', 'skills'];
+const orphans = [];
+scanDirs.forEach(dir => {
+  if (!fs.existsSync(dir)) return;
+  const walk = (d) => {
+    fs.readdirSync(d).forEach(f => {
+      const full = path.join(d, f);
+      if (fs.statSync(full).isDirectory()) { walk(full); return; }
+      if (!f.endsWith('.md')) return;
+      const rel = full.replace(/\\\\/g, '/');
+      if (!registryPaths.has(rel)) {
+        orphans.push({ problem: 'existe en disco pero NO está en registry (nodo huérfano)', path: rel });
+      }
+    });
+  };
+  walk(dir);
+});
+
+const issues = [...missing, ...orphans];
+if (issues.length) {
+  console.error('PROBLEMAS DETECTADOS:');
+  issues.forEach(i => console.error(' -', i.problem + ':', i.path));
+  process.exit(1);
+}
+console.log('Registry completo — sin nodos huérfanos ni referencias rotas.');
+"
+
+# 1b. Ver qué docs son always (lectura obligatoria independiente del issue)
+node -e "
+const config = require('./config.json');
+console.log('Docs always-read:');
+config.always_read.forEach(d => console.log(' -', d));
 "
 
 # 2. Verificar Node

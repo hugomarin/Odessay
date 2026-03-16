@@ -1,84 +1,298 @@
 {
   "project": "Odessay",
   "framework": "mece-v1",
+
+  "_comment_registry": "Inventario completo de todo lo que existe. Un doc que no está aquí es un nodo huérfano — no tiene ruta de entrada para ningún agente. El script de pre-flight verifica que registry == disco.",
+
+  "registry": [
+    {
+      "path": "docs/core/odessay-fundacional.md",
+      "type": "core",
+      "description": "Visión del producto, por qué existe, para quién, los tres modos (Escribir/Leer/Organizar), principios de diseño no negociables.",
+      "scope": "always"
+    },
+    {
+      "path": "docs/core/odessay-arquitectura.md",
+      "type": "core",
+      "description": "Arquitectura técnica, navegación de tres columnas, rutas, vistas principales, decisiones arquitectónicas tomadas.",
+      "scope": "always"
+    },
+    {
+      "path": "docs/core/odessay-stack.md",
+      "type": "core",
+      "description": "Stack tecnológico confirmado, convenciones de código, ambientes de desarrollo y producción, variables de entorno.",
+      "scope": "always"
+    },
+    {
+      "path": "docs/core/odessay-modelo-datos.md",
+      "type": "core",
+      "description": "Schema completo de Supabase: todas las tablas, columnas, tipos, RLS, relaciones. Fuente de verdad de datos.",
+      "scope": "conditional",
+      "trigger": "backend"
+    },
+    {
+      "path": "docs/core/odessay-paginas.md",
+      "type": "core",
+      "description": "Especificación de cada ruta/página: zonas pública, autor y privada, layout, comportamiento, notas de implementación.",
+      "scope": "conditional",
+      "trigger": "frontend"
+    },
+    {
+      "path": "docs/core/odessay-flujos.md",
+      "type": "core",
+      "description": "Flujos de usuario completos (secciones 1–11): registrarse, escribir, publicar, leer, organizar, navegar el editor, formato.",
+      "scope": "conditional",
+      "trigger": "frontend"
+    },
+    {
+      "path": "docs/features/odessay-editor.md",
+      "type": "feature",
+      "description": "Spec técnica del editor TipTap: extensiones, shortcuts, auto-save, modales, Markdown mode, FootnoteExtension, layout de columnas.",
+      "scope": "conditional",
+      "trigger": "editor"
+    },
+    {
+      "path": "docs/features/odessay-ai-editor.md",
+      "type": "feature",
+      "description": "Spec completa del AI editor residente: cuándo habla, qué observa, respuestas posibles, SILENCIO, arquitectura de prompts.",
+      "scope": "conditional",
+      "trigger": "ai-editor"
+    },
+    {
+      "path": "docs/features/odessay-margenes.md",
+      "type": "feature",
+      "description": "Sistema de highlights y anotaciones en lectura: flujo de selección, panel lateral, semántica, schema de margins.",
+      "scope": "reference",
+      "trigger": "reading-view"
+    },
+    {
+      "path": "docs/ops/STATUS.md",
+      "type": "ops",
+      "description": "Estado actual del codebase: qué está construido, qué no existe, decisiones tomadas, gaps documentales conocidos.",
+      "scope": "always"
+    },
+    {
+      "path": "docs/ops/SETUP.md",
+      "type": "ops",
+      "description": "Pre-flight del agente: entorno, variables de entorno, tools requeridos, permisos, estrategia de Git, WORKFLOW.md convention.",
+      "scope": "always"
+    },
+    {
+      "path": "docs/ops/odessay-roadmap.md",
+      "type": "ops",
+      "description": "Fases del producto y orden de implementación. Consultar para entender prioridad relativa de issues y qué bloquea qué.",
+      "scope": "conditional",
+      "trigger": "planning"
+    },
+    {
+      "path": "framework/framework-mece.md",
+      "type": "framework",
+      "description": "Framework MECE genérico y transferible: las 10 preguntas que todo proyecto debe responder, cómo aplicarlo, cómo detectar gaps. No es específico de Odessay.",
+      "scope": "reference",
+      "trigger": "meta"
+    },
+    {
+      "path": "skills/skill-design/SKILL.md",
+      "type": "skill",
+      "description": "Sistema de diseño visual completo: tokens de color, tipografía (Lora/Geist), ShadCN, iconos, transiciones, reglas invariables de UI.",
+      "scope": "conditional",
+      "trigger": "frontend"
+    },
+    {
+      "path": "skills/skill-design/vistas.md",
+      "type": "skill",
+      "description": "Companion de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista + checklists de validación. Nunca usar standalone.",
+      "scope": "conditional",
+      "trigger": "frontend"
+    },
+    {
+      "path": "skills/skill-frontend/SKILL.md",
+      "type": "skill",
+      "description": "Arquitectura React/Next.js: estructura de archivos, naming BEM, Server/Client components, TipTap, estado (Zustand/TanStack Query), performance, accesibilidad.",
+      "scope": "conditional",
+      "trigger": "frontend"
+    },
+    {
+      "path": "skills/skill-backend/SKILL.md",
+      "type": "skill",
+      "description": "API routes, Supabase (auth, DB, realtime), sync local-first, Claude API, Resend, manejo de errores, observabilidad con Sentry.",
+      "scope": "conditional",
+      "trigger": "backend"
+    },
+    {
+      "path": "skills/skill-database/SKILL.md",
+      "type": "skill",
+      "description": "Supabase: convenciones de migración, RLS policies, índices, naming de tablas, cómo actualizar odessay-modelo-datos.md tras un cambio.",
+      "scope": "conditional",
+      "trigger": "database"
+    },
+    {
+      "path": "skills/skill-product-manager/SKILL.md",
+      "type": "skill",
+      "description": "Criterios de producto, creación de issues en Linear, template de issue con areas_affected, proof of work requerido en PR.",
+      "scope": "always"
+    },
+    {
+      "path": "skills/skill-code-review/SKILL.md",
+      "type": "skill",
+      "description": "Checklist pre-PR: proof of work (typecheck + lint + test), hermetic testing, calidad, seguridad, performance. Leer siempre antes de abrir PR.",
+      "scope": "always"
+    },
+    {
+      "path": "skills/skill-ux-testing/SKILL.md",
+      "type": "skill",
+      "description": "Testing de UX y flujos E2E con Playwright. Consultar cuando el issue incluye testing de experiencia de usuario o automatización de flujos.",
+      "scope": "conditional",
+      "trigger": "ux-testing"
+    }
+  ],
+
+  "_comment_structure": "Descripción de carpetas para orientación rápida.",
+  "structure": {
+    "docs/core/": "Verdades estables del producto. Todo agente las lee siempre.",
+    "docs/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
+    "docs/ops/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
+    "framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
+    "skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
+    "reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
+  },
+
+  "reading_protocol": {
+    "always": "Leer antes de cualquier tarea, sin excepción.",
+    "conditional": "Leer cuando el issue toca ese área. El issue debe declararlo en 'areas_affected'.",
+    "reference": "Consultar al llegar a esa parte del trabajo, no al inicio."
+  },
+
+  "_comment_questions": "Índice temático: qué leer para responder cada una de las 10 preguntas MECE. Complementa el registry — este sección es orientada a tareas, el registry es orientado a inventario.",
   "questions": [
     {
       "id": 1,
       "question": "¿Para qué existe esto y para quién?",
-      "documents": ["docs/odessay-fundacional.md"],
-      "required": true
+      "documents": [
+        { "path": "docs/core/odessay-fundacional.md", "scope": "always" }
+      ]
     },
     {
       "id": 2,
       "question": "¿Qué ve y hace el usuario?",
-      "documents": ["docs/odessay-paginas.md", "docs/odessay-flujos.md"],
-      "required": true
+      "documents": [
+        { "path": "docs/core/odessay-paginas.md", "scope": "conditional", "trigger": "frontend" },
+        { "path": "docs/core/odessay-flujos.md", "scope": "conditional", "trigger": "frontend" }
+      ]
     },
     {
       "id": 3,
       "question": "¿Cómo se ve exactamente?",
       "documents": [
-        "skills/skill-design/SKILL.md",
-        "skills/skill-design-vistas/SKILL.md",
-        "reference/"
-      ],
-      "required": true
+        { "path": "skills/skill-design/SKILL.md", "scope": "conditional", "trigger": "frontend" },
+        { "path": "skills/skill-design/vistas.md", "scope": "conditional", "trigger": "frontend" },
+        { "path": "reference/", "scope": "conditional", "trigger": "frontend" }
+      ]
     },
     {
       "id": 4,
       "question": "¿Qué datos existen y cómo se modelan?",
-      "documents": ["docs/odessay-modelo-datos.md"],
-      "required": true
+      "documents": [
+        { "path": "docs/core/odessay-modelo-datos.md", "scope": "conditional", "trigger": "backend" }
+      ]
     },
     {
       "id": 5,
       "question": "¿Cómo está organizado el código?",
       "documents": [
-        "docs/odessay-arquitectura.md",
-        "docs/odessay-stack.md",
-        "skills/skill-frontend/SKILL.md"
-      ],
-      "required": true
+        { "path": "docs/core/odessay-arquitectura.md", "scope": "always" },
+        { "path": "docs/core/odessay-stack.md", "scope": "always" },
+        { "path": "skills/skill-frontend/SKILL.md", "scope": "conditional", "trigger": "frontend" }
+      ]
     },
     {
       "id": 6,
-      "question": "¿Cómo funciona cada parte crítica?",
+      "question": "¿Cómo funciona cada feature crítico?",
       "documents": [
-        "docs/odessay-editor.md",
-        "docs/odessay-ai-editor.md",
-        "docs/odessay-margenes.md"
+        { "path": "docs/features/odessay-editor.md", "scope": "conditional", "trigger": "editor" },
+        { "path": "docs/features/odessay-ai-editor.md", "scope": "conditional", "trigger": "ai-editor" },
+        { "path": "docs/features/odessay-margenes.md", "scope": "reference", "trigger": "reading-view" }
       ],
-      "required": true
+      "gaps": [
+        { "feature": "correspondencias", "status": "sin doc de feature — complejidad alta (thread, participants, sequence view)" },
+        { "feature": "collections", "status": "sin doc de feature — complejidad media (AI suggestions, expandable, uncategorized)" }
+      ]
     },
     {
       "id": 7,
       "question": "¿Cómo se implementa el backend?",
       "documents": [
-        "skills/skill-backend/SKILL.md",
-        "skills/skill-database/SKILL.md"
-      ],
-      "required": true
+        { "path": "skills/skill-backend/SKILL.md", "scope": "conditional", "trigger": "backend" },
+        { "path": "skills/skill-database/SKILL.md", "scope": "conditional", "trigger": "database" }
+      ]
     },
     {
       "id": 8,
       "question": "¿Qué existe hoy en el codebase?",
-      "documents": ["docs/STATUS.md"],
-      "required": true
+      "documents": [
+        { "path": "docs/ops/STATUS.md", "scope": "always" }
+      ]
     },
     {
       "id": 9,
       "question": "¿Cómo opera el agente en este proyecto?",
-      "documents": ["docs/SETUP.md"],
-      "required": true
+      "documents": [
+        { "path": "docs/ops/SETUP.md", "scope": "always" }
+      ]
     },
     {
       "id": 10,
       "question": "¿Cómo sé que terminé?",
       "documents": [
-        "skills/skill-product-manager/SKILL.md",
-        "skills/skill-code-review/SKILL.md"
-      ],
-      "required": true
+        { "path": "skills/skill-product-manager/SKILL.md", "scope": "always" },
+        { "path": "skills/skill-code-review/SKILL.md", "scope": "always" }
+      ]
     }
-  ]
+  ],
+
+  "always_read": [
+    "docs/core/odessay-fundacional.md",
+    "docs/core/odessay-arquitectura.md",
+    "docs/core/odessay-stack.md",
+    "docs/ops/STATUS.md",
+    "docs/ops/SETUP.md",
+    "skills/skill-product-manager/SKILL.md",
+    "skills/skill-code-review/SKILL.md"
+  ],
+
+  "triggers": {
+    "frontend": [
+      "docs/core/odessay-paginas.md",
+      "docs/core/odessay-flujos.md",
+      "skills/skill-design/SKILL.md",
+      "skills/skill-design/vistas.md",
+      "skills/skill-frontend/SKILL.md",
+      "reference/"
+    ],
+    "backend": [
+      "docs/core/odessay-modelo-datos.md",
+      "skills/skill-backend/SKILL.md"
+    ],
+    "database": [
+      "docs/core/odessay-modelo-datos.md",
+      "skills/skill-database/SKILL.md"
+    ],
+    "editor": [
+      "docs/features/odessay-editor.md",
+      "skills/skill-frontend/SKILL.md"
+    ],
+    "ai-editor": [
+      "docs/features/odessay-ai-editor.md",
+      "skills/skill-backend/SKILL.md"
+    ],
+    "reading-view": [
+      "docs/features/odessay-margenes.md"
+    ],
+    "ux-testing": [
+      "skills/skill-ux-testing/SKILL.md"
+    ],
+    "planning": [
+      "docs/ops/odessay-roadmap.md"
+    ]
+  }
 }

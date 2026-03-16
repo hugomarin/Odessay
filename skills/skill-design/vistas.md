@@ -1,6 +1,6 @@
 ---
-name: skill-design-vistas
-description: Especificación visual por vista de Odessay. Úsalo siempre junto a skill-design.md — ese documento define el sistema (tokens, tipografía, ShadCN, reglas). Este define cómo aplicarlo en cada pantalla: valores exactos de padding, tamaños, comportamientos y checklist de validación por vista. Leer antes de implementar Desk, Collections, Correspondences, Reading, Editor, o Sidebar.
+name: skill-design/vistas
+description: Companion file de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. Leer siempre junto a skills/skill-design/SKILL.md antes de implementar cualquier vista. No usar de forma standalone.
 ---
 
 # Skill: Design — Vistas (Odessay)

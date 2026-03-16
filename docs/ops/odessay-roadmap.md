@@ -11,7 +11,7 @@ Este documento define el alcance completo del proyecto: fases, milestones, y los
 
 Cada fase produce algo deployable, funcionalmente completo y **visualmente terminado**. No existe una fase de pulido al final — el estándar de calidad visual se aplica desde la Fase 0. Lo que se entrega en cada fase es lo que el usuario ve.
 
-La referencia visual es siempre los prototipos en `/reference/` y los valores exactos de `skill-design-vistas.md`. Lo que se ve en los prototipos es lo que se construye.
+La referencia visual es siempre los prototipos en `/reference/` y los valores exactos de `skills/skill-design/vistas.md`. Lo que se ve en los prototipos es lo que se construye.
 
 Dentro de cada fase, el orden de ejecución es siempre: database → backend → frontend → validation. Los issues de infra son siempre `critical-path` y van primero.
 
@@ -44,7 +44,7 @@ Dependencias: Configure Supabase projects.
 **Implement design system — tokens, typography, ShadCN base components** `[frontend]` `[critical-path]`
 Implementar el sistema de diseño completo de Odessay: tokens de color en `globals.css` mapeados a variables ShadCN, configuración de Tailwind theme con colores semánticos, sombras y border-radius. Instalar Geist Sans y Lora. Configurar los archivos de componentes ShadCN (Capa 2): card, button, input, textarea, dialog, popover, dropdown-menu, tooltip, badge, sheet, avatar — con los defaults de Odessay aplicados una vez. A partir de este issue, todos los componentes heredan la identidad visual sin `className` adicional.
 Dependencias: Initialize Next.js project.
-Referencia: `skill-design.md` (tokens, tipografía, ShadCN), `skill-design-vistas.md` (valores por vista).
+Referencia: `skill-design.md` (tokens, tipografía, ShadCN), `skills/skill-design/vistas.md` (valores por vista).
 
 **Create initial database schema migrations** `[database]` `[critical-path]`
 Migraciones iniciales para todas las tablas: profiles, writings (con `version`, `sync_status`, `deleted_at`, `slug`), correspondences, collections, writing_collections, writing_shares, ai_observations, margins (con `shared_at`, `updated_at`), invitations. RLS en todas las tablas. Triggers base: on_auth_user_created, slug generation, body_text extraction, correspondence creation.
@@ -71,7 +71,7 @@ Al terminar esta fase: un usuario puede registrarse, abrir el editor, escribir c
 **Implement TipTap editor** `[frontend]`
 Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown), History, Placeholder, CharacterCount. Sin toolbar flotante al seleccionar. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
 Dependencias: Implement authentication, Implement design system.
-Referencia: `odessay-editor.md`, `skill-design-vistas.md` (sección: Editor), `reference/editor.html`.
+Referencia: `odessay-editor.md`, `skills/skill-design/vistas.md` (sección: Editor), `reference/editor.html`.
 
 **Implement auto-save — local-first** `[backend, database]`
 onUpdate de TipTap guarda inmediatamente en la base local (IndexedDB). Sync a Supabase en background con debounce de 1.5 segundos y reintentos silenciosos. Indicador visual mínimo en statusbar ("Saved" / "Saving..." en ink-4/ink-3, sin iconos). El usuario nunca espera — el save local es instantáneo. UUID generado en cliente para escrituras nuevas. Incrementar `version` en cada save.
@@ -81,7 +81,7 @@ Referencia: `odessay-editor.md` (sección: Auto-save), `skill-backend.md` (secci
 **Build /desk — personal writing desk** `[frontend, backend]`
 Vista principal del autor. Tres secciones: Hero con cards horizontales deslizables de drafts activos (220px, scroll con snap), filter bar (All activity / Correspondence / With responses / Received), tabla de actividad agrupada por fecha (Today / This week / Earlier) con columnas Writing | State | With | Date. Datos se leen primero desde base local.
 Dependencias: Implement auto-save.
-Referencia: `odessay-arquitectura.md` (sección: Desk), `skill-design-vistas.md` (sección: Desk), `reference/desk.html`.
+Referencia: `odessay-arquitectura.md` (sección: Desk), `skills/skill-design/vistas.md` (sección: Desk), `reference/desk.html`.
 
 **Implement writing states and private visibility** `[backend, frontend]`
 Estados draft/finished como dimensiones independientes de visibilidad. Panel Properties en el editor para cambiar estado y visibilidad. Visibilidad private por default al crear. Writing solo visible para el autor cuando es private.
@@ -110,7 +110,7 @@ Dependencias: Implement shared and public visibility.
 **Build reading view — dedicated reading space** `[frontend]`
 Vista dedicada de pantalla completa para leer un writing. Sin sidebar. Fondo bg. Autor + título en Lora 30px + cuerpo en Geist Sans 17px / line-height 1.85. Topbar 46px con back link, navegación Previous/Next y botón "Write a response" en terracota. Sin cursor, sin toolbar, sin posibilidad de editar. Navegación entre writings con flechas del teclado, ESC para volver.
 Dependencias: Implement writing_shares.
-Referencia: `odessay-arquitectura.md` (sección: Reading view), `skill-design-vistas.md` (sección: Reading), `reference/reading.html`.
+Referencia: `odessay-arquitectura.md` (sección: Reading view), `skills/skill-design/vistas.md` (sección: Reading), `reference/reading.html`.
 
 **Implement margins — highlights and annotations** `[frontend, backend, database]`
 Sistema de highlights y anotaciones en la reading view. Flujo: seleccionar texto → popup mínimo (Mark / Annotate) → highlight ámbar o burbuja de anotación. Panel de márgenes 296px desde topbar. Privados por default. Compartibles con el autor. Anclados a offsets de body_text. Disponibles como contexto al iniciar una respuesta.
@@ -146,7 +146,7 @@ Referencia: `odessay-modelo-datos.md` (sección: correspondences).
 **Build /correspondences — thread view** `[frontend, backend]`
 Vista de correspondencia: participants bar con avatares apilados y stats, secuencia de mini-documentos con línea vertical conectora, reply prompt terracota al fondo. Lista de correspondencias donde el usuario participa. Pill "Your turn" / "Waiting".
 Dependencias: Implement correspondence creation.
-Referencia: `odessay-arquitectura.md` (sección: Correspondences), `skill-design-vistas.md` (sección: Correspondences), `reference/correspondences.html`.
+Referencia: `odessay-arquitectura.md` (sección: Correspondences), `skills/skill-design/vistas.md` (sección: Correspondences), `reference/correspondences.html`.
 
 ---
 
@@ -159,7 +159,7 @@ Al terminar esta fase: el tercer modo de Odessay (Organizar) está completo. El 
 **Implement collections — CRUD and writing assignment** `[frontend, backend, database]`
 Crear, editar, eliminar collections. Asignar writings a collections desde el editor (panel Properties) y desde la vista /collections. Un writing puede estar en múltiples collections. Collections públicas visibles en el espacio público del autor. Banner uncategorized siempre visible cuando hay writings sin clasificar. Colecciones expandibles sin navegación a otra página.
 Dependencias: Build /desk, Implement writing states.
-Referencia: `odessay-arquitectura.md` (sección: Collections), `skill-design-vistas.md` (sección: Collections), `reference/collections.html`.
+Referencia: `odessay-arquitectura.md` (sección: Collections), `skills/skill-design/vistas.md` (sección: Collections), `reference/collections.html`.
 
 ---
 

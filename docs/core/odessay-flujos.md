@@ -1,13 +1,9 @@
 # ODESSAY — Flujos de usuario
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `odessay-fundacional.md` para la visión, `odessay-stack.md` para tecnologías, `odessay-modelo-datos.md` para el schema, y `odessay-paginas.md` para la arquitectura de páginas.
+Lee `docs/core/odessay-fundacional.md` para la visión, `docs/core/odessay-stack.md` para tecnologías, `docs/core/odessay-modelo-datos.md` para el schema, y `docs/core/odessay-paginas.md` para la arquitectura de páginas.
 
----
-
-## Principio: responder es siempre el mismo mecanismo
-
-Responder a un writing siempre crea un nuevo writing con `parent_id` apuntando al original. Da igual cómo se llegó al texto (compartido, público, dentro de una correspondencia). El camino siempre es `/write?reply_to={id}`.
+El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `docs/core/odessay-paginas.md` §Mecanismo universal de respuesta.
 
 ---
 
