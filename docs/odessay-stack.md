@@ -25,7 +25,7 @@ Este proyecto será construido principalmente por agentes de código (Claude Cod
 | React 19 | UI | — |
 | TypeScript | Tipado | Strict mode. Sin `any`. |
 | Tailwind CSS | Styling | Única herramienta de styling. No CSS modules, no styled-components. |
-| ShadCN/UI | Componentes | Base accesible y customizable. Nunca usar estilos default — adaptar completamente a Odessay. |
+| ShadCN/UI | Componentes | Base accesible. Se usa cerca de sus defaults estructurales — la personalización es por tokens (colores, tipografía, bordes, sombras), no por reescritura de componentes. |
 | TipTap | Editor | Headless, sobre ProseMirror. Siempre aislado del árbol de React. |
 
 ### Tipografía

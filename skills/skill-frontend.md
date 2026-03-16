@@ -30,7 +30,7 @@ Next.js 15 (App Router)
 React 19
 TypeScript — strict mode, sin `any`
 Tailwind CSS — única herramienta de styling
-ShadCN/UI — componentes accesibles, siempre customizados
+ShadCN/UI — componentes accesibles, personalizados solo en colores, tipografía, bordes y sombras vía tokens CSS
 TipTap — editor headless
 Lucide React — iconografía (strokeWidth={1.5} siempre)
 Geist Sans + Lora — tipografía (ver skill-design.md)

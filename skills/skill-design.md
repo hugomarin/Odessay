@@ -284,34 +284,99 @@ const SIDEBAR = {
 
 Inicializar: `npx shadcn@latest init` — Style: Default, Base color: Neutral, CSS variables: Yes.
 
-ShadCN recibe los tokens vía CSS variables — no hay que sobreescribir sus valores base, solo mapear correctamente en `globals.css` (ver sección de tokens).
+### Estrategia de adaptación — tres capas, en orden
 
-### Overrides necesarios por componente
+La personalización de ShadCN ocurre en tres capas. Cada una tiene un propósito distinto. Nunca saltarse una capa para hacer algo en la siguiente — eso produce estilos huérfanos.
 
-**Button default:** ya usa `--primary` → `var(--ink)`. Sin cambios.
+**Capa 1 — `globals.css` (tokens):** La mayor parte del trabajo. Los tokens de Odessay ya están mapeados a las variables que ShadCN espera (`--primary`, `--border`, `--muted`, etc.). La mayoría de los componentes quedan visualmente correctos con solo esta capa — sin tocar nada más.
 
-**Button terracota (acción fundacional):**
+**Capa 2 — archivo del componente (`/components/ui/`):** Al instalar un componente con `npx shadcn@latest add`, se edita su archivo *una sola vez* para fijar los defaults de Odessay: la clase de sombra, el font-family, el border-radius. A partir de ese momento, cada uso del componente hereda el default correcto sin necesidad de `className` adicional.
+
 ```tsx
-<Button className="bg-cursor text-white hover:opacity-90">
-  Invite to respond
-</Button>
+// Ejemplo: /components/ui/card.tsx — editar una vez al instalar
+// Cambiar el className default de Card:
+// De: "rounded-xl border bg-card text-card-foreground shadow"
+// A:  "rounded-[10px] border-[0.5px] bg-sb shadow-float font-sans"
+// Todos los <Card> del proyecto usan esto automáticamente.
 ```
 
-**Input/Textarea:** Siempre `font-sans` explícito. En título del editor: sin borde, fondo transparente, `font-lora`.
+**Capa 3 — `className` en el punto de uso:** Solo para variaciones de contexto que no son defaults — ancho de un panel específico, tamaño de un avatar en una vista concreta, variante terracota de un botón. Si se encuentra la misma combinación de clases en más de dos lugares, subir a Capa 2.
 
-**Card:** `shadow-float border-0 bg-sb` en todas las cards. Hover: `hover:shadow-float-md transition-shadow`.
+```tsx
+// ✓ Correcto — variación de contexto
+<Card className="w-[220px]">  {/* ancho específico del hero card */}
 
-**Dialog:** Solo para confirmaciones destructivas. `shadow-float-lg border-0 font-sans`.
+// ✗ Incorrecto — default que debería estar en Capa 2
+<Card className="rounded-[10px] border-[0.5px] bg-sb shadow-float">
+```
 
-**Popover/DropdownMenu:** `shadow-float-md`. Items con `Button variant="ghost" className="justify-start w-full"`.
+**Señal de alarma:** Si un agente agrega más de 3 clases a un componente ShadCN en el punto de uso, probablemente hay un default que debería estar en Capa 2.
 
-**Badge/Pills:** Usar pills custom — más control. `bg-muted text-ink-4` (neutro), `bg-ink text-bg` (seleccionado). `text-xs font-medium rounded-md px-2 py-0.5`.
+---
 
-**Avatar:** `h-7 w-7` (28px) en sidebar, `h-10 w-10` (40px) en cards de correspondencia.
+### Configuración base por componente (Capa 2)
 
-**Tooltip:** `font-sans text-xs shadow-float`. Siempre en iconos sin label.
+Estos son los cambios a hacer en cada archivo de componente al instalarlo. Se hacen una vez.
 
-**Sheet:** Para panel AI editor. `shadow-float-lg w-[280px]`.
+| Componente | Cambios en `/components/ui/` |
+|---|---|
+| `card.tsx` | `rounded-[10px] border-[0.5px] bg-sb shadow-float` |
+| `button.tsx` | `font-sans` en la clase base; `rounded-[8px]` |
+| `input.tsx` | `font-sans border-[0.5px]` |
+| `textarea.tsx` | `font-sans border-[0.5px]` |
+| `dialog.tsx` | `shadow-float-lg border-[0.5px] font-sans` |
+| `popover.tsx` | `shadow-float-md border-[0.5px]` |
+| `dropdown-menu.tsx` | `shadow-float-md border-[0.5px]` |
+| `tooltip.tsx` | `font-sans text-xs shadow-float` |
+| `badge.tsx` | `font-sans rounded-[6px] border-[0.5px]` |
+| `sheet.tsx` | `shadow-float-lg border-[0.5px]` |
+| `avatar.tsx` | `rounded-full` (ya es default) |
+
+### Variantes permitidas en el punto de uso (Capa 3)
+
+Solo estas variaciones se agregan en `className` en el punto de uso. No inventar nuevas sin actualizar este documento.
+
+**Button:**
+```tsx
+// Acción estándar (hereda default tinta oscura de Capa 1/2)
+<Button>Confirm</Button>
+
+// Acción fundacional — terracota
+<Button className="bg-cursor text-white hover:opacity-90">Write a response</Button>
+
+// Ghost — nav items, acciones secundarias
+<Button variant="ghost" className="justify-start w-full">...</Button>
+```
+
+**Input en título del editor:**
+```tsx
+// Único caso donde Input pierde su estructura visible
+<Input className="border-none bg-transparent shadow-none font-lora text-4xl" />
+```
+
+**Card con ancho fijo:**
+```tsx
+<Card className="w-[220px]">  {/* Hero draft card */}
+<Card className="max-w-[560px]">  {/* Mini-doc de correspondencia */}
+```
+
+**Badge — dos variantes, nada más:**
+```tsx
+<Badge className="bg-muted text-ink-4">Draft</Badge>
+<Badge className="bg-ink text-bg">Done</Badge>
+```
+
+**Avatar — dos tamaños:**
+```tsx
+<Avatar className="h-7 w-7">     {/* Sidebar, participantes */}
+<Avatar className="h-[44px] w-[44px]">  {/* Mini-docs de correspondencia */}
+```
+
+**Sheet — ancho por panel:**
+```tsx
+<Sheet className="w-[248px]">  {/* Properties, Notes */}
+<Sheet className="w-[280px]">  {/* AI Editor */}
+```
 
 ---
 
