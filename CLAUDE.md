@@ -6,9 +6,12 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 
 ## Leer en este orden
 
-1. **`docs/odessay-fundacional.md`** — Qué es Odessay, por qué existe, para quién, los tres modos (Escribir / Leer / Organizar), principios de diseño. Leer siempre primero, antes de cualquier otra cosa.
-2. **`docs/odessay-arquitectura.md`** — Arquitectura técnica, stack, navegación de tres columnas, rutas, vistas principales. Leer segundo.
-3. **Skill según el tipo de tarea** — Ver tabla de skills abajo.
+1. **`config.json`** — Manifiesto del framework. Lista las 10 preguntas MECE y qué documento responde cada una. Verificar que todos los archivos declarados existen antes de empezar (ver pre-flight en `docs/SETUP.md`).
+2. **`docs/SETUP.md`** — Entorno, variables, tools requeridos, permisos, estrategia de Git. Leer antes de cualquier otra cosa. Si falta algo de lo que ahí se pide, no empezar.
+3. **`docs/STATUS.md`** — Qué está construido hoy, qué no existe todavía, decisiones tomadas. Leer segundo para entender el contexto del codebase.
+3. **`docs/odessay-fundacional.md`** — Qué es Odessay, por qué existe, para quién, los tres modos (Escribir / Leer / Organizar), principios de diseño.
+4. **`docs/odessay-arquitectura.md`** — Arquitectura técnica, stack, navegación de tres columnas, rutas, vistas principales.
+5. **Skill según el tipo de tarea** — Ver tabla de skills abajo.
 
 ---
 
@@ -16,7 +19,9 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 
 | Documento | Propósito |
 |-----------|-----------|
-| `docs/odessay-fundacional.md` | Visión, por qué, para quién, principios. Leer primero. |
+| `docs/SETUP.md` | **Leer primero.** Entorno, variables, tools, permisos, Git. |
+| `docs/STATUS.md` | **Leer segundo.** Qué está construido, qué no existe, decisiones tomadas. |
+| `docs/odessay-fundacional.md` | Visión, por qué, para quién, principios. |
 | `docs/odessay-arquitectura.md` | Arquitectura técnica y navegación. Prevalece sobre versiones anteriores. |
 | `docs/odessay-stack.md` | Stack tecnológico confirmado y convenciones |
 | `docs/odessay-flujos.md` | Flujos de usuario detallados (secciones 1–11) |

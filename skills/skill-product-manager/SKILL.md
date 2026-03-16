@@ -81,6 +81,16 @@ Si no tiene dependencias, escribir: None.
 
 Formato: [ID-DEL-ISSUE] Título del issue del que depende.
 
+## Files affected
+Archivos que este issue va a crear o modificar. El agente verifica antes de empezar
+que ningún PR abierto toca los mismos archivos — si hay solapamiento, espera.
+
+Formato:
+- src/path/to/file.tsx (nuevo | modifica)
+- src/otro/archivo.ts (nuevo | modifica)
+
+Si el issue solo toca documentación o configuración que no genera conflictos, escribir: N/A.
+
 ## Requirements
 Lo que debe existir cuando el issue esté terminado. Numerado. Cada item es verificable
 de forma independiente. No son instrucciones de implementación — son resultados esperados.

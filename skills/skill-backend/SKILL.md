@@ -144,6 +144,23 @@ El sistema no bloquea escrituras por conflicto de versión. La última escritura
 
 **Lo que no se hace:** No hay UI de resolución de conflictos. No hay toast de aviso. No hay merge automático. Si en una fase futura el producto requiere edición multi-dispositivo frecuente, se revisará esta decisión.
 
+## Observabilidad
+
+El setup completo de observabilidad está en `docs/SETUP.md` §Observabilidad. Resumen para el agente:
+
+- **Sentry:** captura errores de cliente y excepciones en API routes. Requerido desde Fase 1. Sin Sentry, los errores en producción son invisibles. Configuración: `npx @sentry/wizard@latest -i nextjs`.
+- **Logging estructurado:** todos los errores server-side llevan contexto (`userId`, `writingId`, operación). Sin contexto el log es inútil.
+
+```ts
+// ✓ Siempre así en API routes y sync workers
+console.error('[sync:remote]', { userId, writingId, operation: 'PATCH', error: error.message })
+
+// ✗ Nunca así
+console.error('Error:', error)
+```
+
+- **Build failures:** Vercel notifica por email. No requiere configuración adicional.
+
 ## Manejo de errores
 
 - Nunca muestres errores técnicos al usuario. Log server-side, mensaje amable client-side.

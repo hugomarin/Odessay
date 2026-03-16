@@ -1,0 +1,84 @@
+{
+  "project": "Odessay",
+  "framework": "mece-v1",
+  "questions": [
+    {
+      "id": 1,
+      "question": "¿Para qué existe esto y para quién?",
+      "documents": ["docs/odessay-fundacional.md"],
+      "required": true
+    },
+    {
+      "id": 2,
+      "question": "¿Qué ve y hace el usuario?",
+      "documents": ["docs/odessay-paginas.md", "docs/odessay-flujos.md"],
+      "required": true
+    },
+    {
+      "id": 3,
+      "question": "¿Cómo se ve exactamente?",
+      "documents": [
+        "skills/skill-design/SKILL.md",
+        "skills/skill-design-vistas/SKILL.md",
+        "reference/"
+      ],
+      "required": true
+    },
+    {
+      "id": 4,
+      "question": "¿Qué datos existen y cómo se modelan?",
+      "documents": ["docs/odessay-modelo-datos.md"],
+      "required": true
+    },
+    {
+      "id": 5,
+      "question": "¿Cómo está organizado el código?",
+      "documents": [
+        "docs/odessay-arquitectura.md",
+        "docs/odessay-stack.md",
+        "skills/skill-frontend/SKILL.md"
+      ],
+      "required": true
+    },
+    {
+      "id": 6,
+      "question": "¿Cómo funciona cada parte crítica?",
+      "documents": [
+        "docs/odessay-editor.md",
+        "docs/odessay-ai-editor.md",
+        "docs/odessay-margenes.md"
+      ],
+      "required": true
+    },
+    {
+      "id": 7,
+      "question": "¿Cómo se implementa el backend?",
+      "documents": [
+        "skills/skill-backend/SKILL.md",
+        "skills/skill-database/SKILL.md"
+      ],
+      "required": true
+    },
+    {
+      "id": 8,
+      "question": "¿Qué existe hoy en el codebase?",
+      "documents": ["docs/STATUS.md"],
+      "required": true
+    },
+    {
+      "id": 9,
+      "question": "¿Cómo opera el agente en este proyecto?",
+      "documents": ["docs/SETUP.md"],
+      "required": true
+    },
+    {
+      "id": 10,
+      "question": "¿Cómo sé que terminé?",
+      "documents": [
+        "skills/skill-product-manager/SKILL.md",
+        "skills/skill-code-review/SKILL.md"
+      ],
+      "required": true
+    }
+  ]
+}

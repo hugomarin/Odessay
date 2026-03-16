@@ -7,14 +7,19 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 
 ## 1) Orden de lectura obligatorio
 
-1. `docs/odessay-fundacional.md`
-2. `docs/odessay-arquitectura.md`
-3. Skill según tipo de tarea (ver sección 3)
+1. `config.json` — manifiesto del framework. Verifica que todos los documentos declarados existen (pre-flight en `docs/SETUP.md`). Si hay gaps, no empezar.
+2. `docs/SETUP.md` — entorno, tools, permisos, Git. Si falta algo, no empezar.
+3. `docs/STATUS.md` — qué existe hoy en el codebase, qué no.
+3. `docs/odessay-fundacional.md` — visión y principios del producto.
+4. `docs/odessay-arquitectura.md` — arquitectura técnica.
+5. Skill según tipo de tarea (ver sección 3)
 
 ---
 
 ## 2) Fuente de verdad documental
 
+- Entorno y operación del agente: `docs/SETUP.md`
+- Estado actual del codebase: `docs/STATUS.md`
 - Producto/visión: `docs/odessay-fundacional.md`
 - Arquitectura técnica: `docs/odessay-arquitectura.md`
 - Stack y convenciones: `docs/odessay-stack.md`
