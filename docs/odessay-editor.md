@@ -7,6 +7,40 @@ Este documento define el comportamiento técnico y de UX del editor de Odessay. 
 
 ---
 
+## Modelo de edición: Rich Text con paridad Markdown
+
+Odessay usa Rich Text como formato principal. El usuario nunca lee ni escribe Markdown crudo para componer — la experiencia es visual, directa, sin fricción.
+
+Sin embargo, el editor rico está deliberadamente restringido al subconjunto de formato que Markdown puede representar sin pérdida. Esto no es una limitación técnica sino una decisión de diseño: una carta no necesita 47 opciones de formato.
+
+### Subconjunto de formato soportado
+
+✓ Negrita, itálica, enlace, listas ordenadas y no ordenadas, blockquotes, encabezados (H1/H2/H3), bloques de código.
+
+✗ Colores de texto, tamaños de fuente arbitrarios, alineación, tablas complejas, subrayado, y cualquier formato que Markdown no pueda serializar fielmente.
+
+**Por qué no subrayado:** Markdown estándar no tiene subrayado. Incluirlo rompería la conversión bidireccional. La cursiva es el equivalente epistolar correcto.
+
+### Fuente de verdad y conversión
+
+La fuente de verdad interna es siempre el JSON del editor (modelo ProseMirror/TipTap). Markdown es un formato de entrada y salida — nunca el modelo que se persiste.
+
+```
+Markdown entrante → parsea a JSON → el usuario edita en modo rico → JSON se serializa a Markdown cuando se necesita
+```
+
+El usuario puede cambiar al modo "source" (Markdown crudo) para editar directamente. Al volver a modo rico, el Markdown se re-parsea a JSON. Como el formato rico está limitado al subconjunto Markdown, no hay pérdida en ninguna dirección del ciclo.
+
+### Markdown que excede el subconjunto
+
+Si se importa Markdown con features no soportadas (HTML inline, footnotes extendidos, definiciones de referencia), el parser las trata como texto plano — no se pierden, no se corrompen, simplemente no se renderizan como formato rico. Esto se controla directamente desde las extensiones de TipTap cargadas: lo que no tiene extensión, no se interpreta.
+
+### Stack de conversión
+
+`tiptap-markdown` maneja la serialización y el parseo del round-trip. La conversión es confiable dentro del subconjunto definido. No implementar conversión propia — usar exclusivamente este paquete.
+
+---
+
 ## Motor: TipTap
 
 TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo completamente headless — sin estilos ni toolbar propios. Todo el diseño y comportamiento es custom de Odessay.
@@ -23,16 +57,19 @@ TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo complet
 | Heading | `@tiptap/extension-heading` | H1, H2, H3 |
 | Bold | `@tiptap/extension-bold` | Negrita |
 | Italic | `@tiptap/extension-italic` | Cursiva |
-| Underline | `@tiptap/extension-underline` | Subrayado |
-| Strike | `@tiptap/extension-strike` | Tachado |
 | Link | `@tiptap/extension-link` | Enlaces |
 | Blockquote | `@tiptap/extension-blockquote` | Citas |
 | BulletList | `@tiptap/extension-bullet-list` | Listas sin orden |
 | OrderedList | `@tiptap/extension-ordered-list` | Listas numeradas |
 | ListItem | `@tiptap/extension-list-item` | Items de lista |
+| Code | `@tiptap/extension-code` | Código inline |
+| CodeBlock | `@tiptap/extension-code-block` | Bloques de código |
 | History | `@tiptap/extension-history` | Undo/Redo |
 | Placeholder | `@tiptap/extension-placeholder` | Placeholder en título y cuerpo |
 | CharacterCount | `@tiptap/extension-character-count` | Conteo de palabras para status bar |
+| Markdown | `tiptap-markdown` | Serialización y parseo Markdown ↔ JSON. Fuente de verdad del round-trip. |
+
+**Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip), `Strike` (excluido del subconjunto epistolar), `Table` (Markdown no lo serializa fielmente). No agregar sin revisar paridad con el subconjunto definido.
 
 **Extensiones custom a desarrollar:**
 
@@ -52,13 +89,14 @@ const editor = useEditor({
     Heading.configure({ levels: [1, 2, 3] }),
     Bold,
     Italic,
-    Underline,
-    Strike,
     Link.configure({ openOnClick: false, autolink: true }),
     Blockquote,
     BulletList,
     OrderedList,
     ListItem,
+    Code,
+    CodeBlock,
+    Markdown,           // tiptap-markdown — maneja round-trip JSON ↔ Markdown
     History,
     Placeholder.configure({
       placeholder: ({ node }) => {
@@ -175,15 +213,22 @@ Tres acciones abren un modal en lugar de ejecutarse directamente. El modal apare
 
 El editor guarda automáticamente. No hay botón de guardar. La experiencia debe sentirse como escribir en papel.
 
-### Mecanismo
+### Mecanismo (local-first)
+
+El auto-save es en dos pasos. La UI siempre refleja el estado local — nunca espera a Supabase.
+
+**Paso 1 — Local (inmediato, sin debounce):**
 1. TipTap emite `onUpdate` en cada cambio.
-2. Se aplica debounce de 1.5 segundos (sin actividad).
-3. Se hace PATCH a `/api/writings/[id]` con `body_json` y `body_text`.
-4. El indicador en el status bar cambia: "Saving..." → "Saved".
-5. Si falla: retry silencioso x2, luego indicador sutil de error sin interrumpir al usuario.
+2. Se escribe `body_json` y `body_text` directamente en la base local (SQLite/IndexedDB).
+3. El status bar muestra "Saved" — el texto ya está seguro.
+
+**Paso 2 — Remoto (background, con debounce):**
+1. Después de 1.5 segundos sin actividad, el sync worker encola la mutación.
+2. Se hace PATCH a `/api/writings/[id]` con `body_json`, `body_text`, `updated_at` y `version`.
+3. Si falla: retry con backoff exponencial, silencioso. El status bar no interrumpe al usuario.
 
 ### Primer guardado
-Si el writing no tiene ID (es nuevo), el primer auto-save hace POST y obtiene el ID. La URL cambia de `/write` a `/write/[id]` sin recargar la página (`router.replace`, no `router.push`).
+Si el writing no tiene ID (es nuevo), el save local genera un UUID en el cliente. El primer sync remoto hace POST con ese UUID como ID. La URL cambia de `/write` a `/write/[id]` sin recargar (`router.replace`).
 
 ### Indicador visual
 - Status bar abajo a la izquierda.
@@ -209,12 +254,12 @@ El editor tiene tres capas visuales que coexisten:
 │                                                     │
 │   [Título — Lora 36px/500]                         │
 │                                                     │
-│   [Cuerpo — system-ui 18px/400]                    │
+│   [Cuerpo — Geist Sans 18px/400]                   │
 │   H1: Lora 30px/500                                 │
 │   H2: Lora 24px/500                                 │
 │   H3: Lora 20px/500                                 │
 │   Blockquote: Lora 22px/400 italic                  │
-│   Footnotes: system-ui 13px/400                     │
+│   Footnotes: Geist Sans 13px/400                    │
 │                                                     │
 ├─────────────────────────────────────────────────────┤
 │ Status bar (fija, borde superior)                   │

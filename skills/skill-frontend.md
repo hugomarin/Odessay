@@ -312,7 +312,9 @@ components/
 
 ## Editor TipTap
 
-Siempre `"use client"`. Siempre aislado. El output es ProseMirror JSON (`body_json`) + texto plano (`body_text`) en paralelo.
+Siempre `"use client"`. Siempre aislado. El output es ProseMirror JSON (`body_json`) + texto plano (`body_text`). Markdown es un formato de I/O, nunca el modelo persistido — ver `odessay-editor.md` (sección: Modelo de edición).
+
+El editor tiene dos modos de UI: **Rich** (edición visual, por defecto) y **Source** (Markdown crudo, para usuarios que lo prefieren). El toggle está en la topbar. Al cambiar de Source → Rich, el Markdown se re-parsea a JSON vía `tiptap-markdown`. No hay pérdida en ninguna dirección dentro del subconjunto soportado.
 
 ```tsx
 "use client"
@@ -320,17 +322,19 @@ const editor = useEditor({
   extensions: [
     Document, Paragraph, Text,
     Heading.configure({ levels: [1, 2, 3] }),
-    Bold, Italic, Strike, Link,
+    Bold, Italic, Link,
     Blockquote, BulletList, OrderedList, ListItem,
+    Code, CodeBlock,
+    Markdown,   // tiptap-markdown — serialización y parseo JSON ↔ Markdown
     History,
     Placeholder.configure({ placeholder: 'Escribe algo...' }),
     CharacterCount,
     // Custom: FootnoteExtension, AIObservationExtension
   ],
   onUpdate: ({ editor }) => {
-    // 1. Guarda local primero — inmediato
+    // 1. Guarda local primero — inmediato, sin debounce
     saveToLocal({ body_json: editor.getJSON(), body_text: editor.getText() })
-    // 2. Encola sync remoto — background, no bloquea
+    // 2. Encola sync remoto — background, debounce 1500ms
     debouncedSyncRemote(1500)
   }
 })
@@ -338,7 +342,9 @@ const editor = useEditor({
 
 Auto-save local: inmediato. Sync remoto: debounce 1500ms. Sin indicador agresivo — solo estado sutil en statusbar.
 
-Shortcuts: `⌘B`, `⌘I`, `⌘K`, `⌘⇧X`, `⌘⌥1/2/3`, `⌘⇧F`. Sin toolbar flotante al seleccionar.
+**Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta), `Strike` (fuera del subconjunto epistolar). No agregar sin revisar `odessay-editor.md`.
+
+Shortcuts: `⌘B`, `⌘I`, `⌘K`, `⌘⌥1/2/3`, `⌘⇧F`. Sin toolbar flotante al seleccionar.
 
 ---
 

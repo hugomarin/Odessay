@@ -93,8 +93,9 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 | id | uuid | PK, default gen_random_uuid() | UUID generado en cliente, no en servidor |
 | author_id | uuid | FK → profiles, not null | Quien escribe |
 | title | text | nullable | Opcional |
-| body_json | jsonb | not null, default '{}' | Contenido TipTap (ProseMirror JSON) |
-| body_text | text | not null, default '' | Texto plano. Para búsqueda y contexto AI |
+| body_json | jsonb | not null, default '{}' | **Fuente de verdad.** Contenido TipTap (ProseMirror JSON). No existe `body_markdown` — el Markdown se genera on-demand desde este campo vía `tiptap-markdown` |
+| body_text | text | not null, default '' | Texto plano derivado de `body_json`. Para búsqueda full-text y contexto AI. Nunca editado directamente |
+| slug | text | nullable, unique por author_id | Generado del título. Usado solo en la URL pública `/{username}/{slug}`. Internamente se opera con `id` |
 | status | text | not null, default 'draft' | `draft`, `finished` |
 | visibility | text | not null, default 'private' | `private`, `shared`, `public` |
 | parent_id | uuid | FK → writings, nullable | El writing al que responde. Null = raíz |
@@ -107,9 +108,15 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 
 **Árbol de respuestas:** `parent_id` crea la jerarquía. `correspondence_id` agrupa todo el árbol bajo una identidad. Cuando alguien responde a un writing que no tiene correspondencia, se crea una automáticamente y se asigna al writing raíz y a la respuesta. Respuestas subsiguientes heredan el `correspondence_id`.
 
+**Slug:** Se genera automáticamente del título al publicar (visibility → public o shared). Nullable — los drafts no lo necesitan. El slug es único por autor, no global. Internamente todo opera con `id`; el slug solo existe para URLs públicas.
+
 **Edición:** Tanto `draft` como `finished` son editables. El versionamiento se implementará a futuro para rastrear cambios post-publicación.
 
-**Auto-save:** No hay botón de guardar. Los cambios se persisten automáticamente con debounce (1-2 segundos después de que el usuario deja de escribir). TipTap emite `onUpdate` en cada cambio; se aplica debounce y se actualiza `body_json`, `body_text` y `updated_at` en Supabase. El indicador visual de guardado es mínimo (un punto sutil, sin texto) y desaparece rápido. La experiencia debe sentirse como escribir en papel — sin interrupciones ni ansiedad de pérdida de datos.
+**Auto-save (local-first):** No hay botón de guardar. El save ocurre en dos pasos desacoplados:
+1. **Local (inmediato, sin debounce):** TipTap emite `onUpdate` → se escribe `body_json` y `body_text` en la base local (SQLite/IndexedDB). El status bar muestra "Saved" — el texto ya está seguro.
+2. **Remoto (background, debounce 1.5s):** El sync worker encola un PATCH a `/api/writings/[id]` con `body_json`, `body_text`, `updated_at` y `version`. Si falla, retry con backoff exponencial — silencioso para el usuario.
+
+La UI nunca espera a Supabase. El indicador de guardado es mínimo (statusbar, sin animaciones agresivas). La experiencia debe sentirse como escribir en papel.
 
 ### collections
 
@@ -238,3 +245,4 @@ El `id` del usuario autenticado (`auth.uid()`) se usa en todas las RLS policies 
 - `margins.writing_id` — Márgenes de un writing
 - `margins.reader_id` — Márgenes propios del lector
 - `writings.sync_status` — Queue de sync pendiente
+- `writings.slug` — Lookup por URL pública (parcial, filtrado por author_id)
