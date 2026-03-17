@@ -87,6 +87,68 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 ```
 
+## Supabase — Inicialización del cliente
+
+Odessay usa el sistema nuevo de API keys de Supabase ("Publishable and secret API keys"), no el legacy ("anon, service_role").
+
+### Cliente browser (componentes client-side)
+
+```ts
+// lib/supabase/client.ts
+import { createBrowserClient } from '@supabase/ssr'
+
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!
+  )
+}
+```
+
+### Cliente server-side (Server Components, API routes, middleware)
+
+```ts
+// lib/supabase/server.ts
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+export async function createClient() {
+  const cookieStore = await cookies()
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options))
+          } catch {}
+        },
+      },
+    }
+  )
+}
+```
+
+### Cliente admin (bypass RLS — solo server-side, raro)
+
+```ts
+// lib/supabase/admin.ts
+import { createClient } from '@supabase/supabase-js'
+
+export function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
+```
+
+Solo usar `createAdminClient()` en API routes server-side cuando se necesita bypass RLS. Nunca exponer `SUPABASE_SERVICE_ROLE_KEY` al cliente.
+
 ## Supabase (server-side)
 
 - Usa `createServerClient` de `@supabase/ssr` para el cliente server-side.
@@ -156,15 +218,17 @@ console.error('Error:', error)
 
 ```
 # Server-side only
-SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
 RESEND_API_KEY=
 
 # Client-side (NEXT_PUBLIC_)
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=   # Nombre preferido (Supabase nuevo)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=                  # Alias legacy — backward compatible
 ```
+
+Fuente canónica de variables y matriz por entorno: `docs/ops/SETUP.md §Variables de entorno`.
 
 Nunca agregues un `NEXT_PUBLIC_` sin confirmar que el valor es seguro para exponer.
 

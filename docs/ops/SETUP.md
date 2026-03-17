@@ -121,8 +121,9 @@ config.always_read.forEach(d => console.log(' -', d));
 # 2. Verificar Node
 node --version   # debe ser >= 20
 
-# 3. Verificar que existe .env.local
-ls .env.local    # si no existe, ver sección Variables de entorno
+# 3. Verificar variables de entorno locales
+ls .env.local    # si no existe: cp .env.example .env.local
+npm run env:check
 
 # 4. Verificar acceso a GitHub (si el issue requiere push/PR)
 gh auth status
@@ -154,26 +155,57 @@ Si un test falla en CI pero pasa localmente porque "hay datos en staging", ese t
 
 ## Variables de entorno
 
-Crear `.env.local` en la raíz del proyecto. Nunca commitear este archivo (está en `.gitignore`).
+`.env.example` es la plantilla canónica del proyecto. Crear `.env.local` en la raíz con:
 
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=      # solo para scripts de migración, nunca al cliente
-
-# Claude API (para AI editor)
-ANTHROPIC_API_KEY=
-
-# Resend (para emails)
-RESEND_API_KEY=
-
-# Sentry (para error tracking)
-NEXT_PUBLIC_SENTRY_DSN=
-SENTRY_AUTH_TOKEN=              # solo para source maps en CI
+```bash
+cp .env.example .env.local
 ```
 
-**Entornos:** Existen tres — `local` (`.env.local`), `staging` (Vercel preview), `production` (Vercel main). Las variables de Vercel las gestiona el humano, no el agente.
+Nunca commitear `.env.local` (está en `.gitignore`).
+
+Variables mínimas requeridas para ODE-11:
+
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=
+# Compatibilidad legacy:
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+ANTHROPIC_API_KEY=
+RESEND_API_KEY=
+```
+
+Validar el archivo antes de correr cualquier tarea:
+
+```bash
+npm run env:check
+```
+
+### Matriz de entornos (ODE-11)
+
+**Decisión activa:** Un solo proyecto Supabase (`odessay-staging`) cubre local, Preview y Production hasta el lanzamiento real. El proyecto de producción separado se crea en Fase 5 cuando haya usuarios reales.
+
+| Variable | Local (`.env.local`) | Vercel Preview | Vercel Production |
+|---|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | URL preview de Vercel | Dominio productivo |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL de `odessay-staging` | URL de `odessay-staging` | URL de `odessay-staging` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | publishable key de `odessay-staging` | publishable key de `odessay-staging` | publishable key de `odessay-staging` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | opcional (legacy) | opcional (legacy) | opcional (legacy) |
+| `SUPABASE_SERVICE_ROLE_KEY` | service role key de `odessay-staging` | service role key de `odessay-staging` | service role key de `odessay-staging` |
+| `ANTHROPIC_API_KEY` | key activa de Anthropic | key activa de Anthropic | key activa de Anthropic |
+| `RESEND_API_KEY` | key activa de Resend | key activa de Resend | key activa de Resend |
+
+### Checklist de handoff humano (Supabase + Vercel)
+
+1. Renombrar el proyecto Supabase existente a `odessay-staging` (Settings → General → Name).
+2. Copiar `URL`, `publishable key` y `service role key` desde Supabase Dashboard → Settings → API → pestaña "Publishable and secret API keys".
+3. Llenar `.env.local` con esos valores.
+4. Configurar las mismas variables en Vercel (Preview y Production usan las mismas keys por ahora):
+   `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`.
+5. Confirmar en Linear cuando variables estén listas para desbloquear migraciones (`ODE-14`) y deploy previews (`ODE-12`).
+
+**Entornos:** Existen tres — `local` (`.env.local`), `staging` (Vercel preview), `production` (Vercel main). Las variables de Vercel las gestiona el humano, no el agente. El proyecto Supabase de producción separado se crea en Fase 5.
 
 ---
 

@@ -136,7 +136,8 @@ Acción requerida: Crear dos proyectos en Supabase — uno llamado "odessay-stag
 y otro "odessay-prod". Copiar las tres keys de cada uno en .env.local.
 Dónde: https://app.supabase.com → New project
 Resultado esperado: .env.local tiene valores reales en NEXT_PUBLIC_SUPABASE_URL,
-NEXT_PUBLIC_SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY.
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY y SUPABASE_SERVICE_ROLE_KEY.
+(NEXT_PUBLIC_SUPABASE_ANON_KEY es alias legacy opcional — ver SETUP.md §Variables de entorno.)
 El agente continúa cuando: ls .env.local && cat .env.local muestra las tres variables con valor.
 ```
 
