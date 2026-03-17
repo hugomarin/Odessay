@@ -229,6 +229,39 @@ Sin esos 2 links en Linear, ODE-12 no se mueve a `Done`.
 
 ---
 
+### ODE-14 — Migraciones iniciales de base de datos
+
+Este issue deja la base estructural de Supabase: schema, índices, RLS y triggers.
+
+Pasos operativos:
+
+1. Crear `supabase/config.toml` y las migraciones en `supabase/migrations/` con formato `{timestamp}_{descripcion}.sql`.
+2. Aplicar migración en staging:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260317145743_initial_schema.sql
+```
+
+3. Verificar tablas, columnas críticas y RLS:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -c "select tablename from pg_tables where schemaname='public' and tablename in ('profiles','writings','correspondences','collections','writing_collections','writing_shares','ai_observations','margins','invitations') order by tablename;" \
+  -c "select column_name,data_type from information_schema.columns where table_schema='public' and table_name='writings' and column_name in ('version','sync_status','deleted_at','slug') order by column_name;" \
+  -c "select column_name,data_type from information_schema.columns where table_schema='public' and table_name='margins' and column_name in ('shared_at','updated_at') order by column_name;" \
+  -c "select tablename, policyname, cmd from pg_policies where schemaname='public' and tablename in ('profiles','writings','correspondences','collections','writing_collections','writing_shares','ai_observations','margins','invitations') order by tablename, policyname;"
+```
+
+4. Adjuntar en Linear evidencia de:
+   - PR link
+   - commit SHA
+   - `typecheck` ✅, `lint` ✅, `test` ✅
+   - verificación SQL en staging ✅
+
+Sin verificación SQL de schema y políticas, ODE-14 no se mueve a `In Review`.
+
+---
+
 ## Levantar el proyecto localmente
 
 ```bash
@@ -402,9 +435,12 @@ Si el issue no tiene particularidades, no se crea WORKFLOW.md. Es una herramient
 7. Abrir PR con descripción del issue
 8. Comentar en el issue de Linear: link al PR + SHA del commit + resultado de validaciones
 9. Mover issue a In Review en Linear
-10. Esperar confirmación de merge del humano
-11. Una vez mergeado: mover issue a Done y agregar una fila en `docs/ops/status.json` → "Qué está construido" con issue ID, commit SHA y fecha
+── STOP: el turno del agente termina aquí ──────────────────────────────────
+10. El revisor (agente o humano) aprueba y hace merge
+11. Una vez mergeado: mover issue a Done y agregar entrada en `docs/ops/status.json`
 ```
+
+**Regla de parada — una issue a la vez:** Al llegar al paso 9, el agente detiene todo trabajo. No abre nuevas ramas. No empieza el siguiente issue. No hace commits en ningún otro branch. Su tarea termina cuando el issue está en In Review. El siguiente issue solo puede empezar después de que el PR sea mergeado y el issue esté en Done.
 
 **Nota sobre el merge:** el owner del proyecto es no técnico — no hace code review del código. El merge es una aprobación de go/no-go basada en el proof of work que el agente dejó en el PR y en el comentario de Linear. Si las validaciones pasaron y el agente las documentó, el humano aprueba. Si algo falta o hay un error en el output, el humano rechaza y el agente debe corregir antes de volver a pedir merge.
 
