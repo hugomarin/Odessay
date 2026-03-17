@@ -46,6 +46,7 @@
     { "decision": "Validación con react-hook-form + Zod, onBlur", "doc": "skills/skill-frontend/SKILL.md" },
     { "decision": "Login/Signup con login-02 de ShadCN", "doc": "docs/core/odessay-paginas.md" },
     { "decision": "FootnoteExtension custom (no existe en ecosistema)", "doc": "docs/features/odessay-editor.md" },
-    { "decision": "Branch protection no disponible — fallback por PR obligatorio", "doc": "docs/ops/SETUP.md" }
+    { "decision": "Branch protection no disponible — fallback por PR obligatorio", "doc": "docs/ops/SETUP.md" },
+    { "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados", "doc": "docs/ops/SETUP.md" }
   ]
 }
