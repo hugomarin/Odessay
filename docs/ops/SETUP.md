@@ -153,8 +153,6 @@ git branch       # debe estar en la rama del issue, no en main
 
 Si un test falla en CI pero pasa localmente porque "hay datos en staging", ese test está roto por diseño. Arreglarlo es parte del issue, no deuda técnica posterior.
 
----
-
 ## Variables de entorno
 
 `.env.example` es la plantilla canónica del proyecto. Crear `.env.local` en la raíz con:
@@ -264,6 +262,17 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
    - verificación SQL en staging ✅
 
 Sin verificación SQL de schema y políticas, ODE-14 no se mueve a `In Review`.
+
+---
+
+### ODE-15 — Authentication flow
+
+La implementación de autenticación usa Supabase Auth con email + contraseña y los helpers SSR de `@supabase/ssr`.
+
+- `/login` y `/signup` son públicas, pero si ya existe sesión el middleware redirige a `/desk`.
+- `/desk`, `/write`, `/collections`, `/correspondences`, `/shared` y `/settings` quedan protegidas por middleware y redirigen a `/login?next=...` cuando no hay sesión.
+- El formulario de signup envía `display_name` y `username` dentro de `raw_user_meta_data`. El trigger `on_auth_user_created` usa esos valores para crear el `profile`.
+- La validación pública de username consulta `public.public_profiles`, no `profiles`, para respetar el hardening de RLS definido en `ODE-14`.
 
 ---
 
