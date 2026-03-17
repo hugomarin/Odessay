@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${lora.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${lora.variable}`}>
       <body className="font-sans">{children}</body>
     </html>
   )
