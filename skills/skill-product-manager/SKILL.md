@@ -7,9 +7,27 @@ description: Workflow de Product Manager para Odessay en Linear: definición de 
 
 Este skill tiene dos funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega.
 
-El alcance específico del proyecto — fases, milestones, issues macro — vive en `odessay-roadmap.md`. Lee ese documento antes de crear issues.
+El alcance específico del proyecto — fases e issues macro — vive en `docs/ops/odessay-roadmap.md`. Lee ese documento antes de crear issues.
 
 Usa Linear MCP para crear y gestionar todo directamente.
+
+---
+
+## Estructura en Linear — leer antes de crear nada
+
+```
+Team: Odessay
+  └── Project: Fase 0 — Cimientos    ← status: In Progress
+  └── Project: Fase 1 — Escribir     ← status: Planned
+  └── Project: Fase 2 — ...          ← status: Planned
+  ...hasta Fase 7
+```
+
+**Reglas no negociables:**
+- Un proyecto por fase. No un proyecto "Odessay" con milestones internos.
+- El team Odessay ya es el contenedor del producto — un proyecto adicional con el mismo nombre es redundante.
+- Los milestones dentro de un proyecto solo se usan si una fase tiene sub-entregas con criterios de done independientes. En la mayoría de las fases no son necesarios.
+- Todos los proyectos se crean desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
 
 ---
 
@@ -25,7 +43,7 @@ Los labels se crean una sola vez en Linear antes de crear cualquier issue. Son d
 - `ai-editor` — todo lo relacionado con el agente Claude: prompts, API routes de AI, observaciones.
 
 **Estado del proyecto** — identifica condiciones especiales:
-- `critical-path` — este issue bloquea otros. Nada puede avanzar hasta que esté Done.
+- `critical-path` — este issue bloquea otros. Nada puede avanzar hasta que esté Done. Ejemplos que siempre son `critical-path`: repo/infra base, schema inicial de base de datos, autenticación (sin auth no pueden existir rutas protegidas ni flujos de autor), sistema de diseño base.
 - `blocked` — no se puede ejecutar porque depende de algo que no está resuelto.
 - `needs-clarification` — el issue tiene ambigüedad que debe resolverse antes de ejecutar.
 
@@ -85,11 +103,18 @@ Formato: [ID-DEL-ISSUE] Título del issue del que depende.
 Archivos que este issue va a crear o modificar. El agente verifica antes de empezar
 que ningún PR abierto toca los mismos archivos — si hay solapamiento, espera.
 
-Formato:
+Formato — siempre texto plano, nunca Markdown links:
 - src/path/to/file.tsx (nuevo | modifica)
 - src/otro/archivo.ts (nuevo | modifica)
 
-Si el issue solo toca documentación o configuración que no genera conflictos, escribir: N/A.
+**Reglas:**
+1. Texto plano siempre. Nunca `[archivo.md](<http://archivo.md>)` ni ninguna sintaxis de link — los nombres de archivo no son URLs.
+2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
+3. Los docs de spec (`docs/core/`, `docs/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
+4. Los skills (`skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
+5. Excepción válida: `docs/ops/STATUS.md` y `docs/ops/SETUP.md` pueden aparecer como `(modifica)` cuando el issue explícitamente actualiza el estado del proyecto o el setup.
+
+Si el issue solo toca código sin conflictos de archivos compartidos, escribir: N/A.
 
 ## Requirements
 Lo que debe existir cuando el issue esté terminado. Numerado. Cada item es verificable
@@ -101,10 +126,20 @@ de forma independiente. No son instrucciones de implementación — son resultad
 
 ## Reference docs
 Documentos del proyecto que el agente debe leer antes de implementar.
+Usar siempre paths completos desde la raíz del repo.
 
-- odessay-modelo-datos.md (sección: writings)
-- skill-database.md
-- skill-backend.md
+- docs/core/odessay-modelo-datos.md (sección: writings)
+- skills/skill-database/SKILL.md
+- skills/skill-backend/SKILL.md
+
+**Qué incluir según el tipo de issue:**
+- Cualquier issue con UI → `skills/skill-design/SKILL.md` + `skills/skill-design/vistas.md`
+- Cualquier issue con páginas nuevas (`/login`, `/signup`, `/desk`, etc.) → `docs/core/odessay-paginas.md`
+- Cualquier issue con flujos de usuario → `docs/core/odessay-flujos.md` (sección relevante)
+- Cualquier issue de frontend → `skills/skill-frontend/SKILL.md`
+- Cualquier issue de backend/API → `skills/skill-backend/SKILL.md`
+- Cualquier issue de base de datos → `skills/skill-database/SKILL.md` + `docs/core/odessay-modelo-datos.md`
+- Issues que tocan un feature con doc propio → el doc de `docs/features/` correspondiente
 
 ## Delivery
 
@@ -177,17 +212,61 @@ Un issue nunca pasa a Ready mientras tenga dependencias en estado distinto a Don
 
 ---
 
+## Jerarquía de Linear — qué va en cada nivel
+
+Hay tres niveles: proyecto → milestone → issue. Cada nivel tiene un contrato de contenido distinto. Mezclarlos es el error más frecuente.
+
+### Team (uno por producto)
+
+El team agrupa todo el trabajo del producto. No tiene descripción de implementación — es solo el contenedor organizacional. En Linear: `Team: Odessay`.
+
+### Proyecto (uno por fase)
+
+Cada fase del roadmap es un proyecto independiente en Linear. Un proyecto = una unidad de trabajo con inicio, fin y entregable claro.
+
+La descripción del proyecto define el **exit criteria de esa fase** — qué existe y funciona cuando todos sus issues están Done. Una o dos frases máximo.
+
+Bien: "Editor TipTap operativo con auto-save local-first y Desk personal funcional y visualmente terminado."
+Mal: "Odessay es una plataforma de escritura epistolar con tres modos principales..."
+
+El status del proyecto refleja el estado real de la fase: `Planned` → `In Progress` → `Completed`. Cuando una fase termina, el proyecto se cierra. No se reutiliza.
+
+**Por qué un proyecto por fase y no un proyecto por producto:**
+Si el team y el proyecto tienen el mismo nombre (`Team: Odessay`, `Project: Odessay`), el nivel de proyecto no agrega ningún significado — es ruido. Con un proyecto por fase, la jerarquía es plana y semánticamente clara: `Team: Odessay → Project: Fase 0 — Cimientos → Issues`.
+
+### Milestone (dentro de un proyecto, opcional)
+
+Los milestones marcan un **gate interno** dentro de una fase: un punto donde un bloque de trabajo debe estar 100% verificado antes de que el siguiente bloque pueda empezar.
+
+Cuándo usarlos: cuando una fase tiene dos bloques grandes con una dependencia real entre ellos — no una dependencia de issue a issue, sino una dependencia de bloque a bloque. Ejemplo en Fase 6:
+
+```
+Milestone: "API lista"       → /api/ai/observe + /api/ai/discuss
+Milestone: "Frontend listo"  → panel UI + render de observaciones + context instructions
+```
+
+El frontend no debería empezar hasta que la API esté validada. El milestone hace ese gate explícito y visible.
+
+Cuándo NO usarlos: cuando las dependencias entre issues ya dan el orden correcto. En Fase 0, Fase 1 y la mayoría de las fases, los issues están encadenados por Dependencies — no hace falta un milestone adicional. Añadirlos ahí es ruido.
+
+### Issue (uno por entregable)
+
+La descripción del issue sigue la estructura definida en §Estructura de un issue. El Context del issue explica por qué existe *ese* issue específico — no describe el producto ni la fase.
+
+---
+
 ## Cómo usar este skill
 
 ### Al iniciar el proyecto
 
-1. Lee `odessay-roadmap.md` para entender fases, milestones y el mapa de issues del proyecto.
+1. Lee `docs/ops/odessay-roadmap.md` para entender fases y el mapa de issues.
 2. Crea los labels en Linear exactamente como están definidos en este documento.
 3. Crea los estados en Linear: Backlog, Ready, In Progress, In Review, Done.
-4. Crea un proyecto en Linear para cada fase definida en el roadmap.
-5. Crea los issues de la primera fase con estado Backlog.
-6. Mueve a Ready solo los que no tienen dependencias abiertas.
-7. No crees issues de fases siguientes hasta que la fase anterior esté completa.
+4. Crea **un proyecto por fase** en Linear, con el nombre exacto de la fase (`Fase 0 — Cimientos`, `Fase 1 — Escribir`, etc.) y descripción de exit criteria específica a esa fase.
+5. Crea todos los proyectos desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
+6. Crea los issues de la fase activa dentro de su proyecto, con estado Backlog.
+7. Mueve a Ready solo los que no tienen dependencias abiertas.
+8. No crees issues de fases siguientes hasta que la fase anterior esté completa.
 
 ### Al crear un issue
 
@@ -216,3 +295,9 @@ Un issue enorme bloquea el progreso. Si un issue toca más de una capa y tarda m
 Un issue con dependencia implícita es una trampa. Si asumes que algo existe sin declararlo en Dependencies, el agente se bloqueará en medio de la ejecución.
 
 Un issue que opera contra producción es un error crítico. Todo desarrollo y testing ocurre en staging. Producción solo recibe merges de main con preview verificado.
+
+Un archivo en Files affected escrito como link Markdown rompe la legibilidad. `[CLAUDE.md](<http://CLAUDE.md>)` no es un path — es un artefacto de parseo. Los nombres de archivo van siempre como texto plano.
+
+Un spec doc en Files affected invierte la causalidad. Si `docs/features/odessay-sync.md` aparece como `(modifica)`, significa que el issue está reescribiendo el spec en lugar de implementarlo. El spec existe antes que el issue. La implementación lee el spec — no al revés.
+
+Un skill en Files affected es ruido. `skills/skill-design/SKILL.md (referencia)` en Files affected confunde a quien lee el issue: ese archivo no se toca, se consulta. Va en Reference docs.

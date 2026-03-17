@@ -12,6 +12,8 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 2. `docs/ops/SETUP.md` — entorno, tools, permisos, Git. Si falta algo, no empezar.
 3. `docs/ops/STATUS.md` — qué existe hoy en el codebase.
 
+→ Si la tarea involucra crear o modificar la estructura de Linear: leer `skills/skill-product-manager/SKILL.md` completo **antes de tocar Linear**. La estructura correcta está ahí — no se infiere del roadmap.
+
 **Contexto base (siempre):**
 4. `docs/core/odessay-fundacional.md` — visión y principios.
 5. `docs/core/odessay-arquitectura.md` — arquitectura técnica.
@@ -23,10 +25,15 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 - `database` → core/modelo-datos, skill-database
 - `editor` → features/odessay-editor
 - `ai-editor` → features/odessay-ai-editor
-- `reading-view` → features/odessay-margenes (consultar al llegar, no al inicio)
+- `reading-view` → features/odessay-margenes
+- `correspondencias` → features/odessay-correspondencias
+- `collections` → features/odessay-collections
+- `sync` → features/odessay-sync
+- `invitaciones` → features/odessay-invitaciones
+- `espacio-publico` → features/odessay-espacio-publico
 
 **Antes de PR (siempre):**
-- `skills/skill-product-manager/SKILL.md` y `skills/skill-code-review/SKILL.md`
+- `skills/skill-code-review/SKILL.md`
 
 ---
 
@@ -44,6 +51,11 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 - Editor (TipTap): `docs/features/odessay-editor.md`
 - AI editor: `docs/features/odessay-ai-editor.md`
 - Márgenes/lectura: `docs/features/odessay-margenes.md`
+- Correspondencias: `docs/features/odessay-correspondencias.md`
+- Collections: `docs/features/odessay-collections.md`
+- Sync local-first: `docs/features/odessay-sync.md`
+- Invitaciones: `docs/features/odessay-invitaciones.md`
+- Espacio público: `docs/features/odessay-espacio-publico.md`
 
 ### ops/ — siempre leer (pre-flight)
 - Entorno y operación: `docs/ops/SETUP.md`
@@ -65,6 +77,7 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 
 Regla práctica:
 - Toda tarea con UI → `skill-design/SKILL.md` + `skill-design/vistas.md` + `skill-frontend`.
+- Toda tarea con Linear → `skill-product-manager` primero, antes de crear nada.
 - Todo PR → `skill-code-review`.
 
 ---
@@ -126,6 +139,11 @@ Modificar schema:
 1. `docs/core/odessay-modelo-datos.md`
 2. `skills/skill-database/SKILL.md`
 3. Actualizar `docs/core/odessay-modelo-datos.md` con los cambios
+
+Configurar Linear (proyectos, issues, milestones):
+1. `skills/skill-product-manager/SKILL.md` — leer completo antes de tocar Linear
+2. `docs/ops/odessay-roadmap.md` — fases e issues macro
+3. Crear estructura según §Jerarquía de Linear del skill: un proyecto por fase, no un proyecto paraguas
 
 ---
 

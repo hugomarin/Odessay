@@ -26,6 +26,8 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 2. **`docs/ops/SETUP.md`** — Entorno, variables, tools requeridos, permisos, Git. Si falta algo, no empezar.
 3. **`docs/ops/STATUS.md`** — Qué está construido hoy, qué no existe todavía.
 
+**Si la tarea involucra crear o modificar la estructura de Linear** (proyectos, issues, milestones): leer `skills/skill-product-manager/SKILL.md` completo antes de tocar Linear. La estructura correcta está definida ahí — no se infiere del roadmap.
+
 ### Paso 2 — Contexto base (siempre, todo issue)
 
 4. **`docs/core/odessay-fundacional.md`** — Qué es Odessay, por qué existe, para quién, principios de diseño.
@@ -44,7 +46,7 @@ Consultar `config.json → triggers` para saber qué leer según el área del is
 
 ### Paso 4 — Antes de abrir PR (siempre)
 
-- **`skills/skill-product-manager/SKILL.md`** y **`skills/skill-code-review/SKILL.md`**
+- **`skills/skill-code-review/SKILL.md`** — Checklist completo de calidad, velocidad y seguridad.
 
 ---
 
