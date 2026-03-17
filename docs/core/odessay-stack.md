@@ -126,12 +126,14 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 
 ```bash
 # Server-side only
-SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
 RESEND_API_KEY=
 
 # Client-side (NEXT_PUBLIC_)
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=   # Nombre preferido (Supabase nuevo)
+NEXT_PUBLIC_SUPABASE_ANON_KEY=                  # Alias legacy — backward compatible
 ```
+
+La fuente canónica de todas las variables y su matriz por entorno (local / staging / producción) está en `docs/ops/SETUP.md §Variables de entorno`.

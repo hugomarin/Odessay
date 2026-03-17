@@ -36,7 +36,7 @@ Setup de Next.js 15 con App Router. React 19. Tailwind CSS instalado. ShadCN ini
 Dependencias: Setup GitHub repository.
 
 **Configure Supabase projects (staging and production)** `[infra, database]` `[critical-path]`
-Crear dos proyectos en Supabase. Documentar todas las variables de entorno del proyecto completo de una vez: Supabase (URL, anon key, service role), Anthropic API key, Resend API key, dominio Vercel. Configurar variables en el repo y en Vercel para ambos ambientes.
+Crear dos proyectos en Supabase. Documentar todas las variables de entorno del proyecto completo de una vez: Supabase (URL, publishable key, service role key), Anthropic API key, Resend API key, dominio Vercel. Configurar variables en el repo y en Vercel para ambos ambientes.
 Dependencias: Initialize Next.js project.
 
 **Configure Vercel deployment with branch previews** `[infra]` `[critical-path]`
