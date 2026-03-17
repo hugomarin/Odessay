@@ -50,6 +50,14 @@
       "commit": "f6f7356",
       "date": "2026-03-17",
       "notes": "PR #3 mergeado; deploy productivo confirmado en https://odessay.vercel.app"
+    },
+    {
+      "what": "Design system base: tokens Tailwind v4, tipografía Geist+Lora, ShadCN components con defaults Odessay",
+      "issue": "ODE-13",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-13",
+      "commit": "3ca7f81",
+      "date": "2026-03-17",
+      "notes": "PR #4 en revisión; globals.css con @theme (Tailwind v4); 11 componentes ShadCN configurados (card, button, input, textarea, dialog, popover, dropdown-menu, tooltip, badge, sheet, avatar); typecheck/lint/test OK"
     }
   ],
 
@@ -63,6 +71,7 @@
     { "decision": "Login/Signup con login-02 de ShadCN", "doc": "docs/core/odessay-paginas.md" },
     { "decision": "FootnoteExtension custom (no existe en ecosistema)", "doc": "docs/features/odessay-editor.md" },
     { "decision": "Branch protection no disponible — fallback por PR obligatorio", "doc": "docs/ops/SETUP.md" },
-    { "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados", "doc": "docs/ops/SETUP.md" }
+    { "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados", "doc": "docs/ops/SETUP.md" },
+    { "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático", "doc": "docs/core/odessay-stack.md" }
   ]
 }

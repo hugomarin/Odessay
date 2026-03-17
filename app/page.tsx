@@ -25,14 +25,14 @@ export default async function Home() {
       </header>
 
       {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+        <div className="rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           Error consultando <code>todos</code>: {error.message}
         </div>
       ) : null}
 
       <ul className="space-y-2">
         {todos.map((todo) => (
-          <li key={todo.id} className="rounded-md border border-border bg-card p-3">
+          <li key={todo.id} className="rounded-md border-[0.5px] border-border bg-card p-3">
             {todo.name}
           </li>
         ))}
