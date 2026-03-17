@@ -184,27 +184,28 @@ npm run env:check
 
 ### Matriz de entornos (ODE-11)
 
-| Variable | Local (`.env.local`) | Vercel Preview (`staging`) | Vercel Production (`production`) |
+**Decisión activa:** Un solo proyecto Supabase (`odessay-staging`) cubre local, Preview y Production hasta el lanzamiento real. El proyecto de producción separado se crea en Fase 5 cuando haya usuarios reales.
+
+| Variable | Local (`.env.local`) | Vercel Preview | Vercel Production |
 |---|---|---|---|
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | URL preview de Vercel | Dominio productivo |
-| `NEXT_PUBLIC_SUPABASE_URL` | URL del proyecto `odessay-staging` | URL del proyecto `odessay-staging` | URL del proyecto `odessay-prod` |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | publishable key de `odessay-staging` | publishable key de `odessay-staging` | publishable key de `odessay-prod` |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL de `odessay-staging` | URL de `odessay-staging` | URL de `odessay-staging` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | publishable key de `odessay-staging` | publishable key de `odessay-staging` | publishable key de `odessay-staging` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | opcional (legacy) | opcional (legacy) | opcional (legacy) |
-| `SUPABASE_SERVICE_ROLE_KEY` | service role key de `odessay-staging` | service role key de `odessay-staging` | service role key de `odessay-prod` |
+| `SUPABASE_SERVICE_ROLE_KEY` | service role key de `odessay-staging` | service role key de `odessay-staging` | service role key de `odessay-staging` |
 | `ANTHROPIC_API_KEY` | key activa de Anthropic | key activa de Anthropic | key activa de Anthropic |
 | `RESEND_API_KEY` | key activa de Resend | key activa de Resend | key activa de Resend |
 
 ### Checklist de handoff humano (Supabase + Vercel)
 
-1. Crear proyectos Supabase `odessay-staging` y `odessay-prod`.
-2. Copiar `URL`, `publishable key` (o `anon key` legacy) y `service role key` desde Supabase Dashboard → `Settings` → `API`.
-3. Llenar `.env.local` con valores de `odessay-staging`.
-4. Configurar variables en Vercel:
+1. Renombrar el proyecto Supabase existente a `odessay-staging` (Settings → General → Name).
+2. Copiar `URL`, `publishable key` y `service role key` desde Supabase Dashboard → Settings → API → pestaña "Publishable and secret API keys".
+3. Llenar `.env.local` con esos valores.
+4. Configurar las mismas variables en Vercel (Preview y Production usan las mismas keys por ahora):
    `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`.
-5. Asignar en Vercel `Preview` con credenciales de `odessay-staging` y `Production` con credenciales de `odessay-prod`.
-6. Confirmar en Linear cuando los dos proyectos y variables estén listos para desbloquear migraciones (`ODE-14`) y deploy previews (`ODE-12`).
+5. Confirmar en Linear cuando variables estén listas para desbloquear migraciones (`ODE-14`) y deploy previews (`ODE-12`).
 
-**Entornos:** Existen tres — `local` (`.env.local`), `staging` (Vercel preview), `production` (Vercel main). Las variables de Vercel las gestiona el humano, no el agente.
+**Entornos:** Existen tres — `local` (`.env.local`), `staging` (Vercel preview), `production` (Vercel main). Las variables de Vercel las gestiona el humano, no el agente. El proyecto Supabase de producción separado se crea en Fase 5.
 
 ---
 
