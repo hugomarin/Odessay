@@ -115,7 +115,9 @@ console.log('Registry completo — sin nodos huérfanos ni referencias rotas.');
 node -e "
 const config = require('./docs.json');
 console.log('Docs always-read:');
-config.always_read.forEach(d => console.log(' -', d));
+config.registry
+  .filter(doc => doc.scope === 'always')
+  .forEach(doc => console.log(' -', doc.path));
 "
 
 # 2. Verificar Node
@@ -236,20 +238,23 @@ Este issue deja la base estructural de Supabase: schema, índices, RLS y trigger
 Pasos operativos:
 
 1. Crear `supabase/config.toml` y las migraciones en `supabase/migrations/` con formato `{timestamp}_{descripcion}.sql`.
-2. Aplicar migración en staging:
+2. Aplicar migraciones en staging en orden cronológico:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/migrations/20260317145743_initial_schema.sql
+for migration in $(find supabase/migrations -maxdepth 1 -name '*.sql' | sort); do
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+done
 ```
 
-3. Verificar tablas, columnas críticas y RLS:
+3. Verificar tablas, columnas críticas, RLS y triggers:
 
 ```bash
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
   -c "select tablename from pg_tables where schemaname='public' and tablename in ('profiles','writings','correspondences','collections','writing_collections','writing_shares','ai_observations','margins','invitations') order by tablename;" \
   -c "select column_name,data_type from information_schema.columns where table_schema='public' and table_name='writings' and column_name in ('version','sync_status','deleted_at','slug') order by column_name;" \
   -c "select column_name,data_type from information_schema.columns where table_schema='public' and table_name='margins' and column_name in ('shared_at','updated_at') order by column_name;" \
-  -c "select tablename, policyname, cmd from pg_policies where schemaname='public' and tablename in ('profiles','writings','correspondences','collections','writing_collections','writing_shares','ai_observations','margins','invitations') order by tablename, policyname;"
+  -c "select tablename, policyname, cmd from pg_policies where schemaname='public' and tablename in ('profiles','writings','correspondences','collections','writing_collections','writing_shares','ai_observations','margins','invitations') order by tablename, policyname;" \
+  -c "select tgname from pg_trigger where not tgisinternal and tgname in ('on_auth_user_created','writings_before_set_derived_fields','writings_before_insert_assign_correspondence','writings_touch_correspondence_after_write','margins_manage_shared_at') order by tgname;"
 ```
 
 4. Adjuntar en Linear evidencia de:
