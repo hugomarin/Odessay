@@ -26,6 +26,14 @@
       "commit": "1b53bbe",
       "date": "2026-03-17",
       "notes": "Branch protection no disponible en plan actual — fallback documentado en ODE-9"
+    },
+    {
+      "what": "Baseline Next.js 15 + TypeScript strict + Tailwind + ShadCN config",
+      "issue": "ODE-10",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-10",
+      "commit": "6942c02",
+      "date": "2026-03-17",
+      "notes": "App Router inicializado; lint/typecheck operativos; setup documentado en docs/ops/SETUP.md"
     }
   ],
 
