@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { Lora } from "next/font/google"
+import { SyncBootstrap } from "@/components/sync/sync-bootstrap"
 import "./globals.css"
 
 const lora = Lora({
@@ -13,7 +14,7 @@ const lora = Lora({
 
 export const metadata: Metadata = {
   title: "Odessay",
-  description: "Epistolary writing platform"
+  description: "A sanctuary for epistolary writing"
 }
 
 export default function RootLayout({
@@ -23,7 +24,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${lora.variable}`}>
-      <body className="font-sans">{children}</body>
+      <body className="min-h-screen bg-bg font-sans text-ink">
+        <SyncBootstrap />
+        {children}
+      </body>
     </html>
   )
 }
