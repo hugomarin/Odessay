@@ -34,6 +34,14 @@
       "commit": "6942c02",
       "date": "2026-03-17",
       "notes": "App Router inicializado; lint/typecheck operativos; setup documentado en docs/ops/SETUP.md"
+    },
+    {
+      "what": "Supabase env setup + SSR clients/middleware + documentación de keys",
+      "issue": "ODE-11",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-11",
+      "commit": "737e659",
+      "date": "2026-03-17",
+      "notes": "PR #2 mergeado; env validator (`npm run env:check`) y decisión de un solo proyecto Supabase hasta Fase 5 documentados"
     }
   ],
 
