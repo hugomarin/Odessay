@@ -4,6 +4,62 @@
 
 ---
 
+## Frontera humano / agente
+
+Defines quién hace qué. Antes de ejecutar un issue, el agente debe saber si hay un checkpoint humano pendiente.
+
+### Siempre hace el humano
+
+- Crear repositorios en GitHub y configurar branch protection cuando el plan lo permite
+- Si branch protection no está disponible (por ejemplo: repo privado en plan sin esa feature), confirmar en Linear el fallback operativo: no push directo a `main` y merge solo vía PR aprobado por humano
+- Crear proyectos en Supabase (staging y producción) y copiar las API keys
+- Conectar el repositorio a Vercel desde la UI y configurar las variables de entorno en Vercel
+- Revisar y aprobar (merge) pull requests
+- Autorizar herramientas y permisos (MCPs, tokens, accesos)
+- Llenar `.env.local` con valores reales después de crear los servicios
+- **Asignar issues en Linear** — el humano es el assignee de todos los issues. El agente trabaja bajo instrucción del humano, no de forma autónoma sobre issues no asignados.
+
+### Siempre hace el agente
+
+- Escribir código, crear archivos, modificar configuración
+- Crear migraciones de base de datos y ejecutarlas en staging
+- Correr `typecheck`, `lint` y `tests` — pegar output en el PR
+- Abrir PRs y mover issues en Linear entre estados (`Backlog` → `In Progress` → `In Review`)
+- Crear `.env.example` con las keys esperadas (valores vacíos)
+- Actualizar `docs/ops/STATUS.md` y `docs/ops/SETUP.md` cuando el issue lo requiere
+- Mover el issue a `Done` una vez que el PR está mergeado y el humano lo confirma
+
+### Responsabilidades en Linear — tabla de referencia rápida
+
+| Acción en Linear | Responsable |
+|---|---|
+| Crear proyectos (uno por fase) | Agente (bajo instrucción explícita) |
+| Crear issues dentro del proyecto | Agente (bajo instrucción explícita) |
+| Asignar issues a una persona | **Humano** |
+| Mover issue a `In Progress` | Agente (al empezar a trabajar) |
+| Mover issue a `In Review` | Agente (al abrir el PR) |
+| Mover issue a `Done` | Agente (tras confirmación de merge del humano) |
+| Agregar comentarios de bloqueo | Agente (cuando encuentra un bloqueador) |
+| Crear milestones | Agente (solo si la fase los justifica, ver §Milestone) |
+
+### Issues con checkpoint humano (requieren handoff)
+
+Algunos issues tienen una parte que el agente no puede ejecutar. El agente completa lo que puede, luego **para** y comunica explícitamente qué necesita del humano antes de continuar.
+
+El agente señaliza el checkpoint así:
+
+```
+⏸ HANDOFF REQUERIDO
+
+Completé: [qué hizo el agente]
+Necesito que tú: [acción concreta del humano]
+Una vez listo: [qué hará el agente a continuación]
+```
+
+El agente no avanza al siguiente issue hasta recibir confirmación de que el checkpoint está resuelto.
+
+---
+
 ## Pre-flight: verificar antes de empezar
 
 Antes de tocar un archivo, un agente debe confirmar que tiene todo lo necesario. Si algún item falta, no empezar — documentar el bloqueo en el issue de Linear y escalar.
@@ -188,6 +244,8 @@ npm run test:e2e
 ### Ramas
 
 `main` es producción. Siempre estable. Nunca push directo.
+
+Si branch protection no puede habilitarse por limitación del plan de GitHub, esta regla se aplica como política operativa obligatoria y se documenta en el issue correspondiente de Linear antes de cerrar.
 
 Formato de rama por tipo de issue:
 

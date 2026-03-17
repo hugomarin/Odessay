@@ -116,6 +116,38 @@ Formato — siempre texto plano, nunca Markdown links:
 
 Si el issue solo toca código sin conflictos de archivos compartidos, escribir: N/A.
 
+## Handoff *(solo si el issue requiere acción humana)*
+
+Omitir esta sección si el issue es código puro. Incluirla cuando el agente llega a un punto que no puede resolver solo — crear un servicio externo, aprobar un acceso, llenar credenciales.
+
+Formato:
+```
+Acción requerida: [qué debe hacer el humano, con suficiente detalle para ejecutarlo sin preguntar]
+Dónde: [URL o lugar concreto — dashboard, settings, terminal, etc.]
+Resultado esperado: [qué debe existir o estar disponible cuando el humano termine]
+El agente continúa cuando: [condición verificable — ej. ".env.local tiene valor en SUPABASE_URL"]
+```
+
+Si la acción humana está bloqueada por una limitación técnica/plan (ejemplo: branch protection no disponible en repo privado), el issue no se congela: el Handoff debe declarar un fallback operativo verificable y dejar explícito qué evidencia habilita continuar.
+
+Ejemplo (ODE-11 — Configure Supabase):
+```
+Acción requerida: Crear dos proyectos en Supabase — uno llamado "odessay-staging"
+y otro "odessay-prod". Copiar las tres keys de cada uno en .env.local.
+Dónde: https://app.supabase.com → New project
+Resultado esperado: .env.local tiene valores reales en NEXT_PUBLIC_SUPABASE_URL,
+NEXT_PUBLIC_SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY.
+El agente continúa cuando: ls .env.local && cat .env.local muestra las tres variables con valor.
+```
+
+Ejemplo (ODE-9 — Setup GitHub repository sin branch protection disponible):
+```
+Acción requerida: Confirmar que el repositorio permanecerá privado y que, por limitación del plan, branch protection no puede habilitarse.
+Dónde: GitHub repo settings + comentario en el issue de Linear.
+Resultado esperado: Política operativa acordada: no push directo a main, todo cambio entra por PR y merge aprobado por humano.
+El agente continúa cuando: existe comentario explícito en el issue confirmando la limitación y la política de fallback.
+```
+
 ## Requirements
 Lo que debe existir cuando el issue esté terminado. Numerado. Cada item es verificable
 de forma independiente. No son instrucciones de implementación — son resultados esperados.
@@ -272,6 +304,8 @@ La descripción del issue sigue la estructura definida en §Estructura de un iss
 
 Sigue la estructura de descripción definida en este documento. Todo issue debe tener Context, Dependencies, Requirements, Reference docs, Delivery y Notes si aplica. Un issue sin Definition of Done no es un issue.
 
+**Asignación:** el agente crea los issues sin assignee. El humano los asigna. No asignar issues a nombres o usuarios — dejar el campo vacío al crear.
+
 ### Al ejecutar un issue
 
 [LLM] Antes de empezar: verifica que todas las dependencias están en Done. Lee los Reference docs indicados en el issue. Crea el branch desde main con el formato `feat/{issue-id}-{descripcion-corta}` o `fix/{issue-id}-{descripcion-corta}`. Mueve el issue a In Progress.
@@ -301,3 +335,5 @@ Un archivo en Files affected escrito como link Markdown rompe la legibilidad. `[
 Un spec doc en Files affected invierte la causalidad. Si `docs/features/odessay-sync.md` aparece como `(modifica)`, significa que el issue está reescribiendo el spec en lugar de implementarlo. El spec existe antes que el issue. La implementación lee el spec — no al revés.
 
 Un skill en Files affected es ruido. `skills/skill-design/SKILL.md (referencia)` en Files affected confunde a quien lee el issue: ese archivo no se toca, se consulta. Va en Reference docs.
+
+Un issue con checkpoint humano sin sección Handoff bloquea silenciosamente. Si el agente necesita que el humano cree un servicio externo o llene credenciales y no lo declara explícitamente, el agente intentará ejecutar contra un entorno inexistente y fallará sin diagnóstico claro. Cualquier issue que toque servicios externos (Supabase, Vercel, GitHub, APIs de terceros) necesita sección Handoff.
