@@ -22,9 +22,9 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ### Paso 1 — Pre-flight (siempre, antes de tocar nada)
 
-1. **`config.json`** — Verificar que todos los documentos declarados existen (script en `docs/ops/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
+1. **`docs.json`** — Verificar que todos los documentos declarados existen (script en `docs/ops/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
 2. **`docs/ops/SETUP.md`** — Entorno, variables, tools requeridos, permisos, Git. Si falta algo, no empezar.
-3. **`docs/ops/STATUS.md`** — Qué está construido hoy, qué no existe todavía.
+3. **`docs/ops/status.json`** — Qué está construido hoy, fase activa, build log con commits.
 
 **Si la tarea involucra crear o modificar la estructura de Linear** (proyectos, issues, milestones): leer `skills/skill-product-manager/SKILL.md` completo antes de tocar Linear. La estructura correcta está definida ahí — no se infiere del roadmap.
 
@@ -36,7 +36,7 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ### Paso 3 — Docs condicionales (solo si el issue activa el trigger)
 
-Consultar `config.json → triggers` para saber qué leer según el área del issue:
+Consultar `docs.json → triggers` para saber qué leer según el área del issue:
 - `frontend` → core/paginas, core/flujos, skill-design/SKILL.md, skill-design/vistas.md, skill-frontend, reference/
 - `backend` → core/modelo-datos, skill-backend
 - `database` → core/modelo-datos, skill-database
@@ -80,7 +80,7 @@ Consultar `config.json → triggers` para saber qué leer según el área del is
 | Documento | Propósito |
 |-----------|-----------|
 | `SETUP.md` | **Leer primero.** Entorno, variables, tools, permisos, Git. |
-| `STATUS.md` | **Leer segundo.** Qué está construido, qué no existe, decisiones tomadas. |
+| `status.json` | **Leer segundo.** Qué está construido, qué no existe, decisiones tomadas. |
 | `odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |
 
 ### framework/ — Referencia del meta-framework

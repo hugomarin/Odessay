@@ -1,0 +1,51 @@
+{
+  "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
+  "_maintenance": "Al mover un issue a Done: agregar una entrada en 'built' con issue, linear_url, commit y fecha. Actualizar active_phase si la fase cambia.",
+
+  "last_updated": "2026-03-17",
+
+  "active_phase": {
+    "name": "Fase 0 — Cimientos",
+    "linear_project": "https://linear.app/z9ne/project/fase-0-cimientos-58af8acb9bb0",
+    "roadmap_ref": "docs/ops/odessay-roadmap.md"
+  },
+
+  "built": [
+    {
+      "what": "Repositorio de documentación inicializado",
+      "issue": null,
+      "linear_url": null,
+      "commit": null,
+      "date": "2026-03-17",
+      "notes": "Estructura: docs/, skills/, framework/, reference/"
+    },
+    {
+      "what": "Repo GitHub + .gitignore base",
+      "issue": "ODE-9",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-9",
+      "commit": "1b53bbe",
+      "date": "2026-03-17",
+      "notes": "Branch protection no disponible en plan actual — fallback documentado en ODE-9"
+    },
+    {
+      "what": "Baseline Next.js 15 + TypeScript strict + Tailwind + ShadCN config",
+      "issue": "ODE-10",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-10",
+      "commit": "6942c02",
+      "date": "2026-03-17",
+      "notes": "App Router inicializado; lint/typecheck operativos; setup documentado en docs/ops/SETUP.md"
+    }
+  ],
+
+  "decisions": [
+    { "decision": "Local-first con IndexedDB (no localStorage)", "doc": "docs/core/odessay-arquitectura.md" },
+    { "decision": "body_json como fuente de verdad (no body_markdown)", "doc": "docs/core/odessay-modelo-datos.md" },
+    { "decision": "Last-write-wins silencioso para conflictos de sync", "doc": "docs/features/odessay-sync.md" },
+    { "decision": "ShadCN tres capas de adaptación", "doc": "skills/skill-design/SKILL.md" },
+    { "decision": "TanStack Query + Zustand (2 slices únicamente)", "doc": "skills/skill-frontend/SKILL.md" },
+    { "decision": "Validación con react-hook-form + Zod, onBlur", "doc": "skills/skill-frontend/SKILL.md" },
+    { "decision": "Login/Signup con login-02 de ShadCN", "doc": "docs/core/odessay-paginas.md" },
+    { "decision": "FootnoteExtension custom (no existe en ecosistema)", "doc": "docs/features/odessay-editor.md" },
+    { "decision": "Branch protection no disponible — fallback por PR obligatorio", "doc": "docs/ops/SETUP.md" }
+  ]
+}
