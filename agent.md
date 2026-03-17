@@ -8,9 +8,9 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 ## 1) Protocolo de lectura
 
 **Pre-flight (siempre, sin excepción):**
-1. `config.json` — verificar que todos los docs existen. Leer `always_read` y los `triggers` del issue.
+1. `docs.json` — verificar que todos los docs existen. Leer `always_read` y los `triggers` del issue.
 2. `docs/ops/SETUP.md` — entorno, tools, permisos, Git. Si falta algo, no empezar.
-3. `docs/ops/STATUS.md` — qué existe hoy en el codebase.
+3. `docs/ops/status.json` — qué existe hoy en el codebase.
 
 → Si la tarea involucra crear o modificar la estructura de Linear: leer `skills/skill-product-manager/SKILL.md` completo **antes de tocar Linear**. La estructura correcta está ahí — no se infiere del roadmap.
 
@@ -19,7 +19,7 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 5. `docs/core/odessay-arquitectura.md` — arquitectura técnica.
 6. `docs/core/odessay-stack.md` — stack y convenciones.
 
-**Condicional (según trigger del issue — ver config.json → triggers):**
+**Condicional (según trigger del issue — ver docs.json → triggers):**
 - `frontend` → core/paginas, core/flujos, skill-design/SKILL.md, skill-design/vistas.md, skill-frontend, reference/
 - `backend` → core/modelo-datos, skill-backend
 - `database` → core/modelo-datos, skill-database
@@ -59,7 +59,7 @@ Está basado en `CLAUDE.md`. Si hay conflicto, **gana `CLAUDE.md`**.
 
 ### ops/ — siempre leer (pre-flight)
 - Entorno y operación: `docs/ops/SETUP.md`
-- Estado actual del codebase: `docs/ops/STATUS.md`
+- Estado actual del codebase: `docs/ops/status.json`
 - Plan de ejecución: `docs/ops/odessay-roadmap.md`
 
 ---

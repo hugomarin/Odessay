@@ -112,7 +112,7 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`docs/core/`, `docs/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. Excepción válida: `docs/ops/STATUS.md` y `docs/ops/SETUP.md` pueden aparecer como `(modifica)` cuando el issue explícitamente actualiza el estado del proyecto o el setup.
+5. Excepción válida: `docs/ops/status.json` y `docs/ops/SETUP.md` pueden aparecer como `(modifica)` cuando el issue explícitamente actualiza el estado del proyecto o el setup.
 
 Si el issue solo toca código sin conflictos de archivos compartidos, escribir: N/A.
 

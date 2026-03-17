@@ -26,7 +26,7 @@ Defines quién hace qué. Antes de ejecutar un issue, el agente debe saber si ha
 - Correr `typecheck`, `lint` y `tests` — pegar output en el PR
 - Abrir PRs y mover issues en Linear entre estados (`Backlog` → `In Progress` → `In Review`)
 - Crear `.env.example` con las keys esperadas (valores vacíos)
-- Actualizar `docs/ops/STATUS.md` y `docs/ops/SETUP.md` cuando el issue lo requiere
+- Actualizar `docs/ops/status.json` y `docs/ops/SETUP.md` cuando el issue lo requiere
 - Mover el issue a `Done` una vez que el PR está mergeado y el humano lo confirma
 
 ### Responsabilidades en Linear — tabla de referencia rápida
@@ -69,7 +69,7 @@ Antes de tocar un archivo, un agente debe confirmar que tiene todo lo necesario.
 #    a) docs declarados en registry que no existen en disco
 #    b) docs en disco que no están declarados en registry (contenido sin conexión)
 node -e "
-const config = require('./config.json');
+const config = require('./docs.json');
 const fs = require('fs');
 const path = require('path');
 const glob = require('fs');
@@ -113,7 +113,7 @@ console.log('Registry completo — sin nodos huérfanos ni referencias rotas.');
 
 # 1b. Ver qué docs son always (lectura obligatoria independiente del issue)
 node -e "
-const config = require('./config.json');
+const config = require('./docs.json');
 console.log('Docs always-read:');
 config.always_read.forEach(d => console.log(' -', d));
 "
@@ -330,7 +330,7 @@ Si el issue no tiene particularidades, no se crea WORKFLOW.md. Es una herramient
 8. Comentar en el issue de Linear: link al PR + SHA del commit + resultado de validaciones
 9. Mover issue a In Review en Linear
 10. Esperar confirmación de merge del humano
-11. Una vez mergeado: mover issue a Done y agregar una fila en `docs/ops/STATUS.md` → "Qué está construido" con issue ID, commit SHA y fecha
+11. Una vez mergeado: mover issue a Done y agregar una fila en `docs/ops/status.json` → "Qué está construido" con issue ID, commit SHA y fecha
 ```
 
 **Nota sobre el merge:** el owner del proyecto es no técnico — no hace code review del código. El merge es una aprobación de go/no-go basada en el proof of work que el agente dejó en el PR y en el comentario de Linear. Si las validaciones pasaron y el agente las documentó, el humano aprueba. Si algo falta o hay un error en el output, el humano rechaza y el agente debe corregir antes de volver a pedir merge.
