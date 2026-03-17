@@ -4,26 +4,38 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Odessay tokens */
+    --bg: 38 12% 98%;
+    --sb: 0 0% 100%;
+    --muted: 38 8% 93%;
+    --muted-h: 38 8% 90%;
+    --border: 38 8% 90%;
+    --ink: 25 18% 10%;
+    --ink-2: 25 12% 22%;
+    --ink-3: 25 10% 38%;
+    --ink-4: 25 8% 52%;
+    --cursor: 22 55% 38%;
+
+    /* ShadCN tokens mapped from Odessay */
+    --background: var(--bg);
+    --foreground: var(--ink);
+    --card: var(--sb);
+    --card-foreground: var(--ink);
+    --popover: var(--sb);
+    --popover-foreground: var(--ink);
+    --primary: var(--ink);
+    --primary-foreground: var(--bg);
+    --secondary: var(--muted);
+    --secondary-foreground: var(--ink-2);
+    --muted-foreground: var(--ink-4);
+    --accent: var(--muted-h);
+    --accent-foreground: var(--ink-2);
+    --destructive: 0 72% 51%;
+    --destructive-foreground: var(--bg);
+    --input: var(--border);
+    --ring: var(--ink);
     --radius: 0.5rem;
+    --ease-layout: cubic-bezier(0.4, 0, 0.15, 1);
   }
 
   * {
@@ -31,6 +43,28 @@
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-bg text-ink antialiased;
+  }
+}
+
+@keyframes menuIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
