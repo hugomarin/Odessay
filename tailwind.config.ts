@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss"
 
 const config = {
+  content: [],
   // Tailwind v4 design tokens live in app/globals.css @theme.
   plugins: []
 } satisfies Config
