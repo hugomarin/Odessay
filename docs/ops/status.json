@@ -63,9 +63,9 @@
       "what": "Schema base Supabase + RLS + triggers críticos con hardening de review",
       "issue": "ODE-14",
       "linear_url": "https://linear.app/z9ne/issue/ODE-14",
-      "commit": "1bb30de",
+      "commit": "7269637",
       "date": "2026-03-17",
-      "notes": "PR #5; migraciones 20260317145743, 20260317221000 y 20260317223000; correspondencia diferida a shared/public y updates de status restringidos en ai_observations/invitations"
+      "notes": "PR #5 mergeada en main; migraciones 20260317145743, 20260317221000 y 20260317223000; correspondencia diferida a shared/public y updates de status restringidos en ai_observations/invitations"
     }
   ],
 
