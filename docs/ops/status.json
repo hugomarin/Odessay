@@ -50,6 +50,22 @@
       "commit": "f6f7356",
       "date": "2026-03-17",
       "notes": "PR #3 mergeado; deploy productivo confirmado en https://odessay.vercel.app"
+    },
+    {
+      "what": "Design system — tokens, ShadCN base, tipografía, Tailwind v4",
+      "issue": "ODE-13",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-13",
+      "commit": "8dbcedc",
+      "date": "2026-03-17",
+      "notes": "PR #4; migración a Tailwind v4 + @theme {}; eliminado global border-border; todos los tokens de skill-design implementados"
+    },
+    {
+      "what": "Schema base Supabase + RLS + triggers críticos con hardening de review",
+      "issue": "ODE-14",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-14",
+      "commit": "1bb30de",
+      "date": "2026-03-17",
+      "notes": "PR #5; migraciones 20260317145743, 20260317221000 y 20260317223000; correspondencia diferida a shared/public y updates de status restringidos en ai_observations/invitations"
     }
   ],
 
@@ -63,6 +79,7 @@
     { "decision": "Login/Signup con login-02 de ShadCN", "doc": "docs/core/odessay-paginas.md" },
     { "decision": "FootnoteExtension custom (no existe en ecosistema)", "doc": "docs/features/odessay-editor.md" },
     { "decision": "Branch protection no disponible — fallback por PR obligatorio", "doc": "docs/ops/SETUP.md" },
-    { "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados", "doc": "docs/ops/SETUP.md" }
+    { "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados", "doc": "docs/ops/SETUP.md" },
+    { "decision": "Tailwind CSS v4 (no v3) — migración en Fase 0 con costo mínimo; v3 en modo mantenimiento; ShadCN soporta v4; config via @theme {} en CSS, no tailwind.config.ts", "doc": "docs/core/odessay-stack.md" }
   ]
 }
