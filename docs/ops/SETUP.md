@@ -196,6 +196,27 @@ npm run lint
 npm run test:e2e
 ```
 
+### Baseline frontend (ODE-10)
+
+La base del proyecto se inicializa con:
+
+- Next.js 15 + App Router
+- React 19
+- TypeScript en modo `strict`
+- Tailwind CSS
+- ShadCN configurado con `style: default`, `baseColor: neutral`, `cssVariables: true`
+
+Archivos base esperados tras ODE-10:
+
+- `package.json`
+- `next.config.ts`
+- `tsconfig.json`
+- `postcss.config.mjs`
+- `tailwind.config.ts`
+- `components.json`
+- `app/layout.tsx`
+- `app/globals.css`
+
 ---
 
 ## Manifiesto de tools
