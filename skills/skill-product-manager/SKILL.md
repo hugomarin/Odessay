@@ -180,8 +180,27 @@ El agente hace commits atómicos durante el desarrollo con mensajes en formato c
 Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODY-42]`
 Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
 
+### Trazabilidad Linear ↔ GitHub
+
+Al mover el issue a In Review, el agente debe dejar un comentario en el issue de Linear con:
+- Link al PR abierto
+- SHA del commit principal (o el último commit del branch)
+- Resultado resumido de las validaciones (✅ typecheck / ✅ lint / ✅ tests o equivalente)
+
+Sin este comentario, el issue queda desconectado del trabajo real y el humano no puede hacer el merge con contexto.
+
+Formato del comentario:
+```
+PR: [link]
+Commit: [SHA]
+Validaciones: typecheck ✅ | lint ✅ | tests ✅
+Listo para merge.
+```
+
 ### Validation
 [LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
+
+**El owner de Odessay es no técnico.** El agente es el único responsable de la calidad del código. El humano no hace code review — confía en las validaciones del agente. Por eso el proof of work es obligatorio e irremplazable: es la única forma que tiene el humano de saber que el trabajo está bien hecho antes de aprobar el merge.
 
 **Checks obligatorios en todo issue:**
 ```bash

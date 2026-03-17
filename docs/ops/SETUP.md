@@ -327,9 +327,13 @@ Si el issue no tiene particularidades, no se crea WORKFLOW.md. Es una herramient
 5. Push al branch remoto al terminar cada subtarea
 6. Ejecutar validaciones (typecheck, lint, tests) — pegar output en el PR
 7. Abrir PR con descripción del issue
-8. Mover issue a In Review en Linear
-9. Actualizar STATUS.md con el entregable completado
+8. Comentar en el issue de Linear: link al PR + SHA del commit + resultado de validaciones
+9. Mover issue a In Review en Linear
+10. Esperar confirmación de merge del humano
+11. Una vez mergeado: mover issue a Done y agregar una fila en `docs/ops/STATUS.md` → "Qué está construido" con issue ID, commit SHA y fecha
 ```
+
+**Nota sobre el merge:** el owner del proyecto es no técnico — no hace code review del código. El merge es una aprobación de go/no-go basada en el proof of work que el agente dejó en el PR y en el comentario de Linear. Si las validaciones pasaron y el agente las documentó, el humano aprueba. Si algo falta o hay un error en el output, el humano rechaza y el agente debe corregir antes de volver a pedir merge.
 
 ---
 
