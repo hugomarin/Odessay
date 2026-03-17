@@ -207,6 +207,26 @@ npm run env:check
 
 **Entornos:** Existen tres — `local` (`.env.local`), `staging` (Vercel preview), `production` (Vercel main). Las variables de Vercel las gestiona el humano, no el agente. El proyecto Supabase de producción separado se crea en Fase 5.
 
+### ODE-12 — Deploy en Vercel + previews por PR
+
+Este issue es principalmente humano: el agente no puede conectar el repositorio en la UI de Vercel.
+
+Pasos operativos:
+
+1. Ir a `https://vercel.com/dashboard` → `Add New Project` → `Import Git Repository` → seleccionar `hugomarin/Odessay`.
+2. Confirmar framework detectado: `Next.js` (default de Vercel, sin overrides).
+3. En `Environment Variables`, configurar para `Preview` y `Production`:
+   `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `RESEND_API_KEY`.
+4. Ejecutar primer deploy de `main` y validar build exitoso.
+5. Abrir un PR de prueba para verificar preview deployment automático.
+
+Evidencia mínima para cerrar ODE-12:
+
+- Link deploy de `main` (production).
+- Link preview deployment del PR de prueba.
+
+Sin esos 2 links en Linear, ODE-12 no se mueve a `Done`.
+
 ---
 
 ## Levantar el proyecto localmente
