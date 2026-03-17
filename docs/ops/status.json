@@ -42,6 +42,14 @@
       "commit": "737e659",
       "date": "2026-03-17",
       "notes": "PR #2 mergeado; env validator (`npm run env:check`) y decisión de un solo proyecto Supabase hasta Fase 5 documentados"
+    },
+    {
+      "what": "Vercel deploy flow + branch previews documentados en setup operativo",
+      "issue": "ODE-12",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-12",
+      "commit": "f6f7356",
+      "date": "2026-03-17",
+      "notes": "PR #3 mergeado; deploy productivo confirmado en https://odessay.vercel.app"
     }
   ],
 
