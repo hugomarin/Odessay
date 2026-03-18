@@ -29,12 +29,17 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (error) {
+      console.error("[auth:username-check:db]", {
+        username,
+        error: error.message,
+      })
+
       return NextResponse.json(
         {
           data: null,
           error: {
             code: "DB_ERROR",
-            message: error.message,
+            message: "Could not validate username availability.",
           },
         },
         { status: 500 },
@@ -49,12 +54,17 @@ export async function GET(request: Request) {
       error: null,
     })
   } catch (error) {
+    console.error("[auth:username-check:unexpected]", {
+      username,
+      error: error instanceof Error ? error.message : "Unexpected error",
+    })
+
     return NextResponse.json(
       {
         data: null,
         error: {
           code: "SERVER_ERROR",
-          message: error instanceof Error ? error.message : "Unexpected error",
+          message: "Could not validate username availability.",
         },
       },
       { status: 500 },

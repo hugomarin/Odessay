@@ -9,6 +9,14 @@ const matchesRoute = (pathname: string, routes: string[]) =>
   routes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
 
 export const updateSession = async (request: NextRequest) => {
+  const { pathname, search } = request.nextUrl
+
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
   let response = NextResponse.next({
     request,
   })
@@ -39,12 +47,6 @@ export const updateSession = async (request: NextRequest) => {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-
-  const { pathname, search } = request.nextUrl
-
-  if (pathname.startsWith("/api")) {
-    return response
-  }
 
   if (!user && matchesRoute(pathname, PRIVATE_ROUTES)) {
     const redirectUrl = request.nextUrl.clone()

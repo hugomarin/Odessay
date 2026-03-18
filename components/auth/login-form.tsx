@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 import {
   normalizeEmail,
+  sanitizeRedirectPath,
   toFriendlyAuthError,
   validateLoginValues,
   type AuthFieldErrors,
@@ -25,7 +26,7 @@ export function LoginForm() {
   const needsEmailConfirmation = searchParams.get("checkEmail") === "1"
 
   const redirectTo = useMemo(
-    () => searchParams.get("next") || "/desk",
+    () => sanitizeRedirectPath(searchParams.get("next")),
     [searchParams],
   )
 

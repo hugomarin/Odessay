@@ -10,6 +10,7 @@ import {
   isUsernameFormatValid,
   normalizeEmail,
   normalizeUsername,
+  sanitizeRedirectPath,
   toFriendlyAuthError,
   validateSignupValues,
   type AuthFieldErrors,
@@ -27,7 +28,7 @@ export function SignupForm() {
   const prefilledEmail = searchParams.get("email") ?? ""
   const lockEmail = searchParams.get("lockEmail") === "1"
   const redirectTo = useMemo(
-    () => searchParams.get("next") || "/desk",
+    () => sanitizeRedirectPath(searchParams.get("next")),
     [searchParams],
   )
 

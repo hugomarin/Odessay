@@ -22,6 +22,29 @@ export const normalizeEmail = (value: string) => value.trim().toLowerCase()
 
 export const normalizeUsername = (value: string) => value.trim().toLowerCase()
 
+export const sanitizeRedirectPath = (
+  candidate: string | null | undefined,
+  fallback = "/desk",
+) => {
+  if (!candidate) {
+    return fallback
+  }
+
+  if (!candidate.startsWith("/")) {
+    return fallback
+  }
+
+  if (candidate.startsWith("//")) {
+    return fallback
+  }
+
+  if (candidate.includes("://")) {
+    return fallback
+  }
+
+  return candidate
+}
+
 export const isUsernameFormatValid = (value: string) =>
   USERNAME_PATTERN.test(normalizeUsername(value))
 
