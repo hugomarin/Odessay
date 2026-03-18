@@ -9,6 +9,23 @@
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
     "roadmap_ref": "docs/ops/odessay-roadmap.md"
   },
+  "phase_plan": {
+    "phase": "Fase 1 — Escribir",
+    "source_of_truth": "docs/ops/odessay-roadmap.md",
+    "definition_of_done": "docs/ops/fase-1-definition-of-done.md",
+    "linear_issues": [
+      "ODE-21",
+      "ODE-22",
+      "ODE-23",
+      "ODE-24",
+      "ODE-25",
+      "ODE-26",
+      "ODE-27",
+      "ODE-28",
+      "ODE-29"
+    ],
+    "notes": "Backlog de ejecución de Fase 1 creado en Linear el 2026-03-18, iniciando por actualización de roadmap y alcance (ODE-21)."
+  },
 
   "built": [
     {

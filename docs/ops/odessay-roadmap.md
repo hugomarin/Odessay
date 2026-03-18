@@ -66,13 +66,19 @@ Referencia: `docs/features/odessay-sync.md`, `skills/skill-backend/SKILL.md` (se
 
 ## Fase 1 — Escribir
 
-Al terminar esta fase: un usuario puede registrarse, abrir el editor, escribir con auto-save local-first, y encontrar sus writings en /desk. El editor y el desk están visualmente terminados.
+Al terminar esta fase: un usuario puede registrarse, abrir el editor, escribir con auto-save local-first, y encontrar sus writings en /desk. El editor y el desk están visualmente terminados. Además, existe un flujo de sharing para evaluación cerrada con testers (acceso controlado), suficiente para validar la experiencia de escritura con usuarios reales antes de Fase 2.
 
 ---
 
-**Implement TipTap editor** `[frontend]`
-Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown), History, Placeholder, CharacterCount. Sin toolbar flotante al seleccionar. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
+**Build global sidebar shell (3 estados)** `[frontend]`
+Implementar el sidebar izquierdo reutilizable en toda la zona autenticada con tres estados: colapsado (52-55px), expandido (292-300px) y expandido con panel secundario contextual (Collections). Debe incluir navegación principal (Desk, Collections, Correspondences), acceso a Settings desde user bar, acción New writing y persistencia de estado por sesión.
 Dependencias: Implement authentication, Implement design system.
+Referencia: `docs/core/odessay-arquitectura.md` (sección: Sidebar/List panel), `skills/skill-design/vistas.md` (sección: Sidebar), `reference/editor.html`, `reference/desk.html`, `reference/collections.html`.
+
+**Implement TipTap editor** `[frontend]`
+Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Strike, Highlight, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown + parser compatible con el dialecto markdown del proyecto), History, Placeholder, CharacterCount. Sin toolbar flotante al seleccionar. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
+Incluye modales de rename, insert link e insert footnote, shortcuts de teclado para formato y métricas de texto en panel derecho (palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas).
+Dependencias: Build global sidebar shell (3 estados).
 Referencia: `docs/features/odessay-editor.md`, `skills/skill-design/vistas.md` (sección: Editor), `reference/editor.html`.
 
 **Implement auto-save — local-first** `[backend, database]`
@@ -88,6 +94,10 @@ Referencia: `docs/core/odessay-arquitectura.md` (sección: Desk), `skills/skill-
 **Implement writing states and private visibility** `[backend, frontend]`
 Estados draft/finished como dimensiones independientes de visibilidad. Panel Properties en el editor para cambiar estado y visibilidad. Visibilidad private por default al crear. Writing solo visible para el autor cuando es private.
 Dependencias: Build /desk.
+
+**Enable closed sharing for writing UX testing** `[backend, frontend]`
+Habilitar un modo de sharing controlado para evaluación de experiencia de escritura al cierre de fase: generación de link privado por writing y lectura para testers invitados. No incluye el set completo de visibilidad/shared/public de Fase 2; es una capacidad mínima de validación con usuarios reales.
+Dependencias: Implement writing states and private visibility.
 
 **Seed data — staging básico** `[infra, database]`
 Seed data mínimo para staging: 2-3 usuarios de prueba con profile completo, 5-8 writings en diferentes estados (draft/finished) y visibilidades, sin correspondencias aún. Permite testear el flujo de escritura y el desk de forma autónoma desde este punto.
@@ -181,10 +191,22 @@ Referencia: `docs/features/odessay-invitaciones.md`, `docs/core/odessay-flujos.m
 Página de llegada para invitados sin autenticación. Muestra el writing-invitación si existe. Lleva al signup con email prellenado si viene de un link con email. La primera experiencia en Odessay es leer lo que alguien escribió para ti.
 Dependencias: Implement invitations.
 
+**Implement password recovery flow** `[backend, frontend]`
+Flujo completo de recuperación de contraseña: página /forgot-password con formulario de solicitud, email vía Supabase Auth, ruta /auth/reset-password para ingresar nueva contraseña, redirect post-reset a /desk. Diseño coherente con /login y /signup.
+Dependencias: Implement authentication (Fase 0).
+
+**Implement profile settings — email and password update** `[backend, frontend]`
+Página de ajustes de perfil para usuario autenticado: cambio de email (con reconfirmación vía Supabase), cambio de contraseña, actualización de username y display name. Validación en cliente con Zod. Feedback visual de éxito/error. Accesible desde el sidebar.
+Dependencias: Implement authentication (Fase 0).
+
 **Integrate Resend for transactional email** `[backend, infra]`
 Notificación por email cuando un writing es compartido. Email de invitación epistolar como canal complementario al link. Templates simples, coherentes con la marca. En staging, emails no llegan a destinatarios reales.
 Dependencias: Build /invite/{token}.
 Referencia: `skills/skill-backend/SKILL.md` (sección: Resend).
+
+**Design transactional email templates** `[frontend, infra]`
+Templates de email con identidad visual de Odessay: confirmación de cuenta post-signup, recuperación de contraseña, notificación de writing recibido, invitación epistolar. Tipografía y tono coherentes con `docs/core/odessay-fundacional.md`. Implementados vía Resend.
+Dependencias: Integrate Resend for transactional email.
 
 **Build public pages — landing, manifesto, about, terms, privacy** `[frontend]`
 Páginas públicas sin autenticación. Landing como filtro: quien lo lee y siente algo, entra. Manifiesto completo. Tono y diseño coherentes con `docs/core/odessay-fundacional.md`. Acceso a login y signup.

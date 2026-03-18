@@ -120,6 +120,13 @@
       "trigger": "planning"
     },
     {
+      "path": "docs/ops/fase-1-definition-of-done.md",
+      "type": "ops",
+      "description": "Gate operativo de cierre de Fase 1 (Escribir): checklist de editor, sidebar, persistencia local-first, sharing de evaluación y criterios técnicos mínimos.",
+      "scope": "conditional",
+      "trigger": "planning"
+    },
+    {
       "path": "framework/framework-mece.md",
       "type": "framework",
       "description": "Framework MECE genérico y transferible: las 10 preguntas que todo proyecto debe responder, cómo aplicarlo, cómo detectar gaps. No es específico de Odessay.",

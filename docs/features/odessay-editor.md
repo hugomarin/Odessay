@@ -15,9 +15,9 @@ Sin embargo, el editor rico está deliberadamente restringido al subconjunto de 
 
 ### Subconjunto de formato soportado
 
-✓ Negrita, itálica, enlace, listas ordenadas y no ordenadas, blockquotes, encabezados (H1/H2/H3), bloques de código.
+✓ Negrita, itálica, tachado, highlight, enlace, listas ordenadas y no ordenadas, blockquotes, encabezados (H1/H2/H3), bloques de código.
 
-✗ Colores de texto, tamaños de fuente arbitrarios, alineación, tablas complejas, subrayado, y cualquier formato que Markdown no pueda serializar fielmente.
+✗ Colores de texto, tamaños de fuente arbitrarios, alineación, tablas complejas, subrayado, y cualquier formato que Markdown no pueda serializar fielmente en el parser markdown elegido por el proyecto.
 
 **Por qué no subrayado:** Markdown estándar no tiene subrayado. Incluirlo rompería la conversión bidireccional. La cursiva es el equivalente epistolar correcto.
 
@@ -29,7 +29,7 @@ La fuente de verdad interna es siempre el JSON del editor (modelo ProseMirror/Ti
 Markdown entrante → parsea a JSON → el usuario edita en modo rico → JSON se serializa a Markdown cuando se necesita
 ```
 
-El usuario puede cambiar al modo "source" (Markdown crudo) para editar directamente. Al volver a modo rico, el Markdown se re-parsea a JSON. Como el formato rico está limitado al subconjunto Markdown, no hay pérdida en ninguna dirección del ciclo.
+El usuario puede cambiar al modo "source" (Markdown crudo) para editar directamente. Al volver a modo rico, el Markdown se re-parsea a JSON. Como el formato rico está limitado al subconjunto Markdown soportado por el parser del proyecto, no hay pérdida en ninguna dirección del ciclo.
 
 ### Markdown que excede el subconjunto
 
@@ -87,6 +87,8 @@ TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo complet
 | Heading | `@tiptap/extension-heading` | H1, H2, H3 |
 | Bold | `@tiptap/extension-bold` | Negrita |
 | Italic | `@tiptap/extension-italic` | Cursiva |
+| Strike | `@tiptap/extension-strike` | Tachado inline |
+| Highlight | `@tiptap/extension-highlight` | Resaltado inline |
 | Link | `@tiptap/extension-link` | Enlaces |
 | Blockquote | `@tiptap/extension-blockquote` | Citas |
 | BulletList | `@tiptap/extension-bullet-list` | Listas sin orden |
@@ -99,7 +101,7 @@ TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo complet
 | CharacterCount | `@tiptap/extension-character-count` | Conteo de palabras para status bar |
 | Markdown | `tiptap-markdown` | Serialización y parseo Markdown ↔ JSON. Fuente de verdad del round-trip. |
 
-**Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip), `Strike` (excluido del subconjunto epistolar), `Table` (Markdown no lo serializa fielmente). No agregar sin revisar paridad con el subconjunto definido.
+**Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip), `Table` (Markdown no lo serializa fielmente en el parser objetivo). No agregar sin revisar paridad con el subconjunto definido.
 
 **Extensiones custom a desarrollar:**
 
@@ -119,6 +121,8 @@ const editor = useEditor({
     Heading.configure({ levels: [1, 2, 3] }),
     Bold,
     Italic,
+    Strike,
+    Highlight,
     Link.configure({ openOnClick: false, autolink: true }),
     Blockquote,
     BulletList,
@@ -162,7 +166,12 @@ El editor no muestra toolbar flotante al seleccionar texto — decisión deliber
 |--------|-----|---------------|
 | Negrita | `⌘B` | `Ctrl+B` |
 | Cursiva | `⌘I` | `Ctrl+I` |
+| Tachado | `⌥⌘U` | `Alt+Ctrl+U` |
+| Highlight | `⇧⌘U` | `Shift+Ctrl+U` |
+| Código inline | `⌘J` | `Ctrl+J` |
+| Bloque de código | `⇧⌘J` | `Shift+Ctrl+J` |
 | Enlace | `⌘K` | `Ctrl+K` |
+| Footnote | `⌃⌘K` | `Ctrl+Alt+K` |
 
 ### Estructura
 
@@ -211,6 +220,12 @@ TipTap reconoce estos patrones automáticamente al escribir:
 
 Tres acciones abren un modal en lugar de ejecutarse directamente. El modal aparece sobre un overlay crema con blur suave (`backdrop-filter: blur(4px)`). El agente guarda la selección antes de abrir el modal y la restaura al confirmar.
 
+### Modal de rename (topbar, título del writing)
+- Campo: nombre del writing (input de una línea)
+- Confirmar: actualiza `title` del writing
+- Atajo de confirmación: `Enter`
+- Cancelar: `Escape` o click fuera
+
 ### Modal de enlace (`⌘K`)
 - Campo: texto del enlace (opcional — si hay selección, la usa)
 - Campo: URL (requerido)
@@ -234,6 +249,28 @@ Tres acciones abren un modal en lugar de ejecutarse directamente. El modal apare
 - Click fuera del modal lo cierra
 - Enter en campo de texto de una sola línea confirma
 - La animación de entrada es `translateY(8px) scale(0.99) → translateY(0) scale(1)` en 220ms
+
+---
+
+## Resumen de texto (panel derecho)
+
+El panel derecho de Properties muestra métricas de lectura/escritura en tiempo real para orientar ritmo y longitud del writing.
+
+Métricas mínimas obligatorias:
+- `Words`
+- `Characters`
+- `Sentences`
+- `Reading time` (estimación)
+- `Pages` (estimación)
+
+Reglas de cálculo (v1):
+- `Words`: conteo por separación de espacios sobre `body_text`.
+- `Characters`: longitud total de `body_text` incluyendo espacios.
+- `Sentences`: conteo aproximado por cierre de oración (`.`, `!`, `?`) con fallback mínimo de 0.
+- `Reading time`: `words / 200`, redondeado al minuto superior, mínimo 1 min si hay texto.
+- `Pages`: `words / 250`, redondeado a un decimal.
+
+Las métricas se recalculan localmente y no bloquean el flujo de escritura.
 
 ---
 
@@ -307,10 +344,25 @@ El título del writing en la topbar es editable. Al hacer click abre un dropdown
 
 Se abre desde el icono de equalizer en la topbar. Ancho 248px, transición suave de width. Contiene:
 - Estado: Draft / Done (pills)
-- Visibilidad: Private / Public (pills)
-- Compartir con: input de username + botón añadir
+- Visibilidad: Private (v1 obligatorio) + opciones futuras (Shared/Public) detrás de feature flag
+- Compartir para testing: generación de link privado para evaluación cerrada (sin flujo completo de sharing de Fase 2)
 - Colección: pills con las colecciones existentes
-- Info: fecha creación, última modificación, palabras, respuestas
+- Info: fecha creación, última modificación, palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas, respuestas
+
+### Notes panel (sidebar derecho)
+
+Panel lateral derecho dedicado a notas al pie, independiente de Properties.
+
+Comportamiento mínimo:
+- Lista todas las notas en orden secuencial `[1]`, `[2]`, ...
+- Muestra preview del fragmento anclado y contenido de la nota
+- Permite editar nota existente
+- Permite eliminar nota existente
+- Acción `Add note` al final del panel
+- Cerrar panel con `Escape` o botón de cierre
+
+Regla de consistencia:
+- Cualquier alta/edición/baja desde Notes panel actualiza los nodos de `FootnoteExtension` y renumera referencias en el documento cuando aplica.
 
 ### Focus mode
 
