@@ -5,8 +5,8 @@
   "last_updated": "2026-03-18",
 
   "active_phase": {
-    "name": "Fase 0 — Cimientos",
-    "linear_project": "https://linear.app/z9ne/project/fase-0-cimientos-58af8acb9bb0",
+    "name": "Fase 1 — Escribir",
+    "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
     "roadmap_ref": "docs/ops/odessay-roadmap.md"
   },
 
@@ -57,7 +57,7 @@
       "linear_url": "https://linear.app/z9ne/issue/ODE-13",
       "commit": "3ca7f81",
       "date": "2026-03-17",
-      "notes": "PR #4 en revisión; globals.css con @theme (Tailwind v4); 11 componentes ShadCN configurados (card, button, input, textarea, dialog, popover, dropdown-menu, tooltip, badge, sheet, avatar); typecheck/lint/test OK"
+      "notes": "PR #4 mergeado; globals.css con @theme (Tailwind v4); 11 componentes ShadCN configurados (card, button, input, textarea, dialog, popover, dropdown-menu, tooltip, badge, sheet, avatar); typecheck/lint/test OK"
     },
     {
       "what": "Schema base Supabase + RLS + triggers críticos con hardening de review",
@@ -82,6 +82,14 @@
       "commit": "32be80b",
       "date": "2026-03-18",
       "notes": "Merge en main; localDB namespaced por usuario, compactación de mutaciones por writing_id, transporte vía /api/writings/[id], tests herméticos con Vitest y evidencia browser de drenado remoto con sesión válida"
+    },
+    {
+      "what": "Corrección del runtime auth/build de Next.js 15 para desk y páginas auth",
+      "issue": "ODE-17",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-17",
+      "commit": "80b6ae1",
+      "date": "2026-03-18",
+      "notes": "PR #7 mergeado; `transpilePackages` para `@supabase/ssr` y `Suspense` en /login y /signup; typecheck/lint/test/build OK"
     }
   ],
 
