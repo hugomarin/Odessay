@@ -2,6 +2,7 @@ import {
   LOCAL_DB_NAME,
   LOCAL_DB_STORES,
   LOCAL_DB_VERSION,
+  type LocalDBScope,
   type LocalWriting,
   type SyncMutation,
   type WritingListFilters,
@@ -18,10 +19,13 @@ type LocalDB = {
   syncQueue: {
     enqueue: (mutation: SyncMutation) => Promise<void>;
     getPending: () => Promise<SyncMutation[]>;
+    getCurrentForWriting: (writingId: string) => Promise<SyncMutation | null>;
     markSynced: (id: string) => Promise<void>;
     markFailed: (id: string, error: string, nextRetryAt: number) => Promise<void>;
   };
 };
+
+const DEFAULT_SCOPE = "anonymous";
 
 const assertBrowser = () => {
   if (typeof window === "undefined" || typeof indexedDB === "undefined") {
@@ -30,6 +34,37 @@ const assertBrowser = () => {
 };
 
 let dbPromise: Promise<IDBDatabase> | null = null;
+let databaseInstance: IDBDatabase | null = null;
+let currentScope = DEFAULT_SCOPE;
+
+const normalizeScope = (scope?: LocalDBScope) => {
+  const value = scope?.trim();
+  return value ? value.replace(/[^a-zA-Z0-9-_]/g, "_") : DEFAULT_SCOPE;
+};
+
+const getDatabaseName = () => `${LOCAL_DB_NAME}-${currentScope}`;
+
+const resetDatabaseHandle = () => {
+  if (databaseInstance) {
+    databaseInstance.close();
+    databaseInstance = null;
+  }
+
+  dbPromise = null;
+};
+
+export const setLocalDBScope = (scope?: LocalDBScope) => {
+  const nextScope = normalizeScope(scope);
+
+  if (nextScope === currentScope) {
+    return;
+  }
+
+  currentScope = nextScope;
+  resetDatabaseHandle();
+};
+
+export const getLocalDBScope = () => currentScope;
 
 const openDatabase = () => {
   assertBrowser();
@@ -39,7 +74,7 @@ const openDatabase = () => {
   }
 
   dbPromise = new Promise((resolve, reject) => {
-    const request = indexedDB.open(LOCAL_DB_NAME, LOCAL_DB_VERSION);
+    const request = indexedDB.open(getDatabaseName(), LOCAL_DB_VERSION);
 
     request.onupgradeneeded = () => {
       const database = request.result;
@@ -55,10 +90,27 @@ const openDatabase = () => {
           keyPath: "id",
         });
         syncStore.createIndex("by-created-at", "created_at", { unique: false });
+        syncStore.createIndex("by-writing-id", "writing_id", { unique: true });
+      } else {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const syncStore = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
+
+          if (!syncStore.indexNames.contains("by-writing-id")) {
+            syncStore.createIndex("by-writing-id", "writing_id", { unique: true });
+          }
+        }
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      databaseInstance = request.result;
+      databaseInstance.onversionchange = () => {
+        resetDatabaseHandle();
+      };
+      resolve(request.result);
+    };
     request.onerror = () =>
       reject(request.error ?? new Error("Unable to open IndexedDB for localDB."));
   });
@@ -131,6 +183,12 @@ const softDeleteWriting = async (id: string) => {
 
 const enqueueMutation = async (mutation: SyncMutation) => {
   await withStore(LOCAL_DB_STORES.syncMutations, "readwrite", async (store) => {
+    const existingKey = await runRequest(store.index("by-writing-id").getKey(mutation.writing_id));
+
+    if (existingKey) {
+      await runRequest(store.delete(existingKey));
+    }
+
     await runRequest(store.put(mutation));
   });
 };
@@ -143,6 +201,12 @@ const getPendingMutations = async () =>
     return mutations
       .filter((mutation) => (mutation.next_retry_at ?? 0) <= now)
       .sort((left, right) => left.created_at - right.created_at);
+  });
+
+const getCurrentMutationForWriting = async (writingId: string) =>
+  withStore(LOCAL_DB_STORES.syncMutations, "readonly", async (store) => {
+    const mutation = await runRequest(store.index("by-writing-id").get(writingId));
+    return (mutation as SyncMutation | undefined) ?? null;
   });
 
 const markMutationSynced = async (id: string) => {
@@ -162,12 +226,11 @@ const markMutationSynced = async (id: string) => {
 
   await runRequest(mutationStore.delete(id));
 
-  const remainingMutations = (await runRequest(mutationStore.getAll())) as SyncMutation[];
-  const hasPendingForWriting = remainingMutations.some(
-    (pendingMutation) => pendingMutation.writing_id === mutation.writing_id,
-  );
+  const remainingMutation = (await runRequest(
+    mutationStore.index("by-writing-id").get(mutation.writing_id),
+  )) as SyncMutation | undefined;
 
-  if (!hasPendingForWriting) {
+  if (!remainingMutation) {
     const writing = (await runRequest(writingStore.get(mutation.writing_id))) as
       | LocalWriting
       | undefined;
@@ -247,6 +310,7 @@ const localDBInstance: LocalDB = {
   syncQueue: {
     enqueue: enqueueMutation,
     getPending: getPendingMutations,
+    getCurrentForWriting: getCurrentMutationForWriting,
     markSynced: markMutationSynced,
     markFailed: markMutationFailed,
   },

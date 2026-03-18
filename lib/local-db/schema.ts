@@ -1,5 +1,5 @@
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 1;
+export const LOCAL_DB_VERSION = 2;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -60,3 +60,5 @@ export type WritingListFilters = {
   syncStatus?: LocalSyncStatus;
   includeDeleted?: boolean;
 };
+
+export type LocalDBScope = string | null | undefined;
