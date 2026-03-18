@@ -174,8 +174,13 @@ Trazabilidad: comentario en Linear ✅ | status.json actualizado ✅
 
 Acción: merge del PR + mover issue a Done en Linear.
 ```
+El REVIEW APROBADO es condición suficiente para ejecutar los tres pasos siguientes **sin esperar confirmación del humano**:
+
+→ Usar Linear MCP (`save_comment`) para postear el texto anterior como comentario en el issue.
 → Hacer merge del PR vía `gh pr merge {número} --squash` (o `--merge` según convención del repo).
-→ Mover el issue a Done en Linear.
+→ Usar Linear MCP (`save_issue` con `stateId` de Done) para mover el issue a Done.
+
+**No reportar "listo para merge" — ejecutar el merge y el cierre directamente.**
 
 **Si algún check falla:**
 ```
