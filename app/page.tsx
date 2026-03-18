@@ -1,48 +1,76 @@
-import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
+import { LocalFirstDemo } from "@/components/local-first/local-first-demo";
 
-type Todo = {
-  id: string | number;
-  name: string;
-};
-
-export default async function Home() {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("todos")
-    .select("id, name")
-    .order("id", { ascending: true })
-    .limit(20);
-
-  const todos = (data ?? []) as Todo[];
-
+export default function Home() {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-2xl flex-col gap-6 bg-background px-6 py-16 text-foreground">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Odessay + Supabase</h1>
-        <p className="text-sm text-muted-foreground">
-          Lectura SSR de ejemplo sobre la tabla <code>todos</code>.
-        </p>
-      </header>
+    <main className="min-h-screen bg-background px-6 py-16 text-foreground">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-10">
+        <header className="space-y-4">
+          <p className="text-xs uppercase tracking-[0.07em] text-[hsl(var(--ink-4))]">
+            ODE-16
+          </p>
+          <div className="space-y-3">
+            <h1 className="font-lora text-[36px] font-medium leading-[1.18] text-foreground">
+              Local-first foundation for Odessay
+            </h1>
+            <p className="max-w-3xl text-[15px] leading-7 text-[hsl(var(--ink-3))]">
+              IndexedDB persists writings immediately. A background worker drains the sync queue
+              and retries remote writes with exponential backoff when the network or Supabase is
+              unavailable.
+            </p>
+          </div>
 
-      {error ? (
-        <div className="rounded-md border-[0.5px] border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          Error consultando <code>todos</code>: {error.message}
-        </div>
-      ) : null}
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/login"
+              className="inline-flex h-9 items-center rounded-[8px] border-[0.5px] border-border px-4 text-sm font-medium text-[hsl(var(--ink-2))] transition-colors hover:bg-[hsl(var(--muted))]"
+            >
+              Login
+            </Link>
+            <Link
+              href="/signup"
+              className="inline-flex h-9 items-center rounded-[8px] bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[hsl(var(--ink-2))]"
+            >
+              Create account
+            </Link>
+            <Link
+              href="/desk"
+              className="inline-flex h-9 items-center rounded-[8px] border-[0.5px] border-border px-4 text-sm font-medium text-[hsl(var(--ink-2))] transition-colors hover:bg-[hsl(var(--muted))]"
+            >
+              Open desk
+            </Link>
+          </div>
+        </header>
 
-      <ul className="space-y-2">
-        {todos.map((todo) => (
-          <li key={todo.id} className="rounded-md border-[0.5px] border-border bg-card p-3">
-            {todo.name}
-          </li>
-        ))}
-      </ul>
+        <section className="grid gap-4 rounded-[10px] border-[0.5px] border-border bg-card p-6 shadow-sm md:grid-cols-3">
+          <article className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.07em] text-[hsl(var(--ink-4))]">
+              1. Persist local
+            </p>
+            <p className="text-sm leading-6 text-[hsl(var(--ink-3))]">
+              `localDB` abstracts IndexedDB and keeps browser storage details outside the app.
+            </p>
+          </article>
+          <article className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.07em] text-[hsl(var(--ink-4))]">
+              2. Queue mutations
+            </p>
+            <p className="text-sm leading-6 text-[hsl(var(--ink-3))]">
+              Every local write becomes a durable sync mutation with retries and error context.
+            </p>
+          </article>
+          <article className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.07em] text-[hsl(var(--ink-4))]">
+              3. Sync in background
+            </p>
+            <p className="text-sm leading-6 text-[hsl(var(--ink-3))]">
+              Once authenticated, the same queue drains remotely through `/api/writings/[id]`.
+            </p>
+          </article>
+        </section>
 
-      {!error && todos.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Sin filas en <code>todos</code> todavía.
-        </p>
-      ) : null}
+        <LocalFirstDemo />
+      </div>
     </main>
   );
 }

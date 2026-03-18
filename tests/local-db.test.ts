@@ -1,0 +1,74 @@
+import "fake-indexeddb/auto";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localDB, setLocalDBScope } from "../lib/local-db";
+import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
+
+const createWriting = (id: string, version: number): LocalWriting => ({
+  id,
+  title: "Untitled writing",
+  body_json: {
+    type: "doc",
+  },
+  body_text: `Draft ${version}`,
+  status: "draft",
+  visibility: "private",
+  version,
+  sync_status: "pending",
+  created_at: "2026-03-17T00:00:00.000Z",
+  updated_at: "2026-03-17T00:00:00.000Z",
+  local_updated_at: version,
+});
+
+const createMutation = (id: string, writingId: string, version: number): SyncMutation => ({
+  id,
+  writing_id: writingId,
+  operation: "upsert",
+  payload: {
+    body_json: {
+      type: "doc",
+    },
+    body_text: `Draft ${version}`,
+    status: "draft",
+    visibility: "private",
+    version,
+    updated_at: "2026-03-17T00:00:00.000Z",
+  },
+  created_at: version,
+  attempts: 0,
+});
+
+beforeEach(() => {
+  vi.stubGlobal("window", globalThis);
+});
+
+describe("localDB", () => {
+  it("isolates writings by user scope", async () => {
+    setLocalDBScope("user-a");
+    await localDB.writings.save(createWriting("writing-a", 1));
+
+    setLocalDBScope("user-b");
+    expect(await localDB.writings.get("writing-a")).toBeNull();
+
+    await localDB.writings.save(createWriting("writing-b", 1));
+    expect(await localDB.writings.get("writing-b")).not.toBeNull();
+
+    setLocalDBScope("user-a");
+    expect(await localDB.writings.get("writing-a")).not.toBeNull();
+    expect(await localDB.writings.get("writing-b")).toBeNull();
+  });
+
+  it("compacts sync mutations by writing id", async () => {
+    setLocalDBScope("queue-user");
+
+    await localDB.syncQueue.enqueue(createMutation("mutation-1", "writing-1", 1));
+    await localDB.syncQueue.enqueue(createMutation("mutation-2", "writing-1", 2));
+
+    const pending = await localDB.syncQueue.getPending();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]?.id).toBe("mutation-2");
+
+    const current = await localDB.syncQueue.getCurrentForWriting("writing-1");
+    expect(current?.id).toBe("mutation-2");
+    expect(current?.payload.version).toBe(2);
+  });
+});

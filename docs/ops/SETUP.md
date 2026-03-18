@@ -153,6 +153,21 @@ git branch       # debe estar en la rama del issue, no en main
 
 Si un test falla en CI pero pasa localmente porque "hay datos en staging", ese test está roto por diseño. Arreglarlo es parte del issue, no deuda técnica posterior.
 
+---
+
+## IndexedDB local-first (ODE-16)
+
+La capa `localDB` del MVP web usa IndexedDB y arranca automáticamente al cargar la app en browser. El storage queda namespaced por sesión: la base activa se crea como `odessay-local-first-{userId}` y, si no hay sesión, usa `odessay-local-first-anonymous`.
+
+Si necesitas inspeccionar o resetear el estado local durante desarrollo:
+
+1. Abre DevTools del navegador.
+2. Ve a `Application` → `Storage` → `IndexedDB`.
+3. Busca la base activa `odessay-local-first-{scope}`.
+4. Revisa los object stores `writings` y `sync-mutations`, o elimina la base completa para reiniciar el estado local de ese scope.
+
+El sync worker corre en background y reintenta al volver la conectividad (`online`) además del debounce normal de 1.5s.
+
 ## Variables de entorno
 
 `.env.example` es la plantilla canónica del proyecto. Crear `.env.local` en la raíz con:

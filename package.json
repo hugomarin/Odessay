@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "env:check": "node scripts/check-env.mjs",
     "env:check:template": "node scripts/check-env.mjs .env.example --template",
-    "test": "echo \"No tests yet for ODE-10\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
@@ -28,7 +28,8 @@
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.5.5"
+    "tailwind-merge": "^2.5.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",
@@ -37,8 +38,10 @@
     "@types/react-dom": "^19.0.2",
     "eslint": "^8.57.0",
     "eslint-config-next": "^15.0.0",
+    "fake-indexeddb": "^6.2.5",
     "postcss": "^8.4.49",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.0"
   }
 }
