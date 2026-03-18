@@ -219,7 +219,7 @@ Cada documento tiene un scope que determina cuándo lo lee el agente:
 
 ### WORKFLOW.md — instrucciones de issue específico
 
-Para issues con contexto o restricciones que van más allá de los docs estándar, se crea un `WORKFLOW.md` en la raíz de la rama. Sobreescribe `agent.md` para esa rama únicamente. Se borra al mergear — el historial vive en el PR.
+Para issues con contexto o restricciones que van más allá de los docs estándar, se crea un `WORKFLOW.md` en la raíz de la rama. Sobreescribe `AGENTS.md` para esa rama únicamente. Se borra al mergear — el historial vive en el PR.
 
 El patrón resuelve la tensión entre instrucciones globales (docs) e instrucciones puntuales (el issue específico): los docs no se contaminan con contexto temporal, y el agente tiene acceso a las instrucciones exactas para esa tarea.
 
@@ -256,7 +256,7 @@ skills/            → Q3, Q5, Q7, Q10
 reference/         → Q3
 config.json
 CLAUDE.md
-agent.md
+AGENTS.md
 ```
 
 **2. Completar las 10 preguntas** — redactar un documento por pregunta antes de escribir una línea de código. Las preguntas 1, 2 y 3 las responde el dueño del producto, no el agente.

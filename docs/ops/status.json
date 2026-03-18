@@ -90,6 +90,30 @@
       "commit": "80b6ae1",
       "date": "2026-03-18",
       "notes": "PR #7 mergeado; `transpilePackages` para `@supabase/ssr` y `Suspense` en /login y /signup; typecheck/lint/test/build OK"
+    },
+    {
+      "what": "Transición de fase operativa y actualización de status.json hacia Fase 1",
+      "issue": "ODE-18",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-18",
+      "commit": "96b04f4",
+      "date": "2026-03-18",
+      "notes": "PR #8 mergeado; fase activa actualizada a Fase 1, proyecto de Linear corregido y built history alineado con ODE-17"
+    },
+    {
+      "what": "Versionado de AGENTS.md como instrucciones oficiales del repositorio",
+      "issue": "ODE-20",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-20",
+      "commit": "c79523a",
+      "date": "2026-03-18",
+      "notes": "PR #9 mergeado; AGENTS.md agregado al repo como contrato operativo versionado para agentes"
+    },
+    {
+      "what": "Aclaración del flujo de merge y cierre tras review aprobado en skill-code-review",
+      "issue": "ODE-19",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-19",
+      "commit": "784a476",
+      "date": "2026-03-18",
+      "notes": "PR #10 mergeado; REVIEW APROBADO ahora explicita merge y cierre automático en GitHub y Linear"
     }
   ],
 

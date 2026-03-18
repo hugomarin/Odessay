@@ -128,7 +128,7 @@ Estructura de issues ejecutables, Definition of Done verificable, validaciones q
 /reference             → pregunta 3 (prototipos y screenshots)
 
 CLAUDE.md              → meta-instrucciones: orden de lectura, routing de skills
-agent.md               → resumen condensado para el agente
+AGENTS.md              → resumen condensado para el agente
 ```
 
 **Paso 2 — Auditar con el test de exhaustividad:**

@@ -435,7 +435,7 @@ Si un PR abierto toca los mismos archivos que el issue que vas a empezar: coment
 
 Inspirado en Symphony: si un issue requiere comportamiento del agente diferente al default (contexto extra, restricciones adicionales, pasos de validación específicos), el agente puede crear un `WORKFLOW.md` en la raíz de la rama antes de empezar.
 
-Este archivo sobreescribe `agent.md` para esa rama únicamente. Se commitea como parte del PR y se borra al mergear a main — nunca llega a producción.
+Este archivo sobreescribe `AGENTS.md` para esa rama únicamente. Se commitea como parte del PR y se borra al mergear a main — nunca llega a producción.
 
 ```markdown
 # WORKFLOW.md — ODY-XX
