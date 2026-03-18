@@ -2,7 +2,7 @@
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Al mover un issue a Done: agregar una entrada en 'built' con issue, linear_url, commit y fecha. Actualizar active_phase si la fase cambia.",
 
-  "last_updated": "2026-03-17",
+  "last_updated": "2026-03-18",
 
   "active_phase": {
     "name": "Fase 0 — Cimientos",
@@ -66,6 +66,22 @@
       "commit": "7269637",
       "date": "2026-03-17",
       "notes": "PR #5 mergeada en main; migraciones 20260317145743, 20260317221000 y 20260317223000; correspondencia diferida a shared/public y updates de status restringidos en ai_observations/invitations"
+    },
+    {
+      "what": "Autenticación Supabase con login/signup, middleware SSR y desk protegido",
+      "issue": "ODE-15",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-15",
+      "commit": "a986f85",
+      "date": "2026-03-18",
+      "notes": "PR #6 mergeado; rutas /login y /signup operativas, validación pública de username, redirección por sesión y /desk protegido por middleware"
+    },
+    {
+      "what": "Capa local-first web con IndexedDB, cola persistente, sync worker y validación offline→online autenticada",
+      "issue": "ODE-16",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-16",
+      "commit": "32be80b",
+      "date": "2026-03-18",
+      "notes": "Merge en main; localDB namespaced por usuario, compactación de mutaciones por writing_id, transporte vía /api/writings/[id], tests herméticos con Vitest y evidencia browser de drenado remoto con sesión válida"
     }
   ],
 
