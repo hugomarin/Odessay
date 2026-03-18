@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 const writingPayloadSchema = z.object({
   title: z.string().nullable().optional(),
@@ -40,11 +41,12 @@ async function getCurrentUserId() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  return { supabase, userId: user?.id ?? null };
+  return { userId: user?.id ?? null };
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { supabase, userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserId();
+  const supabase = createAdminClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -73,18 +75,21 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ data: currentWriting, error: null }, { status: 200 });
   }
 
-  const { data, error } = await supabase
-    .from("writings")
-    .upsert(
-      {
-        id,
-        author_id: userId,
-        ...parsed.data,
-      },
-      { onConflict: "id" },
-    )
-    .select()
-    .single();
+  const writingRecord = {
+    id,
+    author_id: userId,
+    ...parsed.data,
+  };
+
+  const query = currentWriting
+    ? supabase
+        .from("writings")
+        .update(writingRecord)
+        .eq("id", id)
+        .eq("author_id", userId)
+    : supabase.from("writings").insert(writingRecord);
+
+  const { data, error } = await query.select().single();
 
   if (error) {
     return jsonError(500, "DB_ERROR", error.message);
@@ -94,7 +99,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { supabase, userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserId();
+  const supabase = createAdminClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");

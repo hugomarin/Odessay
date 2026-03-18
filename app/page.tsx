@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { LocalFirstDemo } from "@/components/local-first/local-first-demo";
 
 export default function Home() {
@@ -17,6 +18,27 @@ export default function Home() {
               and retries remote writes with exponential backoff when the network or Supabase is
               unavailable.
             </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/login"
+              className="inline-flex h-9 items-center rounded-[8px] border-[0.5px] border-border px-4 text-sm font-medium text-[hsl(var(--ink-2))] transition-colors hover:bg-[hsl(var(--muted))]"
+            >
+              Login
+            </Link>
+            <Link
+              href="/signup"
+              className="inline-flex h-9 items-center rounded-[8px] bg-foreground px-4 text-sm font-medium text-background transition-colors hover:bg-[hsl(var(--ink-2))]"
+            >
+              Create account
+            </Link>
+            <Link
+              href="/desk"
+              className="inline-flex h-9 items-center rounded-[8px] border-[0.5px] border-border px-4 text-sm font-medium text-[hsl(var(--ink-2))] transition-colors hover:bg-[hsl(var(--muted))]"
+            >
+              Open desk
+            </Link>
           </div>
         </header>
 
@@ -42,7 +64,7 @@ export default function Home() {
               3. Sync in background
             </p>
             <p className="text-sm leading-6 text-[hsl(var(--ink-3))]">
-              The worker wakes up after debounce and when the browser returns online.
+              Once authenticated, the same queue drains remotely through `/api/writings/[id]`.
             </p>
           </article>
         </section>

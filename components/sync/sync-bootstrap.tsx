@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { setLocalDBScope } from "@/lib/local-db";
 import { getSyncWorker } from "@/lib/sync";
-import { createClient } from "@/utils/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 
 export function SyncBootstrap() {
   useEffect(() => {

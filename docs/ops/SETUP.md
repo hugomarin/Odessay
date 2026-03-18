@@ -157,16 +157,16 @@ Si un test falla en CI pero pasa localmente porque "hay datos en staging", ese t
 
 ## IndexedDB local-first (ODE-16)
 
-La capa `localDB` del MVP web usa IndexedDB y arranca automáticamente al cargar la app en browser. Si necesitas inspeccionar o resetear el estado local durante desarrollo:
+La capa `localDB` del MVP web usa IndexedDB y arranca automáticamente al cargar la app en browser. El storage queda namespaced por sesión: la base activa se crea como `odessay-local-first-{userId}` y, si no hay sesión, usa `odessay-local-first-anonymous`.
+
+Si necesitas inspeccionar o resetear el estado local durante desarrollo:
 
 1. Abre DevTools del navegador.
 2. Ve a `Application` → `Storage` → `IndexedDB`.
-3. Busca la base `odessay-local-first`.
-4. Revisa los object stores `writings` y `sync-mutations`, o elimina la base completa para reiniciar el estado local.
+3. Busca la base activa `odessay-local-first-{scope}`.
+4. Revisa los object stores `writings` y `sync-mutations`, o elimina la base completa para reiniciar el estado local de ese scope.
 
 El sync worker corre en background y reintenta al volver la conectividad (`online`) además del debounce normal de 1.5s.
-
----
 
 ## Variables de entorno
 
@@ -277,6 +277,17 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
    - verificación SQL en staging ✅
 
 Sin verificación SQL de schema y políticas, ODE-14 no se mueve a `In Review`.
+
+---
+
+### ODE-15 — Authentication flow
+
+La implementación de autenticación usa Supabase Auth con email + contraseña y los helpers SSR de `@supabase/ssr`.
+
+- `/login` y `/signup` son públicas, pero si ya existe sesión el middleware redirige a `/desk`.
+- `/desk`, `/write`, `/collections`, `/correspondences`, `/shared` y `/settings` quedan protegidas por middleware y redirigen a `/login?next=...` cuando no hay sesión.
+- El formulario de signup envía `display_name` y `username` dentro de `raw_user_meta_data`. El trigger `on_auth_user_created` usa esos valores para crear el `profile`.
+- La validación pública de username consulta `public.public_profiles`, no `profiles`, para respetar el hardening de RLS definido en `ODE-14`.
 
 ---
 
