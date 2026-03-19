@@ -23,6 +23,7 @@ export type DeskActivityRow = {
   withLabel: string
   dateLabel: string
   isNew: boolean
+  destinationHref: string | null
 }
 
 export type DeskActivityGroup = {
@@ -232,6 +233,7 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
       withLabel: rowState.withLabel,
       dateLabel: buildDateLabel(writing.updatedAt, now),
       isNew: rowState.isNew,
+      destinationHref: rowState.isNew ? null : `/write/${writing.id}`,
     }
 
     if (writing.updatedAt.toDateString() === now.toDateString()) {

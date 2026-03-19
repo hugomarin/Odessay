@@ -111,6 +111,21 @@ describe("buildDeskActivitySummary", () => {
     expect(summary.total).toBe(1)
     expect(summary.groups[0]?.rows[0]?.title).toBe("Earlier reply")
     expect(summary.groups[0]?.rows[0]?.stateTone).toBe("new-reply")
+    expect(summary.groups[0]?.rows[0]?.destinationHref).toBeNull()
     expect(summary.counts.received).toBe(1)
+  })
+
+  it("keeps editor route only for writings owned by the author context", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+    })
+
+    const todayRow = summary.groups.flatMap((group) => group.rows).find((row) => row.title === "Today draft")
+    const receivedRow = summary.groups.flatMap((group) => group.rows).find((row) => row.title === "Earlier reply")
+
+    expect(todayRow?.destinationHref).toBe("/write/draft-today")
+    expect(receivedRow?.destinationHref).toBeNull()
   })
 })

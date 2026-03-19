@@ -70,20 +70,37 @@ export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTab
               </tr>
             </thead>
             <tbody>
-              {group.rows.map((row) => (
+              {group.rows.map((row) => {
+                const isNavigable = Boolean(row.destinationHref)
+                const navigate = () => {
+                  if (row.destinationHref) {
+                    router.push(row.destinationHref)
+                  }
+                }
+
+                return (
                 <tr
                   key={row.id}
-                  role="link"
-                  tabIndex={0}
-                  aria-label={`Open writing ${row.title}`}
-                  onClick={() => router.push(`/write/${row.id}`)}
+                  role={isNavigable ? "link" : undefined}
+                  tabIndex={isNavigable ? 0 : -1}
+                  aria-label={isNavigable ? `Open writing ${row.title}` : `${row.title} is read-only on Desk`}
+                  onClick={navigate}
                   onKeyDown={(event) => {
+                    if (!isNavigable) {
+                      return
+                    }
+
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault()
-                      router.push(`/write/${row.id}`)
+                      navigate()
                     }
                   }}
-                  className="cursor-pointer border-b-[0.5px] border-border transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className={cn(
+                    "border-b-[0.5px] border-border transition-colors",
+                    isNavigable
+                      ? "cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                      : "cursor-default bg-muted/20",
+                  )}
                 >
                   <td className="px-9 py-[18px] align-middle">
                     {row.isNew ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-[hsl(220,50%,55%)]" /> : null}
@@ -100,10 +117,16 @@ export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTab
                       {row.stateLabel}
                     </span>
                   </td>
-                  <td className="px-4 py-[18px] align-middle text-[13px] text-ink-2">{row.withLabel}</td>
+                  <td className="px-4 py-[18px] align-middle text-[13px] text-ink-2">
+                    {row.withLabel}
+                    {!isNavigable ? (
+                      <span className="block pt-1 text-[11px] text-ink-4">Read-only in Desk</span>
+                    ) : null}
+                  </td>
                   <td className="px-9 py-[18px] text-right align-middle text-[13px] text-ink-4">{row.dateLabel}</td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>
