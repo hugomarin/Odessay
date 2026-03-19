@@ -163,6 +163,14 @@
       "commit": null,
       "date": "2026-03-19",
       "notes": "Issue en In Review con rechazo: ajustar generación UUID en fallback y agregar tests de transiciones de estado de sync antes del siguiente ciclo de review."
+    },
+    {
+      "what": "Flujo de trazabilidad endurecido con gates de CI y sincronización de docs operativas",
+      "issue": "ODE-30",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-30",
+      "commit": "ddcaf73",
+      "date": "2026-03-19",
+      "notes": "Nueva máquina de estados canónica en Linear, separación de decisiones vigentes/históricas y gates automáticos: process-sync, status-drift y delivery-gate."
     }
   ],
 
