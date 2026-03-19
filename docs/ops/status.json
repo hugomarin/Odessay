@@ -187,6 +187,14 @@
       "commit": "ddcaf73",
       "date": "2026-03-19",
       "notes": "Nueva máquina de estados canónica en Linear, separación de decisiones vigentes/históricas y gates automáticos: process-sync, status-drift y delivery-gate."
+    },
+    {
+      "what": "Closed sharing links de evaluación UX con preview público read-only y revocación desde Properties",
+      "issue": "ODE-27",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-27",
+      "commit": "42c3226",
+      "date": "2026-03-19",
+      "notes": "API /api/writings/[id]/share-test-link (GET/POST/DELETE), ruta pública /preview/[token], controles Generate/Copy/Revoke en panel Properties y tests unitarios de tokens/acceso."
     }
   ],
 
