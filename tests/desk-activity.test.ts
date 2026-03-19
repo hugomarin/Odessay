@@ -42,7 +42,6 @@ describe("buildDeskActivitySummary", () => {
       local_updated_at: 4,
       status: "finished",
       visibility: "shared",
-      correspondence_id: "corr-1",
     }),
     createWriting({
       id: "reply-earlier",
@@ -96,6 +95,7 @@ describe("buildDeskActivitySummary", () => {
       "Weekly correspondence",
       "Earlier reply",
     ])
+    expect(correspondence.counts.correspondence).toBe(2)
 
     expect(withResponses.total).toBe(1)
     expect(withResponses.groups[0]?.rows[0]?.stateLabel).toBe("Replied")

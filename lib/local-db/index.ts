@@ -26,6 +26,7 @@ type LocalDB = {
 };
 
 const DEFAULT_SCOPE = "anonymous";
+type LocalDBScopeListener = (scope: string) => void;
 
 const assertBrowser = () => {
   if (typeof window === "undefined" || typeof indexedDB === "undefined") {
@@ -36,6 +37,7 @@ const assertBrowser = () => {
 let dbPromise: Promise<IDBDatabase> | null = null;
 let databaseInstance: IDBDatabase | null = null;
 let currentScope = DEFAULT_SCOPE;
+const scopeListeners = new Set<LocalDBScopeListener>();
 
 const normalizeScope = (scope?: LocalDBScope) => {
   const value = scope?.trim();
@@ -62,9 +64,18 @@ export const setLocalDBScope = (scope?: LocalDBScope) => {
 
   currentScope = nextScope;
   resetDatabaseHandle();
+  scopeListeners.forEach((listener) => listener(nextScope));
 };
 
 export const getLocalDBScope = () => currentScope;
+
+export const subscribeToLocalDBScopeChanges = (listener: LocalDBScopeListener) => {
+  scopeListeners.add(listener);
+
+  return () => {
+    scopeListeners.delete(listener);
+  };
+};
 
 const openDatabase = () => {
   assertBrowser();

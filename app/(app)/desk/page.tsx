@@ -5,7 +5,7 @@ import { SignOutButton } from "@/components/auth/sign-out-button"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { DeskFilterBar } from "@/components/desk/desk-filter-bar"
 import { DeskHero } from "@/components/desk/desk-hero"
-import { getLocalDBScope, localDB } from "@/lib/local-db"
+import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import {
   buildDeskActivitySummary,
   type DeskActivityFilter,
@@ -57,6 +57,12 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
+  }, [activeFilter, loadDeskActivity])
+
+  useEffect(() => {
+    return subscribeToLocalDBScopeChanges(() => {
+      void loadDeskActivity(activeFilter)
+    })
   }, [activeFilter, loadDeskActivity])
 
   useEffect(() => {

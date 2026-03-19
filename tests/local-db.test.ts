@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { localDB, setLocalDBScope } from "../lib/local-db";
+import { localDB, setLocalDBScope, subscribeToLocalDBScopeChanges } from "../lib/local-db";
 import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
 
 const createWriting = (id: string, version: number): LocalWriting => ({
@@ -70,5 +70,22 @@ describe("localDB", () => {
     const current = await localDB.syncQueue.getCurrentForWriting("writing-1");
     expect(current?.id).toBe("mutation-2");
     expect(current?.payload.version).toBe(2);
+  });
+
+  it("notifies listeners when the local DB scope changes", () => {
+    const onScopeChange = vi.fn();
+    const unsubscribe = subscribeToLocalDBScopeChanges(onScopeChange);
+    const firstScope = `scope-${Date.now()}`;
+    const secondScope = `${firstScope}-next`;
+
+    setLocalDBScope(firstScope);
+    setLocalDBScope(firstScope);
+    setLocalDBScope(secondScope);
+    unsubscribe();
+    setLocalDBScope(`${secondScope}-ignored`);
+
+    expect(onScopeChange).toHaveBeenCalledTimes(2);
+    expect(onScopeChange).toHaveBeenNthCalledWith(1, firstScope);
+    expect(onScopeChange).toHaveBeenNthCalledWith(2, secondScope);
   });
 });

@@ -1,3 +1,6 @@
+"use client"
+
+import { useRouter } from "next/navigation"
 import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
 import { cn } from "@/lib/utils"
 
@@ -15,6 +18,8 @@ const BADGE_STYLES: Record<DeskBadgeTone, string> = {
 }
 
 export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTableProps) {
+  const router = useRouter()
+
   if (isLoading) {
     return (
       <div
@@ -66,7 +71,20 @@ export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTab
             </thead>
             <tbody>
               {group.rows.map((row) => (
-                <tr key={row.id} className="border-b-[0.5px] border-border transition-colors hover:bg-muted/60">
+                <tr
+                  key={row.id}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Open writing ${row.title}`}
+                  onClick={() => router.push(`/write/${row.id}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      router.push(`/write/${row.id}`)
+                    }
+                  }}
+                  className="cursor-pointer border-b-[0.5px] border-border transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                >
                   <td className="px-9 py-[18px] align-middle">
                     {row.isNew ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-[hsl(220,50%,55%)]" /> : null}
                   </td>

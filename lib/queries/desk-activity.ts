@@ -184,7 +184,11 @@ const buildMetas = (writings: LocalWriting[], userId?: string | null): WritingMe
         excerpt: buildExcerpt(writing.body_text),
         updatedAt,
         wordCount: buildWordCount(writing.body_text),
-        isCorrespondence: Boolean(writing.correspondence_id || writing.parent_id),
+        isCorrespondence: Boolean(
+          writing.correspondence_id ||
+            writing.parent_id ||
+            (childrenByParent.get(writing.id) ?? 0) > 0,
+        ),
         hasResponses: (childrenByParent.get(writing.id) ?? 0) > 0,
         isReceived,
         status: writing.status,
