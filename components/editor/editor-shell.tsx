@@ -4,7 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { useRouter } from "next/navigation"
+import {
+  mapLocalSyncStatusToSaveState,
+  mapSyncLifecycleToSaveState,
+  type EditorSaveState,
+} from "@/components/editor/save-state"
 import { WritingEditorContent } from "@/components/editor/editor-content"
+import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
@@ -13,14 +19,13 @@ import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
 
 type EditorShellProps = {
   writingId?: string
 }
-
-type SyncStatus = "saved" | "saving" | "error"
 
 type SelectionSnapshot = {
   from: number
@@ -31,11 +36,22 @@ type SelectionSnapshot = {
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
 const createWritingId = () => {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID()
   }
 
-  return `writing-${Date.now()}`
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const values = new Uint8Array(16)
+    crypto.getRandomValues(values)
+
+    values[6] = (values[6] & 0x0f) | 0x40
+    values[8] = (values[8] & 0x3f) | 0x80
+
+    const hex = Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("")
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+
+  throw new Error("Unable to generate a UUID for the writing.")
 }
 
 const getWordCount = (editor: Editor | null) => {
@@ -61,8 +77,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
   const [wordCount, setWordCount] = useState(0)
-  const [syncStatus, setSyncStatus] = useState<SyncStatus>("saved")
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
   const [version, setVersion] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
 
@@ -120,10 +135,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setVersion(nextVersion)
         createdAtRef.current = baseCreatedAt
         setCreatedAt(baseCreatedAt)
-        setLastSavedAt(nowIso)
-        setSyncStatus("saved")
+        setSyncStatus(
+          mapLocalSyncStatusToSaveState(
+            nextWriting.sync_status,
+            typeof navigator === "undefined" ? true : navigator.onLine,
+          ),
+        )
       } catch {
-        setSyncStatus("error")
+        setSyncStatus(typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving")
       }
     },
     [currentWritingId, routeWritingId, router],
@@ -218,14 +237,19 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setTitle(localWriting.title ?? "Untitled writing")
         setVersion(localWriting.version)
         setCreatedAt(localWriting.created_at)
-        setLastSavedAt(localWriting.updated_at)
+        setSyncStatus(
+          mapLocalSyncStatusToSaveState(
+            localWriting.sync_status,
+            typeof navigator === "undefined" ? true : navigator.onLine,
+          ),
+        )
         setWordCount(getWordCount(editor))
         setMarkdownValue(getEditorMarkdown(editor))
       } else {
         setTitle("Untitled writing")
         setVersion(0)
         setCreatedAt(null)
-        setLastSavedAt(null)
+        setSyncStatus("saved")
       }
 
       hydratedIdRef.current = currentWritingId
@@ -237,6 +261,20 @@ export function EditorShell({ writingId }: EditorShellProps) {
       cancelled = true
     }
   }, [currentWritingId, editor])
+
+  useEffect(() => {
+    if (!currentWritingId) {
+      return
+    }
+
+    return subscribeToSyncStatusChanges((event) => {
+      if (event.writingId !== currentWritingId) {
+        return
+      }
+
+      setSyncStatus(mapSyncLifecycleToSaveState(event.status))
+    })
+  }, [currentWritingId])
 
   useEffect(() => {
     return () => {
@@ -471,18 +509,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
   }, [footnoteModalOpen, handleRunAction, isFocusMode, linkModalOpen, renameModalOpen])
 
-  const statusLabel = useMemo(() => {
-    if (syncStatus === "saving") {
-      return "Saving..."
-    }
-
-    if (syncStatus === "error") {
-      return "Sync failed"
-    }
-
-    return "Saved"
-  }, [syncStatus])
-
   return (
     <section
       id="editor"
@@ -517,21 +543,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           onMarkdownChange={handleMarkdownChange}
         />
 
-        {!isFocusMode ? (
-          <div
-            id="editor-statusbar"
-            data-section="editor-statusbar"
-            data-testid="editor-statusbar"
-            className="EditorStatusbar flex h-8 items-center justify-between border-t-[0.5px] border-border px-4 text-[11px] text-ink-4"
-          >
-            <p>{statusLabel}</p>
-            <div className="flex items-center gap-3">
-              <span>{wordCount.toLocaleString()} words</span>
-              {lastSavedAt ? <span>Last save {new Date(lastSavedAt).toLocaleTimeString()}</span> : null}
-              <span>{mode === "markdown" ? "Markdown" : "Rich"}</span>
-            </div>
-          </div>
-        ) : null}
+        {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} /> : null}
       </div>
 
       <RenameWritingModal

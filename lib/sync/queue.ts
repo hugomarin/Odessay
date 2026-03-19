@@ -1,5 +1,6 @@
 import { localDB } from "@/lib/local-db";
 import type { LocalWriting, SyncMutation } from "@/lib/local-db/schema";
+import { emitSyncStatusChange } from "@/lib/sync/events";
 import { getSyncWorker } from "@/lib/sync/worker";
 
 const createMutationId = () => {
@@ -36,6 +37,11 @@ const enqueueMutation = async (
     payload: toRemotePayload(writing),
     created_at: Date.now(),
     attempts: 0,
+  });
+
+  emitSyncStatusChange({
+    writingId: writing.id,
+    status: "pending",
   });
 
   getSyncWorker().schedule();

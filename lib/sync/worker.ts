@@ -1,5 +1,6 @@
 import { localDB, type LocalDB } from "@/lib/local-db";
 import type { SyncMutation } from "@/lib/local-db/schema";
+import { emitSyncStatusChange } from "@/lib/sync/events";
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry";
 
 type SyncTransport = {
@@ -134,6 +135,15 @@ class SyncWorker {
     }
 
     if (!this.isOnline()) {
+      const pendingMutations = await this.localDb.syncQueue.getPending();
+
+      pendingMutations.forEach((mutation) => {
+        emitSyncStatusChange({
+          writingId: mutation.writing_id,
+          status: "offline",
+        });
+      });
+
       return;
     }
 
@@ -162,6 +172,11 @@ class SyncWorker {
     }
 
     try {
+      emitSyncStatusChange({
+        writingId: mutation.writing_id,
+        status: "syncing",
+      });
+
       if (mutation.operation === "delete") {
         await this.transport.deleteWriting(mutation.writing_id, mutation.payload);
       } else {
@@ -169,6 +184,11 @@ class SyncWorker {
       }
 
       await this.localDb.syncQueue.markSynced(mutation.id);
+
+      emitSyncStatusChange({
+        writingId: mutation.writing_id,
+        status: "synced",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown sync error";
 
@@ -177,6 +197,11 @@ class SyncWorker {
         operation: mutation.operation,
         attempt: mutation.attempts + 1,
         error: message,
+      });
+
+      emitSyncStatusChange({
+        writingId: mutation.writing_id,
+        status: "retrying",
       });
 
       if (!canRetryMutation(mutation.attempts + 1)) {
