@@ -62,17 +62,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const { id } = await context.params;
   const { data: currentWriting, error: currentWritingError } = await supabase
     .from("writings")
-    .select("id, version")
+    .select("id")
     .eq("id", id)
     .eq("author_id", userId)
     .maybeSingle();
 
   if (currentWritingError) {
     return jsonError(500, "DB_ERROR", currentWritingError.message);
-  }
-
-  if (currentWriting && currentWriting.version > parsed.data.version) {
-    return NextResponse.json({ data: currentWriting, error: null }, { status: 200 });
   }
 
   const writingRecord = {
@@ -116,17 +112,17 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
   const { data: currentWriting, error: currentWritingError } = await supabase
     .from("writings")
-    .select("id, version")
+    .select("id")
     .eq("id", id)
     .eq("author_id", userId)
-    .single();
+    .maybeSingle();
 
   if (currentWritingError) {
     return jsonError(500, "DB_ERROR", currentWritingError.message);
   }
 
-  if (currentWriting.version > parsed.data.version) {
-    return NextResponse.json({ data: currentWriting, error: null }, { status: 200 });
+  if (!currentWriting) {
+    return jsonError(404, "NOT_FOUND", "Writing not found.");
   }
 
   const { data, error } = await supabase
