@@ -10,6 +10,10 @@
     "typecheck": "tsc --noEmit",
     "env:check": "node scripts/check-env.mjs",
     "env:check:template": "node scripts/check-env.mjs .env.example --template",
+    "ops:process:sync": "node scripts/check-process-sync.mjs",
+    "ops:status:drift": "node scripts/check-status-drift.mjs",
+    "ops:status:drift:strict": "node scripts/check-status-drift.mjs --strict",
+    "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
     "test": "vitest run"
   },
   "dependencies": {

@@ -24,9 +24,10 @@ Defines quién hace qué. Antes de ejecutar un issue, el agente debe saber si ha
 - Escribir código, crear archivos, modificar configuración
 - Crear migraciones de base de datos y ejecutarlas en staging
 - Correr `typecheck`, `lint` y `tests` — pegar output en el PR
-- Abrir PRs y mover issues en Linear entre estados (`Backlog` → `In Progress` → `In Review`)
+- Abrir PRs y mover issues en Linear entre estados (`Todo` → `In Progress` → `In Review`)
 - Crear `.env.example` con las keys esperadas (valores vacíos)
-- Actualizar `docs/ops/status.json` y `docs/ops/SETUP.md` cuando el issue lo requiere
+- Actualizar `docs/ops/status.json` en **todo issue** que se mueve a `In Review` (puente GitHub ↔ Linear ↔ roadmap)
+- Actualizar `docs/ops/SETUP.md` cuando cambian reglas operativas, tools o permisos
 - Mover el issue a `Done` una vez que el PR está mergeado y el humano lo confirma
 
 ### Responsabilidades en Linear — tabla de referencia rápida
@@ -36,11 +37,23 @@ Defines quién hace qué. Antes de ejecutar un issue, el agente debe saber si ha
 | Crear proyectos (uno por fase) | Agente (bajo instrucción explícita) |
 | Crear issues dentro del proyecto | Agente (bajo instrucción explícita) |
 | Asignar issues a una persona | **Humano** |
-| Mover issue a `In Progress` | Agente (al empezar a trabajar) |
+| Mover issue de `Todo` a `In Progress` | Agente (al empezar a trabajar) |
 | Mover issue a `In Review` | Agente (al abrir el PR) |
+| Si review es rechazado: `In Review` → `In Progress` | Agente revisor (al rechazar) |
 | Mover issue a `Done` | Agente (tras confirmación de merge del humano) |
 | Agregar comentarios de bloqueo | Agente (cuando encuentra un bloqueador) |
 | Crear milestones | Agente (solo si la fase los justifica, ver §Milestone) |
+
+### Máquina de estados canónica (Linear)
+
+`Todo` → `In Progress` → `In Review` → `Done`
+
+Transición de rechazo:
+`In Review` → `In Progress`
+
+Regla de handoff humano:
+- Si el issue requiere checkpoint humano, el issue se mantiene en `In Progress` con comentario `⏸ HANDOFF REQUERIDO`.
+- El agente no mueve el issue a `In Review` hasta recibir confirmación explícita del handoff.
 
 ### Issues con checkpoint humano (requieren handoff)
 
@@ -119,6 +132,9 @@ config.registry
   .filter(doc => doc.scope === 'always')
   .forEach(doc => console.log(' -', doc.path));
 "
+
+# 1c. Verificar drift entre commits y status.json (modo informativo)
+npm run ops:status:drift
 
 # 2. Verificar Node
 node --version   # debe ser >= 20
@@ -347,7 +363,7 @@ Archivos base esperados tras ODE-10:
 
 | Tool | Para qué | Degradación si no está |
 |---|---|---|
-| GitHub MCP o `gh` CLI | Crear PRs, ver PRs abiertos, detectar conflictos de archivos | El agente hace commit + push manual; el PR lo abre el humano |
+| GitHub MCP o `gh` CLI | Crear PRs, ver PRs abiertos, detectar conflictos de archivos | El agente hace commit + push + PR. Si no hay acceso a GitHub tools, el humano abre el PR con instrucciones del agente |
 | Linear MCP | Leer issues, mover estados, comentar bloqueos | El humano pasa el issue como texto al agente manualmente |
 | Supabase MCP | Verificar schema y RLS en staging post-migración | La verificación se hace manualmente desde el dashboard |
 | Playwright MCP | Validación E2E del flujo antes de mover a In Review | La validación la hace el humano manualmente |
@@ -393,26 +409,26 @@ chore/{issue-id}-{descripcion-corta}  → infra, config, dependencias
 
 Ejemplos:
 ```
-feat/ODY-12-writings-table
-fix/ODY-34-autosave-debounce
-docs/ODY-05-setup-guide
+feat/ODE-12-writings-table
+fix/ODE-34-autosave-debounce
+docs/ODE-05-setup-guide
 ```
 
 El agente crea la rama desde `main` actualizado:
 ```bash
 git checkout main && git pull origin main
-git checkout -b feat/ODY-XX-descripcion
+git checkout -b feat/ODE-XX-descripcion
 ```
 
 ### Commits
 
-Formato: `tipo(scope): descripción [ODY-XX]`
+Formato: `tipo(scope): descripción [ODE-XX]`
 
 ```bash
-feat(db): add writings table with RLS policies [ODY-12]
-feat(editor): implement TipTap base with auto-save [ODY-18]
-fix(editor): correct debounce timing on local save [ODY-18]
-test(editor): add E2E test for auto-save flow [ODY-18]
+feat(db): add writings table with RLS policies [ODE-12]
+feat(editor): implement TipTap base with auto-save [ODE-18]
+fix(editor): correct debounce timing on local save [ODE-18]
+test(editor): add E2E test for auto-save flow [ODE-18]
 ```
 
 **Cuándo commitear:** Al completar una unidad lógica dentro del issue. No después de cada archivo — no al final de todo. El punto óptimo es: una vez que algo funciona de forma independiente y no rompe lo anterior.
@@ -438,7 +454,7 @@ Inspirado en Symphony: si un issue requiere comportamiento del agente diferente 
 Este archivo sobreescribe `AGENTS.md` para esa rama únicamente. Se commitea como parte del PR y se borra al mergear a main — nunca llega a producción.
 
 ```markdown
-# WORKFLOW.md — ODY-XX
+# WORKFLOW.md — ODE-XX
 
 ## Contexto adicional
 Este issue toca el componente FootnoteExtension. Leer odessay-editor.md §FootnoteExtension antes de empezar.
@@ -463,13 +479,31 @@ Si el issue no tiene particularidades, no se crea WORKFLOW.md. Es una herramient
 6. Ejecutar validaciones (typecheck, lint, tests) — pegar output en el PR
 7. Abrir PR con descripción del issue
 8. Comentar en el issue de Linear: link al PR + SHA del commit + resultado de validaciones
-9. Mover issue a In Review en Linear
-── STOP: el turno del agente termina aquí ──────────────────────────────────
-10. El revisor (agente o humano) aprueba y hace merge
-11. Una vez mergeado: mover issue a Done y agregar entrada en `docs/ops/status.json`
+9. Actualizar `docs/ops/status.json` con entrada `built[]` del issue (issue, linear_url, commit, date, notes)
+10. Correr `npm run ops:delivery:gate` (debe quedar OK)
+11. Mover issue a In Review en Linear
+── STOP: el turno del agente implementador termina aquí ────────────────────
+12. El revisor (agente o humano) aprueba
+13. El humano hace merge del PR
+14. Tras merge confirmado: mover issue a Done en Linear
 ```
 
-**Regla de parada — una issue a la vez:** Al llegar al paso 9, el agente detiene todo trabajo. No abre nuevas ramas. No empieza el siguiente issue. No hace commits en ningún otro branch. Su tarea termina cuando el issue está en In Review. El siguiente issue solo puede empezar después de que el PR sea mergeado y el issue esté en Done.
+Si el review es rechazado:
+```
+1. Revisor comenta hallazgos en Linear
+2. Mover issue de In Review → In Progress
+3. Implementador corrige
+4. Repetir flujo desde validaciones + PR
+```
+
+**Gate en CI:** cada PR a `main` ejecuta `.github/workflows/traceability-gates.yml`, que corre:
+- `npm run ops:process:sync` (si cambia proceso, obliga actualizar SETUP + PM skill + Code Review skill juntos)
+- `npm run ops:status:drift:strict`
+- `npm run ops:delivery:gate`
+
+Si alguno falla, el PR no cumple trazabilidad operativa.
+
+**Regla de parada — una issue a la vez:** Al llegar al paso 11, el agente detiene todo trabajo. No abre nuevas ramas. No empieza el siguiente issue. No hace commits en ningún otro branch. Su tarea termina cuando el issue está en In Review. El siguiente issue solo puede empezar después de que el PR sea mergeado y el issue esté en Done.
 
 **Nota sobre el merge:** el owner del proyecto es no técnico — no hace code review del código. El merge es una aprobación de go/no-go basada en el proof of work que el agente dejó en el PR y en el comentario de Linear. Si las validaciones pasaron y el agente las documentó, el humano aprueba. Si algo falta o hay un error en el output, el humano rechaza y el agente debe corregir antes de volver a pedir merge.
 

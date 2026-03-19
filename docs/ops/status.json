@@ -1,8 +1,8 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
-  "_maintenance": "Al mover un issue a Done: agregar una entrada en 'built' con issue, linear_url, commit y fecha. Actualizar active_phase si la fase cambia.",
+  "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
 
-  "last_updated": "2026-03-18",
+  "last_updated": "2026-03-19",
 
   "active_phase": {
     "name": "Fase 1 — Escribir",
@@ -24,7 +24,7 @@
       "ODE-28",
       "ODE-29"
     ],
-    "notes": "Backlog de ejecución de Fase 1 creado en Linear el 2026-03-18, iniciando por actualización de roadmap y alcance (ODE-21)."
+    "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review."
   },
 
   "built": [
@@ -130,21 +130,87 @@
       "linear_url": "https://linear.app/z9ne/issue/ODE-19",
       "commit": "784a476",
       "date": "2026-03-18",
-      "notes": "PR #10 mergeado; REVIEW APROBADO ahora explicita merge y cierre automático en GitHub y Linear"
+      "notes": "PR #10 mergeado; se formalizó el protocolo de REVIEW APROBADO y trazabilidad de cierre."
+    },
+    {
+      "what": "Ajuste de alcance de Fase 1 y definición operativa de cierre",
+      "issue": "ODE-21",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-21",
+      "commit": "23227b2",
+      "date": "2026-03-18",
+      "notes": "Roadmap de Fase 1 refinado + DoD formalizado para secuencia de ejecución."
+    },
+    {
+      "what": "Sidebar global autenticado con 3 estados y persistencia de sesión",
+      "issue": "ODE-22",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-22",
+      "commit": "04e60b2",
+      "date": "2026-03-19",
+      "notes": "Incluido en PR #11 (branch codex/ode-23-editor-core); corrige state carry/toggle y accesibilidad icon-only."
+    },
+    {
+      "what": "Editor TipTap core con paridad markdown, modales y shortcuts",
+      "issue": "ODE-23",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-23",
+      "commit": "976937b",
+      "date": "2026-03-19",
+      "notes": "PR #11 mergeado; focus mode texto-only, debounce markdown blindado y footnotes integradas con extensión."
+    },
+    {
+      "what": "Auto-save local-first del editor con estados de sync en status bar (pendiente fixes de review)",
+      "issue": "ODE-24",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-24",
+      "commit": null,
+      "date": "2026-03-19",
+      "notes": "Issue en In Review con rechazo: ajustar generación UUID en fallback y agregar tests de transiciones de estado de sync antes del siguiente ciclo de review."
     }
   ],
 
-  "decisions": [
-    { "decision": "Local-first con IndexedDB (no localStorage)", "doc": "docs/core/odessay-arquitectura.md" },
-    { "decision": "body_json como fuente de verdad (no body_markdown)", "doc": "docs/core/odessay-modelo-datos.md" },
-    { "decision": "Last-write-wins silencioso para conflictos de sync", "doc": "docs/features/odessay-sync.md" },
-    { "decision": "ShadCN tres capas de adaptación", "doc": "skills/skill-design/SKILL.md" },
-    { "decision": "TanStack Query + Zustand (2 slices únicamente)", "doc": "skills/skill-frontend/SKILL.md" },
-    { "decision": "Validación con react-hook-form + Zod, onBlur", "doc": "skills/skill-frontend/SKILL.md" },
-    { "decision": "Login/Signup con login-02 de ShadCN", "doc": "docs/core/odessay-paginas.md" },
-    { "decision": "FootnoteExtension custom (no existe en ecosistema)", "doc": "docs/features/odessay-editor.md" },
-    { "decision": "Branch protection no disponible — fallback por PR obligatorio", "doc": "docs/ops/SETUP.md" },
-    { "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados", "doc": "docs/ops/SETUP.md" },
-    { "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático", "doc": "docs/core/odessay-stack.md" }
-  ]
+  "decisions_global": [
+    {
+      "decision": "Local-first con IndexedDB (no localStorage)",
+      "doc": "docs/core/odessay-arquitectura.md"
+    },
+    {
+      "decision": "body_json como fuente de verdad (no body_markdown)",
+      "doc": "docs/core/odessay-modelo-datos.md"
+    },
+    {
+      "decision": "Last-write-wins silencioso para conflictos de sync",
+      "doc": "docs/features/odessay-sync.md"
+    },
+    {
+      "decision": "ShadCN tres capas de adaptación",
+      "doc": "skills/skill-design/SKILL.md"
+    },
+    {
+      "decision": "TanStack Query + Zustand (2 slices únicamente)",
+      "doc": "skills/skill-frontend/SKILL.md"
+    },
+    {
+      "decision": "Validación con react-hook-form + Zod, onBlur",
+      "doc": "skills/skill-frontend/SKILL.md"
+    },
+    {
+      "decision": "Branch protection no disponible — fallback por PR obligatorio",
+      "doc": "docs/ops/SETUP.md"
+    },
+    {
+      "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados",
+      "doc": "docs/ops/SETUP.md"
+    },
+    {
+      "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
+      "doc": "docs/core/odessay-stack.md"
+    }
+  ],
+
+  "decisions_phase_active": [
+    {
+      "decision": "FootnoteExtension custom (no existe en ecosistema)",
+      "doc": "docs/features/odessay-editor.md"
+    }
+  ],
+
+  "decisions_archive_ref": "docs/ops/decisions-archive.md"
 }

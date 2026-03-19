@@ -107,6 +107,13 @@
       "scope": "always"
     },
     {
+      "path": "docs/ops/decisions-archive.md",
+      "type": "ops",
+      "description": "Archivo histórico de decisiones por fase. Referencia para contexto pasado sin contaminar el estado operativo vigente.",
+      "scope": "conditional",
+      "trigger": "planning"
+    },
+    {
       "path": "docs/ops/SETUP.md",
       "type": "ops",
       "description": "Pre-flight del agente: entorno, variables de entorno, tools requeridos, permisos, estrategia de Git, frontera humano/agente, WORKFLOW.md convention.",
@@ -273,7 +280,8 @@
       "id": 8,
       "question": "¿Qué existe hoy en el codebase?",
       "documents": [
-        { "path": "docs/ops/status.json", "scope": "always" }
+        { "path": "docs/ops/status.json", "scope": "always" },
+        { "path": "docs/ops/decisions-archive.md", "scope": "reference", "trigger": "planning" }
       ]
     },
     {
@@ -359,7 +367,8 @@
       "skills/skill-ux-testing/SKILL.md"
     ],
     "planning": [
-      "docs/ops/odessay-roadmap.md"
+      "docs/ops/odessay-roadmap.md",
+      "docs/ops/decisions-archive.md"
     ]
   }
 }

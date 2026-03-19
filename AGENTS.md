@@ -46,6 +46,7 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 
 ### Paso 4 — Antes de abrir PR (siempre)
 
+- **`skills/skill-product-manager/SKILL.md`** — Protocolo de cierre del issue y trazabilidad GitHub ↔ Linear ↔ `status.json`.
 - **`skills/skill-code-review/SKILL.md`** — Checklist completo de calidad, velocidad y seguridad.
 
 ---
@@ -71,16 +72,13 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 | `odessay-ai-editor.md` | AI editor residente: spec completa de comportamiento. | `ai-editor` |
 | `odessay-margenes.md` | Sistema de highlights y anotación en lectura. | `reading-view` |
 
-**Gaps conocidos** (features sin doc propio):
-- `correspondencias` — thread, participants bar, sequence view, reply. Complejidad alta.
-- `collections` — AI suggestions, expandable, uncategorized banner. Complejidad media.
-
 ### docs/ops/ — Siempre leer (pre-flight)
 
 | Documento | Propósito |
 |-----------|-----------|
 | `SETUP.md` | **Leer primero.** Entorno, variables, tools, permisos, Git. |
 | `status.json` | **Leer segundo.** Qué está construido, qué no existe, decisiones tomadas. |
+| `decisions-archive.md` | Historial de decisiones por fase (consultar en planeación o cuando se necesite contexto histórico). |
 | `odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |
 
 ### framework/ — Referencia del meta-framework
