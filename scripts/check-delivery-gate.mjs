@@ -17,6 +17,27 @@ function commitExists(commit) {
   }
 }
 
+function hasRef(ref) {
+  try {
+    execSync(`git rev-parse --verify ${ref}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveBaseRef() {
+  const fromCi = process.env.GITHUB_BASE_REF?.trim();
+  if (fromCi) {
+    const remoteRef = `origin/${fromCi}`;
+    if (hasRef(remoteRef)) return remoteRef;
+    if (hasRef(fromCi)) return fromCi;
+  }
+  if (hasRef("origin/main")) return "origin/main";
+  if (hasRef("main")) return "main";
+  return "HEAD";
+}
+
 const branch =
   process.env.GITHUB_HEAD_REF?.trim() ||
   execSync("git rev-parse --abbrev-ref HEAD", {
@@ -62,7 +83,7 @@ if (!commitExists(entry.commit)) {
   );
 }
 
-const baseRef = "main";
+const baseRef = resolveBaseRef();
 const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
   encoding: "utf8",
 }).trim();
