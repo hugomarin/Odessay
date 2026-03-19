@@ -89,6 +89,110 @@
   body {
     @apply bg-bg text-ink antialiased;
   }
+
+  .odessay-editor-content {
+    min-height: 55vh;
+    color: hsl(var(--ink));
+    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-size: 18px;
+    line-height: 1.85;
+    outline: none;
+  }
+
+  .odessay-editor-content > * + * {
+    margin-top: 1.1em;
+  }
+
+  .odessay-editor-content h1,
+  .odessay-editor-content h2,
+  .odessay-editor-content h3 {
+    font-family: var(--font-lora), Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+
+  .odessay-editor-content h1 {
+    font-size: 30px;
+  }
+
+  .odessay-editor-content h2 {
+    font-size: 24px;
+  }
+
+  .odessay-editor-content h3 {
+    font-size: 20px;
+    line-height: 1.35;
+  }
+
+  .odessay-editor-content blockquote {
+    border-left: 2px solid hsl(var(--ink-3));
+    color: hsl(var(--ink-2));
+    font-family: var(--font-lora), Georgia, serif;
+    font-size: 22px;
+    font-style: italic;
+    line-height: 1.7;
+    margin: 1.2em 0;
+    padding-left: 1.2em;
+  }
+
+  .odessay-editor-content ul,
+  .odessay-editor-content ol {
+    padding-left: 1.3em;
+  }
+
+  .odessay-editor-content ul {
+    list-style: disc;
+  }
+
+  .odessay-editor-content ol {
+    list-style: decimal;
+  }
+
+  .odessay-editor-content code {
+    background: hsl(var(--muted));
+    border: 0.5px solid hsl(var(--border));
+    border-radius: 6px;
+    font-size: 0.9em;
+    padding: 0.08em 0.35em;
+  }
+
+  .odessay-editor-content pre {
+    background: hsl(var(--muted));
+    border: 0.5px solid hsl(var(--border));
+    border-radius: 8px;
+    margin: 1.2em 0;
+    overflow-x: auto;
+    padding: 0.9em 1.1em;
+  }
+
+  .odessay-editor-content pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+
+  .odessay-editor-content a {
+    color: hsl(var(--cursor));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .odessay-editor-content mark {
+    background: hsl(45 90% 84%);
+    border-radius: 2px;
+    padding: 0 0.08em;
+  }
+
+  body.od-editor-focus-mode #sidebar,
+  body.od-editor-focus-mode #sidebar-list-panel {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 350ms var(--od-ease-layout);
+    width: 0 !important;
+    border: 0 !important;
+    overflow: hidden !important;
+  }
 }
 
 @keyframes menuIn {

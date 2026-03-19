@@ -127,9 +127,11 @@ export function setSidebarPanel(panel: SidebarPanel) {
 
 export function syncSidebarPanelWithPath(pathname: string) {
   const panel = pathname.startsWith("/collections") ? "collections" : null
+  const isEditorPath = pathname === "/write" || pathname.startsWith("/write/")
 
   setState((current) => ({
     ...current,
     panel,
+    sidebarMode: isEditorPath ? "collapsed" : current.sidebarMode,
   }))
 }
