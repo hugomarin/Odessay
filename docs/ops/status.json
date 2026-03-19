@@ -173,6 +173,14 @@
       "notes": "Desk reimplementado en cliente consumiendo IndexedDB local como fuente primaria; grouping Today/This week/Earlier con filtros operativos y cobertura unitaria. Iteraciones de review: rehidratación al cambio de scope, filtro correspondence corrigiendo raíces con respuestas, filas navegables y bloqueo explícito de rows received para no enrutar al editor del autor."
     },
     {
+      "what": "Estados del writing, visibilidad privada v1 y paneles derechos de editor (Properties + Notes)",
+      "issue": "ODE-26",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-26",
+      "commit": "ba7a537",
+      "date": "2026-03-19",
+      "notes": "PR #15 mergeado; paneles lazy-loaded con cierre por Escape/botón, status Draft/Done, métricas de texto y edición de footnotes con renumeración consistente + cobertura de tests de panel behavior/sync."
+    },
+    {
       "what": "Flujo de trazabilidad endurecido con gates de CI y sincronización de docs operativas",
       "issue": "ODE-30",
       "linear_url": "https://linear.app/z9ne/issue/ODE-30",
