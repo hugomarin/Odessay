@@ -1,0 +1,34 @@
+name: Traceability Gates
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  traceability:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check process docs sync
+        run: npm run ops:process:sync
+
+      - name: Check status drift
+        run: npm run ops:status:drift:strict
+
+      - name: Check delivery gate
+        run: npm run ops:delivery:gate

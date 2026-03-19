@@ -52,9 +52,9 @@ La ausencia de un doc en `features/` no es solo un gap de documentación — es 
 
 ### docs/ops/ — lo que define la operación del agente
 
-Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`STATUS.md`), y en qué orden construir (`roadmap.md`).
+Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`docs/ops/status.json`), y en qué orden construir (`roadmap.md`).
 
-`STATUS.md` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
+`docs/ops/status.json` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
 
 ### skills/ — instrucciones de implementación
 
@@ -106,7 +106,7 @@ Patrones de API, autenticación, base de datos, manejo de errores, servicios ext
 
 **8. ¿Qué existe hoy en el codebase?**
 Estado actual: qué está construido, qué no existe, decisiones tomadas que no están en el código. Sin esto, el agente asume que nada existe o que todo existe.
-*Documento tipo: `STATUS.md` — se actualiza con cada PR significativo.*
+*Documento tipo: `docs/ops/status.json` — se actualiza con cada PR significativo.*
 
 **9. ¿Cómo opera el agente en este proyecto?**
 Variables de entorno, cómo levantar el proyecto, tools requeridos, permisos, Git, protocolo de escalación.
@@ -209,7 +209,7 @@ Cada documento tiene un scope que determina cuándo lo lee el agente:
 
 ### Protocolo de lectura en cuatro pasos
 
-**Paso 1 — Pre-flight.** Correr el script de integridad. Leer `SETUP.md` y `STATUS.md`. Si falta algo requerido, documentar el bloqueo y escalar — no improvisar.
+**Paso 1 — Pre-flight.** Correr el script de integridad. Leer `SETUP.md` y `docs/ops/status.json`. Si falta algo requerido, documentar el bloqueo y escalar — no improvisar.
 
 **Paso 2 — Contexto base.** Leer todos los documentos `always`. Sin excepción. Son el piso de contexto que hace coherente cualquier decisión posterior.
 
@@ -237,9 +237,9 @@ Tests E2E con Playwright son la excepción: corren contra staging, separados del
 
 Antes de mover un issue a revisión, el agente pega el output de `npm run typecheck && npm run lint && npm test` en la descripción del PR. Sin ese output el PR no se revisa. Elimina la categoría de bugs "funciona en mi máquina" y hace la validación trazable.
 
-### Actualización de STATUS.md con cada PR
+### Actualización de status.json con cada PR
 
-Cada PR significativo agrega una fila a `STATUS.md`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
+Cada PR significativo agrega una fila a `docs/ops/status.json`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
 
 ---
 

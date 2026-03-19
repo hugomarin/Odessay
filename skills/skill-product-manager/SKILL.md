@@ -53,19 +53,24 @@ Un issue puede tener múltiples labels de capa técnica si toca varias capas. So
 
 ## Estados de un issue
 
-Linear usa estos estados en orden lineal:
+Linear usa esta máquina de estados canónica:
 
-**Backlog** — el issue existe y está definido pero no es momento de ejecutarlo. Sus dependencias pueden no estar resueltas.
+**Todo** — el issue existe y está definido. No está en ejecución aún.
 
-**Ready** — todas las dependencias están en Done. El agente puede tomar este issue y ejecutarlo sin bloquearse.
-
-**In Progress** — hay un agente o humano trabajando en él. Tiene branch activo.
+**In Progress** — hay un agente o humano trabajando en él. Tiene branch activo.  
+Si hay checkpoint humano, el issue permanece en `In Progress` con comentario `⏸ HANDOFF REQUERIDO`.
 
 **In Review** — el trabajo terminó, el PR está abierto, esperando revisión.
 
 **Done** — PR mergeado, criterios de entrega verificados, commit referenciado.
 
-Un issue nunca pasa a Ready si tiene dependencias abiertas. El agente verifica el estado de las dependencias antes de empezar.
+Transiciones obligatorias:
+- `Todo` → `In Progress` al iniciar ejecución.
+- `In Progress` → `In Review` al abrir PR con validaciones.
+- `In Review` → `Done` tras merge confirmado.
+- Si review es rechazado: `In Review` → `In Progress`.
+
+Si el team usa estado `Ready`, se interpreta como pre-cola entre `Todo` e `In Progress`, nunca como reemplazo de `In Progress`.
 
 ---
 
@@ -94,7 +99,7 @@ Por qué existe este issue. Qué problema resuelve o qué habilita en el product
 Referencia al documento fundacional o técnico que lo justifica si aplica.
 
 ## Dependencies
-Issues que deben estar en Done antes de que este pueda pasar a Ready.
+Issues que deben estar en Done antes de que este pueda pasar a In Progress.
 Si no tiene dependencias, escribir: None.
 
 Formato: [ID-DEL-ISSUE] Título del issue del que depende.
@@ -112,9 +117,9 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`docs/core/`, `docs/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. Excepción válida: `docs/ops/status.json` y `docs/ops/SETUP.md` pueden aparecer como `(modifica)` cuando el issue explícitamente actualiza el estado del proyecto o el setup.
+5. `docs/ops/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `docs/ops/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
 
-Si el issue solo toca código sin conflictos de archivos compartidos, escribir: N/A.
+Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `docs/ops/status.json`.
 
 ## Handoff *(solo si el issue requiere acción humana)*
 
@@ -178,7 +183,7 @@ Usar siempre paths completos desde la raíz del repo.
 
 ### Commits
 El agente hace commits atómicos durante el desarrollo con mensajes en formato convencional.
-Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODY-42]`
+Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODE-42]`
 Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
 
 ### Trazabilidad Linear ↔ GitHub
@@ -197,6 +202,17 @@ Commit: [SHA]
 Validaciones: typecheck ✅ | lint ✅ | tests ✅
 Listo para merge.
 ```
+
+### Trazabilidad GitHub ↔ Linear ↔ status.json
+
+Antes de mover un issue a `In Review`, el agente debe actualizar `docs/ops/status.json` con una entrada en `built[]` para ese issue (issue, linear_url, commit, date, notes).
+
+Luego corre:
+```bash
+npm run ops:delivery:gate
+```
+
+Si este gate falla, el issue no puede pasar a `In Review`.
 
 ### Validation
 [LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
@@ -260,7 +276,7 @@ Dentro de cada fase, el orden de ejecución es siempre: database → backend →
 
 Las dependencias se declaran explícitamente en la sección Dependencies de cada issue. Un issue sin dependencias declaradas se asume independiente. Nunca asumir dependencias implícitas — si algo debe existir para que este issue funcione, se declara.
 
-Un issue nunca pasa a Ready mientras tenga dependencias en estado distinto a Done.
+Un issue nunca pasa a In Progress mientras tenga dependencias en estado distinto a Done.
 
 ---
 
@@ -313,11 +329,11 @@ La descripción del issue sigue la estructura definida en §Estructura de un iss
 
 1. Lee `docs/ops/odessay-roadmap.md` para entender fases y el mapa de issues.
 2. Crea los labels en Linear exactamente como están definidos en este documento.
-3. Crea los estados en Linear: Backlog, Ready, In Progress, In Review, Done.
+3. Crea los estados en Linear: Todo, In Progress, In Review, Done. (Ready es opcional como pre-cola).
 4. Crea **un proyecto por fase** en Linear, con el nombre exacto de la fase (`Fase 0 — Cimientos`, `Fase 1 — Escribir`, etc.) y descripción de exit criteria específica a esa fase.
 5. Crea todos los proyectos desde el inicio con status `Planned`. Solo la fase activa pasa a `In Progress`.
-6. Crea los issues de la fase activa dentro de su proyecto, con estado Backlog.
-7. Mueve a Ready solo los que no tienen dependencias abiertas.
+6. Crea los issues de la fase activa dentro de su proyecto, con estado Todo.
+7. Mueve a In Progress solo los que no tienen dependencias abiertas.
 8. No crees issues de fases siguientes hasta que la fase anterior esté completa.
 
 ### Al crear un issue

@@ -130,7 +130,7 @@ Este protocolo aplica cuando un agente es invocado desde Linear usando **"Open i
 
 ### Identificar el rol antes de empezar
 
-Antes de hacer cualquier cosa, el agente debe leer el estado del issue en Linear. Si el issue está en **In Review**, este protocolo aplica. Si está en **In Progress** o **Backlog**, aplica el protocolo de implementación (SETUP.md + CLAUDE.md).
+Antes de hacer cualquier cosa, el agente debe leer el estado del issue en Linear. Si el issue está en **In Review**, este protocolo aplica. Si está en **In Progress** o **Todo**, aplica el protocolo de implementación (SETUP.md + CLAUDE.md).
 
 ### Checklist de revisión — en orden
 
@@ -172,15 +172,15 @@ Commit: [SHA]
 Validaciones: typecheck ✅ | lint ✅ | tests ✅
 Trazabilidad: comentario en Linear ✅ | status.json actualizado ✅
 
-Acción: merge del PR + mover issue a Done en Linear.
+Acción: aprobación técnica completa. Pendiente merge humano.
 ```
-El REVIEW APROBADO es condición suficiente para ejecutar los tres pasos siguientes **sin esperar confirmación del humano**:
+Con REVIEW APROBADO, ejecutar en este orden:
 
 → Usar Linear MCP (`save_comment`) para postear el texto anterior como comentario en el issue.
-→ Hacer merge del PR vía `gh pr merge {número} --squash` (o `--merge` según convención del repo).
-→ Usar Linear MCP (`save_issue` con `stateId` de Done) para mover el issue a Done.
+→ Esperar confirmación de merge por parte del humano (o instrucción explícita de merge por CLI).
+→ Cuando el PR esté mergeado, mover el issue a Done en Linear.
 
-**No reportar "listo para merge" — ejecutar el merge y el cierre directamente.**
+Sin merge confirmado, el issue se mantiene en `In Review`.
 
 **Si algún check falla:**
 ```
@@ -190,10 +190,10 @@ Issue: [ODE-XX]
 Problema: [descripción exacta del problema]
 Acción requerida: [qué debe corregir el agente implementador]
 
-El issue permanece en In Review hasta que se corrija.
+El issue vuelve a In Progress hasta que se corrija.
 ```
 → Comentar en el issue de Linear con el formato anterior.
-→ No hacer merge. No mover el issue.
+→ No hacer merge. Mover issue de `In Review` → `In Progress`.
 → No modificar el código — el agente revisor no implementa.
 
 ### Lo que el agente revisor NO hace
@@ -201,5 +201,6 @@ El issue permanece en In Review hasta que se corrija.
 - No modifica código para corregir errores.
 - No hace commits al branch del PR.
 - No aprueba PRs que no tienen proof of work completo.
+- No hace merge por defecto sin instrucción explícita del humano.
 - No hace merge si hay red flags activos.
 - No evalúa si el código "se ve bien" — solo verifica que las condiciones objetivas se cumplan.
