@@ -63,6 +63,11 @@ const composeMarkdownWithDefinitions = (body: string, definitions: Map<number, s
   return `${trimmedBody}\n\n${definitionLines.join("\n")}`
 }
 
+export type MarkdownFootnote = {
+  index: number
+  text: string
+}
+
 const remapReferences = (markdown: string, orderedReferences: number[]) => {
   const mapping = new Map<number, number>()
 
@@ -115,6 +120,17 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
   return composeMarkdownWithDefinitions(remapped, remappedDefinitions)
 }
 
+export const getMarkdownFootnotes = (markdown: string): MarkdownFootnote[] => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  const definitions = collectDefinitions(normalized)
+  const orderedReferences = getReferenceOrder(stripDefinitions(normalized))
+
+  return orderedReferences.map((index) => ({
+    index,
+    text: definitions.get(index) ?? "",
+  }))
+}
+
 export const appendMarkdownFootnote = (markdown: string, note: string) => {
   const normalized = normalizeMarkdownFootnotes(markdown)
   const body = stripDefinitions(normalized)
@@ -125,6 +141,32 @@ export const appendMarkdownFootnote = (markdown: string, note: string) => {
   definitions.set(nextIndex, note.trim())
 
   return composeMarkdownWithDefinitions(nextBody, definitions)
+}
+
+export const updateMarkdownFootnote = (markdown: string, index: number, note: string) => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  const body = stripDefinitions(normalized)
+  const definitions = collectDefinitions(normalized)
+
+  if (!definitions.has(index)) {
+    return normalized
+  }
+
+  definitions.set(index, note.trim())
+  return composeMarkdownWithDefinitions(body, definitions)
+}
+
+export const removeMarkdownFootnote = (markdown: string, index: number) => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  const definitions = collectDefinitions(normalized)
+
+  if (!definitions.has(index)) {
+    return normalized
+  }
+
+  definitions.delete(index)
+  const bodyWithoutReference = stripDefinitions(normalized).replaceAll(`[^${index}]`, "")
+  return normalizeMarkdownFootnotes(composeMarkdownWithDefinitions(bodyWithoutReference, definitions))
 }
 
 declare module "@tiptap/core" {
