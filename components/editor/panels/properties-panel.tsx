@@ -1,11 +1,13 @@
 "use client"
 
+import { useCallback, useEffect, useState } from "react"
 import { X } from "lucide-react"
 import type { WritingStatus } from "@/lib/local-db/schema"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import { cn } from "@/lib/utils"
 
 type PropertiesPanelProps = {
+  writingId: string | null
   status: WritingStatus
   metrics: TextMetrics
   onStatusChange: (next: WritingStatus) => void
@@ -17,12 +19,159 @@ const STATUS_OPTIONS: Array<{ value: WritingStatus; label: string }> = [
   { value: "finished", label: "Done" },
 ]
 
+type ShareLinkState = {
+  active: boolean
+  token: string | null
+  link: string | null
+  createdAt: string | null
+}
+
+type ApiEnvelope<TData> = {
+  data: TData | null
+  error: {
+    code: string
+    message: string
+  } | null
+}
+
+const DEFAULT_SHARE_LINK_STATE: ShareLinkState = {
+  active: false,
+  token: null,
+  link: null,
+  createdAt: null,
+}
+
+const getReadableDate = (value: string | null) => {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date)
+}
+
 export function PropertiesPanel({
+  writingId,
   status,
   metrics,
   onStatusChange,
   onClose,
 }: PropertiesPanelProps) {
+  const [shareLink, setShareLink] = useState<ShareLinkState>(DEFAULT_SHARE_LINK_STATE)
+  const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
+  const [isSavingShareLink, setIsSavingShareLink] = useState(false)
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
+
+  const shareApiPath = writingId ? `/api/writings/${writingId}/share-test-link` : null
+  const shareLinkCreatedAt = getReadableDate(shareLink.createdAt)
+
+  const loadShareLink = useCallback(async () => {
+    if (!shareApiPath) {
+      setShareLink(DEFAULT_SHARE_LINK_STATE)
+      setShareError(null)
+      setShareFeedback(null)
+      return
+    }
+
+    setIsLoadingShareLink(true)
+    setShareError(null)
+
+    try {
+      const response = await fetch(shareApiPath, { method: "GET" })
+      const payload = (await response.json()) as ApiEnvelope<ShareLinkState>
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Failed to load test link.")
+      }
+
+      setShareLink(payload.data)
+    } catch (error) {
+      setShareLink(DEFAULT_SHARE_LINK_STATE)
+      setShareError(error instanceof Error ? error.message : "Failed to load test link.")
+    } finally {
+      setIsLoadingShareLink(false)
+    }
+  }, [shareApiPath])
+
+  useEffect(() => {
+    void loadShareLink()
+  }, [loadShareLink])
+
+  const handleGenerateShareLink = useCallback(async () => {
+    if (!shareApiPath) {
+      return
+    }
+
+    setIsSavingShareLink(true)
+    setShareError(null)
+    setShareFeedback(null)
+
+    try {
+      const response = await fetch(shareApiPath, { method: "POST" })
+      const payload = (await response.json()) as ApiEnvelope<ShareLinkState & { replacedPrevious?: boolean }>
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Failed to generate test link.")
+      }
+
+      setShareLink(payload.data)
+      setShareFeedback(payload.data.replacedPrevious ? "Preview link regenerated." : "Preview link generated.")
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : "Failed to generate test link.")
+    } finally {
+      setIsSavingShareLink(false)
+    }
+  }, [shareApiPath])
+
+  const handleRevokeShareLink = useCallback(async () => {
+    if (!shareApiPath) {
+      return
+    }
+
+    setIsSavingShareLink(true)
+    setShareError(null)
+    setShareFeedback(null)
+
+    try {
+      const response = await fetch(shareApiPath, { method: "DELETE" })
+      const payload = (await response.json()) as ApiEnvelope<{ active: boolean; revoked: boolean }>
+
+      if (!response.ok || !payload.data) {
+        throw new Error(payload.error?.message ?? "Failed to revoke test link.")
+      }
+
+      setShareLink(DEFAULT_SHARE_LINK_STATE)
+      setShareFeedback(payload.data.revoked ? "Preview link revoked." : "No active preview link to revoke.")
+    } catch (error) {
+      setShareError(error instanceof Error ? error.message : "Failed to revoke test link.")
+    } finally {
+      setIsSavingShareLink(false)
+    }
+  }, [shareApiPath])
+
+  const handleCopyShareLink = useCallback(async () => {
+    if (!shareLink.link || typeof navigator === "undefined" || !navigator.clipboard) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareLink.link)
+      setShareFeedback("Preview link copied.")
+      setShareError(null)
+    } catch {
+      setShareError("Failed to copy preview link.")
+    }
+  }, [shareLink.link])
+
   return (
     <aside
       id="editor-panel-properties"
@@ -75,6 +224,69 @@ export function PropertiesPanel({
             <p className="mt-1 text-[11px] text-ink-4">
               Visibility remains private in this phase.
             </p>
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Closed Sharing</p>
+          <div className="space-y-3 rounded-lg border-[0.5px] border-border bg-[hsl(22,55%,97%)] p-3">
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              Generate a private read-only link for external UX testing. This does not change writing visibility.
+            </p>
+
+            {!writingId ? (
+              <p className="text-[11px] text-ink-4">Save the writing once before generating a preview link.</p>
+            ) : (
+              <>
+                {shareLink.active && shareLink.link ? (
+                  <div className="space-y-2">
+                    <div className="rounded-md border-[0.5px] border-border bg-bg px-2 py-1.5">
+                      <p className="truncate text-[11px] text-ink-3">{shareLink.link}</p>
+                    </div>
+
+                    {shareLinkCreatedAt ? (
+                      <p className="text-[10px] text-ink-4">Generated {shareLinkCreatedAt}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleGenerateShareLink}
+                    disabled={isLoadingShareLink || isSavingShareLink}
+                    className={cn(
+                      "h-8 rounded-md border-[0.5px] px-3 text-[11px] font-medium transition-colors",
+                      "border-cursor bg-cursor text-bg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+                    )}
+                  >
+                    {shareLink.active ? "Regenerate link" : "Generate link"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyShareLink}
+                    disabled={!shareLink.active || !shareLink.link || isSavingShareLink}
+                    className="h-8 rounded-md border-[0.5px] border-border bg-bg px-3 text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Copy
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRevokeShareLink}
+                    disabled={!shareLink.active || isSavingShareLink}
+                    className="h-8 rounded-md border-[0.5px] border-border bg-bg px-3 text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                </div>
+
+                {isLoadingShareLink ? <p className="text-[11px] text-ink-4">Loading preview link...</p> : null}
+                {shareFeedback ? <p className="text-[11px] text-ink-3">{shareFeedback}</p> : null}
+                {shareError ? <p className="text-[11px] text-[hsl(0,72%,45%)]">{shareError}</p> : null}
+              </>
+            )}
           </div>
         </section>
 
