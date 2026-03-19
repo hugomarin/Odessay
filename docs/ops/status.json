@@ -168,9 +168,9 @@
       "what": "Desk con hero de drafts, filtros y tabla de actividad sobre modelo local-first",
       "issue": "ODE-25",
       "linear_url": "https://linear.app/z9ne/issue/ODE-25",
-      "commit": "6f504fa",
+      "commit": "2f61143",
       "date": "2026-03-19",
-      "notes": "Desk reimplementado en cliente consumiendo IndexedDB local como fuente primaria; grouping Today/This week/Earlier con filtros operativos y cobertura unitaria. Iteración de review: rehidratación al cambio de scope, filtro correspondence corrigiendo raíces con respuestas y filas de actividad navegables."
+      "notes": "Desk reimplementado en cliente consumiendo IndexedDB local como fuente primaria; grouping Today/This week/Earlier con filtros operativos y cobertura unitaria. Iteraciones de review: rehidratación al cambio de scope, filtro correspondence corrigiendo raíces con respuestas, filas navegables y bloqueo explícito de rows received para no enrutar al editor del autor."
     },
     {
       "what": "Flujo de trazabilidad endurecido con gates de CI y sincronización de docs operativas",
