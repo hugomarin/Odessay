@@ -3,6 +3,7 @@
 import type { ComponentType } from "react"
 import type { Editor } from "@tiptap/react"
 import {
+  AlignLeft,
   Bold,
   Code2,
   Highlighter,
@@ -13,6 +14,7 @@ import {
   Maximize2,
   Minimize2,
   Quote,
+  SlidersHorizontal,
   Strikethrough,
   Subscript,
 } from "lucide-react"
@@ -24,8 +26,10 @@ type EditorTopbarProps = {
   mode: "rich" | "markdown"
   title: string
   isFocusMode: boolean
+  activePanel: "notes" | "properties" | null
   onToggleMode: (mode: "rich" | "markdown") => void
   onToggleFocusMode: () => void
+  onTogglePanel: (panel: "notes" | "properties") => void
   onOpenRenameModal: () => void
   onRunAction: (action: EditorShortcutAction) => void
 }
@@ -111,8 +115,10 @@ export function EditorTopbar({
   mode,
   title,
   isFocusMode,
+  activePanel,
   onToggleMode,
   onToggleFocusMode,
+  onTogglePanel,
   onOpenRenameModal,
   onRunAction,
 }: EditorTopbarProps) {
@@ -213,7 +219,7 @@ export function EditorTopbar({
         <button
           type="button"
           onClick={onToggleFocusMode}
-          className="inline-flex h-8 items-center gap-1 rounded-md border-[0.5px] border-border bg-sb px-2 text-[12px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-border bg-sb text-ink-3 transition-colors hover:bg-muted hover:text-ink"
           title={isFocusMode ? "Exit focus mode" : "Focus mode"}
           aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
         >
@@ -222,7 +228,34 @@ export function EditorTopbar({
           ) : (
             <Maximize2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
           )}
-          <span>{isFocusMode ? "Exit" : "Focus"}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onTogglePanel("notes")}
+          className={cn(
+            "inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-border bg-sb text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+            activePanel === "notes" && "bg-muted text-ink",
+          )}
+          title="Notes panel"
+          aria-label="Notes panel"
+          aria-pressed={activePanel === "notes"}
+        >
+          <AlignLeft className="h-[13px] w-[13px]" strokeWidth={1.5} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onTogglePanel("properties")}
+          className={cn(
+            "inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-border bg-sb text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+            activePanel === "properties" && "bg-muted text-ink",
+          )}
+          title="Properties panel"
+          aria-label="Properties panel"
+          aria-pressed={activePanel === "properties"}
+        >
+          <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={1.5} />
         </button>
       </div>
     </div>

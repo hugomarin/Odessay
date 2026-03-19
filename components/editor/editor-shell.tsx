@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { useRouter } from "next/navigation"
@@ -15,12 +15,21 @@ import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
+import {
+  appendMarkdownFootnote,
+  getMarkdownFootnotes,
+  removeMarkdownFootnote,
+  updateMarkdownFootnote,
+} from "@/lib/editor/footnote-extension"
+import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
+import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
+import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { localDB } from "@/lib/local-db"
-import type { LocalWriting } from "@/lib/local-db/schema"
-import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
+import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
+import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
 
 type EditorShellProps = {
@@ -32,6 +41,24 @@ type SelectionSnapshot = {
   to: number
   text: string
 }
+
+type EditorPanel = "notes" | "properties" | null
+
+type PersistSnapshotOverrides = {
+  title?: string
+  status?: WritingStatus
+  visibility?: WritingVisibility
+}
+
+const NotesPanel = lazy(() =>
+  import("@/components/editor/panels/notes-panel").then((module) => ({ default: module.NotesPanel })),
+)
+
+const PropertiesPanel = lazy(() =>
+  import("@/components/editor/panels/properties-panel").then((module) => ({
+    default: module.PropertiesPanel,
+  })),
+)
 
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
@@ -76,10 +103,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [title, setTitle] = useState("Untitled writing")
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+  const [bodyText, setBodyText] = useState("")
   const [wordCount, setWordCount] = useState(0)
   const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
   const [version, setVersion] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
+  const [writingStatus, setWritingStatus] = useState<WritingStatus>("draft")
+  const [writingVisibility, setWritingVisibility] = useState<WritingVisibility>("private")
+  const [activePanel, setActivePanel] = useState<EditorPanel>(null)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
@@ -90,6 +121,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const titleRef = useRef(title)
   const versionRef = useRef(version)
   const createdAtRef = useRef<string | null>(createdAt)
+  const statusRef = useRef<WritingStatus>(writingStatus)
+  const visibilityRef = useRef<WritingVisibility>(writingVisibility)
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const hydratedIdRef = useRef<string | null>(null)
@@ -97,8 +130,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
 
+  const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
+    setWordCount(getWordCount(editorInstance))
+    setMarkdownValue(getEditorMarkdown(editorInstance))
+    setBodyText(editorInstance.getText())
+  }, [])
+
   const persistEditorSnapshot = useCallback(
-    async (editorInstance: Editor, titleOverride?: string) => {
+    async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
       const nowIso = new Date().toISOString()
       const nextId = currentWritingId ?? createWritingId()
       const baseCreatedAt = createdAtRef.current ?? nowIso
@@ -117,11 +156,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       const nextWriting: LocalWriting = {
         id: nextId,
-        title: (titleOverride ?? titleRef.current).trim() || "Untitled writing",
+        title: (overrides?.title ?? titleRef.current).trim() || "Untitled writing",
         body_json: editorInstance.getJSON() as Record<string, unknown>,
         body_text: editorInstance.getText(),
-        status: "draft",
-        visibility: "private",
+        status: overrides?.status ?? statusRef.current,
+        visibility: overrides?.visibility ?? visibilityRef.current,
         version: nextVersion,
         sync_status: "pending",
         created_at: baseCreatedAt,
@@ -148,26 +187,28 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [currentWritingId, routeWritingId, router],
   )
 
-  const editor = useEditor({
-    extensions: editorExtensions,
-    content: EMPTY_EDITOR_JSON,
-    immediatelyRender: false,
-    editorProps: {
-      attributes: {
-        class: "odessay-editor-content",
-        spellcheck: "false",
+  const editor = useEditor(
+    {
+      extensions: editorExtensions,
+      content: EMPTY_EDITOR_JSON,
+      immediatelyRender: false,
+      editorProps: {
+        attributes: {
+          class: "odessay-editor-content",
+          spellcheck: "false",
+        },
+      },
+      onUpdate: ({ editor: nextEditor }) => {
+        if (isApplyingContentRef.current || modeRef.current === "markdown") {
+          return
+        }
+
+        updateDerivedEditorState(nextEditor)
+        void persistEditorSnapshot(nextEditor)
       },
     },
-    onUpdate: ({ editor: nextEditor }) => {
-      if (isApplyingContentRef.current || modeRef.current === "markdown") {
-        return
-      }
-
-      setWordCount(getWordCount(nextEditor))
-      setMarkdownValue(getEditorMarkdown(nextEditor))
-      void persistEditorSnapshot(nextEditor)
-    },
-  }, [editorExtensions, persistEditorSnapshot])
+    [editorExtensions, persistEditorSnapshot, updateDerivedEditorState],
+  )
 
   useEffect(() => {
     modeRef.current = mode
@@ -186,6 +227,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [createdAt])
 
   useEffect(() => {
+    statusRef.current = writingStatus
+  }, [writingStatus])
+
+  useEffect(() => {
+    visibilityRef.current = writingVisibility
+  }, [writingVisibility])
+
+  useEffect(() => {
     setCurrentWritingId(routeWritingId)
     hydratedIdRef.current = null
     navigatedToDraftRef.current = false
@@ -198,6 +247,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
 
+    if (isFocusMode) {
+      setActivePanel(null)
+    }
+
     return () => {
       document.body.classList.remove("od-editor-focus-mode")
     }
@@ -208,11 +261,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
-    setWordCount(getWordCount(editor))
-    setMarkdownValue(getEditorMarkdown(editor))
+    updateDerivedEditorState(editor)
 
     if (!currentWritingId) {
       hydratedIdRef.current = null
+      setWritingStatus("draft")
+      setWritingVisibility("private")
       return
     }
 
@@ -237,19 +291,23 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setTitle(localWriting.title ?? "Untitled writing")
         setVersion(localWriting.version)
         setCreatedAt(localWriting.created_at)
+        setWritingStatus(localWriting.status ?? "draft")
+        setWritingVisibility(localWriting.visibility ?? "private")
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
             localWriting.sync_status,
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
-        setWordCount(getWordCount(editor))
-        setMarkdownValue(getEditorMarkdown(editor))
+        updateDerivedEditorState(editor)
       } else {
         setTitle("Untitled writing")
         setVersion(0)
         setCreatedAt(null)
+        setWritingStatus("draft")
+        setWritingVisibility("private")
         setSyncStatus("saved")
+        setBodyText("")
       }
 
       hydratedIdRef.current = currentWritingId
@@ -260,7 +318,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [currentWritingId, editor])
+  }, [currentWritingId, editor, updateDerivedEditorState])
 
   useEffect(() => {
     if (!currentWritingId) {
@@ -283,6 +341,39 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
     }
   }, [])
+
+  const applyMarkdownFromPanel = useCallback(
+    (nextMarkdown: string) => {
+      if (editor) {
+        isApplyingContentRef.current = true
+      }
+
+      void applyPanelMarkdownChange(editor, nextMarkdown, {
+        clearPendingSave: () => {
+          if (markdownSaveTimeoutRef.current) {
+            window.clearTimeout(markdownSaveTimeoutRef.current)
+            markdownSaveTimeoutRef.current = null
+          }
+        },
+        updateDerivedState: () => {
+          if (!editor) {
+            return
+          }
+          updateDerivedEditorState(editor)
+        },
+        persistSnapshot: () => {
+          if (!editor) {
+            return
+          }
+
+          void persistEditorSnapshot(editor)
+        },
+      })
+
+      isApplyingContentRef.current = false
+    },
+    [editor, persistEditorSnapshot, updateDerivedEditorState],
+  )
 
   const handleRunAction = useCallback(
     (action: EditorShortcutAction) => {
@@ -380,10 +471,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
       editor.commands.setContent(markdownValue)
       isApplyingContentRef.current = false
       setMode("rich")
-      setWordCount(getWordCount(editor))
+      updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
     },
-    [editor, markdownValue, persistEditorSnapshot],
+    [editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
   )
 
   const handleMarkdownChange = useCallback(
@@ -409,12 +500,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
         isApplyingContentRef.current = true
         editor.commands.setContent(nextMarkdown)
         isApplyingContentRef.current = false
-        setWordCount(getWordCount(editor))
+        updateDerivedEditorState(editor)
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
-    [editor, persistEditorSnapshot],
+    [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
 
   const handleInsertLink = useCallback(
@@ -466,17 +557,26 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
 
       editor.commands.addFootnote(note)
-      const nextMarkdown = getEditorMarkdown(editor)
-      setMarkdownValue(nextMarkdown)
-      setWordCount(getWordCount(editor))
+      updateDerivedEditorState(editor)
     },
-    [editor],
+    [editor, updateDerivedEditorState],
   )
+
+  const footnotes = useMemo(() => getMarkdownFootnotes(markdownValue), [markdownValue])
+  const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (isFocusMode) {
+        const intent = resolveEscapeIntent({
+          hasOpenPanel: activePanel !== null,
+          isFocusMode,
+        })
+
+        if (intent === "close-panel") {
+          event.preventDefault()
+          setActivePanel(null)
+        } else if (intent === "exit-focus") {
           event.preventDefault()
           setIsFocusMode(false)
         }
@@ -507,14 +607,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown)
     }
-  }, [footnoteModalOpen, handleRunAction, isFocusMode, linkModalOpen, renameModalOpen])
+  }, [activePanel, footnoteModalOpen, handleRunAction, isFocusMode, linkModalOpen, renameModalOpen])
 
   return (
-    <section
-      id="editor"
-      data-page="editor"
-      className="min-h-screen bg-bg"
-    >
+    <section id="editor" data-page="editor" className="min-h-screen bg-bg">
       <div className="EditorLayout flex min-h-screen flex-col">
         {!isFocusMode ? (
           <EditorTopbar
@@ -522,28 +618,87 @@ export function EditorShell({ writingId }: EditorShellProps) {
             mode={mode}
             title={title}
             isFocusMode={isFocusMode}
+            activePanel={activePanel}
             onToggleMode={handleToggleMode}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
+            onTogglePanel={(panel) => {
+              setActivePanel((current) => (current === panel ? null : panel))
+            }}
             onOpenRenameModal={() => setRenameModalOpen(true)}
             onRunAction={handleRunAction}
           />
         ) : null}
 
-        <WritingEditorContent
-          editor={editor}
-          mode={mode}
-          title={title}
-          markdownValue={markdownValue}
-          onTitleChange={setTitle}
-          onTitleBlur={() => {
-            if (editor) {
-              void persistEditorSnapshot(editor)
-            }
-          }}
-          onMarkdownChange={handleMarkdownChange}
-        />
+        <div className="flex min-h-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <WritingEditorContent
+              editor={editor}
+              mode={mode}
+              title={title}
+              markdownValue={markdownValue}
+              onTitleChange={setTitle}
+              onTitleBlur={() => {
+                if (editor) {
+                  void persistEditorSnapshot(editor)
+                }
+              }}
+              onMarkdownChange={handleMarkdownChange}
+            />
 
-        {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} /> : null}
+            {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} /> : null}
+          </div>
+
+          {!isFocusMode && activePanel ? (
+            <Suspense
+              fallback={
+                <aside className="h-full w-[248px] border-l-[0.5px] border-border bg-sb px-4 py-3 text-[12px] text-ink-4">
+                  Loading panel...
+                </aside>
+              }
+            >
+              {activePanel === "notes" ? (
+                <NotesPanel
+                  footnotes={footnotes}
+                  onClose={() => setActivePanel(null)}
+                  onAddFootnote={(text) => {
+                    const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
+                    applyMarkdownFromPanel(nextMarkdown)
+                  }}
+                  onUpdateFootnote={(index, text) => {
+                    const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
+                    applyMarkdownFromPanel(nextMarkdown)
+                  }}
+                  onDeleteFootnote={(index) => {
+                    const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
+                    applyMarkdownFromPanel(nextMarkdown)
+                  }}
+                />
+              ) : (
+                <PropertiesPanel
+                  status={writingStatus}
+                  metrics={textMetrics}
+                  onClose={() => setActivePanel(null)}
+                  onStatusChange={(nextStatus) => {
+                    if (nextStatus === writingStatus) {
+                      return
+                    }
+
+                    setWritingStatus(nextStatus)
+                    void applyPanelMetaChange(editor, { status: nextStatus }, {
+                      persistSnapshot: (overrides) => {
+                        if (!editor) {
+                          return
+                        }
+
+                        void persistEditorSnapshot(editor, overrides)
+                      },
+                    })
+                  }}
+                />
+              )}
+            </Suspense>
+          ) : null}
+        </div>
       </div>
 
       <RenameWritingModal
@@ -554,7 +709,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           setTitle(nextTitle)
 
           if (editor) {
-            void persistEditorSnapshot(editor, nextTitle)
+            void persistEditorSnapshot(editor, { title: nextTitle })
           }
         }}
       />
@@ -566,11 +721,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         onConfirm={handleInsertLink}
       />
 
-      <InsertFootnoteModal
-        open={footnoteModalOpen}
-        onOpenChange={setFootnoteModalOpen}
-        onConfirm={handleInsertFootnote}
-      />
+      <InsertFootnoteModal open={footnoteModalOpen} onOpenChange={setFootnoteModalOpen} onConfirm={handleInsertFootnote} />
     </section>
   )
 }

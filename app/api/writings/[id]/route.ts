@@ -8,8 +8,8 @@ const writingPayloadSchema = z.object({
   body_json: z.record(z.string(), z.unknown()),
   body_text: z.string(),
   slug: z.string().nullable().optional(),
-  status: z.enum(["draft", "finished"]),
-  visibility: z.enum(["private", "shared", "public"]),
+  status: z.enum(["draft", "finished"]).default("draft"),
+  visibility: z.enum(["private", "shared", "public"]).default("private"),
   parent_id: z.string().uuid().nullable().optional(),
   correspondence_id: z.string().uuid().nullable().optional(),
   version: z.number().int().min(1),
@@ -75,6 +75,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     id,
     author_id: userId,
     ...parsed.data,
+    status: parsed.data.status ?? "draft",
+    visibility: parsed.data.visibility ?? "private",
   };
 
   const query = currentWriting
