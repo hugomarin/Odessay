@@ -103,7 +103,7 @@
       "description": "Fases del producto y orden de implementación: qué bloquea qué, alcance de cada fase y estructura de proyectos en Linear. Fuente de verdad del qué y el cuándo."
     },
     {
-      "path": "workflow/define/fase-1-definition-of-done.md",
+      "path": "workflow/define/dod-fase-1.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 1 — Escribir: checklist de editor core, sidebar, persistencia local-first y criterios técnicos mínimos que deben estar cumplidos para considerar la fase terminada."
     },
@@ -111,16 +111,6 @@
       "path": "workflow/define/debrief.md",
       "type": "ops",
       "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
-    },
-    {
-      "path": "workflow/review/testing-observability.md",
-      "type": "ops",
-      "description": "Reglas mínimas de calidad técnica: estrategia de hermetic testing, estándares de logging, instrumentación de Sentry y criterios que debe cumplir una entrega antes de pasar a In Review."
-    },
-    {
-      "path": "workflow/define/issues/ISSUE-BRIEF.template.md",
-      "type": "ops",
-      "description": "Plantilla canónica del Issue Brief con secciones: identificación, problema, alcance (in/out of scope), diseño técnico, áreas afectadas, criterios de done y proof of work. Gate requerido para pasar de PLAN a BUILD."
     },
 
     {
@@ -177,7 +167,6 @@
     "workflow/context/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
     "workflow/define/": "Artefactos de planificación y definición (roadmap, DoD, debrief e issue briefs).",
     "workflow/context/framework/": "Framework MECE genérico. No es específico de Odessay.",
-    "workflow/define/issues/": "Issue Briefs y plantillas de trabajo.",
     "workflow/context/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica.",
     ".agents/skills/": "Instrucciones de implementación por dominio. Se leen cuando el issue toca ese área."
   }

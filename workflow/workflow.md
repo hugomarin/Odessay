@@ -32,7 +32,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder.
 8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
 9. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
-10. Redactar el Issue Brief usando `workflow/define/issues/ISSUE-BRIEF.template.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
+10. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
 11. Crear los issues en Linear con su brief incluido.
 12. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
