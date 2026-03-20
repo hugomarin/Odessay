@@ -206,6 +206,15 @@
       "notes": "Nueva máquina de estados canónica en Linear, separación de decisiones vigentes/históricas y gates automáticos: process-sync, status-drift y delivery-gate."
     },
     {
+      "what": "Seed de datos baseline para staging: 3 usuarios de prueba y 7 writings en estados y visibilidades de Fase 1",
+      "phase": "Fase 1",
+      "issue": "ODE-28",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-28",
+      "commit": "1fbb439",
+      "date": "2026-03-20",
+      "notes": "supabase/seed/phase-1-staging.sql + scripts/seed-phase-1.ts con guard de staging-only; determinista por UUIDs fijos."
+    },
+    {
       "what": "Closed sharing links de evaluación UX con preview público read-only y revocación desde Properties",
       "phase": "Fase 1",
       "issue": "ODE-27",
