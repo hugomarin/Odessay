@@ -29,11 +29,11 @@
     },
     {
       "decision": "Branch protection no disponible — fallback por PR obligatorio",
-      "doc": "workflow/SETUP.md"
+      "doc": "workflow/context/core/odessay-stack.md"
     },
     {
       "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados",
-      "doc": "workflow/SETUP.md"
+      "doc": "workflow/context/core/odessay-stack.md"
     },
     {
       "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",

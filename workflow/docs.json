@@ -85,7 +85,7 @@
     {
       "path": "workflow/workflow.md",
       "type": "ops",
-      "description": "Protocolo completo de comandos /wf-*: /wf-define (planificar fase), /wf-build (implementar issue), /wf-review (validar PR), /wf-debrief (capturar observaciones post-entrega), /wf-update-docs (sincronizar inventario). Define contexto por etapa, gates, fallback sin argumentos, frontera humano/agente y protocolo de handoff."
+      "description": "Protocolo completo de comandos /wf-*: /wf-define (planificar fase con Diálogo de Alineación + DoD), /wf-build (implementar issue), /wf-review (validar PR y actualizar status.json), /wf-debrief (capturar observaciones post-entrega), /wf-update-docs (sincronizar inventario), /wf-decision (registrar decisión en decisions.json), /wf-audit (verificar calidad de issues contra DoD). Define contexto por etapa, gates, fallback sin argumentos, frontera humano/agente y protocolo de handoff."
     },
     {
       "path": "workflow/status.json",

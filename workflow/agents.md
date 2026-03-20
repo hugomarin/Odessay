@@ -4,15 +4,14 @@ Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digi
 
 ## Lo que tienes disponible
 
-`workflow/docs.json` es el índice de todos los documentos del proyecto. Contiene el path, tipo y descripción de cada archivo. Consúltalo cuando necesites orientarte — no lo leas completo por defecto, úsalo para encontrar el documento específico que necesitas.
-
-`workflow/workflow.md` define qué hace cada comando `/wf-*` paso a paso. Léelo cuando recibas un comando de workflow.
+- `workflow/docs.json`: El inventario completo del proyecto. Contiene la ruta y descripción de cada archivo en `workflow/` y `.agents/skills/`. Consúltalo para ubicarte.
+- `workflow/workflow.md`: El protocolo maestro. Define qué hace cada comando `/wf-*` (como `/wf-define` o `/wf-build`). Léelo SIEMPRE que recibas un comando.
+- `.agents/skills/`: Directorio que contiene el "cómo" (instrucciones técnicas, snippets y checklists por dominio de ingeniería o producto).
 
 ## Cómo operar
 
-Este proyecto usa un modelo **stage-first**: cada tarea pertenece a una etapa con su propio contexto y output requerido. No hay una lista de documentos que leer al inicio — el contexto se carga según la etapa y el área del issue.
-
-Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuencia definida para esa etapa. No cargues contexto adicional hasta que la secuencia lo indique.
+Este proyecto usa un modelo **contexto-justo-a-tiempo**:
+Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuencia definida paso a paso. No cargues contexto adicional al azar. Cada issue en Linear trae explícitamente citados los documentos que requiere en su línea `Referencia:`. Usa los skills solo cuando apliquen a la tarea en curso.
 
 ## Regla de mantenimiento de docs.json
 
