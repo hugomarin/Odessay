@@ -1,7 +1,7 @@
 # ODESSAY — Invitaciones
 
 **Feature spec para agentes de desarrollo.**
-Lee `docs/core/odessay-fundacional.md` para entender la naturaleza epistolar del onboarding y `docs/core/odessay-modelo-datos.md` para el schema de `invitations`.
+Lee `workflow/core/odessay-fundacional.md` para entender la naturaleza epistolar del onboarding y `workflow/core/odessay-modelo-datos.md` para el schema de `invitations`.
 
 ---
 
@@ -116,7 +116,7 @@ Si el invitado ya tiene cuenta en Odessay y llega al link de invitación, el flu
 
 ## Modelo de datos (referencia)
 
-Schema completo en `docs/core/odessay-modelo-datos.md`.
+Schema completo en `workflow/core/odessay-modelo-datos.md`.
 
 **`invitations`**
 - `id`, `token` (UUID único)
@@ -131,5 +131,5 @@ Schema completo en `docs/core/odessay-modelo-datos.md`.
 ## Lo que este doc NO cubre
 
 - Email transaccional setup → `.agents/skills/skill-backend/SKILL.md` §Resend
-- Formulario de signup → `docs/core/odessay-paginas.md` §/signup
-- Sistema de compartir writings → `docs/core/odessay-paginas.md` §/shared
+- Formulario de signup → `workflow/core/odessay-paginas.md` §/signup
+- Sistema de compartir writings → `workflow/core/odessay-paginas.md` §/shared

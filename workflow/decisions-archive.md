@@ -13,7 +13,7 @@ Uso:
 
 | Decisión | Issue | Fecha | Estado | Referencia |
 |---|---|---|---|---|
-| Login/Signup con plantilla `login-02` de ShadCN | ODE-15 | 2026-03-18 | Histórica (implementada) | `docs/core/odessay-paginas.md` |
+| Login/Signup con plantilla `login-02` de ShadCN | ODE-15 | 2026-03-18 | Histórica (implementada) | `workflow/core/odessay-paginas.md` |
 
 Notas:
 - Si una decisión histórica se vuelve transversal, se promueve a `decisions_global` en `status.json`.

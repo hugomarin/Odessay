@@ -187,7 +187,7 @@ El auto-save es local-first. Secuencia invariable: guardar en base local (inmedi
 
 El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins silencioso** — no se bloquean escrituras, no hay UI de resolución. El campo `version` se incrementa como auditoría, no como control de concurrencia.
 
-**Spec completa de sync:** `docs/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
+**Spec completa de sync:** `workflow/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
 
 ## Observabilidad
 

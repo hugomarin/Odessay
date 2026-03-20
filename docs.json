@@ -6,95 +6,95 @@
 
   "registry": [
     {
-      "path": "docs/core/odessay-fundacional.md",
+      "path": "workflow/core/odessay-fundacional.md",
       "type": "core",
       "description": "Visión del producto, por qué existe, para quién, los tres modos (Escribir/Leer/Organizar), principios de diseño no negociables.",
       "scope": "always"
     },
     {
-      "path": "docs/core/odessay-arquitectura.md",
+      "path": "workflow/core/odessay-arquitectura.md",
       "type": "core",
       "description": "Arquitectura técnica, navegación de tres columnas, rutas, vistas principales, decisiones arquitectónicas tomadas.",
       "scope": "always"
     },
     {
-      "path": "docs/core/odessay-stack.md",
+      "path": "workflow/core/odessay-stack.md",
       "type": "core",
       "description": "Stack tecnológico confirmado, convenciones de código, ambientes de desarrollo y producción, variables de entorno.",
       "scope": "always"
     },
     {
-      "path": "docs/core/odessay-modelo-datos.md",
+      "path": "workflow/core/odessay-modelo-datos.md",
       "type": "core",
       "description": "Schema completo de Supabase: todas las tablas, columnas, tipos, RLS, relaciones. Fuente de verdad de datos.",
       "scope": "conditional",
       "trigger": "backend"
     },
     {
-      "path": "docs/core/odessay-paginas.md",
+      "path": "workflow/core/odessay-paginas.md",
       "type": "core",
       "description": "Especificación de cada ruta/página: zonas pública, autor y privada, layout, comportamiento, notas de implementación.",
       "scope": "conditional",
       "trigger": "frontend"
     },
     {
-      "path": "docs/core/odessay-flujos.md",
+      "path": "workflow/core/odessay-flujos.md",
       "type": "core",
       "description": "Flujos de usuario completos (secciones 1–11): registrarse, escribir, publicar, leer, organizar, navegar el editor, formato.",
       "scope": "conditional",
       "trigger": "frontend"
     },
     {
-      "path": "docs/features/odessay-editor.md",
+      "path": "workflow/features/odessay-editor.md",
       "type": "feature",
       "description": "Spec técnica del editor TipTap: extensiones, shortcuts, auto-save, modales, Markdown mode, FootnoteExtension, layout de columnas.",
       "scope": "conditional",
       "trigger": "editor"
     },
     {
-      "path": "docs/features/odessay-ai-editor.md",
+      "path": "workflow/features/odessay-ai-editor.md",
       "type": "feature",
       "description": "Spec completa del AI editor residente: cuándo habla, qué observa, respuestas posibles, SILENCIO, arquitectura de prompts.",
       "scope": "conditional",
       "trigger": "ai-editor"
     },
     {
-      "path": "docs/features/odessay-margenes.md",
+      "path": "workflow/features/odessay-margenes.md",
       "type": "feature",
       "description": "Sistema de highlights y anotaciones en lectura: flujo de selección, panel lateral, semántica, schema de margins.",
       "scope": "reference",
       "trigger": "reading-view"
     },
     {
-      "path": "docs/features/odessay-correspondencias.md",
+      "path": "workflow/features/odessay-correspondencias.md",
       "type": "feature",
       "description": "Spec completa de correspondencias: creación automática, thread visual (participants bar, mini-docs, reply prompt), reading view, estados del turno, modelo de datos.",
       "scope": "conditional",
       "trigger": "correspondencias"
     },
     {
-      "path": "docs/features/odessay-collections.md",
+      "path": "workflow/features/odessay-collections.md",
       "type": "feature",
       "description": "Spec completa de collections: banner uncategorized, AI suggestions (formato y contrato), bulk categorization, expandable collections, visibilidad pública.",
       "scope": "conditional",
       "trigger": "collections"
     },
     {
-      "path": "docs/features/odessay-sync.md",
+      "path": "workflow/features/odessay-sync.md",
       "type": "feature",
       "description": "Spec de sync local-first: interfaz LocalDB, flujo auto-save (local inmediato → remoto background), debounce, backoff exponencial, last-write-wins, estados del statusbar.",
       "scope": "conditional",
       "trigger": "sync"
     },
     {
-      "path": "docs/features/odessay-invitaciones.md",
+      "path": "workflow/features/odessay-invitaciones.md",
       "type": "feature",
       "description": "Spec de invitaciones: flujo del autor, flujo del invitado, landing /invite/{token}, estados (pending/accepted/expired), email transaccional Resend, asociación a cuenta existente.",
       "scope": "conditional",
       "trigger": "invitaciones"
     },
     {
-      "path": "docs/features/odessay-espacio-publico.md",
+      "path": "workflow/features/odessay-espacio-publico.md",
       "type": "feature",
       "description": "Spec del espacio público: /{username} vista dual (pública vs propia), /{username}/{slug} writing público, slug generation, SEO/OG, contexto de correspondencia en lectura pública.",
       "scope": "conditional",
@@ -212,8 +212,8 @@
 
   "_comment_structure": "Descripción de carpetas para orientación rápida.",
   "structure": {
-    "docs/core/": "Verdades estables del producto. Todo agente las lee siempre.",
-    "docs/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
+    "workflow/core/": "Verdades estables del producto. Todo agente las lee siempre.",
+    "workflow/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
     "workflow/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
     "framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
     ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
@@ -234,15 +234,15 @@
       "id": 1,
       "question": "¿Para qué existe esto y para quién?",
       "documents": [
-        { "path": "docs/core/odessay-fundacional.md", "scope": "always" }
+        { "path": "workflow/core/odessay-fundacional.md", "scope": "always" }
       ]
     },
     {
       "id": 2,
       "question": "¿Qué ve y hace el usuario?",
       "documents": [
-        { "path": "docs/core/odessay-paginas.md", "scope": "conditional", "trigger": "frontend" },
-        { "path": "docs/core/odessay-flujos.md", "scope": "conditional", "trigger": "frontend" }
+        { "path": "workflow/core/odessay-paginas.md", "scope": "conditional", "trigger": "frontend" },
+        { "path": "workflow/core/odessay-flujos.md", "scope": "conditional", "trigger": "frontend" }
       ]
     },
     {
@@ -258,15 +258,15 @@
       "id": 4,
       "question": "¿Qué datos existen y cómo se modelan?",
       "documents": [
-        { "path": "docs/core/odessay-modelo-datos.md", "scope": "conditional", "trigger": "backend" }
+        { "path": "workflow/core/odessay-modelo-datos.md", "scope": "conditional", "trigger": "backend" }
       ]
     },
     {
       "id": 5,
       "question": "¿Cómo está organizado el código?",
       "documents": [
-        { "path": "docs/core/odessay-arquitectura.md", "scope": "always" },
-        { "path": "docs/core/odessay-stack.md", "scope": "always" },
+        { "path": "workflow/core/odessay-arquitectura.md", "scope": "always" },
+        { "path": "workflow/core/odessay-stack.md", "scope": "always" },
         { "path": ".agents/skills/skill-frontend/SKILL.md", "scope": "conditional", "trigger": "frontend" }
       ]
     },
@@ -274,14 +274,14 @@
       "id": 6,
       "question": "¿Cómo funciona cada feature crítico?",
       "documents": [
-        { "path": "docs/features/odessay-editor.md", "scope": "conditional", "trigger": "editor" },
-        { "path": "docs/features/odessay-ai-editor.md", "scope": "conditional", "trigger": "ai-editor" },
-        { "path": "docs/features/odessay-margenes.md", "scope": "reference", "trigger": "reading-view" },
-        { "path": "docs/features/odessay-correspondencias.md", "scope": "conditional", "trigger": "correspondencias" },
-        { "path": "docs/features/odessay-collections.md", "scope": "conditional", "trigger": "collections" },
-        { "path": "docs/features/odessay-sync.md", "scope": "conditional", "trigger": "sync" },
-        { "path": "docs/features/odessay-invitaciones.md", "scope": "conditional", "trigger": "invitaciones" },
-        { "path": "docs/features/odessay-espacio-publico.md", "scope": "conditional", "trigger": "espacio-publico" }
+        { "path": "workflow/features/odessay-editor.md", "scope": "conditional", "trigger": "editor" },
+        { "path": "workflow/features/odessay-ai-editor.md", "scope": "conditional", "trigger": "ai-editor" },
+        { "path": "workflow/features/odessay-margenes.md", "scope": "reference", "trigger": "reading-view" },
+        { "path": "workflow/features/odessay-correspondencias.md", "scope": "conditional", "trigger": "correspondencias" },
+        { "path": "workflow/features/odessay-collections.md", "scope": "conditional", "trigger": "collections" },
+        { "path": "workflow/features/odessay-sync.md", "scope": "conditional", "trigger": "sync" },
+        { "path": "workflow/features/odessay-invitaciones.md", "scope": "conditional", "trigger": "invitaciones" },
+        { "path": "workflow/features/odessay-espacio-publico.md", "scope": "conditional", "trigger": "espacio-publico" }
       ]
     },
     {

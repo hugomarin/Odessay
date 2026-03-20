@@ -201,15 +201,15 @@
   "decisions_global": [
     {
       "decision": "Local-first con IndexedDB (no localStorage)",
-      "doc": "docs/core/odessay-arquitectura.md"
+      "doc": "workflow/core/odessay-arquitectura.md"
     },
     {
       "decision": "body_json como fuente de verdad (no body_markdown)",
-      "doc": "docs/core/odessay-modelo-datos.md"
+      "doc": "workflow/core/odessay-modelo-datos.md"
     },
     {
       "decision": "Last-write-wins silencioso para conflictos de sync",
-      "doc": "docs/features/odessay-sync.md"
+      "doc": "workflow/features/odessay-sync.md"
     },
     {
       "decision": "ShadCN tres capas de adaptación",
@@ -233,14 +233,14 @@
     },
     {
       "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
-      "doc": "docs/core/odessay-stack.md"
+      "doc": "workflow/core/odessay-stack.md"
     }
   ],
 
   "decisions_phase_active": [
     {
       "decision": "FootnoteExtension custom (no existe en ecosistema)",
-      "doc": "docs/features/odessay-editor.md"
+      "doc": "workflow/features/odessay-editor.md"
     }
   ],
 

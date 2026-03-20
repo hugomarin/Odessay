@@ -5,8 +5,8 @@ Si un punto no está cumplido, la fase no se considera terminada.
 
 Referencias:
 - `workflow/odessay-roadmap.md`
-- `docs/features/odessay-editor.md`
-- `docs/core/odessay-arquitectura.md`
+- `workflow/features/odessay-editor.md`
+- `workflow/core/odessay-arquitectura.md`
 - `.agents/skills/skill-design/vistas.md`
 
 ---

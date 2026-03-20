@@ -1,7 +1,7 @@
 # ODESSAY — Collections
 
 **Feature spec para agentes de desarrollo.**
-Lee `docs/core/odessay-fundacional.md` para el contexto del modo Organizar y `docs/core/odessay-modelo-datos.md` para el schema de `collections` y `writing_collections`.
+Lee `workflow/core/odessay-fundacional.md` para el contexto del modo Organizar y `workflow/core/odessay-modelo-datos.md` para el schema de `collections` y `writing_collections`.
 
 ---
 
@@ -76,7 +76,7 @@ Las collections existentes aparecen como bloques colapsados debajo del banner. C
 
 ### `/collections/{id}` — Collection específica
 
-Vista dedicada para una collection con muchos writings. Accesible desde el sidebar (al hacer click en el nombre de la collection, el list panel se abre con sus writings — ver `docs/core/odessay-flujos.md` §Navegar el editor).
+Vista dedicada para una collection con muchos writings. Accesible desde el sidebar (al hacer click en el nombre de la collection, el list panel se abre con sus writings — ver `workflow/core/odessay-flujos.md` §Navegar el editor).
 
 Esta ruta existe para el caso en que la collection tenga demasiados writings para manejarlos cómodamente en el expandible de `/collections`. El contenido y comportamiento es idéntico al estado expandido.
 
@@ -119,7 +119,7 @@ El AI sugiere agrupaciones para writings sin clasificar. No categoriza automáti
 ### Crear una collection
 - Desde el botón "New collection" en la topbar de `/collections`
 - Desde el panel Organize al hacer bulk assignment
-- Desde el panel Properties del editor (ver `docs/features/odessay-editor.md` §Properties panel)
+- Desde el panel Properties del editor (ver `workflow/features/odessay-editor.md` §Properties panel)
 
 **Campos:** nombre (requerido, máximo 60 caracteres), visibilidad (`private` | `public`).
 
@@ -155,7 +155,7 @@ Un writing puede pertenecer a múltiples collections. La asignación es una rela
 
 ## Modelo de datos (referencia)
 
-Schema completo en `docs/core/odessay-modelo-datos.md`.
+Schema completo en `workflow/core/odessay-modelo-datos.md`.
 
 **`collections`**
 - `id`, `owner_id`, `name`, `visibility` (`private`|`public`)
@@ -168,6 +168,6 @@ Schema completo en `docs/core/odessay-modelo-datos.md`.
 
 ## Lo que este doc NO cubre
 
-- Panel Properties del editor (donde también se asignan collections) → `docs/features/odessay-editor.md`
-- Flujo de navegación por el sidebar hacia collections → `docs/core/odessay-flujos.md` §Navegar el editor
-- Schema completo → `docs/core/odessay-modelo-datos.md`
+- Panel Properties del editor (donde también se asignan collections) → `workflow/features/odessay-editor.md`
+- Flujo de navegación por el sidebar hacia collections → `workflow/core/odessay-flujos.md` §Navegar el editor
+- Schema completo → `workflow/core/odessay-modelo-datos.md`

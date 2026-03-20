@@ -7,10 +7,10 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 ## Estructura de documentación
 
 ```
-docs/
+workflow/
   core/       → Verdades estables del producto. Siempre leer.
   features/   → Spec de cada feature. Leer solo si el issue lo toca.
-workflow/     → Estado vivo y operación de agentes. Siempre leer (pre-flight).
+  (root)      → Estado vivo y operación de agentes. Siempre leer (pre-flight).
 framework/    → Framework MECE genérico. No es específico de Odessay.
 .agents/skills/       → Instrucciones de implementación. On-demand por trigger.
 reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
@@ -30,9 +30,9 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ### Paso 2 — Contexto base (siempre, todo issue)
 
-4. **`docs/core/odessay-fundacional.md`** — Qué es Odessay, por qué existe, para quién, principios de diseño.
-5. **`docs/core/odessay-arquitectura.md`** — Arquitectura técnica, navegación, rutas, vistas.
-6. **`docs/core/odessay-stack.md`** — Stack tecnológico y convenciones.
+4. **`workflow/core/odessay-fundacional.md`** — Qué es Odessay, por qué existe, para quién, principios de diseño.
+5. **`workflow/core/odessay-arquitectura.md`** — Arquitectura técnica, navegación, rutas, vistas.
+6. **`workflow/core/odessay-stack.md`** — Stack tecnológico y convenciones.
 
 ### Paso 3 — Docs condicionales (solo si el issue activa el trigger)
 
@@ -52,7 +52,7 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 
 ## Mapa de documentos
 
-### docs/core/ — Siempre leer
+### workflow/core/ — Siempre leer
 
 | Documento | Propósito |
 |-----------|-----------|
@@ -63,7 +63,7 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 | `odessay-paginas.md` | Descripción de cada ruta/página. Trigger: frontend. |
 | `odessay-flujos.md` | Flujos de usuario detallados (secciones 1–11). Trigger: frontend. |
 
-### docs/features/ — Leer solo si el issue toca ese feature
+### workflow/features/ — Leer solo si el issue toca ese feature
 
 | Documento | Feature | Trigger |
 |-----------|---------|---------|
@@ -156,7 +156,7 @@ Comportamiento de sidebar por contexto:
 ## Reglas de conflicto entre documentos
 
 - El documento más **específico y reciente** gana.
-- `docs/core/odessay-arquitectura.md` prevalece sobre cualquier versión anterior.
+- `workflow/core/odessay-arquitectura.md` prevalece sobre cualquier versión anterior.
 - **Terminología correcta:** `writings` (no `letters`), `finished` (no `sealed`), `/desk` (no `/home`).
 - Si hay conflicto entre dos documentos de texto, el más específico al tema aplica.
 
@@ -168,7 +168,7 @@ Comportamiento de sidebar por contexto:
 
 **Editor aislado:** Un keystroke en el editor no debe re-renderizar el sidebar, paneles de AI, ni ningún componente externo. Ver `.agents/skills/skill-frontend/SKILL.md`.
 
-**AI no genera texto:** El AI editor observa, señala, pregunta. Nunca escribe por el autor. Si la respuesta es "SILENCIO", no se envía nada al cliente. Ver `docs/features/odessay-ai-editor.md`.
+**AI no genera texto:** El AI editor observa, señala, pregunta. Nunca escribe por el autor. Si la respuesta es "SILENCIO", no se envía nada al cliente. Ver `workflow/features/odessay-ai-editor.md`.
 
 **Simplicidad radical:** Si el issue no lo pidió, no se agrega UI. Cada píxel existe por una razón.
 
@@ -179,8 +179,8 @@ Comportamiento de sidebar por contexto:
 ## Cómo navegar los documentos para una tarea típica
 
 **Para implementar una vista nueva (ej. el Desk):**
-1. Leer `docs/core/odessay-fundacional.md` → entender el modo "Organizar"
-2. Leer `docs/core/odessay-arquitectura.md` → entender la estructura de navegación
+1. Leer `workflow/core/odessay-fundacional.md` → entender el modo "Organizar"
+2. Leer `workflow/core/odessay-arquitectura.md` → entender la estructura de navegación
 3. Leer `.agents/skills/skill-design/SKILL.md` → tokens visuales
 4. Leer `.agents/skills/skill-design/vistas.md` → valores exactos del Desk
 5. Leer `.agents/skills/skill-frontend/SKILL.md` → arquitectura de componentes, naming
@@ -188,18 +188,18 @@ Comportamiento de sidebar por contexto:
 7. Antes de PR: leer `.agents/skills/skill-code-review/SKILL.md`
 
 **Para implementar un endpoint de API:**
-1. Leer `docs/core/odessay-arquitectura.md` → contexto
-2. Leer `docs/core/odessay-modelo-datos.md` → schema
+1. Leer `workflow/core/odessay-arquitectura.md` → contexto
+2. Leer `workflow/core/odessay-modelo-datos.md` → schema
 3. Leer `.agents/skills/skill-backend/SKILL.md` → estándares de API routes
 4. Leer `.agents/skills/skill-database/SKILL.md` → RLS y migraciones
 5. Antes de PR: leer `.agents/skills/skill-code-review/SKILL.md`
 
 **Para implementar el AI editor:**
-1. Leer `docs/features/odessay-ai-editor.md` → spec completa
+1. Leer `workflow/features/odessay-ai-editor.md` → spec completa
 2. Leer `.agents/skills/skill-backend/SKILL.md` → sección Claude API
 3. Leer `.agents/skills/skill-frontend/SKILL.md` → sección Editor TipTap
 
 **Para modificar el schema de base de datos:**
-1. Leer `docs/core/odessay-modelo-datos.md` → schema actual
+1. Leer `workflow/core/odessay-modelo-datos.md` → schema actual
 2. Leer `.agents/skills/skill-database/SKILL.md` → convenciones de migración y RLS
-3. Actualizar `docs/core/odessay-modelo-datos.md` con los cambios
+3. Actualizar `workflow/core/odessay-modelo-datos.md` con los cambios

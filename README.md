@@ -29,22 +29,22 @@ El framework tiene tres capas que resuelven problemas distintos: la jerarquía d
 La documentación se organiza en cuatro tipos con responsabilidades distintas:
 
 ```
-docs/
+workflow/
   core/       → Verdades estables. Todo agente las lee siempre.
   features/   → Specs de features con complejidad propia. On-demand.
-  ops/        → Estado vivo y operación. Pre-flight obligatorio.
+  (root)      → Estado vivo y operación. Pre-flight obligatorio.
 framework/    → Este framework. Transferible, no específico del proyecto.
 .agents/skills/       → Instrucciones de implementación por dominio.
 reference/    → Prototipos y referencias visuales.
 ```
 
-### docs/core/ — lo que define el producto
+### workflow/core/ — lo que define el producto
 
 Los documentos core responden qué es el producto y cómo está construido. Son las verdades que no cambian sprint a sprint. Un agente que no los leyó no entiende el producto.
 
 En la práctica contienen: visión y principios (`fundacional.md`), arquitectura técnica (`arquitectura.md`), stack y convenciones (`stack.md`), schema de datos (`modelo-datos.md`), rutas y páginas (`paginas.md`), flujos de usuario (`flujos.md`).
 
-### docs/features/ — lo que define cada feature complejo
+### workflow/features/ — lo que define cada feature complejo
 
 Los docs de feature responden cómo funciona una parte específica del producto con complejidad no evidente. No todos los features necesitan doc propio — solo los que tienen comportamiento suficientemente específico como para que un agente lo maneje mal sin instrucciones explícitas.
 
@@ -98,7 +98,7 @@ Stack, estructura de carpetas, naming conventions, patrones de componentes, gest
 
 **6. ¿Cómo funciona cada parte crítica?**
 Specs técnicas de los componentes más complejos o únicos del producto. No todos los componentes la necesitan — solo los que tienen comportamiento no evidente.
-*Documentos tipo: uno por componente crítico en `docs/features/`*
+*Documentos tipo: uno por componente crítico en `workflow/features/`*
 
 **7. ¿Cómo se implementa el backend?**
 Patrones de API, autenticación, base de datos, manejo de errores, servicios externos. El agente no define su propio estilo de API.
@@ -152,7 +152,7 @@ La distinción es importante: el registry responde "¿qué existe?", las questio
 {
   "registry": [
     {
-      "path": "docs/core/arquitectura.md",
+      "path": "workflow/core/arquitectura.md",
       "type": "core",
       "description": "Qué contiene y para qué sirve — en una oración.",
       "scope": "always"
@@ -163,7 +163,7 @@ La distinción es importante: el registry responde "¿qué existe?", las questio
       "id": 5,
       "question": "¿Cómo está organizado el código?",
       "documents": [
-        { "path": "docs/core/arquitectura.md", "scope": "always" }
+        { "path": "workflow/core/arquitectura.md", "scope": "always" }
       ]
     }
   ]
@@ -201,9 +201,9 @@ Cada documento tiene un scope que determina cuándo lo lee el agente:
 
 ```json
 "triggers": {
-  "frontend": ["docs/core/paginas.md", ".agents/skills/skill-design/SKILL.md", ".agents/skills/skill-frontend/SKILL.md"],
-  "backend":  ["docs/core/modelo-datos.md", ".agents/skills/skill-backend/SKILL.md"],
-  "editor":   ["docs/features/editor.md"]
+  "frontend": ["workflow/core/paginas.md", ".agents/skills/skill-design/SKILL.md", ".agents/skills/skill-frontend/SKILL.md"],
+  "backend":  ["workflow/core/modelo-datos.md", ".agents/skills/skill-backend/SKILL.md"],
+  "editor":   ["workflow/features/editor.md"]
 }
 ```
 
@@ -248,8 +248,8 @@ Cada PR significativo agrega una fila a `workflow/status.json`. Un PR significat
 **1. Crear la estructura de carpetas:**
 
 ```
-docs/core/         → Q1, Q2, Q4, Q5
-docs/features/     → Q6
+workflow/core/         → Q1, Q2, Q4, Q5
+workflow/features/     → Q6
 workflow/          → Q8, Q9
 framework/         → este framework
 .agents/skills/            → Q3, Q5, Q7, Q10

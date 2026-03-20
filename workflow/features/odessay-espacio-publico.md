@@ -1,7 +1,7 @@
 # ODESSAY — Espacio público del autor
 
 **Feature spec para agentes de desarrollo.**
-Lee `docs/core/odessay-fundacional.md` para entender la identidad epistolar, `docs/core/odessay-paginas.md` para la arquitectura de rutas, y `docs/core/odessay-modelo-datos.md` para el schema de `profiles` y `writings`.
+Lee `workflow/core/odessay-fundacional.md` para entender la identidad epistolar, `workflow/core/odessay-paginas.md` para la arquitectura de rutas, y `workflow/core/odessay-modelo-datos.md` para el schema de `profiles` y `writings`.
 
 ---
 
@@ -154,7 +154,7 @@ Las páginas públicas deben generar metadata estática para previews en redes s
 
 ## Modelo de datos (referencia)
 
-Schema completo en `docs/core/odessay-modelo-datos.md`.
+Schema completo en `workflow/core/odessay-modelo-datos.md`.
 
 Campos relevantes en `writings`:
 - `slug` — text, nullable, unique por `author_id`. Se genera al publicar.
@@ -169,8 +169,8 @@ Campos relevantes en `profiles`:
 
 ## Lo que este doc NO cubre
 
-- Márgenes en la reading view → `docs/features/odessay-margenes.md`
-- Correspondencias y navegación del árbol → `docs/features/odessay-correspondencias.md`
-- Collections públicas (lógica de colección) → `docs/features/odessay-collections.md`
-- Mecanismo de responder (reply_to, parent_id) → `docs/core/odessay-paginas.md` §Mecanismo universal de respuesta
-- Configuración del perfil (`/settings`) → `docs/core/odessay-paginas.md` §/settings
+- Márgenes en la reading view → `workflow/features/odessay-margenes.md`
+- Correspondencias y navegación del árbol → `workflow/features/odessay-correspondencias.md`
+- Collections públicas (lógica de colección) → `workflow/features/odessay-collections.md`
+- Mecanismo de responder (reply_to, parent_id) → `workflow/core/odessay-paginas.md` §Mecanismo universal de respuesta
+- Configuración del perfil (`/settings`) → `workflow/core/odessay-paginas.md` §/settings
