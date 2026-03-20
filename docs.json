@@ -134,6 +134,20 @@
       "trigger": "planning"
     },
     {
+      "path": "workflow/improvements-log.md",
+      "type": "ops",
+      "description": "Registro incremental de mejoras operativas y ajustes de proceso.",
+      "scope": "conditional",
+      "trigger": "planning"
+    },
+    {
+      "path": "workflow/issues/ISSUE-BRIEF.template.md",
+      "type": "ops",
+      "description": "Plantilla canónica de Issue Brief. Obligatoria para cerrar PLAN y habilitar BUILD.",
+      "scope": "conditional",
+      "trigger": "planning"
+    },
+    {
       "path": "framework/framework-mece.md",
       "type": "framework",
       "description": "Framework MECE genérico y transferible: las 10 preguntas que todo proyecto debe responder, cómo aplicarlo, cómo detectar gaps. No es específico de Odessay.",
@@ -210,7 +224,8 @@
     "always": "Aplicar solo en PLAN. En BUILD y REVIEW no se relee por defecto.",
     "conditional": "Leer cuando el issue toca ese área. El issue debe declararlo en 'areas_affected' o labels equivalentes.",
     "reference": "Consultar al llegar a esa parte del trabajo, no al inicio.",
-    "stage_first": "Antes de leer documentos, resolver la etapa activa del issue en Linear."
+    "stage_first": "Antes de leer documentos, resolver la etapa activa del issue en Linear.",
+    "build_gate": "BUILD exige Issue Brief existente. Fuentes válidas: `linear:issue-brief` o `workflow/issues/<issue-id>.md`."
   },
 
   "_comment_questions": "Índice temático: qué leer para responder cada una de las 10 preguntas MECE. Complementa el registry — este sección es orientada a tareas, el registry es orientado a inventario.",
@@ -359,7 +374,10 @@
         "registry:scope=always",
         "registry:trigger=planning"
       ],
-      "notes": "En BUILD, docs base/always no se releen salvo bloqueo técnico real."
+      "notes": "En BUILD, docs base/always no se releen salvo bloqueo técnico real.",
+      "gates": [
+        "issue-brief-required"
+      ]
     },
     "REVIEW": {
       "required_sources": [
@@ -377,5 +395,17 @@
       ],
       "notes": "El foco es diff, pruebas y checklist de calidad. No rehidratar contexto de producto completo."
     }
+  },
+
+  "issue_brief_contract": {
+    "required_for_stage": [
+      "BUILD",
+      "REVIEW"
+    ],
+    "accepted_sources": [
+      "linear:issue-brief",
+      "local:workflow/issues/<issue-id>.md"
+    ],
+    "template": "workflow/issues/ISSUE-BRIEF.template.md"
   }
 }

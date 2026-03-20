@@ -51,14 +51,16 @@ Este protocolo es **stage-first** y prevalece sobre cualquier interpretación pr
 ### Paso 2 — BUILD
 
 - Objetivo: implementar.
-- Requerido: `linear:issue` + `linear:issue-brief`.
+- Requerido: `linear:issue` + Issue Brief vigente.
+- Fuentes válidas de brief: `linear:issue-brief` o `workflow/issues/<issue-id>.md`.
 - Permitido adicional: solo docs/skills del trigger del issue y, si aplica, `status.json`/`SETUP.md`.
 - Prohibido por defecto: releer todo `scope=always` o contexto `planning`.
+- Gate: si no existe Issue Brief, no se ejecuta `/wf-build` y se vuelve a `/wf-define`.
 
 ### Paso 3 — REVIEW
 
 - Objetivo: validar calidad antes de cerrar.
-- Requerido: `linear:issue` + `linear:issue-brief` + `.agents/skills/skill-code-review/SKILL.md`.
+- Requerido: `linear:issue` + Issue Brief vigente + `.agents/skills/skill-code-review/SKILL.md`.
 - Foco: diff, evidencia de tests y checklist de calidad.
 - Prohibido por defecto: rehidratar contexto completo de producto.
 
