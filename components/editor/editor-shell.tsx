@@ -675,6 +675,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 />
               ) : (
                 <PropertiesPanel
+                  writingId={currentWritingId}
                   status={writingStatus}
                   metrics={textMetrics}
                   onClose={() => setActivePanel(null)}
