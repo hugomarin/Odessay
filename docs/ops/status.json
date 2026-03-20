@@ -2,7 +2,7 @@
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
 
-  "last_updated": "2026-03-19",
+  "last_updated": "2026-03-20",
 
   "active_phase": {
     "name": "Fase 1 — Escribir",
