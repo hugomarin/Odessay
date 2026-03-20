@@ -82,7 +82,7 @@ Antes de tocar un archivo, un agente debe confirmar que tiene todo lo necesario.
 #    a) docs declarados en registry que no existen en disco
 #    b) docs en disco que no están declarados en registry (contenido sin conexión)
 node -e "
-const config = require('./docs.json');
+const config = require('./workflow/docs.json');
 const fs = require('fs');
 const path = require('path');
 const glob = require('fs');
@@ -126,7 +126,7 @@ console.log('Registry completo — sin nodos huérfanos ni referencias rotas.');
 
 # 1b. Ver qué docs son always (lectura obligatoria independiente del issue)
 node -e "
-const config = require('./docs.json');
+const config = require('./workflow/docs.json');
 console.log('Docs always-read:');
 config.registry
   .filter(doc => doc.scope === 'always')

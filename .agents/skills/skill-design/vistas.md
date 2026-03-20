@@ -7,7 +7,7 @@ description: Companion file de skill-design. Valores exactos de padding, tamaño
 
 Lee `skill-design.md` primero. Este documento asume que ya tienes los tokens de color, tipografía, sombras y reglas globales. Aquí solo viven los valores específicos de cada vista.
 
-Los prototipos HTML en `/reference/` son la referencia visual canónica. Cuando hay conflicto entre un prototipo y este documento, este documento gana. Los prototipos pueden tener diferencias menores respecto al diseño final — este documento es la especificación oficial. Excepción conocida: ink-3/ink-4 en el editor (`reference/editor.html`) son más claros que el resto — usar los valores de `skill-design.md`.
+Los prototipos HTML en `/workflow/reference/` son la referencia visual canónica. Cuando hay conflicto entre un prototipo y este documento, este documento gana. Los prototipos pueden tener diferencias menores respecto al diseño final — este documento es la especificación oficial. Excepción conocida: ink-3/ink-4 en el editor (`workflow/reference/editor.html`) son más claros que el resto — usar los valores de `skill-design.md`.
 
 El mapa completo de archivos de referencia y sus screenshots está en `CLAUDE.md` (sección: Prototipos visuales de referencia).
 

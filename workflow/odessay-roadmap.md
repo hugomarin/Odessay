@@ -13,7 +13,7 @@ Este documento define el alcance completo del producto: fases, los issues macro 
 
 Cada fase produce algo deployable, funcionalmente completo y **visualmente terminado**. No existe una fase de pulido al final — el estándar de calidad visual se aplica desde la Fase 0. Lo que se entrega en cada fase es lo que el usuario ve.
 
-La referencia visual es siempre los prototipos en `/reference/` y los valores exactos de `.agents/skills/skill-design/vistas.md`. Lo que se ve en los prototipos es lo que se construye.
+La referencia visual es siempre los prototipos en `/workflow/reference/` y los valores exactos de `.agents/skills/skill-design/vistas.md`. Lo que se ve en los prototipos es lo que se construye.
 
 Dentro de cada fase, el orden de ejecución es siempre: database → backend → frontend → validation. Los issues de infra son siempre `critical-path` y van primero.
 
@@ -73,13 +73,13 @@ Al terminar esta fase: un usuario puede registrarse, abrir el editor, escribir c
 **Build global sidebar shell (3 estados)** `[frontend]`
 Implementar el sidebar izquierdo reutilizable en toda la zona autenticada con tres estados: colapsado (52-55px), expandido (292-300px) y expandido con panel secundario contextual (Collections). Debe incluir navegación principal (Desk, Collections, Correspondences), acceso a Settings desde user bar, acción New writing y persistencia de estado por sesión.
 Dependencias: Implement authentication, Implement design system.
-Referencia: `workflow/core/odessay-arquitectura.md` (sección: Sidebar/List panel), `.agents/skills/skill-design/vistas.md` (sección: Sidebar), `reference/editor.html`, `reference/desk.html`, `reference/collections.html`.
+Referencia: `workflow/core/odessay-arquitectura.md` (sección: Sidebar/List panel), `.agents/skills/skill-design/vistas.md` (sección: Sidebar), `workflow/reference/editor.html`, `workflow/reference/desk.html`, `workflow/reference/collections.html`.
 
 **Implement TipTap editor** `[frontend]`
 Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Strike, Highlight, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown + parser compatible con el dialecto markdown del proyecto), History, Placeholder, CharacterCount. Sin toolbar flotante al seleccionar. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
 Incluye modales de rename, insert link e insert footnote, shortcuts de teclado para formato y métricas de texto en panel derecho (palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas).
 Dependencias: Build global sidebar shell (3 estados).
-Referencia: `workflow/features/odessay-editor.md`, `.agents/skills/skill-design/vistas.md` (sección: Editor), `reference/editor.html`.
+Referencia: `workflow/features/odessay-editor.md`, `.agents/skills/skill-design/vistas.md` (sección: Editor), `workflow/reference/editor.html`.
 
 **Implement auto-save — local-first** `[backend, database]`
 onUpdate de TipTap guarda inmediatamente en la base local (IndexedDB). Sync a Supabase en background con debounce de 1.5 segundos y reintentos silenciosos. Indicador visual mínimo en statusbar ("Saved" / "Saving..." en ink-4/ink-3, sin iconos). El usuario nunca espera — el save local es instantáneo. UUID generado en cliente para escrituras nuevas. Incrementar `version` en cada save.
@@ -89,7 +89,7 @@ Referencia: `workflow/features/odessay-sync.md`, `workflow/features/odessay-edit
 **Build /desk — personal writing desk** `[frontend, backend]`
 Vista principal del autor. Tres secciones: Hero con cards horizontales deslizables de drafts activos (220px, scroll con snap), filter bar (All activity / Correspondence / With responses / Received), tabla de actividad agrupada por fecha (Today / This week / Earlier) con columnas Writing | State | With | Date. Datos se leen primero desde base local.
 Dependencias: Implement auto-save.
-Referencia: `workflow/core/odessay-arquitectura.md` (sección: Desk), `.agents/skills/skill-design/vistas.md` (sección: Desk), `reference/desk.html`.
+Referencia: `workflow/core/odessay-arquitectura.md` (sección: Desk), `.agents/skills/skill-design/vistas.md` (sección: Desk), `workflow/reference/desk.html`.
 
 **Implement writing states and private visibility** `[backend, frontend]`
 Estados draft/finished como dimensiones independientes de visibilidad. Panel Properties en el editor para cambiar estado y visibilidad. Visibilidad private por default al crear. Writing solo visible para el autor cuando es private.
@@ -122,12 +122,12 @@ Dependencias: Implement shared and public visibility.
 **Build reading view — dedicated reading space** `[frontend]`
 Vista dedicada de pantalla completa para leer un writing. Sin sidebar. Fondo bg. Autor + título en Lora 30px + cuerpo en Geist Sans 17px / line-height 1.85. Topbar 46px con back link, navegación Previous/Next y botón "Write a response" en terracota. Sin cursor, sin toolbar, sin posibilidad de editar. Navegación entre writings con flechas del teclado, ESC para volver.
 Dependencias: Implement writing_shares.
-Referencia: `workflow/core/odessay-arquitectura.md` (sección: Reading view), `.agents/skills/skill-design/vistas.md` (sección: Reading), `reference/reading.html`.
+Referencia: `workflow/core/odessay-arquitectura.md` (sección: Reading view), `.agents/skills/skill-design/vistas.md` (sección: Reading), `workflow/reference/reading.html`.
 
 **Implement margins — highlights and annotations** `[frontend, backend, database]`
 Sistema de highlights y anotaciones en la reading view. Flujo: seleccionar texto → popup mínimo (Mark / Annotate) → highlight ámbar o burbuja de anotación. Panel de márgenes 296px desde topbar. Privados por default. Compartibles con el autor. Anclados a offsets de body_text. Disponibles como contexto al iniciar una respuesta.
 Dependencias: Build reading view.
-Referencia: `workflow/features/odessay-margenes.md`, `workflow/core/odessay-modelo-datos.md` (tabla: margins), `reference/reading-margins-panel.png`.
+Referencia: `workflow/features/odessay-margenes.md`, `workflow/core/odessay-modelo-datos.md` (tabla: margins), `workflow/reference/reading-margins-panel.png`.
 
 **Build public author space — /{username} and /{username}/{slug}** `[frontend, backend]`
 Espacio público del autor en /{username}: writings y collections públicas, sin métricas visibles. Vista propia con toggle "cómo me ven" / "todo mi contenido". Writing público accesible en /{username}/{slug}. Slug generado automáticamente del título.
@@ -159,7 +159,7 @@ Referencia: `workflow/core/odessay-modelo-datos.md` (sección: correspondences).
 **Build /correspondences — thread view** `[frontend, backend]`
 Vista de correspondencia: participants bar con avatares apilados y stats, secuencia de mini-documentos con línea vertical conectora, reply prompt terracota al fondo. Lista de correspondencias donde el usuario participa. Pill "Your turn" / "Waiting".
 Dependencias: Implement correspondence creation.
-Referencia: `workflow/features/odessay-correspondencias.md`, `workflow/core/odessay-arquitectura.md` (sección: Correspondences), `.agents/skills/skill-design/vistas.md` (sección: Correspondences), `reference/correspondences.html`.
+Referencia: `workflow/features/odessay-correspondencias.md`, `workflow/core/odessay-arquitectura.md` (sección: Correspondences), `.agents/skills/skill-design/vistas.md` (sección: Correspondences), `workflow/reference/correspondences.html`.
 
 ---
 
@@ -172,7 +172,7 @@ Al terminar esta fase: el tercer modo de Odessay (Organizar) está completo. El 
 **Implement collections — CRUD and writing assignment** `[frontend, backend, database]`
 Crear, editar, eliminar collections. Asignar writings a collections desde el editor (panel Properties) y desde la vista /collections. Un writing puede estar en múltiples collections. Collections públicas visibles en el espacio público del autor. Banner uncategorized siempre visible cuando hay writings sin clasificar. Colecciones expandibles sin navegación a otra página.
 Dependencias: Build /desk, Implement writing states.
-Referencia: `workflow/features/odessay-collections.md`, `workflow/core/odessay-arquitectura.md` (sección: Collections), `.agents/skills/skill-design/vistas.md` (sección: Collections), `reference/collections.html`.
+Referencia: `workflow/features/odessay-collections.md`, `workflow/core/odessay-arquitectura.md` (sección: Collections), `.agents/skills/skill-design/vistas.md` (sección: Collections), `workflow/reference/collections.html`.
 
 ---
 

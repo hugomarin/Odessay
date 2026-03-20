@@ -54,7 +54,7 @@ Registro vivo de mejoras no bloqueantes detectadas durante implementación y rev
 
 ### Visual references
 
-- `reference/improvements/editor-polish-rich-view.png`
-- `reference/improvements/editor-polish-rich-overlay.png`
-- `reference/improvements/editor-polish-markdown-size.png`
-- `reference/improvements/editor-polish-toolbar-reference.png`
+- `workflow/reference/improvements/editor-polish-rich-view.png`
+- `workflow/reference/improvements/editor-polish-rich-overlay.png`
+- `workflow/reference/improvements/editor-polish-markdown-size.png`
+- `workflow/reference/improvements/editor-polish-toolbar-reference.png`

@@ -217,7 +217,7 @@
     "workflow/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
     "framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
     ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
-    "reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
+    "workflow/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
   },
 
   "reading_protocol": {
@@ -251,7 +251,7 @@
       "documents": [
         { "path": ".agents/skills/skill-design/SKILL.md", "scope": "conditional", "trigger": "frontend" },
         { "path": ".agents/skills/skill-design/vistas.md", "scope": "conditional", "trigger": "frontend" },
-        { "path": "reference/", "scope": "conditional", "trigger": "frontend" }
+        { "path": "workflow/reference/", "scope": "conditional", "trigger": "frontend" }
       ]
     },
     {

@@ -34,7 +34,7 @@
       "linear_url": null,
       "commit": null,
       "date": "2026-03-17",
-      "notes": "Estructura: docs/, .agents/skills/, framework/, reference/"
+      "notes": "Estructura: workflow/, .agents/skills/, framework/, workflow/reference/"
     },
     {
       "what": "Repo GitHub + .gitignore base",

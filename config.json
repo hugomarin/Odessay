@@ -1,5 +1,0 @@
-{
-  "deprecated": true,
-  "moved_to": "docs.json",
-  "message": "This file is a compatibility stub. Use docs.json as the source of truth."
-}

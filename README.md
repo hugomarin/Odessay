@@ -35,7 +35,7 @@ workflow/
   (root)      → Estado vivo y operación. Pre-flight obligatorio.
 framework/    → Este framework. Transferible, no específico del proyecto.
 .agents/skills/       → Instrucciones de implementación por dominio.
-reference/    → Prototipos y referencias visuales.
+workflow/reference/    → Prototipos y referencias visuales.
 ```
 
 ### workflow/core/ — lo que define el producto
@@ -86,7 +86,7 @@ Flujos de usuario, páginas, rutas, comportamiento en cada interacción, estados
 
 **3. ¿Cómo se ve exactamente?**
 Tokens de diseño, componentes y variantes, valores exactos por vista, prototipos. El agente no interpreta — tiene los valores.
-*Documentos tipo: `skill-design/SKILL.md` + `skill-design/vistas.md` + `reference/`*
+*Documentos tipo: `skill-design/SKILL.md` + `skill-design/vistas.md` + `workflow/reference/`*
 
 **4. ¿Qué datos existen y cómo se modelan?**
 Schema de base de datos, tipos, relaciones, políticas de acceso. Sin esto, el agente define su propio schema y el producto se fragmenta.
@@ -138,9 +138,9 @@ Un agente que improvisa en estas áreas indica un gap específico:
 
 ## Capa 3 — Protocolo de agentes
 
-### config.json como cartografía dual
+### workflow/docs.json como cartografía dual
 
-`config.json` tiene dos responsabilidades que se complementan:
+`workflow/docs.json` tiene dos responsabilidades que se complementan:
 
 **Registry** — inventario completo de todo documento que existe en el proyecto. Un documento que no está en el registry es un **nodo huérfano**: existe en disco pero ningún agente tiene ruta para llegar a él. El agente no sabe lo que no sabe — el contenido huérfano genera gaps de contexto silenciosos.
 
@@ -253,19 +253,19 @@ workflow/features/     → Q6
 workflow/          → Q8, Q9
 framework/         → este framework
 .agents/skills/            → Q3, Q5, Q7, Q10
-reference/         → Q3
-config.json
+workflow/reference/         → Q3
+workflow/docs.json
 CLAUDE.md
 AGENTS.md
 ```
 
 **2. Completar las 10 preguntas** — redactar un documento por pregunta antes de escribir una línea de código. Las preguntas 1, 2 y 3 las responde el dueño del producto, no el agente.
 
-**3. Registrar todo en config.json** — registry + questions. Correr el pre-flight para confirmar integridad bidireccional.
+**3. Registrar todo en workflow/docs.json** — registry + questions. Correr el pre-flight para confirmar integridad bidireccional.
 
 **4. Auditar con los dos tests** — exhaustividad (¿alguna pregunta sin respuesta?) y exclusividad (¿algún overlap entre documentos?).
 
-**5. Definir triggers** — mapear cada área de trabajo (`frontend`, `backend`, `editor`, etc.) a sus documentos en `config.json → triggers`.
+**5. Definir triggers** — mapear cada área de trabajo (`frontend`, `backend`, `editor`, etc.) a sus documentos en `workflow/docs.json → triggers`.
 
 ---
 

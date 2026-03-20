@@ -13,7 +13,7 @@ workflow/
   (root)      → Estado vivo y operación de agentes. Siempre leer (pre-flight).
 framework/    → Framework MECE genérico. No es específico de Odessay.
 .agents/skills/       → Instrucciones de implementación. On-demand por trigger.
-reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
+workflow/reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 ```
 
 ---
@@ -22,7 +22,7 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ### Paso 1 — Pre-flight (siempre, antes de tocar nada)
 
-1. **`docs.json`** — Verificar que todos los documentos declarados existen (script en `workflow/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
+1. **`workflow/docs.json`** — Verificar que todos los documentos declarados existen (script en `workflow/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
 2. **`workflow/SETUP.md`** — Entorno, variables, tools requeridos, permisos, Git. Si falta algo, no empezar.
 3. **`workflow/status.json`** — Qué está construido hoy, fase activa, build log con commits.
 
@@ -36,8 +36,8 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ### Paso 3 — Docs condicionales (solo si el issue activa el trigger)
 
-Consultar `docs.json → triggers` para saber qué leer según el área del issue:
-- `frontend` → core/paginas, core/flujos, skill-design/SKILL.md, skill-design/vistas.md, skill-frontend, reference/
+Consultar `workflow/docs.json → triggers` para saber qué leer según el área del issue:
+- `frontend` → core/paginas, core/flujos, skill-design/SKILL.md, skill-design/vistas.md, skill-frontend, workflow/reference/
 - `backend` → core/modelo-datos, skill-backend
 - `database` → core/modelo-datos, skill-database
 - `editor` → features/editor, skill-frontend
@@ -108,7 +108,7 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 
 ## Prototipos visuales de referencia
 
-La carpeta `reference/` contiene los prototipos HTML interactivos y sus screenshots. Son la fuente visual más fiable para entender layout, comportamiento y valores de componentes.
+La carpeta `workflow/reference/` contiene los prototipos HTML interactivos y sus screenshots. Son la fuente visual más fiable para entender layout, comportamiento y valores de componentes.
 
 **Regla general:** Cuando hay conflicto entre un prototipo y un documento de texto, el documento de texto prevalece. Los prototipos pueden tener diferencias menores respecto al diseño final — siempre validar contra `.agents/skills/skill-design/SKILL.md` y `.agents/skills/skill-design/vistas.md`.
 
@@ -129,27 +129,27 @@ Comportamiento de sidebar por contexto:
 
 | Archivo HTML | Vista | Qué muestra |
 |---|---|---|
-| `reference/desk.html` | Desk | Hero con draft cards, filter bar, tabla de actividad |
-| `reference/collections.html` | Collections | Banner uncategorized, AI suggestions, collections expandibles |
-| `reference/correspondences.html` | Correspondences | Thread con mini-docs, participants bar, reply prompt |
-| `reference/editor.html` | Editor | Sidebar mini, layout de tres columnas, panels, statusbar |
-| `reference/reading.html` | Reading + Márgenes | Vista de lectura standalone, highlights, panel de márgenes |
+| `workflow/reference/desk.html` | Desk | Hero con draft cards, filter bar, tabla de actividad |
+| `workflow/reference/collections.html` | Collections | Banner uncategorized, AI suggestions, collections expandibles |
+| `workflow/reference/correspondences.html` | Correspondences | Thread con mini-docs, participants bar, reply prompt |
+| `workflow/reference/editor.html` | Editor | Sidebar mini, layout de tres columnas, panels, statusbar |
+| `workflow/reference/reading.html` | Reading + Márgenes | Vista de lectura standalone, highlights, panel de márgenes |
 
 **Screenshots** — referencia rápida sin abrir browser:
 
 | Archivo PNG | Qué muestra |
 |---|---|
-| `reference/desk.png` | Desk completo: hero (4 cards) + filter bar + tabla agrupada por fecha |
-| `reference/collections.png` | Collections: banner terracota + AI strip + collections expandibles |
-| `reference/correspondences-thread.png` | Hilo: participants bar + 3 mini-docs + reply prompt |
-| `reference/reading-full.png` | Reading view sin sidebar, writing completo, sin márgenes |
-| `reference/reading-margins-panel.png` | Reading view con panel de márgenes abierto (296px) |
-| `reference/reading-selection-popup.png` | Popup de selección activo + márgenes + anotaciones |
-| `reference/editor-default.png` | Editor con sidebar mini, sin panels secundarios |
-| `reference/editor-list-panel.png` | Editor con list panel abierto (colección Reflections) |
-| `reference/editor-properties.png` | Editor con panel Properties (status, visibility, collections, correspondencia) |
-| `reference/editor-link-modal.png` | Modal "Insert link" sobre el editor |
-| `reference/editor-notes.png` | Editor con panel Notes (footnotes del writing) |
+| `workflow/reference/desk.png` | Desk completo: hero (4 cards) + filter bar + tabla agrupada por fecha |
+| `workflow/reference/collections.png` | Collections: banner terracota + AI strip + collections expandibles |
+| `workflow/reference/correspondences-thread.png` | Hilo: participants bar + 3 mini-docs + reply prompt |
+| `workflow/reference/reading-full.png` | Reading view sin sidebar, writing completo, sin márgenes |
+| `workflow/reference/reading-margins-panel.png` | Reading view con panel de márgenes abierto (296px) |
+| `workflow/reference/reading-selection-popup.png` | Popup de selección activo + márgenes + anotaciones |
+| `workflow/reference/editor-default.png` | Editor con sidebar mini, sin panels secundarios |
+| `workflow/reference/editor-list-panel.png` | Editor con list panel abierto (colección Reflections) |
+| `workflow/reference/editor-properties.png` | Editor con panel Properties (status, visibility, collections, correspondencia) |
+| `workflow/reference/editor-link-modal.png` | Modal "Insert link" sobre el editor |
+| `workflow/reference/editor-notes.png` | Editor con panel Notes (footnotes del writing) |
 
 ---
 
@@ -184,7 +184,7 @@ Comportamiento de sidebar por contexto:
 3. Leer `.agents/skills/skill-design/SKILL.md` → tokens visuales
 4. Leer `.agents/skills/skill-design/vistas.md` → valores exactos del Desk
 5. Leer `.agents/skills/skill-frontend/SKILL.md` → arquitectura de componentes, naming
-6. Implementar contra el prototipo `reference/desk.html`
+6. Implementar contra el prototipo `workflow/reference/desk.html`
 7. Antes de PR: leer `.agents/skills/skill-code-review/SKILL.md`
 
 **Para implementar un endpoint de API:**
