@@ -1,453 +1,203 @@
 {
   "project": "Odessay",
-  "framework": "mece-v1",
 
-  "_comment_registry": "Inventario completo de todo lo que existe. Un doc que no está aquí es un nodo huérfano — no tiene ruta de entrada para ningún agente. El script de pre-flight verifica que registry == disco.",
+  "_comment": "Inventario completo de todos los documentos del proyecto. Un documento que no aparece aquí es un nodo huérfano — no tiene ruta de entrada para ningún agente. Actualizar este archivo cuando se agregue, mueva o elimine cualquier documento.",
 
   "registry": [
+
     {
       "path": "workflow/core/odessay-fundacional.md",
       "type": "core",
-      "description": "Visión del producto, por qué existe, para quién, los tres modos (Escribir/Leer/Organizar), principios de diseño no negociables.",
-      "scope": "always"
+      "description": "Por qué existe Odessay, para quién es y qué problema resuelve. Los tres modos (Escribir/Leer/Organizar) y los principios de producto no negociables. No contiene código ni specs técnicas."
     },
     {
       "path": "workflow/core/odessay-arquitectura.md",
       "type": "core",
-      "description": "Arquitectura técnica, navegación de tres columnas, rutas, vistas principales, decisiones arquitectónicas tomadas.",
-      "scope": "always"
+      "description": "Stack completo (Next.js 15, React 19, TipTap, Supabase, SQLite, Claude API), los tres modos de uso con sus interfaces, navegación de tres columnas, rutas principales y decisiones arquitectónicas tomadas."
     },
     {
       "path": "workflow/core/odessay-stack.md",
       "type": "core",
-      "description": "Stack tecnológico confirmado, convenciones de código, ambientes de desarrollo y producción, variables de entorno.",
-      "scope": "always"
+      "description": "Detalle del stack: librerías confirmadas, convenciones de código, ambientes (local/staging/prod), variables de entorno y criterio de decisión técnica permanente. Complementa odessay-arquitectura.md."
     },
     {
       "path": "workflow/core/odessay-modelo-datos.md",
       "type": "core",
-      "description": "Schema completo de Supabase: todas las tablas, columnas, tipos, RLS, relaciones. Fuente de verdad de datos.",
-      "scope": "conditional",
-      "trigger": "backend"
+      "description": "Schema completo de Supabase: todas las tablas (profiles, writings, correspondences, collections, invitations, margins), columnas, tipos, RLS policies y relaciones. Fuente de verdad de la capa de datos."
     },
     {
       "path": "workflow/core/odessay-paginas.md",
       "type": "core",
-      "description": "Especificación de cada ruta/página: zonas pública, autor y privada, layout, comportamiento, notas de implementación.",
-      "scope": "conditional",
-      "trigger": "frontend"
+      "description": "Arquitectura de rutas: zona pública, espacio del autor (dual: vista propia vs visitante) y zona privada. Mecanismo universal de respuesta (reply_to / parent_id). Layout y comportamiento de cada página."
     },
     {
       "path": "workflow/core/odessay-flujos.md",
       "type": "core",
-      "description": "Flujos de usuario completos (secciones 1–11): registrarse, escribir, publicar, leer, organizar, navegar el editor, formato.",
-      "scope": "conditional",
-      "trigger": "frontend"
+      "description": "Flujos de usuario paso a paso (11 secciones): registrarse, escribir, publicar, leer, organizar, navegar el editor, responder, invitar y formatear. Depende de odessay-paginas.md para el mecanismo de respuesta."
     },
+
     {
       "path": "workflow/features/odessay-editor.md",
       "type": "feature",
-      "description": "Spec técnica del editor TipTap: extensiones, shortcuts, auto-save, modales, Markdown mode, FootnoteExtension, layout de columnas.",
-      "scope": "conditional",
-      "trigger": "editor"
+      "description": "Comportamiento técnico y de UX del editor TipTap: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas."
     },
     {
       "path": "workflow/features/odessay-ai-editor.md",
       "type": "feature",
-      "description": "Spec completa del AI editor residente: cuándo habla, qué observa, respuestas posibles, SILENCIO, arquitectura de prompts.",
-      "scope": "conditional",
-      "trigger": "ai-editor"
+      "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles, regla de SILENCIO y arquitectura de prompts con Claude API."
     },
     {
       "path": "workflow/features/odessay-margenes.md",
       "type": "feature",
-      "description": "Sistema de highlights y anotaciones en lectura: flujo de selección, panel lateral, semántica, schema de margins.",
-      "scope": "reference",
-      "trigger": "reading-view"
+      "description": "Sistema de márgenes: anotaciones que emergen mientras se lee (no son comentarios, son writings en borrador). Flujo de selección de texto, panel lateral, semántica y schema de la tabla margins."
     },
     {
       "path": "workflow/features/odessay-correspondencias.md",
       "type": "feature",
-      "description": "Spec completa de correspondencias: creación automática, thread visual (participants bar, mini-docs, reply prompt), reading view, estados del turno, modelo de datos.",
-      "scope": "conditional",
-      "trigger": "correspondencias"
+      "description": "Correspondencias: árbol de writings conectados por respuestas, creado automáticamente con la primera respuesta. Thread visual (participants bar, mini-docs, reply prompt), estados del turno y modelo de datos."
     },
     {
       "path": "workflow/features/odessay-collections.md",
       "type": "feature",
-      "description": "Spec completa de collections: banner uncategorized, AI suggestions (formato y contrato), bulk categorization, expandable collections, visibilidad pública.",
-      "scope": "conditional",
-      "trigger": "collections"
+      "description": "Collections: interfaz de clasificación del archivo (no de lectura). Resuelve el problema de writings sin clasificar con preview sin apertura, bulk categorization y AI como propuesta no como acción automática."
     },
     {
       "path": "workflow/features/odessay-sync.md",
       "type": "feature",
-      "description": "Spec de sync local-first: interfaz LocalDB, flujo auto-save (local inmediato → remoto background), debounce, backoff exponencial, last-write-wins, estados del statusbar.",
-      "scope": "conditional",
-      "trigger": "sync"
+      "description": "Capa local-first: el usuario nunca espera a Supabase. Interfaz LocalDB, flujo auto-save (escritura local inmediata → sync remoto en background), debounce, backoff exponencial, last-write-wins y estados del statusbar."
     },
     {
       "path": "workflow/features/odessay-invitaciones.md",
       "type": "feature",
-      "description": "Spec de invitaciones: flujo del autor, flujo del invitado, landing /invite/{token}, estados (pending/accepted/expired), email transaccional Resend, asociación a cuenta existente.",
-      "scope": "conditional",
-      "trigger": "invitaciones"
+      "description": "Sistema de invitaciones: la primera experiencia del invitado es leer la carta, no un registro vacío. Flujo del autor, flujo del invitado, landing /invite/{token}, estados (pending/accepted/expired) y email vía Resend."
     },
     {
       "path": "workflow/features/odessay-espacio-publico.md",
       "type": "feature",
-      "description": "Spec del espacio público: /{username} vista dual (pública vs propia), /{username}/{slug} writing público, slug generation, SEO/OG, contexto de correspondencia en lectura pública.",
-      "scope": "conditional",
-      "trigger": "espacio-publico"
+      "description": "Espacio público del autor: /{username} con vista dual (pública vs propia), /{username}/{slug} para writings públicos. Sin métricas de engagement. Slug generation, SEO/OG y contexto de correspondencia en lectura pública."
+    },
+
+    {
+      "path": "workflow/agents.md",
+      "type": "ops",
+      "description": "Fuente de verdad para todos los LLMs (Claude, Codex, Gemini). Puerta mínima del sistema: identidad del proyecto, qué recursos están disponibles y la regla de mantenimiento de docs.json. CLAUDE.md y AGENTS.md en la raíz son stubs que apuntan aquí."
+    },
+    {
+      "path": "workflow/workflow.md",
+      "type": "ops",
+      "description": "Protocolo completo de comandos /wf-*: qué hace cada etapa (PLAN, BUILD, REVIEW, UPDATE-DOCS), qué contexto carga, secuencia de pasos, gates de salida, frontera humano/agente y protocolo de handoff."
     },
     {
       "path": "workflow/status.json",
       "type": "ops",
-      "description": "Estado actual del codebase: fase activa (con links a Linear y roadmap), build log con commits y fechas, decisiones arquitectónicas. Puente entre GitHub, Linear y el roadmap.",
-      "scope": "always"
-    },
-    {
-      "path": "workflow/decisions-archive.md",
-      "type": "ops",
-      "description": "Archivo histórico de decisiones por fase. Referencia para contexto pasado sin contaminar el estado operativo vigente.",
-      "scope": "conditional",
-      "trigger": "planning"
-    },
-    {
-      "path": "workflow/SETUP.md",
-      "type": "ops",
-      "description": "Contrato operativo corto: entrada stage-first, secuencia mínima y mapa hacia docs atómicos de setup/proceso/calidad/runbooks.",
-      "scope": "always"
-    },
-    {
-      "path": "workflow/setup/environment.md",
-      "type": "ops",
-      "description": "Setup técnico de entorno: pre-flight, variables de entorno, matriz de ambientes, tools/permisos y comandos base de ejecución local.",
-      "scope": "conditional",
-      "trigger": "setup"
-    },
-    {
-      "path": "workflow/process/governance.md",
-      "type": "ops",
-      "description": "Gobernanza operativa: frontera humano/agente, máquina de estados en Linear, estrategia Git, handoffs y flujo de entrega.",
-      "scope": "conditional",
-      "trigger": "process"
-    },
-    {
-      "path": "workflow/quality/testing-observability.md",
-      "type": "ops",
-      "description": "Política de calidad técnica: hermetic testing, observabilidad y estándares mínimos de logging y monitoreo.",
-      "scope": "conditional",
-      "trigger": "quality"
-    },
-    {
-      "path": "workflow/runbooks/phase-1-operations.md",
-      "type": "ops",
-      "description": "Runbooks específicos de Fase 1 (ODE-12/14/15/16) para operaciones puntuales que no aplican como regla global.",
-      "scope": "conditional",
-      "trigger": "runbook"
+      "description": "Estado del codebase: fase activa con links a Linear y roadmap, build log con commits y fechas, y decisiones arquitectónicas vigentes. Puente entre GitHub, Linear y el roadmap."
     },
     {
       "path": "workflow/odessay-roadmap.md",
       "type": "ops",
-      "description": "Fases del producto y orden de implementación. Consultar para entender prioridad relativa de issues y qué bloquea qué.",
-      "scope": "conditional",
-      "trigger": "planning"
+      "description": "Fases del producto y orden de implementación: qué bloquea qué, alcance de cada fase y estructura de proyectos en Linear. Fuente de verdad del qué y el cuándo."
     },
     {
       "path": "workflow/fase-1-definition-of-done.md",
       "type": "ops",
-      "description": "Gate operativo de cierre de Fase 1 (Escribir): checklist de editor, sidebar, persistencia local-first, sharing de evaluación y criterios técnicos mínimos.",
-      "scope": "conditional",
-      "trigger": "planning"
+      "description": "Gate de cierre de Fase 1 — Escribir: checklist de editor core, sidebar, persistencia local-first y criterios técnicos mínimos que deben estar cumplidos para considerar la fase terminada."
+    },
+    {
+      "path": "workflow/decisions-archive.md",
+      "type": "ops",
+      "description": "Historial de decisiones por fase (técnicas y de producto). Diferencia de status.json: este archivo guarda decisiones pasadas para trazabilidad; status.json solo tiene las decisiones activas."
     },
     {
       "path": "workflow/improvements-log.md",
       "type": "ops",
-      "description": "Registro incremental de mejoras operativas y ajustes de proceso.",
-      "scope": "conditional",
-      "trigger": "planning"
+      "description": "Registro vivo de mejoras no bloqueantes detectadas durante implementación y review. Cada entrada tiene ID estable, estado (Captured/Triaged/Scheduled/Done/Won't do) y link a Linear cuando aplica."
+    },
+    {
+      "path": "workflow/setup/environment.md",
+      "type": "ops",
+      "description": "Setup técnico del entorno local: pre-flight checklist, variables de entorno requeridas, matriz de ambientes (local/staging/prod), herramientas necesarias y comandos base para ejecutar el proyecto."
+    },
+    {
+      "path": "workflow/process/governance.md",
+      "type": "ops",
+      "description": "Contrato operativo del flujo de trabajo: etapas /wf-*, estados en Linear, outputs requeridos por etapa, handoffs humano/agente y reglas de Git (branches, PRs, merges)."
+    },
+    {
+      "path": "workflow/quality/testing-observability.md",
+      "type": "ops",
+      "description": "Reglas mínimas de calidad técnica: estrategia de hermetic testing, estándares de logging, instrumentación de Sentry y criterios que debe cumplir una entrega antes de pasar a In Review."
+    },
+    {
+      "path": "workflow/runbooks/phase-1-operations.md",
+      "type": "ops",
+      "description": "Playbooks ejecutables específicos de Fase 1 (issues ODE-12/14/15/16). Procedimientos paso a paso para operaciones puntuales que no aplican como regla global."
     },
     {
       "path": "workflow/issues/ISSUE-BRIEF.template.md",
       "type": "ops",
-      "description": "Plantilla canónica de Issue Brief. Obligatoria para cerrar PLAN y habilitar BUILD.",
-      "scope": "conditional",
-      "trigger": "planning"
+      "description": "Plantilla canónica del Issue Brief con secciones: identificación, problema, alcance (in/out of scope), diseño técnico, áreas afectadas, criterios de done y proof of work. Gate requerido para pasar de PLAN a BUILD."
     },
+
     {
       "path": "workflow/framework/framework-mece.md",
       "type": "framework",
-      "description": "Framework MECE genérico y transferible: las 10 preguntas que todo proyecto debe responder, cómo aplicarlo, cómo detectar gaps. No es específico de Odessay.",
-      "scope": "reference",
-      "trigger": "meta"
+      "description": "Framework MECE genérico y transferible a cualquier proyecto: las 10 preguntas que todo sistema debe responder, cómo detectar gaps y cómo aplicarlo. No contiene información específica de Odessay."
     },
+
     {
       "path": ".agents/skills/skill-design/SKILL.md",
       "type": "skill",
-      "description": "Sistema de diseño visual completo: tokens de color, tipografía (Lora/Geist), ShadCN, iconos, transiciones, reglas invariables de UI.",
-      "scope": "conditional",
-      "trigger": "frontend"
+      "description": "Sistema de diseño visual completo: paleta de colores (tokens ink/paper/accent), tipografía (Lora para contenido, Geist para UI), componentes ShadCN adaptados, iconos, transiciones y reglas visuales invariables."
     },
     {
       "path": ".agents/skills/skill-design/vistas.md",
       "type": "skill",
-      "description": "Companion de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista + checklists de validación. Nunca usar standalone.",
-      "scope": "conditional",
-      "trigger": "frontend"
+      "description": "Companion de skill-design: valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. No usar sin skill-design/SKILL.md."
     },
     {
       "path": ".agents/skills/skill-frontend/SKILL.md",
       "type": "skill",
-      "description": "Arquitectura React/Next.js: estructura de archivos, naming BEM, Server/Client components, TipTap, estado (Zustand/TanStack Query), performance, accesibilidad.",
-      "scope": "conditional",
-      "trigger": "frontend"
+      "description": "Estándares de implementación frontend: estructura de archivos Next.js 15, naming BEM, cuándo usar Server vs Client components, integración con TipTap, estado con Zustand y TanStack Query, performance y accesibilidad."
     },
     {
       "path": ".agents/skills/skill-backend/SKILL.md",
       "type": "skill",
-      "description": "API routes, Supabase (auth, DB, realtime), sync local-first, Claude API, Resend, manejo de errores, observabilidad con Sentry.",
-      "scope": "conditional",
-      "trigger": "backend"
+      "description": "Estándares de implementación backend: API routes, Supabase (auth, DB, realtime), capa local-first, integración con Claude API y Resend, manejo de errores y observabilidad con Sentry."
     },
     {
       "path": ".agents/skills/skill-database/SKILL.md",
       "type": "skill",
-      "description": "Supabase: convenciones de migración, RLS policies, índices, naming de tablas, cómo actualizar odessay-modelo-datos.md tras un cambio.",
-      "scope": "conditional",
-      "trigger": "database"
+      "description": "Guía de base de datos: convenciones de migración SQL, RLS policies, triggers, índices, naming de tablas y cómo actualizar odessay-modelo-datos.md después de un cambio de schema."
     },
     {
       "path": ".agents/skills/skill-product-manager/SKILL.md",
       "type": "skill",
-      "description": "Criterios de producto, creación de issues en Linear, template de issue con areas_affected, proof of work requerido en PR.",
-      "scope": "always"
+      "description": "Workflow de PM en Linear: cómo escribir issues ejecutables, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Leer antes de crear o modificar issues."
     },
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
-      "description": "Checklist pre-PR: proof of work (typecheck + lint + test), hermetic testing, calidad, seguridad, performance. Leer siempre antes de abrir PR.",
-      "scope": "always"
+      "description": "Checklist pre-PR: typecheck, lint, tests hermético, calidad de código, seguridad y performance. Define el estándar mínimo que debe cumplir cualquier entrega antes de abrir un PR."
     },
     {
       "path": ".agents/skills/skill-ux-testing/SKILL.md",
       "type": "skill",
-      "description": "Testing de UX y flujos E2E con Playwright. Consultar cuando el issue incluye testing de experiencia de usuario o automatización de flujos.",
-      "scope": "conditional",
-      "trigger": "ux-testing"
+      "description": "Testing de UX con Playwright: cómo estructurar tests E2E para flujos críticos, pruebas de aceptación y regresiones. Incluye uso de Playwright MCP para testear interacciones en browser."
     }
+
   ],
 
-  "_comment_structure": "Descripción de carpetas para orientación rápida.",
   "structure": {
-    "workflow/core/": "Verdades estables del producto. Todo agente las lee siempre.",
-    "workflow/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
-    "workflow/": "Estado vivo y operación de agentes (contrato, roadmap, estado).",
+    "workflow/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
+    "workflow/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
+    "workflow/": "Estado vivo y operación del proyecto (contrato, roadmap, estado, decisiones).",
     "workflow/setup/": "Setup técnico y pre-flight del entorno.",
     "workflow/process/": "Gobernanza del trabajo y flujo operativo.",
     "workflow/quality/": "Criterios de calidad, testing y observabilidad.",
-    "workflow/runbooks/": "Procedimientos específicos por fase/issue.",
-    "workflow/framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
-    ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
-    "workflow/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
-  },
-
-  "reading_protocol": {
-    "always": "Aplicar solo en PLAN. En BUILD y REVIEW no se relee por defecto.",
-    "conditional": "Leer cuando el issue toca ese área. El issue debe declararlo en 'areas_affected' o labels equivalentes.",
-    "reference": "Consultar al llegar a esa parte del trabajo, no al inicio.",
-    "stage_first": "Antes de leer documentos, resolver la etapa activa del issue en Linear.",
-    "build_gate": "BUILD exige Issue Brief existente. Fuentes válidas: `linear:issue-brief` o `workflow/issues/<issue-id>.md`."
-  },
-
-  "_comment_questions": "Índice temático: qué leer para responder cada una de las 10 preguntas MECE. Complementa el registry — este sección es orientada a tareas, el registry es orientado a inventario.",
-  "questions": [
-    {
-      "id": 1,
-      "question": "¿Para qué existe esto y para quién?",
-      "documents": [
-        { "path": "workflow/core/odessay-fundacional.md", "scope": "always" }
-      ]
-    },
-    {
-      "id": 2,
-      "question": "¿Qué ve y hace el usuario?",
-      "documents": [
-        { "path": "workflow/core/odessay-paginas.md", "scope": "conditional", "trigger": "frontend" },
-        { "path": "workflow/core/odessay-flujos.md", "scope": "conditional", "trigger": "frontend" }
-      ]
-    },
-    {
-      "id": 3,
-      "question": "¿Cómo se ve exactamente?",
-      "documents": [
-        { "path": ".agents/skills/skill-design/SKILL.md", "scope": "conditional", "trigger": "frontend" },
-        { "path": ".agents/skills/skill-design/vistas.md", "scope": "conditional", "trigger": "frontend" },
-        { "path": "workflow/reference/", "scope": "conditional", "trigger": "frontend" }
-      ]
-    },
-    {
-      "id": 4,
-      "question": "¿Qué datos existen y cómo se modelan?",
-      "documents": [
-        { "path": "workflow/core/odessay-modelo-datos.md", "scope": "conditional", "trigger": "backend" }
-      ]
-    },
-    {
-      "id": 5,
-      "question": "¿Cómo está organizado el código?",
-      "documents": [
-        { "path": "workflow/core/odessay-arquitectura.md", "scope": "always" },
-        { "path": "workflow/core/odessay-stack.md", "scope": "always" },
-        { "path": ".agents/skills/skill-frontend/SKILL.md", "scope": "conditional", "trigger": "frontend" }
-      ]
-    },
-    {
-      "id": 6,
-      "question": "¿Cómo funciona cada feature crítico?",
-      "documents": [
-        { "path": "workflow/features/odessay-editor.md", "scope": "conditional", "trigger": "editor" },
-        { "path": "workflow/features/odessay-ai-editor.md", "scope": "conditional", "trigger": "ai-editor" },
-        { "path": "workflow/features/odessay-margenes.md", "scope": "reference", "trigger": "reading-view" },
-        { "path": "workflow/features/odessay-correspondencias.md", "scope": "conditional", "trigger": "correspondencias" },
-        { "path": "workflow/features/odessay-collections.md", "scope": "conditional", "trigger": "collections" },
-        { "path": "workflow/features/odessay-sync.md", "scope": "conditional", "trigger": "sync" },
-        { "path": "workflow/features/odessay-invitaciones.md", "scope": "conditional", "trigger": "invitaciones" },
-        { "path": "workflow/features/odessay-espacio-publico.md", "scope": "conditional", "trigger": "espacio-publico" }
-      ]
-    },
-    {
-      "id": 7,
-      "question": "¿Cómo se implementa el backend?",
-      "documents": [
-        { "path": ".agents/skills/skill-backend/SKILL.md", "scope": "conditional", "trigger": "backend" },
-        { "path": ".agents/skills/skill-database/SKILL.md", "scope": "conditional", "trigger": "database" }
-      ]
-    },
-    {
-      "id": 8,
-      "question": "¿Qué existe hoy en el codebase?",
-      "documents": [
-        { "path": "workflow/status.json", "scope": "always" },
-        { "path": "workflow/decisions-archive.md", "scope": "reference", "trigger": "planning" }
-      ]
-    },
-    {
-      "id": 9,
-      "question": "¿Cómo opera el agente en este proyecto?",
-      "documents": [
-        { "path": "workflow/SETUP.md", "scope": "always" },
-        { "path": "workflow/setup/environment.md", "scope": "conditional", "trigger": "setup" },
-        { "path": "workflow/process/governance.md", "scope": "conditional", "trigger": "process" },
-        { "path": "workflow/quality/testing-observability.md", "scope": "conditional", "trigger": "quality" },
-        { "path": "workflow/runbooks/phase-1-operations.md", "scope": "reference", "trigger": "runbook" }
-      ]
-    },
-    {
-      "id": 10,
-      "question": "¿Cómo sé que terminé?",
-      "documents": [
-        { "path": ".agents/skills/skill-product-manager/SKILL.md", "scope": "always" },
-        { "path": ".agents/skills/skill-code-review/SKILL.md", "scope": "always" }
-      ]
-    }
-  ],
-
-  "_comment_stage_machine": "Linear define la etapa activa de cada issue. Esta etapa controla qué contexto se permite leer.",
-  "stage_machine": {
-    "source_of_truth": "Comandos /wf-* (override de sesión) + Linear issue labels (stage:PLAN, stage:BUILD, stage:REVIEW). Si no existe label, inferir por estado del issue.",
-    "command_overrides": {
-      "/wf-define": "PLAN",
-      "/wf-build": "BUILD",
-      "/wf-review": "REVIEW"
-    },
-    "stage_resolution_precedence": [
-      "command_override",
-      "linear_stage_label",
-      "linear_state_fallback"
-    ],
-    "fallback_by_linear_state": {
-      "Todo": "PLAN",
-      "Backlog": "PLAN",
-      "In Progress": "BUILD",
-      "In Review": "REVIEW",
-      "Done": "REVIEW"
-    },
-    "valid_stages": [
-      "PLAN",
-      "BUILD",
-      "REVIEW"
-    ]
-  },
-
-  "_comment_stage_policies": "Las políticas son allowlist por etapa. Cualquier lectura fuera de allowlist requiere justificación explícita en el issue.",
-  "stage_policies": {
-    "PLAN": {
-      "required_sources": [
-        "linear:issue",
-        "registry:scope=always"
-      ],
-      "allowed_additional_sources": [
-        "registry:trigger=planning",
-        "registry:trigger=<issue-area>",
-        "registry:scope=reference"
-      ],
-      "output_required": [
-        "issue-brief"
-      ]
-    },
-    "BUILD": {
-      "required_sources": [
-        "linear:issue",
-        "linear:issue-brief"
-      ],
-      "allowed_additional_sources": [
-        "registry:trigger=<issue-area>",
-        "registry:path=workflow/status.json",
-        "registry:path=workflow/SETUP.md",
-        "registry:path=workflow/setup/environment.md",
-        "registry:path=workflow/process/governance.md",
-        "registry:path=workflow/quality/testing-observability.md",
-        "registry:path=workflow/runbooks/phase-1-operations.md"
-      ],
-      "disallowed_by_default": [
-        "registry:scope=always",
-        "registry:trigger=planning"
-      ],
-      "notes": "En BUILD, docs base/always no se releen salvo bloqueo técnico real.",
-      "gates": [
-        "issue-brief-required"
-      ]
-    },
-    "REVIEW": {
-      "required_sources": [
-        "linear:issue",
-        "linear:issue-brief",
-        ".agents/skills/skill-code-review/SKILL.md"
-      ],
-      "allowed_additional_sources": [
-        "registry:trigger=<issue-area>",
-        "registry:path=workflow/status.json",
-        "registry:path=workflow/quality/testing-observability.md",
-        "registry:path=workflow/process/governance.md"
-      ],
-      "disallowed_by_default": [
-        "registry:scope=always",
-        "registry:trigger=planning"
-      ],
-      "notes": "El foco es diff, pruebas y checklist de calidad. No rehidratar contexto de producto completo."
-    }
-  },
-
-  "issue_brief_contract": {
-    "required_for_stage": [
-      "BUILD",
-      "REVIEW"
-    ],
-    "accepted_sources": [
-      "linear:issue-brief",
-      "local:workflow/issues/<issue-id>.md"
-    ],
-    "template": "workflow/issues/ISSUE-BRIEF.template.md"
+    "workflow/runbooks/": "Procedimientos específicos por fase o issue.",
+    "workflow/framework/": "Framework MECE genérico. No es específico de Odessay.",
+    "workflow/issues/": "Issue Briefs y plantillas de trabajo.",
+    "workflow/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica.",
+    ".agents/skills/": "Instrucciones de implementación por dominio. Se leen cuando el issue toca ese área."
   }
 }

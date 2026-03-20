@@ -2,127 +2,183 @@
 
 ## Alcance
 
-Contrato de proceso operativo del trabajo: responsabilidades, estados, Git y handoffs.
+Contrato operativo del flujo de trabajo: etapas (`/wf-*`), estados en Linear, outputs, handoffs y reglas de Git por etapa.
 
 ## Cuándo se usa
 
-- Durante ejecución de issues (`In Progress` / `In Review`).
-- Cuando hay dudas de ownership humano/agente.
-- Antes de mover estados en Linear o cerrar entrega.
+- Al iniciar cualquier etapa (`/wf-define`, `/wf-build`, `/wf-review`).
+- Antes de mover un issue entre estados en Linear.
+- Ante dudas de ownership humano/agente o reglas de rama.
 
 ## No incluye
 
-- Setup técnico de entorno y variables (ver `workflow/setup/environment.md`).
-- Estándares de testing/observabilidad (ver `workflow/quality/testing-observability.md`).
-- Pasos específicos de un issue puntual (ver `workflow/runbooks/phase-1-operations.md`).
+- Setup técnico y variables → `workflow/setup/environment.md`.
+- Criterios de testing y observabilidad → `workflow/quality/testing-observability.md`.
+- Pasos de ejecución de un issue específico → `workflow/runbooks/phase-1-operations.md`.
+- Políticas de contexto por etapa → `workflow/docs.json → stage_policies`.
+
+---
 
 ## Frontera humano / agente
 
 ### Siempre hace el humano
 
-- Crear repositorios en GitHub y branch protection cuando el plan lo permita.
-- Confirmar fallback operativo si no hay branch protection por limitación de plan.
-- Crear proyectos en Supabase y compartir credenciales necesarias.
-- Conectar repositorio en Vercel y cargar variables de entorno.
-- Aprobar/mergear pull requests.
-- Autorizar tools y accesos.
 - Asignar issues en Linear.
+- Aprobar y mergear PRs a `main`.
+- Resolver handoffs externos (credenciales, dashboards, permisos no automatizables).
 
 ### Siempre hace el agente
 
-- Implementar código y configuración.
-- Crear migraciones y ejecutarlas en staging.
-- Ejecutar `typecheck`, `lint`, `test` y dejar evidencia en PR.
-- Mover estados del issue (`Todo` → `In Progress` → `In Review` → `Done`).
+- Ejecutar el flujo por etapa (`/wf-*`) respetando gates.
+- Implementar, validar y documentar evidencia.
+- Mover estados operativos en Linear según esta guía.
 - Actualizar `workflow/status.json` al pasar a `In Review`.
-- Actualizar este documento cuando cambie el proceso operativo.
+- Dejar comentario en Linear al cerrar cada etapa.
 
-## Máquina de estados (Linear)
+---
 
-`Todo` → `In Progress` → `In Review` → `Done`
+## Operación por etapa
 
-Rechazo de review: `In Review` → `In Progress`
+### `/wf-define` (PLAN)
 
-### Handoff humano obligatorio
+**Objetivo:** definir alcance ejecutable y producir el `Issue Brief`.
 
-Si un issue requiere acción humana:
+| | |
+|---|---|
+| Estado Linear de entrada | `Todo` o `Backlog` |
+| Estado Linear de salida | `Todo` (listo para BUILD) |
+| Gate de entrada | Ninguno |
+| Gate de salida | `Issue Brief` escrito y disponible |
+
+**Output obligatorio:**
+- `Issue Brief` en Linear (cuerpo del issue o comentario) **o** `workflow/issues/<issue-id>.md`.
+- Comentario en Linear confirmando brief completo y alcance acordado.
+
+**Restricción:** no iniciar código ni abrir rama en esta etapa.
+
+---
+
+### `/wf-build` (BUILD)
+
+**Objetivo:** implementar sobre un brief ya aprobado.
+
+| | |
+|---|---|
+| Estado Linear de entrada | `Todo` (con brief existente) |
+| Estado Linear de salida | `In Review` |
+| Gate de entrada | `Issue Brief` debe existir |
+| Gate de salida | `npm run ops:delivery:gate` en verde + PR abierto |
+
+**Operación de estado:** al tomar el issue para ejecución, mover a `In Progress`. Al dejar PR listo, mover a `In Review`.
+
+**Output obligatorio:**
+- Cambios de código en rama del issue.
+- PR abierto con evidencia (typecheck, lint, tests).
+- `workflow/status.json` actualizado.
+- `npm run ops:delivery:gate` en verde.
+- Comentario de trazabilidad en Linear (qué se construyó, evidencia).
+
+---
+
+### `/wf-review` (REVIEW)
+
+**Objetivo:** verificar calidad del PR y cerrar trazabilidad del issue.
+
+| | |
+|---|---|
+| Estado Linear de entrada | `In Review` |
+| Estado Linear de salida (aprobado) | `Done` — solo después de merge confirmado por el humano |
+| Estado Linear de salida (rechazado) | `In Progress` — volver a BUILD |
+| Gate de entrada | PR abierto + validaciones + `workflow/status.json` actualizado |
+
+**Output obligatorio — si aprobado:**
+- Comentario en Linear: resultado de revisión + confirmación de que el humano puede mergear.
+- Mover issue a `Done` solo tras merge confirmado.
+
+**Output obligatorio — si rechazado:**
+- Comentario en Linear: hallazgos específicos que bloquean aprobación.
+- Mover issue a `In Progress`.
+- No cerrar el PR — mantener rama y PR del issue.
+
+**Restricción:** no agregar alcance nuevo en REVIEW. Solo correcciones derivadas del review.
+
+---
+
+## Handoff humano (protocolo)
+
+Usar cuando el agente no puede continuar sin una acción externa.
 
 ```text
 ⏸ HANDOFF REQUERIDO
 
-Completé: [qué hizo el agente]
-Necesito que tú: [acción concreta del humano]
-Una vez listo: [siguiente paso del agente]
+Etapa actual: [PLAN|BUILD|REVIEW]
+Bloquea: [qué no puede avanzar]
+Completé: [trabajo ya realizado]
+Necesito que tú: [acción concreta]
+Evidencia esperada: [qué debe compartir el humano]
+Reanudación: [acción exacta que hará el agente al recibir evidencia]
 ```
 
-El agente no mueve a `In Review` sin confirmación explícita del handoff.
+**Regla de estado durante handoff:**
+- Si el handoff ocurre en BUILD → issue permanece en `In Progress`.
+- No mover a `In Review` mientras exista handoff pendiente.
+- Si REVIEW rechaza → volver a `In Progress` con comentario de hallazgos.
 
-## Estrategia de Git
+---
 
-### Ramas
+## Estrategia de Git por etapa
 
-`main` es estable. Nunca push directo.
+### PLAN (`/wf-define`)
 
-Formato:
+- No abrir rama de implementación.
+- Solo producir brief y decisiones de alcance.
 
-```text
+### BUILD (`/wf-build`)
+
+Crear rama por issue desde `main` actualizado.
+
+**Convención de nombre:**
+
+```
 feat/{issue-id}-{descripcion-corta}
 fix/{issue-id}-{descripcion-corta}
 docs/{issue-id}-{descripcion-corta}
 chore/{issue-id}-{descripcion-corta}
 ```
 
-Creación:
+**Commits:** atómicos con formato `tipo(scope): descripción [ISSUE-ID]`. Push por subtarea significativa.
 
-```bash
-git checkout main && git pull origin main
-git checkout -b feat/ODE-XX-descripcion
-```
+### REVIEW (`/wf-review`)
 
-### Commits
+- Mantener misma rama y PR del issue.
+- Solo commits de corrección derivados del review.
+- El merge a `main` lo ejecuta el humano — nunca el agente.
 
-Formato: `tipo(scope): descripción [ODE-XX]`
+---
 
-Ejemplos:
+## `WORKFLOW.md` por issue (uso excepcional)
 
-```text
-feat(db): add writings table with RLS policies [ISSUE-ID]
-fix(editor): correct debounce timing on local save [ISSUE-ID]
-```
+Reservado para excepciones temporales que no caben en la gobernanza global de este issue específico.
 
-Committs atómicos por unidad lógica; push por subtarea significativa.
+**Cuándo sí usarlo:**
+- Restricción técnica temporal de ese issue.
+- Orden de validación no estándar para ese issue.
+- Dependencia externa puntual que cambia el orden normal.
 
-### Coordinación paralela
+**Cuándo no usarlo:**
+- Reglas generales del repositorio (van aquí o en otro doc de `workflow/`).
+- Recordatorios que ya viven en `workflow/`.
 
-Antes de empezar:
+**Contenido mínimo:**
+1. Contexto extra del issue.
+2. Restricción temporal.
+3. Validación adicional obligatoria.
+4. Condición para retirar el archivo.
 
-```bash
-git fetch origin
-git branch -r
-gh pr list --state open
-```
+Al mergear, `WORKFLOW.md` se elimina.
 
-Si hay solapamiento de archivos con PR abierto, esperar merge o acordar secuencia en Linear.
+---
 
-## WORKFLOW.md por issue (opcional)
+## Regla de foco
 
-Solo crear `WORKFLOW.md` cuando un issue requiere reglas adicionales específicas de esa rama.
-
-No es obligatorio. Se elimina al mergear.
-
-## Flujo completo de entrega
-
-1. Crear rama desde `main` actualizado.
-2. Mover issue a `In Progress`.
-3. Crear `WORKFLOW.md` si aplica.
-4. Desarrollar con commits atómicos.
-5. Push por subtareas.
-6. Ejecutar validaciones y pegar output en PR.
-7. Abrir PR.
-8. Comentar en Linear: link PR + SHA + validaciones.
-9. Actualizar `workflow/status.json` (`built[]`).
-10. Correr `npm run ops:delivery:gate`.
-11. Mover a `In Review`.
-12. Tras aprobación/merge, mover a `Done`.
-
-Regla de foco: una issue activa a la vez por agente implementador.
+Una issue activa por agente implementador.
