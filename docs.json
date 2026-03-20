@@ -207,9 +207,10 @@
   },
 
   "reading_protocol": {
-    "always": "Leer antes de cualquier tarea, sin excepción.",
-    "conditional": "Leer cuando el issue toca ese área. El issue debe declararlo en 'areas_affected'.",
-    "reference": "Consultar al llegar a esa parte del trabajo, no al inicio."
+    "always": "Aplicar solo en PLAN. En BUILD y REVIEW no se relee por defecto.",
+    "conditional": "Leer cuando el issue toca ese área. El issue debe declararlo en 'areas_affected' o labels equivalentes.",
+    "reference": "Consultar al llegar a esa parte del trabajo, no al inicio.",
+    "stage_first": "Antes de leer documentos, resolver la etapa activa del issue en Linear."
   },
 
   "_comment_questions": "Índice temático: qué leer para responder cada una de las 10 preguntas MECE. Complementa el registry — este sección es orientada a tareas, el registry es orientado a inventario.",
@@ -301,74 +302,80 @@
     }
   ],
 
-  "always_read": [
-    "docs/core/odessay-fundacional.md",
-    "docs/core/odessay-arquitectura.md",
-    "docs/core/odessay-stack.md",
-    "docs/ops/status.json",
-    "docs/ops/SETUP.md",
-    "skills/skill-product-manager/SKILL.md",
-    "skills/skill-code-review/SKILL.md"
-  ],
-
-  "triggers": {
-    "frontend": [
-      "docs/core/odessay-paginas.md",
-      "docs/core/odessay-flujos.md",
-      "skills/skill-design/SKILL.md",
-      "skills/skill-design/vistas.md",
-      "skills/skill-frontend/SKILL.md",
-      "reference/"
+  "_comment_stage_machine": "Linear define la etapa activa de cada issue. Esta etapa controla qué contexto se permite leer.",
+  "stage_machine": {
+    "source_of_truth": "Comandos /wf-* (override de sesión) + Linear issue labels (stage:PLAN, stage:BUILD, stage:REVIEW). Si no existe label, inferir por estado del issue.",
+    "command_overrides": {
+      "/wf-define": "PLAN",
+      "/wf-build": "BUILD",
+      "/wf-review": "REVIEW"
+    },
+    "stage_resolution_precedence": [
+      "command_override",
+      "linear_stage_label",
+      "linear_state_fallback"
     ],
-    "backend": [
-      "docs/core/odessay-modelo-datos.md",
-      "skills/skill-backend/SKILL.md"
-    ],
-    "database": [
-      "docs/core/odessay-modelo-datos.md",
-      "skills/skill-database/SKILL.md"
-    ],
-    "editor": [
-      "docs/features/odessay-editor.md",
-      "skills/skill-frontend/SKILL.md"
-    ],
-    "ai-editor": [
-      "docs/features/odessay-ai-editor.md",
-      "skills/skill-backend/SKILL.md"
-    ],
-    "reading-view": [
-      "docs/features/odessay-margenes.md"
-    ],
-    "correspondencias": [
-      "docs/features/odessay-correspondencias.md",
-      "docs/core/odessay-modelo-datos.md",
-      "skills/skill-frontend/SKILL.md"
-    ],
-    "collections": [
-      "docs/features/odessay-collections.md",
-      "docs/core/odessay-modelo-datos.md",
-      "skills/skill-frontend/SKILL.md"
-    ],
-    "sync": [
-      "docs/features/odessay-sync.md",
-      "skills/skill-backend/SKILL.md"
-    ],
-    "invitaciones": [
-      "docs/features/odessay-invitaciones.md",
-      "docs/core/odessay-modelo-datos.md",
-      "skills/skill-backend/SKILL.md"
-    ],
-    "espacio-publico": [
-      "docs/features/odessay-espacio-publico.md",
-      "docs/core/odessay-modelo-datos.md",
-      "skills/skill-frontend/SKILL.md"
-    ],
-    "ux-testing": [
-      "skills/skill-ux-testing/SKILL.md"
-    ],
-    "planning": [
-      "docs/ops/odessay-roadmap.md",
-      "docs/ops/decisions-archive.md"
+    "fallback_by_linear_state": {
+      "Todo": "PLAN",
+      "Backlog": "PLAN",
+      "In Progress": "BUILD",
+      "In Review": "REVIEW",
+      "Done": "REVIEW"
+    },
+    "valid_stages": [
+      "PLAN",
+      "BUILD",
+      "REVIEW"
     ]
+  },
+
+  "_comment_stage_policies": "Las políticas son allowlist por etapa. Cualquier lectura fuera de allowlist requiere justificación explícita en el issue.",
+  "stage_policies": {
+    "PLAN": {
+      "required_sources": [
+        "linear:issue",
+        "registry:scope=always"
+      ],
+      "allowed_additional_sources": [
+        "registry:trigger=planning",
+        "registry:trigger=<issue-area>",
+        "registry:scope=reference"
+      ],
+      "output_required": [
+        "issue-brief"
+      ]
+    },
+    "BUILD": {
+      "required_sources": [
+        "linear:issue",
+        "linear:issue-brief"
+      ],
+      "allowed_additional_sources": [
+        "registry:trigger=<issue-area>",
+        "registry:path=docs/ops/status.json",
+        "registry:path=docs/ops/SETUP.md"
+      ],
+      "disallowed_by_default": [
+        "registry:scope=always",
+        "registry:trigger=planning"
+      ],
+      "notes": "En BUILD, docs base/always no se releen salvo bloqueo técnico real."
+    },
+    "REVIEW": {
+      "required_sources": [
+        "linear:issue",
+        "linear:issue-brief",
+        "skills/skill-code-review/SKILL.md"
+      ],
+      "allowed_additional_sources": [
+        "registry:trigger=<issue-area>",
+        "registry:path=docs/ops/status.json"
+      ],
+      "disallowed_by_default": [
+        "registry:scope=always",
+        "registry:trigger=planning"
+      ],
+      "notes": "El foco es diff, pruebas y checklist de calidad. No rehidratar contexto de producto completo."
+    }
   }
 }

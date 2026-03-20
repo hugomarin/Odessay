@@ -8,9 +8,9 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 
 ```
 docs/
-  core/       → Verdades estables del producto. Siempre leer.
+  core/       → Verdades estables del producto. Primario en PLAN.
   features/   → Spec de cada feature. Leer solo si el issue lo toca.
-  ops/        → Estado vivo y operación de agentes. Siempre leer (pre-flight).
+  ops/        → Estado vivo y operación de agentes. Primario en PLAN.
 framework/    → Framework MECE genérico. No es específico de Odessay.
 skills/       → Instrucciones de implementación. On-demand por trigger.
 reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
@@ -20,40 +20,57 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ## Protocolo de lectura
 
-### Paso 1 — Pre-flight (siempre, antes de tocar nada)
+Este protocolo es **stage-first** y prevalece sobre cualquier interpretación previa de "always" como lectura repetida en todas las etapas.
 
-1. **`docs.json`** — Verificar que todos los documentos declarados existen (script en `docs/ops/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
-2. **`docs/ops/SETUP.md`** — Entorno, variables, tools requeridos, permisos, Git. Si falta algo, no empezar.
-3. **`docs/ops/status.json`** — Qué está construido hoy, fase activa, build log con commits.
+### Paso 0 — Resolver etapa del issue (obligatorio)
 
-**Si la tarea involucra crear o modificar la estructura de Linear** (proyectos, issues, milestones): leer `skills/skill-product-manager/SKILL.md` completo antes de tocar Linear. La estructura correcta está definida ahí — no se infiere del roadmap.
+1. Si el mensaje incluye un comando de etapa, usarlo como override de la sesión:
+   - `/wf-define` → `PLAN`
+   - `/wf-build` → `BUILD`
+   - `/wf-review` → `REVIEW`
+2. Si no hay comando, leer la etapa desde Linear: `stage:PLAN`, `stage:BUILD` o `stage:REVIEW`.
+3. Si no hay label de etapa, inferir por estado de Linear:
+   - `Todo`/`Backlog` → `PLAN`
+   - `In Progress` → `BUILD`
+   - `In Review`/`Done` → `REVIEW`
+4. Aplicar `docs.json -> stage_policies` como allowlist de lectura.
 
-### Paso 2 — Contexto base (siempre, todo issue)
+### Precedencia de etapa
 
-4. **`docs/core/odessay-fundacional.md`** — Qué es Odessay, por qué existe, para quién, principios de diseño.
-5. **`docs/core/odessay-arquitectura.md`** — Arquitectura técnica, navegación, rutas, vistas.
-6. **`docs/core/odessay-stack.md`** — Stack tecnológico y convenciones.
+1. Comando del usuario (`/wf-define`, `/wf-build`, `/wf-review`)
+2. Label de etapa en Linear (`stage:*`)
+3. Fallback por estado de Linear
 
-### Paso 3 — Docs condicionales (solo si el issue activa el trigger)
+### Paso 1 — PLAN
 
-Consultar `docs.json → triggers` para saber qué leer según el área del issue:
-- `frontend` → core/paginas, core/flujos, skill-design/SKILL.md, skill-design/vistas.md, skill-frontend, reference/
-- `backend` → core/modelo-datos, skill-backend
-- `database` → core/modelo-datos, skill-database
-- `editor` → features/editor, skill-frontend
-- `ai-editor` → features/ai-editor, skill-backend
-- `reading-view` → features/margenes (solo al llegar a esa parte del trabajo)
+- Objetivo: entender problema, constraints y estrategia.
+- Requerido: `linear:issue` + `registry:scope=always`.
+- Permitido adicional: `trigger=planning`, `trigger=<issue-area>`, y referencias puntuales.
+- Salida obligatoria: `Issue Brief` atómico (fuente para BUILD/REVIEW).
 
-### Paso 4 — Antes de abrir PR (siempre)
+### Paso 2 — BUILD
 
-- **`skills/skill-product-manager/SKILL.md`** — Protocolo de cierre del issue y trazabilidad GitHub ↔ Linear ↔ `status.json`.
-- **`skills/skill-code-review/SKILL.md`** — Checklist completo de calidad, velocidad y seguridad.
+- Objetivo: implementar.
+- Requerido: `linear:issue` + `linear:issue-brief`.
+- Permitido adicional: solo docs/skills del trigger del issue y, si aplica, `status.json`/`SETUP.md`.
+- Prohibido por defecto: releer todo `scope=always` o contexto `planning`.
+
+### Paso 3 — REVIEW
+
+- Objetivo: validar calidad antes de cerrar.
+- Requerido: `linear:issue` + `linear:issue-brief` + `skills/skill-code-review/SKILL.md`.
+- Foco: diff, evidencia de tests y checklist de calidad.
+- Prohibido por defecto: rehidratar contexto completo de producto.
+
+### Nota operativa de Linear
+
+Si la tarea involucra crear o modificar estructura de Linear (proyectos, issues, milestones), leer `skills/skill-product-manager/SKILL.md` completo antes de tocar Linear.
 
 ---
 
 ## Mapa de documentos
 
-### docs/core/ — Siempre leer
+### docs/core/ — Primario en PLAN
 
 | Documento | Propósito |
 |-----------|-----------|
@@ -72,7 +89,7 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 | `odessay-ai-editor.md` | AI editor residente: spec completa de comportamiento. | `ai-editor` |
 | `odessay-margenes.md` | Sistema de highlights y anotación en lectura. | `reading-view` |
 
-### docs/ops/ — Siempre leer (pre-flight)
+### docs/ops/ — Primario en PLAN
 
 | Documento | Propósito |
 |-----------|-----------|
