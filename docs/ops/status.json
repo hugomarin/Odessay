@@ -34,7 +34,7 @@
       "linear_url": null,
       "commit": null,
       "date": "2026-03-17",
-      "notes": "Estructura: docs/, skills/, framework/, reference/"
+      "notes": "Estructura: docs/, .agents/skills/, framework/, reference/"
     },
     {
       "what": "Repo GitHub + .gitignore base",
@@ -213,15 +213,15 @@
     },
     {
       "decision": "ShadCN tres capas de adaptación",
-      "doc": "skills/skill-design/SKILL.md"
+      "doc": ".agents/skills/skill-design/SKILL.md"
     },
     {
       "decision": "TanStack Query + Zustand (2 slices únicamente)",
-      "doc": "skills/skill-frontend/SKILL.md"
+      "doc": ".agents/skills/skill-frontend/SKILL.md"
     },
     {
       "decision": "Validación con react-hook-form + Zod, onBlur",
-      "doc": "skills/skill-frontend/SKILL.md"
+      "doc": ".agents/skills/skill-frontend/SKILL.md"
     },
     {
       "decision": "Branch protection no disponible — fallback por PR obligatorio",

@@ -207,6 +207,6 @@ Sentry captura estos errores automáticamente. Ver `docs/ops/SETUP.md` §Observa
 
 ## Lo que este doc NO cubre
 
-- Implementación del endpoint `PATCH /api/writings/{id}` → `skills/skill-backend/SKILL.md`
+- Implementación del endpoint `PATCH /api/writings/{id}` → `.agents/skills/skill-backend/SKILL.md`
 - Schema de la tabla `writings` (campos `version`, `sync_status`, `deleted_at`) → `docs/core/odessay-modelo-datos.md`
 - Implementación de SQLite en desktop (Tauri) → `docs/core/odessay-stack.md` §Desktop

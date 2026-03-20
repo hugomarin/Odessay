@@ -116,7 +116,7 @@ Formato — siempre texto plano, nunca Markdown links:
 1. Texto plano siempre. Nunca `[archivo.md](<http://archivo.md>)` ni ninguna sintaxis de link — los nombres de archivo no son URLs.
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`docs/core/`, `docs/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
-4. Los skills (`skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
+4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
 5. `docs/ops/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `docs/ops/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
 
 Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `docs/ops/status.json`.
@@ -167,16 +167,16 @@ Documentos del proyecto que el agente debe leer antes de implementar.
 Usar siempre paths completos desde la raíz del repo.
 
 - docs/core/odessay-modelo-datos.md (sección: writings)
-- skills/skill-database/SKILL.md
-- skills/skill-backend/SKILL.md
+- .agents/skills/skill-database/SKILL.md
+- .agents/skills/skill-backend/SKILL.md
 
 **Qué incluir según el tipo de issue:**
-- Cualquier issue con UI → `skills/skill-design/SKILL.md` + `skills/skill-design/vistas.md`
+- Cualquier issue con UI → `.agents/skills/skill-design/SKILL.md` + `.agents/skills/skill-design/vistas.md`
 - Cualquier issue con páginas nuevas (`/login`, `/signup`, `/desk`, etc.) → `docs/core/odessay-paginas.md`
 - Cualquier issue con flujos de usuario → `docs/core/odessay-flujos.md` (sección relevante)
-- Cualquier issue de frontend → `skills/skill-frontend/SKILL.md`
-- Cualquier issue de backend/API → `skills/skill-backend/SKILL.md`
-- Cualquier issue de base de datos → `skills/skill-database/SKILL.md` + `docs/core/odessay-modelo-datos.md`
+- Cualquier issue de frontend → `.agents/skills/skill-frontend/SKILL.md`
+- Cualquier issue de backend/API → `.agents/skills/skill-backend/SKILL.md`
+- Cualquier issue de base de datos → `.agents/skills/skill-database/SKILL.md` + `docs/core/odessay-modelo-datos.md`
 - Issues que tocan un feature con doc propio → el doc de `docs/features/` correspondiente
 
 ## Delivery
@@ -370,6 +370,6 @@ Un archivo en Files affected escrito como link Markdown rompe la legibilidad. `[
 
 Un spec doc en Files affected invierte la causalidad. Si `docs/features/odessay-sync.md` aparece como `(modifica)`, significa que el issue está reescribiendo el spec en lugar de implementarlo. El spec existe antes que el issue. La implementación lee el spec — no al revés.
 
-Un skill en Files affected es ruido. `skills/skill-design/SKILL.md (referencia)` en Files affected confunde a quien lee el issue: ese archivo no se toca, se consulta. Va en Reference docs.
+Un skill en Files affected es ruido. `.agents/skills/skill-design/SKILL.md (referencia)` en Files affected confunde a quien lee el issue: ese archivo no se toca, se consulta. Va en Reference docs.
 
 Un issue con checkpoint humano sin sección Handoff bloquea silenciosamente. Si el agente necesita que el humano cree un servicio externo o llene credenciales y no lo declara explícitamente, el agente intentará ejecutar contra un entorno inexistente y fallará sin diagnóstico claro. Cualquier issue que toque servicios externos (Supabase, Vercel, GitHub, APIs de terceros) necesita sección Handoff.

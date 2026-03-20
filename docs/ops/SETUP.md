@@ -97,7 +97,7 @@ config.registry.forEach(doc => {
 
 // b) Disco → registry: verificar que todo lo que existe está declarado
 const registryPaths = new Set(config.registry.map(d => d.path));
-const scanDirs = ['docs/core', 'docs/features', 'docs/ops', 'framework', 'skills'];
+const scanDirs = ['docs/core', 'docs/features', 'docs/ops', 'framework', '.agents/skills'];
 const orphans = [];
 scanDirs.forEach(dir => {
   if (!fs.existsSync(dir)) return;

@@ -141,54 +141,54 @@
       "trigger": "meta"
     },
     {
-      "path": "skills/skill-design/SKILL.md",
+      "path": ".agents/skills/skill-design/SKILL.md",
       "type": "skill",
       "description": "Sistema de diseño visual completo: tokens de color, tipografía (Lora/Geist), ShadCN, iconos, transiciones, reglas invariables de UI.",
       "scope": "conditional",
       "trigger": "frontend"
     },
     {
-      "path": "skills/skill-design/vistas.md",
+      "path": ".agents/skills/skill-design/vistas.md",
       "type": "skill",
       "description": "Companion de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista + checklists de validación. Nunca usar standalone.",
       "scope": "conditional",
       "trigger": "frontend"
     },
     {
-      "path": "skills/skill-frontend/SKILL.md",
+      "path": ".agents/skills/skill-frontend/SKILL.md",
       "type": "skill",
       "description": "Arquitectura React/Next.js: estructura de archivos, naming BEM, Server/Client components, TipTap, estado (Zustand/TanStack Query), performance, accesibilidad.",
       "scope": "conditional",
       "trigger": "frontend"
     },
     {
-      "path": "skills/skill-backend/SKILL.md",
+      "path": ".agents/skills/skill-backend/SKILL.md",
       "type": "skill",
       "description": "API routes, Supabase (auth, DB, realtime), sync local-first, Claude API, Resend, manejo de errores, observabilidad con Sentry.",
       "scope": "conditional",
       "trigger": "backend"
     },
     {
-      "path": "skills/skill-database/SKILL.md",
+      "path": ".agents/skills/skill-database/SKILL.md",
       "type": "skill",
       "description": "Supabase: convenciones de migración, RLS policies, índices, naming de tablas, cómo actualizar odessay-modelo-datos.md tras un cambio.",
       "scope": "conditional",
       "trigger": "database"
     },
     {
-      "path": "skills/skill-product-manager/SKILL.md",
+      "path": ".agents/skills/skill-product-manager/SKILL.md",
       "type": "skill",
       "description": "Criterios de producto, creación de issues en Linear, template de issue con areas_affected, proof of work requerido en PR.",
       "scope": "always"
     },
     {
-      "path": "skills/skill-code-review/SKILL.md",
+      "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
       "description": "Checklist pre-PR: proof of work (typecheck + lint + test), hermetic testing, calidad, seguridad, performance. Leer siempre antes de abrir PR.",
       "scope": "always"
     },
     {
-      "path": "skills/skill-ux-testing/SKILL.md",
+      "path": ".agents/skills/skill-ux-testing/SKILL.md",
       "type": "skill",
       "description": "Testing de UX y flujos E2E con Playwright. Consultar cuando el issue incluye testing de experiencia de usuario o automatización de flujos.",
       "scope": "conditional",
@@ -202,7 +202,7 @@
     "docs/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
     "docs/ops/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
     "framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
-    "skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
+    ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
     "reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
   },
 
@@ -234,8 +234,8 @@
       "id": 3,
       "question": "¿Cómo se ve exactamente?",
       "documents": [
-        { "path": "skills/skill-design/SKILL.md", "scope": "conditional", "trigger": "frontend" },
-        { "path": "skills/skill-design/vistas.md", "scope": "conditional", "trigger": "frontend" },
+        { "path": ".agents/skills/skill-design/SKILL.md", "scope": "conditional", "trigger": "frontend" },
+        { "path": ".agents/skills/skill-design/vistas.md", "scope": "conditional", "trigger": "frontend" },
         { "path": "reference/", "scope": "conditional", "trigger": "frontend" }
       ]
     },
@@ -252,7 +252,7 @@
       "documents": [
         { "path": "docs/core/odessay-arquitectura.md", "scope": "always" },
         { "path": "docs/core/odessay-stack.md", "scope": "always" },
-        { "path": "skills/skill-frontend/SKILL.md", "scope": "conditional", "trigger": "frontend" }
+        { "path": ".agents/skills/skill-frontend/SKILL.md", "scope": "conditional", "trigger": "frontend" }
       ]
     },
     {
@@ -273,8 +273,8 @@
       "id": 7,
       "question": "¿Cómo se implementa el backend?",
       "documents": [
-        { "path": "skills/skill-backend/SKILL.md", "scope": "conditional", "trigger": "backend" },
-        { "path": "skills/skill-database/SKILL.md", "scope": "conditional", "trigger": "database" }
+        { "path": ".agents/skills/skill-backend/SKILL.md", "scope": "conditional", "trigger": "backend" },
+        { "path": ".agents/skills/skill-database/SKILL.md", "scope": "conditional", "trigger": "database" }
       ]
     },
     {
@@ -296,8 +296,8 @@
       "id": 10,
       "question": "¿Cómo sé que terminé?",
       "documents": [
-        { "path": "skills/skill-product-manager/SKILL.md", "scope": "always" },
-        { "path": "skills/skill-code-review/SKILL.md", "scope": "always" }
+        { "path": ".agents/skills/skill-product-manager/SKILL.md", "scope": "always" },
+        { "path": ".agents/skills/skill-code-review/SKILL.md", "scope": "always" }
       ]
     }
   ],
@@ -365,7 +365,7 @@
       "required_sources": [
         "linear:issue",
         "linear:issue-brief",
-        "skills/skill-code-review/SKILL.md"
+        ".agents/skills/skill-code-review/SKILL.md"
       ],
       "allowed_additional_sources": [
         "registry:trigger=<issue-area>",

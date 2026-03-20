@@ -130,6 +130,6 @@ Schema completo en `docs/core/odessay-modelo-datos.md`.
 
 ## Lo que este doc NO cubre
 
-- Email transaccional setup → `skills/skill-backend/SKILL.md` §Resend
+- Email transaccional setup → `.agents/skills/skill-backend/SKILL.md` §Resend
 - Formulario de signup → `docs/core/odessay-paginas.md` §/signup
 - Sistema de compartir writings → `docs/core/odessay-paginas.md` §/shared

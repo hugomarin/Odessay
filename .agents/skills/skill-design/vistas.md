@@ -1,6 +1,6 @@
 ---
 name: skill-design/vistas
-description: Companion file de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. Leer siempre junto a skills/skill-design/SKILL.md antes de implementar cualquier vista. No usar de forma standalone.
+description: Companion file de skill-design. Valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. Leer siempre junto a .agents/skills/skill-design/SKILL.md antes de implementar cualquier vista. No usar de forma standalone.
 ---
 
 # Skill: Design — Vistas (Odessay)

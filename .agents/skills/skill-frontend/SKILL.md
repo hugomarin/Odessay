@@ -7,7 +7,7 @@ description: Arquitectura y estándares de implementación frontend de Odessay (
 
 Lee `skill-design.md` antes de implementar cualquier componente con UI.
 
-Lee `skills/skill-design/vistas.md` antes de implementar cualquier vista. Contiene los valores exactos de padding, tipografía, colores y comportamiento de cada componente en cada vista (Desk, Collections, Correspondences, Reading, Editor), más el checklist de validación para verificar que tu implementación coincide con la referencia visual.
+Lee `.agents/skills/skill-design/vistas.md` antes de implementar cualquier vista. Contiene los valores exactos de padding, tipografía, colores y comportamiento de cada componente en cada vista (Desk, Collections, Correspondences, Reading, Editor), más el checklist de validación para verificar que tu implementación coincide con la referencia visual.
 
 ---
 
@@ -572,7 +572,7 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] Clases BEM en PascalCase para identificación semántica
 - [ ] Nombres de componentes coinciden con clase BEM
 
-### Visual (verificar contra `skills/skill-design/vistas.md`)
+### Visual (verificar contra `.agents/skills/skill-design/vistas.md`)
 - [ ] Tokens de color desde CSS variables, nunca hardcoded
 - [ ] `font-lora` para contenido epistolar, `font-sans` para UI
 - [ ] `strokeWidth={1.5}` en todos los iconos Lucide

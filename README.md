@@ -34,7 +34,7 @@ docs/
   features/   → Specs de features con complejidad propia. On-demand.
   ops/        → Estado vivo y operación. Pre-flight obligatorio.
 framework/    → Este framework. Transferible, no específico del proyecto.
-skills/       → Instrucciones de implementación por dominio.
+.agents/skills/       → Instrucciones de implementación por dominio.
 reference/    → Prototipos y referencias visuales.
 ```
 
@@ -56,7 +56,7 @@ Los docs de operaciones son para el agente, no sobre el producto. Responden cóm
 
 `docs/ops/status.json` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
 
-### skills/ — instrucciones de implementación
+### .agents/skills/ — instrucciones de implementación
 
 Los skills son instructivos, no descriptivos. Donde los docs de `core/` y `features/` describen qué existe y cómo funciona, los skills instruyen cómo construirlo: patrones de código, convenciones, checklists, decisiones de implementación.
 
@@ -182,7 +182,7 @@ config.registry.forEach(doc => {
 
 // b) Existe en disco pero no está en registry (nodo huérfano)
 const registryPaths = new Set(config.registry.map(d => d.path));
-walkDirs(['docs', 'framework', 'skills']).forEach(file => {
+walkDirs(['docs', 'framework', '.agents/skills']).forEach(file => {
   if (!registryPaths.has(file)) orphans.push({ problem: 'huérfano', path: file });
 });
 ```
@@ -201,8 +201,8 @@ Cada documento tiene un scope que determina cuándo lo lee el agente:
 
 ```json
 "triggers": {
-  "frontend": ["docs/core/paginas.md", "skills/skill-design/SKILL.md", "skills/skill-frontend/SKILL.md"],
-  "backend":  ["docs/core/modelo-datos.md", "skills/skill-backend/SKILL.md"],
+  "frontend": ["docs/core/paginas.md", ".agents/skills/skill-design/SKILL.md", ".agents/skills/skill-frontend/SKILL.md"],
+  "backend":  ["docs/core/modelo-datos.md", ".agents/skills/skill-backend/SKILL.md"],
   "editor":   ["docs/features/editor.md"]
 }
 ```
@@ -252,7 +252,7 @@ docs/core/         → Q1, Q2, Q4, Q5
 docs/features/     → Q6
 docs/ops/          → Q8, Q9
 framework/         → este framework
-skills/            → Q3, Q5, Q7, Q10
+.agents/skills/            → Q3, Q5, Q7, Q10
 reference/         → Q3
 config.json
 CLAUDE.md

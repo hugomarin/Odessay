@@ -40,7 +40,7 @@ Flujos de usuario, páginas y rutas, comportamiento esperado en cada interacció
 
 Tokens de diseño (colores, tipografía, espaciado, sombras), componentes visuales y sus variantes, valores exactos por vista, referencias visuales concretas (prototipos, screenshots).
 
-**Tipo de documento:** `skill-design.md` + `skills/skill-design/vistas.md` + carpeta `reference/`. El agente no interpreta — tiene los valores exactos.
+**Tipo de documento:** `skill-design.md` + `.agents/skills/skill-design/vistas.md` + carpeta `reference/`. El agente no interpreta — tiene los valores exactos.
 
 ---
 
@@ -116,7 +116,7 @@ Estructura de issues ejecutables, Definition of Done verificable, validaciones q
   STATUS.md            → pregunta 8
   SETUP.md             → pregunta 9
 
-/skills
+/.agents/skills
   skill-design/        → pregunta 3
   skill-design/ → pregunta 3
   skill-frontend/      → pregunta 5

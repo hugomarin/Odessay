@@ -7,7 +7,7 @@ Referencias:
 - `docs/ops/odessay-roadmap.md`
 - `docs/features/odessay-editor.md`
 - `docs/core/odessay-arquitectura.md`
-- `skills/skill-design/vistas.md`
+- `.agents/skills/skill-design/vistas.md`
 
 ---
 
