@@ -172,15 +172,15 @@ Commit: [SHA]
 Validaciones: typecheck ✅ | lint ✅ | tests ✅
 Trazabilidad: comentario en Linear ✅ | status.json actualizado ✅
 
-Acción: aprobación técnica completa. Pendiente merge humano.
+Acción: aprobación técnica completa. Ejecutando merge.
 ```
 Con REVIEW APROBADO, ejecutar en este orden:
 
 → Usar Linear MCP (`save_comment`) para postear el texto anterior como comentario en el issue.
-→ Esperar confirmación de merge por parte del humano (o instrucción explícita de merge por CLI).
-→ Cuando el PR esté mergeado, mover el issue a Done en Linear.
+→ Hacer merge del PR: `gh pr merge {número} --merge`.
+→ Mover el issue a Done en Linear.
 
-Sin merge confirmado, el issue se mantiene en `In Review`.
+El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
 **Si algún check falla:**
 ```
@@ -201,6 +201,6 @@ El issue vuelve a In Progress hasta que se corrija.
 - No modifica código para corregir errores.
 - No hace commits al branch del PR.
 - No aprueba PRs que no tienen proof of work completo.
-- No hace merge por defecto sin instrucción explícita del humano.
+- No hace merge si el review fue rechazado o si el humano indicó explícitamente que quiere hacerlo manualmente.
 - No hace merge si hay red flags activos.
 - No evalúa si el código "se ve bien" — solo verifica que las condiciones objetivas se cumplan.
