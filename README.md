@@ -33,7 +33,7 @@ workflow/
   core/       → Verdades estables. Todo agente las lee siempre.
   features/   → Specs de features con complejidad propia. On-demand.
   (root)      → Estado vivo y operación. Pre-flight obligatorio.
-framework/    → Este framework. Transferible, no específico del proyecto.
+workflow/framework/    → Este framework. Transferible, no específico del proyecto.
 .agents/skills/       → Instrucciones de implementación por dominio.
 workflow/reference/    → Prototipos y referencias visuales.
 ```
@@ -251,7 +251,7 @@ Cada PR significativo agrega una fila a `workflow/status.json`. Un PR significat
 workflow/core/         → Q1, Q2, Q4, Q5
 workflow/features/     → Q6
 workflow/          → Q8, Q9
-framework/         → este framework
+workflow/framework/         → este framework
 .agents/skills/            → Q3, Q5, Q7, Q10
 workflow/reference/         → Q3
 workflow/docs.json

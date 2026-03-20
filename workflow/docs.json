@@ -148,7 +148,7 @@
       "trigger": "planning"
     },
     {
-      "path": "framework/framework-mece.md",
+      "path": "workflow/framework/framework-mece.md",
       "type": "framework",
       "description": "Framework MECE genérico y transferible: las 10 preguntas que todo proyecto debe responder, cómo aplicarlo, cómo detectar gaps. No es específico de Odessay.",
       "scope": "reference",
@@ -215,7 +215,7 @@
     "workflow/core/": "Verdades estables del producto. Todo agente las lee siempre.",
     "workflow/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
     "workflow/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
-    "framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
+    "workflow/framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
     ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
     "workflow/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
   },

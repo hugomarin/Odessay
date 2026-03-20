@@ -11,7 +11,7 @@ workflow/
   core/       → Verdades estables del producto. Siempre leer.
   features/   → Spec de cada feature. Leer solo si el issue lo toca.
   (root)      → Estado vivo y operación de agentes. Siempre leer (pre-flight).
-framework/    → Framework MECE genérico. No es específico de Odessay.
+workflow/framework/    → Framework MECE genérico. No es específico de Odessay.
 .agents/skills/       → Instrucciones de implementación. On-demand por trigger.
 workflow/reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 ```
@@ -83,7 +83,7 @@ Consultar `workflow/docs.json → triggers` para saber qué leer según el área
 | `status.json` | **Leer segundo.** Qué está construido, qué no existe, decisiones tomadas. |
 | `odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |
 
-### framework/ — Referencia del meta-framework
+### workflow/framework/ — Referencia del meta-framework
 
 | Documento | Propósito |
 |-----------|-----------|

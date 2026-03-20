@@ -11,7 +11,7 @@ workflow/
   core/       → Verdades estables del producto. Primario en PLAN.
   features/   → Spec de cada feature. Leer solo si el issue lo toca.
   (root)      → Estado vivo y operación de agentes. Primario en PLAN.
-framework/    → Framework MECE genérico. No es específico de Odessay.
+workflow/framework/    → Framework MECE genérico. No es específico de Odessay.
 .agents/skills/       → Instrucciones de implementación. On-demand por trigger.
 workflow/reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 ```
@@ -100,7 +100,7 @@ Si la tarea involucra crear o modificar estructura de Linear (proyectos, issues,
 | `decisions-archive.md` | Historial de decisiones por fase (consultar en planeación o cuando se necesite contexto histórico). |
 | `odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |
 
-### framework/ — Referencia del meta-framework
+### workflow/framework/ — Referencia del meta-framework
 
 | Documento | Propósito |
 |-----------|-----------|
