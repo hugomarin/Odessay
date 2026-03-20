@@ -1,18 +1,16 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-
   "last_updated": "2026-03-20",
-
   "active_phase": {
     "name": "Fase 1 — Escribir",
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
-    "roadmap_ref": "workflow/define/odessay-roadmap.md"
+    "roadmap_ref": "workflow/define/roadmap.md"
   },
   "phase_plan": {
     "phase": "Fase 1 — Escribir",
-    "source_of_truth": "workflow/define/odessay-roadmap.md",
-    "definition_of_done": "workflow/define/fase-1-definition-of-done.md",
+    "source_of_truth": "workflow/define/roadmap.md",
+    "definition_of_done": "workflow/define/dod-fase-1.md",
     "linear_issues": [
       "ODE-21",
       "ODE-22",
@@ -26,10 +24,10 @@
     ],
     "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review."
   },
-
   "built": [
     {
       "what": "Repositorio de documentación inicializado",
+      "phase": "Fase 0",
       "issue": null,
       "linear_url": null,
       "commit": null,
@@ -38,6 +36,7 @@
     },
     {
       "what": "Repo GitHub + .gitignore base",
+      "phase": "Fase 0",
       "issue": "ODE-9",
       "linear_url": "https://linear.app/z9ne/issue/ODE-9",
       "commit": "1b53bbe",
@@ -46,6 +45,7 @@
     },
     {
       "what": "Baseline Next.js 15 + TypeScript strict + Tailwind + ShadCN config",
+      "phase": "Fase 0",
       "issue": "ODE-10",
       "linear_url": "https://linear.app/z9ne/issue/ODE-10",
       "commit": "6942c02",
@@ -54,6 +54,7 @@
     },
     {
       "what": "Supabase env setup + SSR clients/middleware + documentación de keys",
+      "phase": "Fase 0",
       "issue": "ODE-11",
       "linear_url": "https://linear.app/z9ne/issue/ODE-11",
       "commit": "737e659",
@@ -62,6 +63,7 @@
     },
     {
       "what": "Vercel deploy flow + branch previews documentados en setup operativo",
+      "phase": "Fase 0",
       "issue": "ODE-12",
       "linear_url": "https://linear.app/z9ne/issue/ODE-12",
       "commit": "f6f7356",
@@ -70,6 +72,7 @@
     },
     {
       "what": "Design system base: tokens Tailwind v4, tipografía Geist+Lora, ShadCN components con defaults Odessay",
+      "phase": "Fase 0",
       "issue": "ODE-13",
       "linear_url": "https://linear.app/z9ne/issue/ODE-13",
       "commit": "3ca7f81",
@@ -78,6 +81,7 @@
     },
     {
       "what": "Schema base Supabase + RLS + triggers críticos con hardening de review",
+      "phase": "Fase 0",
       "issue": "ODE-14",
       "linear_url": "https://linear.app/z9ne/issue/ODE-14",
       "commit": "7269637",
@@ -86,6 +90,7 @@
     },
     {
       "what": "Autenticación Supabase con login/signup, middleware SSR y desk protegido",
+      "phase": "Fase 0",
       "issue": "ODE-15",
       "linear_url": "https://linear.app/z9ne/issue/ODE-15",
       "commit": "a986f85",
@@ -94,6 +99,7 @@
     },
     {
       "what": "Capa local-first web con IndexedDB, cola persistente, sync worker y validación offline→online autenticada",
+      "phase": "Fase 0",
       "issue": "ODE-16",
       "linear_url": "https://linear.app/z9ne/issue/ODE-16",
       "commit": "32be80b",
@@ -102,6 +108,7 @@
     },
     {
       "what": "Corrección del runtime auth/build de Next.js 15 para desk y páginas auth",
+      "phase": "Fase 0",
       "issue": "ODE-17",
       "linear_url": "https://linear.app/z9ne/issue/ODE-17",
       "commit": "80b6ae1",
@@ -110,6 +117,7 @@
     },
     {
       "what": "Transición de fase operativa y actualización de status.json hacia Fase 1",
+      "phase": "Fase 0",
       "issue": "ODE-18",
       "linear_url": "https://linear.app/z9ne/issue/ODE-18",
       "commit": "96b04f4",
@@ -118,6 +126,7 @@
     },
     {
       "what": "Versionado de AGENTS.md como instrucciones oficiales del repositorio",
+      "phase": "Fase 0",
       "issue": "ODE-20",
       "linear_url": "https://linear.app/z9ne/issue/ODE-20",
       "commit": "c79523a",
@@ -126,6 +135,7 @@
     },
     {
       "what": "Aclaración del flujo de merge y cierre tras review aprobado en skill-code-review",
+      "phase": "Fase 0",
       "issue": "ODE-19",
       "linear_url": "https://linear.app/z9ne/issue/ODE-19",
       "commit": "784a476",
@@ -134,6 +144,7 @@
     },
     {
       "what": "Ajuste de alcance de Fase 1 y definición operativa de cierre",
+      "phase": "Fase 1",
       "issue": "ODE-21",
       "linear_url": "https://linear.app/z9ne/issue/ODE-21",
       "commit": "23227b2",
@@ -142,6 +153,7 @@
     },
     {
       "what": "Sidebar global autenticado con 3 estados y persistencia de sesión",
+      "phase": "Fase 1",
       "issue": "ODE-22",
       "linear_url": "https://linear.app/z9ne/issue/ODE-22",
       "commit": "04e60b2",
@@ -150,6 +162,7 @@
     },
     {
       "what": "Editor TipTap core con paridad markdown, modales y shortcuts",
+      "phase": "Fase 1",
       "issue": "ODE-23",
       "linear_url": "https://linear.app/z9ne/issue/ODE-23",
       "commit": "976937b",
@@ -158,6 +171,7 @@
     },
     {
       "what": "Auto-save local-first del editor con estados de sync en status bar (pendiente fixes de review)",
+      "phase": "Fase 1",
       "issue": "ODE-24",
       "linear_url": "https://linear.app/z9ne/issue/ODE-24",
       "commit": null,
@@ -166,6 +180,7 @@
     },
     {
       "what": "Desk con hero de drafts, filtros y tabla de actividad sobre modelo local-first",
+      "phase": "Fase 1",
       "issue": "ODE-25",
       "linear_url": "https://linear.app/z9ne/issue/ODE-25",
       "commit": "2f61143",
@@ -174,6 +189,7 @@
     },
     {
       "what": "Estados del writing, visibilidad privada v1 y paneles derechos de editor (Properties + Notes)",
+      "phase": "Fase 1",
       "issue": "ODE-26",
       "linear_url": "https://linear.app/z9ne/issue/ODE-26",
       "commit": "ba7a537",
@@ -182,6 +198,7 @@
     },
     {
       "what": "Flujo de trazabilidad endurecido con gates de CI y sincronización de docs operativas",
+      "phase": "Fase 1",
       "issue": "ODE-30",
       "linear_url": "https://linear.app/z9ne/issue/ODE-30",
       "commit": "ddcaf73",
@@ -190,59 +207,12 @@
     },
     {
       "what": "Closed sharing links de evaluación UX con preview público read-only y revocación desde Properties",
+      "phase": "Fase 1",
       "issue": "ODE-27",
       "linear_url": "https://linear.app/z9ne/issue/ODE-27",
       "commit": "7ae1772",
       "date": "2026-03-20",
       "notes": "API /api/writings/[id]/share-test-link (GET/POST/DELETE), ruta pública /preview/[token], controles Generate/Copy/Revoke en panel Properties y tests unitarios de tokens/acceso. Fix de review: rotación atómica con índice parcial + RPC `rotate_test_preview_link` para evitar dos tokens pending concurrentes. Re-review técnico aprobado sin hallazgos bloqueantes."
     }
-  ],
-
-  "decisions_global": [
-    {
-      "decision": "Local-first con IndexedDB (no localStorage)",
-      "doc": "workflow/context/core/odessay-arquitectura.md"
-    },
-    {
-      "decision": "body_json como fuente de verdad (no body_markdown)",
-      "doc": "workflow/context/core/odessay-modelo-datos.md"
-    },
-    {
-      "decision": "Last-write-wins silencioso para conflictos de sync",
-      "doc": "workflow/context/features/odessay-sync.md"
-    },
-    {
-      "decision": "ShadCN tres capas de adaptación",
-      "doc": ".agents/skills/skill-design/SKILL.md"
-    },
-    {
-      "decision": "TanStack Query + Zustand (2 slices únicamente)",
-      "doc": ".agents/skills/skill-frontend/SKILL.md"
-    },
-    {
-      "decision": "Validación con react-hook-form + Zod, onBlur",
-      "doc": ".agents/skills/skill-frontend/SKILL.md"
-    },
-    {
-      "decision": "Branch protection no disponible — fallback por PR obligatorio",
-      "doc": "workflow/SETUP.md"
-    },
-    {
-      "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados",
-      "doc": "workflow/SETUP.md"
-    },
-    {
-      "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
-      "doc": "workflow/context/core/odessay-stack.md"
-    }
-  ],
-
-  "decisions_phase_active": [
-    {
-      "decision": "FootnoteExtension custom (no existe en ecosistema)",
-      "doc": "workflow/context/features/odessay-editor.md"
-    }
-  ],
-
-  "decisions_archive_ref": "workflow/runbooks/decisions-archive.md"
+  ]
 }

@@ -191,8 +191,6 @@ El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins 
 
 ## Observabilidad
 
-El setup completo de observabilidad está en `workflow/quality/testing-observability.md`. Resumen para el agente:
-
 - **Sentry:** captura errores de cliente y excepciones en API routes. Requerido desde Fase 1. Sin Sentry, los errores en producción son invisibles. Configuración: `npx @sentry/wizard@latest -i nextjs`.
 - **Logging estructurado:** todos los errores server-side llevan contexto (`userId`, `writingId`, operación). Sin contexto el log es inútil.
 
@@ -228,7 +226,6 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=   # Nombre preferido (Supabase nue
 NEXT_PUBLIC_SUPABASE_ANON_KEY=                  # Alias legacy — backward compatible
 ```
 
-Fuente canónica de variables y matriz por entorno: `workflow/setup/environment.md §Variables de entorno`.
 
 Nunca agregues un `NEXT_PUBLIC_` sin confirmar que el valor es seguro para exponer.
 

@@ -16,21 +16,25 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Contexto a cargar:**
 1. `workflow/status.json` — fase activa y qué está construido.
-2. `workflow/define/odessay-roadmap.md` — alcance y dependencias de la fase.
-3. Los documentos de `workflow/context/features/` correspondientes a la fase (consultar `workflow/docs.json` para identificarlos por descripción).
+2. `workflow/define/roadmap.md` — alcance y dependencias de la fase.
+3. El subconjunto estricto de documentos de `workflow/context/` citados en la línea `Referencia` de cada issue del roadmap.
 4. `.agents/skills/skill-product-manager/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
 
-**No cargar por defecto:** skills técnicos (frontend, backend, database), runbooks, testing. Solo si un issue de la fase los requiere explícitamente.
+**No cargar por defecto:** skills técnicos (frontend, backend, database), testing. Solo si un issue de la fase los requiere explícitamente.
 
-**Secuencia:**
+**Secuencia (Diálogo de Alineación y Ejecución):**
 1. Resolver la fase (ver lógica de fallback arriba).
-2. Leer `workflow/status.json` y `workflow/define/odessay-roadmap.md`.
-3. Leer los docs de features relevantes a esa fase.
-4. Leer `.agents/skills/skill-product-manager/SKILL.md`.
-5. Descomponer la fase en issues atómicos siguiendo el template del skill de PM.
-6. Para cada issue: redactar el Issue Brief usando `workflow/define/issues/ISSUE-BRIEF.template.md`.
-7. Crear los issues en Linear con su brief incluido.
-8. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido.
+2. Leer `workflow/status.json` y localizar la fase en `workflow/define/roadmap.md`.
+3. Actualizar `workflow/status.json` definiendo explícitamente la `active_phase` actual.
+4. Buscar si existe un documento `workflow/define/dod-[fase].md` (ej. `dod-fase-1.md`) para la fase actual.
+5. **Si no existe el DoD:** Pausar y co-crear el DoD iterando con el humano, basándose en el roadmap y los objetivos de experiencia.
+6. **Si existe el DoD:** El agente cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, el agente dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
+7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder.
+8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
+9. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
+10. Redactar el Issue Brief usando `workflow/define/issues/ISSUE-BRIEF.template.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
+11. Crear los issues en Linear con su brief incluido.
+12. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
 **Gate de salida:** todos los issues de la fase creados en Linear con su Issue Brief. Sin brief por issue no hay BUILD.
 
@@ -51,7 +55,6 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. Los skills técnicos que corresponden al área del issue (frontend, backend, database, design — consultar `workflow/docs.json`).
-3. `workflow/build/environment.md` — solo si hay bloqueo de entorno.
 
 **No cargar por defecto:** documentos core, fundacional, flujos, páginas. Esa información debe estar sintetizada en el brief. Si falta algo crítico, es un error del brief — corregir en PLAN antes de continuar.
 
@@ -61,12 +64,11 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 3. Crear rama desde `main` actualizado con convención: `feat/{issue-id}-{descripcion}` o `fix/`, `docs/`, `chore/`.
 4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
 5. Correr gate de entrega: `npm run ops:delivery:gate` (typecheck + lint + tests).
-6. Actualizar `workflow/status.json` con el trabajo realizado.
-7. Abrir PR con evidencia (output del gate).
-8. Mover issue a `In Review` en Linear.
-9. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
+6. Abrir PR con evidencia (output del gate).
+7. Mover issue a `In Review` en Linear.
+8. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
 
-**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto + `status.json` actualizado.
+**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto.
 
 ---
 
@@ -84,7 +86,6 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 1. El Issue Brief desde Linear.
 2. El diff del PR.
 3. `.agents/skills/skill-code-review/SKILL.md`.
-4. `workflow/review/testing-observability.md` si el issue incluye testing o logging.
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
@@ -93,6 +94,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 2. Revisar diff contra el brief (scope, calidad, seguridad, performance).
 3. Dejar comentario en Linear: resultado de revisión + confirmación de que el humano puede mergear.
 4. Mover issue a `Done` solo después de que el humano confirme merge.
+5. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
 
 **Secuencia — si rechazado:**
 1. Dejar comentario en Linear con hallazgos específicos que bloquean aprobación.
@@ -157,6 +159,29 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 
 ---
 
+## `/wf-decision` — GESTIÓN DE DECISIONES
+
+**Objetivo:** registrar formalmente una decisión técnica o de arquitectura en el historial canónico.
+
+**Resolución de issue:**
+- Se ejecuta sin argumentos adicionales: `/wf-decision`.
+
+**Contexto a cargar:**
+1. El issue actual y la discusión en Linear.
+2. `workflow/decisions.json`.
+3. El documento en `workflow/context/` más afín al dominio de la decisión (consultar `workflow/docs.json`).
+
+**Secuencia:**
+1. Extraer la decisión tomada, el contexto y a qué documento afecta.
+2. Identificar si es una decisión global (para todo el proyecto) o de fase activa (solo para el ciclo actual).
+3. Actualizar `workflow/decisions.json` añadiendo la decisión en el bloque correspondiente con su respectiva referencia documental.
+4. Si la decisión modifica algo sustancial, sugerir en la respuesta actualizar el documento de contexto relacionado.
+5. Imprimir al humano el registro actualizado para confirmar.
+
+**Gate de salida:** JSON actualizado en `workflow/decisions.json`.
+
+---
+
 ## Frontera humano / agente
 
 Algunos issues requieren acciones que el agente no puede completar solo — credenciales, configuración de servicios externos, decisiones de negocio. Cuando un issue tiene esta dependencia, debe declararla explícitamente en el Issue Brief bajo una sección `Dependencias humanas`.
@@ -172,7 +197,7 @@ Algunos issues requieren acciones que el agente no puede completar solo — cred
 **Siempre hace el agente:**
 - Ejecutar la secuencia `/wf-*` respetando los gates.
 - Mover estados en Linear según este documento.
-- Actualizar `workflow/status.json` al pasar a `In Review`.
+- Actualizar `workflow/status.json` estableciendo la fase en PLAN y agregando los issues completados a `built` al pasar a `Done` en REVIEW.
 - Dejar comentario de trazabilidad en Linear al cerrar cada etapa.
 
 ## Protocolo de handoff (bloqueo externo)

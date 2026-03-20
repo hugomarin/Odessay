@@ -50,14 +50,22 @@ Referencias:
 - Incluye navegación principal (`Desk`, `Collections`, `Correspondences`) y acceso a `Settings`.
 - Persistencia del estado de sidebar por sesión.
 
-## 6) Persistencia y sync (local-first)
+## 6) /desk — Personal writing desk
+
+- Hero section con tarjetas horizontales deslizables de drafts activos (scroll con snap).
+- Barra de filtros funcional: `All activity`, `Correspondence`, `With responses`, `Received`.
+- Tabla de actividad agrupada lógicamente por fecha (`Today`, `This week`, `Earlier`).
+- Columnas de tabla funcionales: `Writing`, `State`, `With`, `Date`.
+- Los datos se leen primero de la base local y reaccionan a actualizaciones sincronizadas.
+
+## 7) Persistencia y sync (local-first)
 
 - Guardado inmediato local (IndexedDB) en cada edición.
 - Sync en background a Supabase con debounce + retries.
 - Estado visual mínimo de guardado (`Saved` / `Saving...`) sin interrumpir escritura.
 - Escrituras nuevas reciben UUID en cliente y se normalizan a `/write/[id]` sin recarga.
 
-## 7) Estado y visibilidad mínima
+## 8) Estado y visibilidad mínima
 
 - Estado del writing: `Draft` / `Done`.
 - Visibilidad mínima funcional en Fase 1: `Private` por default.
@@ -70,7 +78,7 @@ Referencias:
   - acceso de lectura para testers invitados
 - No requiere el sistema completo de shared/public de Fase 2.
 
-## 9) Calidad de entrega (gate técnico)
+## 10) Calidad de entrega (gate técnico)
 
 - `typecheck` verde.
 - `lint` verde.
@@ -78,10 +86,11 @@ Referencias:
 - Evidencia manual de UX:
   - flujo escribir > guardar > cerrar > reabrir > contenido intacto
   - flujo compartir link de evaluación > abrir como tester > leer sin editar
+- **Seed Data**: Staging poblado con 2-3 usuarios completos y 5-8 writings en distintos estados para permitir QA inicial autónomo.
 
-## 10) Gate de cierre de fase
+## 11) Gate de cierre de fase
 
 Fase 1 se marca `Done` solo si:
-- Se cumplen los 9 bloques anteriores.
+- Se cumplen los 10 bloques anteriores.
 - Hay al menos una ronda de evaluación externa (testers reales) y feedback documentado en Linear.
 - No hay regresiones críticas abiertas en editor, guardado o navegación base.

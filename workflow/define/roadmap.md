@@ -77,7 +77,7 @@ Referencia: `workflow/context/core/odessay-arquitectura.md` (sección: Sidebar/L
 
 **Implement TipTap editor** `[frontend]`
 Editor TipTap headless configurado con el subconjunto de extensiones de Odessay: Document, Paragraph, Text, Heading (H1/H2/H3), Bold, Italic, Strike, Highlight, Link, Blockquote, BulletList, OrderedList, ListItem, Code, CodeBlock, Markdown (tiptap-markdown + parser compatible con el dialecto markdown del proyecto), History, Placeholder, CharacterCount. Sin toolbar flotante al seleccionar. Tipografía del sistema de diseño aplicada. Layout de tres capas: topbar 46px + writing area flex-1 + statusbar 32px. Sidebar en modo mini (52px) por defecto en el editor.
-Incluye modales de rename, insert link e insert footnote, shortcuts de teclado para formato y métricas de texto en panel derecho (palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas).
+Incluye modales de rename, insert link e insert footnote, shortcuts de teclado para formato testeados sin colisiones (Mac/Win/Linux) y métricas de texto en panel derecho (palabras, caracteres, oraciones, tiempo de lectura, páginas estimadas).
 Dependencias: Build global sidebar shell (3 estados).
 Referencia: `workflow/context/features/odessay-editor.md`, `.agents/skills/skill-design/vistas.md` (sección: Editor), `workflow/context/reference/editor.html`.
 

@@ -21,7 +21,17 @@ _(sin entradas aún)_
 
 ## Fase 1 — Escribir
 
-_(sin entradas aún)_
+- IMP-2026-03-19-01 | mejora | Editor + Sidebar visual parity polish | next-sprint | pendiente
+  - **Scope**:
+    - Iconografía exacta en sidebar/editor (PanelLeftClose, LibraryBig, Mails, FileText, etc.).
+    - Eliminar item del sidebar con `aria-label="Continue writing"`.
+    - `editor-statusbar` flotante y oculto en focus mode.
+    - `editor-panel-notes` y `editor-panel-properties` flotantes, altura completa de viewport, proporcionales.
+    - Mover switch `Rich/Markdown` de topbar a statusbar.
+    - Título centrado respecto a pantalla, más pequeño, como referencia. Eliminar `textarea` de título en el cuerpo del editor.
+    - Auto-title: primeros 48 caracteres + fallback `Untitled — {YYYY-MM-DD}`.
+    - En modo Markdown, el textarea ocupa mismo espacio útil que Rich.
+  - **Visuals**: `workflow/context/reference/improvements/editor-polish-*`
 
 ---
 

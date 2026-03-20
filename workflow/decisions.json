@@ -1,0 +1,49 @@
+{
+  "_description": "Registro de decisiones arquitectónicas y técnicas del proyecto. Las decisiones globales aplican a todo el ciclo de vida, mientras que las de fase son específicas al ciclo de trabajo actual.",
+  "_maintenance": "Debe actualizarse obligatoriamente mediante `/wf-decision` si se toma una decisión que altera el stack, la arquitectura o políticas globales.",
+  "last_updated": "2026-03-20",
+  "decisions_global": [
+    {
+      "decision": "Local-first con IndexedDB (no localStorage)",
+      "doc": "workflow/context/core/odessay-arquitectura.md"
+    },
+    {
+      "decision": "body_json como fuente de verdad (no body_markdown)",
+      "doc": "workflow/context/core/odessay-modelo-datos.md"
+    },
+    {
+      "decision": "Last-write-wins silencioso para conflictos de sync",
+      "doc": "workflow/context/features/odessay-sync.md"
+    },
+    {
+      "decision": "ShadCN tres capas de adaptación",
+      "doc": ".agents/skills/skill-design/SKILL.md"
+    },
+    {
+      "decision": "TanStack Query + Zustand (2 slices únicamente)",
+      "doc": ".agents/skills/skill-frontend/SKILL.md"
+    },
+    {
+      "decision": "Validación con react-hook-form + Zod, onBlur",
+      "doc": ".agents/skills/skill-frontend/SKILL.md"
+    },
+    {
+      "decision": "Branch protection no disponible — fallback por PR obligatorio",
+      "doc": "workflow/SETUP.md"
+    },
+    {
+      "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados",
+      "doc": "workflow/SETUP.md"
+    },
+    {
+      "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
+      "doc": "workflow/context/core/odessay-stack.md"
+    }
+  ],
+  "decisions_phase_active": [
+    {
+      "decision": "FootnoteExtension custom (no existe en ecosistema)",
+      "doc": "workflow/context/features/odessay-editor.md"
+    }
+  ]
+}

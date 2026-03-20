@@ -90,10 +90,15 @@
     {
       "path": "workflow/status.json",
       "type": "ops",
-      "description": "Estado del codebase: fase activa con links a Linear y roadmap, build log con commits y fechas, y decisiones arquitectónicas vigentes. Puente entre GitHub, Linear y el roadmap."
+      "description": "Estado del codebase: fase activa con links a Linear y roadmap, y build log con commits y fechas. Puente entre GitHub, Linear y el roadmap."
     },
     {
-      "path": "workflow/define/odessay-roadmap.md",
+      "path": "workflow/decisions.json",
+      "type": "ops",
+      "description": "Registro canónico de decisiones de arquitectura, técnicas o de producto aplicables globalmente o a la fase activa. Debe consultarse antes de cuestionar el stack."
+    },
+    {
+      "path": "workflow/define/roadmap.md",
       "type": "ops",
       "description": "Fases del producto y orden de implementación: qué bloquea qué, alcance de cada fase y estructura de proyectos en Linear. Fuente de verdad del qué y el cuándo."
     },
@@ -103,29 +108,14 @@
       "description": "Gate de cierre de Fase 1 — Escribir: checklist de editor core, sidebar, persistencia local-first y criterios técnicos mínimos que deben estar cumplidos para considerar la fase terminada."
     },
     {
-      "path": "workflow/runbooks/decisions-archive.md",
-      "type": "ops",
-      "description": "Historial de decisiones por fase (técnicas y de producto). Diferencia de status.json: este archivo guarda decisiones pasadas para trazabilidad; status.json solo tiene las decisiones activas."
-    },
-    {
       "path": "workflow/define/debrief.md",
       "type": "ops",
       "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
     },
     {
-      "path": "workflow/build/environment.md",
-      "type": "ops",
-      "description": "Setup técnico del entorno local: pre-flight checklist, variables de entorno requeridas, matriz de ambientes (local/staging/prod), herramientas necesarias y comandos base para ejecutar el proyecto."
-    },
-    {
       "path": "workflow/review/testing-observability.md",
       "type": "ops",
       "description": "Reglas mínimas de calidad técnica: estrategia de hermetic testing, estándares de logging, instrumentación de Sentry y criterios que debe cumplir una entrega antes de pasar a In Review."
-    },
-    {
-      "path": "workflow/runbooks/phase-1-operations.md",
-      "type": "ops",
-      "description": "Playbooks ejecutables específicos de Fase 1 (issues ODE-12/14/15/16). Procedimientos paso a paso para operaciones puntuales que no aplican como regla global."
     },
     {
       "path": "workflow/define/issues/ISSUE-BRIEF.template.md",
@@ -186,9 +176,6 @@
     "workflow/context/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
     "workflow/context/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
     "workflow/define/": "Artefactos de planificación y definición (roadmap, DoD, debrief e issue briefs).",
-    "workflow/build/": "Contexto operativo de implementación (setup técnico y pre-flight).",
-    "workflow/review/": "Políticas de calidad, testing y observabilidad para validar entregas.",
-    "workflow/runbooks/": "Procedimientos específicos por fase o issue.",
     "workflow/context/framework/": "Framework MECE genérico. No es específico de Odessay.",
     "workflow/define/issues/": "Issue Briefs y plantillas de trabajo.",
     "workflow/context/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica.",
