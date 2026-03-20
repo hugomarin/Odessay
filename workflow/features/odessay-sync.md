@@ -201,7 +201,7 @@ console.error('[sync:remote]', {
 })
 ```
 
-Sentry captura estos errores automáticamente. Ver `workflow/SETUP.md` §Observabilidad.
+Sentry captura estos errores automáticamente. Ver `workflow/quality/testing-observability.md`.
 
 ---
 

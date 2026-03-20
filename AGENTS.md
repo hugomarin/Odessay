@@ -95,7 +95,11 @@ Si la tarea involucra crear o modificar estructura de Linear (proyectos, issues,
 
 | Documento | Propósito |
 |-----------|-----------|
-| `SETUP.md` | **Leer primero.** Entorno, variables, tools, permisos, Git. |
+| `SETUP.md` | **Contrato de ejecución.** Punto de entrada stage-first y secuencia mínima. |
+| `setup/environment.md` | Setup técnico: pre-flight, entorno, variables, tools/permisos. |
+| `process/governance.md` | Proceso operativo: frontera humano/agente, Linear, Git y entrega. |
+| `quality/testing-observability.md` | Calidad: hermetic testing y observabilidad. |
+| `runbooks/phase-1-operations.md` | Runbooks específicos (ODE-12/14/15/16). |
 | `status.json` | **Leer segundo.** Qué está construido, qué no existe, decisiones tomadas. |
 | `decisions-archive.md` | Historial de decisiones por fase (consultar en planeación o cuando se necesite contexto histórico). |
 | `odessay-roadmap.md` | Fases y prioridades. Fuente de verdad del qué y el cuándo. |

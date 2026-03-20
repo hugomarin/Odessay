@@ -116,8 +116,36 @@
     {
       "path": "workflow/SETUP.md",
       "type": "ops",
-      "description": "Pre-flight del agente: entorno, variables de entorno, tools requeridos, permisos, estrategia de Git, frontera humano/agente, WORKFLOW.md convention.",
+      "description": "Contrato operativo corto: entrada stage-first, secuencia mínima y mapa hacia docs atómicos de setup/proceso/calidad/runbooks.",
       "scope": "always"
+    },
+    {
+      "path": "workflow/setup/environment.md",
+      "type": "ops",
+      "description": "Setup técnico de entorno: pre-flight, variables de entorno, matriz de ambientes, tools/permisos y comandos base de ejecución local.",
+      "scope": "conditional",
+      "trigger": "setup"
+    },
+    {
+      "path": "workflow/process/governance.md",
+      "type": "ops",
+      "description": "Gobernanza operativa: frontera humano/agente, máquina de estados en Linear, estrategia Git, handoffs y flujo de entrega.",
+      "scope": "conditional",
+      "trigger": "process"
+    },
+    {
+      "path": "workflow/quality/testing-observability.md",
+      "type": "ops",
+      "description": "Política de calidad técnica: hermetic testing, observabilidad y estándares mínimos de logging y monitoreo.",
+      "scope": "conditional",
+      "trigger": "quality"
+    },
+    {
+      "path": "workflow/runbooks/phase-1-operations.md",
+      "type": "ops",
+      "description": "Runbooks específicos de Fase 1 (ODE-12/14/15/16) para operaciones puntuales que no aplican como regla global.",
+      "scope": "conditional",
+      "trigger": "runbook"
     },
     {
       "path": "workflow/odessay-roadmap.md",
@@ -214,7 +242,11 @@
   "structure": {
     "workflow/core/": "Verdades estables del producto. Todo agente las lee siempre.",
     "workflow/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
-    "workflow/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
+    "workflow/": "Estado vivo y operación de agentes (contrato, roadmap, estado).",
+    "workflow/setup/": "Setup técnico y pre-flight del entorno.",
+    "workflow/process/": "Gobernanza del trabajo y flujo operativo.",
+    "workflow/quality/": "Criterios de calidad, testing y observabilidad.",
+    "workflow/runbooks/": "Procedimientos específicos por fase/issue.",
     "workflow/framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
     ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
     "workflow/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
@@ -304,7 +336,11 @@
       "id": 9,
       "question": "¿Cómo opera el agente en este proyecto?",
       "documents": [
-        { "path": "workflow/SETUP.md", "scope": "always" }
+        { "path": "workflow/SETUP.md", "scope": "always" },
+        { "path": "workflow/setup/environment.md", "scope": "conditional", "trigger": "setup" },
+        { "path": "workflow/process/governance.md", "scope": "conditional", "trigger": "process" },
+        { "path": "workflow/quality/testing-observability.md", "scope": "conditional", "trigger": "quality" },
+        { "path": "workflow/runbooks/phase-1-operations.md", "scope": "reference", "trigger": "runbook" }
       ]
     },
     {
@@ -368,7 +404,11 @@
       "allowed_additional_sources": [
         "registry:trigger=<issue-area>",
         "registry:path=workflow/status.json",
-        "registry:path=workflow/SETUP.md"
+        "registry:path=workflow/SETUP.md",
+        "registry:path=workflow/setup/environment.md",
+        "registry:path=workflow/process/governance.md",
+        "registry:path=workflow/quality/testing-observability.md",
+        "registry:path=workflow/runbooks/phase-1-operations.md"
       ],
       "disallowed_by_default": [
         "registry:scope=always",
@@ -387,7 +427,9 @@
       ],
       "allowed_additional_sources": [
         "registry:trigger=<issue-area>",
-        "registry:path=workflow/status.json"
+        "registry:path=workflow/status.json",
+        "registry:path=workflow/quality/testing-observability.md",
+        "registry:path=workflow/process/governance.md"
       ],
       "disallowed_by_default": [
         "registry:scope=always",

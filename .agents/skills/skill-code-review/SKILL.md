@@ -130,7 +130,7 @@ Este protocolo aplica cuando un agente es invocado desde Linear usando **"Open i
 
 ### Identificar el rol antes de empezar
 
-Antes de hacer cualquier cosa, el agente debe leer el estado del issue en Linear. Si el issue está en **In Review**, este protocolo aplica. Si está en **In Progress** o **Todo**, aplica el protocolo de implementación (SETUP.md + CLAUDE.md).
+Antes de hacer cualquier cosa, el agente debe leer el estado del issue en Linear. Si el issue está en **In Review**, este protocolo aplica. Si está en **In Progress** o **Todo**, aplica el protocolo de implementación (`workflow/SETUP.md` + CLAUDE.md).
 
 ### Checklist de revisión — en orden
 

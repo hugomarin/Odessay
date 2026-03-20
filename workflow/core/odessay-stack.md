@@ -136,4 +136,4 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=   # Nombre preferido (Supabase nue
 NEXT_PUBLIC_SUPABASE_ANON_KEY=                  # Alias legacy — backward compatible
 ```
 
-La fuente canónica de todas las variables y su matriz por entorno (local / staging / producción) está en `workflow/SETUP.md §Variables de entorno`.
+La fuente canónica de todas las variables y su matriz por entorno (local / staging / producción) está en `workflow/setup/environment.md §Variables de entorno`.
