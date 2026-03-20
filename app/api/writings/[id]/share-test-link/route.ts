@@ -105,6 +105,12 @@ const revokeActiveTestLinks = async (writingId: string, userId: string) => {
 const toAbsolutePreviewLink = (request: Request, token: string) =>
   new URL(buildTestLinkPath(token), request.url).toString()
 
+type RotatedPreviewLinkRow = {
+  token: string
+  created_at: string
+  replaced_previous: boolean
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const writingId = await parseWritingId(context)
 
@@ -186,39 +192,35 @@ export async function POST(request: Request, context: RouteContext) {
     return jsonError(404, "NOT_FOUND", "Writing not found.")
   }
 
-  const revokeResult = await revokeActiveTestLinks(writingId, userId)
-
-  if (revokeResult.error) {
-    return jsonError(500, "DB_ERROR", revokeResult.error.message)
-  }
-
   const token = createTestLinkToken()
   const supabase = createAdminClient()
 
   const { data, error } = await supabase
-    .from("invitations")
-    .insert({
-      inviter_id: userId,
-      writing_id: writingId,
-      email: getTestLinkEmail(writingId),
-      token,
-      status: "pending",
+    .rpc("rotate_test_preview_link", {
+      p_inviter_id: userId,
+      p_writing_id: writingId,
+      p_token: token,
     })
-    .select("token, created_at")
-    .single<{ token: string; created_at: string }>()
+    .returns<RotatedPreviewLinkRow[]>()
 
   if (error) {
     return jsonError(500, "DB_ERROR", error.message)
+  }
+
+  const rotatedLink = Array.isArray(data) ? data[0] : null
+
+  if (!rotatedLink) {
+    return jsonError(500, "DB_ERROR", "Failed to generate an active preview link.")
   }
 
   return NextResponse.json(
     {
       data: {
         active: true,
-        token: data.token,
-        link: toAbsolutePreviewLink(request, data.token),
-        createdAt: data.created_at,
-        replacedPrevious: revokeResult.revokedCount > 0,
+        token: rotatedLink.token,
+        link: toAbsolutePreviewLink(request, rotatedLink.token),
+        createdAt: rotatedLink.created_at,
+        replacedPrevious: rotatedLink.replaced_previous,
       },
       error: null,
     },

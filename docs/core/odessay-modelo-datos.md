@@ -244,6 +244,7 @@ El `id` del usuario autenticado (`auth.uid()`) se usa en todas las RLS policies 
 - `writing_shares.shared_with_id` — Writings compartidos conmigo
 - `invitations.token` — Lookup por token
 - `invitations.email` — Invitaciones pendientes al registrarse
+- `invitations(inviter_id, writing_id, email)` parcial (`status='pending'` + `ux-eval` marker) — Garantiza un único link de preview UX activo por writing
 - `margins.writing_id` — Márgenes de un writing
 - `margins.reader_id` — Márgenes propios del lector
 - `writings.sync_status` — Queue de sync pendiente
