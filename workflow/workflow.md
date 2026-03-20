@@ -42,11 +42,11 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Objetivo:** implementar sobre el brief aprobado.
 
-**Estado Linear:** `Todo` (con brief) → `In Progress` al iniciar → `In Review` al dejar PR listo.
+**Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al dejar PR listo.
 
 **Resolución de issue:**
 - Con argumento (`/wf-build ODE-22`): usar el issue indicado.
-- Sin argumento (`/wf-build`): consultar Linear → buscar issues en estado `Todo` que tengan Issue Brief y pertenezcan a la fase activa en `status.json` → tomar el de mayor prioridad según orden del roadmap → confirmar al humano el issue seleccionado antes de iniciar.
+- Sin argumento (`/wf-build`): consultar Linear → buscar issues en estado `Todo` o `Backlog` que tengan Issue Brief y pertenezcan a la fase activa en `status.json` → tomar el de mayor prioridad según orden del roadmap → confirmar al humano el issue seleccionado antes de iniciar.
 
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
@@ -103,6 +103,38 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 ---
 
+## `/wf-debrief [issue-id?]` — POST-ENTREGA
+
+**Objetivo:** capturar observaciones post-entrega y convertir las relevantes en issues de mejora en Linear, sin reabrir ni modificar el issue original.
+
+Este comando existe porque la realidad después de un merge rara vez coincide exactamente con lo planeado. No es un error de planificación — es información nueva que emerge al ver el producto funcionando. La política es: **la entrega se acepta como está**. Lo que no quedó perfecto se captura aquí y entra al ciclo normal de BUILD.
+
+**Resolución de issue:**
+- Con argumento (`/wf-debrief ODE-22`): trabajar sobre ese issue específico.
+- Sin argumento (`/wf-debrief`): consultar Linear → tomar el issue más recientemente movido a `Done` en la fase activa.
+
+**Contexto a cargar:**
+1. El issue original desde Linear (brief + comentarios de BUILD y REVIEW).
+2. `workflow/debrief.md` — sección de la fase activa, para agregar entradas y consultar el historial.
+
+**No cargar por defecto:** documentos core, features, skills técnicos. Si una observación requiere validar comportamiento esperado, consultar el doc de feature correspondiente usando `workflow/docs.json`.
+
+**Secuencia:**
+1. Resolver el issue de referencia (ver fallback arriba).
+2. Leer el issue original en Linear: brief, comentarios de BUILD, comentarios de REVIEW.
+3. Por cada observación del humano o hallazgo propio: crear una entrada en `workflow/debrief.md` bajo la sección de la fase activa, con ID estable (`IMP-YYYY-MM-DD-NN`), descripción, tipo y prioridad sugerida.
+4. Clasificar cada entrada por tipo: `bug` / `mejora` / `ux-friction` / `deuda-tecnica`.
+5. Clasificar cada entrada por prioridad sugerida: `next-sprint` / `backlog` / `won't-do`.
+6. Presentar al humano el resumen de entradas capturadas y proponer cuáles crear como issues en Linear.
+7. Para las que el humano aprueba: crear el issue en Linear con el tipo correcto (Bug, Improvement, etc.), referencia al issue original y un brief mínimo.
+8. Dejar comentario en el issue original de Linear enlazando los nuevos issues creados.
+
+**Gate de salida:** entradas en `workflow/debrief.md` + issues aprobados creados en Linear.
+
+**Restricción:** no modificar el scope ni reabrir el issue original. No cambiar código en esta etapa.
+
+---
+
 ## `/wf-update-docs` — MANTENIMIENTO DE DOCS
 
 **Objetivo:** mantener `workflow/docs.json` sincronizado con el estado real del disco.
@@ -127,10 +159,15 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 ## Frontera humano / agente
 
+Algunos issues requieren acciones que el agente no puede completar solo — credenciales, configuración de servicios externos, decisiones de negocio. Cuando un issue tiene esta dependencia, debe declararla explícitamente en el Issue Brief bajo una sección `Dependencias humanas`.
+
+**El agente no bloquea silenciosamente.** Cuando encuentra una dependencia humana, emite el protocolo de handoff y pausa.
+
 **Siempre hace el humano:**
 - Aprobar y mergear PRs a `main`.
 - Asignar issues en Linear.
-- Resolver bloqueos externos (credenciales, permisos no automatizables).
+- Proveer credenciales, variables de entorno y accesos externos.
+- Aprobar qué entradas de `/wf-debrief` se convierten en issues.
 
 **Siempre hace el agente:**
 - Ejecutar la secuencia `/wf-*` respetando los gates.
@@ -140,7 +177,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 ## Protocolo de handoff (bloqueo externo)
 
-Cuando el agente no puede continuar sin una acción humana:
+Cuando el agente encuentra una dependencia humana y no puede continuar:
 
 ```
 ⏸ HANDOFF REQUERIDO
@@ -148,7 +185,7 @@ Cuando el agente no puede continuar sin una acción humana:
 Etapa actual: [PLAN|BUILD|REVIEW]
 Bloquea: [qué no puede avanzar]
 Completé: [trabajo ya realizado]
-Necesito que tú: [acción concreta]
+Necesito que tú: [acción concreta y específica]
 Evidencia esperada: [qué debe compartir el humano para reanudar]
 Reanudación: [acción exacta que hará el agente al recibir evidencia]
 ```

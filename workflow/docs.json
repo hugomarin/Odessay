@@ -85,7 +85,7 @@
     {
       "path": "workflow/workflow.md",
       "type": "ops",
-      "description": "Protocolo completo de comandos /wf-*: qué hace cada etapa (PLAN, BUILD, REVIEW, UPDATE-DOCS), qué contexto carga, secuencia de pasos, gates de salida, frontera humano/agente y protocolo de handoff."
+      "description": "Protocolo completo de comandos /wf-*: /wf-define (planificar fase), /wf-build (implementar issue), /wf-review (validar PR), /wf-debrief (capturar observaciones post-entrega), /wf-update-docs (sincronizar inventario). Define contexto por etapa, gates, fallback sin argumentos, frontera humano/agente y protocolo de handoff."
     },
     {
       "path": "workflow/status.json",
@@ -108,9 +108,9 @@
       "description": "Historial de decisiones por fase (técnicas y de producto). Diferencia de status.json: este archivo guarda decisiones pasadas para trazabilidad; status.json solo tiene las decisiones activas."
     },
     {
-      "path": "workflow/improvements-log.md",
+      "path": "workflow/debrief.md",
       "type": "ops",
-      "description": "Registro vivo de mejoras no bloqueantes detectadas durante implementación y review. Cada entrada tiene ID estable, estado (Captured/Triaged/Scheduled/Done/Won't do) y link a Linear cuando aplica."
+      "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
     },
     {
       "path": "workflow/setup/environment.md",
