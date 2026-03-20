@@ -76,7 +76,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Objetivo:** verificar calidad del PR y cerrar la trazabilidad del issue.
 
-**Estado Linear:** `In Review` → `Done` (si aprobado, tras merge del humano) o `In Progress` (si rechazado).
+**Estado Linear:** `In Review` → `Done` (si aprobado, el agente hace merge y cierra) o `In Progress` (si rechazado).
 
 **Resolución de issue:**
 - Con argumento (`/wf-review ODE-22`): usar el issue indicado.
@@ -92,9 +92,12 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 **Secuencia — si aprobado:**
 1. Verificar gate: `npm run ops:delivery:gate` en verde.
 2. Revisar diff contra el brief (scope, calidad, seguridad, performance).
-3. Dejar comentario en Linear: resultado de revisión + confirmación de que el humano puede mergear.
-4. Mover issue a `Done` solo después de que el humano confirme merge.
-5. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
+3. Dejar comentario en Linear: resultado de revisión.
+4. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
+5. Mover issue a `Done` en Linear.
+6. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
+
+**Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
 **Secuencia — si rechazado:**
 1. Dejar comentario en Linear con hallazgos específicos que bloquean aprobación.
@@ -189,13 +192,14 @@ Algunos issues requieren acciones que el agente no puede completar solo — cred
 **El agente no bloquea silenciosamente.** Cuando encuentra una dependencia humana, emite el protocolo de handoff y pausa.
 
 **Siempre hace el humano:**
-- Aprobar y mergear PRs a `main`.
 - Asignar issues en Linear.
 - Proveer credenciales, variables de entorno y accesos externos.
 - Aprobar qué entradas de `/wf-debrief` se convierten en issues.
+- Indicar explícitamente si quiere hacer el merge manualmente (por defecto lo hace el agente).
 
 **Siempre hace el agente:**
 - Ejecutar la secuencia `/wf-*` respetando los gates.
+- Hacer merge del PR tras REVIEW APROBADO: `gh pr merge {número} --merge`.
 - Mover estados en Linear según este documento.
 - Actualizar `workflow/status.json` estableciendo la fase en PLAN y agregando los issues completados a `built` al pasar a `Done` en REVIEW.
 - Dejar comentario de trazabilidad en Linear al cerrar cada etapa.
