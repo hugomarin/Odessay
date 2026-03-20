@@ -14,6 +14,7 @@
     "ops:status:drift": "node scripts/check-status-drift.mjs",
     "ops:status:drift:strict": "node scripts/check-status-drift.mjs --strict",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
+    "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run"
   },
   "dependencies": {
