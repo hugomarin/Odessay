@@ -12,8 +12,8 @@ Reglas mínimas de calidad técnica y observabilidad para aceptar entregas.
 
 ## No incluye
 
-- Setup de entorno y variables (ver `workflow/setup/environment.md`).
-- Gobernanza de flujo en Linear/Git (ver `workflow/process/governance.md`).
+- Setup de entorno y variables (ver `workflow/build/environment.md`).
+- Gobernanza de flujo en Linear/Git (ver `workflow/workflow.md`).
 - Runbooks operativos por issue (ver `workflow/runbooks/phase-1-operations.md`).
 
 ## Hermetic testing

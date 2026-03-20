@@ -40,7 +40,7 @@ Flujos de usuario, páginas y rutas, comportamiento esperado en cada interacció
 
 Tokens de diseño (colores, tipografía, espaciado, sombras), componentes visuales y sus variantes, valores exactos por vista, referencias visuales concretas (prototipos, screenshots).
 
-**Tipo de documento:** `skill-design.md` + `.agents/skills/skill-design/vistas.md` + carpeta `workflow/reference/`. El agente no interpreta — tiene los valores exactos.
+**Tipo de documento:** `skill-design.md` + `.agents/skills/skill-design/vistas.md` + carpeta `workflow/context/reference/`. El agente no interpreta — tiene los valores exactos.
 
 ---
 

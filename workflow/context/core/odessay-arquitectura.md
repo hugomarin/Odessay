@@ -160,7 +160,7 @@ Para desktop (Tauri/Electron): SQLite vía el runtime nativo. Para web: IndexedD
 
 ---
 
-Schema de entidades en `workflow/core/odessay-modelo-datos.md`.
+Schema de entidades en `workflow/context/core/odessay-modelo-datos.md`.
 
 ---
 

@@ -1,7 +1,7 @@
 # ODESSAY — Correspondencias
 
 **Feature spec para agentes de desarrollo.**
-Lee `workflow/core/odessay-fundacional.md` para la visión epistolar y `workflow/core/odessay-modelo-datos.md` para el schema de `correspondences` y `writings`.
+Lee `workflow/context/core/odessay-fundacional.md` para la visión epistolar y `workflow/context/core/odessay-modelo-datos.md` para el schema de `correspondences` y `writings`.
 
 ---
 
@@ -126,13 +126,13 @@ Se abre al hacer click en cualquier mini-documento. Pantalla completa. Sin sideb
 
 **Inmutabilidad:** los writings en correspondencia son de solo lectura una vez compartidos. Esta decisión protege los anclajes de los márgenes (`anchor_start`, `anchor_end` basados en offsets de `body_text`). Si el texto cambiara, los highlights quedarían anclados a posiciones incorrectas. El icono de edición no aparece en la topbar cuando el writing está en correspondencia.
 
-Ver `workflow/features/odessay-margenes.md` para la spec del sistema de highlights y anotaciones disponible en esta vista.
+Ver `workflow/context/features/odessay-margenes.md` para la spec del sistema de highlights y anotaciones disponible en esta vista.
 
 ---
 
 ## Modelo de datos (referencia)
 
-Schema completo en `workflow/core/odessay-modelo-datos.md`. Las tablas relevantes:
+Schema completo en `workflow/context/core/odessay-modelo-datos.md`. Las tablas relevantes:
 
 **`correspondences`**
 - `id` — UUID
@@ -171,7 +171,7 @@ El editor muestra el writing como solo lectura si `correspondence_id` no es null
 
 ## Lo que este doc NO cubre
 
-- Sistema de márgenes (highlights y anotaciones) → `workflow/features/odessay-margenes.md`
-- Mecanismo de respuesta (`/write?reply_to`) → `workflow/core/odessay-flujos.md` §Leer y Responder
-- Schema completo de tablas → `workflow/core/odessay-modelo-datos.md`
-- Visibilidad compartida → `workflow/core/odessay-paginas.md` §/shared
+- Sistema de márgenes (highlights y anotaciones) → `workflow/context/features/odessay-margenes.md`
+- Mecanismo de respuesta (`/write?reply_to`) → `workflow/context/core/odessay-flujos.md` §Leer y Responder
+- Schema completo de tablas → `workflow/context/core/odessay-modelo-datos.md`
+- Visibilidad compartida → `workflow/context/core/odessay-paginas.md` §/shared

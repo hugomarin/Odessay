@@ -7,12 +7,12 @@
   "active_phase": {
     "name": "Fase 1 — Escribir",
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
-    "roadmap_ref": "workflow/odessay-roadmap.md"
+    "roadmap_ref": "workflow/define/odessay-roadmap.md"
   },
   "phase_plan": {
     "phase": "Fase 1 — Escribir",
-    "source_of_truth": "workflow/odessay-roadmap.md",
-    "definition_of_done": "workflow/fase-1-definition-of-done.md",
+    "source_of_truth": "workflow/define/odessay-roadmap.md",
+    "definition_of_done": "workflow/define/fase-1-definition-of-done.md",
     "linear_issues": [
       "ODE-21",
       "ODE-22",
@@ -34,7 +34,7 @@
       "linear_url": null,
       "commit": null,
       "date": "2026-03-17",
-      "notes": "Estructura: workflow/, .agents/skills/, workflow/framework/, workflow/reference/"
+      "notes": "Estructura: workflow/, .agents/skills/, workflow/context/framework/, workflow/context/reference/"
     },
     {
       "what": "Repo GitHub + .gitignore base",
@@ -201,15 +201,15 @@
   "decisions_global": [
     {
       "decision": "Local-first con IndexedDB (no localStorage)",
-      "doc": "workflow/core/odessay-arquitectura.md"
+      "doc": "workflow/context/core/odessay-arquitectura.md"
     },
     {
       "decision": "body_json como fuente de verdad (no body_markdown)",
-      "doc": "workflow/core/odessay-modelo-datos.md"
+      "doc": "workflow/context/core/odessay-modelo-datos.md"
     },
     {
       "decision": "Last-write-wins silencioso para conflictos de sync",
-      "doc": "workflow/features/odessay-sync.md"
+      "doc": "workflow/context/features/odessay-sync.md"
     },
     {
       "decision": "ShadCN tres capas de adaptación",
@@ -233,16 +233,16 @@
     },
     {
       "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
-      "doc": "workflow/core/odessay-stack.md"
+      "doc": "workflow/context/core/odessay-stack.md"
     }
   ],
 
   "decisions_phase_active": [
     {
       "decision": "FootnoteExtension custom (no existe en ecosistema)",
-      "doc": "workflow/features/odessay-editor.md"
+      "doc": "workflow/context/features/odessay-editor.md"
     }
   ],
 
-  "decisions_archive_ref": "workflow/decisions-archive.md"
+  "decisions_archive_ref": "workflow/runbooks/decisions-archive.md"
 }

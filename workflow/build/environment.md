@@ -12,8 +12,8 @@ Setup técnico del entorno local para poder ejecutar trabajo de implementación.
 
 ## No incluye
 
-- Proceso de entrega, estados de Linear o estrategia de Git (ver `workflow/process/governance.md`).
-- Estándares de calidad/observabilidad (ver `workflow/quality/testing-observability.md`).
+- Proceso de entrega, estados de Linear o estrategia de Git (ver `workflow/workflow.md`).
+- Estándares de calidad/observabilidad (ver `workflow/review/testing-observability.md`).
 - Procedimientos específicos por issue/fase (ver `workflow/runbooks/phase-1-operations.md`).
 
 ## Pre-flight: verificar antes de empezar
@@ -36,14 +36,14 @@ config.registry.forEach(doc => {
 
 const registryPaths = new Set(config.registry.map(d => d.path));
 const scanDirs = [
-  'workflow/core',
-  'workflow/features',
-  'workflow/setup',
-  'workflow/process',
+  'workflow/context/core',
+  'workflow/context/features',
+  'workflow/context/framework',
+  'workflow/context/reference',
+  'workflow/define',
+  'workflow/build',
+  'workflow/review',
   'workflow/runbooks',
-  'workflow/quality',
-  'workflow/framework',
-  'workflow/issues',
   '.agents/skills'
 ];
 const orphans = [];

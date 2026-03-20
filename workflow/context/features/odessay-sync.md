@@ -1,7 +1,7 @@
 # ODESSAY — Local-first sync
 
 **Feature spec para agentes de desarrollo.**
-Lee `workflow/core/odessay-arquitectura.md` §Arquitectura de datos y `workflow/core/odessay-stack.md` §Arquitectura local-first antes de implementar cualquier parte de esta capa.
+Lee `workflow/context/core/odessay-arquitectura.md` §Arquitectura de datos y `workflow/context/core/odessay-stack.md` §Arquitectura local-first antes de implementar cualquier parte de esta capa.
 
 ---
 
@@ -201,12 +201,12 @@ console.error('[sync:remote]', {
 })
 ```
 
-Sentry captura estos errores automáticamente. Ver `workflow/quality/testing-observability.md`.
+Sentry captura estos errores automáticamente. Ver `workflow/review/testing-observability.md`.
 
 ---
 
 ## Lo que este doc NO cubre
 
 - Implementación del endpoint `PATCH /api/writings/{id}` → `.agents/skills/skill-backend/SKILL.md`
-- Schema de la tabla `writings` (campos `version`, `sync_status`, `deleted_at`) → `workflow/core/odessay-modelo-datos.md`
-- Implementación de SQLite en desktop (Tauri) → `workflow/core/odessay-stack.md` §Desktop
+- Schema de la tabla `writings` (campos `version`, `sync_status`, `deleted_at`) → `workflow/context/core/odessay-modelo-datos.md`
+- Implementación de SQLite en desktop (Tauri) → `workflow/context/core/odessay-stack.md` §Desktop

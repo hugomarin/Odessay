@@ -16,19 +16,19 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Contexto a cargar:**
 1. `workflow/status.json` — fase activa y qué está construido.
-2. `workflow/odessay-roadmap.md` — alcance y dependencias de la fase.
-3. Los documentos de `workflow/features/` correspondientes a la fase (consultar `workflow/docs.json` para identificarlos por descripción).
+2. `workflow/define/odessay-roadmap.md` — alcance y dependencias de la fase.
+3. Los documentos de `workflow/context/features/` correspondientes a la fase (consultar `workflow/docs.json` para identificarlos por descripción).
 4. `.agents/skills/skill-product-manager/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
 
 **No cargar por defecto:** skills técnicos (frontend, backend, database), runbooks, testing. Solo si un issue de la fase los requiere explícitamente.
 
 **Secuencia:**
 1. Resolver la fase (ver lógica de fallback arriba).
-2. Leer `workflow/status.json` y `workflow/odessay-roadmap.md`.
+2. Leer `workflow/status.json` y `workflow/define/odessay-roadmap.md`.
 3. Leer los docs de features relevantes a esa fase.
 4. Leer `.agents/skills/skill-product-manager/SKILL.md`.
 5. Descomponer la fase en issues atómicos siguiendo el template del skill de PM.
-6. Para cada issue: redactar el Issue Brief usando `workflow/issues/ISSUE-BRIEF.template.md`.
+6. Para cada issue: redactar el Issue Brief usando `workflow/define/issues/ISSUE-BRIEF.template.md`.
 7. Crear los issues en Linear con su brief incluido.
 8. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido.
 
@@ -51,7 +51,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. Los skills técnicos que corresponden al área del issue (frontend, backend, database, design — consultar `workflow/docs.json`).
-3. `workflow/setup/environment.md` — solo si hay bloqueo de entorno.
+3. `workflow/build/environment.md` — solo si hay bloqueo de entorno.
 
 **No cargar por defecto:** documentos core, fundacional, flujos, páginas. Esa información debe estar sintetizada en el brief. Si falta algo crítico, es un error del brief — corregir en PLAN antes de continuar.
 
@@ -84,7 +84,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 1. El Issue Brief desde Linear.
 2. El diff del PR.
 3. `.agents/skills/skill-code-review/SKILL.md`.
-4. `workflow/quality/testing-observability.md` si el issue incluye testing o logging.
+4. `workflow/review/testing-observability.md` si el issue incluye testing o logging.
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
@@ -115,21 +115,21 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 
 **Contexto a cargar:**
 1. El issue original desde Linear (brief + comentarios de BUILD y REVIEW).
-2. `workflow/debrief.md` — sección de la fase activa, para agregar entradas y consultar el historial.
+2. `workflow/define/debrief.md` — sección de la fase activa, para agregar entradas y consultar el historial.
 
 **No cargar por defecto:** documentos core, features, skills técnicos. Si una observación requiere validar comportamiento esperado, consultar el doc de feature correspondiente usando `workflow/docs.json`.
 
 **Secuencia:**
 1. Resolver el issue de referencia (ver fallback arriba).
 2. Leer el issue original en Linear: brief, comentarios de BUILD, comentarios de REVIEW.
-3. Por cada observación del humano o hallazgo propio: crear una entrada en `workflow/debrief.md` bajo la sección de la fase activa, con ID estable (`IMP-YYYY-MM-DD-NN`), descripción, tipo y prioridad sugerida.
+3. Por cada observación del humano o hallazgo propio: crear una entrada en `workflow/define/debrief.md` bajo la sección de la fase activa, con ID estable (`IMP-YYYY-MM-DD-NN`), descripción, tipo y prioridad sugerida.
 4. Clasificar cada entrada por tipo: `bug` / `mejora` / `ux-friction` / `deuda-tecnica`.
 5. Clasificar cada entrada por prioridad sugerida: `next-sprint` / `backlog` / `won't-do`.
 6. Presentar al humano el resumen de entradas capturadas y proponer cuáles crear como issues en Linear.
 7. Para las que el humano aprueba: crear el issue en Linear con el tipo correcto (Bug, Improvement, etc.), referencia al issue original y un brief mínimo.
 8. Dejar comentario en el issue original de Linear enlazando los nuevos issues creados.
 
-**Gate de salida:** entradas en `workflow/debrief.md` + issues aprobados creados en Linear.
+**Gate de salida:** entradas en `workflow/define/debrief.md` + issues aprobados creados en Linear.
 
 **Restricción:** no modificar el scope ni reabrir el issue original. No cambiar código en esta etapa.
 

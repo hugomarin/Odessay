@@ -11,9 +11,9 @@ Procedimientos operativos específicos por issue/fase (playbooks ejecutables).
 
 ## No incluye
 
-- Reglas globales de proceso (ver `workflow/process/governance.md`).
-- Setup técnico base (ver `workflow/setup/environment.md`).
-- Criterios generales de testing/observabilidad (ver `workflow/quality/testing-observability.md`).
+- Reglas globales de proceso (ver `workflow/workflow.md`).
+- Setup técnico base (ver `workflow/build/environment.md`).
+- Criterios generales de testing/observabilidad (ver `workflow/review/testing-observability.md`).
 
 ## ODE-12 — Deploy en Vercel + previews por PR
 

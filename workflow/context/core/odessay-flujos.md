@@ -1,9 +1,9 @@
 # ODESSAY — Flujos de usuario
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `workflow/core/odessay-fundacional.md` para la visión, `workflow/core/odessay-stack.md` para tecnologías, `workflow/core/odessay-modelo-datos.md` para el schema, y `workflow/core/odessay-paginas.md` para la arquitectura de páginas.
+Lee `workflow/context/core/odessay-fundacional.md` para la visión, `workflow/context/core/odessay-stack.md` para tecnologías, `workflow/context/core/odessay-modelo-datos.md` para el schema, y `workflow/context/core/odessay-paginas.md` para la arquitectura de páginas.
 
-El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `workflow/core/odessay-paginas.md` §Mecanismo universal de respuesta.
+El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `workflow/context/core/odessay-paginas.md` §Mecanismo universal de respuesta.
 
 ---
 
@@ -178,7 +178,7 @@ La vista de una correspondencia es principalmente una **interfaz de lectura**, n
 
 La correspondencia se navega como secuencia de mini-documentos conectados por una línea vertical. Cada writing se abre en una reading view completa. El turno activo ("Your turn" / "Waiting") orienta al autor sobre quién escribe ahora.
 
-**Spec completa:** `workflow/features/odessay-correspondencias.md`
+**Spec completa:** `workflow/context/features/odessay-correspondencias.md`
 
 ---
 
@@ -188,7 +188,7 @@ Collections es una interfaz de **organización y gestión**, no de lectura. El a
 
 El flujo central: un banner permanente señala los writings sin clasificar. El AI sugiere agrupaciones (no las aplica). El autor acepta sugerencias por item o hace bulk assign con checkbox. Las colecciones existentes son expandibles en la misma vista — sin navegación a otra página.
 
-**Spec completa:** `workflow/features/odessay-collections.md`
+**Spec completa:** `workflow/context/features/odessay-collections.md`
 
 
 ---
@@ -199,4 +199,4 @@ Los márgenes son el espacio de escritura que emerge mientras se lee. No son com
 
 Cuando va a responder, sus márgenes están disponibles en el editor como materia prima: el lector decide qué incorporar y cómo.
 
-**Spec completa:** `workflow/features/odessay-margenes.md`
+**Spec completa:** `workflow/context/features/odessay-margenes.md`

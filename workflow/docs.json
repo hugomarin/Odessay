@@ -6,73 +6,73 @@
   "registry": [
 
     {
-      "path": "workflow/core/odessay-fundacional.md",
+      "path": "workflow/context/core/odessay-fundacional.md",
       "type": "core",
       "description": "Por qué existe Odessay, para quién es y qué problema resuelve. Los tres modos (Escribir/Leer/Organizar) y los principios de producto no negociables. No contiene código ni specs técnicas."
     },
     {
-      "path": "workflow/core/odessay-arquitectura.md",
+      "path": "workflow/context/core/odessay-arquitectura.md",
       "type": "core",
       "description": "Stack completo (Next.js 15, React 19, TipTap, Supabase, SQLite, Claude API), los tres modos de uso con sus interfaces, navegación de tres columnas, rutas principales y decisiones arquitectónicas tomadas."
     },
     {
-      "path": "workflow/core/odessay-stack.md",
+      "path": "workflow/context/core/odessay-stack.md",
       "type": "core",
       "description": "Detalle del stack: librerías confirmadas, convenciones de código, ambientes (local/staging/prod), variables de entorno y criterio de decisión técnica permanente. Complementa odessay-arquitectura.md."
     },
     {
-      "path": "workflow/core/odessay-modelo-datos.md",
+      "path": "workflow/context/core/odessay-modelo-datos.md",
       "type": "core",
       "description": "Schema completo de Supabase: todas las tablas (profiles, writings, correspondences, collections, invitations, margins), columnas, tipos, RLS policies y relaciones. Fuente de verdad de la capa de datos."
     },
     {
-      "path": "workflow/core/odessay-paginas.md",
+      "path": "workflow/context/core/odessay-paginas.md",
       "type": "core",
       "description": "Arquitectura de rutas: zona pública, espacio del autor (dual: vista propia vs visitante) y zona privada. Mecanismo universal de respuesta (reply_to / parent_id). Layout y comportamiento de cada página."
     },
     {
-      "path": "workflow/core/odessay-flujos.md",
+      "path": "workflow/context/core/odessay-flujos.md",
       "type": "core",
       "description": "Flujos de usuario paso a paso (11 secciones): registrarse, escribir, publicar, leer, organizar, navegar el editor, responder, invitar y formatear. Depende de odessay-paginas.md para el mecanismo de respuesta."
     },
 
     {
-      "path": "workflow/features/odessay-editor.md",
+      "path": "workflow/context/features/odessay-editor.md",
       "type": "feature",
       "description": "Comportamiento técnico y de UX del editor TipTap: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas."
     },
     {
-      "path": "workflow/features/odessay-ai-editor.md",
+      "path": "workflow/context/features/odessay-ai-editor.md",
       "type": "feature",
       "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles, regla de SILENCIO y arquitectura de prompts con Claude API."
     },
     {
-      "path": "workflow/features/odessay-margenes.md",
+      "path": "workflow/context/features/odessay-margenes.md",
       "type": "feature",
       "description": "Sistema de márgenes: anotaciones que emergen mientras se lee (no son comentarios, son writings en borrador). Flujo de selección de texto, panel lateral, semántica y schema de la tabla margins."
     },
     {
-      "path": "workflow/features/odessay-correspondencias.md",
+      "path": "workflow/context/features/odessay-correspondencias.md",
       "type": "feature",
       "description": "Correspondencias: árbol de writings conectados por respuestas, creado automáticamente con la primera respuesta. Thread visual (participants bar, mini-docs, reply prompt), estados del turno y modelo de datos."
     },
     {
-      "path": "workflow/features/odessay-collections.md",
+      "path": "workflow/context/features/odessay-collections.md",
       "type": "feature",
       "description": "Collections: interfaz de clasificación del archivo (no de lectura). Resuelve el problema de writings sin clasificar con preview sin apertura, bulk categorization y AI como propuesta no como acción automática."
     },
     {
-      "path": "workflow/features/odessay-sync.md",
+      "path": "workflow/context/features/odessay-sync.md",
       "type": "feature",
       "description": "Capa local-first: el usuario nunca espera a Supabase. Interfaz LocalDB, flujo auto-save (escritura local inmediata → sync remoto en background), debounce, backoff exponencial, last-write-wins y estados del statusbar."
     },
     {
-      "path": "workflow/features/odessay-invitaciones.md",
+      "path": "workflow/context/features/odessay-invitaciones.md",
       "type": "feature",
       "description": "Sistema de invitaciones: la primera experiencia del invitado es leer la carta, no un registro vacío. Flujo del autor, flujo del invitado, landing /invite/{token}, estados (pending/accepted/expired) y email vía Resend."
     },
     {
-      "path": "workflow/features/odessay-espacio-publico.md",
+      "path": "workflow/context/features/odessay-espacio-publico.md",
       "type": "feature",
       "description": "Espacio público del autor: /{username} con vista dual (pública vs propia), /{username}/{slug} para writings públicos. Sin métricas de engagement. Slug generation, SEO/OG y contexto de correspondencia en lectura pública."
     },
@@ -93,37 +93,32 @@
       "description": "Estado del codebase: fase activa con links a Linear y roadmap, build log con commits y fechas, y decisiones arquitectónicas vigentes. Puente entre GitHub, Linear y el roadmap."
     },
     {
-      "path": "workflow/odessay-roadmap.md",
+      "path": "workflow/define/odessay-roadmap.md",
       "type": "ops",
       "description": "Fases del producto y orden de implementación: qué bloquea qué, alcance de cada fase y estructura de proyectos en Linear. Fuente de verdad del qué y el cuándo."
     },
     {
-      "path": "workflow/fase-1-definition-of-done.md",
+      "path": "workflow/define/fase-1-definition-of-done.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 1 — Escribir: checklist de editor core, sidebar, persistencia local-first y criterios técnicos mínimos que deben estar cumplidos para considerar la fase terminada."
     },
     {
-      "path": "workflow/decisions-archive.md",
+      "path": "workflow/runbooks/decisions-archive.md",
       "type": "ops",
       "description": "Historial de decisiones por fase (técnicas y de producto). Diferencia de status.json: este archivo guarda decisiones pasadas para trazabilidad; status.json solo tiene las decisiones activas."
     },
     {
-      "path": "workflow/debrief.md",
+      "path": "workflow/define/debrief.md",
       "type": "ops",
       "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
     },
     {
-      "path": "workflow/setup/environment.md",
+      "path": "workflow/build/environment.md",
       "type": "ops",
       "description": "Setup técnico del entorno local: pre-flight checklist, variables de entorno requeridas, matriz de ambientes (local/staging/prod), herramientas necesarias y comandos base para ejecutar el proyecto."
     },
     {
-      "path": "workflow/process/governance.md",
-      "type": "ops",
-      "description": "Contrato operativo del flujo de trabajo: etapas /wf-*, estados en Linear, outputs requeridos por etapa, handoffs humano/agente y reglas de Git (branches, PRs, merges)."
-    },
-    {
-      "path": "workflow/quality/testing-observability.md",
+      "path": "workflow/review/testing-observability.md",
       "type": "ops",
       "description": "Reglas mínimas de calidad técnica: estrategia de hermetic testing, estándares de logging, instrumentación de Sentry y criterios que debe cumplir una entrega antes de pasar a In Review."
     },
@@ -133,13 +128,13 @@
       "description": "Playbooks ejecutables específicos de Fase 1 (issues ODE-12/14/15/16). Procedimientos paso a paso para operaciones puntuales que no aplican como regla global."
     },
     {
-      "path": "workflow/issues/ISSUE-BRIEF.template.md",
+      "path": "workflow/define/issues/ISSUE-BRIEF.template.md",
       "type": "ops",
       "description": "Plantilla canónica del Issue Brief con secciones: identificación, problema, alcance (in/out of scope), diseño técnico, áreas afectadas, criterios de done y proof of work. Gate requerido para pasar de PLAN a BUILD."
     },
 
     {
-      "path": "workflow/framework/framework-mece.md",
+      "path": "workflow/context/framework/framework-mece.md",
       "type": "framework",
       "description": "Framework MECE genérico y transferible a cualquier proyecto: las 10 preguntas que todo sistema debe responder, cómo detectar gaps y cómo aplicarlo. No contiene información específica de Odessay."
     },
@@ -188,16 +183,15 @@
   ],
 
   "structure": {
-    "workflow/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
-    "workflow/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
-    "workflow/": "Estado vivo y operación del proyecto (contrato, roadmap, estado, decisiones).",
-    "workflow/setup/": "Setup técnico y pre-flight del entorno.",
-    "workflow/process/": "Gobernanza del trabajo y flujo operativo.",
-    "workflow/quality/": "Criterios de calidad, testing y observabilidad.",
+    "workflow/context/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
+    "workflow/context/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",
+    "workflow/define/": "Artefactos de planificación y definición (roadmap, DoD, debrief e issue briefs).",
+    "workflow/build/": "Contexto operativo de implementación (setup técnico y pre-flight).",
+    "workflow/review/": "Políticas de calidad, testing y observabilidad para validar entregas.",
     "workflow/runbooks/": "Procedimientos específicos por fase o issue.",
-    "workflow/framework/": "Framework MECE genérico. No es específico de Odessay.",
-    "workflow/issues/": "Issue Briefs y plantillas de trabajo.",
-    "workflow/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica.",
+    "workflow/context/framework/": "Framework MECE genérico. No es específico de Odessay.",
+    "workflow/define/issues/": "Issue Briefs y plantillas de trabajo.",
+    "workflow/context/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica.",
     ".agents/skills/": "Instrucciones de implementación por dominio. Se leen cuando el issue toca ese área."
   }
 }
