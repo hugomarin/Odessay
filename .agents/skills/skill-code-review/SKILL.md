@@ -157,7 +157,7 @@ Si falta el comentario de trazabilidad → **rechazar**. La conexión Linear ↔
 - Si se detecta alguno → **rechazar** con descripción del problema específico.
 
 **5. status.json actualizado**
-- ¿Se agregó una entrada en `docs/ops/status.json → built` con el issue ID, commit SHA y fecha?
+- ¿Se agregó una entrada en `workflow/status.json → built` con el issue ID, commit SHA y fecha?
 - Si el issue era el último de la fase activa → ¿se actualizó `active_phase`?
 
 ### Decisión final

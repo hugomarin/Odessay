@@ -10,7 +10,7 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 docs/
   core/       → Verdades estables del producto. Primario en PLAN.
   features/   → Spec de cada feature. Leer solo si el issue lo toca.
-  ops/        → Estado vivo y operación de agentes. Primario en PLAN.
+workflow/     → Estado vivo y operación de agentes. Primario en PLAN.
 framework/    → Framework MECE genérico. No es específico de Odessay.
 .agents/skills/       → Instrucciones de implementación. On-demand por trigger.
 reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
@@ -89,7 +89,7 @@ Si la tarea involucra crear o modificar estructura de Linear (proyectos, issues,
 | `odessay-ai-editor.md` | AI editor residente: spec completa de comportamiento. | `ai-editor` |
 | `odessay-margenes.md` | Sistema de highlights y anotación en lectura. | `reading-view` |
 
-### docs/ops/ — Primario en PLAN
+### workflow/ — Primario en PLAN
 
 | Documento | Propósito |
 |-----------|-----------|

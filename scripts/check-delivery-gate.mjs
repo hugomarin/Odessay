@@ -56,12 +56,12 @@ if (!issueMatch) {
 }
 
 const issueId = issueMatch[0].toUpperCase();
-const status = JSON.parse(readFileSync("docs/ops/status.json", "utf8"));
+const status = JSON.parse(readFileSync("workflow/status.json", "utf8"));
 const entry = status.built.find((builtEntry) => builtEntry.issue === issueId);
 
 if (!entry) {
   fail(
-    `docs/ops/status.json is missing built[] entry for ${issueId}. Add it before moving to In Review.`,
+    `workflow/status.json is missing built[] entry for ${issueId}. Add it before moving to In Review.`,
   );
 }
 

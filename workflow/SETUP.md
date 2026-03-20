@@ -26,8 +26,8 @@ Defines quién hace qué. Antes de ejecutar un issue, el agente debe saber si ha
 - Correr `typecheck`, `lint` y `tests` — pegar output en el PR
 - Abrir PRs y mover issues en Linear entre estados (`Todo` → `In Progress` → `In Review`)
 - Crear `.env.example` con las keys esperadas (valores vacíos)
-- Actualizar `docs/ops/status.json` en **todo issue** que se mueve a `In Review` (puente GitHub ↔ Linear ↔ roadmap)
-- Actualizar `docs/ops/SETUP.md` cuando cambian reglas operativas, tools o permisos
+- Actualizar `workflow/status.json` en **todo issue** que se mueve a `In Review` (puente GitHub ↔ Linear ↔ roadmap)
+- Actualizar `workflow/SETUP.md` cuando cambian reglas operativas, tools o permisos
 - Mover el issue a `Done` una vez que el PR está mergeado y el humano lo confirma
 
 ### Responsabilidades en Linear — tabla de referencia rápida
@@ -97,7 +97,7 @@ config.registry.forEach(doc => {
 
 // b) Disco → registry: verificar que todo lo que existe está declarado
 const registryPaths = new Set(config.registry.map(d => d.path));
-const scanDirs = ['docs/core', 'docs/features', 'docs/ops', 'framework', '.agents/skills'];
+const scanDirs = ['docs/core', 'docs/features', 'workflow', 'framework', '.agents/skills'];
 const orphans = [];
 scanDirs.forEach(dir => {
   if (!fs.existsSync(dir)) return;
@@ -479,7 +479,7 @@ Si el issue no tiene particularidades, no se crea WORKFLOW.md. Es una herramient
 6. Ejecutar validaciones (typecheck, lint, tests) — pegar output en el PR
 7. Abrir PR con descripción del issue
 8. Comentar en el issue de Linear: link al PR + SHA del commit + resultado de validaciones
-9. Actualizar `docs/ops/status.json` con entrada `built[]` del issue (issue, linear_url, commit, date, notes)
+9. Actualizar `workflow/status.json` con entrada `built[]` del issue (issue, linear_url, commit, date, notes)
 10. Correr `npm run ops:delivery:gate` (debe quedar OK)
 11. Mover issue a In Review en Linear
 ── STOP: el turno del agente implementador termina aquí ────────────────────

@@ -28,7 +28,7 @@ function commitExists(commit) {
 }
 
 const strict = process.argv.includes("--strict");
-const status = JSON.parse(readFileSync("docs/ops/status.json", "utf8"));
+const status = JSON.parse(readFileSync("workflow/status.json", "utf8"));
 const builtIssues = status.built
   .map((entry) => entry.issue)
   .filter((issue) => typeof issue === "string");
@@ -94,7 +94,7 @@ if (duplicates.length > 0) {
 
 if (missingInStatus.length > 0) {
   console.error(
-    `[ops:status:drift] Missing issues in docs/ops/status.json: ${missingInStatus.join(", ")}`,
+    `[ops:status:drift] Missing issues in workflow/status.json: ${missingInStatus.join(", ")}`,
   );
 }
 

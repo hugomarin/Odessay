@@ -3,7 +3,7 @@
 import { execSync } from "node:child_process";
 
 const PROCESS_FILES = [
-  "docs/ops/SETUP.md",
+  "workflow/SETUP.md",
   ".agents/skills/skill-product-manager/SKILL.md",
   ".agents/skills/skill-code-review/SKILL.md",
 ];

@@ -1,6 +1,6 @@
 # ODESSAY — Decisions Archive
 
-Histórico de decisiones por fase que **no necesitan** vivir en `docs/ops/status.json` como decisiones globales vigentes.
+Histórico de decisiones por fase que **no necesitan** vivir en `workflow/status.json` como decisiones globales vigentes.
 
 Uso:
 - `status.json -> decisions_global`: decisiones activas, transversales y no negociables.

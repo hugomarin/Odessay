@@ -50,11 +50,11 @@ Los docs de feature responden cómo funciona una parte específica del producto 
 
 La ausencia de un doc en `features/` no es solo un gap de documentación — es un indicador de riesgo: el agente que toque ese feature tomará decisiones de diseño sin referencia.
 
-### docs/ops/ — lo que define la operación del agente
+### workflow/ — lo que define la operación del agente
 
-Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`docs/ops/status.json`), y en qué orden construir (`roadmap.md`).
+Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`workflow/status.json`), y en qué orden construir (`roadmap.md`).
 
-`docs/ops/status.json` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
+`workflow/status.json` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
 
 ### .agents/skills/ — instrucciones de implementación
 
@@ -106,7 +106,7 @@ Patrones de API, autenticación, base de datos, manejo de errores, servicios ext
 
 **8. ¿Qué existe hoy en el codebase?**
 Estado actual: qué está construido, qué no existe, decisiones tomadas que no están en el código. Sin esto, el agente asume que nada existe o que todo existe.
-*Documento tipo: `docs/ops/status.json` — se actualiza con cada PR significativo.*
+*Documento tipo: `workflow/status.json` — se actualiza con cada PR significativo.*
 
 **9. ¿Cómo opera el agente en este proyecto?**
 Variables de entorno, cómo levantar el proyecto, tools requeridos, permisos, Git, protocolo de escalación.
@@ -182,7 +182,7 @@ config.registry.forEach(doc => {
 
 // b) Existe en disco pero no está en registry (nodo huérfano)
 const registryPaths = new Set(config.registry.map(d => d.path));
-walkDirs(['docs', 'framework', '.agents/skills']).forEach(file => {
+walkDirs(['docs', 'workflow', 'framework', '.agents/skills']).forEach(file => {
   if (!registryPaths.has(file)) orphans.push({ problem: 'huérfano', path: file });
 });
 ```
@@ -209,7 +209,7 @@ Cada documento tiene un scope que determina cuándo lo lee el agente:
 
 ### Protocolo de lectura en cuatro pasos
 
-**Paso 1 — Pre-flight.** Correr el script de integridad. Leer `SETUP.md` y `docs/ops/status.json`. Si falta algo requerido, documentar el bloqueo y escalar — no improvisar.
+**Paso 1 — Pre-flight.** Correr el script de integridad. Leer `SETUP.md` y `workflow/status.json`. Si falta algo requerido, documentar el bloqueo y escalar — no improvisar.
 
 **Paso 2 — Contexto base.** Leer todos los documentos `always`. Sin excepción. Son el piso de contexto que hace coherente cualquier decisión posterior.
 
@@ -239,7 +239,7 @@ Antes de mover un issue a revisión, el agente pega el output de `npm run typech
 
 ### Actualización de status.json con cada PR
 
-Cada PR significativo agrega una fila a `docs/ops/status.json`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
+Cada PR significativo agrega una fila a `workflow/status.json`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
 
 ---
 
@@ -250,7 +250,7 @@ Cada PR significativo agrega una fila a `docs/ops/status.json`. Un PR significat
 ```
 docs/core/         → Q1, Q2, Q4, Q5
 docs/features/     → Q6
-docs/ops/          → Q8, Q9
+workflow/          → Q8, Q9
 framework/         → este framework
 .agents/skills/            → Q3, Q5, Q7, Q10
 reference/         → Q3

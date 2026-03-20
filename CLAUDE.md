@@ -10,7 +10,7 @@ Este repositorio contiene la documentación completa de Odessay — una platafor
 docs/
   core/       → Verdades estables del producto. Siempre leer.
   features/   → Spec de cada feature. Leer solo si el issue lo toca.
-  ops/        → Estado vivo y operación de agentes. Siempre leer (pre-flight).
+workflow/     → Estado vivo y operación de agentes. Siempre leer (pre-flight).
 framework/    → Framework MECE genérico. No es específico de Odessay.
 .agents/skills/       → Instrucciones de implementación. On-demand por trigger.
 reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
@@ -22,9 +22,9 @@ reference/    → Prototipos HTML y screenshots. Referencia visual canónica.
 
 ### Paso 1 — Pre-flight (siempre, antes de tocar nada)
 
-1. **`docs.json`** — Verificar que todos los documentos declarados existen (script en `docs/ops/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
-2. **`docs/ops/SETUP.md`** — Entorno, variables, tools requeridos, permisos, Git. Si falta algo, no empezar.
-3. **`docs/ops/status.json`** — Qué está construido hoy, fase activa, build log con commits.
+1. **`docs.json`** — Verificar que todos los documentos declarados existen (script en `workflow/SETUP.md`). Identificar el `scope` de los docs: cuáles son `always`, cuáles son `conditional` según el issue.
+2. **`workflow/SETUP.md`** — Entorno, variables, tools requeridos, permisos, Git. Si falta algo, no empezar.
+3. **`workflow/status.json`** — Qué está construido hoy, fase activa, build log con commits.
 
 **Si la tarea involucra crear o modificar la estructura de Linear** (proyectos, issues, milestones): leer `.agents/skills/skill-product-manager/SKILL.md` completo antes de tocar Linear. La estructura correcta está definida ahí — no se infiere del roadmap.
 
@@ -75,7 +75,7 @@ Consultar `docs.json → triggers` para saber qué leer según el área del issu
 - `correspondencias` — thread, participants bar, sequence view, reply. Complejidad alta.
 - `collections` — AI suggestions, expandable, uncategorized banner. Complejidad media.
 
-### docs/ops/ — Siempre leer (pre-flight)
+### workflow/ — Siempre leer (pre-flight)
 
 | Documento | Propósito |
 |-----------|-----------|

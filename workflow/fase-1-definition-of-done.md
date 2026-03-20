@@ -4,7 +4,7 @@ Este documento define el gate de cierre de **Fase 1 — Escribir**.
 Si un punto no está cumplido, la fase no se considera terminada.
 
 Referencias:
-- `docs/ops/odessay-roadmap.md`
+- `workflow/odessay-roadmap.md`
 - `docs/features/odessay-editor.md`
 - `docs/core/odessay-arquitectura.md`
 - `.agents/skills/skill-design/vistas.md`

@@ -7,12 +7,12 @@
   "active_phase": {
     "name": "Fase 1 — Escribir",
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
-    "roadmap_ref": "docs/ops/odessay-roadmap.md"
+    "roadmap_ref": "workflow/odessay-roadmap.md"
   },
   "phase_plan": {
     "phase": "Fase 1 — Escribir",
-    "source_of_truth": "docs/ops/odessay-roadmap.md",
-    "definition_of_done": "docs/ops/fase-1-definition-of-done.md",
+    "source_of_truth": "workflow/odessay-roadmap.md",
+    "definition_of_done": "workflow/fase-1-definition-of-done.md",
     "linear_issues": [
       "ODE-21",
       "ODE-22",
@@ -50,7 +50,7 @@
       "linear_url": "https://linear.app/z9ne/issue/ODE-10",
       "commit": "6942c02",
       "date": "2026-03-17",
-      "notes": "App Router inicializado; lint/typecheck operativos; setup documentado en docs/ops/SETUP.md"
+      "notes": "App Router inicializado; lint/typecheck operativos; setup documentado en workflow/SETUP.md"
     },
     {
       "what": "Supabase env setup + SSR clients/middleware + documentación de keys",
@@ -225,11 +225,11 @@
     },
     {
       "decision": "Branch protection no disponible — fallback por PR obligatorio",
-      "doc": "docs/ops/SETUP.md"
+      "doc": "workflow/SETUP.md"
     },
     {
       "decision": "Un solo proyecto Supabase (odessay-staging) hasta Fase 5 — plan gratuito limita a 2 proyectos activos y los otros slots están ocupados",
-      "doc": "docs/ops/SETUP.md"
+      "doc": "workflow/SETUP.md"
     },
     {
       "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
@@ -244,5 +244,5 @@
     }
   ],
 
-  "decisions_archive_ref": "docs/ops/decisions-archive.md"
+  "decisions_archive_ref": "workflow/decisions-archive.md"
 }

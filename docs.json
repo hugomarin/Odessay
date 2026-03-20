@@ -101,33 +101,33 @@
       "trigger": "espacio-publico"
     },
     {
-      "path": "docs/ops/status.json",
+      "path": "workflow/status.json",
       "type": "ops",
       "description": "Estado actual del codebase: fase activa (con links a Linear y roadmap), build log con commits y fechas, decisiones arquitectónicas. Puente entre GitHub, Linear y el roadmap.",
       "scope": "always"
     },
     {
-      "path": "docs/ops/decisions-archive.md",
+      "path": "workflow/decisions-archive.md",
       "type": "ops",
       "description": "Archivo histórico de decisiones por fase. Referencia para contexto pasado sin contaminar el estado operativo vigente.",
       "scope": "conditional",
       "trigger": "planning"
     },
     {
-      "path": "docs/ops/SETUP.md",
+      "path": "workflow/SETUP.md",
       "type": "ops",
       "description": "Pre-flight del agente: entorno, variables de entorno, tools requeridos, permisos, estrategia de Git, frontera humano/agente, WORKFLOW.md convention.",
       "scope": "always"
     },
     {
-      "path": "docs/ops/odessay-roadmap.md",
+      "path": "workflow/odessay-roadmap.md",
       "type": "ops",
       "description": "Fases del producto y orden de implementación. Consultar para entender prioridad relativa de issues y qué bloquea qué.",
       "scope": "conditional",
       "trigger": "planning"
     },
     {
-      "path": "docs/ops/fase-1-definition-of-done.md",
+      "path": "workflow/fase-1-definition-of-done.md",
       "type": "ops",
       "description": "Gate operativo de cierre de Fase 1 (Escribir): checklist de editor, sidebar, persistencia local-first, sharing de evaluación y criterios técnicos mínimos.",
       "scope": "conditional",
@@ -200,7 +200,7 @@
   "structure": {
     "docs/core/": "Verdades estables del producto. Todo agente las lee siempre.",
     "docs/features/": "Spec de cada feature con complejidad propia. On-demand según trigger del issue.",
-    "docs/ops/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
+    "workflow/": "Estado vivo y operación de agentes. Todo agente las lee siempre (pre-flight).",
     "framework/": "Framework MECE genérico y transferible. No es específico de Odessay.",
     ".agents/skills/": "Instrucciones de implementación. Se leen cuando el issue activa su trigger.",
     "reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica."
@@ -281,15 +281,15 @@
       "id": 8,
       "question": "¿Qué existe hoy en el codebase?",
       "documents": [
-        { "path": "docs/ops/status.json", "scope": "always" },
-        { "path": "docs/ops/decisions-archive.md", "scope": "reference", "trigger": "planning" }
+        { "path": "workflow/status.json", "scope": "always" },
+        { "path": "workflow/decisions-archive.md", "scope": "reference", "trigger": "planning" }
       ]
     },
     {
       "id": 9,
       "question": "¿Cómo opera el agente en este proyecto?",
       "documents": [
-        { "path": "docs/ops/SETUP.md", "scope": "always" }
+        { "path": "workflow/SETUP.md", "scope": "always" }
       ]
     },
     {
@@ -352,8 +352,8 @@
       ],
       "allowed_additional_sources": [
         "registry:trigger=<issue-area>",
-        "registry:path=docs/ops/status.json",
-        "registry:path=docs/ops/SETUP.md"
+        "registry:path=workflow/status.json",
+        "registry:path=workflow/SETUP.md"
       ],
       "disallowed_by_default": [
         "registry:scope=always",
@@ -369,7 +369,7 @@
       ],
       "allowed_additional_sources": [
         "registry:trigger=<issue-area>",
-        "registry:path=docs/ops/status.json"
+        "registry:path=workflow/status.json"
       ],
       "disallowed_by_default": [
         "registry:scope=always",

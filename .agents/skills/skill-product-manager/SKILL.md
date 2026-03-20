@@ -7,7 +7,7 @@ description: Workflow de Product Manager para Odessay en Linear: definición de 
 
 Este skill tiene dos funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega.
 
-El alcance específico del proyecto — fases e issues macro — vive en `docs/ops/odessay-roadmap.md`. Lee ese documento antes de crear issues.
+El alcance específico del proyecto — fases e issues macro — vive en `workflow/odessay-roadmap.md`. Lee ese documento antes de crear issues.
 
 Usa Linear MCP para crear y gestionar todo directamente.
 
@@ -117,9 +117,9 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`docs/core/`, `docs/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. `docs/ops/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `docs/ops/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
+5. `workflow/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `workflow/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
 
-Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `docs/ops/status.json`.
+Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/status.json`.
 
 ## Handoff *(solo si el issue requiere acción humana)*
 
@@ -205,7 +205,7 @@ Listo para merge.
 
 ### Trazabilidad GitHub ↔ Linear ↔ status.json
 
-Antes de mover un issue a `In Review`, el agente debe actualizar `docs/ops/status.json` con una entrada en `built[]` para ese issue (issue, linear_url, commit, date, notes).
+Antes de mover un issue a `In Review`, el agente debe actualizar `workflow/status.json` con una entrada en `built[]` para ese issue (issue, linear_url, commit, date, notes).
 
 Luego corre:
 ```bash
@@ -327,7 +327,7 @@ La descripción del issue sigue la estructura definida en §Estructura de un iss
 
 ### Al iniciar el proyecto
 
-1. Lee `docs/ops/odessay-roadmap.md` para entender fases y el mapa de issues.
+1. Lee `workflow/odessay-roadmap.md` para entender fases y el mapa de issues.
 2. Crea los labels en Linear exactamente como están definidos en este documento.
 3. Crea los estados en Linear: Todo, In Progress, In Review, Done. (Ready es opcional como pre-cola).
 4. Crea **un proyecto por fase** en Linear, con el nombre exacto de la fase (`Fase 0 — Cimientos`, `Fase 1 — Escribir`, etc.) y descripción de exit criteria específica a esa fase.
