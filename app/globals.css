@@ -216,3 +216,99 @@
     transform: translateY(0);
   }
 }
+
+/* Preview prose styles */
+.prose-odessay {
+  color: hsl(var(--ink));
+  font-size: 17px;
+  line-height: 1.85;
+}
+
+.prose-odessay p {
+  margin-bottom: 1.4em;
+}
+
+.prose-odessay h1 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 1.75em;
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 1.6em;
+  margin-bottom: 0.6em;
+  color: hsl(var(--ink));
+}
+
+.prose-odessay h2 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 1.35em;
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1.4em;
+  margin-bottom: 0.5em;
+  color: hsl(var(--ink));
+}
+
+.prose-odessay h3 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 1.1em;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+  color: hsl(var(--ink));
+}
+
+.prose-odessay blockquote {
+  border-left: 3px solid hsl(var(--ink-4));
+  padding-left: 1.2em;
+  margin: 1.4em 0;
+  font-style: italic;
+  color: hsl(var(--ink-2));
+}
+
+.prose-odessay strong {
+  font-weight: 600;
+  color: hsl(var(--ink));
+}
+
+.prose-odessay em {
+  font-style: italic;
+}
+
+.prose-odessay a {
+  color: hsl(var(--ink-2));
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose-odessay ul,
+.prose-odessay ol {
+  padding-left: 1.5em;
+  margin-bottom: 1.2em;
+}
+
+.prose-odessay li {
+  margin-bottom: 0.3em;
+}
+
+.prose-odessay code {
+  font-size: 0.875em;
+  background: hsl(var(--ink) / 0.07);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+.prose-odessay pre {
+  background: hsl(var(--ink) / 0.05);
+  border: 0.5px solid hsl(var(--ink) / 0.1);
+  border-radius: 6px;
+  padding: 1em 1.2em;
+  overflow-x: auto;
+  margin-bottom: 1.4em;
+}
+
+.prose-odessay pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}

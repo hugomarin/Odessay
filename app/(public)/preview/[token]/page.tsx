@@ -73,11 +73,6 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     )
   }
 
-  const paragraphs = result.writing.bodyText
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-
   return (
     <section id="preview-reading" data-page="preview-reading" className="min-h-screen bg-bg">
       <header className="PreviewTopbar sticky top-0 z-10 h-[46px] border-b-[0.5px] border-border bg-bg/90 backdrop-blur-sm">
@@ -99,18 +94,9 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
             id="preview-body"
             data-section="preview-body"
             data-testid="preview-body"
-            className="PreviewBody pt-8 font-sans text-[17px] leading-[1.85] text-ink"
-          >
-            {paragraphs.length > 0 ? (
-              paragraphs.map((paragraph, index) => (
-                <p key={`${result.writing.id}-${index}`} className="mb-6 whitespace-pre-wrap">
-                  {paragraph}
-                </p>
-              ))
-            ) : (
-              <p className="font-lora text-[18px] italic text-ink-3">This writing has no text yet.</p>
-            )}
-          </div>
+            className="PreviewBody prose prose-odessay pt-8"
+            dangerouslySetInnerHTML={{ __html: result.writing.bodyHtml }}
+          />
         </article>
       </main>
     </section>

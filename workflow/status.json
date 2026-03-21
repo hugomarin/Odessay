@@ -222,6 +222,15 @@
       "commit": "7ae1772",
       "date": "2026-03-20",
       "notes": "API /api/writings/[id]/share-test-link (GET/POST/DELETE), ruta pública /preview/[token], controles Generate/Copy/Revoke en panel Properties y tests unitarios de tokens/acceso. Fix de review: rotación atómica con índice parcial + RPC `rotate_test_preview_link` para evitar dos tokens pending concurrentes. Re-review técnico aprobado sin hallazgos bloqueantes."
+    },
+    {
+      "what": "Validación UX externa de Fase 1 y cierre del gate DoD — fix de preview HTML incluido",
+      "phase": "Fase 1",
+      "issue": "ODE-29",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-29",
+      "commit": "9785fa2",
+      "date": "2026-03-20",
+      "notes": "Ronda de evaluación UX completada por Hugo. Fix hotfix: preview de sharing renderiza HTML de TipTap (generateHTML + prose-odessay) en lugar de texto plano. Hallazgos menores documentados como nuevos issues. DoD de Fase 1 verificado completo."
     }
   ]
 }
