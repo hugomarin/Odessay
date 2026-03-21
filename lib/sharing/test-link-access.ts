@@ -1,5 +1,42 @@
+import { generateHTML } from "@tiptap/core"
+import Blockquote from "@tiptap/extension-blockquote"
+import Bold from "@tiptap/extension-bold"
+import BulletList from "@tiptap/extension-bullet-list"
+import Code from "@tiptap/extension-code"
+import CodeBlock from "@tiptap/extension-code-block"
+import Document from "@tiptap/extension-document"
+import Heading from "@tiptap/extension-heading"
+import Highlight from "@tiptap/extension-highlight"
+import Italic from "@tiptap/extension-italic"
+import Link from "@tiptap/extension-link"
+import ListItem from "@tiptap/extension-list-item"
+import OrderedList from "@tiptap/extension-ordered-list"
+import Paragraph from "@tiptap/extension-paragraph"
+import Strike from "@tiptap/extension-strike"
+import Text from "@tiptap/extension-text"
+import type { JSONContent } from "@tiptap/core"
 import { z } from "zod"
+import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { isTestLinkEmail } from "@/lib/sharing/test-link"
+
+const PREVIEW_EXTENSIONS = [
+  Document,
+  Paragraph,
+  Text,
+  Heading.configure({ levels: [1, 2, 3] }),
+  Bold,
+  Italic,
+  Strike,
+  Highlight,
+  Link.configure({ openOnClick: false, autolink: true, protocols: ["http", "https", "mailto"] }),
+  Blockquote,
+  BulletList,
+  OrderedList,
+  ListItem,
+  Code,
+  CodeBlock,
+  FootnoteExtension,
+]
 
 type InvitationRow = {
   id: string
@@ -13,6 +50,7 @@ type WritingRow = {
   id: string
   author_id: string
   title: string | null
+  body_json: Record<string, unknown>
   body_text: string
   status: "draft" | "finished"
   visibility: "private" | "shared" | "public"
@@ -55,7 +93,7 @@ export const getTestLinkInvitationState = (
 export type PreviewWriting = {
   id: string
   title: string
-  bodyText: string
+  bodyHtml: string
   status: "draft" | "finished"
   visibility: "private" | "shared" | "public"
   createdAt: string
@@ -107,7 +145,7 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
 
   const { data: writing, error: writingError } = await supabase
     .from("writings")
-    .select("id, author_id, title, body_text, status, visibility, created_at, updated_at")
+    .select("id, author_id, title, body_json, body_text, status, visibility, created_at, updated_at")
     .eq("id", activeInvitation.writing_id)
     .is("deleted_at", null)
     .maybeSingle<WritingRow>()
@@ -143,7 +181,7 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
     writing: {
       id: writing.id,
       title: writing.title?.trim() || "Untitled writing",
-      bodyText: writing.body_text,
+      bodyHtml: generateHTML(writing.body_json as JSONContent, PREVIEW_EXTENSIONS),
       status: writing.status,
       visibility: writing.visibility,
       createdAt: writing.created_at,
