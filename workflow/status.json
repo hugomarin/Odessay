@@ -237,7 +237,7 @@
       "phase": "Fase 1",
       "issue": "ODE-34",
       "linear_url": "https://linear.app/z9ne/issue/ODE-34",
-      "commit": null,
+      "commit": "01e24f5",
       "date": "2026-03-21",
       "notes": "En PR. Reemplaza LayoutGrid/FolderOpen/BookOpen/ChevronLeft/ChevronRight/PenSquare por los iconos del sistema de diseño especificados en el brief."
     }
