@@ -633,14 +633,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             <WritingEditorContent
               editor={editor}
               mode={mode}
-              title={title}
               markdownValue={markdownValue}
-              onTitleChange={setTitle}
-              onTitleBlur={() => {
-                if (editor) {
-                  void persistEditorSnapshot(editor)
-                }
-              }}
               onMarkdownChange={handleMarkdownChange}
             />
 
