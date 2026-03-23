@@ -176,12 +176,23 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
     return { state: "unavailable" }
   }
 
+  let bodyHtml: string
+  try {
+    bodyHtml = generateHTML(writing.body_json as JSONContent, PREVIEW_EXTENSIONS)
+  } catch (err) {
+    console.error("[sharing:test-link-access:generateHTML]", {
+      writingId: writing.id,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return { state: "unavailable" }
+  }
+
   return {
     state: "ok",
     writing: {
       id: writing.id,
       title: writing.title?.trim() || "Untitled writing",
-      bodyHtml: generateHTML(writing.body_json as JSONContent, PREVIEW_EXTENSIONS),
+      bodyHtml,
       status: writing.status,
       visibility: writing.visibility,
       createdAt: writing.created_at,
