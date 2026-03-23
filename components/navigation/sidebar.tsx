@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BookOpen, ChevronLeft, ChevronRight, FolderOpen, LayoutGrid, PenSquare, Plus, Search } from "lucide-react"
+import { FileText, LibraryBig, Mails, PanelLeftClose, Plus, Search } from "lucide-react"
 import { SidebarListPanel } from "@/components/navigation/sidebar-list-panel"
 import { UserBar } from "@/components/navigation/user-bar"
 import {
@@ -32,9 +32,9 @@ type NavItem = {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/desk", label: "Desk", icon: LayoutGrid, section: "sidebar-nav-desk" },
-  { href: "/collections", label: "Collections", icon: FolderOpen, section: "sidebar-nav-collections" },
-  { href: "/correspondences", label: "Correspondences", icon: BookOpen, section: "sidebar-nav-correspondences" },
+  { href: "/desk", label: "Desk", icon: FileText, section: "sidebar-nav-desk" },
+  { href: "/collections", label: "Collections", icon: LibraryBig, section: "sidebar-nav-collections" },
+  { href: "/correspondences", label: "Correspondences", icon: Mails, section: "sidebar-nav-correspondences" },
 ]
 
 const SIDEBAR_WIDTH_EXPANDED = 292
@@ -101,14 +101,10 @@ export function Sidebar({ children, user }: SidebarProps) {
             <button
               type="button"
               onClick={handleSidebarToggle}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink"
               aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {isIconOnly ? (
-                <ChevronRight className="h-[14px] w-[14px]" strokeWidth={1.5} />
-              ) : (
-                <ChevronLeft className="h-[14px] w-[14px]" strokeWidth={1.5} />
-              )}
+              <PanelLeftClose className="h-[14px] w-[14px]" strokeWidth={1.5} />
             </button>
           </div>
 
@@ -239,28 +235,6 @@ export function Sidebar({ children, user }: SidebarProps) {
                 )
               })}
             </div>
-          </div>
-
-          <div className="px-2 pb-2">
-            <Link
-              href="/write"
-              className={cn(
-                "flex h-8 items-center rounded-md border-[0.5px] border-transparent text-[13px] text-ink-3 transition-colors hover:border-border hover:bg-muted/70 hover:text-ink",
-                isIconOnly ? "justify-center" : "gap-2 px-2",
-              )}
-              aria-label="Continue writing"
-              title="Continue writing"
-            >
-              <PenSquare className="h-[14px] w-[14px]" strokeWidth={1.5} />
-              <span
-                className={cn(
-                  "overflow-hidden transition-[width,opacity] duration-200",
-                  isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
-                )}
-              >
-                Continue writing
-              </span>
-            </Link>
           </div>
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
