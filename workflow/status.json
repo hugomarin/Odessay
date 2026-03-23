@@ -240,6 +240,15 @@
       "commit": "01e24f5",
       "date": "2026-03-21",
       "notes": "En PR. Reemplaza LayoutGrid/FolderOpen/BookOpen/ChevronLeft/ChevronRight/PenSquare por los iconos del sistema de diseño especificados en el brief."
+    },
+    {
+      "what": "Editor statusbar flotante (absolute overlay) y switch Rich/Markdown movido de topbar a statusbar",
+      "phase": "Fase 1",
+      "issue": "ODE-35",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-35/editor-statusbar-flotante-y-oculta-en-focus-mode",
+      "commit": "5a931f2",
+      "date": "2026-03-23",
+      "notes": "statusbar usa absolute bottom-0 sobre el contenedor relative del editor; onToggleMode y mode pasados como props; topbar sin switch de modo."
     }
   ]
 }
