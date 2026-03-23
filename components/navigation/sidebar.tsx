@@ -101,7 +101,7 @@ export function Sidebar({ children, user }: SidebarProps) {
             <button
               type="button"
               onClick={handleSidebarToggle}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink"
               aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
             >
               <PanelLeftClose className="h-[14px] w-[14px]" strokeWidth={1.5} />

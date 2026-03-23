@@ -6,17 +6,17 @@ import {
   AlignLeft,
   Bold,
   Code2,
+  Expand,
   Highlighter,
   Italic,
-  Link2,
+  Link,
   List,
   ListOrdered,
-  Maximize2,
+  MessageSquareQuote,
   Minimize2,
-  Quote,
   SlidersHorizontal,
   Strikethrough,
-  Subscript,
+  Superscript,
 } from "lucide-react"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { cn } from "@/lib/utils"
@@ -53,9 +53,9 @@ const FORMAT_ACTIONS: TopbarActionItem[] = [
   { id: "editor-action-italic", label: "Italic", action: "italic", icon: Italic },
   { id: "editor-action-strike", label: "Strike", action: "strike", icon: Strikethrough },
   { id: "editor-action-highlight", label: "Highlight", action: "highlight", icon: Highlighter },
-  { id: "editor-action-link", label: "Link", action: "link", icon: Link2 },
-  { id: "editor-action-footnote", label: "Footnote", action: "footnote", icon: Subscript },
-  { id: "editor-action-blockquote", label: "Quote", action: "blockquote", icon: Quote },
+  { id: "editor-action-link", label: "Link", action: "link", icon: Link },
+  { id: "editor-action-footnote", label: "Footnote", action: "footnote", icon: Superscript },
+  { id: "editor-action-blockquote", label: "Quote", action: "blockquote", icon: MessageSquareQuote },
   { id: "editor-action-bullet-list", label: "Bullet list", action: "bulletList", icon: List },
   {
     id: "editor-action-ordered-list",
@@ -129,16 +129,18 @@ export function EditorTopbar({
       id="editor-topbar"
       data-section="editor-topbar"
       data-testid="editor-topbar"
-      className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border bg-bg/95 px-3 backdrop-blur"
+      className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border bg-bg px-3"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <div className="inline-flex h-8 items-center rounded-md border-[0.5px] border-border bg-sb p-0.5 text-[12px]">
+        <div className="inline-flex items-center gap-0.5 rounded-[7px] bg-muted p-[3px] text-[11px]">
           <button
             type="button"
             onClick={() => onToggleMode("rich")}
             className={cn(
-              "h-7 rounded-[6px] px-2.5 font-medium transition-colors",
-              mode === "rich" ? "bg-ink text-bg" : "text-ink-3 hover:bg-muted hover:text-ink",
+              "h-[22px] rounded-[5px] px-[10px] font-medium whitespace-nowrap transition-[background,color] duration-[180ms] ease-in-out",
+              mode === "rich"
+                ? "bg-white text-ink-2 shadow-[0_1px_3px_0_hsla(25,18%,12%,0.08)]"
+                : "bg-transparent text-ink-4 hover:text-ink",
             )}
           >
             Rich
@@ -147,8 +149,10 @@ export function EditorTopbar({
             type="button"
             onClick={() => onToggleMode("markdown")}
             className={cn(
-              "h-7 rounded-[6px] px-2.5 font-medium transition-colors",
-              mode === "markdown" ? "bg-ink text-bg" : "text-ink-3 hover:bg-muted hover:text-ink",
+              "h-[22px] rounded-[5px] px-[10px] font-medium whitespace-nowrap transition-[background,color] duration-[180ms] ease-in-out",
+              mode === "markdown"
+                ? "bg-white text-ink-2 shadow-[0_1px_3px_0_hsla(25,18%,12%,0.08)]"
+                : "bg-transparent text-ink-4 hover:text-ink",
             )}
           >
             Markdown
@@ -157,7 +161,7 @@ export function EditorTopbar({
 
         <div
           className={cn(
-            "flex items-center gap-1 rounded-md border-[0.5px] border-border bg-sb px-1 py-1 transition-opacity",
+            "flex items-center gap-0.5 px-1 transition-opacity",
             disableFormatting && "pointer-events-none opacity-35",
           )}
           aria-disabled={disableFormatting}
@@ -219,14 +223,14 @@ export function EditorTopbar({
         <button
           type="button"
           onClick={onToggleFocusMode}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-border bg-sb text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
           title={isFocusMode ? "Exit focus mode" : "Focus mode"}
           aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
         >
           {isFocusMode ? (
             <Minimize2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
           ) : (
-            <Maximize2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
+            <Expand className="h-[13px] w-[13px]" strokeWidth={1.5} />
           )}
         </button>
 
@@ -234,7 +238,7 @@ export function EditorTopbar({
           type="button"
           onClick={() => onTogglePanel("notes")}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-border bg-sb text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+            "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
             activePanel === "notes" && "bg-muted text-ink",
           )}
           title="Notes panel"
@@ -248,7 +252,7 @@ export function EditorTopbar({
           type="button"
           onClick={() => onTogglePanel("properties")}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-md border-[0.5px] border-border bg-sb text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+            "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
             activePanel === "properties" && "bg-muted text-ink",
           )}
           title="Properties panel"
