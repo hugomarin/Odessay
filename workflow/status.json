@@ -249,6 +249,15 @@
       "commit": "5a931f2",
       "date": "2026-03-23",
       "notes": "statusbar usa absolute bottom-0 sobre el contenedor relative del editor; onToggleMode y mode pasados como props; topbar sin switch de modo."
+    },
+    {
+      "what": "Panels Notes y Properties como overlay flotante (fixed right-0 top-0 h-screen), sin comprimir el área de escritura",
+      "phase": "Fase 1",
+      "issue": "ODE-36",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-36/editor-panels-notes-y-properties-flotantes-altura-completa-de-viewport",
+      "commit": "ba27343",
+      "date": "2026-03-23",
+      "notes": "NotesPanel y PropertiesPanel usan fixed right-0 top-0 z-40 h-screen. El bloque Suspense se extrajo del flex row del editor. Suspense fallback simplificado a null."
     }
   ]
 }
