@@ -179,11 +179,11 @@ export function EditorTopbar({
         </div>
       </div>
 
-      <div className="mx-6 min-w-0 flex-1">
+      <div className="pointer-events-none absolute inset-x-0 flex justify-center">
         <button
           type="button"
           onClick={onOpenRenameModal}
-          className="mx-auto block max-w-[460px] truncate px-3 text-center font-lora text-[15px] text-ink-2 transition-colors hover:text-ink"
+          className="pointer-events-auto max-w-[460px] truncate px-3 text-center font-lora text-[13px] text-ink-3 transition-colors hover:text-ink"
           title={title}
         >
           {title}

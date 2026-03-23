@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-03-21",
+  "last_updated": "2026-03-23",
   "active_phase": {
     "name": "Fase 1 — Escribir",
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
@@ -233,13 +233,22 @@
       "notes": "Ronda de evaluación UX completada por Hugo. Fix hotfix: preview de sharing renderiza HTML de TipTap (generateHTML + prose-odessay) en lugar de texto plano. Hallazgos menores documentados como nuevos issues. DoD de Fase 1 verificado completo."
     },
     {
+      "what": "Fix preview generateHTML con try/catch para evitar 500 en body_json malformado",
+      "phase": "Fase 1",
+      "issue": "ODE-32",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-32",
+      "commit": "f545d8b",
+      "date": "2026-03-20",
+      "notes": "PR #22 mergeado; wrap generateHTML en try/catch en route de preview."
+    },
+    {
       "what": "Iconografía correcta en sidebar: PanelLeftClose, FileText, LibraryBig, Mails; eliminado ítem Continue writing",
       "phase": "Fase 1",
       "issue": "ODE-34",
       "linear_url": "https://linear.app/z9ne/issue/ODE-34",
-      "commit": "01e24f5",
+      "commit": "7af49ce",
       "date": "2026-03-21",
-      "notes": "En PR. Reemplaza LayoutGrid/FolderOpen/BookOpen/ChevronLeft/ChevronRight/PenSquare por los iconos del sistema de diseño especificados en el brief."
+      "notes": "PR #23 mergeado. Reemplaza LayoutGrid/FolderOpen/BookOpen/ChevronLeft/ChevronRight/PenSquare por los iconos del sistema de diseño especificados en el brief."
     },
     {
       "what": "Editor statusbar flotante (absolute overlay) y switch Rich/Markdown movido de topbar a statusbar",
@@ -255,9 +264,18 @@
       "phase": "Fase 1",
       "issue": "ODE-36",
       "linear_url": "https://linear.app/z9ne/issue/ODE-36/editor-panels-notes-y-properties-flotantes-altura-completa-de-viewport",
-      "commit": "ba27343",
+      "commit": "62a366d",
       "date": "2026-03-23",
-      "notes": "NotesPanel y PropertiesPanel usan fixed right-0 top-0 z-40 h-screen. El bloque Suspense se extrajo del flex row del editor. Suspense fallback simplificado a null."
+      "notes": "PR #25 mergeado. NotesPanel y PropertiesPanel usan fixed right-0 top-0 z-40 h-screen. El bloque Suspense se extrajo del flex row del editor. Suspense fallback simplificado a null."
+    },
+    {
+      "what": "Título centrado en viewport y sin textarea en cuerpo del editor",
+      "phase": "Fase 1",
+      "issue": "ODE-37",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-37",
+      "commit": "758d413",
+      "date": "2026-03-23",
+      "notes": "PR #26. Textarea de título eliminado de editor-content.tsx; topbar centra título con absolute positioning; tamaño reducido a text-[13px] text-ink-3."
     }
   ]
 }
