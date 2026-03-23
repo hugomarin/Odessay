@@ -646,59 +646,53 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
             {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} onToggleMode={handleToggleMode} /> : null}
           </div>
-
-          {!isFocusMode && activePanel ? (
-            <Suspense
-              fallback={
-                <aside className="h-full w-[248px] border-l-[0.5px] border-border bg-sb px-4 py-3 text-[12px] text-ink-4">
-                  Loading panel...
-                </aside>
-              }
-            >
-              {activePanel === "notes" ? (
-                <NotesPanel
-                  footnotes={footnotes}
-                  onClose={() => setActivePanel(null)}
-                  onAddFootnote={(text) => {
-                    const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
-                    applyMarkdownFromPanel(nextMarkdown)
-                  }}
-                  onUpdateFootnote={(index, text) => {
-                    const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
-                    applyMarkdownFromPanel(nextMarkdown)
-                  }}
-                  onDeleteFootnote={(index) => {
-                    const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
-                    applyMarkdownFromPanel(nextMarkdown)
-                  }}
-                />
-              ) : (
-                <PropertiesPanel
-                  writingId={currentWritingId}
-                  status={writingStatus}
-                  metrics={textMetrics}
-                  onClose={() => setActivePanel(null)}
-                  onStatusChange={(nextStatus) => {
-                    if (nextStatus === writingStatus) {
-                      return
-                    }
-
-                    setWritingStatus(nextStatus)
-                    void applyPanelMetaChange(editor, { status: nextStatus }, {
-                      persistSnapshot: (overrides) => {
-                        if (!editor) {
-                          return
-                        }
-
-                        void persistEditorSnapshot(editor, overrides)
-                      },
-                    })
-                  }}
-                />
-              )}
-            </Suspense>
-          ) : null}
         </div>
+
+        {!isFocusMode && activePanel ? (
+          <Suspense fallback={null}>
+            {activePanel === "notes" ? (
+              <NotesPanel
+                footnotes={footnotes}
+                onClose={() => setActivePanel(null)}
+                onAddFootnote={(text) => {
+                  const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
+                  applyMarkdownFromPanel(nextMarkdown)
+                }}
+                onUpdateFootnote={(index, text) => {
+                  const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
+                  applyMarkdownFromPanel(nextMarkdown)
+                }}
+                onDeleteFootnote={(index) => {
+                  const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
+                  applyMarkdownFromPanel(nextMarkdown)
+                }}
+              />
+            ) : (
+              <PropertiesPanel
+                writingId={currentWritingId}
+                status={writingStatus}
+                metrics={textMetrics}
+                onClose={() => setActivePanel(null)}
+                onStatusChange={(nextStatus) => {
+                  if (nextStatus === writingStatus) {
+                    return
+                  }
+
+                  setWritingStatus(nextStatus)
+                  void applyPanelMetaChange(editor, { status: nextStatus }, {
+                    persistSnapshot: (overrides) => {
+                      if (!editor) {
+                        return
+                      }
+
+                      void persistEditorSnapshot(editor, overrides)
+                    },
+                  })
+                }}
+              />
+            )}
+          </Suspense>
+        ) : null}
       </div>
 
       <RenameWritingModal
