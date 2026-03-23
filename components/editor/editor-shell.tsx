@@ -619,7 +619,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
             title={title}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
-            onToggleMode={handleToggleMode}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
@@ -630,7 +629,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         ) : null}
 
         <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="relative flex min-w-0 flex-1 flex-col">
             <WritingEditorContent
               editor={editor}
               mode={mode}
@@ -645,7 +644,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
               onMarkdownChange={handleMarkdownChange}
             />
 
-            {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} /> : null}
+            {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} onToggleMode={handleToggleMode} /> : null}
           </div>
 
           {!isFocusMode && activePanel ? (

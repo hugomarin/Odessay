@@ -27,7 +27,6 @@ type EditorTopbarProps = {
   title: string
   isFocusMode: boolean
   activePanel: "notes" | "properties" | null
-  onToggleMode: (mode: "rich" | "markdown") => void
   onToggleFocusMode: () => void
   onTogglePanel: (panel: "notes" | "properties") => void
   onOpenRenameModal: () => void
@@ -116,7 +115,6 @@ export function EditorTopbar({
   title,
   isFocusMode,
   activePanel,
-  onToggleMode,
   onToggleFocusMode,
   onTogglePanel,
   onOpenRenameModal,
@@ -132,33 +130,6 @@ export function EditorTopbar({
       className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border bg-bg px-3"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <div className="inline-flex items-center gap-0.5 rounded-[7px] bg-muted p-[3px] text-[11px]">
-          <button
-            type="button"
-            onClick={() => onToggleMode("rich")}
-            className={cn(
-              "h-[22px] rounded-[5px] px-[10px] font-medium whitespace-nowrap transition-[background,color] duration-[180ms] ease-in-out",
-              mode === "rich"
-                ? "bg-white text-ink-2 shadow-[0_1px_3px_0_hsla(25,18%,12%,0.08)]"
-                : "bg-transparent text-ink-4 hover:text-ink",
-            )}
-          >
-            Rich
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggleMode("markdown")}
-            className={cn(
-              "h-[22px] rounded-[5px] px-[10px] font-medium whitespace-nowrap transition-[background,color] duration-[180ms] ease-in-out",
-              mode === "markdown"
-                ? "bg-white text-ink-2 shadow-[0_1px_3px_0_hsla(25,18%,12%,0.08)]"
-                : "bg-transparent text-ink-4 hover:text-ink",
-            )}
-          >
-            Markdown
-          </button>
-        </div>
-
         <div
           className={cn(
             "flex items-center gap-0.5 px-1 transition-opacity",
