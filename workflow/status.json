@@ -294,6 +294,15 @@
       "commit": "416617e",
       "date": "2026-03-23",
       "notes": "field-sizing:content para auto-crecimiento del textarea sin JS; misma estructura de contenedor que Rich (overflow-y-auto en EditorWritingArea, max-w-[860px] con paddings idénticos)."
+    },
+    {
+      "what": "Fix double-trigger de shortcuts Mac: deshabilitados keybindings nativos de TipTap para bold, italic, strike, highlight, code, codeBlock, blockquote, bulletList, orderedList y heading",
+      "phase": "Fase 1",
+      "issue": "ODE-40",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-40/editor-shortcuts-de-formato-no-funcionan-en-mac-b-i-etc",
+      "commit": "d3898ee",
+      "date": "2026-03-23",
+      "notes": "TipTap aplicaba el formato y luego el window listener lo deshacía. Solución: addKeyboardShortcuts: () => ({}) en extensiones de formato para que el window listener sea la única fuente de verdad."
     }
   ]
 }
