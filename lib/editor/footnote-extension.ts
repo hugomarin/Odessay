@@ -1,4 +1,5 @@
 import { Extension } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
 
 // ---------------------------------------------------------------------------
 // Markdown-only helpers (used when mode === "markdown" or for persistence)
@@ -194,7 +195,7 @@ export const FootnoteExtension = Extension.create({
     return {
       addFootnote:
         (text: string) =>
-        ({ editor }) => {
+        ({ editor, tr, dispatch }) => {
           const trimmedText = text.trim()
 
           if (!trimmedText) {
@@ -211,18 +212,16 @@ export const FootnoteExtension = Extension.create({
           })
           const nextIndex = maxIndex + 1
 
-          // Collapse selection to end (don't replace selected text), then insert node
-          const { to } = editor.state.selection
-          editor
-            .chain()
-            .focus()
-            .setTextSelection(to)
-            .insertContent({
-              type: "footnoteReference",
-              attrs: { index: nextIndex, text: trimmedText },
-            })
-            .run()
+          // Insert node at end of current selection (without replacing selected text)
+          const insertPos = editor.state.selection.to
+          const nodeType = editor.schema.nodes.footnoteReference
+          if (!nodeType) return false
 
+          const refNode = nodeType.create({ index: nextIndex, text: trimmedText })
+          tr.setSelection(TextSelection.create(tr.doc, insertPos))
+          tr.insert(insertPos, refNode)
+
+          if (dispatch) dispatch(tr)
           return true
         },
 
