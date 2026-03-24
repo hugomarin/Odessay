@@ -615,6 +615,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
       setMarkdownValue(nextMarkdown)
+      setSyncStatus("saving")
 
       if (!editor) {
         return
@@ -624,13 +625,23 @@ export function EditorShell({ writingId }: EditorShellProps) {
         window.clearTimeout(markdownSaveTimeoutRef.current)
       }
 
-      isApplyingContentRef.current = true
-      editor.commands.setContent(nextMarkdown)
-      isApplyingContentRef.current = false
-      updateDerivedEditorState(editor)
-      void persistEditorSnapshot(editor)
+      // Debounce parse + persist exactly like handleMarkdownChange, but do NOT call
+      // updateDerivedEditorState — that would overwrite markdownValue with TipTap's
+      // serialization of the table nodes, which can include HTML instead of GFM syntax.
+      markdownSaveTimeoutRef.current = window.setTimeout(() => {
+        if (modeRef.current !== "markdown") {
+          markdownSaveTimeoutRef.current = null
+          return
+        }
+
+        isApplyingContentRef.current = true
+        editor.commands.setContent(nextMarkdown)
+        isApplyingContentRef.current = false
+        void persistEditorSnapshot(editor)
+        markdownSaveTimeoutRef.current = null
+      }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
-    [mode, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
+    [mode, editor, markdownValue, persistEditorSnapshot],
   )
 
   const handleInsertFootnote = useCallback(
