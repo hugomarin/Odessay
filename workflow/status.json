@@ -291,9 +291,9 @@
       "phase": "Fase 1",
       "issue": "ODE-39",
       "linear_url": "https://linear.app/z9ne/issue/ODE-39",
-      "commit": null,
+      "commit": "416617e",
       "date": "2026-03-23",
-      "notes": "Añadido box-border y max-w-full al textarea en editor-content.tsx para que no se extienda horizontalmente fuera del contenedor max-w-[860px]."
+      "notes": "field-sizing:content para auto-crecimiento del textarea sin JS; misma estructura de contenedor que Rich (overflow-y-auto en EditorWritingArea, max-w-[860px] con paddings idénticos)."
     }
   ]
 }
