@@ -276,6 +276,15 @@
       "commit": "758d413",
       "date": "2026-03-23",
       "notes": "PR #26. Textarea de título eliminado de editor-content.tsx; topbar centra título con absolute positioning; tamaño reducido a text-[13px] text-ink-3."
+    },
+    {
+      "what": "Auto-title desde primeros 48 caracteres con fallback a fecha",
+      "phase": "Fase 1",
+      "issue": "ODE-38",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-38",
+      "commit": "a65ff39",
+      "date": "2026-03-23",
+      "notes": "PR #27. deriveAutoTitle() trunca en límite de palabra; hasExplicitTitle distingue título de usuario vs placeholder; displayTitle en tiempo real sin persistir en DB."
     }
   ]
 }

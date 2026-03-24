@@ -62,6 +62,28 @@ const PropertiesPanel = lazy(() =>
 
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
+const AUTO_TITLE_MAX_CHARS = 48
+
+function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
+  const text = bodyText.trim()
+
+  if (!text) {
+    const dateSource = createdAt ? new Date(createdAt) : new Date()
+    const yyyy = dateSource.getFullYear()
+    const mm = String(dateSource.getMonth() + 1).padStart(2, "0")
+    const dd = String(dateSource.getDate()).padStart(2, "0")
+    return `Untitled — ${yyyy}-${mm}-${dd}`
+  }
+
+  if (text.length <= AUTO_TITLE_MAX_CHARS) {
+    return text
+  }
+
+  const truncated = text.slice(0, AUTO_TITLE_MAX_CHARS)
+  const lastSpace = truncated.lastIndexOf(" ")
+  return lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated
+}
+
 const createWritingId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID()
@@ -101,6 +123,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const [currentWritingId, setCurrentWritingId] = useState<string | null>(routeWritingId)
   const [title, setTitle] = useState("Untitled writing")
+  const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
   const [bodyText, setBodyText] = useState("")
@@ -288,7 +311,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
         editor.commands.setContent(localWriting.body_json)
         isApplyingContentRef.current = false
 
-        setTitle(localWriting.title ?? "Untitled writing")
+        const loadedTitle = localWriting.title ?? "Untitled writing"
+        setTitle(loadedTitle)
+        setHasExplicitTitle(loadedTitle !== "Untitled writing" && loadedTitle !== "")
         setVersion(localWriting.version)
         setCreatedAt(localWriting.created_at)
         setWritingStatus(localWriting.status ?? "draft")
@@ -302,6 +327,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         updateDerivedEditorState(editor)
       } else {
         setTitle("Untitled writing")
+        setHasExplicitTitle(false)
         setVersion(0)
         setCreatedAt(null)
         setWritingStatus("draft")
@@ -564,6 +590,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const footnotes = useMemo(() => getMarkdownFootnotes(markdownValue), [markdownValue])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
+  const displayTitle = useMemo(
+    () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
+    [hasExplicitTitle, title, bodyText, createdAt],
+  )
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -616,7 +646,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           <EditorTopbar
             editor={editor}
             mode={mode}
-            title={title}
+            title={displayTitle}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
@@ -690,10 +720,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       <RenameWritingModal
         open={renameModalOpen}
-        title={title}
+        title={displayTitle}
         onOpenChange={setRenameModalOpen}
         onConfirm={(nextTitle) => {
           setTitle(nextTitle)
+          setHasExplicitTitle(true)
 
           if (editor) {
             void persistEditorSnapshot(editor, { title: nextTitle })
