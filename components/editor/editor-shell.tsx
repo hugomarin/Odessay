@@ -21,6 +21,7 @@ import {
   removeMarkdownFootnote,
   updateMarkdownFootnote,
 } from "@/lib/editor/footnote-extension"
+import { FOOTNOTE_REF_EVENT } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
@@ -568,6 +569,18 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [editor],
   )
 
+  useEffect(() => {
+    const onFootnoteClick = () => {
+      setActivePanel("notes")
+    }
+
+    window.addEventListener(FOOTNOTE_REF_EVENT, onFootnoteClick)
+
+    return () => {
+      window.removeEventListener(FOOTNOTE_REF_EVENT, onFootnoteClick)
+    }
+  }, [])
+
   const handleInsertFootnote = useCallback(
     (note: string) => {
       if (!editor) {
@@ -584,6 +597,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       editor.commands.addFootnote(note)
       updateDerivedEditorState(editor)
+      setActivePanel("notes")
     },
     [editor, updateDerivedEditorState],
   )

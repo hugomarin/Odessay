@@ -204,7 +204,7 @@ export const FootnoteExtension = Extension.create({
             withNormalizedState
           const nextIndex = getReferenceOrder(latestMarkdown).length + 1
 
-          editor.chain().focus().insertContent(`[^${nextIndex}]`).run()
+          editor.chain().focus().insertContent({ type: "footnoteReference", attrs: { index: nextIndex } }).run()
 
           const markdownAfterInsert =
             (editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown?.getMarkdown?.() ??
