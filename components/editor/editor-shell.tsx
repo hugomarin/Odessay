@@ -595,14 +595,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
-      // Position cursor at end of selection (without replacing selected text)
-      const snapshot = selectionRef.current
-      if (snapshot) {
-        editor.chain().focus().setTextSelection(snapshot.to).run()
-      } else {
-        editor.commands.focus()
-      }
-
       editor.commands.addFootnote(note)
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)

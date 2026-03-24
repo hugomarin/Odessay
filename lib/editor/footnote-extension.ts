@@ -211,14 +211,12 @@ export const FootnoteExtension = Extension.create({
           })
           const nextIndex = maxIndex + 1
 
-          // Collapse selection to end so we don't replace selected text
+          // Collapse selection to end (don't replace selected text), then insert node
           const { to } = editor.state.selection
-          editor.chain().focus().setTextSelection(to).run()
-
-          // Insert the node with the text embedded as an attribute
           editor
             .chain()
             .focus()
+            .setTextSelection(to)
             .insertContent({
               type: "footnoteReference",
               attrs: { index: nextIndex, text: trimmedText },
