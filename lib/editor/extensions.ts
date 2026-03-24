@@ -16,6 +16,10 @@ import OrderedList from "@tiptap/extension-ordered-list"
 import Paragraph from "@tiptap/extension-paragraph"
 import Placeholder from "@tiptap/extension-placeholder"
 import Strike from "@tiptap/extension-strike"
+import { Table } from "@tiptap/extension-table"
+import { TableCell } from "@tiptap/extension-table-cell"
+import { TableHeader } from "@tiptap/extension-table-header"
+import { TableRow } from "@tiptap/extension-table-row"
 import Text from "@tiptap/extension-text"
 import { Markdown } from "tiptap-markdown"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
@@ -52,6 +56,10 @@ export const createEditorExtensions = (): Extensions => [
     breaks: true,
     linkify: true,
   }),
+  Table.configure({ resizable: false }),
+  TableRow,
+  TableHeader,
+  TableCell,
   FootnoteReferenceNode,
   FootnoteExtension,
   History,

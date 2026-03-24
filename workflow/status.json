@@ -312,6 +312,15 @@
       "commit": "61db942",
       "date": "2026-03-23",
       "notes": "Nuevo FootnoteReferenceNode (Node inline) con storage.markdown: parse.setup registra regla markdown-it que convierte [^n] → nodo sup; parse.updateDOM elimina definiciones del DOM; serialize emite [^n]. Click en sup dispara FOOTNOTE_REF_EVENT; editor-shell escucha y abre panel Notes. addFootnote actualizado para insertar nodo en lugar de texto crudo."
+    },
+    {
+      "what": "Insertar tablas con modal de dimensiones en modo Rich y Markdown",
+      "phase": "Fase 1",
+      "issue": "ODE-42",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-42",
+      "commit": "320ea48",
+      "date": "2026-03-23",
+      "notes": "InsertTableModal con grid picker 6×6; Rich mode usa insertTable de TipTap con header row; Markdown mode genera sintaxis GFM. Shortcut ⌘⇧T y botón Table en topbar."
     }
   ]
 }

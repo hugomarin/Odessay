@@ -14,6 +14,7 @@ import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
+import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   appendMarkdownFootnote,
@@ -139,6 +140,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [footnoteModalOpen, setFootnoteModalOpen] = useState(false)
+  const [tableModalOpen, setTableModalOpen] = useState(false)
   const [isFocusMode, setIsFocusMode] = useState(false)
 
   const modeRef = useRef(mode)
@@ -473,6 +475,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
           captureSelection()
           setFootnoteModalOpen(true)
           return
+        case "table":
+          setTableModalOpen(true)
+          return
         case "focusMode":
           setIsFocusMode((currentState) => !currentState)
           return
@@ -535,12 +540,16 @@ export function EditorShell({ writingId }: EditorShellProps) {
         isApplyingContentRef.current = true
         editor.commands.setContent(nextMarkdown)
         isApplyingContentRef.current = false
-        updateDerivedEditorState(editor)
+        // Update metrics from TipTap but do NOT derive markdownValue from it —
+        // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
+        // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
+        setWordCount(getWordCount(editor))
+        setBodyText(editor.getText())
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
-    [editor, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, persistEditorSnapshot],
   )
 
   const handleInsertLink = useCallback(
@@ -589,6 +598,56 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
   }, [])
 
+  const handleInsertTable = useCallback(
+    (rows: number, cols: number) => {
+      if (mode === "rich") {
+        if (!editor) {
+          return
+        }
+
+        editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run()
+        void persistEditorSnapshot(editor)
+        return
+      }
+
+      // Markdown mode: generate and insert a markdown table at the current cursor
+      const header = `| ${Array.from({ length: cols }, () => "Header").join(" | ")} |`
+      const separator = `| ${Array.from({ length: cols }, () => "---").join(" | ")} |`
+      const row = `| ${Array.from({ length: cols }, () => "Cell").join(" | ")} |`
+      const dataRows = Array.from({ length: rows - 1 }, () => row)
+      const tableMarkdown = [header, separator, ...dataRows].join("\n")
+
+      const nextMarkdown = markdownValue ? `${markdownValue}\n\n${tableMarkdown}\n` : `${tableMarkdown}\n`
+      setMarkdownValue(nextMarkdown)
+      setSyncStatus("saving")
+
+      if (!editor) {
+        return
+      }
+
+      if (markdownSaveTimeoutRef.current) {
+        window.clearTimeout(markdownSaveTimeoutRef.current)
+      }
+
+      // Debounce parse + persist exactly like handleMarkdownChange, but do NOT call
+      // updateDerivedEditorState — that would overwrite markdownValue with TipTap's
+      // serialization of the table nodes, which can include HTML instead of GFM syntax.
+      markdownSaveTimeoutRef.current = window.setTimeout(() => {
+        if (modeRef.current !== "markdown") {
+          markdownSaveTimeoutRef.current = null
+          return
+        }
+
+        isApplyingContentRef.current = true
+        editor.commands.setContent(nextMarkdown)
+        isApplyingContentRef.current = false
+        void persistEditorSnapshot(editor)
+        markdownSaveTimeoutRef.current = null
+      }, MARKDOWN_SAVE_DEBOUNCE_MS)
+    },
+    [mode, editor, markdownValue, persistEditorSnapshot],
+  )
+
   const handleInsertFootnote = useCallback(
     (note: string) => {
       if (!editor) {
@@ -634,7 +693,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
-      if (renameModalOpen || linkModalOpen || footnoteModalOpen) {
+      if (renameModalOpen || linkModalOpen || footnoteModalOpen || tableModalOpen) {
         return
       }
 
@@ -657,7 +716,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown)
     }
-  }, [activePanel, footnoteModalOpen, handleRunAction, isFocusMode, linkModalOpen, renameModalOpen])
+  }, [activePanel, footnoteModalOpen, handleRunAction, isFocusMode, linkModalOpen, renameModalOpen, tableModalOpen])
 
   return (
     <section id="editor" data-page="editor" className="min-h-screen bg-bg">
@@ -778,6 +837,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
       />
 
       <InsertFootnoteModal open={footnoteModalOpen} onOpenChange={setFootnoteModalOpen} onConfirm={handleInsertFootnote} />
+
+      <InsertTableModal open={tableModalOpen} onOpenChange={setTableModalOpen} onConfirm={handleInsertTable} />
     </section>
   )
 }
