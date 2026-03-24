@@ -21,7 +21,7 @@ import {
   removeMarkdownFootnote,
   updateMarkdownFootnote,
 } from "@/lib/editor/footnote-extension"
-import { FOOTNOTE_REF_EVENT } from "@/lib/editor/footnote-node"
+import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
@@ -156,7 +156,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
     setWordCount(getWordCount(editorInstance))
-    setMarkdownValue(getEditorMarkdown(editorInstance))
+    const bodyMarkdown = getEditorMarkdown(editorInstance)
+    const footnoteNodes = getEditorFootnotes(editorInstance)
+    setMarkdownValue(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes))
     setBodyText(editorInstance.getText())
   }, [])
 
@@ -593,22 +595,28 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
+      // Position cursor at end of selection (without replacing selected text)
       const snapshot = selectionRef.current
-
       if (snapshot) {
-        editor.chain().focus().setTextSelection({ from: snapshot.from, to: snapshot.to }).run()
+        editor.chain().focus().setTextSelection(snapshot.to).run()
       } else {
         editor.commands.focus()
       }
 
       editor.commands.addFootnote(note)
       updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
       setActivePanel("notes")
     },
-    [editor, updateDerivedEditorState],
+    [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
 
-  const footnotes = useMemo(() => getMarkdownFootnotes(markdownValue), [markdownValue])
+  // In Rich mode, footnotes are derived from editor nodes (markdownValue triggers recalc on each update).
+  // In Markdown mode, footnotes are parsed from the raw markdown string.
+  const footnotes = useMemo(
+    () => (mode === "rich" && editor ? getEditorFootnotes(editor) : getMarkdownFootnotes(markdownValue)),
+    [mode, markdownValue, editor],
+  )
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const displayTitle = useMemo(
     () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
@@ -698,16 +706,34 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 footnotes={footnotes}
                 onClose={() => setActivePanel(null)}
                 onAddFootnote={(text) => {
-                  const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
-                  applyMarkdownFromPanel(nextMarkdown)
+                  if (mode === "rich" && editor) {
+                    editor.commands.addFootnote(text)
+                    updateDerivedEditorState(editor)
+                    void persistEditorSnapshot(editor)
+                  } else {
+                    const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
+                    applyMarkdownFromPanel(nextMarkdown)
+                  }
                 }}
                 onUpdateFootnote={(index, text) => {
-                  const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
-                  applyMarkdownFromPanel(nextMarkdown)
+                  if (mode === "rich" && editor) {
+                    editor.commands.updateFootnote(index, text)
+                    updateDerivedEditorState(editor)
+                    void persistEditorSnapshot(editor)
+                  } else {
+                    const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
+                    applyMarkdownFromPanel(nextMarkdown)
+                  }
                 }}
                 onDeleteFootnote={(index) => {
-                  const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
-                  applyMarkdownFromPanel(nextMarkdown)
+                  if (mode === "rich" && editor) {
+                    editor.commands.deleteFootnote(index)
+                    updateDerivedEditorState(editor)
+                    void persistEditorSnapshot(editor)
+                  } else {
+                    const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
+                    applyMarkdownFromPanel(nextMarkdown)
+                  }
                 }}
               />
             ) : (
