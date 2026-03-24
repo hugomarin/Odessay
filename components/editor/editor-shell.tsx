@@ -44,6 +44,12 @@ type SelectionSnapshot = {
   text: string
 }
 
+type MarkdownSelectionSnapshot = {
+  start: number
+  end: number
+  text: string
+}
+
 type EditorPanel = "notes" | "properties" | null
 
 type PersistSnapshotOverrides = {
@@ -154,6 +160,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const hydratedIdRef = useRef<string | null>(null)
   const navigatedToDraftRef = useRef(false)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
+  const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
+  const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
@@ -414,17 +422,267 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const handleRunAction = useCallback(
     (action: EditorShortcutAction) => {
-      if (!editor) {
-        return
-      }
-
       const captureSelection = () => {
+        if (!editor) {
+          return
+        }
+
         const { from, to } = editor.state.selection
         selectionRef.current = {
           from,
           to,
           text: editor.state.doc.textBetween(from, to, " "),
         }
+      }
+
+      const captureMarkdownSelection = () => {
+        const textarea = markdownTextareaRef.current
+
+        if (!textarea) {
+          markdownSelectionRef.current = null
+          return
+        }
+
+        const start = textarea.selectionStart
+        const end = textarea.selectionEnd
+        markdownSelectionRef.current = {
+          start,
+          end,
+          text: textarea.value.slice(start, end),
+        }
+      }
+
+      const persistMarkdownDraft = (nextMarkdown: string) => {
+        setMarkdownValue(nextMarkdown)
+
+        if (markdownSaveTimeoutRef.current) {
+          window.clearTimeout(markdownSaveTimeoutRef.current)
+        }
+
+        setSyncStatus("saving")
+
+        if (!editor) {
+          return
+        }
+
+        markdownSaveTimeoutRef.current = window.setTimeout(() => {
+          if (modeRef.current !== "markdown") {
+            markdownSaveTimeoutRef.current = null
+            return
+          }
+
+          isApplyingContentRef.current = true
+          editor.commands.setContent(nextMarkdown)
+          isApplyingContentRef.current = false
+          setWordCount(getWordCount(editor))
+          setBodyText(editor.getText())
+          void persistEditorSnapshot(editor)
+          markdownSaveTimeoutRef.current = null
+        }, MARKDOWN_SAVE_DEBOUNCE_MS)
+      }
+
+      const replaceMarkdownSelection = (
+        replacement: string,
+        options?: {
+          selectionStart?: number
+          selectionEnd?: number
+        },
+      ) => {
+        const textarea = markdownTextareaRef.current
+        const fallbackCursor = markdownValue.length
+        const start = textarea?.selectionStart ?? fallbackCursor
+        const end = textarea?.selectionEnd ?? fallbackCursor
+        const nextMarkdown = `${markdownValue.slice(0, start)}${replacement}${markdownValue.slice(end)}`
+        const nextSelectionStart = start + (options?.selectionStart ?? replacement.length)
+        const nextSelectionEnd = start + (options?.selectionEnd ?? options?.selectionStart ?? replacement.length)
+
+        persistMarkdownDraft(nextMarkdown)
+
+        window.requestAnimationFrame(() => {
+          const nextTextarea = markdownTextareaRef.current
+
+          if (!nextTextarea) {
+            return
+          }
+
+          nextTextarea.focus()
+          nextTextarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
+          markdownSelectionRef.current = {
+            start: nextSelectionStart,
+            end: nextSelectionEnd,
+            text: nextTextarea.value.slice(nextSelectionStart, nextSelectionEnd),
+          }
+        })
+      }
+
+      const toggleMarkdownWrap = (marker: string) => {
+        const textarea = markdownTextareaRef.current
+        const fallbackCursor = markdownValue.length
+        const start = textarea?.selectionStart ?? fallbackCursor
+        const end = textarea?.selectionEnd ?? fallbackCursor
+        const selectedText = markdownValue.slice(start, end)
+
+        if (!selectedText) {
+          replaceMarkdownSelection(`${marker}${marker}`, {
+            selectionStart: marker.length,
+            selectionEnd: marker.length,
+          })
+          return
+        }
+
+        if (
+          selectedText.startsWith(marker) &&
+          selectedText.endsWith(marker) &&
+          selectedText.length >= marker.length * 2
+        ) {
+          const unwrapped = selectedText.slice(marker.length, selectedText.length - marker.length)
+          replaceMarkdownSelection(unwrapped, {
+            selectionStart: 0,
+            selectionEnd: unwrapped.length,
+          })
+          return
+        }
+
+        replaceMarkdownSelection(`${marker}${selectedText}${marker}`, {
+          selectionStart: marker.length,
+          selectionEnd: marker.length + selectedText.length,
+        })
+      }
+
+      const toggleMarkdownLinePrefix = (
+        prefix: string,
+        options?: {
+          ordered?: boolean
+          clearBlockFormatting?: boolean
+        },
+      ) => {
+        const textarea = markdownTextareaRef.current
+        const fallbackCursor = markdownValue.length
+        const selectionStart = textarea?.selectionStart ?? fallbackCursor
+        const selectionEnd = textarea?.selectionEnd ?? fallbackCursor
+        const blockStart = markdownValue.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1
+        const nextBreak = markdownValue.indexOf("\n", selectionEnd)
+        const blockEnd = nextBreak === -1 ? markdownValue.length : nextBreak
+        const block = markdownValue.slice(blockStart, blockEnd)
+        const lines = block.split("\n")
+        const normalize = (line: string) => {
+          if (!options?.clearBlockFormatting) {
+            return line
+          }
+
+          return line
+            .replace(/^\s*>\s?/, "")
+            .replace(/^\s*[-*]\s+/, "")
+            .replace(/^\s*\d+\.\s+/, "")
+            .replace(/^\s{0,3}#{1,6}\s+/, "")
+        }
+
+        const removePrefix = options?.ordered
+          ? lines.every((line) => /^\s*\d+\.\s+/.test(line))
+          : prefix.length > 0 && lines.every((line) => line.startsWith(prefix))
+
+        const nextLines = lines.map((line, index) => {
+          if (options?.ordered) {
+            if (removePrefix) {
+              return line.replace(/^\s*\d+\.\s+/, "")
+            }
+
+            return `${index + 1}. ${normalize(line)}`
+          }
+
+          if (!prefix.length) {
+            return normalize(line)
+          }
+
+          if (removePrefix) {
+            return line.slice(prefix.length)
+          }
+
+          return `${prefix}${normalize(line)}`
+        })
+
+        const nextBlock = nextLines.join("\n")
+        const nextMarkdown = `${markdownValue.slice(0, blockStart)}${nextBlock}${markdownValue.slice(blockEnd)}`
+        const nextSelectionEnd = blockStart + nextBlock.length
+
+        persistMarkdownDraft(nextMarkdown)
+
+        window.requestAnimationFrame(() => {
+          const nextTextarea = markdownTextareaRef.current
+
+          if (!nextTextarea) {
+            return
+          }
+
+          nextTextarea.focus()
+          nextTextarea.setSelectionRange(blockStart, nextSelectionEnd)
+          markdownSelectionRef.current = {
+            start: blockStart,
+            end: nextSelectionEnd,
+            text: nextTextarea.value.slice(blockStart, nextSelectionEnd),
+          }
+        })
+      }
+
+      if (modeRef.current === "markdown") {
+        switch (action) {
+          case "bold":
+            toggleMarkdownWrap("**")
+            return
+          case "italic":
+            toggleMarkdownWrap("*")
+            return
+          case "strike":
+            toggleMarkdownWrap("~~")
+            return
+          case "highlight":
+            toggleMarkdownWrap("==")
+            return
+          case "inlineCode":
+            toggleMarkdownWrap("`")
+            return
+          case "paragraph":
+            toggleMarkdownLinePrefix("", { clearBlockFormatting: true })
+            return
+          case "heading1":
+            toggleMarkdownLinePrefix("# ", { clearBlockFormatting: true })
+            return
+          case "heading2":
+            toggleMarkdownLinePrefix("## ", { clearBlockFormatting: true })
+            return
+          case "heading3":
+            toggleMarkdownLinePrefix("### ", { clearBlockFormatting: true })
+            return
+          case "blockquote":
+            toggleMarkdownLinePrefix("> ", { clearBlockFormatting: true })
+            return
+          case "bulletList":
+            toggleMarkdownLinePrefix("- ", { clearBlockFormatting: true })
+            return
+          case "orderedList":
+            toggleMarkdownLinePrefix("", { ordered: true, clearBlockFormatting: true })
+            return
+          case "link":
+            captureMarkdownSelection()
+            setLinkModalOpen(true)
+            return
+          case "footnote":
+            captureMarkdownSelection()
+            setFootnoteModalOpen(true)
+            return
+          case "table":
+            setTableModalOpen(true)
+            return
+          case "focusMode":
+            setIsFocusMode((currentState) => !currentState)
+            return
+          default:
+            return
+        }
+      }
+
+      if (!editor) {
+        return
       }
 
       switch (action) {
@@ -485,7 +743,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
       }
     },
-    [editor],
+    [editor, markdownValue, persistEditorSnapshot],
   )
 
   const handleToggleMode = useCallback(
@@ -554,6 +812,63 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const handleInsertLink = useCallback(
     (payload: { text: string; url: string }) => {
+      if (modeRef.current === "markdown") {
+        const source = markdownValue
+        const textarea = markdownTextareaRef.current
+        const fallbackCursor = source.length
+        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
+        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const selectedText = markdownSelectionRef.current?.text?.trim() ?? source.slice(start, end).trim()
+        const linkText = payload.text || selectedText || payload.url
+        const replacement = `[${linkText}](${payload.url})`
+        const nextMarkdown = `${source.slice(0, start)}${replacement}${source.slice(end)}`
+        const nextSelectionStart = start + 1
+        const nextSelectionEnd = start + 1 + linkText.length
+
+        setMarkdownValue(nextMarkdown)
+
+        if (markdownSaveTimeoutRef.current) {
+          window.clearTimeout(markdownSaveTimeoutRef.current)
+        }
+
+        setSyncStatus("saving")
+
+        if (editor) {
+          markdownSaveTimeoutRef.current = window.setTimeout(() => {
+            if (modeRef.current !== "markdown") {
+              markdownSaveTimeoutRef.current = null
+              return
+            }
+
+            isApplyingContentRef.current = true
+            editor.commands.setContent(nextMarkdown)
+            isApplyingContentRef.current = false
+            setWordCount(getWordCount(editor))
+            setBodyText(editor.getText())
+            void persistEditorSnapshot(editor)
+            markdownSaveTimeoutRef.current = null
+          }, MARKDOWN_SAVE_DEBOUNCE_MS)
+        }
+
+        window.requestAnimationFrame(() => {
+          const nextTextarea = markdownTextareaRef.current
+
+          if (!nextTextarea) {
+            return
+          }
+
+          nextTextarea.focus()
+          nextTextarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
+          markdownSelectionRef.current = {
+            start: nextSelectionStart,
+            end: nextSelectionEnd,
+            text: nextTextarea.value.slice(nextSelectionStart, nextSelectionEnd),
+          }
+        })
+
+        return
+      }
+
       if (!editor) {
         return
       }
@@ -583,7 +898,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           .run()
       }
     },
-    [editor],
+    [editor, markdownValue, persistEditorSnapshot],
   )
 
   useEffect(() => {
@@ -650,6 +965,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const handleInsertFootnote = useCallback(
     (note: string) => {
+      if (modeRef.current === "markdown") {
+        const nextMarkdown = appendMarkdownFootnote(markdownValue, note)
+        applyMarkdownFromPanel(nextMarkdown)
+        setActivePanel("notes")
+        return
+      }
+
       if (!editor) {
         return
       }
@@ -659,7 +981,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
       void persistEditorSnapshot(editor)
       setActivePanel("notes")
     },
-    [editor, persistEditorSnapshot, updateDerivedEditorState],
+    [applyMarkdownFromPanel, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
   )
 
   // In Rich mode, footnotes are derived from editor nodes (markdownValue triggers recalc on each update).
@@ -703,10 +1025,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
-      if (modeRef.current === "markdown" && action !== "focusMode") {
-        return
-      }
-
       event.preventDefault()
       handleRunAction(action)
     }
@@ -724,7 +1042,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
         {!isFocusMode ? (
           <EditorTopbar
             editor={editor}
-            mode={mode}
             title={displayTitle}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
@@ -744,6 +1061,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
               mode={mode}
               markdownValue={markdownValue}
               onMarkdownChange={handleMarkdownChange}
+              markdownTextareaRef={markdownTextareaRef}
             />
 
             {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} onToggleMode={handleToggleMode} /> : null}

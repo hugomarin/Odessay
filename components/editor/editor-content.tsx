@@ -2,6 +2,7 @@
 
 import type { Editor } from "@tiptap/react"
 import { EditorContent } from "@tiptap/react"
+import type { RefObject } from "react"
 import { cn } from "@/lib/utils"
 
 type EditorContentProps = {
@@ -9,6 +10,7 @@ type EditorContentProps = {
   mode: "rich" | "markdown"
   markdownValue: string
   onMarkdownChange: (markdown: string) => void
+  markdownTextareaRef?: RefObject<HTMLTextAreaElement | null>
 }
 
 export function WritingEditorContent({
@@ -16,6 +18,7 @@ export function WritingEditorContent({
   mode,
   markdownValue,
   onMarkdownChange,
+  markdownTextareaRef,
 }: EditorContentProps) {
   return (
     <div
@@ -27,6 +30,7 @@ export function WritingEditorContent({
       <div className="mx-auto w-full max-w-[860px] px-6 pb-20 pt-16 sm:px-10">
         {mode === "markdown" ? (
           <textarea
+            ref={markdownTextareaRef}
             value={markdownValue}
             onChange={(event) => onMarkdownChange(event.target.value)}
             style={{ fieldSizing: "content" } as React.CSSProperties}
