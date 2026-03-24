@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils"
 
 type EditorTopbarProps = {
   editor: Editor | null
-  mode: "rich" | "markdown"
   title: string
   isFocusMode: boolean
   activePanel: "notes" | "properties" | null
@@ -113,7 +112,6 @@ const isActionActive = (editor: Editor | null, action: EditorShortcutAction) => 
 
 export function EditorTopbar({
   editor,
-  mode,
   title,
   isFocusMode,
   activePanel,
@@ -122,8 +120,6 @@ export function EditorTopbar({
   onOpenRenameModal,
   onRunAction,
 }: EditorTopbarProps) {
-  const disableFormatting = mode === "markdown"
-
   return (
     <div
       id="editor-topbar"
@@ -133,11 +129,8 @@ export function EditorTopbar({
     >
       <div className="flex min-w-0 items-center gap-2">
         <div
-          className={cn(
-            "flex items-center gap-0.5 px-1 transition-opacity",
-            disableFormatting && "pointer-events-none opacity-35",
-          )}
-          aria-disabled={disableFormatting}
+          className="flex items-center gap-0.5 px-1 transition-opacity"
+          aria-disabled={false}
         >
           {FORMAT_ACTIONS.map((actionItem) => (
             <button
