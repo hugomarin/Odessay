@@ -285,6 +285,15 @@
       "commit": "23352c2",
       "date": "2026-03-23",
       "notes": "PR #27. deriveAutoTitle() trunca en límite de palabra; hasExplicitTitle distingue título de usuario vs placeholder; displayTitle en tiempo real sin persistir en DB."
+    },
+    {
+      "what": "Textarea Markdown ocupa mismo espacio útil que editor Rich (box-border + max-w-full)",
+      "phase": "Fase 1",
+      "issue": "ODE-39",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-39",
+      "commit": null,
+      "date": "2026-03-23",
+      "notes": "Añadido box-border y max-w-full al textarea en editor-content.tsx para que no se extienda horizontalmente fuera del contenedor max-w-[860px]."
     }
   ]
 }

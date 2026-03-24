@@ -29,7 +29,8 @@ export function WritingEditorContent({
           <textarea
             value={markdownValue}
             onChange={(event) => onMarkdownChange(event.target.value)}
-            className="min-h-[55vh] w-full resize-y border-none bg-transparent font-mono text-[18px] leading-[1.85] text-ink outline-none"
+            style={{ fieldSizing: "content" } as React.CSSProperties}
+            className="box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent font-mono text-[18px] leading-[1.85] text-ink outline-none"
             aria-label="Markdown source"
           />
         ) : (
