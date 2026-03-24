@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   Strikethrough,
   Superscript,
+  Table,
 } from "lucide-react"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { cn } from "@/lib/utils"
@@ -63,6 +64,7 @@ const FORMAT_ACTIONS: TopbarActionItem[] = [
     icon: ListOrdered,
   },
   { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode", icon: Code2 },
+  { id: "editor-action-table", label: "Table", action: "table", icon: Table },
 ]
 
 const STRUCTURE_ACTIONS: StructureActionItem[] = [

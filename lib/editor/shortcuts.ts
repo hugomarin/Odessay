@@ -15,6 +15,7 @@ export type EditorShortcutAction =
   | "bulletList"
   | "orderedList"
   | "focusMode"
+  | "table"
 
 export type KeyboardLikeEvent = {
   key: string
@@ -126,6 +127,10 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
 
   if (matches(event, "f", { shift: true })) {
     return "focusMode"
+  }
+
+  if (matches(event, "t", { shift: true })) {
+    return "table"
   }
 
   return null
