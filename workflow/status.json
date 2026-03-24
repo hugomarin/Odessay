@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-03-23",
+  "last_updated": "2026-03-24",
   "active_phase": {
     "name": "Fase 1 — Escribir",
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
@@ -30,7 +30,7 @@
       "phase": "Fase 0",
       "issue": null,
       "linear_url": null,
-      "commit": null,
+      "commit": "d3cf724",
       "date": "2026-03-17",
       "notes": "Estructura: workflow/, .agents/skills/, workflow/context/framework/, workflow/context/reference/"
     },
@@ -321,6 +321,15 @@
       "commit": "320ea48",
       "date": "2026-03-23",
       "notes": "InsertTableModal con grid picker 6×6; Rich mode usa insertTable de TipTap con header row; Markdown mode genera sintaxis GFM. Shortcut ⌘⇧T y botón Table en topbar."
+    },
+    {
+      "what": "Shortcuts y botones de formato habilitados en modo Markdown aplicando sintaxis sobre selección en textarea",
+      "phase": "Fase 1",
+      "issue": "ODE-41",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-41",
+      "commit": null,
+      "date": "2026-03-24",
+      "notes": "Toolbar habilitado en Markdown; acciones de formato estructural e inline operan sobre selección/líneas en textarea; shortcuts globales dejan de bloquearse en Markdown."
     }
   ]
 }
