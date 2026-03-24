@@ -1,4 +1,9 @@
 import { Extension } from "@tiptap/core"
+import { TextSelection } from "@tiptap/pm/state"
+
+// ---------------------------------------------------------------------------
+// Markdown-only helpers (used when mode === "markdown" or for persistence)
+// ---------------------------------------------------------------------------
 
 const FOOTNOTE_REFERENCE_REGEX = /\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
@@ -169,10 +174,16 @@ export const removeMarkdownFootnote = (markdown: string, index: number) => {
   return normalizeMarkdownFootnotes(composeMarkdownWithDefinitions(bodyWithoutReference, definitions))
 }
 
+// ---------------------------------------------------------------------------
+// TipTap command extension
+// ---------------------------------------------------------------------------
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     footnote: {
       addFootnote: (text: string) => ReturnType
+      updateFootnote: (index: number, text: string) => ReturnType
+      deleteFootnote: (index: number) => ReturnType
     }
   }
 }
@@ -184,35 +195,111 @@ export const FootnoteExtension = Extension.create({
     return {
       addFootnote:
         (text: string) =>
-        ({ editor }) => {
+        ({ editor, tr, dispatch }) => {
           const trimmedText = text.trim()
 
           if (!trimmedText) {
             return false
           }
 
-          const currentMarkdown =
-            (editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown?.getMarkdown?.() ?? ""
-          const withNormalizedState = normalizeMarkdownFootnotes(currentMarkdown)
+          // Count existing footnote nodes to assign the next index
+          let maxIndex = 0
+          editor.state.doc.descendants((node) => {
+            if (node.type.name === "footnoteReference") {
+              const idx = node.attrs.index as number
+              if (idx > maxIndex) maxIndex = idx
+            }
+          })
+          const nextIndex = maxIndex + 1
 
-          if (withNormalizedState !== currentMarkdown) {
-            editor.commands.setContent(withNormalizedState)
+          // Insert node at end of current selection (without replacing selected text)
+          const insertPos = editor.state.selection.to
+          const nodeType = editor.schema.nodes.footnoteReference
+          if (!nodeType) return false
+
+          const refNode = nodeType.create({ index: nextIndex, text: trimmedText })
+          tr.setSelection(TextSelection.create(tr.doc, insertPos))
+          tr.insert(insertPos, refNode)
+
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      updateFootnote:
+        (index: number, text: string) =>
+        ({ editor, tr, dispatch }) => {
+          const positions: number[] = []
+
+          editor.state.doc.descendants((node, pos) => {
+            if (node.type.name === "footnoteReference" && (node.attrs.index as number) === index) {
+              positions.push(pos)
+            }
+          })
+
+          if (!positions.length) return false
+
+          for (const pos of positions) {
+            const node = editor.state.doc.nodeAt(pos)
+            if (!node) continue
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, text: text.trim() })
           }
 
-          const latestMarkdown =
-            (editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown?.getMarkdown?.() ??
-            withNormalizedState
-          const nextIndex = getReferenceOrder(latestMarkdown).length + 1
+          if (dispatch) dispatch(tr)
+          return true
+        },
 
-          editor.chain().focus().insertContent(`[^${nextIndex}]`).run()
+      deleteFootnote:
+        (index: number) =>
+        ({ editor, tr, dispatch }) => {
+          // Collect positions in reverse order to avoid offset shifts
+          const positions: { pos: number; size: number }[] = []
 
-          const markdownAfterInsert =
-            (editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown?.getMarkdown?.() ??
-            latestMarkdown
-          const normalizedWithDefinition = appendMarkdownFootnote(markdownAfterInsert, trimmedText)
+          editor.state.doc.descendants((node, pos) => {
+            if (node.type.name === "footnoteReference" && (node.attrs.index as number) === index) {
+              positions.push({ pos, size: node.nodeSize })
+            }
+          })
 
-          editor.commands.setContent(normalizedWithDefinition)
+          if (!positions.length) return false
 
+          // Delete in reverse order
+          for (const { pos, size } of [...positions].reverse()) {
+            tr.delete(pos, pos + size)
+          }
+
+          // Re-index remaining nodes so indices are sequential
+          const nodePositions: { pos: number; currentIndex: number }[] = []
+          const tempDoc = tr.doc
+          tempDoc.descendants((node, pos) => {
+            if (node.type.name === "footnoteReference") {
+              nodePositions.push({ pos, currentIndex: node.attrs.index as number })
+            }
+          })
+
+          // Sort by appearance order
+          nodePositions.sort((a, b) => a.pos - b.pos)
+
+          // Assign sequential indices
+          const seenOriginal = new Map<number, number>()
+          let nextIdx = 1
+          for (const { currentIndex } of nodePositions) {
+            if (!seenOriginal.has(currentIndex)) {
+              seenOriginal.set(currentIndex, nextIdx++)
+            }
+          }
+
+          // Apply new indices
+          for (const { pos, currentIndex } of [...nodePositions].reverse()) {
+            const newIndex = seenOriginal.get(currentIndex) ?? currentIndex
+            if (newIndex !== currentIndex) {
+              const node = tr.doc.nodeAt(pos)
+              if (node) {
+                tr.setNodeMarkup(pos, undefined, { ...node.attrs, index: newIndex })
+              }
+            }
+          }
+
+          if (dispatch) dispatch(tr)
           return true
         },
     }

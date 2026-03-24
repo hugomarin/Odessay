@@ -303,6 +303,15 @@
       "commit": "d3898ee",
       "date": "2026-03-23",
       "notes": "TipTap aplicaba el formato y luego el window listener lo deshacía. Solución: addKeyboardShortcuts: () => ({}) en extensiones de formato para que el window listener sea la única fuente de verdad."
+    },
+    {
+      "what": "Footnotes renderizan como nodo superíndice y abren panel Notes al hacer click",
+      "phase": "Fase 1",
+      "issue": "ODE-31",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-31",
+      "commit": "61db942",
+      "date": "2026-03-23",
+      "notes": "Nuevo FootnoteReferenceNode (Node inline) con storage.markdown: parse.setup registra regla markdown-it que convierte [^n] → nodo sup; parse.updateDOM elimina definiciones del DOM; serialize emite [^n]. Click en sup dispara FOOTNOTE_REF_EVENT; editor-shell escucha y abre panel Notes. addFootnote actualizado para insertar nodo en lugar de texto crudo."
     }
   ]
 }

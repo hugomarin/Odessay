@@ -19,6 +19,7 @@ import Strike from "@tiptap/extension-strike"
 import Text from "@tiptap/extension-text"
 import { Markdown } from "tiptap-markdown"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
+import { FootnoteReferenceNode } from "@/lib/editor/footnote-node"
 
 export const EMPTY_EDITOR_JSON: JSONContent = {
   type: "doc",
@@ -51,6 +52,7 @@ export const createEditorExtensions = (): Extensions => [
     breaks: true,
     linkify: true,
   }),
+  FootnoteReferenceNode,
   FootnoteExtension,
   History,
   Placeholder.configure({
