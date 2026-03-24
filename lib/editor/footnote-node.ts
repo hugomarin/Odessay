@@ -7,11 +7,38 @@ const FOOTNOTE_DEFINITION_LINE_RE = /^\[\^\d+\]:\s*/
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function setupMarkdownItRule(md: any) {
-  md.core.ruler.push("footnote_inline_ref", (state: { tokens: { type: string; children: { type: string; content: string }[] | null }[] }) => {
-    for (const blockToken of state.tokens) {
-      if (blockToken.type !== "inline") continue
-      const children = blockToken.children
-      if (!children) continue
+  md.core.ruler.push("footnote_inline_ref", (state: { tokens: { type: string; content: string; children: { type: string; content: string }[] | null }[] }) => {
+    const filtered: typeof state.tokens = []
+    let i = 0
+
+    while (i < state.tokens.length) {
+      const token = state.tokens[i]
+
+      // Remove block-level footnote definitions: paragraph_open + inline([^n]: text) + paragraph_close
+      if (
+        token.type === "paragraph_open" &&
+        i + 1 < state.tokens.length &&
+        state.tokens[i + 1].type === "inline" &&
+        FOOTNOTE_DEFINITION_LINE_RE.test(state.tokens[i + 1].content)
+      ) {
+        // Skip paragraph_open, inline, paragraph_close
+        i += 3
+        continue
+      }
+
+      if (token.type !== "inline") {
+        filtered.push(token)
+        i++
+        continue
+      }
+
+      // Process inline tokens: replace [^n] text with html_inline footnote-ref
+      const children = token.children
+      if (!children) {
+        filtered.push(token)
+        i++
+        continue
+      }
 
       const nextChildren: typeof children = []
 
@@ -47,8 +74,12 @@ function setupMarkdownItRule(md: any) {
         }
       }
 
-      blockToken.children = nextChildren
+      token.children = nextChildren
+      filtered.push(token)
+      i++
     }
+
+    state.tokens = filtered
   })
 }
 

@@ -309,7 +309,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       if (localWriting) {
         isApplyingContentRef.current = true
+        // Load JSON first to get the markdown serialization, then re-parse as markdown
+        // so that footnote references are converted to footnoteReference nodes.
         editor.commands.setContent(localWriting.body_json)
+        const loadedMarkdown = getEditorMarkdown(editor)
+        if (loadedMarkdown) {
+          editor.commands.setContent(loadedMarkdown)
+        }
         isApplyingContentRef.current = false
 
         const loadedTitle = localWriting.title ?? "Untitled writing"
