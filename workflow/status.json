@@ -30,7 +30,7 @@
       "phase": "Fase 0",
       "issue": null,
       "linear_url": null,
-      "commit": "d3cf724",
+      "commit": null,
       "date": "2026-03-17",
       "notes": "Estructura: workflow/, .agents/skills/, workflow/context/framework/, workflow/context/reference/"
     },
@@ -327,7 +327,7 @@
       "phase": "Fase 1",
       "issue": "ODE-41",
       "linear_url": "https://linear.app/z9ne/issue/ODE-41",
-      "commit": null,
+      "commit": "d3cf724",
       "date": "2026-03-24",
       "notes": "Toolbar habilitado en Markdown; acciones de formato estructural e inline operan sobre selección/líneas en textarea; shortcuts globales dejan de bloquearse en Markdown."
     }
