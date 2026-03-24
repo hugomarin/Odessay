@@ -540,12 +540,16 @@ export function EditorShell({ writingId }: EditorShellProps) {
         isApplyingContentRef.current = true
         editor.commands.setContent(nextMarkdown)
         isApplyingContentRef.current = false
-        updateDerivedEditorState(editor)
+        // Update metrics from TipTap but do NOT derive markdownValue from it —
+        // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
+        // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
+        setWordCount(getWordCount(editor))
+        setBodyText(editor.getText())
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
-    [editor, persistEditorSnapshot, updateDerivedEditorState],
+    [editor, persistEditorSnapshot],
   )
 
   const handleInsertLink = useCallback(
