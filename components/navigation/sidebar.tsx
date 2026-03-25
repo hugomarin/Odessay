@@ -91,7 +91,10 @@ export function Sidebar({ children, user }: SidebarProps) {
             id="sidebar-top"
             data-section="sidebar-top"
             data-testid="sidebar-top"
-            className="SidebarTop flex h-[56px] items-center justify-between gap-2 border-b-[0.5px] border-border px-3"
+            className={cn(
+              "SidebarTop flex h-[46px] items-center gap-2 border-b-[0.5px] border-border",
+              isIconOnly ? "justify-center px-2" : "justify-between px-3",
+            )}
           >
             <Link
               href="/desk"
