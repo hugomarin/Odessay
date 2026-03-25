@@ -375,6 +375,15 @@
       "commit": "e379030",
       "date": "2026-03-25",
       "notes": "Se creó workflow/perf-budgets.json con umbrales pass/warn/fail y workflow/perf/editor-baseline.md con metodología y métricas del trace de referencia; se añadió scripts/analyze-editor-trace.mjs para regeneración."
+    },
+    {
+      "what": "Optimización del path de paste en editor: side-effects diferidos y serialización markdown fuera del hot path",
+      "phase": "Fase 1",
+      "issue": "ODE-50",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-50/optimizar-path-de-paste-en-tiptapprosemirror-para-eliminar-picos-100ms",
+      "commit": "7855c80",
+      "date": "2026-03-25",
+      "notes": "onUpdate en Rich mode difiere transacciones de paste a requestAnimationFrame para sacar trabajo fuera del EventDispatch; markdown + footnotes se serializan al cambiar a modo Markdown (no en cada update). Se agregó helper isPasteTransaction con pruebas unitarias."
     }
   ]
 }
