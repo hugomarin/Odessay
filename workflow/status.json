@@ -348,6 +348,15 @@
       "commit": "7c69c8d",
       "date": "2026-03-24",
       "notes": "SidebarTop baja de 56px a 46px para alinear la línea inferior con la topbar; en modo icon-only el botón toggle se centra para coincidir con la columna de botones del sidebar."
+    },
+    {
+      "what": "Tooltips en sidebar y toolbar con nombre de acción y shortcut contextual por plataforma",
+      "phase": "Fase 1",
+      "issue": "ODE-45",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-45/tooltips-con-nombre-y-shortcut-en-sidebar-y-toolbar-de-formato",
+      "commit": "64d0fa7",
+      "date": "2026-03-24",
+      "notes": "Se agregó wrapper ActionTooltip reusable, tooltips en acciones de sidebar/topbar y labels de shortcuts Mac/Windows desde una fuente única."
     }
   ]
 }
