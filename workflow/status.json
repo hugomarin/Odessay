@@ -339,6 +339,15 @@
       "commit": "5908f01",
       "date": "2026-03-24",
       "notes": "Statusbar migra de absolute a fixed y usa --app-shell-left-offset para respetar ancho de sidebar/panel lateral; mantiene visibilidad en el bottom del viewport."
+    },
+    {
+      "what": "Alineación del header del sidebar con el topbar y centrado del toggle en modo mini",
+      "phase": "Fase 1",
+      "issue": "ODE-44",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-44/alinear-linea-inferior-del-logo-con-el-topbar",
+      "commit": "7c69c8d",
+      "date": "2026-03-24",
+      "notes": "SidebarTop baja de 56px a 46px para alinear la línea inferior con la topbar; en modo icon-only el botón toggle se centra para coincidir con la columna de botones del sidebar."
     }
   ]
 }
