@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { getEditorShortcutAction } from "@/lib/editor/shortcuts"
+import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
 
 type ShortcutInput = {
   key: string
@@ -45,6 +45,30 @@ describe("getEditorShortcutAction", () => {
 
     expect(getEditorShortcutAction(shortcut({ key: "x", metaKey: true }))).toBeNull()
     expect(getEditorShortcutAction(shortcut({ key: "k" }))).toBeNull()
+
+    vi.unstubAllGlobals()
+  })
+})
+
+describe("getEditorShortcutLabel", () => {
+  it("formats labels for mac", () => {
+    vi.stubGlobal("navigator", { platform: "MacIntel" })
+
+    expect(getEditorShortcutLabel("bold")).toBe("⌘B")
+    expect(getEditorShortcutLabel("italic")).toBe("⌘I")
+    expect(getEditorShortcutLabel("footnote")).toBe("⌃⌘K")
+    expect(getEditorShortcutLabel("focusMode")).toBe("⌘⇧F")
+
+    vi.unstubAllGlobals()
+  })
+
+  it("formats labels for windows/linux", () => {
+    vi.stubGlobal("navigator", { platform: "Win32" })
+
+    expect(getEditorShortcutLabel("bold")).toBe("Ctrl+B")
+    expect(getEditorShortcutLabel("italic")).toBe("Ctrl+I")
+    expect(getEditorShortcutLabel("footnote")).toBe("Ctrl+Alt+K")
+    expect(getEditorShortcutLabel("focusMode")).toBe("Ctrl+Shift+F")
 
     vi.unstubAllGlobals()
   })

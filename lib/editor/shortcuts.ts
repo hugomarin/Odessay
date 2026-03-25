@@ -1,3 +1,5 @@
+import { getShortcutForPlatform, isMacPlatform, type ShortcutDisplay } from "@/lib/keyboard-shortcuts"
+
 export type EditorShortcutAction =
   | "bold"
   | "italic"
@@ -25,12 +27,24 @@ export type KeyboardLikeEvent = {
   altKey: boolean
 }
 
-const isMacPlatform = () => {
-  if (typeof navigator === "undefined") {
-    return true
-  }
-
-  return /Mac|iPhone|iPad|iPod/i.test(navigator.platform)
+const EDITOR_SHORTCUT_LABELS: Partial<Record<EditorShortcutAction, ShortcutDisplay>> = {
+  bold: { mac: "⌘B", windows: "Ctrl+B" },
+  italic: { mac: "⌘I", windows: "Ctrl+I" },
+  strike: { mac: "⌘⌥U", windows: "Ctrl+Alt+U" },
+  highlight: { mac: "⌘⇧U", windows: "Ctrl+Shift+U" },
+  inlineCode: { mac: "⌘J", windows: "Ctrl+J" },
+  codeBlock: { mac: "⌘⇧J", windows: "Ctrl+Shift+J" },
+  link: { mac: "⌘K", windows: "Ctrl+K" },
+  footnote: { mac: "⌃⌘K", windows: "Ctrl+Alt+K" },
+  paragraph: { mac: "⌘⌥0", windows: "Ctrl+Alt+0" },
+  heading1: { mac: "⌘⌥1", windows: "Ctrl+Alt+1" },
+  heading2: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
+  heading3: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
+  blockquote: { mac: "⌘⇧B", windows: "Ctrl+Shift+B" },
+  bulletList: { mac: "⌘⇧8", windows: "Ctrl+Shift+8" },
+  orderedList: { mac: "⌘⇧7", windows: "Ctrl+Shift+7" },
+  focusMode: { mac: "⌘⇧F", windows: "Ctrl+Shift+F" },
+  table: { mac: "⌘⇧T", windows: "Ctrl+Shift+T" },
 }
 
 const isCommandKey = (event: KeyboardLikeEvent) =>
@@ -134,4 +148,14 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
   }
 
   return null
+}
+
+export const getEditorShortcutLabel = (action: EditorShortcutAction): string | null => {
+  const shortcut = EDITOR_SHORTCUT_LABELS[action]
+
+  if (!shortcut) {
+    return null
+  }
+
+  return getShortcutForPlatform(shortcut)
 }
