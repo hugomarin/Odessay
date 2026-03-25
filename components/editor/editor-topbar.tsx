@@ -5,6 +5,8 @@ import type { Editor } from "@tiptap/react"
 import {
   AlignLeft,
   Bold,
+  Check,
+  ChevronDown,
   Code2,
   Expand,
   Highlighter,
@@ -20,6 +22,15 @@ import {
   Table,
 } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutLabel, type EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { cn } from "@/lib/utils"
@@ -73,6 +84,35 @@ const STRUCTURE_ACTIONS: StructureActionItem[] = [
   { id: "editor-action-heading-1", label: "Heading 1", action: "heading1", text: "H1" },
   { id: "editor-action-heading-2", label: "Heading 2", action: "heading2", text: "H2" },
   { id: "editor-action-heading-3", label: "Heading 3", action: "heading3", text: "H3" },
+]
+
+const COMPACT_QUICK_ACTIONS: TopbarActionItem[] = FORMAT_ACTIONS.filter(
+  ({ action }) =>
+    action === "bold" ||
+    action === "italic" ||
+    action === "strike" ||
+    action === "highlight" ||
+    action === "link" ||
+    action === "footnote",
+)
+
+const COMPACT_LIST_ACTIONS: Array<{
+  id: string
+  label: string
+  action: EditorShortcutAction
+  text?: string
+}> = [
+  ...STRUCTURE_ACTIONS,
+  { id: "editor-action-blockquote", label: "Block quote", action: "blockquote", text: ">" },
+  { id: "editor-action-bullet-list", label: "Bulleted list", action: "bulletList", text: "-" },
+  {
+    id: "editor-action-ordered-list",
+    label: "Numbered list",
+    action: "orderedList",
+    text: "1.",
+  },
+  { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode" },
+  { id: "editor-action-table", label: "Table", action: "table" },
 ]
 
 const isActionActive = (editor: Editor | null, action: EditorShortcutAction) => {
@@ -132,7 +172,7 @@ export function EditorTopbar({
       >
         <div className="flex min-w-0 items-center gap-2">
           <div
-            className="flex items-center gap-0.5 px-1 transition-opacity"
+            className="hidden items-center gap-0.5 px-1 transition-opacity min-[960px]:flex"
             aria-disabled={false}
           >
             {FORMAT_ACTIONS.map((actionItem) => (
@@ -185,13 +225,93 @@ export function EditorTopbar({
               </ActionTooltip>
             ))}
           </div>
+
+          <div className="min-[960px]:hidden">
+            <DropdownMenu>
+              <ActionTooltip label="Format menu" side="bottom">
+                <DropdownMenuTrigger asChild>
+                  <button
+                    id="editor-format-menu-trigger"
+                    type="button"
+                    aria-label="Format menu"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border-[0.5px] border-border bg-sb px-2.5 text-[13px] text-ink-2 transition-colors hover:bg-muted hover:text-ink"
+                  >
+                    <span className="font-medium tracking-[-0.01em]">Aa</span>
+                    <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+                  </button>
+                </DropdownMenuTrigger>
+              </ActionTooltip>
+
+              <DropdownMenuContent
+                align="start"
+                side="bottom"
+                sideOffset={8}
+                className="w-[294px] rounded-[16px] border-[0.5px] border-border bg-sb p-2.5 shadow-float-md"
+              >
+                <div className="mb-1.5 grid grid-cols-6 gap-1">
+                  {COMPACT_QUICK_ACTIONS.map((actionItem) => (
+                    <DropdownMenuItem
+                      key={`${actionItem.id}-compact-quick`}
+                      onSelect={(event) => {
+                        event.preventDefault()
+                        onRunAction(actionItem.action)
+                      }}
+                      aria-label={actionItem.label}
+                      className={cn(
+                        "h-8 justify-center rounded-[8px] p-0",
+                        isActionActive(editor, actionItem.action)
+                          ? "bg-muted text-ink"
+                          : "text-ink-3 hover:bg-muted hover:text-ink",
+                      )}
+                    >
+                      <actionItem.icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                    </DropdownMenuItem>
+                  ))}
+                </div>
+
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[10px] uppercase tracking-[0.07em] text-ink-4">
+                  Structure
+                </DropdownMenuLabel>
+
+                {COMPACT_LIST_ACTIONS.map((actionItem) => {
+                  const active = isActionActive(editor, actionItem.action)
+                  const shortcut = getEditorShortcutLabel(actionItem.action)
+                  const displayText = actionItem.text ?? actionItem.label
+
+                  return (
+                    <DropdownMenuItem
+                      key={`${actionItem.id}-compact-list`}
+                      onSelect={() => onRunAction(actionItem.action)}
+                      className={cn(
+                        "h-9 rounded-[8px] px-2.5 text-[14px]",
+                        active ? "bg-muted text-ink" : "text-ink-2",
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "mr-2 inline-flex h-4 w-4 items-center justify-center text-ink-4",
+                          active && "text-ink",
+                        )}
+                      >
+                        {active ? <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> : null}
+                      </span>
+                      <span className="truncate">{displayText}</span>
+                      {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 flex justify-center px-[88px] min-[960px]:px-[280px]">
           <button
             type="button"
             onClick={onOpenRenameModal}
-            className="pointer-events-auto max-w-[460px] truncate px-3 text-center font-lora text-[13px] text-ink-3 transition-colors hover:text-ink"
+            className="pointer-events-auto w-full max-w-[460px] truncate px-3 text-center font-lora text-[13px] text-ink-3 transition-colors hover:text-ink"
             title={title}
           >
             {title}
