@@ -330,6 +330,15 @@
       "commit": "d3cf724",
       "date": "2026-03-24",
       "notes": "Toolbar habilitado en Markdown; acciones de formato estructural e inline operan sobre selección/líneas en textarea; shortcuts globales dejan de bloquearse en Markdown."
+    },
+    {
+      "what": "EditorStatusbar fijado al viewport con offset dinámico del shell para mantenerse visible durante scroll largo",
+      "phase": "Fase 1",
+      "issue": "ODE-43",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-43",
+      "commit": "5908f01",
+      "date": "2026-03-24",
+      "notes": "Statusbar migra de absolute a fixed y usa --app-shell-left-offset para respetar ancho de sidebar/panel lateral; mantiene visibilidad en el bottom del viewport."
     }
   ]
 }
