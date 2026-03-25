@@ -28,6 +28,7 @@ import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/pan
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
+import { isPasteTransaction } from "@/lib/editor/transactions"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
@@ -162,13 +163,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const richUpdateRafRef = useRef<number | null>(null)
+  const richUpdateEditorRef = useRef<Editor | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
     setWordCount(getWordCount(editorInstance))
-    const bodyMarkdown = getEditorMarkdown(editorInstance)
-    const footnoteNodes = getEditorFootnotes(editorInstance)
-    setMarkdownValue(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes))
     setBodyText(editorInstance.getText())
   }, [])
 
@@ -223,6 +223,26 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [currentWritingId, routeWritingId, router],
   )
 
+  const runRichModeUpdateSideEffects = useCallback(
+    (editorInstance: Editor) => {
+      updateDerivedEditorState(editorInstance)
+      void persistEditorSnapshot(editorInstance)
+    },
+    [persistEditorSnapshot, updateDerivedEditorState],
+  )
+
+  const flushQueuedRichModeUpdate = useCallback(() => {
+    richUpdateRafRef.current = null
+    const queuedEditor = richUpdateEditorRef.current
+    richUpdateEditorRef.current = null
+
+    if (!queuedEditor) {
+      return
+    }
+
+    runRichModeUpdateSideEffects(queuedEditor)
+  }, [runRichModeUpdateSideEffects])
+
   const editor = useEditor(
     {
       extensions: editorExtensions,
@@ -234,16 +254,34 @@ export function EditorShell({ writingId }: EditorShellProps) {
           spellcheck: "false",
         },
       },
-      onUpdate: ({ editor: nextEditor }) => {
+      onUpdate: ({ editor: nextEditor, transaction }) => {
         if (isApplyingContentRef.current || modeRef.current === "markdown") {
           return
         }
 
-        updateDerivedEditorState(nextEditor)
-        void persistEditorSnapshot(nextEditor)
+        if (isPasteTransaction(transaction)) {
+          richUpdateEditorRef.current = nextEditor
+
+          if (richUpdateRafRef.current !== null) {
+            return
+          }
+
+          richUpdateRafRef.current = window.requestAnimationFrame(() => {
+            flushQueuedRichModeUpdate()
+          })
+          return
+        }
+
+        if (richUpdateRafRef.current !== null) {
+          window.cancelAnimationFrame(richUpdateRafRef.current)
+          richUpdateRafRef.current = null
+          richUpdateEditorRef.current = null
+        }
+
+        runRichModeUpdateSideEffects(nextEditor)
       },
     },
-    [editorExtensions, persistEditorSnapshot, updateDerivedEditorState],
+    [editorExtensions, flushQueuedRichModeUpdate, runRichModeUpdateSideEffects],
   )
 
   useEffect(() => {
@@ -384,6 +422,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
       if (markdownSaveTimeoutRef.current) {
         window.clearTimeout(markdownSaveTimeoutRef.current)
       }
+
+      if (richUpdateRafRef.current !== null) {
+        window.cancelAnimationFrame(richUpdateRafRef.current)
+      }
+
+      richUpdateRafRef.current = null
+      richUpdateEditorRef.current = null
     }
   }, [])
 
@@ -760,7 +805,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
       if (nextMode === "markdown") {
         modeRef.current = "markdown"
         setMode("markdown")
-        setMarkdownValue(getEditorMarkdown(editor))
+        const bodyMarkdown = getEditorMarkdown(editor)
+        const footnoteNodes = getEditorFootnotes(editor)
+        setMarkdownValue(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes))
         return
       }
 
@@ -984,12 +1031,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [applyMarkdownFromPanel, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
   )
 
-  // In Rich mode, footnotes are derived from editor nodes (markdownValue triggers recalc on each update).
+  // In Rich mode, footnotes are derived from editor nodes and refreshed on each editor update tick.
   // In Markdown mode, footnotes are parsed from the raw markdown string.
-  const footnotes = useMemo(
-    () => (mode === "rich" && editor ? getEditorFootnotes(editor) : getMarkdownFootnotes(markdownValue)),
-    [mode, markdownValue, editor],
-  )
+  const footnotes = mode === "rich" && editor ? getEditorFootnotes(editor) : getMarkdownFootnotes(markdownValue)
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const displayTitle = useMemo(
     () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
