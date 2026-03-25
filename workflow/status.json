@@ -357,6 +357,15 @@
       "commit": "64d0fa7",
       "date": "2026-03-24",
       "notes": "Se agregó wrapper ActionTooltip reusable, tooltips en acciones de sidebar/topbar y labels de shortcuts Mac/Windows desde una fuente única."
+    },
+    {
+      "what": "Topbar del editor responsive: dropdown de formato en <960px para evitar superposición con título y acciones de shell",
+      "phase": "Fase 1",
+      "issue": "ODE-47",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-47/editor-topbar-dropdown-de-formato-responsive-para-evitar-superposicion",
+      "commit": "5f4a979",
+      "date": "2026-03-24",
+      "notes": "Se mantiene toolbar completo en >=960px; en <960px se colapsa a menú con estados activos, shortcuts y navegación por teclado."
     }
   ]
 }
