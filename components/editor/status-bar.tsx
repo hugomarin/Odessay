@@ -26,7 +26,8 @@ export function EditorStatusBar({ mode, wordCount, saveState, onToggleMode }: St
       id="editor-statusbar"
       data-section="editor-statusbar"
       data-testid="editor-statusbar"
-      className="EditorStatusbar absolute bottom-0 left-0 right-0 flex h-8 items-center justify-between px-4 text-[11px] text-ink-4"
+      style={{ left: "var(--app-shell-left-offset, 0px)" }}
+      className="EditorStatusbar fixed right-0 bottom-0 z-20 flex h-8 items-center justify-between border-t-[0.5px] border-border/80 bg-bg/95 px-4 text-[11px] text-ink-4 backdrop-blur supports-[backdrop-filter]:bg-bg/85"
     >
       <p className={SAVE_STATE_COLORS[saveState]} aria-live="polite">
         {SAVE_STATE_LABELS[saveState]}

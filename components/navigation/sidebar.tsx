@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo } from "react"
+import { useEffect, useLayoutEffect, useMemo, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { FileText, LibraryBig, Mails, PanelLeftClose, Plus, Search } from "lucide-react"
@@ -61,6 +61,8 @@ export function Sidebar({ children, user }: SidebarProps) {
 
     return isCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED
   }, [isCollapsed, isCollectionsPanelOpen])
+  const shellLeftOffset = sidebarWidth + (isCollectionsPanelOpen ? 240 : 0)
+  const shellStyle = { "--app-shell-left-offset": `${shellLeftOffset}px` } as CSSProperties
 
   const userDisplayName = user.displayName ?? user.email?.split("@")[0] ?? "Writer"
   const userUsername = user.username ?? "profile"
@@ -74,7 +76,10 @@ export function Sidebar({ children, user }: SidebarProps) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg">
+    <div
+      className="flex h-screen overflow-hidden bg-bg"
+      style={shellStyle}
+    >
       <div className="flex h-full shrink-0">
         <nav
           id="sidebar"
