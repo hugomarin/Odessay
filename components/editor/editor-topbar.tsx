@@ -19,7 +19,9 @@ import {
   Superscript,
   Table,
 } from "lucide-react"
-import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
+import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { getEditorShortcutLabel, type EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { cn } from "@/lib/utils"
 
 type EditorTopbarProps = {
@@ -121,113 +123,132 @@ export function EditorTopbar({
   onRunAction,
 }: EditorTopbarProps) {
   return (
-    <div
-      id="editor-topbar"
-      data-section="editor-topbar"
-      data-testid="editor-topbar"
-      className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border bg-bg px-3"
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <div
-          className="flex items-center gap-0.5 px-1 transition-opacity"
-          aria-disabled={false}
-        >
-          {FORMAT_ACTIONS.map((actionItem) => (
-            <button
-              key={actionItem.id}
-              id={actionItem.id}
-              type="button"
-              onClick={() => onRunAction(actionItem.action)}
-              title={actionItem.label}
-              aria-label={actionItem.label}
-              className={cn(
-                "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
-                isActionActive(editor, actionItem.action)
-                  ? "bg-muted text-ink"
-                  : "hover:bg-muted hover:text-ink",
-              )}
-            >
-              <actionItem.icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
-            </button>
-          ))}
+    <TooltipProvider delayDuration={120}>
+      <div
+        id="editor-topbar"
+        data-section="editor-topbar"
+        data-testid="editor-topbar"
+        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border bg-bg px-3"
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          <div
+            className="flex items-center gap-0.5 px-1 transition-opacity"
+            aria-disabled={false}
+          >
+            {FORMAT_ACTIONS.map((actionItem) => (
+              <ActionTooltip
+                key={actionItem.id}
+                label={actionItem.label}
+                shortcut={getEditorShortcutLabel(actionItem.action)}
+                side="bottom"
+              >
+                <button
+                  id={actionItem.id}
+                  type="button"
+                  onClick={() => onRunAction(actionItem.action)}
+                  aria-label={actionItem.label}
+                  className={cn(
+                    "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
+                    isActionActive(editor, actionItem.action)
+                      ? "bg-muted text-ink"
+                      : "hover:bg-muted hover:text-ink",
+                  )}
+                >
+                  <actionItem.icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                </button>
+              </ActionTooltip>
+            ))}
 
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
 
-          {STRUCTURE_ACTIONS.map((actionItem) => (
+            {STRUCTURE_ACTIONS.map((actionItem) => (
+              <ActionTooltip
+                key={actionItem.id}
+                label={actionItem.label}
+                shortcut={getEditorShortcutLabel(actionItem.action)}
+                side="bottom"
+              >
+                <button
+                  id={actionItem.id}
+                  type="button"
+                  onClick={() => onRunAction(actionItem.action)}
+                  aria-label={actionItem.label}
+                  className={cn(
+                    "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
+                    isActionActive(editor, actionItem.action)
+                      ? "bg-muted text-ink"
+                      : "text-ink-3 hover:bg-muted hover:text-ink",
+                  )}
+                >
+                  {actionItem.text}
+                </button>
+              </ActionTooltip>
+            ))}
+          </div>
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+          <button
+            type="button"
+            onClick={onOpenRenameModal}
+            className="pointer-events-auto max-w-[460px] truncate px-3 text-center font-lora text-[13px] text-ink-3 transition-colors hover:text-ink"
+            title={title}
+          >
+            {title}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <ActionTooltip
+            label={isFocusMode ? "Exit focus mode" : "Focus mode"}
+            shortcut={getEditorShortcutLabel("focusMode")}
+            side="bottom"
+          >
             <button
-              key={actionItem.id}
-              id={actionItem.id}
               type="button"
-              onClick={() => onRunAction(actionItem.action)}
-              title={actionItem.label}
-              aria-label={actionItem.label}
-              className={cn(
-                "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
-                isActionActive(editor, actionItem.action)
-                  ? "bg-muted text-ink"
-                  : "text-ink-3 hover:bg-muted hover:text-ink",
-              )}
+              onClick={onToggleFocusMode}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+              aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
             >
-              {actionItem.text}
+              {isFocusMode ? (
+                <Minimize2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
+              ) : (
+                <Expand className="h-[13px] w-[13px]" strokeWidth={1.5} />
+              )}
             </button>
-          ))}
+          </ActionTooltip>
+
+          <ActionTooltip label="Notes panel" side="bottom">
+            <button
+              type="button"
+              onClick={() => onTogglePanel("notes")}
+              className={cn(
+                "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+                activePanel === "notes" && "bg-muted text-ink",
+              )}
+              aria-label="Notes panel"
+              aria-pressed={activePanel === "notes"}
+            >
+              <AlignLeft className="h-[13px] w-[13px]" strokeWidth={1.5} />
+            </button>
+          </ActionTooltip>
+
+          <ActionTooltip label="Properties panel" side="bottom">
+            <button
+              type="button"
+              onClick={() => onTogglePanel("properties")}
+              className={cn(
+                "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
+                activePanel === "properties" && "bg-muted text-ink",
+              )}
+              aria-label="Properties panel"
+              aria-pressed={activePanel === "properties"}
+            >
+              <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={1.5} />
+            </button>
+          </ActionTooltip>
         </div>
       </div>
-
-      <div className="pointer-events-none absolute inset-x-0 flex justify-center">
-        <button
-          type="button"
-          onClick={onOpenRenameModal}
-          className="pointer-events-auto max-w-[460px] truncate px-3 text-center font-lora text-[13px] text-ink-3 transition-colors hover:text-ink"
-          title={title}
-        >
-          {title}
-        </button>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onToggleFocusMode}
-          className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
-          title={isFocusMode ? "Exit focus mode" : "Focus mode"}
-          aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
-        >
-          {isFocusMode ? (
-            <Minimize2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
-          ) : (
-            <Expand className="h-[13px] w-[13px]" strokeWidth={1.5} />
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onTogglePanel("notes")}
-          className={cn(
-            "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
-            activePanel === "notes" && "bg-muted text-ink",
-          )}
-          title="Notes panel"
-          aria-label="Notes panel"
-          aria-pressed={activePanel === "notes"}
-        >
-          <AlignLeft className="h-[13px] w-[13px]" strokeWidth={1.5} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onTogglePanel("properties")}
-          className={cn(
-            "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
-            activePanel === "properties" && "bg-muted text-ink",
-          )}
-          title="Properties panel"
-          aria-label="Properties panel"
-          aria-pressed={activePanel === "properties"}
-        >
-          <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={1.5} />
-        </button>
-      </div>
-    </div>
+    </TooltipProvider>
   )
 }
