@@ -33,6 +33,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutLabel, type EditorShortcutAction } from "@/lib/editor/shortcuts"
+import {
+  EDITOR_TOPBAR_COMPACT_FORMAT_CLASS,
+  EDITOR_TOPBAR_COMPACT_TRIGGER_ID,
+  EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS,
+  EDITOR_TOPBAR_TITLE_CONTAINER_CLASS,
+  runCompactTopbarAction,
+} from "@/lib/editor/topbar-compact"
 import { cn } from "@/lib/utils"
 
 type EditorTopbarProps = {
@@ -162,6 +169,95 @@ export function EditorTopbar({
   onOpenRenameModal,
   onRunAction,
 }: EditorTopbarProps) {
+  const formatButtons = FORMAT_ACTIONS.map((actionItem) => {
+    const Icon = actionItem.icon
+
+    return (
+      <ActionTooltip
+        key={actionItem.id}
+        label={actionItem.label}
+        shortcut={getEditorShortcutLabel(actionItem.action)}
+        side="bottom"
+      >
+        <button
+          id={actionItem.id}
+          type="button"
+          onClick={() => onRunAction(actionItem.action)}
+          aria-label={actionItem.label}
+          className={cn(
+            "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
+            isActionActive(editor, actionItem.action) ? "bg-muted text-ink" : "hover:bg-muted hover:text-ink",
+          )}
+        >
+          <Icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
+        </button>
+      </ActionTooltip>
+    )
+  })
+
+  const structureButtons = STRUCTURE_ACTIONS.map((actionItem) => (
+    <ActionTooltip
+      key={actionItem.id}
+      label={actionItem.label}
+      shortcut={getEditorShortcutLabel(actionItem.action)}
+      side="bottom"
+    >
+      <button
+        id={actionItem.id}
+        type="button"
+        onClick={() => onRunAction(actionItem.action)}
+        aria-label={actionItem.label}
+        className={cn(
+          "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
+          isActionActive(editor, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
+        )}
+      >
+        {actionItem.text}
+      </button>
+    </ActionTooltip>
+  ))
+
+  const compactQuickButtons = COMPACT_QUICK_ACTIONS.map((actionItem) => {
+    const Icon = actionItem.icon
+
+    return (
+      <DropdownMenuItem
+        key={`${actionItem.id}-compact-quick`}
+        onSelect={(event) => runCompactTopbarAction(onRunAction, actionItem.action, event)}
+        aria-label={actionItem.label}
+        className={cn(
+          "h-8 justify-center rounded-[8px] p-0",
+          isActionActive(editor, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
+        )}
+      >
+        <Icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
+      </DropdownMenuItem>
+    )
+  })
+
+  const compactListButtons = COMPACT_LIST_ACTIONS.map((actionItem) => {
+    const active = isActionActive(editor, actionItem.action)
+    const shortcut = getEditorShortcutLabel(actionItem.action)
+    const displayText = actionItem.text ?? actionItem.label
+
+    return (
+      <DropdownMenuItem
+        key={`${actionItem.id}-compact-list`}
+        onSelect={() => runCompactTopbarAction(onRunAction, actionItem.action)}
+        className={cn("h-9 rounded-[8px] px-2.5 text-[14px]", active ? "bg-muted text-ink" : "text-ink-2")}
+      >
+        <span
+          aria-hidden="true"
+          className={cn("mr-2 inline-flex h-4 w-4 items-center justify-center text-ink-4", active && "text-ink")}
+        >
+          {active ? <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> : null}
+        </span>
+        <span className="truncate">{displayText}</span>
+        {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    )
+  })
+
   return (
     <TooltipProvider delayDuration={120}>
       <div
@@ -172,66 +268,22 @@ export function EditorTopbar({
       >
         <div className="flex min-w-0 items-center gap-2">
           <div
-            className="hidden items-center gap-0.5 px-1 transition-opacity min-[960px]:flex"
+            className={EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS}
             aria-disabled={false}
           >
-            {FORMAT_ACTIONS.map((actionItem) => (
-              <ActionTooltip
-                key={actionItem.id}
-                label={actionItem.label}
-                shortcut={getEditorShortcutLabel(actionItem.action)}
-                side="bottom"
-              >
-                <button
-                  id={actionItem.id}
-                  type="button"
-                  onClick={() => onRunAction(actionItem.action)}
-                  aria-label={actionItem.label}
-                  className={cn(
-                    "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
-                    isActionActive(editor, actionItem.action)
-                      ? "bg-muted text-ink"
-                      : "hover:bg-muted hover:text-ink",
-                  )}
-                >
-                  <actionItem.icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
-                </button>
-              </ActionTooltip>
-            ))}
+            {formatButtons}
 
             <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
 
-            {STRUCTURE_ACTIONS.map((actionItem) => (
-              <ActionTooltip
-                key={actionItem.id}
-                label={actionItem.label}
-                shortcut={getEditorShortcutLabel(actionItem.action)}
-                side="bottom"
-              >
-                <button
-                  id={actionItem.id}
-                  type="button"
-                  onClick={() => onRunAction(actionItem.action)}
-                  aria-label={actionItem.label}
-                  className={cn(
-                    "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
-                    isActionActive(editor, actionItem.action)
-                      ? "bg-muted text-ink"
-                      : "text-ink-3 hover:bg-muted hover:text-ink",
-                  )}
-                >
-                  {actionItem.text}
-                </button>
-              </ActionTooltip>
-            ))}
+            {structureButtons}
           </div>
 
-          <div className="min-[960px]:hidden">
+          <div className={EDITOR_TOPBAR_COMPACT_FORMAT_CLASS}>
             <DropdownMenu>
               <ActionTooltip label="Format menu" side="bottom">
                 <DropdownMenuTrigger asChild>
                   <button
-                    id="editor-format-menu-trigger"
+                    id={EDITOR_TOPBAR_COMPACT_TRIGGER_ID}
                     type="button"
                     aria-label="Format menu"
                     className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border-[0.5px] border-border bg-sb px-2.5 text-[13px] text-ink-2 transition-colors hover:bg-muted hover:text-ink"
@@ -249,24 +301,7 @@ export function EditorTopbar({
                 className="w-[294px] rounded-[16px] border-[0.5px] border-border bg-sb p-2.5 shadow-float-md"
               >
                 <div className="mb-1.5 grid grid-cols-6 gap-1">
-                  {COMPACT_QUICK_ACTIONS.map((actionItem) => (
-                    <DropdownMenuItem
-                      key={`${actionItem.id}-compact-quick`}
-                      onSelect={(event) => {
-                        event.preventDefault()
-                        onRunAction(actionItem.action)
-                      }}
-                      aria-label={actionItem.label}
-                      className={cn(
-                        "h-8 justify-center rounded-[8px] p-0",
-                        isActionActive(editor, actionItem.action)
-                          ? "bg-muted text-ink"
-                          : "text-ink-3 hover:bg-muted hover:text-ink",
-                      )}
-                    >
-                      <actionItem.icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
-                    </DropdownMenuItem>
-                  ))}
+                  {compactQuickButtons}
                 </div>
 
                 <DropdownMenuSeparator />
@@ -274,40 +309,13 @@ export function EditorTopbar({
                   Structure
                 </DropdownMenuLabel>
 
-                {COMPACT_LIST_ACTIONS.map((actionItem) => {
-                  const active = isActionActive(editor, actionItem.action)
-                  const shortcut = getEditorShortcutLabel(actionItem.action)
-                  const displayText = actionItem.text ?? actionItem.label
-
-                  return (
-                    <DropdownMenuItem
-                      key={`${actionItem.id}-compact-list`}
-                      onSelect={() => onRunAction(actionItem.action)}
-                      className={cn(
-                        "h-9 rounded-[8px] px-2.5 text-[14px]",
-                        active ? "bg-muted text-ink" : "text-ink-2",
-                      )}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          "mr-2 inline-flex h-4 w-4 items-center justify-center text-ink-4",
-                          active && "text-ink",
-                        )}
-                      >
-                        {active ? <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> : null}
-                      </span>
-                      <span className="truncate">{displayText}</span>
-                      {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
-                    </DropdownMenuItem>
-                  )
-                })}
+                {compactListButtons}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 flex justify-center px-[88px] min-[960px]:px-[280px]">
+        <div className={EDITOR_TOPBAR_TITLE_CONTAINER_CLASS}>
           <button
             type="button"
             onClick={onOpenRenameModal}
