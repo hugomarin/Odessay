@@ -1040,6 +1040,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   // In Markdown mode, parse from the raw markdown value.
   const footnotes = useMemo(() => {
     if (mode === "rich") {
+      const contentRevision = version
+      void contentRevision
       return editor ? getEditorFootnotes(editor) : []
     }
 
