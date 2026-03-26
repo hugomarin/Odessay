@@ -28,7 +28,7 @@ import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/pan
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
-import { isPasteTransaction } from "@/lib/editor/transactions"
+import { shouldDeferRichModeSideEffects } from "@/lib/editor/transactions"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
@@ -165,6 +165,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const richUpdateRafRef = useRef<number | null>(null)
   const richUpdateEditorRef = useRef<Editor | null>(null)
+  const markdownSelectionRafRef = useRef<number | null>(null)
+  const pendingMarkdownSelectionRef = useRef<{ start: number; end: number } | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
@@ -243,6 +245,45 @@ export function EditorShell({ writingId }: EditorShellProps) {
     runRichModeUpdateSideEffects(queuedEditor)
   }, [runRichModeUpdateSideEffects])
 
+  const queueMarkdownSelectionRestore = useCallback((start: number, end: number) => {
+    pendingMarkdownSelectionRef.current = { start, end }
+
+    if (markdownSelectionRafRef.current !== null) {
+      return
+    }
+
+    markdownSelectionRafRef.current = window.requestAnimationFrame(() => {
+      markdownSelectionRafRef.current = null
+
+      const pendingSelection = pendingMarkdownSelectionRef.current
+      pendingMarkdownSelectionRef.current = null
+
+      if (!pendingSelection) {
+        return
+      }
+
+      const nextTextarea = markdownTextareaRef.current
+
+      if (!nextTextarea) {
+        return
+      }
+
+      if (document.activeElement !== nextTextarea) {
+        nextTextarea.focus()
+      }
+
+      if (nextTextarea.selectionStart !== pendingSelection.start || nextTextarea.selectionEnd !== pendingSelection.end) {
+        nextTextarea.setSelectionRange(pendingSelection.start, pendingSelection.end)
+      }
+
+      markdownSelectionRef.current = {
+        start: pendingSelection.start,
+        end: pendingSelection.end,
+        text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
+      }
+    })
+  }, [])
+
   const editor = useEditor(
     {
       extensions: editorExtensions,
@@ -259,7 +300,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
         }
 
-        if (isPasteTransaction(transaction)) {
+        if (shouldDeferRichModeSideEffects(transaction)) {
           richUpdateEditorRef.current = nextEditor
 
           if (richUpdateRafRef.current !== null) {
@@ -427,8 +468,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
         window.cancelAnimationFrame(richUpdateRafRef.current)
       }
 
+      if (markdownSelectionRafRef.current !== null) {
+        window.cancelAnimationFrame(markdownSelectionRafRef.current)
+      }
+
       richUpdateRafRef.current = null
       richUpdateEditorRef.current = null
+      markdownSelectionRafRef.current = null
+      pendingMarkdownSelectionRef.current = null
     }
   }, [])
 
@@ -543,21 +590,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         persistMarkdownDraft(nextMarkdown)
 
-        window.requestAnimationFrame(() => {
-          const nextTextarea = markdownTextareaRef.current
-
-          if (!nextTextarea) {
-            return
-          }
-
-          nextTextarea.focus()
-          nextTextarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
-          markdownSelectionRef.current = {
-            start: nextSelectionStart,
-            end: nextSelectionEnd,
-            text: nextTextarea.value.slice(nextSelectionStart, nextSelectionEnd),
-          }
-        })
+        queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionEnd)
       }
 
       const toggleMarkdownWrap = (marker: string) => {
@@ -652,21 +685,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         persistMarkdownDraft(nextMarkdown)
 
-        window.requestAnimationFrame(() => {
-          const nextTextarea = markdownTextareaRef.current
-
-          if (!nextTextarea) {
-            return
-          }
-
-          nextTextarea.focus()
-          nextTextarea.setSelectionRange(blockStart, nextSelectionEnd)
-          markdownSelectionRef.current = {
-            start: blockStart,
-            end: nextSelectionEnd,
-            text: nextTextarea.value.slice(blockStart, nextSelectionEnd),
-          }
-        })
+        queueMarkdownSelectionRestore(blockStart, nextSelectionEnd)
       }
 
       if (modeRef.current === "markdown") {
@@ -788,7 +807,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
       }
     },
-    [editor, markdownValue, persistEditorSnapshot],
+    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
   )
 
   const handleToggleMode = useCallback(
@@ -897,21 +916,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           }, MARKDOWN_SAVE_DEBOUNCE_MS)
         }
 
-        window.requestAnimationFrame(() => {
-          const nextTextarea = markdownTextareaRef.current
-
-          if (!nextTextarea) {
-            return
-          }
-
-          nextTextarea.focus()
-          nextTextarea.setSelectionRange(nextSelectionStart, nextSelectionEnd)
-          markdownSelectionRef.current = {
-            start: nextSelectionStart,
-            end: nextSelectionEnd,
-            text: nextTextarea.value.slice(nextSelectionStart, nextSelectionEnd),
-          }
-        })
+        queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionEnd)
 
         return
       }
@@ -945,7 +950,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           .run()
       }
     },
-    [editor, markdownValue, persistEditorSnapshot],
+    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
   )
 
   useEffect(() => {
@@ -1031,9 +1036,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [applyMarkdownFromPanel, editor, markdownValue, persistEditorSnapshot, updateDerivedEditorState],
   )
 
-  // In Rich mode, footnotes are derived from editor nodes and refreshed on each editor update tick.
-  // In Markdown mode, footnotes are parsed from the raw markdown string.
-  const footnotes = mode === "rich" && editor ? getEditorFootnotes(editor) : getMarkdownFootnotes(markdownValue)
+  // In Rich mode, derive footnotes from editor nodes only when content version changes.
+  // In Markdown mode, parse from the raw markdown value.
+  const footnotes = useMemo(() => {
+    if (mode === "rich") {
+      return editor ? getEditorFootnotes(editor) : []
+    }
+
+    return getMarkdownFootnotes(markdownValue)
+  }, [editor, markdownValue, mode, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const displayTitle = useMemo(
     () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
