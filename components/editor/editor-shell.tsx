@@ -32,6 +32,7 @@ import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
+import { hydrateLocalWritingFromRemote } from "@/lib/sync/remote-bootstrap"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
 
 type EditorShellProps = {
@@ -380,7 +381,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
     let cancelled = false
 
     const hydrateEditor = async () => {
-      const localWriting = await localDB.writings.get(currentWritingId)
+      let localWriting = await localDB.writings.get(currentWritingId)
+
+      if (!localWriting) {
+        try {
+          await hydrateLocalWritingFromRemote(currentWritingId)
+        } catch {
+          // The writing might not exist remotely yet; keep local fallback behavior.
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        localWriting = await localDB.writings.get(currentWritingId)
+      }
 
       if (cancelled) {
         return
