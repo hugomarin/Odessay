@@ -28,7 +28,6 @@ import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/pan
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
-import { shouldDeferRichModeSideEffects } from "@/lib/editor/transactions"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
@@ -295,34 +294,23 @@ export function EditorShell({ writingId }: EditorShellProps) {
           spellcheck: "false",
         },
       },
-      onUpdate: ({ editor: nextEditor, transaction }) => {
+      onUpdate: ({ editor: nextEditor }) => {
         if (isApplyingContentRef.current || modeRef.current === "markdown") {
           return
         }
 
-        if (shouldDeferRichModeSideEffects(transaction)) {
-          richUpdateEditorRef.current = nextEditor
+        richUpdateEditorRef.current = nextEditor
 
-          if (richUpdateRafRef.current !== null) {
-            return
-          }
-
-          richUpdateRafRef.current = window.requestAnimationFrame(() => {
-            flushQueuedRichModeUpdate()
-          })
+        if (richUpdateRafRef.current !== null) {
           return
         }
 
-        if (richUpdateRafRef.current !== null) {
-          window.cancelAnimationFrame(richUpdateRafRef.current)
-          richUpdateRafRef.current = null
-          richUpdateEditorRef.current = null
-        }
-
-        runRichModeUpdateSideEffects(nextEditor)
+        richUpdateRafRef.current = window.requestAnimationFrame(() => {
+          flushQueuedRichModeUpdate()
+        })
       },
     },
-    [editorExtensions, flushQueuedRichModeUpdate, runRichModeUpdateSideEffects],
+    [editorExtensions, flushQueuedRichModeUpdate],
   )
 
   useEffect(() => {
