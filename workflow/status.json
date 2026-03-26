@@ -403,6 +403,15 @@
       "commit": "658df15",
       "date": "2026-03-26",
       "notes": "Se agrega pull remoto autenticado (/api/writings y /api/writings/[id]) con merge seguro remoto→local para no sobrescribir estados pending/failed/deleted; bootstrap en SyncBootstrap + fallback en Desk y Editor para sesiones limpias."
+    },
+    {
+      "what": "Gate automático de performance del editor en CI con captura de trace, budgets versionados y artifacts",
+      "phase": "Fase 1",
+      "issue": "ODE-52",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-52/automatizar-perf-gate-en-ci-con-trace-y-budgets-del-editor",
+      "commit": "7688d7e",
+      "date": "2026-03-26",
+      "notes": "Se añade scripts/check-performance-gate.mjs y scripts/capture-editor-trace.mjs, ruta /perf/editor-harness, integración en traceability-gates.yml y ejecución opcional vía OPS_PERF_TRACE_PATH dentro de ops:delivery:gate."
     }
   ]
 }
