@@ -400,7 +400,7 @@
       "phase": "Fase 1",
       "issue": "ODE-55",
       "linear_url": "https://linear.app/z9ne/issue/ODE-55/fix-cross-session-remote-hydration-for-writings-same-account-clean",
-      "commit": "22ba9a0",
+      "commit": "658df15",
       "date": "2026-03-26",
       "notes": "Se agrega pull remoto autenticado (/api/writings y /api/writings/[id]) con merge seguro remoto→local para no sobrescribir estados pending/failed/deleted; bootstrap en SyncBootstrap + fallback en Desk y Editor para sesiones limpias."
     }
