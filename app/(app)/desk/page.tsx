@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { DeskFilterBar } from "@/components/desk/desk-filter-bar"
@@ -11,6 +11,7 @@ import {
   type DeskActivityFilter,
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
+import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 
 const EMPTY_SUMMARY: DeskActivitySummary = {
   heroDrafts: [],
@@ -28,6 +29,27 @@ export default function DeskPage() {
   const [activeFilter, setActiveFilter] = useState<DeskActivityFilter>("all")
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)
   const [isLoading, setIsLoading] = useState(true)
+  const hasHydratedRemoteRef = useRef(false)
+
+  const syncRemoteWritings = useCallback(async () => {
+    try {
+      await hydrateLocalWritingsFromRemote()
+    } catch (error) {
+      console.error("[desk:hydrate]", error)
+    }
+  }, [])
+
+  const hydrateRemoteIfNeeded = useCallback(
+    async (force = false) => {
+      if (!force && hasHydratedRemoteRef.current) {
+        return
+      }
+
+      await syncRemoteWritings()
+      hasHydratedRemoteRef.current = true
+    },
+    [syncRemoteWritings],
+  )
 
   const loadDeskActivity = useCallback(async (filter: DeskActivityFilter) => {
     const localWritings = await localDB.writings.getAll()
@@ -46,6 +68,7 @@ export default function DeskPage() {
 
     const load = async () => {
       setIsLoading(true)
+      await hydrateRemoteIfNeeded()
       await loadDeskActivity(activeFilter)
       if (!cancelled) {
         setIsLoading(false)
@@ -57,17 +80,18 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, loadDeskActivity])
+  }, [activeFilter, hydrateRemoteIfNeeded, loadDeskActivity])
 
   useEffect(() => {
     return subscribeToLocalDBScopeChanges(() => {
-      void loadDeskActivity(activeFilter)
+      hasHydratedRemoteRef.current = false
+      void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
     })
-  }, [activeFilter, loadDeskActivity])
+  }, [activeFilter, hydrateRemoteIfNeeded, loadDeskActivity])
 
   useEffect(() => {
     const handleRefresh = () => {
-      void loadDeskActivity(activeFilter)
+      void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
     }
 
     window.addEventListener("focus", handleRefresh)
@@ -77,7 +101,7 @@ export default function DeskPage() {
       window.removeEventListener("focus", handleRefresh)
       window.removeEventListener("online", handleRefresh)
     }
-  }, [activeFilter, loadDeskActivity])
+  }, [activeFilter, hydrateRemoteIfNeeded, loadDeskActivity])
 
   const counts = useMemo(() => summary.counts, [summary.counts])
 

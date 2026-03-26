@@ -44,6 +44,35 @@ async function getCurrentUserId() {
   return { userId: user?.id ?? null };
 }
 
+export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
+  const { userId } = await getCurrentUserId();
+  const supabase = createAdminClient();
+
+  if (!userId) {
+    return jsonError(401, "UNAUTHORIZED", "No active session.");
+  }
+
+  const { id } = await context.params;
+  const { data, error } = await supabase
+    .from("writings")
+    .select(
+      "id, author_id, title, body_json, body_text, slug, status, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at",
+    )
+    .eq("id", id)
+    .eq("author_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    return jsonError(500, "DB_ERROR", error.message);
+  }
+
+  if (!data) {
+    return jsonError(404, "NOT_FOUND", "Writing not found.");
+  }
+
+  return NextResponse.json({ data, error: null }, { status: 200 });
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { userId } = await getCurrentUserId();
   const supabase = createAdminClient();

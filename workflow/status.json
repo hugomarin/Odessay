@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-03-25",
+  "last_updated": "2026-03-26",
   "active_phase": {
     "name": "Fase 1 — Escribir",
     "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
@@ -20,9 +20,10 @@
       "ODE-26",
       "ODE-27",
       "ODE-28",
-      "ODE-29"
+      "ODE-29",
+      "ODE-55"
     ],
-    "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review."
+    "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review. Se agregó ODE-55 vía /wf-define para cerrar la brecha de hidratación remota entre sesiones limpias y no limpias."
   },
   "built": [
     {
