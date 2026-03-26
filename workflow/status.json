@@ -384,6 +384,15 @@
       "commit": "7855c80",
       "date": "2026-03-25",
       "notes": "onUpdate en Rich mode difiere transacciones de paste a requestAnimationFrame para sacar trabajo fuera del EventDispatch; markdown + footnotes se serializan al cambiar a modo Markdown (no en cada update). Se agregó helper isPasteTransaction con pruebas unitarias."
+    },
+    {
+      "what": "Optimización de click/selection: side-effects diferidos en pointer/click y menor churn de selección en Markdown",
+      "phase": "Fase 1",
+      "issue": "ODE-51",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-51/optimizar-click-y-seleccion-reducir-cola-de-interaccion-y-relayout",
+      "commit": "54b8bc6",
+      "date": "2026-03-25",
+      "notes": "onUpdate difiere side-effects en transacciones pointer/click para sacar trabajo de EventDispatch; restauración de selección Markdown coalescida en un solo requestAnimationFrame por frame; derivación de footnotes memoizada por versión para evitar recorridos completos del doc en interacciones sin cambios de contenido."
     }
   ]
 }
