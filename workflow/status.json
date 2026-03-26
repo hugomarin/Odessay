@@ -394,6 +394,15 @@
       "commit": "54b8bc6",
       "date": "2026-03-25",
       "notes": "onUpdate difiere side-effects en transacciones pointer/click para sacar trabajo de EventDispatch; restauración de selección Markdown coalescida en un solo requestAnimationFrame por frame; derivación de footnotes memoizada por versión para evitar recorridos completos del doc en interacciones sin cambios de contenido."
+    },
+    {
+      "what": "Hidratación remota inicial de writings para consistencia entre sesión normal y sesión limpia/incógnito",
+      "phase": "Fase 1",
+      "issue": "ODE-55",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-55/fix-cross-session-remote-hydration-for-writings-same-account-clean",
+      "commit": "22ba9a0",
+      "date": "2026-03-26",
+      "notes": "Se agrega pull remoto autenticado (/api/writings y /api/writings/[id]) con merge seguro remoto→local para no sobrescribir estados pending/failed/deleted; bootstrap en SyncBootstrap + fallback en Desk y Editor para sesiones limpias."
     }
   ]
 }
