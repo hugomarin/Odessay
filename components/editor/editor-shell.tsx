@@ -79,6 +79,7 @@ const PropertiesPanel = lazy(() =>
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
 const AUTO_TITLE_MAX_CHARS = 48
+const UNTITLED_WRITING_TITLE = "Untitled writing"
 
 function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
   const text = bodyText.trim()
@@ -98,6 +99,16 @@ function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
   const truncated = text.slice(0, AUTO_TITLE_MAX_CHARS)
   const lastSpace = truncated.lastIndexOf(" ")
   return lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated
+}
+
+function isExplicitWritingTitle(title: string | null | undefined, bodyText: string, createdAt: string | null): boolean {
+  const normalizedTitle = title?.trim() ?? ""
+
+  if (!normalizedTitle || normalizedTitle === UNTITLED_WRITING_TITLE) {
+    return false
+  }
+
+  return normalizedTitle !== deriveAutoTitle(bodyText, createdAt)
 }
 
 const createWritingId = () => {
@@ -138,7 +149,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const routeWritingId = writingId ?? null
 
   const [currentWritingId, setCurrentWritingId] = useState<string | null>(routeWritingId)
-  const [title, setTitle] = useState("Untitled writing")
+  const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
@@ -161,6 +172,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const modeRef = useRef(mode)
   const titleRef = useRef(title)
+  const hasExplicitTitleRef = useRef(hasExplicitTitle)
   const versionRef = useRef(version)
   const createdAtRef = useRef<string | null>(createdAt)
   const statusRef = useRef<WritingStatus>(writingStatus)
@@ -193,6 +205,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
       const nextId = currentWritingId ?? createWritingId()
       const baseCreatedAt = createdAtRef.current ?? nowIso
       const nextVersion = versionRef.current + 1
+      const nextBodyText = editorInstance.getText()
+      const nextDerivedTitle = deriveAutoTitle(nextBodyText, baseCreatedAt)
+      const overrideTitle = overrides?.title?.trim()
+      const nextTitle =
+        overrideTitle && overrideTitle.length > 0
+          ? overrideTitle
+          : hasExplicitTitleRef.current
+            ? titleRef.current.trim() || UNTITLED_WRITING_TITLE
+            : nextDerivedTitle
 
       if (!currentWritingId) {
         setCurrentWritingId(nextId)
@@ -207,9 +228,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       const nextWriting: LocalWriting = {
         id: nextId,
-        title: (overrides?.title ?? titleRef.current).trim() || "Untitled writing",
+        title: nextTitle,
         body_json: editorInstance.getJSON() as Record<string, unknown>,
-        body_text: editorInstance.getText(),
+        body_text: nextBodyText,
         status: overrides?.status ?? statusRef.current,
         visibility: overrides?.visibility ?? visibilityRef.current,
         version: nextVersion,
@@ -369,6 +390,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [title])
 
   useEffect(() => {
+    hasExplicitTitleRef.current = hasExplicitTitle
+  }, [hasExplicitTitle])
+
+  useEffect(() => {
     versionRef.current = version
   }, [version])
 
@@ -458,9 +483,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
         }
         isApplyingContentRef.current = false
 
-        const loadedTitle = localWriting.title ?? "Untitled writing"
+        const loadedTitle = localWriting.title?.trim() || UNTITLED_WRITING_TITLE
+        const loadedHasExplicitTitle = isExplicitWritingTitle(loadedTitle, localWriting.body_text, localWriting.created_at)
         setTitle(loadedTitle)
-        setHasExplicitTitle(loadedTitle !== "Untitled writing" && loadedTitle !== "")
+        setHasExplicitTitle(loadedHasExplicitTitle)
         setVersion(localWriting.version)
         setCreatedAt(localWriting.created_at)
         setWritingStatus(localWriting.status ?? "draft")
@@ -473,7 +499,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         )
         updateDerivedEditorState(editor)
       } else {
-        setTitle("Untitled writing")
+        setTitle(UNTITLED_WRITING_TITLE)
         setHasExplicitTitle(false)
         setVersion(0)
         setCreatedAt(null)
@@ -1259,7 +1285,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         onOpenChange={setRenameModalOpen}
         onConfirm={(nextTitle) => {
           setTitle(nextTitle)
-          setHasExplicitTitle(true)
+          setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
 
           if (editor) {
             void persistEditorSnapshot(editor, { title: nextTitle })
