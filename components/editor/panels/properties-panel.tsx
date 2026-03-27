@@ -4,13 +4,17 @@ import { useCallback, useEffect, useState } from "react"
 import { X } from "lucide-react"
 import type { WritingStatus } from "@/lib/local-db/schema"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
+import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import { cn } from "@/lib/utils"
 
 type PropertiesPanelProps = {
   writingId: string | null
   status: WritingStatus
   metrics: TextMetrics
+  spellcheckPreference: EditorSpellcheckPreference
+  spellcheckLanguage: string
   onStatusChange: (next: WritingStatus) => void
+  onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
   onClose: () => void
 }
 
@@ -62,7 +66,10 @@ export function PropertiesPanel({
   writingId,
   status,
   metrics,
+  spellcheckPreference,
+  spellcheckLanguage,
   onStatusChange,
+  onSpellcheckPreferenceChange,
   onClose,
 }: PropertiesPanelProps) {
   const [shareLink, setShareLink] = useState<ShareLinkState>(DEFAULT_SHARE_LINK_STATE)
@@ -287,6 +294,43 @@ export function PropertiesPanel({
                 {shareError ? <p className="text-[11px] text-[hsl(0,72%,45%)]">{shareError}</p> : null}
               </>
             )}
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Spellcheck</p>
+          <div className="space-y-3 rounded-lg border-[0.5px] border-border bg-bg p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onSpellcheckPreferenceChange("system")}
+                className={cn(
+                  "h-8 rounded-md border-[0.5px] text-[12px] font-medium transition-colors",
+                  spellcheckPreference === "system"
+                    ? "border-ink bg-ink text-bg"
+                    : "border-border bg-bg text-ink-3 hover:bg-muted hover:text-ink",
+                )}
+              >
+                System
+              </button>
+              <button
+                type="button"
+                onClick={() => onSpellcheckPreferenceChange("off")}
+                className={cn(
+                  "h-8 rounded-md border-[0.5px] text-[12px] font-medium transition-colors",
+                  spellcheckPreference === "off"
+                    ? "border-ink bg-ink text-bg"
+                    : "border-border bg-bg text-ink-3 hover:bg-muted hover:text-ink",
+                )}
+              >
+                Off
+              </button>
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-ink-4">
+              Language hint: <span className="font-medium text-ink-3">{spellcheckLanguage}</span>. Safari follows macOS
+              Keyboard settings; Chrome and Edge use browser dictionaries.
+            </p>
           </div>
         </section>
 

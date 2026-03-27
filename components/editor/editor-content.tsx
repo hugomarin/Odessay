@@ -10,6 +10,10 @@ type EditorContentProps = {
   mode: "rich" | "markdown"
   markdownValue: string
   onMarkdownChange: (markdown: string) => void
+  spellcheckEnabled: boolean
+  autoCorrect: "on" | "off"
+  autoCapitalize: "on" | "off"
+  language: string
   markdownTextareaRef?: RefObject<HTMLTextAreaElement | null>
 }
 
@@ -18,6 +22,10 @@ export function WritingEditorContent({
   mode,
   markdownValue,
   onMarkdownChange,
+  spellcheckEnabled,
+  autoCorrect,
+  autoCapitalize,
+  language,
   markdownTextareaRef,
 }: EditorContentProps) {
   return (
@@ -33,6 +41,10 @@ export function WritingEditorContent({
             ref={markdownTextareaRef}
             value={markdownValue}
             onChange={(event) => onMarkdownChange(event.target.value)}
+            spellCheck={spellcheckEnabled}
+            autoCorrect={autoCorrect}
+            autoCapitalize={autoCapitalize}
+            lang={language}
             style={{ fieldSizing: "content" } as React.CSSProperties}
             className="box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent font-mono text-[18px] leading-[1.85] text-ink outline-none"
             aria-label="Markdown source"
