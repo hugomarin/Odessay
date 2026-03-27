@@ -11,6 +11,7 @@ jobs:
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: example-public-anon-key
+      ODESSAY_PERF_HARNESS_ENABLED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,6 +31,9 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
+      - name: Build app for perf capture
+        run: npm run build
+
       - name: Check process docs sync
         run: npm run ops:process:sync
 
@@ -40,12 +44,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          npm run dev -- --hostname 127.0.0.1 --port 4010 > /tmp/odessay-dev.log 2>&1 &
-          DEV_SERVER_PID=$!
+          npm run start -- --hostname 127.0.0.1 --port 4010 > /tmp/odessay-start.log 2>&1 &
+          APP_SERVER_PID=$!
 
           cleanup() {
-            kill "${DEV_SERVER_PID}" || true
-            wait "${DEV_SERVER_PID}" 2>/dev/null || true
+            kill "${APP_SERVER_PID}" || true
+            wait "${APP_SERVER_PID}" 2>/dev/null || true
           }
 
           trap cleanup EXIT

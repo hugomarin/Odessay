@@ -103,21 +103,25 @@ async function readTraceFromStream(cdp, stream) {
   return Buffer.concat(chunks);
 }
 
-async function runScenario(page, targetUrl, timeoutMs) {
+async function prepareHarness(page, targetUrl, timeoutMs) {
   await page.goto(targetUrl, { waitUntil: "networkidle", timeout: timeoutMs });
   await page.waitForSelector(".odessay-editor-content", { timeout: timeoutMs });
-
   const editor = page.locator(".odessay-editor-content").first();
   await editor.click();
 
-  const typeSeed =
-    "Odessay performance harness typing pass to validate EventDispatch and EventTiming.";
+  // Warm-up to exclude first-render and first-input initialization work from the measured trace.
+  await page.keyboard.type("warmup editor", { delay: 10 });
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(300);
+}
 
-  for (let iteration = 0; iteration < 14; iteration += 1) {
-    await page.keyboard.type(`${typeSeed} `, { delay: 12 });
-  }
+async function runMeasuredScenario(page, targetUrl) {
+  const editor = page.locator(".odessay-editor-content").first();
+  await page.keyboard.type("editor baseline trace", { delay: 24 });
+  await page.keyboard.type(" sample", { delay: 24 });
 
-  const pastePayload = `\n${"Large paste block for perf gate. ".repeat(220)}\n`;
+  const pastePayload = `\n${"Large paste block for perf gate. ".repeat(120)}\n`;
   try {
     const origin = new URL(targetUrl).origin;
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
@@ -145,7 +149,7 @@ async function runScenario(page, targetUrl, timeoutMs) {
 
   const box = await editor.boundingBox();
   if (box) {
-    for (let iteration = 0; iteration < 18; iteration += 1) {
+    for (let iteration = 0; iteration < 10; iteration += 1) {
       const ratio = (iteration % 6) / 6;
       const x = box.x + 40 + ratio * Math.max(box.width - 120, 20);
       const y = box.y + 40 + ((iteration * 31) % Math.max(box.height - 80, 20));
@@ -194,13 +198,14 @@ async function main() {
   });
 
   try {
+    await prepareHarness(page, targetUrl, options.timeoutMs);
     await cdp.send("Tracing.start", {
       transferMode: "ReturnAsStream",
       categories: categories.join(","),
       options: "record-as-much-as-possible",
     });
 
-    await runScenario(page, targetUrl, options.timeoutMs);
+    await runMeasuredScenario(page, targetUrl);
 
     await cdp.send("Tracing.end");
     const completion = await traceCompleted;

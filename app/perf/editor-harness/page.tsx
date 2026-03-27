@@ -2,7 +2,10 @@ import { notFound } from "next/navigation"
 import { EditorShell } from "@/components/editor/editor-shell"
 
 export default function EditorPerfHarnessPage() {
-  if (process.env.NODE_ENV === "production") {
+  const isHarnessEnabled =
+    process.env.NODE_ENV !== "production" || process.env.ODESSAY_PERF_HARNESS_ENABLED === "true"
+
+  if (!isHarnessEnabled) {
     notFound()
   }
 

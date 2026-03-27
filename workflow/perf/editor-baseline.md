@@ -105,8 +105,10 @@ OPS_PERF_TRACE_PATH=artifacts/perf/editor-local-trace.json.gz npm run ops:delive
 `Traceability Gates` now executes:
 
 1. `npx playwright install --with-deps chromium`
-2. `npm run ops:perf:capture` against `/perf/editor-harness`
-3. `npm run ops:delivery:gate` with `OPS_PERF_TRACE_PATH`
+2. `npm run build`
+3. `npm run start -- --hostname 127.0.0.1 --port 4010` with `ODESSAY_PERF_HARNESS_ENABLED=true`
+4. `npm run ops:perf:capture` against `/perf/editor-harness`
+5. `npm run ops:delivery:gate` with `OPS_PERF_TRACE_PATH`
 
 Generated artifacts are uploaded in every run:
 
