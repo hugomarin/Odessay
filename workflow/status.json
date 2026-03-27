@@ -409,9 +409,9 @@
       "phase": "Fase 1",
       "issue": "ODE-52",
       "linear_url": "https://linear.app/z9ne/issue/ODE-52/automatizar-perf-gate-en-ci-con-trace-y-budgets-del-editor",
-      "commit": "1cb25c7",
+      "commit": "23c486f",
       "date": "2026-03-26",
-      "notes": "Se añade scripts/check-performance-gate.mjs y scripts/capture-editor-trace.mjs, ruta /perf/editor-harness, integración en traceability-gates.yml y ejecución opcional vía OPS_PERF_TRACE_PATH dentro de ops:delivery:gate. Fix de review: captura estabilizada con warm-up y escenario medido, CI en build+start con ODESSAY_PERF_HARNESS_ENABLED=true."
+      "notes": "Se añade scripts/check-performance-gate.mjs y scripts/capture-editor-trace.mjs, ruta /perf/editor-harness, integración en traceability-gates.yml y ejecución opcional vía OPS_PERF_TRACE_PATH dentro de ops:delivery:gate. Fix de review: captura estabilizada con warm-up y escenario medido, CI en build+start con ODESSAY_PERF_HARNESS_ENABLED=true y tratamiento de long_tasks ausentes como 0 en el gate."
     }
   ]
 }
