@@ -104,6 +104,8 @@ function resolveInteractionMetric(metricKey, metrics) {
 function resolveLongTaskMetric(metricKey, metrics) {
   const stats = metrics.long_tasks_ge_50ms?.stats;
   if (!stats || typeof stats !== "object") {
+    if (metricKey === "count") return 0;
+    if (metricKey === "max_ms" || metricKey === "max") return 0;
     return null;
   }
 
