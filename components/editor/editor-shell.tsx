@@ -22,6 +22,11 @@ import {
   removeMarkdownFootnote,
   updateMarkdownFootnote,
 } from "@/lib/editor/footnote-extension"
+import {
+  materializeMarkdownForRichParser,
+  normalizeMarkdownForRoundTrip,
+  toggleMarkdownInlineMarker,
+} from "@/lib/editor/markdown-format"
 import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
@@ -187,7 +192,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const richUpdateRafRef = useRef<number | null>(null)
   const richUpdateEditorRef = useRef<Editor | null>(null)
   const markdownSelectionRafRef = useRef<number | null>(null)
-  const pendingMarkdownSelectionRef = useRef<{ start: number; end: number } | null>(null)
+  const pendingMarkdownSelectionRef = useRef<{
+    start: number
+    end: number
+    scrollTop?: number
+    scrollLeft?: number
+  } | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -279,44 +289,62 @@ export function EditorShell({ writingId }: EditorShellProps) {
     runRichModeUpdateSideEffects(queuedEditor)
   }, [runRichModeUpdateSideEffects])
 
-  const queueMarkdownSelectionRestore = useCallback((start: number, end: number) => {
-    pendingMarkdownSelectionRef.current = { start, end }
+  const queueMarkdownSelectionRestore = useCallback(
+    (
+      start: number,
+      end: number,
+      options?: {
+        scrollTop?: number
+        scrollLeft?: number
+      },
+    ) => {
+      pendingMarkdownSelectionRef.current = { start, end, ...options }
 
-    if (markdownSelectionRafRef.current !== null) {
-      return
-    }
-
-    markdownSelectionRafRef.current = window.requestAnimationFrame(() => {
-      markdownSelectionRafRef.current = null
-
-      const pendingSelection = pendingMarkdownSelectionRef.current
-      pendingMarkdownSelectionRef.current = null
-
-      if (!pendingSelection) {
+      if (markdownSelectionRafRef.current !== null) {
         return
       }
 
-      const nextTextarea = markdownTextareaRef.current
+      markdownSelectionRafRef.current = window.requestAnimationFrame(() => {
+        markdownSelectionRafRef.current = null
 
-      if (!nextTextarea) {
-        return
-      }
+        const pendingSelection = pendingMarkdownSelectionRef.current
+        pendingMarkdownSelectionRef.current = null
 
-      if (document.activeElement !== nextTextarea) {
-        nextTextarea.focus()
-      }
+        if (!pendingSelection) {
+          return
+        }
 
-      if (nextTextarea.selectionStart !== pendingSelection.start || nextTextarea.selectionEnd !== pendingSelection.end) {
-        nextTextarea.setSelectionRange(pendingSelection.start, pendingSelection.end)
-      }
+        const nextTextarea = markdownTextareaRef.current
 
-      markdownSelectionRef.current = {
-        start: pendingSelection.start,
-        end: pendingSelection.end,
-        text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
-      }
-    })
-  }, [])
+        if (!nextTextarea) {
+          return
+        }
+
+        if (document.activeElement !== nextTextarea) {
+          nextTextarea.focus()
+        }
+
+        if (nextTextarea.selectionStart !== pendingSelection.start || nextTextarea.selectionEnd !== pendingSelection.end) {
+          nextTextarea.setSelectionRange(pendingSelection.start, pendingSelection.end)
+        }
+
+        if (typeof pendingSelection.scrollTop === "number") {
+          nextTextarea.scrollTop = pendingSelection.scrollTop
+        }
+
+        if (typeof pendingSelection.scrollLeft === "number") {
+          nextTextarea.scrollLeft = pendingSelection.scrollLeft
+        }
+
+        markdownSelectionRef.current = {
+          start: pendingSelection.start,
+          end: pendingSelection.end,
+          text: nextTextarea.value.slice(pendingSelection.start, pendingSelection.end),
+        }
+      })
+    },
+    [],
+  )
 
   const editor = useEditor(
     {
@@ -477,9 +505,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
         // Load JSON first to get the markdown serialization, then re-parse as markdown
         // so that footnote references are converted to footnoteReference nodes.
         editor.commands.setContent(localWriting.body_json)
-        const loadedMarkdown = getEditorMarkdown(editor)
+        const loadedMarkdown = normalizeMarkdownForRoundTrip(getEditorMarkdown(editor))
         if (loadedMarkdown) {
-          editor.commands.setContent(loadedMarkdown)
+          editor.commands.setContent(materializeMarkdownForRichParser(loadedMarkdown))
         }
         isApplyingContentRef.current = false
 
@@ -556,11 +584,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const applyMarkdownFromPanel = useCallback(
     (nextMarkdown: string) => {
+      const normalizedMarkdown = normalizeMarkdownForRoundTrip(nextMarkdown)
+
       if (editor) {
         isApplyingContentRef.current = true
       }
 
-      void applyPanelMarkdownChange(editor, nextMarkdown, {
+      void applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
         clearPendingSave: () => {
           if (markdownSaveTimeoutRef.current) {
             window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -639,7 +669,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           }
 
           isApplyingContentRef.current = true
-          editor.commands.setContent(nextMarkdown)
+          editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
           isApplyingContentRef.current = false
           setWordCount(getWordCount(editor))
           setBodyText(editor.getText())
@@ -648,58 +678,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
         }, MARKDOWN_SAVE_DEBOUNCE_MS)
       }
 
-      const replaceMarkdownSelection = (
-        replacement: string,
-        options?: {
-          selectionStart?: number
-          selectionEnd?: number
-        },
-      ) => {
-        const textarea = markdownTextareaRef.current
-        const fallbackCursor = markdownValue.length
-        const start = textarea?.selectionStart ?? fallbackCursor
-        const end = textarea?.selectionEnd ?? fallbackCursor
-        const nextMarkdown = `${markdownValue.slice(0, start)}${replacement}${markdownValue.slice(end)}`
-        const nextSelectionStart = start + (options?.selectionStart ?? replacement.length)
-        const nextSelectionEnd = start + (options?.selectionEnd ?? options?.selectionStart ?? replacement.length)
-
-        persistMarkdownDraft(nextMarkdown)
-
-        queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionEnd)
-      }
-
       const toggleMarkdownWrap = (marker: string) => {
         const textarea = markdownTextareaRef.current
         const fallbackCursor = markdownValue.length
         const start = textarea?.selectionStart ?? fallbackCursor
         const end = textarea?.selectionEnd ?? fallbackCursor
-        const selectedText = markdownValue.slice(start, end)
+        const scrollTop = textarea?.scrollTop
+        const scrollLeft = textarea?.scrollLeft
+        const result = toggleMarkdownInlineMarker(markdownValue, start, end, marker)
 
-        if (!selectedText) {
-          replaceMarkdownSelection(`${marker}${marker}`, {
-            selectionStart: marker.length,
-            selectionEnd: marker.length,
-          })
-          return
-        }
-
-        if (
-          selectedText.startsWith(marker) &&
-          selectedText.endsWith(marker) &&
-          selectedText.length >= marker.length * 2
-        ) {
-          const unwrapped = selectedText.slice(marker.length, selectedText.length - marker.length)
-          replaceMarkdownSelection(unwrapped, {
-            selectionStart: 0,
-            selectionEnd: unwrapped.length,
-          })
-          return
-        }
-
-        replaceMarkdownSelection(`${marker}${selectedText}${marker}`, {
-          selectionStart: marker.length,
-          selectionEnd: marker.length + selectedText.length,
-        })
+        persistMarkdownDraft(result.markdown)
+        queueMarkdownSelectionRestore(result.selectionStart, result.selectionEnd, { scrollTop, scrollLeft })
       }
 
       const toggleMarkdownLinePrefix = (
@@ -713,6 +702,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
         const fallbackCursor = markdownValue.length
         const selectionStart = textarea?.selectionStart ?? fallbackCursor
         const selectionEnd = textarea?.selectionEnd ?? fallbackCursor
+        const scrollTop = textarea?.scrollTop
+        const scrollLeft = textarea?.scrollLeft
         const blockStart = markdownValue.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1
         const nextBreak = markdownValue.indexOf("\n", selectionEnd)
         const blockEnd = nextBreak === -1 ? markdownValue.length : nextBreak
@@ -760,7 +751,29 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         persistMarkdownDraft(nextMarkdown)
 
-        queueMarkdownSelectionRestore(blockStart, nextSelectionEnd)
+        queueMarkdownSelectionRestore(blockStart, nextSelectionEnd, { scrollTop, scrollLeft })
+      }
+
+      const preserveViewport = (fn: () => void) => {
+        const container = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+        const previousScrollTop = container?.scrollTop
+        const previousScrollLeft = container?.scrollLeft
+
+        fn()
+
+        if (!container) {
+          return
+        }
+
+        window.requestAnimationFrame(() => {
+          if (typeof previousScrollTop === "number") {
+            container.scrollTop = previousScrollTop
+          }
+
+          if (typeof previousScrollLeft === "number") {
+            container.scrollLeft = previousScrollLeft
+          }
+        })
       }
 
       if (modeRef.current === "markdown") {
@@ -844,25 +857,39 @@ export function EditorShell({ writingId }: EditorShellProps) {
           editor.chain().focus().toggleCodeBlock().run()
           return
         case "paragraph":
-          editor.chain().focus().setParagraph().run()
+          preserveViewport(() => {
+            editor.chain().focus().setParagraph().run()
+          })
           return
         case "heading1":
-          editor.chain().focus().toggleHeading({ level: 1 }).run()
+          preserveViewport(() => {
+            editor.chain().focus().toggleHeading({ level: 1 }).run()
+          })
           return
         case "heading2":
-          editor.chain().focus().toggleHeading({ level: 2 }).run()
+          preserveViewport(() => {
+            editor.chain().focus().toggleHeading({ level: 2 }).run()
+          })
           return
         case "heading3":
-          editor.chain().focus().toggleHeading({ level: 3 }).run()
+          preserveViewport(() => {
+            editor.chain().focus().toggleHeading({ level: 3 }).run()
+          })
           return
         case "blockquote":
-          editor.chain().focus().toggleBlockquote().run()
+          preserveViewport(() => {
+            editor.chain().focus().toggleBlockquote().run()
+          })
           return
         case "bulletList":
-          editor.chain().focus().toggleBulletList().run()
+          preserveViewport(() => {
+            editor.chain().focus().toggleBulletList().run()
+          })
           return
         case "orderedList":
-          editor.chain().focus().toggleOrderedList().run()
+          preserveViewport(() => {
+            editor.chain().focus().toggleOrderedList().run()
+          })
           return
         case "link":
           captureSelection()
@@ -901,14 +928,16 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setMode("markdown")
         const bodyMarkdown = getEditorMarkdown(editor)
         const footnoteNodes = getEditorFootnotes(editor)
-        setMarkdownValue(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes))
+        setMarkdownValue(normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)))
         return
       }
 
+      const normalizedMarkdown = normalizeMarkdownForRoundTrip(markdownValue)
       modeRef.current = "rich"
       isApplyingContentRef.current = true
-      editor.commands.setContent(markdownValue)
+      editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
       isApplyingContentRef.current = false
+      setMarkdownValue(normalizedMarkdown)
       setMode("rich")
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
@@ -937,7 +966,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         }
 
         isApplyingContentRef.current = true
-        editor.commands.setContent(nextMarkdown)
+        editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
         isApplyingContentRef.current = false
         // Update metrics from TipTap but do NOT derive markdownValue from it —
         // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
@@ -982,7 +1011,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             }
 
             isApplyingContentRef.current = true
-            editor.commands.setContent(nextMarkdown)
+            editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
             isApplyingContentRef.current = false
             setWordCount(getWordCount(editor))
             setBodyText(editor.getText())
@@ -1081,7 +1110,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         }
 
         isApplyingContentRef.current = true
-        editor.commands.setContent(nextMarkdown)
+        editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
         isApplyingContentRef.current = false
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
