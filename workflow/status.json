@@ -22,9 +22,10 @@
       "ODE-28",
       "ODE-29",
       "ODE-55",
-      "ODE-56"
+      "ODE-56",
+      "ODE-58"
     ],
-    "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review. Se agregó ODE-55 vía /wf-define para cerrar la brecha de hidratación remota entre sesiones limpias y no limpias. Se agregó ODE-56 vía /wf-define para habilitar spellcheck/autocorrect nativo del navegador con preferencia de usuario."
+    "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review. Se agregó ODE-55 vía /wf-define para cerrar la brecha de hidratación remota entre sesiones limpias y no limpias. Se agregó ODE-56 vía /wf-define para habilitar spellcheck/autocorrect nativo del navegador con preferencia de usuario. Se agregó ODE-58 vía /wf-define para consolidar regresiones de paridad Markdown/Rich y estabilidad de formato en editor."
   },
   "built": [
     {
@@ -449,6 +450,15 @@
       "commit": "af5dcf9",
       "date": "2026-03-27",
       "notes": "Ajustes de UI en editor/preview y navegación lateral: estilo de tablas tipo lectura limpia, strong/b=600, iconos de sidebar más grandes, corrección óptica del PanelLeftClose y caret cian con blink en Rich/Markdown; se añadieron refinamientos tipográficos (ritmo vertical + topbar) y hardening de sync para evitar conflictos intermitentes de concurrencia."
+    },
+    {
+      "what": "Stabilize editor Markdown/Rich parity and formatting UX regressions",
+      "phase": "Fase 1",
+      "issue": "ODE-58",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-58",
+      "commit": "ca3ad07",
+      "date": "2026-03-27",
+      "notes": "Paridad idempotente de toggles Markdown, canonicalización de highlight/footnotes, estabilidad de viewport en formatos estructurales y cobertura E2E Playwright en harness."
     }
   ]
 }
