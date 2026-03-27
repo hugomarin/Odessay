@@ -421,6 +421,15 @@
       "commit": "7999692",
       "date": "2026-03-26",
       "notes": "workflow/workflow.md ahora exige resolver Performance Contract en BUILD/REVIEW, define evidencia objetiva y condiciones explícitas de rechazo por falta de artefactos o regresión. .agents/skills/skill-product-manager/SKILL.md incorpora sección Performance Contract y validaciones asociadas."
+    },
+    {
+      "what": "Skills de frontend/review/ux-testing actualizados con protocolo operativo de performance y evidencia before/after",
+      "phase": "Fase 1",
+      "issue": "ODE-54",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-54/actualizar-skills-de-frontendreviewux-testing-con-protocolo-de",
+      "commit": "b3ccf3f",
+      "date": "2026-03-26",
+      "notes": "Se institucionaliza el contrato de performance en tres skills: anti-patterns y checklist de critical path en frontend, criterios bloqueantes y evidencia obligatoria en code review, y protocolo de captura/comparación de trace before/after en UX testing."
     }
   ]
 }

@@ -159,6 +159,44 @@ if (process.env.NODE_ENV === 'development') {
 }
 ```
 
+### Protocolo operativo de performance (critical path)
+
+Aplica siempre que el issue toque interacción de escritura o lectura activa:
+- editor TipTap (`keydown`, `input`, `paste`);
+- acciones de selección/click dentro del documento;
+- paneles que se abren durante escritura;
+- auto-save, sync, o observaciones AI que compiten por main thread.
+
+Si el issue toca alguno de estos puntos, no se implementa "a ciegas". Se mide before/after.
+
+1. Capturar baseline del issue (before):
+
+```bash
+npm run ops:perf:capture -- --output artifacts/perf/editor-before.json.gz
+npm run ops:perf:gate -- --trace artifacts/perf/editor-before.json.gz --report artifacts/perf/editor-before-report.json --metrics artifacts/perf/editor-before-metrics.json
+```
+
+2. Implementar el cambio.
+3. Capturar trace final (after):
+
+```bash
+npm run ops:perf:capture -- --output artifacts/perf/editor-after.json.gz
+npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report artifacts/perf/editor-after-report.json --metrics artifacts/perf/editor-after-metrics.json
+```
+
+4. Evaluar diff before/after contra `workflow/perf-budgets.json`.
+5. Si `required_failures > 0`, el cambio no está listo para PR.
+
+### Anti-patterns de performance (bloqueantes)
+
+- Publicar updates de editor en Zustand o contexto global por keystroke.
+- Disparar fetch/sync remoto en cada `onUpdate` sin debounce.
+- Mount de paneles secundarios en primera carga sin lazy loading.
+- Parseos o transformaciones pesadas en el hilo principal dentro de handlers de input.
+- Cálculos de word count/derivados fuera de TipTap en cada tecla.
+- Ejecutar lógica AI síncrona en el camino de interacción del editor.
+- Introducir dependencias de UI pesadas sin presupuesto de impacto medido.
+
 ---
 
 ## Nomenclatura semántica de componentes
@@ -566,6 +604,8 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] ¿El estado está segmentado en documento / UI / sync / AI?
 - [ ] ¿Los paneles secundarios se cargan con lazy load?
 - [ ] ¿Ninguna operación de AI bloquea el flujo de escritura?
+- [ ] Si el issue toca el critical path, ¿hay trace before/after en `artifacts/perf/`?
+- [ ] ¿`npm run ops:perf:gate` pasa para el trace `after` sin `required_failures`?
 
 ### Nomenclatura
 - [ ] Cada módulo tiene `id`, `data-page`, `data-section`, `data-testid`

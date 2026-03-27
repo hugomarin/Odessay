@@ -44,6 +44,40 @@ Estos flujos son el corazón de Odessay. Si alguno se rompe, el producto no func
 5. **Invitar** — compartir con email nuevo → generar link → invitado se registra → ve la carta.
 6. **AI Editor** — escribir → pausa → observación aparece (o silencio) → descartar.
 
+## Protocolo de performance UX (before/after trace)
+
+Este protocolo es obligatorio cuando el issue toca interacción del editor, auto-save, sync o paneles durante escritura.
+
+### Secuencia operativa
+
+1. Capturar trace before con el flujo base:
+
+```bash
+npm run ops:perf:capture -- --output artifacts/perf/editor-before.json.gz
+npm run ops:perf:gate -- --trace artifacts/perf/editor-before.json.gz --report artifacts/perf/editor-before-report.json --metrics artifacts/perf/editor-before-metrics.json
+```
+
+2. Implementar el cambio y ejecutar el flujo UX completo (manual o Playwright).
+3. Capturar trace after:
+
+```bash
+npm run ops:perf:capture -- --output artifacts/perf/editor-after.json.gz
+npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report artifacts/perf/editor-after-report.json --metrics artifacts/perf/editor-after-metrics.json
+```
+
+4. Comparar `editor-before-report.json` vs `editor-after-report.json`.
+5. Si `required_failures > 0` en after, el issue no se entrega.
+6. Adjuntar al PR las rutas de `artifacts/perf/*` usadas en la comparación.
+
+### Qué validar en la comparación
+
+- `event_dispatch_ms` (`keydown`, `input`, `paste`, `click`) no cruza umbral de fail.
+- `event_timing_ms` (`keydown`, `input`, `click`) no cruza umbral de fail.
+- `interaction_latency_ms` se mantiene dentro de presupuesto.
+- `long_tasks_ge_50ms` no excede límites de presupuesto.
+
+Fuente de verdad de budgets: `workflow/perf-budgets.json`.
+
 ## Playwright
 
 - Tests en `/tests/`.
@@ -95,3 +129,5 @@ Este checklist cubre la validación de UX durante la implementación. Antes de a
 - [ ] ¿El flujo funciona en desktop y lectura en mobile?
 - [ ] ¿Tests E2E escritos para flujos críticos afectados?
 - [ ] ¿No hay UI innecesaria que distraiga?
+- [ ] Si aplica contrato de performance, ¿hay trace before/after y comparación explícita?
+- [ ] ¿El trace after pasa `ops:perf:gate` sin `required_failures`?
