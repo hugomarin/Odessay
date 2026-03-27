@@ -204,20 +204,27 @@
 
   .odessay-editor-content thead th,
   .odessay-editor-content tbody td {
-    border-bottom: 0.5px solid hsl(var(--border));
     padding: 0.8em 0;
-    text-align: left;
     vertical-align: top;
   }
 
   .odessay-editor-content thead th {
+    border-bottom: 1px solid hsl(var(--ink) / 0.28);
     color: hsl(var(--ink));
+    font-family: var(--font-lora), Georgia, serif;
     font-weight: 600;
-    letter-spacing: 0.01em;
+    text-align: left !important;
   }
 
   .odessay-editor-content tbody td {
+    border-bottom: 0.5px solid hsl(var(--border) / 0.6);
     color: hsl(var(--ink-2));
+    text-align: left;
+  }
+
+  .odessay-editor-content thead th p {
+    margin: 0;
+    text-align: left !important;
   }
 
   .odessay-editor-content th + th,
@@ -225,7 +232,6 @@
     padding-left: 1.05em;
   }
 
-  .odessay-editor-content thead th p,
   .odessay-editor-content tbody td p {
     margin: 0;
   }
@@ -344,20 +350,27 @@
 
 .prose-odessay thead th,
 .prose-odessay tbody td {
-  border-bottom: 0.5px solid hsl(var(--border));
   padding: 0.8em 0;
-  text-align: left;
   vertical-align: top;
 }
 
 .prose-odessay thead th {
+  border-bottom: 1px solid hsl(var(--ink) / 0.28);
   color: hsl(var(--ink));
+  font-family: var(--font-lora), Georgia, serif;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  text-align: left !important;
 }
 
 .prose-odessay tbody td {
+  border-bottom: 0.5px solid hsl(var(--border) / 0.6);
   color: hsl(var(--ink-2));
+  text-align: left;
+}
+
+.prose-odessay thead th p {
+  margin: 0;
+  text-align: left !important;
 }
 
 .prose-odessay th + th,
@@ -365,7 +378,6 @@
   padding-left: 1.05em;
 }
 
-.prose-odessay thead th p,
 .prose-odessay tbody td p {
   margin: 0;
 }
