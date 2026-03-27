@@ -110,7 +110,7 @@ export function Sidebar({ children, user }: SidebarProps) {
             <Link
               href="/desk"
               className={cn(
-                "overflow-hidden font-lora text-[17px] text-ink transition-[width,opacity] duration-200",
+                "overflow-hidden font-lora text-[18px] font-semibold text-[#1021d8] transition-[width,opacity,color] duration-200 hover:text-[#0c1ab3]",
                 isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
               )}
             >
@@ -127,7 +127,7 @@ export function Sidebar({ children, user }: SidebarProps) {
                 className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink"
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <PanelLeftClose className="h-4 w-4 -translate-x-px" strokeWidth={1.5} />
+                <PanelLeftClose className="h-[18px] w-[18px] -translate-x-[3px]" strokeWidth={1.5} />
               </button>
             </ActionTooltip>
           </div>
@@ -149,7 +149,7 @@ export function Sidebar({ children, user }: SidebarProps) {
                 )}
                 aria-label="New writing"
               >
-                <Plus className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                <Plus className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                 <span
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-200",
@@ -170,7 +170,7 @@ export function Sidebar({ children, user }: SidebarProps) {
                 )}
                 aria-label="Search"
               >
-                <Search className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                 <span
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-200",
@@ -225,7 +225,7 @@ export function Sidebar({ children, user }: SidebarProps) {
                         )}
                         aria-label={item.label}
                       >
-                        <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                        <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                         <span
                           className={cn(
                             "overflow-hidden transition-[width,opacity] duration-200",
@@ -258,7 +258,7 @@ export function Sidebar({ children, user }: SidebarProps) {
                       )}
                       aria-label={item.label}
                     >
-                      <item.icon className="h-4 w-4 shrink-0" strokeWidth={1.5} />
+                      <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                       <span
                         className={cn(
                           "overflow-hidden transition-[width,opacity] duration-200",
