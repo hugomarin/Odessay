@@ -32,7 +32,7 @@
       "phase": "Fase 0",
       "issue": null,
       "linear_url": null,
-      "commit": null,
+      "commit": "4a9a9fa",
       "date": "2026-03-17",
       "notes": "Estructura: workflow/, .agents/skills/, workflow/context/framework/, workflow/context/reference/"
     },
