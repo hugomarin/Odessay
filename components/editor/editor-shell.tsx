@@ -25,10 +25,17 @@ import {
 import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
+import {
+  buildEditorSpellcheckConfig,
+  DEFAULT_EDITOR_SPELLCHECK_LANGUAGE,
+  persistEditorSpellcheckPreference,
+  readEditorSpellcheckPreference,
+  type EditorSpellcheckPreference,
+} from "@/lib/editor/spellcheck"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
-import { localDB } from "@/lib/local-db"
+import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
@@ -143,6 +150,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [writingStatus, setWritingStatus] = useState<WritingStatus>("draft")
   const [writingVisibility, setWritingVisibility] = useState<WritingVisibility>("private")
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
+  const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
+  const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
@@ -168,6 +177,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const markdownSelectionRafRef = useRef<number | null>(null)
   const pendingMarkdownSelectionRef = useRef<{ start: number; end: number } | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
+  const spellcheckConfig = useMemo(
+    () => buildEditorSpellcheckConfig(spellcheckPreference),
+    [spellcheckPreference],
+  )
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
     setWordCount(getWordCount(editorInstance))
@@ -292,7 +305,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
       editorProps: {
         attributes: {
           class: "odessay-editor-content",
-          spellcheck: "false",
+          spellcheck: "true",
+          autocorrect: "on",
+          autocapitalize: "on",
+          lang: DEFAULT_EDITOR_SPELLCHECK_LANGUAGE,
         },
       },
       onUpdate: ({ editor: nextEditor }) => {
@@ -313,6 +329,36 @@ export function EditorShell({ writingId }: EditorShellProps) {
     },
     [editorExtensions, flushQueuedRichModeUpdate],
   )
+
+  useEffect(() => {
+    setSpellcheckScope(getLocalDBScope())
+
+    return subscribeToLocalDBScopeChanges((nextScope) => {
+      setSpellcheckScope(nextScope)
+    })
+  }, [])
+
+  useEffect(() => {
+    setSpellcheckPreference(readEditorSpellcheckPreference(spellcheckScope))
+  }, [spellcheckScope])
+
+  useEffect(() => {
+    if (!editor) {
+      return
+    }
+
+    editor.setOptions({
+      editorProps: {
+        attributes: {
+          class: "odessay-editor-content",
+          spellcheck: spellcheckConfig.enabled ? "true" : "false",
+          autocorrect: spellcheckConfig.autoCorrect,
+          autocapitalize: spellcheckConfig.autoCapitalize,
+          lang: spellcheckConfig.language,
+        },
+      },
+    })
+  }, [editor, spellcheckConfig])
 
   useEffect(() => {
     modeRef.current = mode
@@ -1121,6 +1167,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
               mode={mode}
               markdownValue={markdownValue}
               onMarkdownChange={handleMarkdownChange}
+              spellcheckEnabled={spellcheckConfig.enabled}
+              autoCorrect={spellcheckConfig.autoCorrect}
+              autoCapitalize={spellcheckConfig.autoCapitalize}
+              language={spellcheckConfig.language}
               markdownTextareaRef={markdownTextareaRef}
             />
 
@@ -1170,6 +1220,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 writingId={currentWritingId}
                 status={writingStatus}
                 metrics={textMetrics}
+                spellcheckPreference={spellcheckPreference}
+                spellcheckLanguage={spellcheckConfig.language}
                 onClose={() => setActivePanel(null)}
                 onStatusChange={(nextStatus) => {
                   if (nextStatus === writingStatus) {
@@ -1186,6 +1238,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
                       void persistEditorSnapshot(editor, overrides)
                     },
                   })
+                }}
+                onSpellcheckPreferenceChange={(nextPreference) => {
+                  if (nextPreference === spellcheckPreference) {
+                    return
+                  }
+
+                  setSpellcheckPreference(nextPreference)
+                  persistEditorSpellcheckPreference(spellcheckScope, nextPreference)
                 }}
               />
             )}
