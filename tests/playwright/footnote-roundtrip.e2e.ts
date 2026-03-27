@@ -1,16 +1,15 @@
 import { expect, test } from "@playwright/test"
 import {
-  focusRichEditor,
   markdownTextarea,
   openEditorHarness,
   switchToMarkdown,
   switchToRich,
+  typeInRichEditor,
 } from "./helpers/editor"
 
 test("footnotes preserve refs and definitions across rich/markdown toggles", async ({ page }) => {
   await openEditorHarness(page)
-  await focusRichEditor(page)
-  await page.keyboard.type("Texto con nota")
+  await typeInRichEditor(page, "Texto con nota")
 
   await page.locator("#editor-action-footnote").click()
   await page.getByPlaceholder("Add note text").fill("Primera nota")
@@ -22,7 +21,7 @@ test("footnotes preserve refs and definitions across rich/markdown toggles", asy
   await expect(textarea).toHaveValue(/\[\^1\]: Primera nota/)
 
   await textarea.fill("Texto con nota[^1]\n\n[^1]: Nota actualizada")
-  await page.getByTestId("editor-topbar").getByRole("button", { name: "Notes panel" }).click()
+  await page.keyboard.press("Escape")
   await switchToRich(page)
   await expect(page.locator(".odessay-editor-content .footnote-ref")).toContainText("1")
 

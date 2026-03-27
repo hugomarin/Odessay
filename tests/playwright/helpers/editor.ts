@@ -26,3 +26,10 @@ export async function focusRichEditor(page: Page) {
   await expect(editor).toBeVisible()
   await editor.click()
 }
+
+export async function typeInRichEditor(page: Page, text: string) {
+  const editor = page.locator(".odessay-editor-content")
+  await expect(editor).toBeVisible()
+  await editor.click()
+  await editor.type(text)
+}
