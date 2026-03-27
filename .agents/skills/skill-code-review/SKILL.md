@@ -43,6 +43,30 @@ Sin estos tres outputs en el PR, el review no empieza.
 
 ---
 
+## Contrato de performance — criterio bloqueante
+
+Todo PR debe declarar el estado del contrato de performance del issue:
+
+- `required`: toca el critical path de interacción (editor/input/click/paste, auto-save, sync o AI en escritura).
+- `not required`: no toca runtime de interacción. Debe incluir justificación explícita.
+
+Si el contrato es `required`, el PR debe adjuntar evidencia obligatoria:
+
+```bash
+npm run ops:perf:capture -- --output artifacts/perf/editor-trace.json.gz
+npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz
+OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate
+```
+
+Mínimo esperado en la descripción del PR:
+- output de `ops:perf:gate` con `required_failures: 0`;
+- output de `ops:delivery:gate` usando `OPS_PERF_TRACE_PATH`;
+- rutas de artefactos generados en `artifacts/perf/` (trace, metrics, report).
+
+Si el contrato es `not required`, el PR debe incluir una sección corta: "Performance contract: not required — {justificación}".
+
+---
+
 ## Checklist de calidad
 
 ### Tests — verificar primero
@@ -58,6 +82,9 @@ Sin estos tres outputs en el PR, el review no empieza.
 - [ ] ¿No se agregaron dependencias pesadas sin justificación?
 - [ ] ¿Los paneles secundarios nuevos se cargan con lazy load?
 - [ ] ¿La app puede abrir y editar documentos sin conexión a red?
+- [ ] ¿El PR declara `Performance Contract` (`required` o `not required`) con justificación?
+- [ ] Si es `required`, ¿hay trace + gate report + delivery gate con `OPS_PERF_TRACE_PATH`?
+- [ ] Si es `required`, ¿`required_failures` es `0` y no hay métricas requeridas faltantes?
 
 ### Código
 - [ ] TypeScript estricto. Sin `any`. Sin `@ts-ignore`.
@@ -119,6 +146,9 @@ Sin estos tres outputs en el PR, el review no empieza.
 - El AI editor genera texto en algún caso.
 - Se agregó UI que el issue no pedía.
 - Se agregaron dependencias pesadas sin justificación.
+- El issue exige `Performance Contract: required` y no hay trace/evidencia objetiva.
+- `check-performance-gate` reporta `required_failures > 0` o métricas requeridas faltantes.
+- Se marcó `Performance Contract: not required` sin justificación explícita.
 - No hay descripción del PR o no referencia el issue.
 - Se operó contra producción.
 
@@ -141,22 +171,31 @@ Antes de hacer cualquier cosa, el agente debe leer el estado del issue en Linear
 
 Si falta alguno de los tres → **rechazar**. No hay nada que revisar sin proof of work.
 
-**2. Trazabilidad Linear ↔ GitHub**
+**2. Contrato de performance resuelto**
+- ¿El issue/PR declara `Performance Contract` como `required` o `not required`?
+- Si es `required`: ¿existe trace reproducible (`artifacts/perf/*.json.gz`)?
+- Si es `required`: ¿`npm run ops:perf:gate -- --trace <trace>` pasa sin `required_failures`?
+- Si es `required`: ¿`OPS_PERF_TRACE_PATH=<trace> npm run ops:delivery:gate` está en verde?
+- Si es `not required`: ¿la justificación está escrita y es coherente con el scope?
+
+Si falla cualquiera de estos puntos → **rechazar**.
+
+**3. Trazabilidad Linear ↔ GitHub**
 - ¿El issue en Linear tiene un comentario del agente implementador con: link al PR + commit SHA + resultado de validaciones?
 - ¿El PR referencia el issue (ej. `feat(setup): init Next.js baseline [ODE-10]`)?
 
 Si falta el comentario de trazabilidad → **rechazar**. La conexión Linear ↔ GitHub es obligatoria.
 
-**3. Archivos modificados vs. ## Files affected**
+**4. Archivos modificados vs. ## Files affected**
 - Comparar los archivos tocados en el PR contra la sección `## Files affected` del issue.
 - Si hay archivos modificados que no estaban en `## Files affected` → evaluar si el cambio es scope creep o una adición justificada.
 - Si hay archivos listados en `## Files affected` que no fueron modificados → verificar si el issue quedó incompleto.
 
-**4. Red flags del checklist**
+**5. Red flags del checklist**
 - Revisar la lista de Red flags de este skill contra los cambios del PR.
 - Si se detecta alguno → **rechazar** con descripción del problema específico.
 
-**5. status.json actualizado**
+**6. status.json actualizado**
 - ¿Se agregó una entrada en `workflow/status.json → built` con el issue ID, commit SHA y fecha?
 - Si el issue era el último de la fase activa → ¿se actualizó `active_phase`?
 
