@@ -412,6 +412,15 @@
       "commit": "23c486f",
       "date": "2026-03-26",
       "notes": "Se añade scripts/check-performance-gate.mjs y scripts/capture-editor-trace.mjs, ruta /perf/editor-harness, integración en traceability-gates.yml y ejecución opcional vía OPS_PERF_TRACE_PATH dentro de ops:delivery:gate. Fix de review: captura estabilizada con warm-up y escenario medido, CI en build+start con ODESSAY_PERF_HARNESS_ENABLED=true y tratamiento de long_tasks ausentes como 0 en el gate."
+    },
+    {
+      "what": "Contrato de performance integrado en protocolos /wf-build y /wf-review + template de Issue Brief alineado",
+      "phase": "Fase 1",
+      "issue": "ODE-53",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-53/integrar-contrato-de-performance-en-wf-build-y-wf-review",
+      "commit": "7999692",
+      "date": "2026-03-26",
+      "notes": "workflow/workflow.md ahora exige resolver Performance Contract en BUILD/REVIEW, define evidencia objetiva y condiciones explícitas de rechazo por falta de artefactos o regresión. .agents/skills/skill-product-manager/SKILL.md incorpora sección Performance Contract y validaciones asociadas."
     }
   ]
 }

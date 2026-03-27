@@ -55,20 +55,29 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. Los skills técnicos que corresponden al área del issue (frontend, backend, database, design — consultar `workflow/docs.json`).
+3. Si el brief declara `Performance Contract` requerido: `workflow/perf-budgets.json` + `workflow/perf/editor-baseline.md`.
 
 **No cargar por defecto:** documentos core, fundacional, flujos, páginas. Esa información debe estar sintetizada en el brief. Si falta algo crítico, es un error del brief — corregir en PLAN antes de continuar.
 
 **Secuencia:**
-1. Verificar que existe el Issue Brief en Linear.
+1. Verificar que existe el Issue Brief en Linear y resolver su `Performance Contract` (`required`/`not required` con justificación).
 2. Correr pre-flight: `node --version && npm run env:check && npm run ops:status:drift`.
 3. Crear rama desde `main` actualizado con convención: `feat/{issue-id}-{descripcion}` o `fix/`, `docs/`, `chore/`.
 4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
-5. Correr gate de entrega: `npm run ops:delivery:gate` (typecheck + lint + tests).
-6. Abrir PR con evidencia (output del gate).
-7. Mover issue a `In Review` en Linear.
-8. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
+5. Si `Performance Contract` es `required`, generar evidencia reproducible:
+   - Capturar trace: `node scripts/capture-editor-trace.mjs --output artifacts/perf/editor-trace.json.gz`.
+   - Evaluar budgets: `node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace.json.gz`.
+6. Correr gate de entrega:
+   - Con contrato requerido: `OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate`.
+   - Sin contrato requerido: `npm run ops:delivery:gate`.
+7. Abrir PR con evidencia objetiva:
+   - output del gate de entrega;
+   - output de `check-performance-gate` (si aplica);
+   - rutas de artefactos `artifacts/perf/*` (trace, report y metrics) o justificación explícita de por qué no aplica contrato.
+8. Mover issue a `In Review` en Linear.
+9. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
 
-**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto.
+**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto + evidencia de performance completa cuando el contrato es requerido.
 
 ---
 
@@ -86,23 +95,32 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 1. El Issue Brief desde Linear.
 2. El diff del PR.
 3. `.agents/skills/skill-code-review/SKILL.md`.
+4. Si el brief tiene `Performance Contract` requerido: artefactos de performance del PR (trace + report + output de gate).
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
 **Secuencia — si aprobado:**
-1. Verificar gate: `npm run ops:delivery:gate` en verde.
-2. Revisar diff contra el brief (scope, calidad, seguridad, performance).
-3. Dejar comentario en Linear: resultado de revisión.
-4. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
-5. Mover issue a `Done` en Linear.
-6. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
+1. Verificar gate: `npm run ops:delivery:gate` en verde (y con `OPS_PERF_TRACE_PATH` cuando el contrato es requerido).
+2. Validar `Performance Contract` contra evidencia objetiva:
+   - existe trace reproducible;
+   - `node scripts/check-performance-gate.mjs --trace <trace>` no reporta `required_failures`;
+   - la evidencia está adjunta en PR/issue.
+3. Revisar diff contra el brief (scope, calidad, seguridad, performance).
+4. Dejar comentario en Linear: resultado de revisión.
+5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
+6. Mover issue a `Done` en Linear.
+7. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
 **Secuencia — si rechazado:**
 1. Dejar comentario en Linear con hallazgos específicos que bloquean aprobación.
-2. Mover issue a `In Progress`.
-3. No cerrar ni eliminar el PR — mantener rama activa.
+2. Rechazar automáticamente si se cumple cualquiera de estas condiciones:
+   - falta evidencia de performance cuando el contrato es requerido;
+   - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
+   - no existe justificación explícita cuando el brief marcó `Performance Contract: not required`.
+3. Mover issue a `In Progress`.
+4. No cerrar ni eliminar el PR — mantener rama activa.
 
 **Restricción:** no agregar alcance nuevo en REVIEW. Solo correcciones derivadas del review.
 

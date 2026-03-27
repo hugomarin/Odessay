@@ -162,6 +162,21 @@ de forma independiente. No son instrucciones de implementación — son resultad
 2. La tabla Y existe con los campos Z.
 3. El endpoint W responde correctamente cuando...
 
+## Performance Contract
+Obligatorio si el issue toca interacciones de UI, editor, rendering o performance explícita.
+Si no aplica, escribir `Performance Contract: not required` y justificar por qué.
+
+Formato recomendado:
+Required: yes | no
+Scope: [flujo/ruta concreta que se mide]
+Trace scenario: [comando o pasos exactos y reproducibles]
+Budgets: workflow/perf-budgets.json (version activa)
+Evidence required in PR:
+- Trace path (ej: artifacts/perf/editor-trace.json.gz)
+- Resultado de `node scripts/check-performance-gate.mjs --trace <trace>`
+- Resultado de `OPS_PERF_TRACE_PATH=<trace> npm run ops:delivery:gate`
+Approval rule: `required_failures = 0` y métricas requeridas presentes.
+
 ## Reference docs
 Documentos del proyecto que el agente debe leer antes de implementar.
 Usar siempre paths completos desde la raíz del repo.
@@ -232,6 +247,12 @@ Pegar el output de estos tres comandos en la descripción del PR. Sin este outpu
 - Verifica que no hay errores en consola del browser durante el flujo.
 - Verifica estados de carga, errores y casos edge definidos en Requirements.
 - Pegar screenshot o log del resultado en el PR.
+
+**Si `Performance Contract` es requerido:**
+- Captura trace reproducible (`node scripts/capture-editor-trace.mjs` o comando equivalente declarado en el brief).
+- Evalúa budgets (`node scripts/check-performance-gate.mjs --trace <trace>`).
+- Corre delivery gate con `OPS_PERF_TRACE_PATH=<trace>`.
+- Adjunta en PR output de ambos comandos + rutas de artefactos generados.
 
 **Si el issue toca base de datos:**
 - Usa Supabase MCP para verificar que el schema resultante coincide con lo especificado.
