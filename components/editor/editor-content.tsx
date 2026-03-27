@@ -46,7 +46,7 @@ export function WritingEditorContent({
             autoCapitalize={autoCapitalize}
             lang={language}
             style={{ fieldSizing: "content" } as React.CSSProperties}
-            className="box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent font-mono text-[18px] leading-[1.85] text-ink outline-none"
+            className="odessay-markdown-source box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent font-mono text-[18px] leading-[1.85] text-ink outline-none"
             aria-label="Markdown source"
           />
         ) : (

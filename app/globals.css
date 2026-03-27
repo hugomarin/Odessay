@@ -92,11 +92,21 @@
 
   .odessay-editor-content {
     min-height: 55vh;
+    caret-color: hsl(190 88% 46%);
     color: hsl(var(--ink));
     font-family: var(--font-geist-sans), system-ui, sans-serif;
     font-size: 18px;
     line-height: 1.85;
     outline: none;
+  }
+
+  .odessay-markdown-source {
+    caret-color: hsl(190 88% 46%);
+  }
+
+  .odessay-editor-content:focus,
+  .odessay-markdown-source:focus {
+    animation: odessayCaretBlink 1.05s steps(1, end) infinite;
   }
 
   .odessay-editor-content > * + * {
@@ -178,6 +188,48 @@
     text-underline-offset: 2px;
   }
 
+  .odessay-editor-content b,
+  .odessay-editor-content strong {
+    color: hsl(var(--ink));
+    font-weight: 600;
+  }
+
+  .odessay-editor-content table {
+    border-collapse: collapse;
+    font-size: 0.98em;
+    line-height: 1.55;
+    margin: 1.6em 0;
+    width: 100%;
+  }
+
+  .odessay-editor-content thead th,
+  .odessay-editor-content tbody td {
+    border-bottom: 0.5px solid hsl(var(--border));
+    padding: 0.8em 0;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .odessay-editor-content thead th {
+    color: hsl(var(--ink));
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .odessay-editor-content tbody td {
+    color: hsl(var(--ink-2));
+  }
+
+  .odessay-editor-content th + th,
+  .odessay-editor-content td + td {
+    padding-left: 1.05em;
+  }
+
+  .odessay-editor-content thead th p,
+  .odessay-editor-content tbody td p {
+    margin: 0;
+  }
+
   .odessay-editor-content mark {
     background: hsl(45 90% 84%);
     border-radius: 2px;
@@ -214,6 +266,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes odessayCaretBlink {
+  0%,
+  45% {
+    caret-color: hsl(190 88% 46%);
+  }
+  50%,
+  100% {
+    caret-color: transparent;
   }
 }
 
@@ -269,6 +332,42 @@
 .prose-odessay strong {
   font-weight: 600;
   color: hsl(var(--ink));
+}
+
+.prose-odessay table {
+  border-collapse: collapse;
+  font-size: 0.98em;
+  line-height: 1.55;
+  margin: 1.6em 0;
+  width: 100%;
+}
+
+.prose-odessay thead th,
+.prose-odessay tbody td {
+  border-bottom: 0.5px solid hsl(var(--border));
+  padding: 0.8em 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose-odessay thead th {
+  color: hsl(var(--ink));
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.prose-odessay tbody td {
+  color: hsl(var(--ink-2));
+}
+
+.prose-odessay th + th,
+.prose-odessay td + td {
+  padding-left: 1.05em;
+}
+
+.prose-odessay thead th p,
+.prose-odessay tbody td p {
+  margin: 0;
 }
 
 .prose-odessay em {
