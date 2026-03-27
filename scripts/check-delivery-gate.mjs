@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 function fail(message) {
@@ -103,6 +103,27 @@ if (commitsWithoutIssue.length > 0) {
   const listed = commitsWithoutIssue.map((subject) => `- ${subject}`).join("\n");
   fail(
     `Commits in this branch must reference ${issueId}. Fix commit messages:\n${listed}`,
+  );
+}
+
+const perfTracePath = process.env.OPS_PERF_TRACE_PATH?.trim() ?? "";
+if (perfTracePath) {
+  const perfArgs = ["scripts/check-performance-gate.mjs", "--trace", perfTracePath];
+  const perfReportPath = process.env.OPS_PERF_REPORT_PATH?.trim();
+  const perfMetricsPath = process.env.OPS_PERF_METRICS_PATH?.trim();
+
+  if (perfReportPath) {
+    perfArgs.push("--report", perfReportPath);
+  }
+
+  if (perfMetricsPath) {
+    perfArgs.push("--metrics", perfMetricsPath);
+  }
+
+  execFileSync("node", perfArgs, { stdio: "inherit" });
+} else {
+  console.log(
+    "[ops:delivery:gate] Performance gate skipped (set OPS_PERF_TRACE_PATH to enforce perf budgets).",
   );
 }
 

@@ -17,6 +17,12 @@ export const updateSession = async (request: NextRequest) => {
     })
   }
 
+  if (pathname.startsWith("/perf")) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
   let response = NextResponse.next({
     request,
   })

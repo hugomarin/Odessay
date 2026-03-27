@@ -76,3 +76,42 @@ node scripts/analyze-editor-trace.mjs /absolute/path/to/trace.json.gz > /tmp/edi
 
 3. Compare `/tmp/editor-trace-metrics.json` against `workflow/perf-budgets.json`.
 4. If the scenario changed intentionally, document the reason and update both baseline and budget in the same issue.
+
+## Automated gate pipeline (ODE-52)
+
+### Local
+
+1. Start the app:
+
+```bash
+npm run dev -- --hostname 127.0.0.1 --port 4010
+```
+
+2. In a separate terminal, capture a trace from the editor harness route:
+
+```bash
+npm run ops:perf:capture -- --base-url http://127.0.0.1:4010 --output artifacts/perf/editor-local-trace.json.gz
+```
+
+3. Run the performance gate directly or through the delivery gate:
+
+```bash
+npm run ops:perf:gate -- --trace artifacts/perf/editor-local-trace.json.gz
+OPS_PERF_TRACE_PATH=artifacts/perf/editor-local-trace.json.gz npm run ops:delivery:gate
+```
+
+### CI
+
+`Traceability Gates` now executes:
+
+1. `npx playwright install --with-deps chromium`
+2. `npm run build`
+3. `npm run start -- --hostname 127.0.0.1 --port 4010` with `ODESSAY_PERF_HARNESS_ENABLED=true`
+4. `npm run ops:perf:capture` against `/perf/editor-harness`
+5. `npm run ops:delivery:gate` with `OPS_PERF_TRACE_PATH`
+
+Generated artifacts are uploaded in every run:
+
+- `artifacts/perf/editor-ci-trace.json.gz`
+- `artifacts/perf/editor-ci-metrics.json`
+- `artifacts/perf/editor-ci-report.json`

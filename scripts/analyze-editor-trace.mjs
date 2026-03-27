@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 function fail(message) {
@@ -65,8 +66,7 @@ function topPeaks(values, limit = 5) {
     .map((value) => Number(value.toFixed(2)));
 }
 
-function main() {
-  const { tracePath } = parseArgs(process.argv);
+export function analyzeEditorTrace(tracePath) {
   const traceEvents = readTrace(tracePath);
 
   const targetTypes = ["keydown", "input", "paste", "click"];
@@ -110,7 +110,7 @@ function main() {
     }
   }
 
-  const output = {
+  return {
     source_trace: tracePath,
     generated_at_utc: new Date().toISOString(),
     units: {
@@ -141,8 +141,15 @@ function main() {
       ),
     },
   };
+}
 
+function main() {
+  const { tracePath } = parseArgs(process.argv);
+  const output = analyzeEditorTrace(tracePath);
   console.log(JSON.stringify(output, null, 2));
 }
 
-main();
+const scriptPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+if (scriptPath && import.meta.url === scriptPath) {
+  main();
+}
