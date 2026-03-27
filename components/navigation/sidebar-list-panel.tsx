@@ -37,7 +37,7 @@ export function SidebarListPanel({ open }: SidebarListPanelProps) {
               className="flex w-full items-center justify-between rounded-md px-2 py-[9px] text-left text-[13px] text-ink-3 transition-colors hover:bg-muted/70 hover:text-ink"
             >
               <span className="flex items-center gap-2">
-                <FileText className="h-3.5 w-3.5" strokeWidth={1.5} />
+                <FileText className="h-[18px] w-[18px]" strokeWidth={1.5} />
                 <span>{section.label}</span>
               </span>
               <span className="text-[11px] text-ink-4">{section.meta}</span>

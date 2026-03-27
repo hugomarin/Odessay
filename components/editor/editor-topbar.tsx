@@ -264,7 +264,7 @@ export function EditorTopbar({
         id="editor-topbar"
         data-section="editor-topbar"
         data-testid="editor-topbar"
-        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border bg-bg px-3"
+        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border/80 bg-bg/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-bg/85"
       >
         <div className="flex min-w-0 items-center gap-2">
           <div
@@ -319,7 +319,7 @@ export function EditorTopbar({
           <button
             type="button"
             onClick={onOpenRenameModal}
-            className="pointer-events-auto w-full max-w-[460px] truncate px-3 text-center font-lora text-[13px] text-ink-3 transition-colors hover:text-ink"
+            className="pointer-events-auto w-full max-w-[460px] truncate px-3 text-center font-sans text-[13px] text-ink-3 transition-colors hover:text-ink"
             title={title}
           >
             {title}

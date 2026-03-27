@@ -8,14 +8,37 @@ type SyncTransport = {
   deleteWriting: (writingId: string, payload: SyncMutation["payload"]) => Promise<void>;
 };
 
-const parseEnvelope = async (response: Response) => {
-  const result = (await response.json()) as {
-    data: unknown;
-    error: { code: string; message: string } | null;
-  };
+type SyncEnvelope = {
+  data: unknown;
+  error: { code: string; message: string } | null;
+};
 
-  if (!response.ok || result.error) {
-    throw new Error(result.error?.message ?? `Sync request failed with status ${response.status}.`);
+type SyncRemoteError = Error & {
+  status?: number;
+  code?: string | null;
+  url?: string;
+};
+
+const parseEnvelope = async (response: Response) => {
+  let result: SyncEnvelope | null = null;
+
+  try {
+    result = (await response.json()) as SyncEnvelope;
+  } catch {
+    result = null;
+  }
+
+  if (!response.ok || result?.error) {
+    const rawMessage = result?.error?.message?.trim();
+    const message =
+      rawMessage && rawMessage.length > 0
+        ? rawMessage
+        : `Sync request failed with status ${response.status}.`;
+    const error: SyncRemoteError = new Error(message);
+    error.status = response.status;
+    error.code = result?.error?.code ?? null;
+    error.url = response.url;
+    throw error;
   }
 };
 
@@ -86,7 +109,12 @@ class SyncWorker {
       options.addOnlineListener ?? ((callback) => window.addEventListener("online", callback));
     this.removeOnlineListener =
       options.removeOnlineListener ?? ((callback) => window.removeEventListener("online", callback));
-    this.logError = options.logError ?? ((message, context) => console.error(message, context));
+    this.logError =
+      options.logError ??
+      ((message, context) => {
+        // Remote sync errors are handled with retry policy; keep diagnostics visible without surfacing a hard runtime error.
+        console.warn(`${message} ${JSON.stringify(context)}`);
+      });
   }
 
   start() {
@@ -191,12 +219,17 @@ class SyncWorker {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown sync error";
+      const syncError = error as SyncRemoteError;
 
       this.logError("[sync:remote]", {
+        mutationId: mutation.id,
         writingId: mutation.writing_id,
         operation: mutation.operation,
         attempt: mutation.attempts + 1,
         error: message,
+        status: typeof syncError?.status === "number" ? syncError.status : undefined,
+        code: typeof syncError?.code === "string" ? syncError.code : undefined,
+        url: typeof syncError?.url === "string" ? syncError.url : undefined,
       });
 
       emitSyncStatusChange({

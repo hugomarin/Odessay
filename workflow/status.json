@@ -32,7 +32,7 @@
       "phase": "Fase 0",
       "issue": null,
       "linear_url": null,
-      "commit": null,
+      "commit": "4a9a9fa",
       "date": "2026-03-17",
       "notes": "Estructura: workflow/, .agents/skills/, workflow/context/framework/, workflow/context/reference/"
     },
@@ -440,6 +440,15 @@
       "commit": "21abcf7",
       "date": "2026-03-27",
       "notes": "Se añade toggle System/Off en Properties panel, persistencia local por scope de usuario y aplicación de spellcheck/autocorrect/autocapitalize/idioma en modos Rich y Markdown (fallback de idioma: es-MX -> es -> en)."
+    },
+    {
+      "what": "Polish visual del editor: tablas más legibles, bold 600, iconografía de sidebar y cursor cian parpadeante",
+      "phase": "Fase 1",
+      "issue": "ODE-57",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-57/polish-ui-editor-tablas-bold-navegacion-y-cursor",
+      "commit": "af5dcf9",
+      "date": "2026-03-27",
+      "notes": "Ajustes de UI en editor/preview y navegación lateral: estilo de tablas tipo lectura limpia, strong/b=600, iconos de sidebar más grandes, corrección óptica del PanelLeftClose y caret cian con blink en Rich/Markdown; se añadieron refinamientos tipográficos (ritmo vertical + topbar) y hardening de sync para evitar conflictos intermitentes de concurrencia."
     }
   ]
 }

@@ -89,17 +89,6 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
-  const { data: currentWriting, error: currentWritingError } = await supabase
-    .from("writings")
-    .select("id")
-    .eq("id", id)
-    .eq("author_id", userId)
-    .maybeSingle();
-
-  if (currentWritingError) {
-    return jsonError(500, "DB_ERROR", currentWritingError.message);
-  }
-
   const writingRecord = {
     id,
     author_id: userId,
@@ -108,21 +97,55 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     visibility: parsed.data.visibility ?? "private",
   };
 
-  const query = currentWriting
-    ? supabase
+  // Try update first to keep ownership checks strict and avoid duplicate-key races on insert.
+  const { data: updatedWriting, error: updateError } = await supabase
+    .from("writings")
+    .update(writingRecord)
+    .eq("id", id)
+    .eq("author_id", userId)
+    .select()
+    .maybeSingle();
+
+  if (updateError) {
+    return jsonError(500, "DB_ERROR", updateError.message);
+  }
+
+  if (updatedWriting) {
+    return NextResponse.json({ data: updatedWriting, error: null }, { status: 200 });
+  }
+
+  const { data: insertedWriting, error: insertError } = await supabase
+    .from("writings")
+    .insert(writingRecord)
+    .select()
+    .single();
+
+  if (insertError) {
+    if (insertError.code === "23505") {
+      // Concurrent insert happened between update and insert. Resolve by re-reading as owner.
+      const { data: retriedWriting, error: retriedError } = await supabase
         .from("writings")
         .update(writingRecord)
         .eq("id", id)
         .eq("author_id", userId)
-    : supabase.from("writings").insert(writingRecord);
+        .select()
+        .maybeSingle();
 
-  const { data, error } = await query.select().single();
+      if (retriedError) {
+        return jsonError(500, "DB_ERROR", retriedError.message);
+      }
 
-  if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+      if (!retriedWriting) {
+        return jsonError(409, "WRITE_CONFLICT", "Writing ID conflict for current user.");
+      }
+
+      return NextResponse.json({ data: retriedWriting, error: null }, { status: 200 });
+    }
+
+    return jsonError(500, "DB_ERROR", insertError.message);
   }
 
-  return NextResponse.json({ data, error: null }, { status: 200 });
+  return NextResponse.json({ data: insertedWriting, error: null }, { status: 200 });
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {

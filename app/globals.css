@@ -92,6 +92,7 @@
 
   .odessay-editor-content {
     min-height: 55vh;
+    caret-color: hsl(190 88% 46%);
     color: hsl(var(--ink));
     font-family: var(--font-geist-sans), system-ui, sans-serif;
     font-size: 18px;
@@ -99,15 +100,28 @@
     outline: none;
   }
 
+  .odessay-markdown-source {
+    caret-color: hsl(190 88% 46%);
+  }
+
+  .odessay-editor-content:focus,
+  .odessay-markdown-source:focus {
+    animation: odessayCaretBlink 1.05s steps(1, end) infinite;
+  }
+
   .odessay-editor-content > * + * {
-    margin-top: 1.1em;
+    margin-top: 1.15em;
+  }
+
+  .odessay-editor-content p + p {
+    margin-top: 1.2em;
   }
 
   .odessay-editor-content h1,
   .odessay-editor-content h2,
   .odessay-editor-content h3 {
     font-family: var(--font-lora), Georgia, serif;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: -0.01em;
     line-height: 1.25;
   }
@@ -123,6 +137,40 @@
   .odessay-editor-content h3 {
     font-size: 20px;
     line-height: 1.35;
+  }
+
+  /* Typographic rhythm: more air before headings, tighter entry into body copy. */
+  .odessay-editor-content p + h1,
+  .odessay-editor-content ul + h1,
+  .odessay-editor-content ol + h1,
+  .odessay-editor-content blockquote + h1 {
+    margin-top: 2.3em;
+  }
+
+  .odessay-editor-content p + h2,
+  .odessay-editor-content ul + h2,
+  .odessay-editor-content ol + h2,
+  .odessay-editor-content blockquote + h2 {
+    margin-top: 2.1em;
+  }
+
+  .odessay-editor-content p + h3,
+  .odessay-editor-content ul + h3,
+  .odessay-editor-content ol + h3,
+  .odessay-editor-content blockquote + h3 {
+    margin-top: 1.9em;
+  }
+
+  .odessay-editor-content h1 + p {
+    margin-top: 1.08em;
+  }
+
+  .odessay-editor-content h2 + p {
+    margin-top: 1em;
+  }
+
+  .odessay-editor-content h3 + p {
+    margin-top: 0.92em;
   }
 
   .odessay-editor-content blockquote {
@@ -178,6 +226,54 @@
     text-underline-offset: 2px;
   }
 
+  .odessay-editor-content b,
+  .odessay-editor-content strong {
+    color: hsl(var(--ink));
+    font-weight: 600;
+  }
+
+  .odessay-editor-content table {
+    border-collapse: collapse;
+    font-size: 0.98em;
+    line-height: 1.55;
+    margin: 1.6em 0;
+    width: 100%;
+  }
+
+  .odessay-editor-content th,
+  .odessay-editor-content td {
+    padding: 0.8em 0;
+    vertical-align: top;
+  }
+
+  .odessay-editor-content th {
+    border-bottom: 1px solid hsl(var(--ink) / 0.4);
+    color: hsl(var(--ink));
+    font-family: var(--font-lora), Georgia, serif;
+    font-weight: 600;
+    text-align: left !important;
+  }
+
+  .odessay-editor-content td {
+    border-bottom: 0.5px solid hsl(var(--ink) / 0.3);
+    color: hsl(var(--ink-2));
+    text-align: left;
+  }
+
+  .odessay-editor-content th p {
+    margin: 0;
+    text-align: left !important;
+  }
+
+  .odessay-editor-content th + th,
+  .odessay-editor-content td + td {
+    padding-left: 1.05em;
+  }
+
+  .odessay-editor-content td p {
+    margin: 0;
+  }
+
   .odessay-editor-content mark {
     background: hsl(45 90% 84%);
     border-radius: 2px;
@@ -214,6 +310,17 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes odessayCaretBlink {
+  0%,
+  45% {
+    caret-color: hsl(190 88% 46%);
+  }
+  50%,
+  100% {
+    caret-color: transparent;
   }
 }
 
@@ -269,6 +376,48 @@
 .prose-odessay strong {
   font-weight: 600;
   color: hsl(var(--ink));
+}
+
+.prose-odessay table {
+  border-collapse: collapse;
+  font-size: 0.98em;
+  line-height: 1.55;
+  margin: 1.6em 0;
+  width: 100%;
+}
+
+.prose-odessay th,
+.prose-odessay td {
+  padding: 0.8em 0;
+  vertical-align: top;
+}
+
+.prose-odessay th {
+  border-bottom: 1px solid hsl(var(--ink) / 0.4);
+  color: hsl(var(--ink));
+  font-family: var(--font-lora), Georgia, serif;
+  font-weight: 600;
+  text-align: left !important;
+}
+
+.prose-odessay td {
+  border-bottom: 0.5px solid hsl(var(--ink) / 0.3);
+  color: hsl(var(--ink-2));
+  text-align: left;
+}
+
+.prose-odessay th p {
+  margin: 0;
+  text-align: left !important;
+}
+
+.prose-odessay th + th,
+.prose-odessay td + td {
+  padding-left: 1.05em;
+}
+
+.prose-odessay td p {
+  margin: 0;
 }
 
 .prose-odessay em {
