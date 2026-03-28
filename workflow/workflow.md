@@ -108,8 +108,10 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 3. Revisar diff contra el brief (scope, calidad, seguridad, performance).
 4. Dejar comentario en Linear: resultado de revisión.
 5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
-6. Mover issue a `Done` en Linear.
-7. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
+6. Volver a `main`: `git switch main`.
+7. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
+8. Mover issue a `Done` en Linear.
+9. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
@@ -218,6 +220,7 @@ Algunos issues requieren acciones que el agente no puede completar solo — cred
 **Siempre hace el agente:**
 - Ejecutar la secuencia `/wf-*` respetando los gates.
 - Hacer merge del PR tras REVIEW APROBADO: `gh pr merge {número} --merge`.
+- Tras merge confirmado en REVIEW, volver a `main` y sincronizar (`git switch main` + `git pull --ff-only origin main`) antes de iniciar el siguiente BUILD.
 - Mover estados en Linear según este documento.
 - Actualizar `workflow/status.json` estableciendo la fase en PLAN y agregando los issues completados a `built` al pasar a `Done` en REVIEW.
 - Dejar comentario de trazabilidad en Linear al cerrar cada etapa.

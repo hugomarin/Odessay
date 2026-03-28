@@ -217,6 +217,8 @@ Con REVIEW APROBADO, ejecutar en este orden:
 
 → Usar Linear MCP (`save_comment`) para postear el texto anterior como comentario en el issue.
 → Hacer merge del PR: `gh pr merge {número} --merge`.
+→ Volver a `main`: `git switch main`.
+→ Sincronizar `main`: `git pull --ff-only origin main`.
 → Mover el issue a Done en Linear.
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
