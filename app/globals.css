@@ -131,6 +131,11 @@
     font-weight: 700;
   }
 
+  .od-markdown-heading {
+    color: hsl(var(--ink));
+    font-weight: 700;
+  }
+
   .odessay-editor-content > * + * {
     margin-top: 1.15em;
   }

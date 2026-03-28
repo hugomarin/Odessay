@@ -84,6 +84,14 @@ const formatInlineMarkdown = (line: string): string => {
 export const renderMarkdownSemanticHtml = (markdown: string): string => {
   return markdown
     .split("\n")
-    .map((line) => formatInlineMarkdown(line))
+    .map((line) => {
+      const formatted = formatInlineMarkdown(line)
+
+      if (/^\s{0,3}#{1,3}\s+/.test(line)) {
+        return `<span class="od-markdown-heading">${formatted}</span>`
+      }
+
+      return formatted
+    })
     .join("\n")
 }
