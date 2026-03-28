@@ -60,4 +60,29 @@ describe("test link helpers", () => {
 
     expect(picked?.token).toBe("pending-newest")
   })
+
+  it("ignores non-pending links even when they are the newest", () => {
+    const writingId = "writing-123"
+    const markerEmail = getTestLinkEmail(writingId)
+
+    const picked = pickLatestPendingTestLink(
+      [
+        {
+          token: "expired-newest",
+          email: markerEmail,
+          status: "expired",
+          created_at: "2026-03-19T05:00:00.000Z",
+        },
+        {
+          token: "pending-valid",
+          email: markerEmail,
+          status: "pending",
+          created_at: "2026-03-19T03:00:00.000Z",
+        },
+      ],
+      writingId,
+    )
+
+    expect(picked?.token).toBe("pending-valid")
+  })
 })
