@@ -197,6 +197,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
     end: number
     scrollTop?: number
     scrollLeft?: number
+    editorScrollTop?: number
+    editorScrollLeft?: number
   } | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
@@ -296,6 +298,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
       options?: {
         scrollTop?: number
         scrollLeft?: number
+        editorScrollTop?: number
+        editorScrollLeft?: number
       },
     ) => {
       pendingMarkdownSelectionRef.current = { start, end, ...options }
@@ -334,6 +338,26 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         if (typeof pendingSelection.scrollLeft === "number") {
           nextTextarea.scrollLeft = pendingSelection.scrollLeft
+        }
+
+        const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+
+        if (
+          editorViewport &&
+          (typeof pendingSelection.editorScrollTop === "number" || typeof pendingSelection.editorScrollLeft === "number")
+        ) {
+          const applyViewportScroll = () => {
+            if (typeof pendingSelection.editorScrollTop === "number") {
+              editorViewport.scrollTop = pendingSelection.editorScrollTop
+            }
+
+            if (typeof pendingSelection.editorScrollLeft === "number") {
+              editorViewport.scrollLeft = pendingSelection.editorScrollLeft
+            }
+          }
+
+          applyViewportScroll()
+          window.requestAnimationFrame(applyViewportScroll)
         }
 
         markdownSelectionRef.current = {
@@ -680,15 +704,23 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       const toggleMarkdownWrap = (marker: string) => {
         const textarea = markdownTextareaRef.current
+        const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
         const fallbackCursor = markdownValue.length
         const start = textarea?.selectionStart ?? fallbackCursor
         const end = textarea?.selectionEnd ?? fallbackCursor
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
+        const editorScrollTop = editorViewport?.scrollTop
+        const editorScrollLeft = editorViewport?.scrollLeft
         const result = toggleMarkdownInlineMarker(markdownValue, start, end, marker)
 
         persistMarkdownDraft(result.markdown)
-        queueMarkdownSelectionRestore(result.selectionStart, result.selectionEnd, { scrollTop, scrollLeft })
+        queueMarkdownSelectionRestore(result.selectionStart, result.selectionEnd, {
+          scrollTop,
+          scrollLeft,
+          editorScrollTop,
+          editorScrollLeft,
+        })
       }
 
       const toggleMarkdownLinePrefix = (
@@ -699,11 +731,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
         },
       ) => {
         const textarea = markdownTextareaRef.current
+        const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
         const fallbackCursor = markdownValue.length
         const selectionStart = textarea?.selectionStart ?? fallbackCursor
         const selectionEnd = textarea?.selectionEnd ?? fallbackCursor
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
+        const editorScrollTop = editorViewport?.scrollTop
+        const editorScrollLeft = editorViewport?.scrollLeft
         const blockStart = markdownValue.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1
         const nextBreak = markdownValue.indexOf("\n", selectionEnd)
         const blockEnd = nextBreak === -1 ? markdownValue.length : nextBreak
@@ -751,7 +786,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         persistMarkdownDraft(nextMarkdown)
 
-        queueMarkdownSelectionRestore(blockStart, nextSelectionEnd, { scrollTop, scrollLeft })
+        queueMarkdownSelectionRestore(blockStart, nextSelectionEnd, {
+          scrollTop,
+          scrollLeft,
+          editorScrollTop,
+          editorScrollLeft,
+        })
       }
 
       const preserveViewport = (fn: () => void) => {

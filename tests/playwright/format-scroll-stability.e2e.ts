@@ -11,6 +11,10 @@ test("structural formatting in long markdown keeps viewport near editing point",
 
   const beforeSelectionStart = await textarea.evaluate((node) => {
     const element = node as HTMLTextAreaElement
+    const container = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+    if (container) {
+      container.scrollTop = container.scrollHeight
+    }
     element.scrollTop = element.scrollHeight
     const start = Math.max(0, element.value.length - 40)
     element.setSelectionRange(start, element.value.length)
@@ -18,13 +22,33 @@ test("structural formatting in long markdown keeps viewport near editing point",
     return element.selectionStart
   })
 
-  await page.locator("#editor-action-heading-1").click()
+  const readViewport = async () =>
+    page.evaluate(() => {
+      const container = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+      const source = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
 
-  const [afterSelectionStart, markdownAfter] = await textarea.evaluate((node) => {
-    const element = node as HTMLTextAreaElement
-    return [element.selectionStart, element.value] as const
-  })
+      return {
+        containerScrollTop: container?.scrollTop ?? 0,
+        textareaScrollTop: source?.scrollTop ?? 0,
+        selectionStart: source?.selectionStart ?? 0,
+      }
+    })
 
-  expect(afterSelectionStart).toBeGreaterThan(beforeSelectionStart - 12)
+  const assertNoJumpForAction = async (actionId: string) => {
+    const before = await readViewport()
+    await page.locator(actionId).click()
+    const after = await readViewport()
+
+    expect(after.containerScrollTop).toBeGreaterThanOrEqual(Math.max(0, before.containerScrollTop - 28))
+    expect(after.textareaScrollTop).toBeGreaterThanOrEqual(Math.max(0, before.textareaScrollTop - 28))
+    expect(after.selectionStart).toBeGreaterThan(beforeSelectionStart - 20)
+  }
+
+  await assertNoJumpForAction("#editor-action-heading-1")
+  await assertNoJumpForAction("#editor-action-italic")
+  await assertNoJumpForAction("#editor-action-highlight")
+
+  const markdownAfter = await textarea.evaluate((node) => (node as HTMLTextAreaElement).value)
+
   expect(markdownAfter).toContain("# line 220")
 })
