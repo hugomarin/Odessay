@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils"
 type EditorTopbarProps = {
   editor: Editor | null
   title: string
+  mode: "rich" | "markdown"
   isFocusMode: boolean
   activePanel: "notes" | "properties" | null
   onToggleFocusMode: () => void
@@ -162,6 +163,7 @@ const isActionActive = (editor: Editor | null, action: EditorShortcutAction) => 
 export function EditorTopbar({
   editor,
   title,
+  mode,
   isFocusMode,
   activePanel,
   onToggleFocusMode,
@@ -182,6 +184,12 @@ export function EditorTopbar({
         <button
           id={actionItem.id}
           type="button"
+          onMouseDown={(event) => {
+            // Keep editor/textarea selection stable when triggering formatting from toolbar.
+            if (mode === "markdown" || mode === "rich") {
+              event.preventDefault()
+            }
+          }}
           onClick={() => onRunAction(actionItem.action)}
           aria-label={actionItem.label}
           className={cn(
@@ -205,6 +213,12 @@ export function EditorTopbar({
       <button
         id={actionItem.id}
         type="button"
+        onMouseDown={(event) => {
+          // Prevent focus-stealing click from collapsing markdown selection before applying style.
+          if (mode === "markdown" || mode === "rich") {
+            event.preventDefault()
+          }
+        }}
         onClick={() => onRunAction(actionItem.action)}
         aria-label={actionItem.label}
         className={cn(

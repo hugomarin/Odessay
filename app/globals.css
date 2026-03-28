@@ -102,11 +102,38 @@
 
   .odessay-markdown-source {
     caret-color: hsl(190 88% 46%);
+    color: transparent;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 18px;
+    line-height: 1.85;
+    -webkit-text-fill-color: transparent;
   }
 
   .odessay-editor-content:focus,
   .odessay-markdown-source:focus {
     animation: odessayCaretBlink 1.05s steps(1, end) infinite;
+  }
+
+  .odessay-markdown-source::selection {
+    background: hsl(var(--ink) / 0.14);
+  }
+
+  .odessay-markdown-semantic {
+    color: hsl(var(--ink));
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 18px;
+    line-height: 1.85;
+    padding: 0;
+  }
+
+  .od-markdown-strong {
+    color: hsl(var(--ink));
+    font-weight: 700;
+  }
+
+  .od-markdown-heading {
+    color: hsl(var(--ink));
+    font-weight: 700;
   }
 
   .odessay-editor-content > * + * {
