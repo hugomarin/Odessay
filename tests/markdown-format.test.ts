@@ -72,13 +72,13 @@ describe("materializeMarkdownForRichParser", () => {
 })
 
 describe("renderMarkdownSemanticHtml", () => {
-  it("adds semantic classes for headings, strong, blockquotes and code", () => {
+  it("keeps markdown styling minimal and only accents strong markers", () => {
     const html = renderMarkdownSemanticHtml("# Header\n**bold**\n> quote\n`code`\n```")
 
-    expect(html).toContain('class="od-markdown-heading-1"')
     expect(html).toContain('class="od-markdown-strong"')
-    expect(html).toContain('class="od-markdown-blockquote"')
-    expect(html).toContain('class="od-markdown-inline-code"')
-    expect(html).toContain('class="od-markdown-code-fence"')
+    expect(html).not.toContain('class="od-markdown-heading-1"')
+    expect(html).not.toContain('class="od-markdown-blockquote"')
+    expect(html).not.toContain('class="od-markdown-inline-code"')
+    expect(html).not.toContain('class="od-markdown-code-fence"')
   })
 })

@@ -1222,10 +1222,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
               mode={mode}
               markdownValue={markdownValue}
               onMarkdownChange={handleMarkdownChange}
-              spellcheckEnabled={spellcheckConfig.enabled}
-              autoCorrect={spellcheckConfig.autoCorrect}
-              autoCapitalize={spellcheckConfig.autoCapitalize}
-              language={spellcheckConfig.language}
               markdownTextareaRef={markdownTextareaRef}
             />
 

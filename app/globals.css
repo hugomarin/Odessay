@@ -103,7 +103,7 @@
   .odessay-markdown-source {
     caret-color: hsl(190 88% 46%);
     color: transparent;
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 18px;
     line-height: 1.85;
     -webkit-text-fill-color: transparent;
@@ -120,83 +120,15 @@
 
   .odessay-markdown-semantic {
     color: hsl(var(--ink));
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 18px;
     line-height: 1.85;
     padding: 0;
   }
 
-  .od-markdown-heading-1,
-  .od-markdown-heading-2,
-  .od-markdown-heading-3,
-  .od-markdown-blockquote,
-  .od-markdown-inline-code,
-  .od-markdown-code-fence,
-  .od-markdown-code-block-line {
-    display: block;
-  }
-
-  .od-markdown-heading-1 {
-    color: hsl(var(--ink));
-    font-size: 28px;
-    font-weight: 650;
-    line-height: 1.28;
-  }
-
-  .od-markdown-heading-2 {
-    color: hsl(var(--ink));
-    font-size: 23px;
-    font-weight: 620;
-    line-height: 1.3;
-  }
-
-  .od-markdown-heading-3 {
-    color: hsl(var(--ink-2));
-    font-size: 20px;
-    font-weight: 600;
-    line-height: 1.35;
-  }
-
   .od-markdown-strong {
     color: hsl(var(--ink));
-    font-weight: 620;
-  }
-
-  .od-markdown-blockquote {
-    border-left: 2px solid hsl(var(--ink-4) / 0.55);
-    color: hsl(var(--ink-3));
-    margin-left: 0;
-    padding-left: 0.75em;
-  }
-
-  .od-markdown-inline-code {
-    background: hsl(var(--muted));
-    border: 0.5px solid hsl(var(--border));
-    border-radius: 6px;
-    color: hsl(var(--ink-2));
-    padding: 0.06em 0.32em;
-  }
-
-  .od-markdown-code-fence,
-  .od-markdown-code-block-line {
-    background: hsl(var(--muted));
-    color: hsl(var(--ink-2));
-  }
-
-  .od-markdown-code-fence {
-    border-left: 2px solid hsl(var(--border));
-    padding: 0.18em 0.75em;
-  }
-
-  .od-markdown-code-block-line {
-    border-left: 2px solid hsl(var(--border));
-    padding: 0.06em 0.75em;
-  }
-
-  .od-markdown-highlight {
-    background: hsl(45 90% 84%);
-    border-radius: 2px;
-    padding: 0 0.08em;
+    font-weight: 700;
   }
 
   .odessay-editor-content > * + * {

@@ -78,46 +78,12 @@ const escapeHtml = (value: string) =>
 const formatInlineMarkdown = (line: string): string => {
   const escapedLine = escapeHtml(line)
 
-  return escapedLine
-    .replace(/(`[^`\n]+`)/g, '<span class="od-markdown-inline-code">$1</span>')
-    .replace(/(\*\*[^*\n]+\*\*)/g, '<span class="od-markdown-strong">$1</span>')
-    .replace(/(==[^=\n]+==)/g, '<span class="od-markdown-highlight">$1</span>')
+  return escapedLine.replace(/(\*\*[^*\n]+\*\*)/g, '<span class="od-markdown-strong">$1</span>')
 }
 
 export const renderMarkdownSemanticHtml = (markdown: string): string => {
-  const lines = markdown.split("\n")
-  let inCodeFence = false
-
-  return lines
-    .map((line) => {
-      const trimmed = line.trim()
-
-      if (trimmed.startsWith("```")) {
-        inCodeFence = !inCodeFence
-        return `<span class="od-markdown-code-fence">${escapeHtml(line)}</span>`
-      }
-
-      if (inCodeFence) {
-        return `<span class="od-markdown-code-block-line">${escapeHtml(line)}</span>`
-      }
-
-      if (/^\s*###\s+/.test(line)) {
-        return `<span class="od-markdown-heading-3">${formatInlineMarkdown(line)}</span>`
-      }
-
-      if (/^\s*##\s+/.test(line)) {
-        return `<span class="od-markdown-heading-2">${formatInlineMarkdown(line)}</span>`
-      }
-
-      if (/^\s*#\s+/.test(line)) {
-        return `<span class="od-markdown-heading-1">${formatInlineMarkdown(line)}</span>`
-      }
-
-      if (/^\s*>\s?/.test(line)) {
-        return `<span class="od-markdown-blockquote">${formatInlineMarkdown(line)}</span>`
-      }
-
-      return formatInlineMarkdown(line)
-    })
+  return markdown
+    .split("\n")
+    .map((line) => formatInlineMarkdown(line))
     .join("\n")
 }

@@ -12,10 +12,6 @@ type EditorContentProps = {
   mode: "rich" | "markdown"
   markdownValue: string
   onMarkdownChange: (markdown: string) => void
-  spellcheckEnabled: boolean
-  autoCorrect: "on" | "off"
-  autoCapitalize: "on" | "off"
-  language: string
   markdownTextareaRef?: RefObject<HTMLTextAreaElement | null>
 }
 
@@ -24,10 +20,6 @@ export function WritingEditorContent({
   mode,
   markdownValue,
   onMarkdownChange,
-  spellcheckEnabled,
-  autoCorrect,
-  autoCapitalize,
-  language,
   markdownTextareaRef,
 }: EditorContentProps) {
   const markdownSemanticRef = useRef<HTMLPreElement | null>(null)
@@ -63,10 +55,9 @@ export function WritingEditorContent({
               value={markdownValue}
               onChange={(event) => onMarkdownChange(event.target.value)}
               onScroll={handleMarkdownScroll}
-              spellCheck={spellcheckEnabled}
-              autoCorrect={autoCorrect}
-              autoCapitalize={autoCapitalize}
-              lang={language}
+              spellCheck={false}
+              autoCorrect="off"
+              autoCapitalize="off"
               style={{ fieldSizing: "content" } as CSSProperties}
               className="odessay-markdown-source relative z-10 box-border min-h-[55vh] w-full max-w-full resize-none border-none bg-transparent outline-none"
               aria-label="Markdown source"
