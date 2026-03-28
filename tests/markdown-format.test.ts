@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  convertHtmlTablesToMarkdown,
   materializeMarkdownForRichParser,
   normalizeMarkdownForRoundTrip,
   normalizeMarkdownHighlights,
@@ -62,6 +63,19 @@ describe("normalizeMarkdownForRoundTrip", () => {
     expect(normalizeMarkdownForRoundTrip(markdown)).toBe(
       "Body ==highlight==[^1] and more[^2]\n\n[^1]: Third\n[^2]: First",
     )
+  })
+})
+
+describe("convertHtmlTablesToMarkdown", () => {
+  it("converts html table markup into gfm table and strips style metadata", () => {
+    const html = `<table style="min-width: 557px;"><colgroup><col style="min-width: 25px;"><col style="width: 133px;"></colgroup><tbody><tr><td><p><strong>Perfil</strong></p></td><td><p><strong>Objetivo</strong></p></td></tr><tr><td><p>Builder</p></td><td><p>Integrar rapido</p></td></tr></tbody></table>`
+    const converted = convertHtmlTablesToMarkdown(html)
+
+    expect(converted).toContain("| **Perfil** | **Objetivo** |")
+    expect(converted).toContain("| --- | --- |")
+    expect(converted).toContain("| Builder | Integrar rapido |")
+    expect(converted).not.toContain("<table")
+    expect(converted).not.toContain("style=")
   })
 })
 

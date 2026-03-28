@@ -23,6 +23,7 @@ import {
   updateMarkdownFootnote,
 } from "@/lib/editor/footnote-extension"
 import {
+  convertHtmlTablesToMarkdown,
   materializeMarkdownForRichParser,
   normalizeMarkdownForRoundTrip,
   toggleMarkdownInlineMarker,
@@ -1044,7 +1045,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const handleMarkdownChange = useCallback(
     (nextMarkdown: string) => {
-      setMarkdownValue(nextMarkdown)
+      const normalizedMarkdown = convertHtmlTablesToMarkdown(nextMarkdown)
+      setMarkdownValue(normalizedMarkdown)
 
       if (!editor) {
         return
@@ -1063,7 +1065,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         }
 
         isApplyingContentRef.current = true
-        editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
+        editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
         isApplyingContentRef.current = false
         // Update metrics from TipTap but do NOT derive markdownValue from it —
         // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
