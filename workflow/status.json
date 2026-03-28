@@ -465,9 +465,9 @@
       "phase": "Fase 1",
       "issue": "ODE-59",
       "linear_url": "https://linear.app/z9ne/issue/ODE-59/fix-closed-preview-link-returning-temporary-unavailable-on-production",
-      "commit": "a1f0acd",
+      "commit": "9290926",
       "date": "2026-03-27",
-      "notes": "Render de preview migrado a @tiptap/html con fallback seguro a texto plano cuando el render rich falla; observabilidad con logs sanitizados y cobertura automatizada para estados ok/not-found/revoked/unavailable."
+      "notes": "Render de preview migrado a @tiptap/html/server con fallback seguro a texto plano cuando el render rich falla; observabilidad con logs sanitizados y cobertura automatizada para estados ok/not-found/revoked/unavailable."
     }
   ]
 }
