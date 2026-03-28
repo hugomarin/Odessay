@@ -17,7 +17,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   webServer: {
-    command: "npm run dev",
+    command: "ODE_TEST_LINK_FIXTURES=1 npm run dev",
     port: 3000,
     reuseExistingServer: !CI,
     timeout: 120_000,

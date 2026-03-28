@@ -1,4 +1,4 @@
-import { generateHTML } from "@tiptap/core"
+import { createHash } from "node:crypto"
 import Blockquote from "@tiptap/extension-blockquote"
 import Bold from "@tiptap/extension-bold"
 import BulletList from "@tiptap/extension-bullet-list"
@@ -15,6 +15,7 @@ import Paragraph from "@tiptap/extension-paragraph"
 import Strike from "@tiptap/extension-strike"
 import Text from "@tiptap/extension-text"
 import type { JSONContent } from "@tiptap/core"
+import { generateHTML } from "@tiptap/html"
 import { z } from "zod"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { isTestLinkEmail } from "@/lib/sharing/test-link"
@@ -51,7 +52,7 @@ type WritingRow = {
   author_id: string
   title: string | null
   body_json: Record<string, unknown>
-  body_text: string
+  body_text: string | null
   status: "draft" | "finished"
   visibility: "private" | "shared" | "public"
   created_at: string
@@ -111,11 +112,110 @@ export type TestLinkAccessResult =
   | { state: "revoked" }
   | { state: "unavailable" }
 
+const TEST_LINK_FIXTURE_ENABLED = process.env.ODE_TEST_LINK_FIXTURES === "1"
+
+const TEST_LINK_FIXTURE_RESPONSES: Record<string, TestLinkAccessResult> = {
+  fixturepreviewoktoken0001: {
+    state: "ok",
+    writing: {
+      id: "fixture-writing-id",
+      title: "Fixture Preview",
+      bodyHtml: "<p>Preview fixture content</p>",
+      status: "draft",
+      visibility: "private",
+      createdAt: "2026-03-27T00:00:00.000Z",
+      updatedAt: "2026-03-27T00:00:00.000Z",
+      author: {
+        id: "fixture-author-id",
+        displayName: "Fixture Author",
+        username: "fixture-author",
+      },
+    },
+  },
+  fixturepreviewnotfound0001: { state: "not-found" },
+  fixturepreviewrevokedtoken001: { state: "revoked" },
+  fixturepreviewunavailable001: { state: "unavailable" },
+}
+
+const getPreviewFixtureResponse = (token: string): TestLinkAccessResult | null => {
+  if (!TEST_LINK_FIXTURE_ENABLED) {
+    return null
+  }
+
+  return TEST_LINK_FIXTURE_RESPONSES[token] ?? { state: "not-found" }
+}
+
+const hashForLog = (value: string) => createHash("sha256").update(value).digest("hex").slice(0, 12)
+const sanitizeIdForLog = (value: string) => (value.length <= 12 ? value : `${value.slice(0, 8)}...${value.slice(-4)}`)
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+
+const renderPlainTextPreviewHtml = (bodyText: string | null) => {
+  const normalized = (bodyText ?? "").replaceAll("\r\n", "\n").trim()
+
+  if (!normalized) {
+    return "<p></p>"
+  }
+
+  const paragraphs = normalized
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replaceAll("\n", "<br />")}</p>`)
+
+  return paragraphs.length > 0 ? paragraphs.join("") : "<p></p>"
+}
+
+type PreviewHtmlRenderResult = {
+  bodyHtml: string
+  mode: "rich" | "plain-text"
+}
+
+type PreviewHtmlRenderOptions = {
+  renderRichHtml?: (bodyJson: JSONContent) => string
+  onRichRenderError?: (errorMessage: string) => void
+}
+
+export const renderPreviewBodyHtml = (
+  writing: Pick<WritingRow, "body_json" | "body_text">,
+  options: PreviewHtmlRenderOptions = {},
+): PreviewHtmlRenderResult => {
+  const renderRichHtml = options.renderRichHtml ?? ((bodyJson: JSONContent) => generateHTML(bodyJson, PREVIEW_EXTENSIONS))
+  const bodyJson = writing.body_json
+
+  if (bodyJson && typeof bodyJson === "object" && !Array.isArray(bodyJson)) {
+    try {
+      return {
+        bodyHtml: renderRichHtml(bodyJson as JSONContent),
+        mode: "rich",
+      }
+    } catch (error) {
+      options.onRichRenderError?.(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  return {
+    bodyHtml: renderPlainTextPreviewHtml(writing.body_text),
+    mode: "plain-text",
+  }
+}
+
 export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<TestLinkAccessResult> => {
   const token = normalizeTestLinkToken(rawToken)
 
   if (!token) {
     return { state: "not-found" }
+  }
+
+  const fixtureResult = getPreviewFixtureResponse(token)
+  if (fixtureResult) {
+    return fixtureResult
   }
 
   const { createAdminClient } = await import("@/lib/supabase/admin")
@@ -129,7 +229,7 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
 
   if (invitationError) {
     console.error("[sharing:test-link-access:invitation]", {
-      token,
+      tokenFingerprint: hashForLog(token),
       error: invitationError.message,
     })
     return { state: "unavailable" }
@@ -141,7 +241,7 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
     return { state: invitationState === "not-found" ? "not-found" : "revoked" }
   }
 
-  const activeInvitation = invitation
+  const activeInvitation = invitation as InvitationRow & { writing_id: string }
 
   const { data: writing, error: writingError } = await supabase
     .from("writings")
@@ -152,7 +252,8 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
 
   if (writingError) {
     console.error("[sharing:test-link-access:writing]", {
-      writingId: activeInvitation.writing_id,
+      tokenFingerprint: hashForLog(token),
+      writingRef: sanitizeIdForLog(activeInvitation.writing_id),
       error: writingError.message,
     })
     return { state: "unavailable" }
@@ -170,29 +271,30 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
 
   if (authorProfileError) {
     console.error("[sharing:test-link-access:profile]", {
-      authorId: writing.author_id,
+      writingRef: sanitizeIdForLog(writing.id),
+      authorRef: sanitizeIdForLog(writing.author_id),
       error: authorProfileError.message,
     })
     return { state: "unavailable" }
   }
 
-  let bodyHtml: string
-  try {
-    bodyHtml = generateHTML(writing.body_json as JSONContent, PREVIEW_EXTENSIONS)
-  } catch (err) {
-    console.error("[sharing:test-link-access:generateHTML]", {
-      writingId: writing.id,
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return { state: "unavailable" }
-  }
+  const renderedBody = renderPreviewBodyHtml(writing, {
+    onRichRenderError: (errorMessage) => {
+      console.warn("[sharing:test-link-access:render-fallback]", {
+        tokenFingerprint: hashForLog(token),
+        writingRef: sanitizeIdForLog(writing.id),
+        fallback: "plain-text",
+        reason: errorMessage,
+      })
+    },
+  })
 
   return {
     state: "ok",
     writing: {
       id: writing.id,
       title: writing.title?.trim() || "Untitled writing",
-      bodyHtml,
+      bodyHtml: renderedBody.bodyHtml,
       status: writing.status,
       visibility: writing.visibility,
       createdAt: writing.created_at,

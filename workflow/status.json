@@ -459,6 +459,15 @@
       "commit": "ca3ad07",
       "date": "2026-03-27",
       "notes": "Paridad idempotente de toggles Markdown, canonicalización de highlight/footnotes, estabilidad de viewport en formatos estructurales y cobertura E2E Playwright en harness."
+    },
+    {
+      "what": "Fix closed preview state mapping to avoid false operational failures",
+      "phase": "Fase 1",
+      "issue": "ODE-59",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-59/fix-closed-preview-link-returning-temporary-unavailable-on-production",
+      "commit": "a1f0acd",
+      "date": "2026-03-27",
+      "notes": "Render de preview migrado a @tiptap/html con fallback seguro a texto plano cuando el render rich falla; observabilidad con logs sanitizados y cobertura automatizada para estados ok/not-found/revoked/unavailable."
     }
   ]
 }
