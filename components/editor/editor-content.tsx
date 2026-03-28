@@ -12,6 +12,7 @@ type EditorContentProps = {
   mode: "rich" | "markdown"
   markdownValue: string
   onMarkdownChange: (markdown: string) => void
+  onMarkdownSelectionChange?: (selection: { start: number; end: number; text: string }) => void
   markdownTextareaRef?: RefObject<HTMLTextAreaElement | null>
 }
 
@@ -20,6 +21,7 @@ export function WritingEditorContent({
   mode,
   markdownValue,
   onMarkdownChange,
+  onMarkdownSelectionChange,
   markdownTextareaRef,
 }: EditorContentProps) {
   const markdownSemanticRef = useRef<HTMLPreElement | null>(null)
@@ -32,6 +34,14 @@ export function WritingEditorContent({
       markdownSemanticRef.current.scrollTop = target.scrollTop
       markdownSemanticRef.current.scrollLeft = target.scrollLeft
     }
+  }
+
+  const emitMarkdownSelection = (element: HTMLTextAreaElement) => {
+    onMarkdownSelectionChange?.({
+      start: element.selectionStart,
+      end: element.selectionEnd,
+      text: element.value.slice(element.selectionStart, element.selectionEnd),
+    })
   }
 
   return (
@@ -55,6 +65,10 @@ export function WritingEditorContent({
               value={markdownValue}
               onChange={(event) => onMarkdownChange(event.target.value)}
               onScroll={handleMarkdownScroll}
+              onSelect={(event) => emitMarkdownSelection(event.currentTarget)}
+              onFocus={(event) => emitMarkdownSelection(event.currentTarget)}
+              onKeyUp={(event) => emitMarkdownSelection(event.currentTarget)}
+              onMouseUp={(event) => emitMarkdownSelection(event.currentTarget)}
               spellCheck={false}
               autoCorrect="off"
               autoCapitalize="off"

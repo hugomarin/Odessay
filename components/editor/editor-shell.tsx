@@ -199,6 +199,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
     scrollLeft?: number
     editorScrollTop?: number
     editorScrollLeft?: number
+    shellScrollTop?: number
+    shellScrollLeft?: number
+    windowScrollX?: number
+    windowScrollY?: number
   } | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
@@ -300,6 +304,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
         scrollLeft?: number
         editorScrollTop?: number
         editorScrollLeft?: number
+        shellScrollTop?: number
+        shellScrollLeft?: number
+        windowScrollX?: number
+        windowScrollY?: number
       },
     ) => {
       pendingMarkdownSelectionRef.current = { start, end, ...options }
@@ -358,6 +366,37 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
           applyViewportScroll()
           window.requestAnimationFrame(applyViewportScroll)
+        }
+
+        const shellViewport = document.querySelector<HTMLElement>("main")
+        if (
+          shellViewport &&
+          (typeof pendingSelection.shellScrollTop === "number" || typeof pendingSelection.shellScrollLeft === "number")
+        ) {
+          const applyShellScroll = () => {
+            if (typeof pendingSelection.shellScrollTop === "number") {
+              shellViewport.scrollTop = pendingSelection.shellScrollTop
+            }
+
+            if (typeof pendingSelection.shellScrollLeft === "number") {
+              shellViewport.scrollLeft = pendingSelection.shellScrollLeft
+            }
+          }
+
+          applyShellScroll()
+          window.requestAnimationFrame(applyShellScroll)
+        }
+
+        if (typeof pendingSelection.windowScrollX === "number" || typeof pendingSelection.windowScrollY === "number") {
+          const applyWindowScroll = () => {
+            window.scrollTo(
+              typeof pendingSelection.windowScrollX === "number" ? pendingSelection.windowScrollX : window.scrollX,
+              typeof pendingSelection.windowScrollY === "number" ? pendingSelection.windowScrollY : window.scrollY,
+            )
+          }
+
+          applyWindowScroll()
+          window.requestAnimationFrame(applyWindowScroll)
         }
 
         markdownSelectionRef.current = {
@@ -705,13 +744,18 @@ export function EditorShell({ writingId }: EditorShellProps) {
       const toggleMarkdownWrap = (marker: string) => {
         const textarea = markdownTextareaRef.current
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+        const shellViewport = document.querySelector<HTMLElement>("main")
         const fallbackCursor = markdownValue.length
-        const start = textarea?.selectionStart ?? fallbackCursor
-        const end = textarea?.selectionEnd ?? fallbackCursor
+        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
+        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
         const editorScrollTop = editorViewport?.scrollTop
         const editorScrollLeft = editorViewport?.scrollLeft
+        const shellScrollTop = shellViewport?.scrollTop
+        const shellScrollLeft = shellViewport?.scrollLeft
+        const windowScrollX = window.scrollX
+        const windowScrollY = window.scrollY
         const result = toggleMarkdownInlineMarker(markdownValue, start, end, marker)
 
         persistMarkdownDraft(result.markdown)
@@ -720,6 +764,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
           scrollLeft,
           editorScrollTop,
           editorScrollLeft,
+          shellScrollTop,
+          shellScrollLeft,
+          windowScrollX,
+          windowScrollY,
         })
       }
 
@@ -732,13 +780,18 @@ export function EditorShell({ writingId }: EditorShellProps) {
       ) => {
         const textarea = markdownTextareaRef.current
         const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+        const shellViewport = document.querySelector<HTMLElement>("main")
         const fallbackCursor = markdownValue.length
-        const selectionStart = textarea?.selectionStart ?? fallbackCursor
-        const selectionEnd = textarea?.selectionEnd ?? fallbackCursor
+        const selectionStart = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
+        const selectionEnd = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
         const scrollTop = textarea?.scrollTop
         const scrollLeft = textarea?.scrollLeft
         const editorScrollTop = editorViewport?.scrollTop
         const editorScrollLeft = editorViewport?.scrollLeft
+        const shellScrollTop = shellViewport?.scrollTop
+        const shellScrollLeft = shellViewport?.scrollLeft
+        const windowScrollX = window.scrollX
+        const windowScrollY = window.scrollY
         const blockStart = markdownValue.lastIndexOf("\n", Math.max(0, selectionStart - 1)) + 1
         const nextBreak = markdownValue.indexOf("\n", selectionEnd)
         const blockEnd = nextBreak === -1 ? markdownValue.length : nextBreak
@@ -791,6 +844,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
           scrollLeft,
           editorScrollTop,
           editorScrollLeft,
+          shellScrollTop,
+          shellScrollLeft,
+          windowScrollX,
+          windowScrollY,
         })
       }
 
@@ -1244,6 +1301,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           <EditorTopbar
             editor={editor}
             title={displayTitle}
+            mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
@@ -1262,6 +1320,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
               mode={mode}
               markdownValue={markdownValue}
               onMarkdownChange={handleMarkdownChange}
+              onMarkdownSelectionChange={(selection) => {
+                markdownSelectionRef.current = selection
+              }}
               markdownTextareaRef={markdownTextareaRef}
             />
 

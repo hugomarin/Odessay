@@ -25,11 +25,14 @@ test("structural formatting in long markdown keeps viewport near editing point",
   const readViewport = async () =>
     page.evaluate(() => {
       const container = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+      const shell = document.querySelector<HTMLElement>("main")
       const source = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
 
       return {
         containerScrollTop: container?.scrollTop ?? 0,
         textareaScrollTop: source?.scrollTop ?? 0,
+        shellScrollTop: shell?.scrollTop ?? 0,
+        windowScrollY: window.scrollY,
         selectionStart: source?.selectionStart ?? 0,
       }
     })
@@ -41,6 +44,8 @@ test("structural formatting in long markdown keeps viewport near editing point",
 
     expect(after.containerScrollTop).toBeGreaterThanOrEqual(Math.max(0, before.containerScrollTop - 28))
     expect(after.textareaScrollTop).toBeGreaterThanOrEqual(Math.max(0, before.textareaScrollTop - 28))
+    expect(after.shellScrollTop).toBeGreaterThanOrEqual(Math.max(0, before.shellScrollTop - 28))
+    expect(after.windowScrollY).toBeGreaterThanOrEqual(Math.max(0, before.windowScrollY - 28))
     expect(after.selectionStart).toBeGreaterThan(beforeSelectionStart - 20)
   }
 
