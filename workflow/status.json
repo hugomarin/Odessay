@@ -468,6 +468,15 @@
       "commit": "a1f0acd",
       "date": "2026-03-27",
       "notes": "Render de preview migrado a @tiptap/html con fallback seguro a texto plano cuando el render rich falla; observabilidad con logs sanitizados y cobertura automatizada para estados ok/not-found/revoked/unavailable."
+    },
+    {
+      "what": "Formalizar retorno a main tras merge en /wf-review para arrancar el siguiente build desde base actualizada",
+      "phase": "Fase 1",
+      "issue": "ODE-60",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-60/asegurar-retorno-a-main-tras-merge-en-wf-review",
+      "commit": "dd2565a",
+      "date": "2026-03-27",
+      "notes": "Se actualizó el protocolo de /wf-review en workflow/workflow.md y skill-code-review para exigir post-merge `git switch main` + `git pull --ff-only origin main`."
     }
   ]
 }
