@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Soft delete de writings desde el desk: diálogo de confirmación, optimistic update local-first, cascade de writing_shares e invitations (ux-eval) en server-side",
+      "phase": "Fase 2",
+      "issue": "ODE-62",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-62",
+      "commit": "1f5189e",
+      "date": "2026-03-31",
+      "notes": "DELETE handler extiende cascade: elimina writing_shares y expira invitations ux-eval pending. Frontend: DeleteWritingDialog (ShadCN), three-dots menu en DeskActivityTable visible en hover, enqueueWritingDelete para optimistic update. Hero cards ya filtraban sync_status=deleted."
+    },
+    {
       "what": "Visibilidad shared/public: migración de trigger (slug fallback + estabilidad) y suite de tests ODE-61",
       "phase": "Fase 2",
       "issue": "ODE-61",
