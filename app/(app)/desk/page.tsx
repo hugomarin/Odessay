@@ -12,6 +12,7 @@ import {
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
+import { enqueueWritingDelete } from "@/lib/sync/queue"
 
 const EMPTY_SUMMARY: DeskActivitySummary = {
   heroDrafts: [],
@@ -121,7 +122,14 @@ export default function DeskPage() {
 
       <DeskFilterBar activeFilter={activeFilter} counts={counts} onFilterChange={setActiveFilter} />
 
-      <DeskActivityTable groups={summary.groups} isLoading={isLoading} />
+      <DeskActivityTable
+        groups={summary.groups}
+        isLoading={isLoading}
+        onDeleteRequest={async (id) => {
+          await enqueueWritingDelete(id)
+          await loadDeskActivity(activeFilter)
+        }}
+      />
     </section>
   )
 }
