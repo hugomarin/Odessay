@@ -444,9 +444,9 @@
       "phase": "Fase 1",
       "issue": "ODE-57",
       "linear_url": "https://linear.app/z9ne/issue/ODE-57/polish-ui-editor-tablas-bold-navegacion-y-cursor",
-      "commit": "af5dcf9",
+      "commit": "781df45",
       "date": "2026-03-27",
-      "notes": "Ajustes de UI en editor/preview y navegación lateral: estilo de tablas tipo lectura limpia, strong/b=600, iconos de sidebar más grandes, corrección óptica del PanelLeftClose y caret cian con blink en Rich/Markdown; se añadieron refinamientos tipográficos (ritmo vertical + topbar) y hardening de sync para evitar conflictos intermitentes de concurrencia."
+      "notes": "Review aprobado y mergeado en PR #44 (merge SHA 781df45; implementación principal af5dcf9). Ajustes de UI en editor/preview y navegación lateral: estilo de tablas tipo lectura limpia, strong/b=600, iconos de sidebar más grandes, corrección óptica del PanelLeftClose y caret cian con blink en Rich/Markdown; se añadieron refinamientos tipográficos (ritmo vertical + topbar) y hardening de sync para evitar conflictos intermitentes de concurrencia."
     },
     {
       "what": "Stabilize editor Markdown/Rich parity and formatting UX regressions",
