@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Visibilidad shared/public: migración de trigger (slug fallback + estabilidad) y suite de tests ODE-61",
+      "phase": "Fase 2",
+      "issue": "ODE-61",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-61",
+      "commit": "2ff5bb9",
+      "date": "2026-03-31",
+      "notes": "Actualiza writings_set_derived_fields: cadena de fallback title → body_text → short id para slug, y restauración de old.slug en UPDATE para evitar regeneración desde clientes local-first. 16 tests de transiciones de visibilidad y merge de bootstrap."
+    },
+    {
       "what": "Repositorio de documentación inicializado",
       "phase": "Fase 0",
       "issue": null,
