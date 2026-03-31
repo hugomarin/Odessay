@@ -30,7 +30,7 @@
       "phase": "Fase 2",
       "issue": "ODE-62",
       "linear_url": "https://linear.app/z9ne/issue/ODE-62",
-      "commit": null,
+      "commit": "1f5189e",
       "date": "2026-03-31",
       "notes": "DELETE handler extiende cascade: elimina writing_shares y expira invitations ux-eval pending. Frontend: DeleteWritingDialog (ShadCN), three-dots menu en DeskActivityTable visible en hover, enqueueWritingDelete para optimistic update. Hero cards ya filtraban sync_status=deleted."
     },
