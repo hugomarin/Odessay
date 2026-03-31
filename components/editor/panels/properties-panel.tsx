@@ -6,6 +6,7 @@ import type { WritingStatus } from "@/lib/local-db/schema"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import { cn } from "@/lib/utils"
+import { WritingSharesSection } from "./writing-shares-section"
 
 type PropertiesPanelProps = {
   writingId: string | null
@@ -233,6 +234,10 @@ export function PropertiesPanel({
             </p>
           </div>
         </section>
+
+        {writingId ? (
+          <WritingSharesSection writingId={writingId} />
+        ) : null}
 
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Closed Sharing</p>
