@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "writing_shares: API routes, /shared page y Share section en Properties panel",
+      "phase": "Fase 2",
+      "issue": "ODE-63",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-63",
+      "commit": "5b86f30",
+      "date": "2026-03-31",
+      "notes": "POST/GET/DELETE /api/writings/[id]/shares con auto-upgrade de visibility a 'shared'; GET /api/users/search (solo username+display_name, sin email); /shared page como Server Component; WritingSharesSection en PropertiesPanel con debounce 300ms, dropdown de resultados y lista de acceso con revocación. lib/sharing/writing-shares.ts con helpers puros y 10 tests unitarios."
+    },
+    {
       "what": "Soft delete de writings desde el desk: diálogo de confirmación, optimistic update local-first, cascade de writing_shares e invitations (ux-eval) en server-side",
       "phase": "Fase 2",
       "issue": "ODE-62",
