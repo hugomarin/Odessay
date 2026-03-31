@@ -1,31 +1,28 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-03-28",
+  "last_updated": "2026-03-30",
   "active_phase": {
-    "name": "Fase 1 — Escribir",
-    "linear_project": "https://linear.app/z9ne/project/fase-1-escribir-405134ed4eac",
+    "name": "Fase 2 — Compartir y leer",
+    "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
     "roadmap_ref": "workflow/define/roadmap.md"
   },
   "phase_plan": {
-    "phase": "Fase 1 — Escribir",
+    "phase": "Fase 2 — Compartir y leer",
     "source_of_truth": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-1.md",
+    "definition_of_done": "workflow/define/dod-fase-2.md",
+    "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
     "linear_issues": [
-      "ODE-21",
-      "ODE-22",
-      "ODE-23",
-      "ODE-24",
-      "ODE-25",
-      "ODE-26",
-      "ODE-27",
-      "ODE-28",
-      "ODE-29",
-      "ODE-55",
-      "ODE-56",
-      "ODE-58"
+      "ODE-61",
+      "ODE-62",
+      "ODE-63",
+      "ODE-64",
+      "ODE-65",
+      "ODE-66",
+      "ODE-67",
+      "ODE-68"
     ],
-    "notes": "Fase 1 en ejecución: ODE-21/22/23 cerrados. ODE-24 pasó por review y quedó rechazado con fixes pendientes antes de volver a In Review. Se agregó ODE-55 vía /wf-define para cerrar la brecha de hidratación remota entre sesiones limpias y no limpias. Se agregó ODE-56 vía /wf-define para habilitar spellcheck/autocorrect nativo del navegador con preferencia de usuario. Se agregó ODE-58 vía /wf-define para consolidar regresiones de paridad Markdown/Rich y estabilidad de formato en editor."
+    "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
     {

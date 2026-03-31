@@ -61,7 +61,10 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Secuencia:**
 1. Verificar que existe el Issue Brief en Linear y resolver su `Performance Contract` (`required`/`not required` con justificación).
-2. Correr pre-flight: `node --version && npm run env:check && npm run ops:status:drift`.
+2. Correr pre-flight:
+   - Base (siempre): `node --version`
+   - Scripts opcionales (si existen en el repo): `npm run env:check --if-present` y `npm run ops:status:drift --if-present`.
+   - Si el issue exige checks obligatorios adicionales, declararlos explícitamente en el Issue Brief para este repo.
 3. Crear rama desde `main` actualizado con convención: `feat/{issue-id}-{descripcion}` o `fix/`, `docs/`, `chore/`.
 4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
 5. Si `Performance Contract` es `required`, generar evidencia reproducible:
