@@ -69,8 +69,11 @@ describe("buildDeskActivitySummary", () => {
       filter: "all",
       userId: "user-1",
       now,
-      recipientLabelsByWritingId: {
-        "corr-week": ["Ana Pérez", "Luis Gómez"],
+      recipientPreviewsByWritingId: {
+        "corr-week": [
+          { username: "ana", displayName: "Ana Pérez" },
+          { username: "luis", displayName: "Luis Gómez" },
+        ],
       },
     })
 
@@ -139,14 +142,18 @@ describe("buildDeskActivitySummary", () => {
       filter: "all",
       userId: "user-1",
       now,
-      recipientLabelsByWritingId: {
-        "corr-week": ["Ana Pérez", "Luis Gómez"],
+      recipientPreviewsByWritingId: {
+        "corr-week": [
+          { username: "ana", displayName: "Ana Pérez" },
+          { username: "luis", displayName: "Luis Gómez" },
+        ],
       },
     })
 
     const sharedRow = summary.groups.flatMap((group) => group.rows).find((row) => row.title === "Weekly correspondence")
 
     expect(sharedRow?.stateLabel).toBe("Compartido")
-    expect(sharedRow?.withLabel).toBe("Ana Pérez, Luis Gómez")
+    expect(sharedRow?.withLabel).toBe("@ana, @luis")
+    expect(sharedRow?.recipientPreviews[0]?.username).toBe("ana")
   })
 })

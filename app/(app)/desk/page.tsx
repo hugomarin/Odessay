@@ -12,7 +12,6 @@ import {
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
-import { enqueueWritingDelete } from "@/lib/sync/queue"
 
 type ApiEnvelope<T> = {
   data: T | null
@@ -30,6 +29,11 @@ type ShareEntry = {
   can_respond: boolean
   created_at: string
   profiles: ShareProfile | ShareProfile[] | null
+}
+
+type RecipientPreview = {
+  username: string
+  displayName: string
 }
 
 const EMPTY_SUMMARY: DeskActivitySummary = {
@@ -62,7 +66,7 @@ export default function DeskPage() {
     return profiles
   }, [])
 
-  const loadRecipientLabels = useCallback(
+  const loadRecipientPreviews = useCallback(
     async (writingIds: string[]) => {
       if (writingIds.length === 0) {
         return {}
@@ -77,16 +81,27 @@ export default function DeskPage() {
             const payload = (await response.json()) as ApiEnvelope<ShareEntry[]>
 
             if (!response.ok || payload.error || !payload.data) {
-              return [writingId, [] as string[]] as const
+              return [writingId, [] as RecipientPreview[]] as const
             }
 
-            const recipientLabels = payload.data
-              .map((share) => normalizeProfile(share.profiles)?.display_name ?? null)
-              .filter((label): label is string => Boolean(label))
+            const recipientPreviews = payload.data
+              .map((share) => {
+                const profile = normalizeProfile(share.profiles)
 
-            return [writingId, recipientLabels] as const
+                if (!profile) {
+                  return null
+                }
+
+                return {
+                  username: profile.username,
+                  displayName: profile.display_name,
+                }
+              })
+              .filter((item): item is RecipientPreview => Boolean(item))
+
+            return [writingId, recipientPreviews] as const
           } catch {
-            return [writingId, [] as string[]] as const
+            return [writingId, [] as RecipientPreview[]] as const
           }
         }),
       )
@@ -119,7 +134,7 @@ export default function DeskPage() {
   const loadDeskActivity = useCallback(async (filter: DeskActivityFilter) => {
     const localWritings = await localDB.writings.getAll()
     const localScope = getLocalDBScope()
-    const recipientLabelsByWritingId = await loadRecipientLabels(
+    const recipientPreviewsByWritingId = await loadRecipientPreviews(
       localWritings
         .filter((writing) => writing.visibility === "shared" && writing.sync_status !== "deleted")
         .map((writing) => writing.id),
@@ -129,10 +144,10 @@ export default function DeskPage() {
       buildDeskActivitySummary(localWritings, {
         filter,
         userId: localScope === "anonymous" ? null : localScope,
-        recipientLabelsByWritingId,
+        recipientPreviewsByWritingId,
       }),
     )
-  }, [loadRecipientLabels])
+  }, [loadRecipientPreviews])
 
   useEffect(() => {
     let cancelled = false
@@ -195,10 +210,6 @@ export default function DeskPage() {
       <DeskActivityTable
         groups={summary.groups}
         isLoading={isLoading}
-        onDeleteRequest={async (id) => {
-          await enqueueWritingDelete(id)
-          await loadDeskActivity(activeFilter)
-        }}
       />
     </section>
   )

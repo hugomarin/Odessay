@@ -4,6 +4,11 @@ export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "
 
 export type DeskBadgeTone = "private" | "shared" | "public"
 
+export type DeskRecipientPreview = {
+  username: string
+  displayName: string | null
+}
+
 export type DeskHeroDraft = {
   id: string
   title: string
@@ -21,6 +26,7 @@ export type DeskActivityRow = {
   stateLabel: string
   stateTone: DeskBadgeTone
   withLabel: string
+  recipientPreviews: DeskRecipientPreview[]
   dateLabel: string
   isNew: boolean
   destinationHref: string | null
@@ -42,7 +48,7 @@ type BuildDeskActivityOptions = {
   filter: DeskActivityFilter
   userId?: string | null
   now?: Date
-  recipientLabelsByWritingId?: Record<string, string[]>
+  recipientPreviewsByWritingId?: Record<string, DeskRecipientPreview[]>
 }
 
 type WritingMeta = {
@@ -56,7 +62,7 @@ type WritingMeta = {
   isReceived: boolean
   status: LocalWriting["status"]
   visibility: LocalWriting["visibility"]
-  recipientLabels: string[]
+  recipientPreviews: DeskRecipientPreview[]
 }
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000
@@ -130,7 +136,7 @@ const buildVisibilityLabel = (
     return {
       stateLabel: "Compartido",
       stateTone: "shared",
-      withLabel: "Compartido",
+      withLabel: "",
     }
   }
 
@@ -138,31 +144,41 @@ const buildVisibilityLabel = (
     return {
       stateLabel: "Público",
       stateTone: "public",
-      withLabel: "Abierto",
+      withLabel: "",
     }
   }
 
   return {
     stateLabel: "Privado",
     stateTone: "private",
-    withLabel: "Solo tú",
+    withLabel: "",
   }
 }
 
-const formatRecipientLabels = (labels: string[]) => {
-  const uniqueLabels = [...new Set(labels.map((label) => label.trim()).filter(Boolean))]
+const formatRecipientLabels = (previews: DeskRecipientPreview[]) => {
+  const handles = [
+    ...new Map(
+      previews
+        .map((preview) => ({
+          username: preview.username.trim(),
+          displayName: preview.displayName?.trim() ?? null,
+        }))
+        .filter((preview) => preview.username.length > 0)
+        .map((preview) => [preview.username, preview] as const),
+    ).values(),
+  ]
 
-  if (uniqueLabels.length === 0) {
-    return "Compartido"
+  if (handles.length === 0) {
+    return ""
   }
 
-  return uniqueLabels.join(", ")
+  return handles.map((preview) => `@${preview.username}`).join(", ")
 }
 
 const buildMetas = (
   writings: LocalWriting[],
   userId?: string | null,
-  recipientLabelsByWritingId?: Record<string, string[]>,
+  recipientPreviewsByWritingId?: Record<string, DeskRecipientPreview[]>,
 ): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
   const childrenByParent = new Map<string, number>()
@@ -195,7 +211,7 @@ const buildMetas = (
         isReceived,
         status: writing.status,
         visibility: writing.visibility,
-        recipientLabels: recipientLabelsByWritingId?.[writing.id] ?? [],
+        recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
       }
     })
     .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
@@ -234,8 +250,9 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
       stateTone: visibilityState.stateTone,
       withLabel:
         writing.visibility === "shared"
-          ? formatRecipientLabels(writing.recipientLabels)
+          ? formatRecipientLabels(writing.recipientPreviews)
           : visibilityState.withLabel,
+      recipientPreviews: writing.recipientPreviews,
       dateLabel: `Modificado · ${buildDateLabel(writing.updatedAt, now)}`,
       isNew: writing.isReceived,
       destinationHref: writing.isReceived ? null : `/write/${writing.id}`,
@@ -283,7 +300,7 @@ export const buildDeskActivitySummary = (
   options: BuildDeskActivityOptions,
 ): DeskActivitySummary => {
   const now = options.now ?? new Date()
-  const allWritings = buildMetas(writings, options.userId, options.recipientLabelsByWritingId)
+  const allWritings = buildMetas(writings, options.userId, options.recipientPreviewsByWritingId)
   const filtered = applyFilter(allWritings, options.filter)
 
   return {

@@ -1,22 +1,13 @@
 "use client"
 
-import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, Trash2 } from "lucide-react"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { cn } from "@/lib/utils"
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
   isLoading?: boolean
-  onDeleteRequest?: (id: string) => void
 }
 
 const BADGE_STYLES: Record<DeskBadgeTone, string> = {
@@ -25,9 +16,16 @@ const BADGE_STYLES: Record<DeskBadgeTone, string> = {
   public: "bg-[hsl(140,24%,92%)] text-[hsl(140,30%,28%)]",
 }
 
-export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }: DeskActivityTableProps) {
+const buildInitials = (value: string) =>
+  value
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
+
+export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTableProps) {
   const router = useRouter()
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -64,12 +62,18 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
         className="DeskActivityTable overflow-y-auto"
       >
         {groups.map((group) => (
-          <div key={group.label} className="pb-1">
+          <div key={group.label}>
             <div className="border-b-[0.5px] border-border px-9 py-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">{group.label}</p>
             </div>
 
-            <table className="w-full border-collapse">
+            <table className="w-full table-fixed border-collapse">
+              <colgroup>
+                <col className="w-[58%]" />
+                <col className="w-[16%]" />
+                <col className="w-[14%]" />
+                <col className="w-[12%]" />
+              </colgroup>
               <tbody>
                 {group.rows.map((row) => {
                   const isNavigable = Boolean(row.destinationHref)
@@ -103,12 +107,19 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
                           : "cursor-default bg-muted/20",
                       )}
                     >
-                      <td className="w-8 px-9 py-[18px] align-top md:align-middle">
-                        {row.isNew ? <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-[hsl(220,50%,55%)]" /> : null}
-                      </td>
-                      <td className="px-4 py-[18px] align-top md:align-middle">
-                        <p className="font-lora text-[15px] font-medium leading-[1.3] text-ink">{row.title}</p>
-                        <p className="max-w-[420px] truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                      <td className="px-9 py-[18px] align-top md:align-middle">
+                        <div
+                          className="min-w-0"
+                          style={{
+                            WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                            maskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                          }}
+                        >
+                          <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                            {row.title}
+                          </p>
+                          <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                        </div>
                       </td>
                       <td className="px-4 py-[18px] align-top md:align-middle">
                         <span
@@ -121,32 +132,35 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
                         </span>
                       </td>
                       <td className="px-4 py-[18px] align-top text-[13px] text-ink-2 md:align-middle">
-                        <p className="max-w-[280px] truncate">{row.withLabel}</p>
-                        {!isNavigable ? (
-                          <span className="block pt-1 text-[11px] text-ink-4">Read-only in Desk</span>
+                        {row.recipientPreviews.length > 0 ? (
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="-space-x-1 shrink-0">
+                              {row.recipientPreviews.slice(0, 2).map((recipient) => {
+                                const initialsSource = recipient.displayName ?? recipient.username
+
+                                return (
+                                  <Avatar
+                                    key={recipient.username}
+                                    className="inline-flex h-5 w-5 border-[0.5px] border-border align-middle"
+                                  >
+                                    <AvatarFallback className="bg-ink-2 text-[9px] text-bg">
+                                      {buildInitials(initialsSource)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                )
+                              })}
+                            </div>
+                            <span className="min-w-0 truncate text-[13px] text-ink-2">
+                              @{row.recipientPreviews[0]?.username}
+                            </span>
+                            {row.recipientPreviews.length > 1 ? (
+                              <span className="shrink-0 text-[12px] text-ink-4">+{row.recipientPreviews.length - 1}</span>
+                            ) : null}
+                          </div>
                         ) : null}
                       </td>
                       <td className="px-9 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
                         {row.dateLabel}
-                      </td>
-                      <td className="px-2 py-[18px] align-top md:align-middle" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink-2 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 group-hover:opacity-100"
-                            aria-label="Writing options"
-                          >
-                            <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-[140px]">
-                            <DropdownMenuItem
-                              className="text-destructive focus:text-destructive"
-                              onSelect={() => setPendingDeleteId(row.id)}
-                            >
-                              <Trash2 className="mr-2 h-[13px] w-[13px]" strokeWidth={1.5} />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </td>
                     </tr>
                   )
@@ -156,21 +170,6 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
           </div>
         ))}
       </div>
-
-      <DeleteWritingDialog
-        open={pendingDeleteId !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPendingDeleteId(null)
-          }
-        }}
-        onConfirm={() => {
-          if (pendingDeleteId) {
-            onDeleteRequest?.(pendingDeleteId)
-          }
-          setPendingDeleteId(null)
-        }}
-      />
     </>
   )
 }
