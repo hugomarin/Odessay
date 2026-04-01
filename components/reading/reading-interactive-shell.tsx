@@ -31,7 +31,6 @@ function selectionToOffsets(
   const range = selection.getRangeAt(0)
   const text = range.toString().trim()
   if (!text) return null
-  if (!container.contains(range.commonAncestorContainer)) return null
 
   const preRange = document.createRange()
   preRange.selectNodeContents(container)
@@ -215,6 +214,12 @@ export function ReadingInteractiveShell({
   useEffect(() => {
     if (!isAuthenticated) return
 
+    function getSelectionRoot(): Element | null {
+      const readingBody = document.getElementById("reading-body")
+      if (!readingBody) return bodyRef.current
+      return readingBody.closest("article") ?? readingBody
+    }
+
     function captureSelection() {
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed) {
@@ -223,8 +228,19 @@ export function ReadingInteractiveShell({
         return
       }
 
-      const body = bodyRef.current ?? document.getElementById("reading-body")
+      const body = getSelectionRoot()
       if (!body) return
+
+      const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null
+      if (!range) return
+
+      const insideBody =
+        body.contains(range.startContainer) && body.contains(range.endContainer)
+      if (!insideBody) {
+        setSelectionInfo(null)
+        setAnnotationMode(false)
+        return
+      }
 
       const offsets = selectionToOffsets(body, selection)
       if (!offsets || !offsets.text) {
@@ -233,7 +249,6 @@ export function ReadingInteractiveShell({
         return
       }
 
-      const range = selection.getRangeAt(0)
       const rects = Array.from(range.getClientRects())
       if (!rects.length) return
 
