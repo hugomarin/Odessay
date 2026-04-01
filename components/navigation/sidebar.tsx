@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, LibraryBig, Mails, PanelLeftClose, Plus, Search } from "lucide-react"
+import { FileText, Inbox, LibraryBig, Mails, PanelLeftClose, Plus, Search } from "lucide-react"
 import { SidebarListPanel } from "@/components/navigation/sidebar-list-panel"
 import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
@@ -37,6 +37,7 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/desk", label: "Desk", icon: FileText, section: "sidebar-nav-desk" },
+  { href: "/shared", label: "Shared", icon: Inbox, section: "sidebar-nav-shared" },
   {
     href: "/collections",
     label: "Collections",
