@@ -167,7 +167,7 @@ export default async function PublicAuthorPage({ params }: PageProps) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[720px] flex-1 px-6 pb-16 pt-12">
+      <main className="mx-auto w-full max-w-[720px] flex-1 px-5 pb-16 pt-10 sm:px-6 sm:pt-12">
         <div className="flex flex-col gap-12">
           <AuthorHeader
             profile={{

@@ -382,6 +382,7 @@ export function ReadingInteractiveShell({
             onDelete={handleDelete}
             onShare={handleShare}
             alreadyShared={alreadyShared}
+            onClose={() => setMarginPanelOpen(false)}
           />
         )}
       </div>

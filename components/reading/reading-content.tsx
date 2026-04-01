@@ -104,7 +104,7 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
       data-testid="reading-text"
       className="ReadingText flex-1 overflow-y-auto"
     >
-      <div className="mx-auto max-w-[660px] px-4 pb-16 pt-10 sm:px-10 sm:pb-20 sm:pt-14">
+      <div className="mx-auto max-w-[660px] px-5 pb-16 pt-10 sm:px-10 sm:pb-20 sm:pt-14">
         {/* Author block */}
         <div className="mb-8 flex items-center gap-3 border-b-[0.5px] border-border pb-4 sm:mb-11 sm:pb-6">
           <div

@@ -142,7 +142,7 @@ export function ReadingTopbar({
       </div>
 
       {/* Center — sequence navigation */}
-      <div className="flex items-center gap-0.5 sm:gap-1.5">
+      <div className="hidden items-center gap-0.5 sm:gap-1.5 md:flex">
         {hasNav ? (
           <>
             <button

@@ -82,7 +82,7 @@ export default async function SharedPage() {
       <div
         id="shared-topbar"
         data-section="shared-topbar"
-        className="SharedTopbar flex h-[46px] items-center border-b-[0.5px] border-border px-4 sm:px-6"
+        className="SharedTopbar flex h-[46px] items-center border-b-[0.5px] border-border px-5 sm:px-6"
       >
         <p className="font-lora text-[15px] text-ink-2">Shared with me</p>
       </div>
@@ -91,7 +91,7 @@ export default async function SharedPage() {
         id="shared-list"
         data-section="shared-list"
         data-testid="shared-list"
-        className="SharedList mx-auto max-w-[660px] px-4 py-6 sm:px-6 sm:py-8"
+        className="SharedList mx-auto max-w-[660px] px-5 py-6 sm:px-6 sm:py-8"
       >
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-4 py-16 text-center">

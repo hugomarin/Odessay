@@ -327,20 +327,9 @@
     position: relative;
   }
 
-  #reading-margin-panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(92vw, 296px);
-    max-width: 296px;
-    z-index: 20;
-    box-shadow: var(--shadow-float-lg);
-  }
-
   .prose-odessay {
     font-size: 16px !important;
-    line-height: 1.75 !important;
+    line-height: 1.8 !important;
   }
 
   .prose-odessay h1 {
