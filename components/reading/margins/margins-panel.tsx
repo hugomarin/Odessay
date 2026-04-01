@@ -18,7 +18,6 @@ export function MarginsPanel({
   open,
   margins,
   authorName,
-  writingId: _,
   onUpdateNote,
   onDelete,
   onShare,

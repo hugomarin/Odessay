@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Export de writings desde el editor a .md, .pdf y .docx desde Properties. Markdown client-side; PDF server-side con @react-pdf/renderer; DOCX server-side con docx; endpoint autenticado y bloqueado para writings ajenos.",
+      "phase": "Fase 2",
+      "issue": "ODE-67",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-67",
+      "commit": "efca281",
+      "date": "2026-04-01",
+      "notes": "Se agregó la sección Export en el Properties panel, el endpoint GET /api/writings/[id]/export?format=pdf|docx, helpers de serialización Markdown/PDF/DOCX y tests unitarios. Validaciones en verde: npm run typecheck, npm run lint, npm test."
+    },
+    {
       "what": "Espacio público del autor en /{username} y /{username}/{slug}. Vista dual visitante/author con toggle \"Todo mi contenido\" y badges de visibilidad. Reading pública integrada con metadata SEO/OG y topbar pública (logo + acceso + responder).",
       "phase": "Fase 2",
       "issue": "ODE-66",

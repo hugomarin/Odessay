@@ -31,6 +31,7 @@ import {
 import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
+import { getExportFileBaseName } from "@/lib/export/writing-export"
 import {
   buildEditorSpellcheckConfig,
   DEFAULT_EDITOR_SPELLCHECK_LANGUAGE,
@@ -1256,6 +1257,65 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [hasExplicitTitle, title, bodyText, createdAt],
   )
 
+  const exportFileBaseName = useMemo(
+    () =>
+      getExportFileBaseName({
+        title: displayTitle,
+        bodyText,
+        writingId: currentWritingId ?? "draft",
+      }),
+    [bodyText, currentWritingId, displayTitle],
+  )
+
+  const downloadBlob = useCallback((blob: Blob, filename: string) => {
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+
+    anchor.href = objectUrl
+    anchor.download = filename
+    anchor.rel = "noreferrer"
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+  }, [])
+
+  const exportMarkdown = useCallback(async () => {
+    if (!editor) {
+      return
+    }
+
+    const bodyMarkdown =
+      modeRef.current === "markdown"
+        ? markdownValue
+        : normalizeMarkdownForRoundTrip(
+            getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+          )
+
+    const blob = new Blob([`${bodyMarkdown.trimEnd()}\n`], { type: "text/markdown;charset=utf-8" })
+    downloadBlob(blob, `${exportFileBaseName}.md`)
+  }, [downloadBlob, editor, exportFileBaseName, markdownValue])
+
+  const exportBinary = useCallback(
+    async (format: "pdf" | "docx") => {
+      if (!currentWritingId) {
+        return
+      }
+
+      const response = await fetch(`/api/writings/${currentWritingId}/export?format=${format}`)
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null
+        throw new Error(payload?.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
+      }
+
+      const blob = await response.blob()
+      downloadBlob(blob, `${exportFileBaseName}.${format}`)
+    },
+    [currentWritingId, downloadBlob, exportFileBaseName],
+  )
+
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -1372,11 +1432,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
             ) : (
               <PropertiesPanel
                 writingId={currentWritingId}
+                title={displayTitle}
                 status={writingStatus}
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 spellcheckPreference={spellcheckPreference}
                 spellcheckLanguage={spellcheckConfig.language}
+                onExportMarkdown={exportMarkdown}
+                onExportPdf={() => exportBinary("pdf")}
+                onExportDocx={() => exportBinary("docx")}
                 onClose={() => setActivePanel(null)}
                 onStatusChange={(nextStatus) => {
                   if (nextStatus === writingStatus) {
