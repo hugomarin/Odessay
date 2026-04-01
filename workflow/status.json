@@ -30,7 +30,7 @@
       "phase": "Fase 2",
       "issue": "ODE-67",
       "linear_url": "https://linear.app/z9ne/issue/ODE-67",
-      "commit": "350c9b7",
+      "commit": "efca281",
       "date": "2026-04-01",
       "notes": "Se agregó la sección Export en el Properties panel, el endpoint GET /api/writings/[id]/export?format=pdf|docx, helpers de serialización Markdown/PDF/DOCX y tests unitarios. Validaciones en verde: npm run typecheck, npm run lint, npm test."
     },
