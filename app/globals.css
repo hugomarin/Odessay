@@ -318,6 +318,38 @@
   }
 }
 
+@media (max-width: 699px) {
+  #app-sidebar-shell {
+    display: none !important;
+  }
+
+  #reading-body-shell {
+    position: relative;
+  }
+
+  .prose-odessay {
+    font-size: 16px !important;
+    line-height: 1.8 !important;
+  }
+
+  .prose-odessay h1 {
+    font-size: 1.5em !important;
+  }
+
+  .prose-odessay h2 {
+    font-size: 1.22em !important;
+  }
+
+  .prose-odessay h3 {
+    font-size: 1.05em !important;
+  }
+
+  .prose-odessay blockquote {
+    font-size: 17px !important;
+    padding-left: 1em !important;
+  }
+}
+
 @keyframes menuIn {
   from {
     opacity: 0;

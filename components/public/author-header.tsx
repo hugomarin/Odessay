@@ -34,21 +34,21 @@ export function AuthorHeader({ profile }: { profile: PublicAuthorProfile }) {
       id="author-header"
       data-section="author-header"
       data-testid="author-header"
-      className="AuthorHeader flex flex-col items-center gap-5 text-center"
+      className="AuthorHeader flex flex-col items-center gap-4 text-center sm:gap-5"
     >
-      <Avatar className="h-16 w-16 border-[0.5px] border-border">
+      <Avatar data-testid="author-avatar" className="h-12 w-12 border-[0.5px] border-border sm:h-16 sm:w-16">
         <AvatarFallback className="bg-ink text-lg font-semibold text-bg">
           {initials}
         </AvatarFallback>
       </Avatar>
 
       <div className="flex flex-col items-center gap-1">
-        <h1 className="font-lora text-[22px] font-medium text-ink">{profile.displayName}</h1>
-        <p className="text-[14px] text-ink-3">@{profile.username}</p>
+        <h1 className="font-lora text-[18px] font-medium text-ink sm:text-[22px]">{profile.displayName}</h1>
+        <p className="text-[13px] text-ink-3 sm:text-[14px]">@{profile.username}</p>
       </div>
 
       {bio ? (
-        <p className="max-w-[560px] text-[15px] leading-relaxed text-ink-2">{bio}</p>
+        <p className="max-w-[560px] text-[14px] leading-relaxed text-ink-2 sm:text-[15px]">{bio}</p>
       ) : null}
     </div>
   )

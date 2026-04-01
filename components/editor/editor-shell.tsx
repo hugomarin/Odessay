@@ -12,6 +12,7 @@ import {
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
+import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
@@ -1358,7 +1359,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   return (
     <section id="editor" data-page="editor" className="min-h-screen bg-bg">
-      <div className="EditorLayout flex min-h-screen flex-col">
+      <div className="EditorLayout hidden min-h-screen flex-col md:flex">
         {!isFocusMode ? (
           <EditorTopbar
             editor={editor}
@@ -1486,6 +1487,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
             )}
           </Suspense>
         ) : null}
+      </div>
+
+      <div className="md:hidden">
+        <MobileWriteNotice />
       </div>
 
       <RenameWritingModal

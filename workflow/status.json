@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Mobile reading layouts for /shared and public routes, plus desktop-only gate on /write. Reading typography/padding tightened for mobile, margins panel converted to a bottom sheet, author/public pages adapted for small screens, and mobile UX coverage added.",
+      "phase": "Fase 2",
+      "issue": "ODE-68",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-68",
+      "commit": "0904a92",
+      "date": "2026-04-01",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npx playwright test tests/playwright/reading-mobile.e2e.ts tests/playwright/write-mobile-gate.e2e.ts. Linear moved to In Review with PR #58 linked."
+    },
+    {
       "what": "Export de writings desde el editor a .md, .pdf y .docx desde Properties. Markdown client-side; PDF server-side con @react-pdf/renderer; DOCX server-side con docx; endpoint autenticado y bloqueado para writings ajenos.",
       "phase": "Fase 2",
       "issue": "ODE-67",

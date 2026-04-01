@@ -78,11 +78,11 @@ export default async function SharedPage() {
   )
 
   return (
-    <section id="shared" data-page="shared" className="flex-1 overflow-y-auto">
+    <section id="shared" data-page="shared" className="min-h-[100dvh] flex-1 overflow-y-auto">
       <div
         id="shared-topbar"
         data-section="shared-topbar"
-        className="SharedTopbar flex h-[46px] items-center border-b-[0.5px] border-border px-6"
+        className="SharedTopbar flex h-[46px] items-center border-b-[0.5px] border-border px-5 sm:px-6"
       >
         <p className="font-lora text-[15px] text-ink-2">Shared with me</p>
       </div>
@@ -91,7 +91,7 @@ export default async function SharedPage() {
         id="shared-list"
         data-section="shared-list"
         data-testid="shared-list"
-        className="SharedList mx-auto max-w-[660px] px-6 py-8"
+        className="SharedList mx-auto max-w-[660px] px-5 py-6 sm:px-6 sm:py-8"
       >
         {items.length === 0 ? (
           <div className="flex flex-col items-center gap-4 py-16 text-center">
@@ -105,7 +105,7 @@ export default async function SharedPage() {
               <li key={item.id}>
                 <Link
                   href={`/shared/${item.id}`}
-                  className="block rounded-[10px] border-[0.5px] border-border bg-sb px-5 py-4 shadow-float transition-shadow hover:shadow-float-md"
+                  className="block rounded-[10px] border-[0.5px] border-border bg-sb px-4 py-4 shadow-float transition-shadow hover:shadow-float-md sm:px-5"
                   data-testid="shared-writing-item"
                 >
                   <div className="flex items-start justify-between gap-4">

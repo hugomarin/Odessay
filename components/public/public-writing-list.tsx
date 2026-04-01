@@ -115,7 +115,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
       id="public-writing-list"
       data-section="public-writing-list"
       data-testid="public-writing-list"
-      className="PublicWritingList mx-auto flex w-full max-w-[720px] flex-col gap-10"
+      className="PublicWritingList mx-auto flex w-full max-w-[720px] flex-col gap-8 sm:gap-10"
     >
       {isOwner ? (
         <div className="flex justify-center">
@@ -147,25 +147,25 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
       ) : null}
 
       {collections.length > 0 ? (
-        <section
-          id="public-collections"
-          data-section="public-collections"
-          className="PublicCollections flex flex-col gap-3"
-        >
-          {collections.map((collection) => (
-            <div key={collection.id} className="flex items-center gap-3">
-              <span className="text-[14px] text-ink-2">{collection.name}</span>
-              <span className="h-1 w-1 rounded-full bg-ink-4" />
-              <span className="text-[13px] text-ink-4">{collection.publicWritingsCount} writings</span>
-            </div>
-          ))}
-        </section>
+      <section
+        id="public-collections"
+        data-section="public-collections"
+        className="PublicCollections flex flex-col gap-2 sm:gap-3"
+      >
+        {collections.map((collection) => (
+          <div key={collection.id} className="flex items-center gap-3">
+            <span className="text-[13px] text-ink-2 sm:text-[14px]">{collection.name}</span>
+            <span className="h-1 w-1 rounded-full bg-ink-4" />
+            <span className="text-[12px] text-ink-4 sm:text-[13px]">{collection.publicWritingsCount} writings</span>
+          </div>
+        ))}
+      </section>
       ) : null}
 
       <section
         id="public-writings"
         data-section="public-writings"
-        className="PublicWritings flex flex-col gap-8"
+        className="PublicWritings flex flex-col gap-6 sm:gap-8"
       >
         {displayedWritings.length === 0 ? (
           <p className="py-12 text-center font-lora text-[15px] italic text-ink-3">
@@ -182,22 +182,22 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
               <article key={writing.id} className="group relative">
                 <div className="flex items-start justify-between gap-4">
                   <Link href={href} className="flex min-w-0 flex-1 flex-col gap-2">
-                    <h2 className="font-lora text-[18px] font-medium leading-tight text-ink">
+                    <h2 className="font-lora text-[17px] font-medium leading-tight text-ink sm:text-[18px]">
                       {writing.title ?? "Untitled"}
                     </h2>
-                    <p className="line-clamp-3 text-[15px] leading-relaxed text-ink-2">
+                    <p className="line-clamp-3 text-[14px] leading-relaxed text-ink-2 sm:text-[15px]">
                       {buildExcerpt(writing.bodyText)}
                     </p>
 
                     <div className="mt-1 flex items-center gap-2.5">
-                      <span className="text-[13px] text-ink-4">{formatRelativeDate(writing.updatedAt)}</span>
+                      <span className="text-[12px] text-ink-4 sm:text-[13px]">{formatRelativeDate(writing.updatedAt)}</span>
                       {isOwner && viewMode === "all" ? (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] font-medium text-ink">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-ink sm:text-[12px]">
                           {capitalize(writing.visibility)}
                         </span>
                       ) : null}
                       {isOwner && viewMode === "all" && writing.status === "draft" ? (
-                        <span className="text-[12px] italic text-ink-4">Draft</span>
+                        <span className="text-[11px] italic text-ink-4 sm:text-[12px]">Draft</span>
                       ) : null}
                     </div>
                   </Link>

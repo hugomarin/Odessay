@@ -88,10 +88,11 @@ export function Sidebar({ children, user }: SidebarProps) {
   return (
     <TooltipProvider delayDuration={120}>
       <div
+        id="app-shell"
         className="flex h-screen overflow-hidden bg-bg"
         style={shellStyle}
       >
-        <div className="flex h-full shrink-0">
+        <div id="app-sidebar-shell" className="flex h-full shrink-0">
           <nav
             id="sidebar"
             data-page="sidebar"
