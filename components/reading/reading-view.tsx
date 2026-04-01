@@ -1,6 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import { ReadingTopbar } from "./reading-topbar"
-import { ReadingContent } from "./reading-content"
+import { ReadingInteractiveShell } from "./reading-interactive-shell"
 
 export type ReadingViewProps = {
   writing: {
@@ -20,6 +19,7 @@ export type ReadingViewProps = {
   sequenceTotal?: number | null
   canRespond: boolean
   backUrl?: string
+  isAuthenticated?: boolean
 }
 
 export function ReadingView({
@@ -31,33 +31,19 @@ export function ReadingView({
   sequenceTotal = null,
   canRespond,
   backUrl = "/shared",
+  isAuthenticated = true,
 }: ReadingViewProps) {
   return (
-    <section
-      id="reading-view"
-      data-page="reading-view"
-      className="flex h-screen flex-col overflow-hidden bg-bg"
-    >
-      <ReadingTopbar
-        writingId={writing.id}
-        backUrl={backUrl}
-        prevWritingId={prevWritingId}
-        nextWritingId={nextWritingId}
-        sequencePosition={sequencePosition}
-        sequenceTotal={sequenceTotal}
-        canRespond={canRespond}
-      />
-
-      <div className="flex flex-1 overflow-hidden">
-        <ReadingContent
-          title={writing.title}
-          bodyJson={writing.bodyJson}
-          bodyText={writing.bodyText}
-          author={author}
-          updatedAt={writing.updatedAt}
-        />
-        {/* ReadingMarginPanel — implemented in next issue */}
-      </div>
-    </section>
+    <ReadingInteractiveShell
+      writing={writing}
+      author={author}
+      prevWritingId={prevWritingId}
+      nextWritingId={nextWritingId}
+      sequencePosition={sequencePosition}
+      sequenceTotal={sequenceTotal}
+      canRespond={canRespond}
+      backUrl={backUrl}
+      isAuthenticated={isAuthenticated}
+    />
   )
 }
