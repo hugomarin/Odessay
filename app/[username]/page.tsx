@@ -3,6 +3,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { AuthorHeader } from "@/components/public/author-header"
 import { PublicWritingList } from "@/components/public/public-writing-list"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 type PageProps = {
@@ -40,9 +41,9 @@ function truncateOgDescription(input: string | null, fallback: string): string {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { username } = await params
-  const supabase = await createClient()
+  const admin = createAdminClient()
 
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from("profiles")
     .select("display_name, bio")
     .eq("username", username)
@@ -70,12 +71,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function PublicAuthorPage({ params }: PageProps) {
   const { username } = await params
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from("profiles")
     .select("id, username, display_name, bio")
     .eq("username", username)
@@ -85,7 +87,7 @@ export default async function PublicAuthorPage({ params }: PageProps) {
 
   const isOwner = profile.id === user?.id
 
-  let writingsQuery = supabase
+  let writingsQuery = admin
     .from("writings")
     .select("id, title, body_text, updated_at, visibility, status, slug, version")
     .eq("author_id", profile.id)
@@ -98,13 +100,13 @@ export default async function PublicAuthorPage({ params }: PageProps) {
 
   const [{ data: writingsData, error: writingsError }, { data: collectionsData, error: collectionsError }, { data: publicWritingsData, error: publicWritingsError }] = await Promise.all([
     writingsQuery,
-    supabase
+    admin
       .from("collections")
       .select("id, name")
       .eq("owner_id", profile.id)
       .eq("visibility", "public")
       .order("updated_at", { ascending: false }),
-    supabase
+    admin
       .from("writings")
       .select("id")
       .eq("author_id", profile.id)
@@ -128,7 +130,7 @@ export default async function PublicAuthorPage({ params }: PageProps) {
 
   let writingCollections: WritingCollectionRow[] = []
   if (collectionIds.length > 0 && publicWritingIds.length > 0) {
-    const { data: writingCollectionsData, error: writingCollectionsError } = await supabase
+    const { data: writingCollectionsData, error: writingCollectionsError } = await admin
       .from("writing_collections")
       .select("collection_id, writing_id")
       .in("collection_id", collectionIds)

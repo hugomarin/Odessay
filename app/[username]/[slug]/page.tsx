@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { ReadingView } from "@/components/reading/reading-view"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
 type PageProps = {
@@ -25,9 +26,9 @@ function buildInitials(name: string): string {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { username, slug } = await params
-  const supabase = await createClient()
+  const admin = createAdminClient()
 
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from("profiles")
     .select("id, display_name")
     .eq("username", username)
@@ -39,7 +40,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     }
   }
 
-  const { data: writing } = await supabase
+  const { data: writing } = await admin
     .from("writings")
     .select("title, body_text")
     .eq("author_id", profile.id)
@@ -72,12 +73,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function PublicWritingPage({ params }: PageProps) {
   const { username, slug } = await params
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const { data: profile } = await supabase
+  const { data: profile } = await admin
     .from("profiles")
     .select("id, username, display_name")
     .eq("username", username)
@@ -85,7 +87,7 @@ export default async function PublicWritingPage({ params }: PageProps) {
 
   if (!profile) notFound()
 
-  const { data: writing } = await supabase
+  const { data: writing } = await admin
     .from("writings")
     .select("id, title, body_json, body_text, updated_at")
     .eq("author_id", profile.id)
