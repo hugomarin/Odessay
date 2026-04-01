@@ -10,6 +10,7 @@ import { WritingSharesSection } from "./writing-shares-section"
 
 type PropertiesPanelProps = {
   writingId: string | null
+  title: string
   status: WritingStatus
   visibility: WritingVisibility
   metrics: TextMetrics
@@ -18,6 +19,9 @@ type PropertiesPanelProps = {
   onStatusChange: (next: WritingStatus) => void
   onVisibilityChange: (next: WritingVisibility) => void
   onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
+  onExportMarkdown: () => Promise<void> | void
+  onExportPdf: () => Promise<void> | void
+  onExportDocx: () => Promise<void> | void
   onClose: () => void
 }
 
@@ -82,11 +86,15 @@ const getReadableDate = (value: string | null) => {
 
 export function PropertiesPanel({
   writingId,
+  title,
   status,
   visibility,
   metrics,
   spellcheckPreference,
   spellcheckLanguage,
+  onExportMarkdown,
+  onExportPdf,
+  onExportDocx,
   onStatusChange,
   onVisibilityChange,
   onSpellcheckPreferenceChange,
@@ -97,6 +105,11 @@ export function PropertiesPanel({
   const [isSavingShareLink, setIsSavingShareLink] = useState(false)
   const [shareFeedback, setShareFeedback] = useState<string | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [exportFeedback, setExportFeedback] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const [isExportingMarkdown, setIsExportingMarkdown] = useState(false)
+  const [isExportingPdf, setIsExportingPdf] = useState(false)
+  const [isExportingDocx, setIsExportingDocx] = useState(false)
 
   const shareApiPath = writingId ? `/api/writings/${writingId}/share-test-link` : null
   const shareLinkCreatedAt = getReadableDate(shareLink.createdAt)
@@ -200,6 +213,51 @@ export function PropertiesPanel({
   }, [shareLink.link])
 
   const visibilityCopy = VISIBILITY_COPY[visibility]
+  const handleExportMarkdown = useCallback(async () => {
+    setExportFeedback(null)
+    setExportError(null)
+    setIsExportingMarkdown(true)
+
+    try {
+      await onExportMarkdown()
+      setExportFeedback("Markdown export generated.")
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to export Markdown.")
+    } finally {
+      setIsExportingMarkdown(false)
+    }
+  }, [onExportMarkdown])
+
+  const handleExportPdf = useCallback(async () => {
+    setExportFeedback(null)
+    setExportError(null)
+    setIsExportingPdf(true)
+
+    try {
+      await onExportPdf()
+      setExportFeedback("PDF export generated.")
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to export PDF.")
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }, [onExportPdf])
+
+  const handleExportDocx = useCallback(async () => {
+    setExportFeedback(null)
+    setExportError(null)
+    setIsExportingDocx(true)
+
+    try {
+      await onExportDocx()
+      setExportFeedback("Word export generated.")
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Failed to export Word.")
+    } finally {
+      setIsExportingDocx(false)
+    }
+  }, [onExportDocx])
+
   const handleSharesStateChange = useCallback(
     (hasShares: boolean) => {
       if (hasShares && visibility === "private") {
@@ -268,6 +326,53 @@ export function PropertiesPanel({
             onSharesStateChange={handleSharesStateChange}
           />
         ) : null}
+
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Export</p>
+          <div className="space-y-3 rounded-lg border-[0.5px] border-border bg-bg p-3">
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              Export “{title}” as Markdown, PDF, or Word.
+            </p>
+
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => void handleExportMarkdown()}
+                disabled={isExportingMarkdown}
+                className={cn(
+                  "h-8 rounded-md border-[0.5px] px-3 text-[11px] font-medium transition-colors",
+                  "border-ink bg-ink text-bg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60",
+                )}
+              >
+                {isExportingMarkdown ? "Exporting Markdown..." : "Markdown (.md)"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleExportPdf()}
+                disabled={!writingId || isExportingPdf}
+                className="h-8 rounded-md border-[0.5px] border-border bg-bg px-3 text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isExportingPdf ? "Exporting PDF..." : "PDF (.pdf)"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleExportDocx()}
+                disabled={!writingId || isExportingDocx}
+                className="h-8 rounded-md border-[0.5px] border-border bg-bg px-3 text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isExportingDocx ? "Exporting Word..." : "Word (.docx)"}
+              </button>
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-ink-4">
+              Markdown is generated locally. PDF and Word exports require a saved writing.
+            </p>
+            {exportFeedback ? <p className="text-[11px] text-ink-3">{exportFeedback}</p> : null}
+            {exportError ? <p className="text-[11px] text-[hsl(0,72%,45%)]">{exportError}</p> : null}
+          </div>
+        </section>
 
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Closed Sharing</p>
