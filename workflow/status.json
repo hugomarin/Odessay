@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-03-30",
+  "last_updated": "2026-04-01",
   "active_phase": {
     "name": "Fase 2 — Compartir y leer",
     "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
     "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "Espacio público del autor en /{username} y /{username}/{slug}. Vista dual visitante/author con toggle \"Todo mi contenido\" y badges de visibilidad. Reading pública integrada con metadata SEO/OG y topbar pública (logo + acceso + responder).",
+      "phase": "Fase 2",
+      "issue": "ODE-66",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-66",
+      "commit": "6e7bfae",
+      "date": "2026-04-01",
+      "notes": "Rutas app/[username]/page.tsx y app/[username]/[slug]/page.tsx con 404 unificado para username/slug inválidos y contenido no público. Nuevos componentes components/public/author-header.tsx y components/public/public-writing-list.tsx. ReadingView/ReadingTopbar extendidos con modo público; middleware vuelve a updateSession para mantener flujo auth estable. Performance evidence: artifacts/perf/public-space-trace.json.gz + report/metrics (public-space-*) validados con workflow/perf-budgets-reading.json."
+    },
     {
       "what": "Margins: highlights y anotaciones en la reading view. SelectionPopup (Mark/Annotate), AnnotationBubble (260px, Enter/Escape), HighlightLayer (TreeWalker offset mapping + ResizeObserver), MarginsPanel (296px, editable inline, share footer). API routes GET/POST /api/margins, PATCH /api/margins (batch share), PATCH/DELETE /api/margins/[id]. ReadingInteractiveShell client component. lib/margins/margins.ts con 30 unit tests. HANDOFF pendiente: perf trace requiere dev server corriendo.",
       "phase": "Fase 2",

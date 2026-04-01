@@ -20,6 +20,13 @@ export type ReadingViewProps = {
   canRespond: boolean
   backUrl?: string
   isAuthenticated?: boolean
+  chromeMode?: "default" | "public"
+  publicHeader?: {
+    logoHref: string
+    accountHref: string
+    accountLabel: string
+  }
+  respondHref?: string
 }
 
 export function ReadingView({
@@ -32,6 +39,9 @@ export function ReadingView({
   canRespond,
   backUrl = "/shared",
   isAuthenticated = true,
+  chromeMode = "default",
+  publicHeader,
+  respondHref,
 }: ReadingViewProps) {
   return (
     <ReadingInteractiveShell
@@ -44,6 +54,9 @@ export function ReadingView({
       canRespond={canRespond}
       backUrl={backUrl}
       isAuthenticated={isAuthenticated}
+      chromeMode={chromeMode}
+      publicHeader={publicHeader}
+      respondHref={respondHref}
     />
   )
 }
