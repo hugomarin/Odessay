@@ -179,42 +179,49 @@ async function main() {
     );
   }
 
-  console.log("[ops:perf:capture-reading] Starting trace...");
+  const categories = [
+    "-*",
+    "devtools.timeline",
+    "disabled-by-default-devtools.timeline",
+    "disabled-by-default-devtools.timeline.inputs",
+    "disabled-by-default-devtools.timeline.event-timing",
+    "latencyInfo",
+    "blink.user_timing",
+    "loading",
+    "toplevel",
+  ];
 
-  await cdp.send("Tracing.start", {
-    traceConfig: {
-      recordMode: "recordContinuously",
-      includedCategories: [
-        "devtools.timeline",
-        "v8.execute",
-        "disabled-by-default-devtools.timeline",
-        "disabled-by-default-devtools.timeline.frame",
-        "latencyInfo",
-        "disabled-by-default-v8.cpu_profiler",
-      ],
-    },
+  const traceCompleted = new Promise((resolve) => {
+    cdp.once("Tracing.tracingComplete", resolve);
   });
 
-  await runMeasuredScenario(page);
+  try {
+    console.log("[ops:perf:capture-reading] Starting trace...");
 
-  console.log("[ops:perf:capture-reading] Stopping trace...");
+    await cdp.send("Tracing.start", {
+      transferMode: "ReturnAsStream",
+      categories: categories.join(","),
+      options: "record-as-much-as-possible",
+    });
 
-  const traceResult = await new Promise((resolve, reject) => {
-    cdp.on("Tracing.tracingComplete", resolve);
-    cdp.send("Tracing.end").catch(reject);
-  });
+    await runMeasuredScenario(page);
 
-  const traceBuffer = await readTraceFromStream(cdp, traceResult.stream);
+    await cdp.send("Tracing.end");
+    const completion = await traceCompleted;
+    const traceBuffer = await readTraceFromStream(cdp, completion.stream);
+    const outputBuffer = options.outputPath.endsWith(".gz")
+      ? gzipSync(traceBuffer)
+      : traceBuffer;
 
-  await browser.close();
+    mkdirSync(dirname(options.outputPath), { recursive: true });
+    writeFileSync(options.outputPath, outputBuffer);
 
-  const compressed = gzipSync(traceBuffer);
-  mkdirSync(dirname(options.outputPath), { recursive: true });
-  writeFileSync(options.outputPath, compressed);
-
-  console.log(
-    `[ops:perf:capture-reading] Trace saved to ${options.outputPath} (${(compressed.length / 1024).toFixed(1)} KB compressed).`,
-  );
+    console.log(
+      `[ops:perf:capture-reading] OK - trace stored at ${options.outputPath} (${outputBuffer.length} bytes).`,
+    );
+  } finally {
+    await browser.close();
+  }
 }
 
 main().catch((error) => {
