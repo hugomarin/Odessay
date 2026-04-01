@@ -12,6 +12,7 @@ import {
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
+import { enqueueWritingDelete } from "@/lib/sync/queue"
 
 type ApiEnvelope<T> = {
   data: T | null
@@ -210,6 +211,10 @@ export default function DeskPage() {
       <DeskActivityTable
         groups={summary.groups}
         isLoading={isLoading}
+        onDeleteRequest={async (id) => {
+          await enqueueWritingDelete(id)
+          await loadDeskActivity(activeFilter)
+        }}
       />
     </section>
   )

@@ -1,13 +1,17 @@
 "use client"
 
+import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { MoreHorizontal } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { cn } from "@/lib/utils"
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
   isLoading?: boolean
+  onDeleteRequest?: (id: string) => void
 }
 
 const BADGE_STYLES: Record<DeskBadgeTone, string> = {
@@ -24,8 +28,9 @@ const buildInitials = (value: string) =>
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
 
-export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTableProps) {
+export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }: DeskActivityTableProps) {
   const router = useRouter()
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -69,10 +74,11 @@ export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTab
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[58%]" />
+                <col className="w-[56%]" />
                 <col className="w-[16%]" />
-                <col className="w-[14%]" />
-                <col className="w-[12%]" />
+                <col className="w-[16%]" />
+                <col className="w-[8%]" />
+                <col className="w-[4%]" />
               </colgroup>
               <tbody>
                 {group.rows.map((row) => {
@@ -162,6 +168,19 @@ export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTab
                       <td className="px-9 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
                         {row.dateLabel}
                       </td>
+                      <td
+                        className="px-2 py-[18px] align-top text-right md:align-middle"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`Delete writing ${row.title}`}
+                          onClick={() => setPendingDeleteId(row.id)}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink-2 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 group-hover:opacity-100"
+                        >
+                          <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                        </button>
+                      </td>
                     </tr>
                   )
                 })}
@@ -170,6 +189,21 @@ export function DeskActivityTable({ groups, isLoading = false }: DeskActivityTab
           </div>
         ))}
       </div>
+
+      <DeleteWritingDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteId(null)
+          }
+        }}
+        onConfirm={() => {
+          if (pendingDeleteId) {
+            onDeleteRequest?.(pendingDeleteId)
+          }
+          setPendingDeleteId(null)
+        }}
+      />
     </>
   )
 }
