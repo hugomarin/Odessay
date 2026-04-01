@@ -134,7 +134,7 @@ describe("buildDeskActivitySummary", () => {
     expect(todayRow?.destinationHref).toBe("/write/draft-today")
     expect(receivedRow?.destinationHref).toBeNull()
     expect(todayRow?.stateLabel).toBe("Privado")
-    expect(todayRow?.dateLabel.startsWith("Modificado · ")).toBe(true)
+    expect(todayRow?.dateLabel).toBe("")
   })
 
   it("renders shared recipient names directly when provided", () => {

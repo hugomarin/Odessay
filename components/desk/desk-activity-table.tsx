@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
@@ -169,16 +169,16 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
                         {row.dateLabel}
                       </td>
                       <td
-                        className="px-2 py-[18px] align-top text-right md:align-middle"
+                        className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button
                           type="button"
                           aria-label={`Delete writing ${row.title}`}
                           onClick={() => setPendingDeleteId(row.id)}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink-2 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 group-hover:opacity-100"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                         >
-                          <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                          <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
                         </button>
                       </td>
                     </tr>

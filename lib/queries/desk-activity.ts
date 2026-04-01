@@ -112,11 +112,7 @@ const buildDateLabel = (updatedAt: Date, now: Date) => {
   const today = updatedAt.toDateString() === now.toDateString()
 
   if (today) {
-    return new Intl.DateTimeFormat(formatterOptions.locale, {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(updatedAt)
+    return ""
   }
 
   if (now.getTime() - updatedAt.getTime() < WEEK_IN_MS) {
@@ -253,7 +249,7 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
           ? formatRecipientLabels(writing.recipientPreviews)
           : visibilityState.withLabel,
       recipientPreviews: writing.recipientPreviews,
-      dateLabel: `Modificado · ${buildDateLabel(writing.updatedAt, now)}`,
+      dateLabel: buildDateLabel(writing.updatedAt, now),
       isNew: writing.isReceived,
       destinationHref: writing.isReceived ? null : `/write/${writing.id}`,
     }
