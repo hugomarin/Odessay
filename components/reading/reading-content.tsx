@@ -102,7 +102,7 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
       id="reading-text"
       data-section="reading-text"
       data-testid="reading-text"
-      className="ReadingText h-full overflow-y-auto"
+      className="ReadingText min-h-0 h-full overflow-y-auto"
     >
       <div className="mx-auto max-w-[660px] px-10 pb-20 pt-14">
         {/* Author block */}

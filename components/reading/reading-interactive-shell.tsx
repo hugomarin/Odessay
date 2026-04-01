@@ -215,7 +215,7 @@ export function ReadingInteractiveShell({
   useEffect(() => {
     if (!isAuthenticated) return
 
-    function handleMouseUp() {
+    function captureSelection() {
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed) {
         setSelectionInfo(null)
@@ -223,7 +223,7 @@ export function ReadingInteractiveShell({
         return
       }
 
-      const body = bodyRef.current
+      const body = bodyRef.current ?? document.getElementById("reading-body")
       if (!body) return
 
       const offsets = selectionToOffsets(body, selection)
@@ -255,8 +255,16 @@ export function ReadingInteractiveShell({
       })
     }
 
+    function handleMouseUp() {
+      window.requestAnimationFrame(captureSelection)
+    }
+
     document.addEventListener("mouseup", handleMouseUp)
-    return () => document.removeEventListener("mouseup", handleMouseUp)
+    document.addEventListener("keyup", handleMouseUp)
+    return () => {
+      document.removeEventListener("mouseup", handleMouseUp)
+      document.removeEventListener("keyup", handleMouseUp)
+    }
   }, [isAuthenticated])
 
   // Dismiss popup on Escape
@@ -327,7 +335,7 @@ export function ReadingInteractiveShell({
     <section
       id="reading-view"
       data-page="reading-view"
-      className="flex h-screen flex-col overflow-hidden bg-bg"
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-bg"
     >
       <ReadingTopbar
         writingId={writing.id}
