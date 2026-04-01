@@ -118,6 +118,13 @@ export type ReadingInteractiveShellProps = {
   canRespond: boolean
   backUrl?: string
   isAuthenticated: boolean
+  chromeMode?: "default" | "public"
+  publicHeader?: {
+    logoHref: string
+    accountHref: string
+    accountLabel: string
+  }
+  respondHref?: string
 }
 
 export function ReadingInteractiveShell({
@@ -130,6 +137,9 @@ export function ReadingInteractiveShell({
   canRespond,
   backUrl = "/shared",
   isAuthenticated,
+  chromeMode = "default",
+  publicHeader,
+  respondHref,
 }: ReadingInteractiveShellProps) {
   const [marginPanelOpen, setMarginPanelOpen] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null)
@@ -330,6 +340,9 @@ export function ReadingInteractiveShell({
         marginPanelOpen={marginPanelOpen}
         onToggleMarginPanel={() => setMarginPanelOpen((v) => !v)}
         isAuthenticated={isAuthenticated}
+        mode={chromeMode}
+        publicHeader={publicHeader}
+        respondHref={respondHref}
       />
 
       <div className="flex flex-1 overflow-hidden">
