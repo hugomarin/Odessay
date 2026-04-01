@@ -89,12 +89,30 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
+  let visibility = parsed.data.visibility ?? "private";
+
+  // Guardrail: if the writing already has recipients, keep at least "shared" visibility.
+  if (visibility === "private") {
+    const { count, error: sharesError } = await supabase
+      .from("writing_shares")
+      .select("id", { head: true, count: "exact" })
+      .eq("writing_id", id);
+
+    if (sharesError) {
+      return jsonError(500, "DB_ERROR", sharesError.message);
+    }
+
+    if ((count ?? 0) > 0) {
+      visibility = "shared";
+    }
+  }
+
   const writingRecord = {
     id,
     author_id: userId,
     ...parsed.data,
     status: parsed.data.status ?? "draft",
-    visibility: parsed.data.visibility ?? "private",
+    visibility,
   };
 
   // Try update first to keep ownership checks strict and avoid duplicate-key races on insert.

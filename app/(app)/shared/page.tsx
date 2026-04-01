@@ -36,7 +36,7 @@ export default async function SharedPage() {
 
   const writingIds = (shareRows ?? []).map((r: { writing_id: string }) => r.writing_id)
 
-  // Step 2: fetch those writings (only shared, non-deleted) with author profile
+  // Step 2: fetch those writings (non-deleted) with author profile
   const writings =
     writingIds.length > 0
       ? await admin
@@ -45,7 +45,6 @@ export default async function SharedPage() {
             "id, title, body_text, updated_at, profiles!author_id(username, display_name)",
           )
           .in("id", writingIds)
-          .eq("visibility", "shared")
           .is("deleted_at", null)
           .order("updated_at", { ascending: false })
           .then(({ data }) => data ?? [])

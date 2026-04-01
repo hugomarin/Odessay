@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { X } from "lucide-react"
-import type { WritingStatus } from "@/lib/local-db/schema"
+import type { WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import { cn } from "@/lib/utils"
@@ -11,10 +11,12 @@ import { WritingSharesSection } from "./writing-shares-section"
 type PropertiesPanelProps = {
   writingId: string | null
   status: WritingStatus
+  visibility: WritingVisibility
   metrics: TextMetrics
   spellcheckPreference: EditorSpellcheckPreference
   spellcheckLanguage: string
   onStatusChange: (next: WritingStatus) => void
+  onVisibilityChange: (next: WritingVisibility) => void
   onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
   onClose: () => void
 }
@@ -23,6 +25,21 @@ const STATUS_OPTIONS: Array<{ value: WritingStatus; label: string }> = [
   { value: "draft", label: "Draft" },
   { value: "finished", label: "Done" },
 ]
+
+const VISIBILITY_COPY: Record<WritingVisibility, { label: string; description: string }> = {
+  private: {
+    label: "Private",
+    description: "Only you can access this writing.",
+  },
+  shared: {
+    label: "Shared",
+    description: "Shared users can read and respond.",
+  },
+  public: {
+    label: "Public",
+    description: "Anyone with the link can view it.",
+  },
+}
 
 type ShareLinkState = {
   active: boolean
@@ -66,10 +83,12 @@ const getReadableDate = (value: string | null) => {
 export function PropertiesPanel({
   writingId,
   status,
+  visibility,
   metrics,
   spellcheckPreference,
   spellcheckLanguage,
   onStatusChange,
+  onVisibilityChange,
   onSpellcheckPreferenceChange,
   onClose,
 }: PropertiesPanelProps) {
@@ -180,6 +199,16 @@ export function PropertiesPanel({
     }
   }, [shareLink.link])
 
+  const visibilityCopy = VISIBILITY_COPY[visibility]
+  const handleSharesStateChange = useCallback(
+    (hasShares: boolean) => {
+      if (hasShares && visibility === "private") {
+        onVisibilityChange("shared")
+      }
+    },
+    [onVisibilityChange, visibility],
+  )
+
   return (
     <aside
       id="editor-panel-properties"
@@ -228,15 +257,16 @@ export function PropertiesPanel({
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Visibility</p>
           <div className="rounded-md border-[0.5px] border-border bg-bg px-3 py-2">
-            <p className="text-[12px] font-medium text-ink">Private</p>
-            <p className="mt-1 text-[11px] text-ink-4">
-              Visibility remains private in this phase.
-            </p>
+            <p className="text-[12px] font-medium text-ink">{visibilityCopy.label}</p>
+            <p className="mt-1 text-[11px] text-ink-4">{visibilityCopy.description}</p>
           </div>
         </section>
 
         {writingId ? (
-          <WritingSharesSection writingId={writingId} />
+          <WritingSharesSection
+            writingId={writingId}
+            onSharesStateChange={handleSharesStateChange}
+          />
         ) : null}
 
         <section className="space-y-2">
