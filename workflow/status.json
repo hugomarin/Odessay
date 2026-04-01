@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Reading view: layout sin sidebar, ruta /shared/[id], componentes ReadingView/ReadingTopbar/ReadingContent, harness de perf y capture script",
+      "phase": "Fase 2",
+      "issue": "ODE-64",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-64",
+      "commit": "36253ae",
+      "date": "2026-03-31",
+      "notes": "app/(reading)/layout.tsx (no sidebar), app/(reading)/shared/[id]/page.tsx (auth + access check), ReadingView/ReadingTopbar (client: keyboard nav ← →)/ReadingContent (server: generateHTML). Perf harness en /perf/reading-harness. perf-budgets-reading.json con input/paste como not-required."
+    },
+    {
       "what": "writing_shares: API routes, /shared page y Share section en Properties panel",
       "phase": "Fase 2",
       "issue": "ODE-63",

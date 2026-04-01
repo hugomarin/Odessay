@@ -1,0 +1,93 @@
+{
+  "_description": "Performance budgets for the reading view (ODE-64). No editor interactions — input/paste metrics are not applicable. Budgets derived from the editor baseline with headroom for simpler read-only interactions.",
+  "version": "2026-03-31",
+  "scope": "reading",
+  "evaluation": {
+    "pass_rule": "pass if value <= warn_lte",
+    "warn_rule": "warn if warn_lte < value <= fail_lte",
+    "fail_rule": "fail if value > fail_lte",
+    "approval_rule": "A trace is approved when every required metric is pass or warn and no required metric is fail.",
+    "rejection_rule": "A trace is rejected when at least one required metric is fail or a required metric is missing."
+  },
+  "budgets": {
+    "event_dispatch_ms": {
+      "keydown_p95": {
+        "required": true,
+        "warn_lte": 20,
+        "fail_lte": 25
+      },
+      "input_p95": {
+        "required": false,
+        "note": "Reading view has no text input — metric will not be present in reading traces."
+      },
+      "paste_max": {
+        "required": false,
+        "note": "Reading view has no paste target — metric will not be present in reading traces."
+      },
+      "click_p95": {
+        "required": true,
+        "warn_lte": 63,
+        "fail_lte": 68
+      },
+      "click_max": {
+        "required": true,
+        "warn_lte": 66,
+        "fail_lte": 70
+      }
+    },
+    "event_timing_ms": {
+      "keydown_p95": {
+        "required": true,
+        "warn_lte": 62,
+        "fail_lte": 65
+      },
+      "input_p95": {
+        "required": false,
+        "note": "Reading view has no text input — metric will not be present in reading traces."
+      },
+      "click_p95": {
+        "required": true,
+        "warn_lte": 145,
+        "fail_lte": 150
+      },
+      "click_max": {
+        "required": true,
+        "warn_lte": 160,
+        "fail_lte": 170
+      },
+      "paste_p95": {
+        "required": false,
+        "note": "Reading view has no paste target — metric will not be present in reading traces."
+      }
+    },
+    "interaction_latency_ms": {
+      "editor_inputs_p95": {
+        "required": true,
+        "warn_lte": 130,
+        "fail_lte": 140
+      },
+      "editor_inputs_max": {
+        "required": true,
+        "warn_lte": 160,
+        "fail_lte": 170
+      },
+      "with_interaction_id_p95": {
+        "required": true,
+        "warn_lte": 130,
+        "fail_lte": 140
+      }
+    },
+    "long_tasks_ge_50ms": {
+      "count": {
+        "required": true,
+        "warn_lte": 8,
+        "fail_lte": 10
+      },
+      "max_ms": {
+        "required": true,
+        "warn_lte": 360,
+        "fail_lte": 400
+      }
+    }
+  }
+}

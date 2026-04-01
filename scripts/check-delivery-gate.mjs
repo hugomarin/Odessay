@@ -111,6 +111,7 @@ if (perfTracePath) {
   const perfArgs = ["scripts/check-performance-gate.mjs", "--trace", perfTracePath];
   const perfReportPath = process.env.OPS_PERF_REPORT_PATH?.trim();
   const perfMetricsPath = process.env.OPS_PERF_METRICS_PATH?.trim();
+  const perfBudgetsPath = process.env.OPS_PERF_BUDGETS_PATH?.trim();
 
   if (perfReportPath) {
     perfArgs.push("--report", perfReportPath);
@@ -118,6 +119,10 @@ if (perfTracePath) {
 
   if (perfMetricsPath) {
     perfArgs.push("--metrics", perfMetricsPath);
+  }
+
+  if (perfBudgetsPath) {
+    perfArgs.push("--budgets", perfBudgetsPath);
   }
 
   execFileSync("node", perfArgs, { stdio: "inherit" });
