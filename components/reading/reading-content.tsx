@@ -104,24 +104,24 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
       data-testid="reading-text"
       className="ReadingText flex-1 overflow-y-auto"
     >
-      <div className="mx-auto max-w-[660px] px-10 pb-20 pt-14">
+      <div className="mx-auto max-w-[660px] px-4 pb-16 pt-10 sm:px-10 sm:pb-20 sm:pt-14">
         {/* Author block */}
-        <div className="mb-11 flex items-center gap-3 border-b-[0.5px] border-border pb-6">
+        <div className="mb-8 flex items-center gap-3 border-b-[0.5px] border-border pb-4 sm:mb-11 sm:pb-6">
           <div
-            className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-white"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white sm:h-[38px] sm:w-[38px] sm:text-[12px]"
             style={{ backgroundColor: `hsl(${hue}, 30%, 45%)` }}
             aria-label={displayName}
           >
             {initials}
           </div>
           <div>
-            <p className="text-[14px] font-medium text-ink-3">{displayName}</p>
-            <p className="text-[12px] text-ink-4">{relativeDate}</p>
+            <p className="text-[13px] font-medium text-ink-3 sm:text-[14px]">{displayName}</p>
+            <p className="text-[11px] text-ink-4 sm:text-[12px]">{relativeDate}</p>
           </div>
         </div>
 
         {/* Title */}
-        <h1 className="mb-8 font-lora text-[30px] font-medium leading-[1.2] tracking-[-0.01em] text-ink">
+        <h1 className="mb-6 font-lora text-[24px] font-medium leading-[1.2] tracking-[-0.01em] text-ink sm:mb-8 sm:text-[30px]">
           {title ?? "Untitled"}
         </h1>
 

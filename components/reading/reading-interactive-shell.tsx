@@ -327,7 +327,7 @@ export function ReadingInteractiveShell({
     <section
       id="reading-view"
       data-page="reading-view"
-      className="flex h-screen flex-col overflow-hidden bg-bg"
+      className="flex min-h-[100dvh] flex-col overflow-hidden bg-bg"
     >
       <ReadingTopbar
         writingId={writing.id}
@@ -345,7 +345,12 @@ export function ReadingInteractiveShell({
         respondHref={respondHref}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div
+        id="reading-body-shell"
+        data-section="reading-body-shell"
+        data-testid="reading-body-shell"
+        className="ReadingBodyShell relative flex flex-1 overflow-hidden"
+      >
         {/* Reading content + highlight overlay */}
         <div className="relative flex-1 overflow-hidden">
           <ReadingContent

@@ -73,7 +73,7 @@ export function ReadingTopbar({
         data-testid="reading-chrome"
         className="ReadingChrome flex h-[46px] shrink-0 items-center border-b-[0.5px] border-border bg-bg"
       >
-        <div className="mx-auto flex h-full w-full max-w-[680px] items-center justify-between px-6">
+        <div className="mx-auto flex h-full w-full max-w-[680px] items-center justify-between px-4 sm:px-6">
           <Link href={publicHeader?.logoHref ?? "/"} className="font-lora text-[17px] text-ink">
             Odessay
           </Link>
@@ -98,7 +98,7 @@ export function ReadingTopbar({
             {publicHeader ? (
               <Link
                 href={publicHeader.accountHref}
-                className={`flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-border px-3 text-[12px] ${
+                className={`flex h-8 max-w-[96px] items-center justify-center rounded-[8px] border-[0.5px] border-border px-3 text-[12px] ${
                   isAuthenticated ? "font-semibold text-ink-2" : "font-medium text-ink-3"
                 }`}
               >
@@ -127,46 +127,46 @@ export function ReadingTopbar({
       id="reading-chrome"
       data-section="reading-chrome"
       data-testid="reading-chrome"
-      className="ReadingChrome flex h-[46px] shrink-0 items-center justify-between border-b-[0.5px] border-border bg-bg px-8"
+      className="ReadingChrome flex h-[46px] shrink-0 items-center justify-between border-b-[0.5px] border-border bg-bg px-4 sm:px-8"
     >
       {/* Left — back */}
       <div className="flex items-center">
         <Link
           href={backUrl}
-          className="flex items-center gap-1.5 text-[13px] text-ink-4 transition-colors hover:text-ink-3"
+          className="flex items-center gap-1 text-[12px] text-ink-4 transition-colors hover:text-ink-3 sm:gap-1.5 sm:text-[13px]"
           aria-label="Go back"
         >
-          <ChevronLeft strokeWidth={1.5} className="h-[13px] w-[13px]" />
+          <ChevronLeft strokeWidth={1.5} className="h-[12px] w-[12px] sm:h-[13px] sm:w-[13px]" />
           Back
         </Link>
       </div>
 
       {/* Center — sequence navigation */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-0.5 sm:gap-1.5">
         {hasNav ? (
           <>
             <button
               onClick={() => prevWritingId && router.push(`/shared/${prevWritingId}`)}
               disabled={!prevWritingId}
-              className="flex items-center gap-1 rounded-[7px] px-2.5 py-1.5 text-[12px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30"
+              className="flex items-center gap-1 rounded-[7px] px-2 py-1 text-[11px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
               aria-label="Previous writing"
             >
-              <ChevronLeft strokeWidth={1.5} className="h-[12px] w-[12px]" />
+              <ChevronLeft strokeWidth={1.5} className="h-[11px] w-[11px] sm:h-[12px] sm:w-[12px]" />
               Previous
             </button>
             {sequencePosition !== null && sequenceTotal !== null ? (
-              <span className="px-1 text-[12px] text-ink-4">
+              <span className="hidden px-1 text-[12px] text-ink-4 sm:inline">
                 {sequencePosition} of {sequenceTotal}
               </span>
             ) : null}
             <button
               onClick={() => nextWritingId && router.push(`/shared/${nextWritingId}`)}
               disabled={!nextWritingId}
-              className="flex items-center gap-1 rounded-[7px] px-2.5 py-1.5 text-[12px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30"
+              className="flex items-center gap-1 rounded-[7px] px-2 py-1 text-[11px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
               aria-label="Next writing"
             >
               Next
-              <ChevronRight strokeWidth={1.5} className="h-[12px] w-[12px]" />
+              <ChevronRight strokeWidth={1.5} className="h-[11px] w-[11px] sm:h-[12px] sm:w-[12px]" />
             </button>
           </>
         ) : null}
