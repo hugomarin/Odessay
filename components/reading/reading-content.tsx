@@ -102,7 +102,7 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
       id="reading-text"
       data-section="reading-text"
       data-testid="reading-text"
-      className="ReadingText flex-1 overflow-y-auto"
+      className="ReadingText h-full overflow-y-auto"
     >
       <div className="mx-auto max-w-[660px] px-10 pb-20 pt-14">
         {/* Author block */}
@@ -120,20 +120,21 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
           </div>
         </div>
 
-        {/* Title */}
-        <h1 className="mb-8 font-lora text-[30px] font-medium leading-[1.2] tracking-[-0.01em] text-ink">
-          {title ?? "Untitled"}
-        </h1>
+        <article ref={bodyRef}>
+          {/* Title */}
+          <h1 className="mb-8 font-lora text-[30px] font-medium leading-[1.2] tracking-[-0.01em] text-ink">
+            {title ?? "Untitled"}
+          </h1>
 
-        {/* Body */}
-        <div
-          ref={bodyRef}
-          id="reading-body"
-          data-section="reading-body"
-          data-testid="reading-body"
-          className="prose-odessay"
-          dangerouslySetInnerHTML={{ __html: bodyHtml }}
-        />
+          {/* Body */}
+          <div
+            id="reading-body"
+            data-section="reading-body"
+            data-testid="reading-body"
+            className="prose-odessay"
+            dangerouslySetInnerHTML={{ __html: bodyHtml }}
+          />
+        </article>
       </div>
     </div>
   )

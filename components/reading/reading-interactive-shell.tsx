@@ -345,9 +345,9 @@ export function ReadingInteractiveShell({
         respondHref={respondHref}
       />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Reading content + highlight overlay */}
-        <div className="relative flex-1 overflow-hidden">
+        <div className="relative min-h-0 flex-1 overflow-hidden">
           <ReadingContent
             title={writing.title}
             bodyJson={writing.bodyJson}
