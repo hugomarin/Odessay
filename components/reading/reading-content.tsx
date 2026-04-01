@@ -77,9 +77,10 @@ type ReadingContentProps = {
     username: string
   } | null
   updatedAt: string
+  bodyRef?: React.RefObject<HTMLDivElement | null>
 }
 
-export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt }: ReadingContentProps) {
+export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, bodyRef }: ReadingContentProps) {
   let bodyHtml: string
   if (bodyJson && typeof bodyJson === "object" && !Array.isArray(bodyJson)) {
     try {
@@ -126,6 +127,7 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt }:
 
         {/* Body */}
         <div
+          ref={bodyRef}
           id="reading-body"
           data-section="reading-body"
           data-testid="reading-body"

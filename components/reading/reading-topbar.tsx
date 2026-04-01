@@ -13,6 +13,9 @@ type ReadingTopbarProps = {
   sequencePosition: number | null
   sequenceTotal: number | null
   canRespond: boolean
+  marginPanelOpen?: boolean
+  onToggleMarginPanel?: () => void
+  isAuthenticated?: boolean
 }
 
 export function ReadingTopbar({
@@ -23,6 +26,9 @@ export function ReadingTopbar({
   sequencePosition,
   sequenceTotal,
   canRespond,
+  marginPanelOpen = false,
+  onToggleMarginPanel,
+  isAuthenticated = false,
 }: ReadingTopbarProps) {
   const router = useRouter()
   const hasNav = prevWritingId !== null || nextWritingId !== null
@@ -98,14 +104,22 @@ export function ReadingTopbar({
 
       {/* Right — tools */}
       <div className="flex items-center gap-1">
-        {/* Margins toggle — stub for next issue */}
-        <button
-          className="flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2"
-          aria-label="Toggle margins"
-          title="Margins"
-        >
-          <AlignLeft strokeWidth={1.5} className="h-[14px] w-[14px]" />
-        </button>
+        {/* Margins toggle */}
+        {isAuthenticated && (
+          <button
+            onClick={onToggleMarginPanel}
+            className={`flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors ${
+              marginPanelOpen
+                ? "bg-muted text-ink-2"
+                : "text-ink-4 hover:bg-muted hover:text-ink-2"
+            }`}
+            aria-label={marginPanelOpen ? "Close margins" : "Open margins"}
+            aria-pressed={marginPanelOpen}
+            title="Margins"
+          >
+            <AlignLeft strokeWidth={1.5} className="h-[14px] w-[14px]" />
+          </button>
+        )}
 
         {canRespond ? (
           <Link

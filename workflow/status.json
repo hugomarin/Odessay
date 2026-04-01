@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Margins: highlights y anotaciones en la reading view. SelectionPopup (Mark/Annotate), AnnotationBubble (260px, Enter/Escape), HighlightLayer (TreeWalker offset mapping + ResizeObserver), MarginsPanel (296px, editable inline, share footer). API routes GET/POST /api/margins, PATCH /api/margins (batch share), PATCH/DELETE /api/margins/[id]. ReadingInteractiveShell client component. lib/margins/margins.ts con 30 unit tests. HANDOFF pendiente: perf trace requiere dev server corriendo.",
+      "phase": "Fase 2",
+      "issue": "ODE-65",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-65",
+      "commit": "4cf2386",
+      "date": "2026-03-31",
+      "notes": "Typecheck y lint en verde. 168/168 tests pasan. Performance trace pendiente — requiere `npm run dev` + interacción en /perf/reading-harness para capturar artifacts/perf/margins-trace.json.gz."
+    },
+    {
       "what": "Reading view: layout sin sidebar, ruta /shared/[id], componentes ReadingView/ReadingTopbar/ReadingContent, harness de perf y capture script",
       "phase": "Fase 2",
       "issue": "ODE-64",

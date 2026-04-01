@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
- * Capture a Chrome DevTools performance trace for the reading view.
- * Analogous to capture-editor-trace.mjs but targeting /perf/reading-harness.
+ * capture-reading-trace.mjs — perf trace para reading view + margins (ODE-65)
+ *
+ * Escenario: navegar a /perf/reading-harness → esperar #reading-body →
+ *   seleccionar texto → interactuar con popup → abrir/cerrar panel de márgenes
  *
  * Usage:
- *   node scripts/capture-reading-trace.mjs [--output <path>] [--route <route>]
- *     [--base-url <url>] [--timeout-ms <ms>] [--headed]
+ *   node scripts/capture-reading-trace.mjs \
+ *     --base-url http://127.0.0.1:3000 \
+ *     --output artifacts/perf/margins-trace.json.gz
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -15,7 +18,7 @@ import { chromium } from "playwright";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
 const DEFAULT_ROUTE = "/perf/reading-harness";
-const DEFAULT_OUTPUT = "artifacts/perf/reading-trace.json.gz";
+const DEFAULT_OUTPUT = "artifacts/perf/margins-trace.json.gz";
 const DEFAULT_TIMEOUT_MS = 45_000;
 
 function fail(message) {
@@ -31,200 +34,135 @@ function parseArgs(argv) {
     timeoutMs: DEFAULT_TIMEOUT_MS,
     headless: true,
   };
-
   const args = argv.slice(2);
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    const value = args[index + 1];
-
-    if (arg === "--base-url") {
-      if (!value) fail("Missing value for --base-url.");
-      options.baseUrl = value;
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--route") {
-      if (!value) fail("Missing value for --route.");
-      options.route = value;
-      index += 1;
-      continue;
-    }
-
-    if (arg === "--output") {
-      if (!value) fail("Missing value for --output.");
-      options.outputPath = value;
-      index += 1;
-      continue;
-    }
-
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    const val = args[i + 1];
+    if (arg === "--base-url") { options.baseUrl = val; i++; continue; }
+    if (arg === "--route")    { options.route = val; i++; continue; }
+    if (arg === "--output")   { options.outputPath = val; i++; continue; }
+    if (arg === "--headed")   { options.headless = false; continue; }
     if (arg === "--timeout-ms") {
-      if (!value) fail("Missing value for --timeout-ms.");
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        fail(`Invalid timeout value "${value}".`);
-      }
-      options.timeoutMs = parsed;
-      index += 1;
-      continue;
+      const n = Number(val);
+      if (!Number.isFinite(n) || n <= 0) fail(`Invalid timeout "${val}".`);
+      options.timeoutMs = n; i++; continue;
     }
-
-    if (arg === "--headed") {
-      options.headless = false;
-      continue;
-    }
-
     fail(`Unknown argument "${arg}".`);
   }
-
   return options;
-}
-
-function resolveTargetUrl(baseUrl, route) {
-  const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-  const normalizedRoute = route.startsWith("/") ? route : `/${route}`;
-  return `${normalizedBase}${normalizedRoute}`;
 }
 
 async function readTraceFromStream(cdp, stream) {
   const chunks = [];
-
   while (true) {
-    const response = await cdp.send("IO.read", {
-      handle: stream,
-      size: 1_048_576,
-    });
-
-    if (response.data) {
-      const chunk = response.base64Encoded
-        ? Buffer.from(response.data, "base64")
-        : Buffer.from(response.data, "utf8");
-      chunks.push(chunk);
-    }
-
-    if (response.eof) {
-      break;
-    }
+    const r = await cdp.send("IO.read", { handle: stream, size: 1_048_576 });
+    if (r.data) chunks.push(r.base64Encoded ? Buffer.from(r.data, "base64") : Buffer.from(r.data, "utf8"));
+    if (r.eof) break;
   }
-
   await cdp.send("IO.close", { handle: stream });
   return Buffer.concat(chunks);
 }
 
-async function prepareHarness(page, targetUrl, timeoutMs) {
-  await page.goto(targetUrl, { waitUntil: "networkidle", timeout: timeoutMs });
-  // Wait for the reading content to render
-  await page.waitForSelector("[data-testid='reading-text']", { timeout: timeoutMs });
-  // Click the reading body to establish focus context
-  const body = page.locator("[data-testid='reading-body']").first();
-  await body.click({ position: { x: 80, y: 40 } });
-  // Brief warm-up pause
-  await page.waitForTimeout(300);
-}
-
-async function runMeasuredScenario(page) {
-  // --- Click interactions ---
-  const content = page.locator("[data-testid='reading-body']").first();
-  const box = await content.boundingBox();
-
-  if (box) {
-    for (let iteration = 0; iteration < 12; iteration += 1) {
-      const x = box.x + 40 + ((iteration * 47) % Math.max(box.width - 100, 20));
-      const y = box.y + 20 + ((iteration * 31) % Math.max(box.height - 40, 20));
-      await page.mouse.click(x, y);
-      await page.waitForTimeout(40);
-    }
-  }
-
-  // --- Keyboard interactions — arrow keys (reading navigation) ---
-  for (let i = 0; i < 20; i += 1) {
-    await page.keyboard.press("ArrowDown");
-    await page.waitForTimeout(24);
-  }
-  for (let i = 0; i < 8; i += 1) {
-    await page.keyboard.press("ArrowLeft");
-    await page.waitForTimeout(24);
-  }
-  for (let i = 0; i < 8; i += 1) {
-    await page.keyboard.press("ArrowRight");
-    await page.waitForTimeout(24);
-  }
-  // ESC (margin popup close — no-op in this phase)
-  await page.keyboard.press("Escape");
-
-  await page.waitForTimeout(500);
-}
-
 async function main() {
-  const options = parseArgs(process.argv);
-  const targetUrl = resolveTargetUrl(options.baseUrl, options.route);
+  const opts = parseArgs(process.argv);
+  const base = opts.baseUrl.replace(/\/$/, "");
+  const route = opts.route.startsWith("/") ? opts.route : `/${opts.route}`;
+  const url = `${base}${route}`;
 
-  const browser = await chromium.launch({ headless: options.headless });
-  const context = await browser.newContext();
-  const page = await context.newPage();
+  console.log(`[ops:perf:capture-reading] target: ${url}`);
+  console.log(`[ops:perf:capture-reading] output: ${opts.outputPath}`);
 
-  await page.setViewportSize({ width: 1440, height: 900 });
-
-  const cdp = await page.context().newCDPSession(page);
-
-  console.log(`[ops:perf:capture-reading] Navigating to ${targetUrl}`);
-
-  try {
-    await prepareHarness(page, targetUrl, options.timeoutMs);
-  } catch (error) {
-    await browser.close();
-    fail(
-      `Harness preparation failed: ${error instanceof Error ? error.message : String(error)}\n` +
-        `Make sure the dev server is running at ${options.baseUrl}.`,
-    );
-  }
+  const browser = await chromium.launch({ headless: opts.headless });
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  const cdp = await ctx.newCDPSession(page);
 
   const categories = [
-    "-*",
-    "devtools.timeline",
-    "disabled-by-default-devtools.timeline",
+    "-*","devtools.timeline","disabled-by-default-devtools.timeline",
     "disabled-by-default-devtools.timeline.inputs",
     "disabled-by-default-devtools.timeline.event-timing",
-    "latencyInfo",
-    "blink.user_timing",
-    "loading",
-    "toplevel",
+    "latencyInfo","blink.user_timing","loading","toplevel",
   ];
 
-  const traceCompleted = new Promise((resolve) => {
-    cdp.once("Tracing.tracingComplete", resolve);
-  });
+  const traceCompleted = new Promise(r => cdp.once("Tracing.tracingComplete", r));
 
   try {
-    console.log("[ops:perf:capture-reading] Starting trace...");
+    // ── 1. Navigate and wait for reading body ──
+    await page.goto(url, { waitUntil: "networkidle", timeout: opts.timeoutMs });
+    await page.waitForSelector("#reading-body", { timeout: opts.timeoutMs });
+    await page.waitForTimeout(400);
 
+    // ── 2. Start trace ──
     await cdp.send("Tracing.start", {
       transferMode: "ReturnAsStream",
       categories: categories.join(","),
       options: "record-as-much-as-possible",
     });
 
-    await runMeasuredScenario(page);
+    // ── 3. Measured scenario ──
+    const body = page.locator("#reading-body");
+    const box = await body.boundingBox();
+    if (!box) fail("Could not locate #reading-body bounding box.");
 
+    // Text selection drag
+    await page.mouse.move(box.x + 40, box.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 320, box.y + 60, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    // Dismiss selection popup (it will be shown but margins API will 401 — that's OK)
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+
+    // Toggle margin panel open (topbar button)
+    const toggle = page.locator('[aria-label="Open margins"]');
+    const toggleOk = await toggle.isVisible().catch(() => false);
+    if (toggleOk) {
+      await toggle.click();
+      await page.waitForTimeout(400); // 300ms animation + buffer
+    }
+
+    // Scroll reading area
+    const scrollEl = page.locator('[data-section="reading-text"]');
+    const scrollBox = await scrollEl.boundingBox().catch(() => null);
+    if (scrollBox) {
+      await page.mouse.move(scrollBox.x + scrollBox.width / 2, scrollBox.y + scrollBox.height / 2);
+      await page.mouse.wheel(0, 400);
+      await page.waitForTimeout(200);
+      await page.mouse.wheel(0, -400);
+      await page.waitForTimeout(200);
+    }
+
+    // Close panel
+    const closeBtn = page.locator('[aria-label="Close margins"]');
+    const closeOk = await closeBtn.isVisible().catch(() => false);
+    if (closeOk) {
+      await closeBtn.click();
+      await page.waitForTimeout(400);
+    }
+
+    await page.waitForTimeout(500);
+
+    // ── 4. Stop trace and save ──
     await cdp.send("Tracing.end");
     const completion = await traceCompleted;
-    const traceBuffer = await readTraceFromStream(cdp, completion.stream);
-    const outputBuffer = options.outputPath.endsWith(".gz")
-      ? gzipSync(traceBuffer)
-      : traceBuffer;
+    const traceBuf = await readTraceFromStream(cdp, completion.stream);
+    const out = opts.outputPath.endsWith(".gz") ? gzipSync(traceBuf) : traceBuf;
 
-    mkdirSync(dirname(options.outputPath), { recursive: true });
-    writeFileSync(options.outputPath, outputBuffer);
+    mkdirSync(dirname(opts.outputPath), { recursive: true });
+    writeFileSync(opts.outputPath, out);
+    console.log(`[ops:perf:capture-reading] OK - ${opts.outputPath} (${out.length} bytes)`);
 
-    console.log(
-      `[ops:perf:capture-reading] OK - trace stored at ${options.outputPath} (${outputBuffer.length} bytes).`,
-    );
   } finally {
     await browser.close();
   }
 }
 
-main().catch((error) => {
-  console.error("[ops:perf:capture-reading] Unexpected error:", error);
-  process.exit(1);
+main().catch(err => {
+  const msg = String(err?.message ?? err);
+  if (msg.includes("Executable doesn't exist")) {
+    fail("Chromium not installed. Run: npx playwright install --with-deps chromium");
+  }
+  fail(msg);
 });
