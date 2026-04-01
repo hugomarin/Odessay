@@ -1373,6 +1373,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
               <PropertiesPanel
                 writingId={currentWritingId}
                 status={writingStatus}
+                visibility={writingVisibility}
                 metrics={textMetrics}
                 spellcheckPreference={spellcheckPreference}
                 spellcheckLanguage={spellcheckConfig.language}
@@ -1384,6 +1385,22 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
                   setWritingStatus(nextStatus)
                   void applyPanelMetaChange(editor, { status: nextStatus }, {
+                    persistSnapshot: (overrides) => {
+                      if (!editor) {
+                        return
+                      }
+
+                      void persistEditorSnapshot(editor, overrides)
+                    },
+                  })
+                }}
+                onVisibilityChange={(nextVisibility) => {
+                  if (nextVisibility === writingVisibility) {
+                    return
+                  }
+
+                  setWritingVisibility(nextVisibility)
+                  void applyPanelMetaChange(editor, { visibility: nextVisibility }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {
                         return

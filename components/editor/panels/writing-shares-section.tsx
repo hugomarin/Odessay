@@ -31,9 +31,10 @@ function getInitials(name: string): string {
 
 type WritingSharesSectionProps = {
   writingId: string
+  onSharesStateChange?: (hasShares: boolean) => void
 }
 
-export function WritingSharesSection({ writingId }: WritingSharesSectionProps) {
+export function WritingSharesSection({ writingId, onSharesStateChange }: WritingSharesSectionProps) {
   const sharesApiPath = `/api/writings/${writingId}/shares`
   const [shares, setShares] = useState<ShareEntry[]>([])
   const [isLoadingShares, setIsLoadingShares] = useState(true)
@@ -52,11 +53,14 @@ export function WritingSharesSection({ writingId }: WritingSharesSectionProps) {
     fetch(sharesApiPath)
       .then((r) => r.json() as Promise<ApiEnvelope<ShareEntry[]>>)
       .then((payload) => {
-        if (payload.data) setShares(payload.data)
+        if (payload.data) {
+          setShares(payload.data)
+          onSharesStateChange?.(payload.data.length > 0)
+        }
       })
       .catch(() => {})
       .finally(() => setIsLoadingShares(false))
-  }, [sharesApiPath])
+  }, [onSharesStateChange, sharesApiPath])
 
   // Debounced user search
   useEffect(() => {
@@ -128,14 +132,18 @@ export function WritingSharesSection({ writingId }: WritingSharesSectionProps) {
           return
         }
 
-        setShares((prev) => [...prev, payload.data!])
+        setShares((prev) => {
+          const nextShares = [...prev, payload.data!]
+          onSharesStateChange?.(nextShares.length > 0)
+          return nextShares
+        })
       } catch {
         setError("Couldn't add this user. Please try again.")
       } finally {
         setIsSaving(false)
       }
     },
-    [sharesApiPath],
+    [onSharesStateChange, sharesApiPath],
   )
 
   const handleRevoke = useCallback(
@@ -155,14 +163,18 @@ export function WritingSharesSection({ writingId }: WritingSharesSectionProps) {
           return
         }
 
-        setShares((prev) => prev.filter((s) => s.shared_with_id !== sharedWithId))
+        setShares((prev) => {
+          const nextShares = prev.filter((s) => s.shared_with_id !== sharedWithId)
+          onSharesStateChange?.(nextShares.length > 0)
+          return nextShares
+        })
       } catch {
         setError("Couldn't revoke access. Please try again.")
       } finally {
         setIsSaving(false)
       }
     },
-    [sharesApiPath],
+    [onSharesStateChange, sharesApiPath],
   )
 
   return (

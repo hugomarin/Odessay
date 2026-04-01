@@ -65,9 +65,6 @@ export default async function SharedReadingPage({ params }: PageProps) {
 
   // Access check: author can always view; others need a writing_share row
   if (!isAuthor) {
-    // Only shared writings are accessible to recipients
-    if (writing.visibility !== "shared") notFound()
-
     const { data: shareRow } = await admin
       .from("writing_shares")
       .select("id")
@@ -102,7 +99,6 @@ export default async function SharedReadingPage({ params }: PageProps) {
       .from("writings")
       .select("id, updated_at")
       .in("id", sharedWritingIds)
-      .eq("visibility", "shared")
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
 
