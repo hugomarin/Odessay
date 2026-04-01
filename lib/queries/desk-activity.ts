@@ -2,7 +2,7 @@ import type { LocalWriting } from "@/lib/local-db/schema"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
-export type DeskBadgeTone = "new-reply" | "waiting" | "replied" | "shared" | "read"
+export type DeskBadgeTone = "private" | "shared" | "public"
 
 export type DeskHeroDraft = {
   id: string
@@ -42,6 +42,7 @@ type BuildDeskActivityOptions = {
   filter: DeskActivityFilter
   userId?: string | null
   now?: Date
+  recipientLabelsByWritingId?: Record<string, string[]>
 }
 
 type WritingMeta = {
@@ -55,6 +56,7 @@ type WritingMeta = {
   isReceived: boolean
   status: LocalWriting["status"]
   visibility: LocalWriting["visibility"]
+  recipientLabels: string[]
 }
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000
@@ -98,71 +100,70 @@ const buildTitle = (title: string | null | undefined) => {
 }
 
 const buildDateLabel = (updatedAt: Date, now: Date) => {
+  const formatterOptions = {
+    locale: "es-MX",
+  } as const
   const today = updatedAt.toDateString() === now.toDateString()
 
   if (today) {
-    return new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
+    return new Intl.DateTimeFormat(formatterOptions.locale, {
+      hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
     }).format(updatedAt)
   }
 
   if (now.getTime() - updatedAt.getTime() < WEEK_IN_MS) {
-    return new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(updatedAt)
+    return new Intl.DateTimeFormat(formatterOptions.locale, { weekday: "short" }).format(updatedAt)
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(formatterOptions.locale, {
     month: "short",
     day: "numeric",
   }).format(updatedAt)
 }
 
-const buildState = (writing: WritingMeta): Pick<DeskActivityRow, "stateLabel" | "stateTone" | "withLabel" | "isNew"> => {
-  if (writing.isReceived) {
+const buildVisibilityLabel = (
+  visibility: LocalWriting["visibility"],
+): Pick<DeskActivityRow, "stateLabel" | "stateTone" | "withLabel"> => {
+  if (visibility === "shared") {
     return {
-      stateLabel: "New reply",
-      stateTone: "new-reply",
-      withLabel: "Incoming",
-      isNew: true,
-    }
-  }
-
-  if (writing.hasResponses) {
-    return {
-      stateLabel: "Replied",
-      stateTone: "replied",
-      withLabel: "Thread",
-      isNew: false,
-    }
-  }
-
-  if (writing.visibility !== "private") {
-    return {
-      stateLabel: "Shared",
+      stateLabel: "Compartido",
       stateTone: "shared",
-      withLabel: "Recipients",
-      isNew: false,
+      withLabel: "Compartido",
     }
   }
 
-  if (writing.status === "draft") {
+  if (visibility === "public") {
     return {
-      stateLabel: "Waiting",
-      stateTone: "waiting",
-      withLabel: writing.isCorrespondence ? "Thread" : "Only you",
-      isNew: false,
+      stateLabel: "Público",
+      stateTone: "public",
+      withLabel: "Abierto",
     }
   }
 
   return {
-    stateLabel: "Read",
-    stateTone: "read",
-    withLabel: writing.isCorrespondence ? "Thread" : "Only you",
-    isNew: false,
+    stateLabel: "Privado",
+    stateTone: "private",
+    withLabel: "Solo tú",
   }
 }
 
-const buildMetas = (writings: LocalWriting[], userId?: string | null): WritingMeta[] => {
+const formatRecipientLabels = (labels: string[]) => {
+  const uniqueLabels = [...new Set(labels.map((label) => label.trim()).filter(Boolean))]
+
+  if (uniqueLabels.length === 0) {
+    return "Compartido"
+  }
+
+  return uniqueLabels.join(", ")
+}
+
+const buildMetas = (
+  writings: LocalWriting[],
+  userId?: string | null,
+  recipientLabelsByWritingId?: Record<string, string[]>,
+): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
   const childrenByParent = new Map<string, number>()
 
@@ -194,6 +195,7 @@ const buildMetas = (writings: LocalWriting[], userId?: string | null): WritingMe
         isReceived,
         status: writing.status,
         visibility: writing.visibility,
+        recipientLabels: recipientLabelsByWritingId?.[writing.id] ?? [],
       }
     })
     .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
@@ -223,17 +225,20 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
   ]
 
   for (const writing of writings) {
-    const rowState = buildState(writing)
+    const visibilityState = buildVisibilityLabel(writing.visibility)
     const row: DeskActivityRow = {
       id: writing.id,
       title: writing.title,
       excerpt: writing.excerpt,
-      stateLabel: rowState.stateLabel,
-      stateTone: rowState.stateTone,
-      withLabel: rowState.withLabel,
-      dateLabel: buildDateLabel(writing.updatedAt, now),
-      isNew: rowState.isNew,
-      destinationHref: rowState.isNew ? null : `/write/${writing.id}`,
+      stateLabel: visibilityState.stateLabel,
+      stateTone: visibilityState.stateTone,
+      withLabel:
+        writing.visibility === "shared"
+          ? formatRecipientLabels(writing.recipientLabels)
+          : visibilityState.withLabel,
+      dateLabel: `Modificado · ${buildDateLabel(writing.updatedAt, now)}`,
+      isNew: writing.isReceived,
+      destinationHref: writing.isReceived ? null : `/write/${writing.id}`,
     }
 
     if (writing.updatedAt.toDateString() === now.toDateString()) {
@@ -278,7 +283,7 @@ export const buildDeskActivitySummary = (
   options: BuildDeskActivityOptions,
 ): DeskActivitySummary => {
   const now = options.now ?? new Date()
-  const allWritings = buildMetas(writings, options.userId)
+  const allWritings = buildMetas(writings, options.userId, options.recipientLabelsByWritingId)
   const filtered = applyFilter(allWritings, options.filter)
 
   return {
