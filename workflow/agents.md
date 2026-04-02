@@ -20,6 +20,19 @@ Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuenc
 - Si la rama actual es `main`, crear y cambiar a una rama `codex/<issue-o-tarea>` antes de editar o commitear.
 - Si el trabajo ya quedó en `main` por error, corregirlo moviendo los commits a la rama de feat y restaurando `main` al commit previo.
 
+## Regla de transición a In Review
+
+Antes de mover cualquier issue a `In Review` en Linear, verificar que existe un PR abierto para la rama del issue:
+
+```bash
+gh pr list --head <rama-del-issue>
+```
+
+- Si no existe PR: **no mover a `In Review`**. Completar el BUILD abriendo el PR primero con `gh pr create`.
+- Si existe PR: confirmar que está en estado `OPEN` antes de continuar.
+
+Un issue en `In Review` sin PR es un estado inválido — indica que BUILD no completó su gate.
+
 ## Regla de mantenimiento de docs.json
 
 Cuando una tarea cree, mueva o elimine un documento, actualiza `workflow/docs.json` al cerrar esa tarea — solo la entrada afectada, no el archivo completo. Para un mantenimiento profundo del inventario, usa `/wf-update-docs`.

@@ -74,14 +74,15 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 7. Correr gate de entrega:
     - Con contrato requerido: `OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate`.
     - Sin contrato requerido: `npm run ops:delivery:gate`.
-8. Abrir PR con evidencia objetiva:
+8. Abrir PR con evidencia objetiva y verificar que `gh pr create` devuelve una URL válida:
     - output del gate de entrega;
     - output de `check-performance-gate` (si aplica);
     - rutas de artefactos `artifacts/perf/*` (trace, report y metrics) o justificación explícita de por qué no aplica contrato.
-9. Mover issue a `In Review` en Linear.
+   Si `gh pr create` falla o no devuelve URL, el issue **no puede pasar a `In Review`** — corregir antes de continuar.
+9. Mover issue a `In Review` en Linear **solo tras confirmar que el PR existe** (`gh pr view` devuelve estado `OPEN`).
 10. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
 
-**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto + evidencia de performance completa cuando el contrato es requerido.
+**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido.
 
 ---
 
@@ -102,6 +103,11 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 4. Si el brief tiene `Performance Contract` requerido: artefactos de performance del PR (trace + report + output de gate).
 
 **No cargar por defecto:** documentos core, features, roadmap.
+
+**Pre-check obligatorio — antes de cualquier otra acción:**
+Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente un PR en estado `OPEN`.
+- Si no existe PR: emitir HANDOFF al humano indicando que BUILD no completó su gate, mover el issue a `In Progress` y no continuar el review.
+- Si existe PR: continuar con la secuencia normal.
 
 **Secuencia — si aprobado:**
 1. Verificar gate: `npm run ops:delivery:gate` en verde (y con `OPS_PERF_TRACE_PATH` cuando el contrato es requerido).
