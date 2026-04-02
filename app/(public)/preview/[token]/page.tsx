@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { WritingContentFrame } from "@/components/reading/writing-content-frame"
 import { getPreviewWritingFromTestLink } from "@/lib/sharing/test-link-access"
 
 export const dynamic = "force-dynamic"
@@ -82,21 +83,20 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         </div>
       </header>
 
-      <main className="PreviewContent mx-auto w-full max-w-[860px] px-6 py-10">
-        <article className="mx-auto w-full max-w-[660px]">
-          <div className="border-b-[0.5px] border-border pb-5">
-            <p className="text-[12px] text-ink-4">By {result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"}</p>
-            <h1 className="mt-3 font-lora text-[30px] font-medium leading-[1.2] text-ink">{result.writing.title}</h1>
-            <p className="mt-3 text-[12px] text-ink-4">Updated {formatDate(result.writing.updatedAt)}</p>
-          </div>
-
-          <div
-            id="preview-body"
-            data-section="preview-body"
-            data-testid="preview-body"
-            className="PreviewBody prose prose-odessay pt-8"
-            dangerouslySetInnerHTML={{ __html: result.writing.bodyHtml }}
-          />
+      <main className="PreviewContent w-full">
+        <article className="w-full">
+          <WritingContentFrame
+            title={result.writing.title}
+            bodyHtml={result.writing.bodyHtml}
+            bodyId="preview-body"
+            bodyTestId="preview-body"
+            showTitle={false}
+          >
+            <div className="border-b-[0.5px] border-border pb-5">
+              <p className="text-[12px] text-ink-4">By {result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"}</p>
+              <p className="mt-3 text-[12px] text-ink-4">Updated {formatDate(result.writing.updatedAt)}</p>
+            </div>
+          </WritingContentFrame>
         </article>
       </main>
     </section>

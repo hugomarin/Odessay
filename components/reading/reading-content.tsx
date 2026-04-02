@@ -1,6 +1,7 @@
 import type { JSONContent } from "@tiptap/core"
 import { renderWritingBodyHtml } from "@/lib/reading/render-body-html-client"
-import { SelectionPreviewLayer, type SelectionPreviewRect } from "./margins/selection-preview-layer"
+import { WritingContentFrame } from "./writing-content-frame"
+import { type SelectionPreviewRect } from "./margins/selection-preview-layer"
 
 function getInitials(name: string): string {
   return name
@@ -70,7 +71,15 @@ export function ReadingContent({
       data-testid="reading-text"
       className="ReadingText relative min-h-0 flex-1 overflow-y-auto"
     >
-      <div className="mx-auto max-w-[660px] px-5 pb-16 pt-10 sm:px-10 sm:pb-20 sm:pt-14">
+      <WritingContentFrame
+        title={title}
+        bodyHtml={bodyHtml}
+        bodyId="reading-body"
+        bodyTestId="reading-body"
+        bodyRef={bodyRef}
+        selectionPreviewRects={selectionPreviewRects ?? null}
+        showTitle={false}
+      >
         {/* Author block */}
         <div className="mb-8 flex items-center gap-3 border-b-[0.5px] border-border pb-4 sm:mb-11 sm:pb-6">
           <div
@@ -86,23 +95,7 @@ export function ReadingContent({
           </div>
         </div>
 
-        {/* Title */}
-        <h1 className="mb-6 font-lora text-[24px] font-medium leading-[1.2] tracking-[-0.01em] text-ink sm:mb-8 sm:text-[30px]">
-          {title ?? "Untitled"}
-        </h1>
-
-        {/* Body */}
-        <div
-          ref={bodyRef}
-          id="reading-body"
-          data-section="reading-body"
-          data-testid="reading-body"
-          className="prose-odessay"
-          dangerouslySetInnerHTML={{ __html: bodyHtml }}
-        />
-      </div>
-
-      <SelectionPreviewLayer rects={selectionPreviewRects ?? null} />
+      </WritingContentFrame>
     </div>
   )
 }

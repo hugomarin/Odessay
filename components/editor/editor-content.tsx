@@ -51,7 +51,7 @@ export function WritingEditorContent({
       data-testid="editor-writing-area"
       className="EditorWritingArea min-h-0 flex-1 overflow-y-auto"
     >
-      <div className="mx-auto w-full max-w-[860px] px-6 pb-20 pt-16 sm:px-10">
+      <div className="odessay-content-frame">
         {mode === "markdown" ? (
           <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
             <pre
