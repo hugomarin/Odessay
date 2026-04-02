@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Unify reading typography and content frame across writing, preview, and shared views. Shared content frame class centralizes width/padding, editor writing area now uses the same 660px content column, and preview/shared render through the same title/body frame. Added E2E coverage for preview typography and reading mobile/desktop stability.",
+      "phase": "Fase 2",
+      "issue": "ODE-76",
+      "linear_url": "https://linear.app/issue/ODE-76",
+      "commit": "907939f",
+      "date": "2026-04-02",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test, npx playwright test tests/playwright/preview-valid-token.e2e.ts tests/playwright/reading-mobile.e2e.ts. Performance contract: required."
+    },
+    {
       "what": "Rich text rendering fix: shared renderer lib/reading/render-body-html.ts centralizes TipTap HTML generation with Table extensions; reading-content.tsx and test-link-access.ts now use it so /shared, /preview, and /{username}/{slug} render bold, headings, lists, and tables from body_json instead of falling back to plain text.",
       "phase": "Fase 2",
       "issue": "ODE-74",
