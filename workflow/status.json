@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-04-01",
+  "last_updated": "2026-04-02",
   "active_phase": {
     "name": "Fase 2 — Compartir y leer",
     "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
     "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "Shared-with-me filter tab on Desk. DeskViewToggle switches between My writings and Shared with me via ?tab=shared. SharedWithMeList renders shared writings with author avatar. /shared redirects to /desk?tab=shared. GET /api/shared/writings authenticated endpoint. Lazy-loads on first tab activation.",
+      "phase": "Fase 2",
+      "issue": "ODE-70",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-70",
+      "commit": "35e8d61",
+      "date": "2026-04-02",
+      "notes": "Typecheck, lint, tests 172/172 en verde. Performance contract: not required. PR #60 merged."
+    },
     {
       "what": "Mobile reading layouts for /shared and public routes, plus desktop-only gate on /write. Reading typography/padding tightened for mobile, margins panel converted to a bottom sheet, author/public pages adapted for small screens, and mobile UX coverage added.",
       "phase": "Fase 2",
