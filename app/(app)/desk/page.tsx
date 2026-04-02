@@ -1,16 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { SignOutButton } from "@/components/auth/sign-out-button"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { DeskFilterBar } from "@/components/desk/desk-filter-bar"
 import { DeskHero } from "@/components/desk/desk-hero"
+import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
+import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import {
   buildDeskActivitySummary,
   type DeskActivityFilter,
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
+import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete } from "@/lib/sync/queue"
 
@@ -49,11 +53,41 @@ const EMPTY_SUMMARY: DeskActivitySummary = {
   total: 0,
 }
 
+type SharedApiEnvelope<T> = {
+  data: T | null
+  error: { code: string; message: string } | null
+}
+
 export default function DeskPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [activeFilter, setActiveFilter] = useState<DeskActivityFilter>("all")
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)
   const [isLoading, setIsLoading] = useState(true)
+  const [sharedItems, setSharedItems] = useState<SharedWritingListItem[]>([])
+  const [isSharedLoading, setIsSharedLoading] = useState(false)
+  const [sharedError, setSharedError] = useState<string | null>(null)
   const hasHydratedRemoteRef = useRef(false)
+  const hasLoadedSharedRef = useRef(false)
+
+  const activeView: DeskViewMode = searchParams.get("tab") === "shared" ? "shared" : "mine"
+
+  const updateActiveView = useCallback(
+    (nextView: DeskViewMode) => {
+      const nextSearchParams = new URLSearchParams(searchParams.toString())
+
+      if (nextView === "shared") {
+        nextSearchParams.set("tab", "shared")
+      } else {
+        nextSearchParams.delete("tab")
+      }
+
+      const nextQuery = nextSearchParams.toString()
+      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams],
+  )
 
   const normalizeProfile = useCallback((profiles: ShareEntry["profiles"]) => {
     if (!profiles) {
@@ -150,7 +184,42 @@ export default function DeskPage() {
     )
   }, [loadRecipientPreviews])
 
+  const loadSharedWritings = useCallback(
+    async (force = false) => {
+      if (!force && hasLoadedSharedRef.current) {
+        return
+      }
+
+      setIsSharedLoading(true)
+      setSharedError(null)
+
+      try {
+        const response = await fetch("/api/shared/writings", {
+          cache: "no-store",
+        })
+        const payload = (await response.json()) as SharedApiEnvelope<SharedWritingListItem[]>
+
+        if (!response.ok || payload.error || !payload.data) {
+          throw new Error(payload.error?.message ?? "Failed to load shared writings.")
+        }
+
+        setSharedItems(payload.data)
+        hasLoadedSharedRef.current = true
+      } catch (error) {
+        setSharedItems([])
+        setSharedError(error instanceof Error ? error.message : "Failed to load shared writings.")
+      } finally {
+        setIsSharedLoading(false)
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
+    if (activeView !== "mine") {
+      return
+    }
+
     let cancelled = false
 
     const load = async () => {
@@ -167,18 +236,33 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, hydrateRemoteIfNeeded, loadDeskActivity])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity])
+
+  useEffect(() => {
+    if (activeView !== "shared") {
+      return
+    }
+
+    void loadSharedWritings()
+  }, [activeView, loadSharedWritings])
 
   useEffect(() => {
     return subscribeToLocalDBScopeChanges(() => {
       hasHydratedRemoteRef.current = false
-      void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
+      if (activeView === "mine") {
+        void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
+      }
     })
-  }, [activeFilter, hydrateRemoteIfNeeded, loadDeskActivity])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity])
 
   useEffect(() => {
     const handleRefresh = () => {
-      void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
+      if (activeView === "mine") {
+        void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
+        return
+      }
+
+      void loadSharedWritings(true)
     }
 
     window.addEventListener("focus", handleRefresh)
@@ -188,7 +272,7 @@ export default function DeskPage() {
       window.removeEventListener("focus", handleRefresh)
       window.removeEventListener("online", handleRefresh)
     }
-  }, [activeFilter, hydrateRemoteIfNeeded, loadDeskActivity])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadSharedWritings])
 
   const counts = useMemo(() => summary.counts, [summary.counts])
 
@@ -198,24 +282,33 @@ export default function DeskPage() {
         id="desk-topbar"
         data-section="desk-topbar"
         data-testid="desk-topbar"
-        className="DeskTopbar flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-9"
+        className="DeskTopbar flex h-[46px] items-center justify-between gap-4 border-b-[0.5px] border-border px-5 sm:px-9"
       >
-        <p className="font-lora text-[15px] text-ink-2">Desk</p>
+        <div className="flex min-w-0 items-center gap-4">
+          <p className="shrink-0 font-lora text-[15px] text-ink-2">Desk</p>
+          <DeskViewToggle activeView={activeView} onViewChange={updateActiveView} />
+        </div>
         <SignOutButton />
       </div>
 
-      <DeskHero drafts={summary.heroDrafts} />
+      {activeView === "mine" ? (
+        <>
+          <DeskHero drafts={summary.heroDrafts} />
 
-      <DeskFilterBar activeFilter={activeFilter} counts={counts} onFilterChange={setActiveFilter} />
+          <DeskFilterBar activeFilter={activeFilter} counts={counts} onFilterChange={setActiveFilter} />
 
-      <DeskActivityTable
-        groups={summary.groups}
-        isLoading={isLoading}
-        onDeleteRequest={async (id) => {
-          await enqueueWritingDelete(id)
-          await loadDeskActivity(activeFilter)
-        }}
-      />
+          <DeskActivityTable
+            groups={summary.groups}
+            isLoading={isLoading}
+            onDeleteRequest={async (id) => {
+              await enqueueWritingDelete(id)
+              await loadDeskActivity(activeFilter)
+            }}
+          />
+        </>
+      ) : (
+        <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
+      )}
     </section>
   )
 }
