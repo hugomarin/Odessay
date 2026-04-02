@@ -1,43 +1,8 @@
 import { createHash } from "node:crypto"
-import Blockquote from "@tiptap/extension-blockquote"
-import Bold from "@tiptap/extension-bold"
-import BulletList from "@tiptap/extension-bullet-list"
-import Code from "@tiptap/extension-code"
-import CodeBlock from "@tiptap/extension-code-block"
-import Document from "@tiptap/extension-document"
-import Heading from "@tiptap/extension-heading"
-import Highlight from "@tiptap/extension-highlight"
-import Italic from "@tiptap/extension-italic"
-import Link from "@tiptap/extension-link"
-import ListItem from "@tiptap/extension-list-item"
-import OrderedList from "@tiptap/extension-ordered-list"
-import Paragraph from "@tiptap/extension-paragraph"
-import Strike from "@tiptap/extension-strike"
-import Text from "@tiptap/extension-text"
 import type { JSONContent } from "@tiptap/core"
-import { generateHTML } from "@tiptap/html"
 import { z } from "zod"
-import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { isTestLinkEmail } from "@/lib/sharing/test-link"
-
-const PREVIEW_EXTENSIONS = [
-  Document,
-  Paragraph,
-  Text,
-  Heading.configure({ levels: [1, 2, 3] }),
-  Bold,
-  Italic,
-  Strike,
-  Highlight,
-  Link.configure({ openOnClick: false, autolink: true, protocols: ["http", "https", "mailto"] }),
-  Blockquote,
-  BulletList,
-  OrderedList,
-  ListItem,
-  Code,
-  CodeBlock,
-  FootnoteExtension,
-]
+import { renderWritingBodyHtml } from "@/lib/reading/render-body-html"
 
 type InvitationRow = {
   id: string
@@ -114,13 +79,76 @@ export type TestLinkAccessResult =
 
 const TEST_LINK_FIXTURE_ENABLED = process.env.ODE_TEST_LINK_FIXTURES === "1"
 
+const PREVIEW_FIXTURE_BODY_JSON: JSONContent = {
+  type: "doc",
+  content: [
+    {
+      type: "heading",
+      attrs: { level: 1 },
+      content: [{ type: "text", text: "Preview fixture heading" }],
+    },
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Preview fixture " },
+        { type: "text", text: "content", marks: [{ type: "bold" }] },
+        { type: "text", text: " with a table and a list." },
+      ],
+    },
+    {
+      type: "bulletList",
+      content: [
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "First bullet" }] }],
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "Second bullet" }] }],
+        },
+      ],
+    },
+    {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableHeader",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "A" }] }],
+            },
+            {
+              type: "tableHeader",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "B" }] }],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableCell",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "1" }] }],
+            },
+            {
+              type: "tableCell",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "2" }] }],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+}
+
 const TEST_LINK_FIXTURE_RESPONSES: Record<string, TestLinkAccessResult> = {
   fixturepreviewoktoken0001: {
     state: "ok",
     writing: {
       id: "fixture-writing-id",
       title: "Fixture Preview",
-      bodyHtml: "<p>Preview fixture content</p>",
+      bodyHtml: renderWritingBodyHtml(PREVIEW_FIXTURE_BODY_JSON, "Preview fixture content").bodyHtml,
       status: "draft",
       visibility: "private",
       createdAt: "2026-03-27T00:00:00.000Z",
@@ -186,24 +214,17 @@ export const renderPreviewBodyHtml = (
   writing: Pick<WritingRow, "body_json" | "body_text">,
   options: PreviewHtmlRenderOptions = {},
 ): PreviewHtmlRenderResult => {
-  const renderRichHtml = options.renderRichHtml ?? ((bodyJson: JSONContent) => generateHTML(bodyJson, PREVIEW_EXTENSIONS))
-  const bodyJson = writing.body_json
+  const rendered = renderWritingBodyHtml(writing.body_json, writing.body_text, {
+    renderRichHtml: options.renderRichHtml,
+    onRichRenderError: options.onRichRenderError,
+  })
 
-  if (bodyJson && typeof bodyJson === "object" && !Array.isArray(bodyJson)) {
-    try {
-      return {
-        bodyHtml: renderRichHtml(bodyJson as JSONContent),
-        mode: "rich",
+  return rendered.mode === "rich"
+    ? rendered
+    : {
+        bodyHtml: renderPlainTextPreviewHtml(writing.body_text),
+        mode: "plain-text",
       }
-    } catch (error) {
-      options.onRichRenderError?.(error instanceof Error ? error.message : String(error))
-    }
-  }
-
-  return {
-    bodyHtml: renderPlainTextPreviewHtml(writing.body_text),
-    mode: "plain-text",
-  }
 }
 
 export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<TestLinkAccessResult> => {

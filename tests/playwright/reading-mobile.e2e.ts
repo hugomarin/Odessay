@@ -7,6 +7,7 @@ test("reading view stays usable on mobile", async ({ page }) => {
   await expect(page.getByTestId("reading-chrome")).toBeVisible()
   await expect(page.getByTestId("reading-body-shell")).toBeVisible()
   await expect(page.getByTestId("reading-body")).toBeVisible()
+  await expect(page.getByTestId("reading-body").locator("table")).toBeVisible()
 
   const title = page.locator("#reading-text h1")
   await expect(title).toBeVisible()
