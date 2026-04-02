@@ -32,7 +32,9 @@ function selectionToOffsets(
   const range = selection.getRangeAt(0)
   const text = range.toString().trim()
   if (!text) return null
-  if (!container.contains(range.startContainer) && !container.contains(range.endContainer)) return null
+  if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) {
+    return null
+  }
 
   const preRange = document.createRange()
   preRange.selectNodeContents(container)
@@ -390,6 +392,7 @@ export function ReadingInteractiveShell({
 
           {isAuthenticated && (
             <HighlightLayer
+              key={writing.id}
               bodyRef={bodyRef}
               margins={highlightMargins}
               onHighlightClick={handleHighlightClick}
