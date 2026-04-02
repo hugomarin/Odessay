@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Reading margins usability polish: persistent inline highlights now render with span overlays, selection preview stays pinned inside the scroll container, annotation bubble/button contrast fixed, and /api/margins now resolves slug-like identifiers so margins can be created from shared reading routes and perf harnesses. Also stabilized perf capture for the reading/editor harness with domcontentloaded navigation.",
+      "phase": "Fase 2",
+      "issue": "ODE-73",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-73",
+      "commit": "39c4038",
+      "date": "2026-04-01",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test, npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz --report artifacts/perf/editor-trace-report.json --metrics artifacts/perf/editor-trace-metrics.json. Perf evidence: artifacts/perf/editor-trace.json.gz, artifacts/perf/editor-trace-report.json, artifacts/perf/editor-trace-metrics.json, artifacts/perf/margins-trace.json.gz, artifacts/perf/margins-trace-report.json, artifacts/perf/margins-trace-metrics.json. Performance contract: required."
+    },
+    {
       "what": "Shared reading view scroll restoration. Reading shell now uses a fixed 100dvh container with min-h-0 on the reading stack so /shared/[id] and the shared reading component can scroll long writings while the topbar stays fixed; coverage added for mobile and desktop scroll behavior.",
       "phase": "Fase 2",
       "issue": "ODE-72",
