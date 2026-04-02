@@ -14,6 +14,29 @@ import {
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete } from "@/lib/sync/queue"
 
+type ApiEnvelope<T> = {
+  data: T | null
+  error: { code: string; message: string } | null
+}
+
+type ShareProfile = {
+  username: string
+  display_name: string
+}
+
+type ShareEntry = {
+  id: string
+  shared_with_id: string
+  can_respond: boolean
+  created_at: string
+  profiles: ShareProfile | ShareProfile[] | null
+}
+
+type RecipientPreview = {
+  username: string
+  displayName: string
+}
+
 const EMPTY_SUMMARY: DeskActivitySummary = {
   heroDrafts: [],
   groups: [],
@@ -31,6 +54,63 @@ export default function DeskPage() {
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)
   const [isLoading, setIsLoading] = useState(true)
   const hasHydratedRemoteRef = useRef(false)
+
+  const normalizeProfile = useCallback((profiles: ShareEntry["profiles"]) => {
+    if (!profiles) {
+      return null
+    }
+
+    if (Array.isArray(profiles)) {
+      return profiles[0] ?? null
+    }
+
+    return profiles
+  }, [])
+
+  const loadRecipientPreviews = useCallback(
+    async (writingIds: string[]) => {
+      if (writingIds.length === 0) {
+        return {}
+      }
+
+      const entries = await Promise.all(
+        writingIds.map(async (writingId) => {
+          try {
+            const response = await fetch(`/api/writings/${writingId}/shares`, {
+              cache: "no-store",
+            })
+            const payload = (await response.json()) as ApiEnvelope<ShareEntry[]>
+
+            if (!response.ok || payload.error || !payload.data) {
+              return [writingId, [] as RecipientPreview[]] as const
+            }
+
+            const recipientPreviews = payload.data
+              .map((share) => {
+                const profile = normalizeProfile(share.profiles)
+
+                if (!profile) {
+                  return null
+                }
+
+                return {
+                  username: profile.username,
+                  displayName: profile.display_name,
+                }
+              })
+              .filter((item): item is RecipientPreview => Boolean(item))
+
+            return [writingId, recipientPreviews] as const
+          } catch {
+            return [writingId, [] as RecipientPreview[]] as const
+          }
+        }),
+      )
+
+      return Object.fromEntries(entries)
+    },
+    [normalizeProfile],
+  )
 
   const syncRemoteWritings = useCallback(async () => {
     try {
@@ -55,14 +135,20 @@ export default function DeskPage() {
   const loadDeskActivity = useCallback(async (filter: DeskActivityFilter) => {
     const localWritings = await localDB.writings.getAll()
     const localScope = getLocalDBScope()
+    const recipientPreviewsByWritingId = await loadRecipientPreviews(
+      localWritings
+        .filter((writing) => writing.visibility === "shared" && writing.sync_status !== "deleted")
+        .map((writing) => writing.id),
+    )
 
     setSummary(
       buildDeskActivitySummary(localWritings, {
         filter,
         userId: localScope === "anonymous" ? null : localScope,
+        recipientPreviewsByWritingId,
       }),
     )
-  }, [])
+  }, [loadRecipientPreviews])
 
   useEffect(() => {
     let cancelled = false

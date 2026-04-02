@@ -2,14 +2,9 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { MoreHorizontal, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { cn } from "@/lib/utils"
 
@@ -20,12 +15,18 @@ type DeskActivityTableProps = {
 }
 
 const BADGE_STYLES: Record<DeskBadgeTone, string> = {
-  "new-reply": "bg-[hsl(22,55%,92%)] text-cursor",
-  waiting: "bg-[hsl(45,60%,91%)] text-[hsl(35,55%,32%)]",
-  replied: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,32%)]",
+  private: "bg-muted text-ink-4",
   shared: "bg-[hsl(220,40%,92%)] text-[hsl(220,50%,40%)]",
-  read: "bg-muted text-ink-4",
+  public: "bg-[hsl(140,24%,92%)] text-[hsl(140,30%,28%)]",
 }
+
+const buildInitials = (value: string) =>
+  value
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("")
 
 export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }: DeskActivityTableProps) {
   const router = useRouter()
@@ -71,17 +72,14 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
               <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">{group.label}</p>
             </div>
 
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b-[0.5px] border-border">
-                  <th className="w-8 px-9 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">·</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Writing</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">State</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">With</th>
-                  <th className="px-9 py-3 text-right text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Date</th>
-                  <th className="w-10 px-2 py-3" />
-                </tr>
-              </thead>
+            <table className="w-full table-fixed border-collapse">
+              <colgroup>
+                <col className="w-[56%]" />
+                <col className="w-[16%]" />
+                <col className="w-[16%]" />
+                <col className="w-[8%]" />
+                <col className="w-[4%]" />
+              </colgroup>
               <tbody>
                 {group.rows.map((row) => {
                   const isNavigable = Boolean(row.destinationHref)
@@ -92,71 +90,98 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
                   }
 
                   return (
-                  <tr
-                    key={row.id}
-                    role={isNavigable ? "link" : undefined}
-                    tabIndex={isNavigable ? 0 : -1}
-                    aria-label={isNavigable ? `Open writing ${row.title}` : `${row.title} is read-only on Desk`}
-                    onClick={navigate}
-                    onKeyDown={(event) => {
-                      if (!isNavigable) {
-                        return
-                      }
+                    <tr
+                      key={row.id}
+                      role={isNavigable ? "link" : undefined}
+                      tabIndex={isNavigable ? 0 : -1}
+                      aria-label={isNavigable ? `Open writing ${row.title}` : `${row.title} is read-only on Desk`}
+                      onClick={navigate}
+                      onKeyDown={(event) => {
+                        if (!isNavigable) {
+                          return
+                        }
 
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        navigate()
-                      }
-                    }}
-                    className={cn(
-                      "group border-b-[0.5px] border-border transition-colors",
-                      isNavigable
-                        ? "cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                        : "cursor-default bg-muted/20",
-                    )}
-                  >
-                    <td className="px-9 py-[18px] align-middle">
-                      {row.isNew ? <span className="inline-block h-1.5 w-1.5 rounded-full bg-[hsl(220,50%,55%)]" /> : null}
-                    </td>
-                    <td className="px-4 py-[18px] align-middle">
-                      <p className="font-lora text-[15px] font-medium leading-[1.3] text-ink">{row.title}</p>
-                      <p className="max-w-[420px] truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
-                    </td>
-                    <td className="px-4 py-[18px] align-middle">
-                      <span className={cn(
-                        "inline-flex rounded-md px-[10px] py-[5px] text-[12px] font-medium",
-                        BADGE_STYLES[row.stateTone],
-                      )}>
-                        {row.stateLabel}
-                      </span>
-                    </td>
-                    <td className="px-4 py-[18px] align-middle text-[13px] text-ink-2">
-                      {row.withLabel}
-                      {!isNavigable ? (
-                        <span className="block pt-1 text-[11px] text-ink-4">Read-only in Desk</span>
-                      ) : null}
-                    </td>
-                    <td className="px-9 py-[18px] text-right align-middle text-[13px] text-ink-4">{row.dateLabel}</td>
-                    <td className="px-2 py-[18px] align-middle" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink-2 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 group-hover:opacity-100"
-                          aria-label="Writing options"
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          navigate()
+                        }
+                      }}
+                      className={cn(
+                        "group border-b-[0.5px] border-border transition-colors",
+                        isNavigable
+                          ? "cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                          : "cursor-default bg-muted/20",
+                      )}
+                    >
+                      <td className="px-9 py-[18px] align-top md:align-middle">
+                        <div
+                          className="min-w-0"
+                          style={{
+                            WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                            maskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                          }}
                         >
-                          <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-[140px]">
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onSelect={() => setPendingDeleteId(row.id)}
-                          >
-                            <Trash2 className="mr-2 h-[13px] w-[13px]" strokeWidth={1.5} />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
+                          <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                            {row.title}
+                          </p>
+                          <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                        </div>
+                      </td>
+                      <td className="px-4 py-[18px] align-top md:align-middle">
+                        <span
+                          className={cn(
+                            "inline-flex rounded-md px-[10px] py-[5px] text-[12px] font-medium",
+                            BADGE_STYLES[row.stateTone],
+                          )}
+                        >
+                          {row.stateLabel}
+                        </span>
+                      </td>
+                      <td className="px-4 py-[18px] align-top text-[13px] text-ink-2 md:align-middle">
+                        {row.recipientPreviews.length > 0 ? (
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="-space-x-1 shrink-0">
+                              {row.recipientPreviews.slice(0, 2).map((recipient) => {
+                                const initialsSource = recipient.displayName ?? recipient.username
+
+                                return (
+                                  <Avatar
+                                    key={recipient.username}
+                                    className="inline-flex h-5 w-5 border-[0.5px] border-border align-middle"
+                                  >
+                                    <AvatarFallback className="bg-ink-2 text-[9px] text-bg">
+                                      {buildInitials(initialsSource)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                )
+                              })}
+                            </div>
+                            <span className="min-w-0 truncate text-[13px] text-ink-2">
+                              @{row.recipientPreviews[0]?.username}
+                            </span>
+                            {row.recipientPreviews.length > 1 ? (
+                              <span className="shrink-0 text-[12px] text-ink-4">+{row.recipientPreviews.length - 1}</span>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-9 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
+                        {row.dateLabel}
+                      </td>
+                      <td
+                        className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          aria-label={`Delete writing ${row.title}`}
+                          onClick={() => setPendingDeleteId(row.id)}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                        >
+                          <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                        </button>
+                      </td>
+                    </tr>
                   )
                 })}
               </tbody>
