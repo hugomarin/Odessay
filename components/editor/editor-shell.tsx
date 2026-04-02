@@ -624,8 +624,22 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
 
       setSyncStatus(mapSyncLifecycleToSaveState(event.status))
+
+      if (event.status !== "synced") {
+        return
+      }
+
+      void (async () => {
+        const localWriting = await localDB.writings.get(currentWritingId)
+
+        if (!localWriting?.slug || routeWritingId === localWriting.slug) {
+          return
+        }
+
+        router.replace(`/write/${localWriting.slug}`)
+      })()
     })
-  }, [currentWritingId])
+  }, [currentWritingId, routeWritingId, router])
 
   useEffect(() => {
     return () => {

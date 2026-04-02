@@ -1,4 +1,5 @@
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
@@ -11,6 +12,7 @@ export type DeskRecipientPreview = {
 
 export type DeskHeroDraft = {
   id: string
+  slug: string | null
   title: string
   excerpt: string
   statusLabel: string
@@ -53,6 +55,7 @@ type BuildDeskActivityOptions = {
 
 type WritingMeta = {
   id: string
+  slug: string | null
   title: string
   excerpt: string
   updatedAt: Date
@@ -194,6 +197,7 @@ const buildMetas = (
 
       return {
         id: writing.id,
+        slug: writing.slug ?? null,
         title: buildTitle(writing.title),
         excerpt: buildExcerpt(writing.body_text),
         updatedAt,
@@ -238,21 +242,23 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
 
   for (const writing of writings) {
     const visibilityState = buildVisibilityLabel(writing.visibility)
-    const row: DeskActivityRow = {
-      id: writing.id,
-      title: writing.title,
-      excerpt: writing.excerpt,
-      stateLabel: visibilityState.stateLabel,
-      stateTone: visibilityState.stateTone,
+      const row: DeskActivityRow = {
+        id: writing.id,
+        title: writing.title,
+        excerpt: writing.excerpt,
+        stateLabel: visibilityState.stateLabel,
+        stateTone: visibilityState.stateTone,
       withLabel:
         writing.visibility === "shared"
           ? formatRecipientLabels(writing.recipientPreviews)
           : visibilityState.withLabel,
-      recipientPreviews: writing.recipientPreviews,
-      dateLabel: buildDateLabel(writing.updatedAt, now),
-      isNew: writing.isReceived,
-      destinationHref: writing.isReceived ? null : `/write/${writing.id}`,
-    }
+        recipientPreviews: writing.recipientPreviews,
+        dateLabel: buildDateLabel(writing.updatedAt, now),
+        isNew: writing.isReceived,
+      destinationHref: writing.isReceived
+        ? null
+        : buildWritingRouteHref("/write", { id: writing.id, slug: writing.slug }),
+      }
 
     if (writing.updatedAt.toDateString() === now.toDateString()) {
       groups[0].rows.push(row)
@@ -275,6 +281,7 @@ const buildHeroDrafts = (writings: WritingMeta[], now: Date): DeskHeroDraft[] =>
 
   return drafts.map((draft, index) => ({
     id: draft.id,
+    slug: draft.slug,
     title: draft.title,
     excerpt: draft.excerpt,
     statusLabel: index === 0 ? "In progress" : "Draft",

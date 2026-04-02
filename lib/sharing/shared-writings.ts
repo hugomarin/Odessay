@@ -4,6 +4,7 @@ import { buildSharedWritingListItem, type SharedWritingListItem } from "@/lib/sh
 type RawWritingRow = {
   id: string
   title: string | null
+  slug: string | null
   body_text: string
   updated_at: string
   profiles:
@@ -46,7 +47,7 @@ export async function listSharedWritingsForUser(userId: string): Promise<SharedW
 
   const { data: writings, error: writingsError } = await admin
     .from("writings")
-    .select("id, title, body_text, updated_at, profiles!author_id(username, display_name)")
+    .select("id, title, slug, body_text, updated_at, profiles!author_id(username, display_name)")
     .in("id", writingIds)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false })
@@ -60,6 +61,7 @@ export async function listSharedWritingsForUser(userId: string): Promise<SharedW
       {
         id: writing.id,
         title: writing.title,
+        slug: writing.slug,
         body_text: writing.body_text,
         updated_at: writing.updated_at,
       },

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Plus } from "lucide-react"
 import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
 
 type DeskHeroProps = {
@@ -30,7 +31,7 @@ export function DeskHero({ drafts }: DeskHeroProps) {
         {drafts.map((draft) => (
           <Link
             key={draft.id}
-            href={`/write/${draft.id}`}
+            href={buildWritingRouteHref("/write", draft)}
             id={`desk-hero-draft-card-${draft.id}`}
             data-section="desk-hero-draft-card"
             data-testid="desk-hero-draft-card"
