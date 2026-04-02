@@ -24,6 +24,31 @@ test("reading view stays usable on mobile", async ({ page }) => {
   const shellWidth = await page.getByTestId("reading-body-shell").evaluate((element) => element.getBoundingClientRect().width)
   expect(shellWidth).toBeGreaterThan(360)
 
+  const readingText = page.getByTestId("reading-text")
+  const topbar = page.getByTestId("reading-chrome")
+  const topbarTopBefore = await topbar.evaluate((element) => element.getBoundingClientRect().top)
+  const scrollBefore = await readingText.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }))
+
+  expect(scrollBefore.scrollHeight).toBeGreaterThan(scrollBefore.clientHeight)
+
+  await readingText.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+
+  const scrollAfter = await readingText.evaluate((element) => ({
+    scrollTop: element.scrollTop,
+    scrollHeight: element.scrollHeight,
+  }))
+  const topbarTopAfter = await topbar.evaluate((element) => element.getBoundingClientRect().top)
+
+  expect(scrollAfter.scrollTop).toBeGreaterThan(0)
+  expect(scrollAfter.scrollHeight).toBe(scrollBefore.scrollHeight)
+  expect(topbarTopAfter).toBeCloseTo(topbarTopBefore, 1)
+
   await page.getByLabel("Open margins").click()
   await expect(page.getByLabel("Close")).toBeVisible()
   await expect(page.getByTestId("reading-margin-panel")).toBeVisible()
@@ -54,6 +79,31 @@ test("reading view remains stable on desktop", async ({ page }) => {
 
   const body = page.getByTestId("reading-body")
   await expect(body).toHaveCSS("font-size", "17px")
+
+  const readingText = page.getByTestId("reading-text")
+  const topbar = page.getByTestId("reading-chrome")
+  const topbarTopBefore = await topbar.evaluate((element) => element.getBoundingClientRect().top)
+  const scrollBefore = await readingText.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+    scrollTop: element.scrollTop,
+  }))
+
+  expect(scrollBefore.scrollHeight).toBeGreaterThan(scrollBefore.clientHeight)
+
+  await readingText.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
+
+  const scrollAfter = await readingText.evaluate((element) => ({
+    scrollTop: element.scrollTop,
+    scrollHeight: element.scrollHeight,
+  }))
+  const topbarTopAfter = await topbar.evaluate((element) => element.getBoundingClientRect().top)
+
+  expect(scrollAfter.scrollTop).toBeGreaterThan(0)
+  expect(scrollAfter.scrollHeight).toBe(scrollBefore.scrollHeight)
+  expect(topbarTopAfter).toBeCloseTo(topbarTopBefore, 1)
 
   const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
   expect(hasOverflow).toBe(false)
