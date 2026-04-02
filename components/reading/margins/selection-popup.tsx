@@ -66,7 +66,7 @@ export function SelectionPopup({ position, onMark, onAnnotate, onDismiss }: Sele
             e.stopPropagation()
             onAnnotate()
           }}
-          className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
+          className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-ink-2"
           aria-label="Annotate passage"
         >
           Annotate

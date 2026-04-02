@@ -307,6 +307,28 @@
     padding: 0 0.08em;
   }
 
+  .prose-odessay .hl {
+    background: hsl(45 90% 84%);
+    border-radius: 2px;
+    cursor: pointer;
+    padding: 0 0.08em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    transition: background 0.15s ease;
+  }
+
+  .prose-odessay .hl:hover {
+    background: hsl(45 90% 76%);
+  }
+
+  .prose-odessay .hl.annotated {
+    border-bottom: 1.5px solid hsl(35 80% 55%);
+  }
+
+  .prose-odessay .hl.active {
+    background: hsl(45 90% 74%);
+  }
+
   body.od-editor-focus-mode #sidebar,
   body.od-editor-focus-mode #sidebar-list-panel {
     opacity: 0;
@@ -388,6 +410,11 @@
   color: hsl(var(--ink));
   font-size: 17px;
   line-height: 1.85;
+}
+
+.prose-odessay ::selection {
+  background: hsl(var(--ink) / 0.12);
+  color: hsl(var(--ink));
 }
 
 .prose-odessay p {

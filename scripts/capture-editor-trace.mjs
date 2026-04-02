@@ -104,7 +104,7 @@ async function readTraceFromStream(cdp, stream) {
 }
 
 async function prepareHarness(page, targetUrl, timeoutMs) {
-  await page.goto(targetUrl, { waitUntil: "networkidle", timeout: timeoutMs });
+  await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await page.waitForSelector(".odessay-editor-content", { timeout: timeoutMs });
   const editor = page.locator(".odessay-editor-content").first();
   await editor.click();

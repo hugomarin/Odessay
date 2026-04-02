@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 
 export type MarginHighlight = {
   id: string
@@ -8,8 +8,6 @@ export type MarginHighlight = {
   anchor_end: number
   note: string | null
 }
-
-type Rect = { top: number; left: number; width: number; height: number; key: string }
 
 type HighlightLayerProps = {
   bodyRef: React.RefObject<HTMLDivElement | null>
@@ -38,7 +36,6 @@ function findTextPosition(
     charCount += len
   }
 
-  // Clamp to end of last text node
   if (node) {
     const text = node as Text
     return { node: text, offset: text.length }
@@ -47,113 +44,103 @@ function findTextPosition(
   return null
 }
 
-/**
- * Returns bounding client rects for a plain-text range [start, end) in a DOM element.
- */
-function getRangeRects(root: Element, start: number, end: number): DOMRect[] {
-  const startPos = findTextPosition(root, start)
-  const endPos = findTextPosition(root, end)
-  if (!startPos || !endPos) return []
+function collectTextNodes(root: Element): Array<{ node: Text; start: number; end: number }> {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const nodes: Array<{ node: Text; start: number; end: number }> = []
+  let charCount = 0
+  let node: Node | null
 
-  try {
-    const range = document.createRange()
-    range.setStart(startPos.node, startPos.offset)
-    range.setEnd(endPos.node, endPos.offset)
-    return Array.from(range.getClientRects())
-  } catch {
-    return []
+  while ((node = walker.nextNode())) {
+    const text = node as Text
+    const start = charCount
+    const end = start + text.length
+    nodes.push({ node: text, start, end })
+    charCount = end
   }
+
+  return nodes
+}
+
+function applyHighlight(root: Element, margin: MarginHighlight): boolean {
+  const startPos = findTextPosition(root, margin.anchor_start)
+  const endPos = findTextPosition(root, margin.anchor_end)
+  if (!startPos || !endPos) return false
+
+  const nodes = collectTextNodes(root)
+  const wrapperClass = `hl${margin.note ? " annotated" : ""}`
+  let wrapped = false
+
+  for (let i = nodes.length - 1; i >= 0; i -= 1) {
+    const { node, start, end } = nodes[i]
+    const overlapStart = Math.max(start, margin.anchor_start)
+    const overlapEnd = Math.min(end, margin.anchor_end)
+    if (overlapStart >= overlapEnd) continue
+
+    const localStart = overlapStart - start
+    const localEnd = overlapEnd - start
+
+    try {
+      const range = document.createRange()
+      range.setStart(node, localStart)
+      range.setEnd(node, localEnd)
+
+      const wrapper = document.createElement("span")
+      wrapper.className = wrapperClass
+      wrapper.dataset.id = margin.id
+
+      range.surroundContents(wrapper)
+      wrapped = true
+    } catch {
+      // Ignore fragments that cannot be wrapped cleanly.
+    }
+  }
+
+  return wrapped
 }
 
 export function HighlightLayer({ bodyRef, margins, onHighlightClick }: HighlightLayerProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [highlightRects, setHighlightRects] = useState<
-    { marginId: string; hasNote: boolean; rects: Rect[] }[]
-  >([])
+  const originalHtmlRef = useRef<string | null>(null)
 
-  function recalculate() {
-    const body = bodyRef.current
-    const container = containerRef.current
-    if (!body || !container) return
-
-    const containerRect = container.getBoundingClientRect()
-
-    const next = margins.map((margin) => {
-      const clientRects = getRangeRects(body, margin.anchor_start, margin.anchor_end)
-      const rects: Rect[] = clientRects
-        .filter((r) => r.width > 0 && r.height > 0)
-        .map((r, i) => ({
-          top: r.top - containerRect.top,
-          left: r.left - containerRect.left,
-          width: r.width,
-          height: r.height,
-          key: `${margin.id}-${i}`,
-        }))
-      return { marginId: margin.id, hasNote: !!margin.note, rects }
-    })
-
-    setHighlightRects(next)
-  }
-
-  // Recalculate on mount and on every margins change
-  useEffect(() => {
-    recalculate()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [margins, bodyRef.current])
-
-  // Recalculate on resize via ResizeObserver
   useEffect(() => {
     const body = bodyRef.current
     if (!body) return
+    const root = body
 
-    const observer = new ResizeObserver(() => {
-      recalculate()
+    if (originalHtmlRef.current === null) {
+      originalHtmlRef.current = body.innerHTML
+    }
+
+    const originalHtml = originalHtmlRef.current
+    if (!originalHtml) return
+
+    root.innerHTML = originalHtml
+
+    const sortedMargins = [...margins].sort((a, b) => {
+      if (a.anchor_start !== b.anchor_start) return b.anchor_start - a.anchor_start
+      return b.anchor_end - a.anchor_end
     })
-    observer.observe(body)
-    return () => observer.disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bodyRef.current, margins])
 
-  return (
-    <div
-      ref={containerRef}
-      aria-hidden="true"
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none",
-        zIndex: 1,
-      }}
-    >
-      {highlightRects.map(({ marginId, hasNote, rects }) =>
-        rects.map((rect) => (
-          <button
-            key={rect.key}
-            data-margin-id={marginId}
-            onClick={() => onHighlightClick(marginId)}
-            aria-label="Open margin"
-            style={{
-              position: "absolute",
-              top: rect.top,
-              left: rect.left,
-              width: rect.width,
-              height: rect.height,
-              background: "hsl(45,90%,84%)",
-              opacity: 0.7,
-              borderRadius: 2,
-              border: "none",
-              cursor: "pointer",
-              pointerEvents: "auto",
-              borderBottom: hasNote ? "1.5px solid hsl(35,80%,55%)" : undefined,
-              // Hover handled via CSS class
-            }}
-            className="highlight-rect"
-          />
-        )),
-      )}
-      <style>{`
-        .highlight-rect:hover { opacity: 1 !important; }
-      `}</style>
-    </div>
-  )
+    for (const margin of sortedMargins) {
+      applyHighlight(root, margin)
+    }
+
+    function handleClick(event: MouseEvent) {
+      const target = event.target
+      if (!(target instanceof Element)) return
+
+      const highlight = target.closest(".hl[data-id]")
+      if (!highlight) return
+      if (!root.contains(highlight)) return
+
+      const marginId = highlight.getAttribute("data-id")
+      if (marginId) onHighlightClick(marginId)
+    }
+
+    root.addEventListener("click", handleClick)
+    return () => {
+      root.removeEventListener("click", handleClick)
+    }
+  }, [bodyRef, margins, onHighlightClick])
+
+  return null
 }
