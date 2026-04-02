@@ -141,6 +141,37 @@ const HARNESS_BODY_JSON: JSONContent = {
       ],
     },
     {
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableHeader",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "Lens" }] }],
+            },
+            {
+              type: "tableHeader",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "Reading" }] }],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          content: [
+            {
+              type: "tableCell",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "Attention" }] }],
+            },
+            {
+              type: "tableCell",
+              content: [{ type: "paragraph", content: [{ type: "text", text: "Presence" }] }],
+            },
+          ],
+        },
+      ],
+    },
+    {
       type: "paragraph",
       content: [
         {

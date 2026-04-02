@@ -1,41 +1,6 @@
-import Blockquote from "@tiptap/extension-blockquote"
-import Bold from "@tiptap/extension-bold"
-import BulletList from "@tiptap/extension-bullet-list"
-import Code from "@tiptap/extension-code"
-import CodeBlock from "@tiptap/extension-code-block"
-import Document from "@tiptap/extension-document"
-import Heading from "@tiptap/extension-heading"
-import Highlight from "@tiptap/extension-highlight"
-import Italic from "@tiptap/extension-italic"
-import Link from "@tiptap/extension-link"
-import ListItem from "@tiptap/extension-list-item"
-import OrderedList from "@tiptap/extension-ordered-list"
-import Paragraph from "@tiptap/extension-paragraph"
-import Strike from "@tiptap/extension-strike"
-import Text from "@tiptap/extension-text"
 import type { JSONContent } from "@tiptap/core"
-import { generateHTML } from "@tiptap/html"
-import { FootnoteExtension } from "@/lib/editor/footnote-extension"
+import { renderWritingBodyHtml } from "@/lib/reading/render-body-html"
 import { SelectionPreviewLayer, type SelectionPreviewRect } from "./margins/selection-preview-layer"
-
-const READING_EXTENSIONS = [
-  Document,
-  Paragraph,
-  Text,
-  Heading.configure({ levels: [1, 2, 3] }),
-  Bold,
-  Italic,
-  Strike,
-  Highlight,
-  Link.configure({ openOnClick: false, autolink: true, protocols: ["http", "https", "mailto"] }),
-  Blockquote,
-  BulletList,
-  OrderedList,
-  ListItem,
-  Code,
-  CodeBlock,
-  FootnoteExtension,
-]
 
 function getInitials(name: string): string {
   return name
@@ -91,16 +56,7 @@ export function ReadingContent({
   bodyRef,
   selectionPreviewRects,
 }: ReadingContentProps) {
-  let bodyHtml: string
-  if (bodyJson && typeof bodyJson === "object" && !Array.isArray(bodyJson)) {
-    try {
-      bodyHtml = generateHTML(bodyJson, READING_EXTENSIONS)
-    } catch {
-      bodyHtml = `<p>${bodyText.replace(/</g, "&lt;")}</p>`
-    }
-  } else {
-    bodyHtml = `<p>${bodyText.replace(/</g, "&lt;")}</p>`
-  }
+  const { bodyHtml } = renderWritingBodyHtml(bodyJson, bodyText)
 
   const displayName = author?.displayName ?? author?.username ?? "Odessay author"
   const initials = getInitials(displayName)

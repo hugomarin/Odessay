@@ -68,6 +68,53 @@ describe("test link access guards", () => {
     expect(rendered.bodyHtml).toBe("<p>Rich body</p>")
   })
 
+  it("renders table html in rich preview bodies", () => {
+    const rendered = renderPreviewBodyHtml({
+      body_json: {
+        type: "doc",
+        content: [
+          {
+            type: "table",
+            content: [
+              {
+                type: "tableRow",
+                content: [
+                  {
+                    type: "tableHeader",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "A" }] }],
+                  },
+                  {
+                    type: "tableHeader",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "B" }] }],
+                  },
+                ],
+              },
+              {
+                type: "tableRow",
+                content: [
+                  {
+                    type: "tableCell",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "1" }] }],
+                  },
+                  {
+                    type: "tableCell",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "2" }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      body_text: "A B 1 2",
+    })
+
+    expect(rendered.mode).toBe("rich")
+    expect(rendered.bodyHtml).toContain("<table")
+    expect(rendered.bodyHtml).toContain("<th")
+    expect(rendered.bodyHtml).toContain("<td")
+  })
+
   it("falls back to escaped plain text html when rich rendering fails", () => {
     const errors: string[] = []
 
