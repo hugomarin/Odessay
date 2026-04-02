@@ -520,6 +520,15 @@
 .prose-odessay ol {
   padding-left: 1.5em;
   margin-bottom: 1.2em;
+  list-style-position: outside;
+}
+
+.prose-odessay ul {
+  list-style: disc;
+}
+
+.prose-odessay ol {
+  list-style: decimal;
 }
 
 .prose-odessay li {
