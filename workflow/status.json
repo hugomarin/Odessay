@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Shared reading view scroll restoration. Reading shell now uses a fixed 100dvh container with min-h-0 on the reading stack so /shared/[id] and the shared reading component can scroll long writings while the topbar stays fixed; coverage added for mobile and desktop scroll behavior.",
+      "phase": "Fase 2",
+      "issue": "ODE-72",
+      "linear_url": "https://linear.app/issue/ODE-72",
+      "commit": "7ffce1a",
+      "date": "2026-04-01",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test, npx playwright test tests/playwright/reading-mobile.e2e.ts. Performance contract: not required."
+    },
+    {
       "what": "Persist semantic slug in writing and shared URLs. /write/[id] and /shared/[id] now resolve canonical slugs when available, preserve UUID links via permanent redirects, and propagate slug-aware hrefs through desk/shared/reader navigation plus sync bootstrap.",
       "phase": "Fase 2",
       "issue": "ODE-71",
