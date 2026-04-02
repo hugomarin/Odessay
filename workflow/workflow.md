@@ -65,20 +65,21 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
    - Base (siempre): `node --version`
    - Scripts opcionales (si existen en el repo): `npm run env:check --if-present` y `npm run ops:status:drift --if-present`.
    - Si el issue exige checks obligatorios adicionales, declararlos explícitamente en el Issue Brief para este repo.
-3. Crear rama desde `main` actualizado con convención: `feat/{issue-id}-{descripcion}` o `fix/`, `docs/`, `chore/`.
-4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
-5. Si `Performance Contract` es `required`, generar evidencia reproducible:
-   - Capturar trace: `node scripts/capture-editor-trace.mjs --output artifacts/perf/editor-trace.json.gz`.
-   - Evaluar budgets: `node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace.json.gz`.
-6. Correr gate de entrega:
-   - Con contrato requerido: `OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate`.
-   - Sin contrato requerido: `npm run ops:delivery:gate`.
-7. Abrir PR con evidencia objetiva:
-   - output del gate de entrega;
-   - output de `check-performance-gate` (si aplica);
-   - rutas de artefactos `artifacts/perf/*` (trace, report y metrics) o justificación explícita de por qué no aplica contrato.
-8. Mover issue a `In Review` en Linear.
-9. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
+3. Verificar la rama actual. Si es `main`, crear y cambiar primero a una rama de feat con convención `codex/{issue-id}-{descripcion}` o `feat/{issue-id}-{descripcion}` antes de editar o commitear.
+4. No hacer commits directos en `main`. Todos los commits del issue deben quedar en la rama de trabajo.
+5. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
+6. Si `Performance Contract` es `required`, generar evidencia reproducible:
+    - Capturar trace: `node scripts/capture-editor-trace.mjs --output artifacts/perf/editor-trace.json.gz`.
+    - Evaluar budgets: `node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace.json.gz`.
+7. Correr gate de entrega:
+    - Con contrato requerido: `OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate`.
+    - Sin contrato requerido: `npm run ops:delivery:gate`.
+8. Abrir PR con evidencia objetiva:
+    - output del gate de entrega;
+    - output de `check-performance-gate` (si aplica);
+    - rutas de artefactos `artifacts/perf/*` (trace, report y metrics) o justificación explícita de por qué no aplica contrato.
+9. Mover issue a `In Review` en Linear.
+10. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
 
 **Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto + evidencia de performance completa cuando el contrato es requerido.
 

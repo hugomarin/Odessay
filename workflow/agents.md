@@ -13,6 +13,13 @@ Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digi
 Este proyecto usa un modelo **contexto-justo-a-tiempo**:
 Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuencia definida paso a paso. No cargues contexto adicional al azar. Cada issue en Linear trae explícitamente citados los documentos que requiere en su línea `Referencia:`. Usa los skills solo cuando apliquen a la tarea en curso.
 
+## Regla de ramas y commits
+
+- Nunca hacer commits directamente en `main`.
+- Antes de cualquier `git commit`, verificar la rama actual con `git branch --show-current`.
+- Si la rama actual es `main`, crear y cambiar a una rama `codex/<issue-o-tarea>` antes de editar o commitear.
+- Si el trabajo ya quedó en `main` por error, corregirlo moviendo los commits a la rama de feat y restaurando `main` al commit previo.
+
 ## Regla de mantenimiento de docs.json
 
 Cuando una tarea cree, mueva o elimine un documento, actualiza `workflow/docs.json` al cerrar esa tarea — solo la entrada afectada, no el archivo completo. Para un mantenimiento profundo del inventario, usa `/wf-update-docs`.

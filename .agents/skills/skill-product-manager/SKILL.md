@@ -365,7 +365,7 @@ Sigue la estructura de descripción definida en este documento. Todo issue debe 
 
 ### Al ejecutar un issue
 
-[LLM] Antes de empezar: verifica que todas las dependencias están en Done. Lee los Reference docs indicados en el issue. Crea el branch desde main con el formato `feat/{issue-id}-{descripcion-corta}` o `fix/{issue-id}-{descripcion-corta}`. Mueve el issue a In Progress.
+[LLM] Antes de empezar: verifica que todas las dependencias están en Done. Lee los Reference docs indicados en el issue. Crea el branch desde main con el formato `codex/{issue-id}-{descripcion-corta}` o `feat/{issue-id}-{descripcion-corta}` o `fix/{issue-id}-{descripcion-corta}`. Si la rama actual es `main`, no commitees ahí: cambia primero al branch de trabajo. Mueve el issue a In Progress.
 
 Durante la ejecución: commits atómicos con ID del issue en el mensaje. Push al branch remoto al terminar cada subtarea significativa.
 
@@ -386,6 +386,8 @@ Un issue enorme bloquea el progreso. Si un issue toca más de una capa y tarda m
 Un issue con dependencia implícita es una trampa. Si asumes que algo existe sin declararlo en Dependencies, el agente se bloqueará en medio de la ejecución.
 
 Un issue que opera contra producción es un error crítico. Todo desarrollo y testing ocurre en staging. Producción solo recibe merges de main con preview verificado.
+
+Un commit directo en `main` es un error operativo. Si ocurre, corrígelo antes de continuar: mueve los commits al branch de feat y restaura `main` al commit anterior.
 
 Un archivo en Files affected escrito como link Markdown rompe la legibilidad. `[CLAUDE.md](<http://CLAUDE.md>)` no es un path — es un artefacto de parseo. Los nombres de archivo van siempre como texto plano.
 
