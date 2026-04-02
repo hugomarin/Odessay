@@ -2,9 +2,13 @@ import { localDB, type LocalDB } from "@/lib/local-db";
 import type { SyncMutation } from "@/lib/local-db/schema";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry";
+import { mapRemoteWritingToLocal, type RemoteWritingRecord } from "@/lib/sync/remote-bootstrap";
 
 type SyncTransport = {
-  upsertWriting: (writingId: string, payload: SyncMutation["payload"]) => Promise<void>;
+  upsertWriting: (
+    writingId: string,
+    payload: SyncMutation["payload"],
+  ) => Promise<RemoteWritingRecord | null>;
   deleteWriting: (writingId: string, payload: SyncMutation["payload"]) => Promise<void>;
 };
 
@@ -19,7 +23,7 @@ type SyncRemoteError = Error & {
   url?: string;
 };
 
-const parseEnvelope = async (response: Response) => {
+const parseEnvelope = async <T>(response: Response): Promise<T> => {
   let result: SyncEnvelope | null = null;
 
   try {
@@ -40,6 +44,8 @@ const parseEnvelope = async (response: Response) => {
     error.url = response.url;
     throw error;
   }
+
+  return result?.data as T;
 };
 
 const defaultTransport: SyncTransport = {
@@ -52,7 +58,7 @@ const defaultTransport: SyncTransport = {
       body: JSON.stringify(payload),
     });
 
-    await parseEnvelope(response);
+    return parseEnvelope<RemoteWritingRecord | null>(response);
   },
   deleteWriting: async (writingId, payload) => {
     const response = await fetch(`/api/writings/${writingId}`, {
@@ -208,7 +214,11 @@ class SyncWorker {
       if (mutation.operation === "delete") {
         await this.transport.deleteWriting(mutation.writing_id, mutation.payload);
       } else {
-        await this.transport.upsertWriting(mutation.writing_id, mutation.payload);
+        const remoteWriting = await this.transport.upsertWriting(mutation.writing_id, mutation.payload);
+
+        if (remoteWriting) {
+          await this.localDb.writings.save(mapRemoteWritingToLocal(remoteWriting));
+        }
       }
 
       await this.localDb.syncQueue.markSynced(mutation.id);

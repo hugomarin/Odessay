@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
 
 type SharedWithMeListProps = {
@@ -85,12 +86,12 @@ export function SharedWithMeList({ items, isLoading = false, error = null }: Sha
                     "group border-b-[0.5px] border-border transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
                   )}
                   onClick={() => {
-                    router.push(`/shared/${item.id}`)
+                    router.push(buildWritingRouteHref("/shared", item))
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault()
-                      router.push(`/shared/${item.id}`)
+                      router.push(buildWritingRouteHref("/shared", item))
                     }
                   }}
                 >

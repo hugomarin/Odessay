@@ -113,6 +113,8 @@ export type ReadingInteractiveShellProps = {
   author: { displayName: string; username: string } | null
   prevWritingId?: string | null
   nextWritingId?: string | null
+  prevWritingHref?: string | null
+  nextWritingHref?: string | null
   sequencePosition?: number | null
   sequenceTotal?: number | null
   canRespond: boolean
@@ -132,6 +134,8 @@ export function ReadingInteractiveShell({
   author,
   prevWritingId = null,
   nextWritingId = null,
+  prevWritingHref = null,
+  nextWritingHref = null,
   sequencePosition = null,
   sequenceTotal = null,
   canRespond,
@@ -334,6 +338,8 @@ export function ReadingInteractiveShell({
         backUrl={backUrl}
         prevWritingId={prevWritingId}
         nextWritingId={nextWritingId}
+        prevWritingHref={prevWritingHref}
+        nextWritingHref={nextWritingHref}
         sequencePosition={sequencePosition}
         sequenceTotal={sequenceTotal}
         canRespond={canRespond}

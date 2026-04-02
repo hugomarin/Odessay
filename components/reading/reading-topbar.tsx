@@ -10,6 +10,8 @@ type ReadingTopbarProps = {
   backUrl: string
   prevWritingId: string | null
   nextWritingId: string | null
+  prevWritingHref?: string | null
+  nextWritingHref?: string | null
   sequencePosition: number | null
   sequenceTotal: number | null
   canRespond: boolean
@@ -30,6 +32,8 @@ export function ReadingTopbar({
   backUrl,
   prevWritingId,
   nextWritingId,
+  prevWritingHref = null,
+  nextWritingHref = null,
   sequencePosition,
   sequenceTotal,
   canRespond,
@@ -41,8 +45,10 @@ export function ReadingTopbar({
   respondHref,
 }: ReadingTopbarProps) {
   const router = useRouter()
-  const hasNav = prevWritingId !== null || nextWritingId !== null
   const resolvedRespondHref = respondHref ?? `/write?reply_to=${writingId}`
+  const resolvedPrevHref = prevWritingHref ?? (prevWritingId ? `/shared/${prevWritingId}` : null)
+  const resolvedNextHref = nextWritingHref ?? (nextWritingId ? `/shared/${nextWritingId}` : null)
+  const hasNav = resolvedPrevHref !== null || resolvedNextHref !== null
 
   useEffect(() => {
     if (mode === "public") return
@@ -52,10 +58,10 @@ export function ReadingTopbar({
       const tag = (e.target as HTMLElement).tagName
       if (tag === "INPUT" || tag === "TEXTAREA") return
 
-      if (e.key === "ArrowLeft" && prevWritingId) {
-        router.push(`/shared/${prevWritingId}`)
-      } else if (e.key === "ArrowRight" && nextWritingId) {
-        router.push(`/shared/${nextWritingId}`)
+      if (e.key === "ArrowLeft" && resolvedPrevHref) {
+        router.push(resolvedPrevHref)
+      } else if (e.key === "ArrowRight" && resolvedNextHref) {
+        router.push(resolvedNextHref)
       } else if (e.key === "Escape") {
         // Preparation for margin/selection popup in the next issue — no-op for now
       }
@@ -63,7 +69,7 @@ export function ReadingTopbar({
 
     document.addEventListener("keydown", handleKeydown)
     return () => document.removeEventListener("keydown", handleKeydown)
-  }, [mode, prevWritingId, nextWritingId, router])
+  }, [mode, resolvedPrevHref, resolvedNextHref, router])
 
   if (mode === "public") {
     return (
@@ -146,8 +152,8 @@ export function ReadingTopbar({
         {hasNav ? (
           <>
             <button
-              onClick={() => prevWritingId && router.push(`/shared/${prevWritingId}`)}
-              disabled={!prevWritingId}
+              onClick={() => resolvedPrevHref && router.push(resolvedPrevHref)}
+              disabled={!resolvedPrevHref}
               className="flex items-center gap-1 rounded-[7px] px-2 py-1 text-[11px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
               aria-label="Previous writing"
             >
@@ -160,8 +166,8 @@ export function ReadingTopbar({
               </span>
             ) : null}
             <button
-              onClick={() => nextWritingId && router.push(`/shared/${nextWritingId}`)}
-              disabled={!nextWritingId}
+              onClick={() => resolvedNextHref && router.push(resolvedNextHref)}
+              disabled={!resolvedNextHref}
               className="flex items-center gap-1 rounded-[7px] px-2 py-1 text-[11px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 disabled:pointer-events-none disabled:opacity-30 sm:px-2.5 sm:py-1.5 sm:text-[12px]"
               aria-label="Next writing"
             >

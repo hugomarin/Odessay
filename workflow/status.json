@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Persist semantic slug in writing and shared URLs. /write/[id] and /shared/[id] now resolve canonical slugs when available, preserve UUID links via permanent redirects, and propagate slug-aware hrefs through desk/shared/reader navigation plus sync bootstrap.",
+      "phase": "Fase 2",
+      "issue": "ODE-71",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-71",
+      "commit": "cc4ae38",
+      "date": "2026-04-02",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test, npx playwright test tests/playwright/writing-route-canonical.e2e.ts. Added perf harness checks for UUID redirect and shared slug load."
+    },
+    {
       "what": "Shared-with-me filter tab on Desk. DeskViewToggle switches between My writings and Shared with me via ?tab=shared. SharedWithMeList renders shared writings with author avatar. /shared redirects to /desk?tab=shared. GET /api/shared/writings authenticated endpoint. Lazy-loads on first tab activation.",
       "phase": "Fase 2",
       "issue": "ODE-70",

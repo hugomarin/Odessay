@@ -39,6 +39,7 @@ export type RawAuthorProfile = { username: string; display_name: string } | null
 export type SharedWritingListItem = {
   id: string
   title: string | null
+  slug: string | null
   excerpt: string
   updatedAt: string
   author: { username: string; displayName: string } | null
@@ -59,12 +60,13 @@ export function buildExcerpt(bodyText: string, maxLen = 120): string {
  * Normalizes a raw DB row into a SharedWritingListItem for the /shared page.
  */
 export function buildSharedWritingListItem(
-  writing: { id: string; title: string | null; body_text: string; updated_at: string },
+  writing: { id: string; title: string | null; slug: string | null; body_text: string; updated_at: string },
   author: RawAuthorProfile,
 ): SharedWritingListItem {
   return {
     id: writing.id,
     title: writing.title,
+    slug: writing.slug,
     excerpt: buildExcerpt(writing.body_text),
     updatedAt: writing.updated_at,
     author: author

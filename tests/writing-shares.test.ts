@@ -121,6 +121,7 @@ describe("buildSharedWritingListItem", () => {
   const baseWriting = {
     id: "w-1",
     title: "Epistle to a friend",
+    slug: "epistle-to-a-friend",
     body_text: "This is the body of the writing.",
     updated_at: "2026-03-31T00:00:00Z",
   }

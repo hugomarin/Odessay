@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type PublicCollectionListItem = {
   id: string
@@ -176,7 +177,7 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
             const href =
               writing.visibility === "public" && writing.slug
                 ? `/${username}/${writing.slug}`
-                : `/write/${writing.id}`
+                : buildWritingRouteHref("/write", writing)
 
             return (
               <article key={writing.id} className="group relative">
@@ -216,8 +217,8 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-40 rounded-xl border-[0.5px] border-border bg-bg shadow-float">
-                          <DropdownMenuItem asChild className="m-1 cursor-pointer rounded-lg text-[13px] text-ink-2 focus:bg-muted">
-                            <Link href={`/write/${writing.id}`}>
+                        <DropdownMenuItem asChild className="m-1 cursor-pointer rounded-lg text-[13px] text-ink-2 focus:bg-muted">
+                            <Link href={buildWritingRouteHref("/write", writing)}>
                               <PenSquare className="mr-2 h-4 w-4" strokeWidth={1.5} />
                               Editar
                             </Link>

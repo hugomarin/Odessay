@@ -28,6 +28,7 @@ describe("buildDeskActivitySummary", () => {
     createWriting({
       id: "draft-today",
       title: "Today draft",
+      slug: "today-draft",
       body_text: "hello world from today",
       updated_at: "2026-03-19T11:00:00.000Z",
       local_updated_at: 5,
@@ -131,7 +132,7 @@ describe("buildDeskActivitySummary", () => {
     const todayRow = summary.groups.flatMap((group) => group.rows).find((row) => row.title === "Today draft")
     const receivedRow = summary.groups.flatMap((group) => group.rows).find((row) => row.title === "Earlier reply")
 
-    expect(todayRow?.destinationHref).toBe("/write/draft-today")
+    expect(todayRow?.destinationHref).toBe("/write/today-draft")
     expect(receivedRow?.destinationHref).toBeNull()
     expect(todayRow?.stateLabel).toBe("Privado")
     expect(todayRow?.dateLabel).toBe("")
