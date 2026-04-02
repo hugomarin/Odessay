@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
 
 const createMarginSchema = z.object({
-  writing_id: z.string().uuid(),
+  writing_id: z.string().min(1),
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(1),
   anchor_text: z.string().min(1),
@@ -12,6 +14,28 @@ const createMarginSchema = z.object({
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
+
+async function resolveWritingId(identifier: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const lookupOrder = isUuidLikeWritingIdentifier(identifier) ? ["id", "slug"] : ["slug", "id"]
+
+  for (const field of lookupOrder) {
+    const { data, error } = await admin
+      .from("writings")
+      .select("id")
+      .eq(field, identifier)
+      .maybeSingle()
+
+    if (error) {
+      console.error("[margins:resolve-writing-id]", { identifier, field, error: error.message })
+      return null
+    }
+
+    if (data?.id) return data.id as string
+  }
+
+  return null
+}
 
 // GET /api/margins?writing_id=<uuid> — list margins for a writing (reader sees own, author sees shared)
 export async function GET(request: Request) {
@@ -23,9 +47,12 @@ export async function GET(request: Request) {
   if (!user) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const { searchParams } = new URL(request.url)
-  const writingId = searchParams.get("writing_id")
+  const writingIdentifier = searchParams.get("writing_id")
 
-  if (!writingId) return jsonError(400, "INVALID_INPUT", "writing_id is required.")
+  if (!writingIdentifier) return jsonError(400, "INVALID_INPUT", "writing_id is required.")
+
+  const writingId = await resolveWritingId(writingIdentifier)
+  if (!writingId) return jsonError(404, "NOT_FOUND", "Writing not found.")
 
   const { data, error } = await supabase
     .from("margins")
@@ -62,6 +89,9 @@ export async function POST(request: Request) {
 
   const { writing_id, anchor_start, anchor_end, anchor_text, note } = parsed.data
 
+  const resolvedWritingId = await resolveWritingId(writing_id)
+  if (!resolvedWritingId) return jsonError(404, "NOT_FOUND", "Writing not found.")
+
   if (anchor_end <= anchor_start) {
     return jsonError(400, "INVALID_INPUT", "anchor_end must be greater than anchor_start.")
   }
@@ -70,7 +100,7 @@ export async function POST(request: Request) {
     .from("margins")
     .insert({
       reader_id: user.id,
-      writing_id,
+      writing_id: resolvedWritingId,
       anchor_start,
       anchor_end,
       anchor_text,
@@ -81,7 +111,7 @@ export async function POST(request: Request) {
     .single()
 
   if (error) {
-    console.error("[margins:post]", { userId: user.id, writingId: writing_id, error: error.message })
+    console.error("[margins:post]", { userId: user.id, writingId: resolvedWritingId, error: error.message })
     return jsonError(500, "DB_ERROR", error.message)
   }
 
@@ -105,21 +135,22 @@ export async function PATCH(request: Request) {
     return jsonError(400, "INVALID_INPUT", "Invalid JSON body.")
   }
 
-  const parsed = z.object({ writing_id: z.string().uuid() }).safeParse(body)
+  const parsed = z.object({ writing_id: z.string().min(1) }).safeParse(body)
   if (!parsed.success) return jsonError(400, "INVALID_INPUT", parsed.error.message)
 
-  const { writing_id } = parsed.data
+  const resolvedWritingId = await resolveWritingId(parsed.data.writing_id)
+  if (!resolvedWritingId) return jsonError(404, "NOT_FOUND", "Writing not found.")
   const sharedAt = new Date().toISOString()
 
   const { data, error } = await supabase
     .from("margins")
     .update({ shared: true, shared_at: sharedAt })
-    .eq("writing_id", writing_id)
+    .eq("writing_id", resolvedWritingId)
     .eq("reader_id", user.id)
     .select()
 
   if (error) {
-    console.error("[margins:share]", { userId: user.id, writingId: writing_id, error: error.message })
+    console.error("[margins:share]", { userId: user.id, writingId: resolvedWritingId, error: error.message })
     return jsonError(500, "DB_ERROR", error.message)
   }
 

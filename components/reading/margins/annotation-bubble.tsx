@@ -48,7 +48,7 @@ export function AnnotationBubble({ position, onConfirm, onCancel }: AnnotationBu
       id="annotation-bubble"
       data-section="annotation-bubble"
       data-testid="annotation-bubble"
-      className="AnnotationBubble"
+      className="AnnotationBubble rounded-[12px] border-[0.5px] border-border bg-sb shadow-float-lg"
       style={{
         position: "fixed",
         left: position.x,
@@ -56,10 +56,6 @@ export function AnnotationBubble({ position, onConfirm, onCancel }: AnnotationBu
         transform: "translateX(-50%)",
         width: 260,
         zIndex: 50,
-        background: "var(--sb)",
-        border: "0.5px solid var(--border)",
-        borderRadius: 12,
-        boxShadow: "var(--shadow-float-lg, 0 8px 32px rgba(0,0,0,0.12))",
         padding: "10px 12px",
         display: "flex",
         flexDirection: "column",

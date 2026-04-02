@@ -8,6 +8,7 @@ import { SelectionPopup } from "./margins/selection-popup"
 import { AnnotationBubble } from "./margins/annotation-bubble"
 import { HighlightLayer, type MarginHighlight } from "./margins/highlight-layer"
 import { MarginsPanel } from "./margins/margins-panel"
+import type { SelectionPreviewRect } from "./margins/selection-preview-layer"
 import type { MarginData } from "./margins/margin-entry"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ type SelectionInfo = {
   anchorEnd: number
   anchorText: string
   popupPosition: { x: number; y: number }
-  selectionRect: DOMRect
+  selectionRects: SelectionPreviewRect[]
 }
 
 // ─── Offset helpers ───────────────────────────────────────────────────────────
@@ -31,7 +32,7 @@ function selectionToOffsets(
   const range = selection.getRangeAt(0)
   const text = range.toString().trim()
   if (!text) return null
-  if (!container.contains(range.commonAncestorContainer)) return null
+  if (!container.contains(range.startContainer) && !container.contains(range.endContainer)) return null
 
   const preRange = document.createRange()
   preRange.selectNodeContents(container)
@@ -244,6 +245,21 @@ export function ReadingInteractiveShell({
       const firstRect = rects[0]
       if (!firstRect) return
 
+      const scrollContainer = body.closest("#reading-text") as HTMLElement | null
+      const scrollContainerRect = scrollContainer?.getBoundingClientRect()
+      const scrollTop = scrollContainer?.scrollTop ?? 0
+      const scrollLeft = scrollContainer?.scrollLeft ?? 0
+
+      const selectionRects = rects
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .map((rect, index) => ({
+          top: scrollContainerRect ? rect.top - scrollContainerRect.top + scrollTop : rect.top,
+          left: scrollContainerRect ? rect.left - scrollContainerRect.left + scrollLeft : rect.left,
+          width: rect.width,
+          height: rect.height,
+          key: `${offsets.start}-${offsets.end}-${index}`,
+        }))
+
       const popupPosition = {
         x: firstRect.left + firstRect.width / 2,
         y: firstRect.top - 8,
@@ -255,7 +271,7 @@ export function ReadingInteractiveShell({
         anchorEnd: offsets.end,
         anchorText: offsets.text,
         popupPosition,
-        selectionRect: firstRect,
+        selectionRects,
       })
     }
 
@@ -305,13 +321,13 @@ export function ReadingInteractiveShell({
     setMarginPanelOpen(true)
   }
 
-  function handleHighlightClick(marginId: string) {
+  const handleHighlightClick = useCallback((marginId: string) => {
     setMarginPanelOpen(true)
     setTimeout(() => {
       const el = document.querySelector(`[data-margin-id="${marginId}"] textarea`)
       if (el instanceof HTMLElement) el.focus()
     }, 350)
-  }
+  }, [])
 
   // ─── Derived data ──────────────────────────────────────────────────────────
 
@@ -324,7 +340,10 @@ export function ReadingInteractiveShell({
 
   const annotationBubblePosition =
     selectionInfo
-      ? { x: selectionInfo.popupPosition.x, y: selectionInfo.selectionRect.bottom }
+      ? {
+          x: selectionInfo.popupPosition.x,
+          y: Math.max(...selectionInfo.selectionRects.map((rect) => rect.top + rect.height)),
+        }
       : null
 
   return (
@@ -366,6 +385,7 @@ export function ReadingInteractiveShell({
             author={author}
             updatedAt={writing.updatedAt}
             bodyRef={bodyRef}
+            selectionPreviewRects={selectionInfo?.selectionRects ?? null}
           />
 
           {isAuthenticated && (

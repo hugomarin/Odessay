@@ -16,6 +16,7 @@ import Text from "@tiptap/extension-text"
 import type { JSONContent } from "@tiptap/core"
 import { generateHTML } from "@tiptap/html"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
+import { SelectionPreviewLayer, type SelectionPreviewRect } from "./margins/selection-preview-layer"
 
 const READING_EXTENSIONS = [
   Document,
@@ -78,9 +79,18 @@ type ReadingContentProps = {
   } | null
   updatedAt: string
   bodyRef?: React.RefObject<HTMLDivElement | null>
+  selectionPreviewRects?: SelectionPreviewRect[] | null
 }
 
-export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, bodyRef }: ReadingContentProps) {
+export function ReadingContent({
+  title,
+  bodyJson,
+  bodyText,
+  author,
+  updatedAt,
+  bodyRef,
+  selectionPreviewRects,
+}: ReadingContentProps) {
   let bodyHtml: string
   if (bodyJson && typeof bodyJson === "object" && !Array.isArray(bodyJson)) {
     try {
@@ -102,7 +112,7 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
       id="reading-text"
       data-section="reading-text"
       data-testid="reading-text"
-      className="ReadingText min-h-0 flex-1 overflow-y-auto"
+      className="ReadingText relative min-h-0 flex-1 overflow-y-auto"
     >
       <div className="mx-auto max-w-[660px] px-5 pb-16 pt-10 sm:px-10 sm:pb-20 sm:pt-14">
         {/* Author block */}
@@ -135,6 +145,8 @@ export function ReadingContent({ title, bodyJson, bodyText, author, updatedAt, b
           dangerouslySetInnerHTML={{ __html: bodyHtml }}
         />
       </div>
+
+      <SelectionPreviewLayer rects={selectionPreviewRects ?? null} />
     </div>
   )
 }
