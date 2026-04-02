@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import { generateHTML } from "@tiptap/html/server"
+import { generateHTML } from "@tiptap/html"
 import {
   WRITING_BODY_EXTENSIONS,
   isRenderableBodyJson,

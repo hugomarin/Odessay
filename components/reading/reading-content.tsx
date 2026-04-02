@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
-import { renderWritingBodyHtml } from "@/lib/reading/render-body-html"
+import { renderWritingBodyHtml } from "@/lib/reading/render-body-html-client"
 import { SelectionPreviewLayer, type SelectionPreviewRect } from "./margins/selection-preview-layer"
 
 function getInitials(name: string): string {

@@ -38,3 +38,4 @@ pnpm-debug.log*
 playwright-report/
 test-results/
 artifacts/perf/
+.gstack/
