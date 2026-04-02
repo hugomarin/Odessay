@@ -83,19 +83,20 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
         </div>
       </header>
 
-      <main className="PreviewContent mx-auto w-full max-w-[860px] px-6 py-10">
-        <article className="mx-auto w-full max-w-[660px]">
-          <div className="border-b-[0.5px] border-border pb-5">
-            <p className="text-[12px] text-ink-4">By {result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"}</p>
-            <p className="mt-3 text-[12px] text-ink-4">Updated {formatDate(result.writing.updatedAt)}</p>
-          </div>
-
+      <main className="PreviewContent w-full">
+        <article className="w-full">
           <WritingContentFrame
             title={result.writing.title}
             bodyHtml={result.writing.bodyHtml}
             bodyId="preview-body"
             bodyTestId="preview-body"
-          />
+            showTitle={false}
+          >
+            <div className="border-b-[0.5px] border-border pb-5">
+              <p className="text-[12px] text-ink-4">By {result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"}</p>
+              <p className="mt-3 text-[12px] text-ink-4">Updated {formatDate(result.writing.updatedAt)}</p>
+            </div>
+          </WritingContentFrame>
         </article>
       </main>
     </section>

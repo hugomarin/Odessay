@@ -23,7 +23,7 @@ export function WritingContentFrame({
   showTitle = true,
 }: WritingContentFrameProps) {
   return (
-    <div className="WritingContentFrame relative mx-auto w-full max-w-[660px] px-5 pb-16 pt-10 sm:px-10 sm:pb-20 sm:pt-14">
+    <div className="WritingContentFrame odessay-content-frame relative">
       {children ? <div className="WritingContentFrameHeader">{children}</div> : null}
 
       {showTitle ? (

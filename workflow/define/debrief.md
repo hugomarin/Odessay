@@ -37,7 +37,13 @@ _(sin entradas aún)_
 
 ## Fase 2 — Compartir y leer
 
-_(sin entradas aún)_
+- IMP-2026-04-02-01 | mejora | Unify reading typography and content frame across writing, preview, and shared views | next-sprint | ODE-76
+  - **Scope**:
+    - Unificar la caja de contenido y la escala tipográfica del body en `/write`, `/preview/[token]`, `/shared/[id]`, y `/[username]/[slug]`.
+    - Reutilizar la misma base visual para headings, paragraphs, blockquotes, lists, tables, links, code y highlight styles.
+    - Mantener distintos los shells y la interacción de cada modo; solo la presentación del contenido debe converger.
+    - Extraer un wrapper compartido si hace falta, en vez de duplicar reglas CSS por modo.
+  - **Reference**: ODE-74, ODE-75
 
 ---
 

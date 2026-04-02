@@ -90,6 +90,20 @@
     @apply bg-bg text-ink antialiased;
   }
 
+  .odessay-content-frame {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 860px;
+    padding: 2.5rem 1.25rem 4rem;
+    width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    .odessay-content-frame {
+      padding: 3.5rem 2.5rem 5rem;
+    }
+  }
+
   .odessay-editor-content {
     min-height: 55vh;
     caret-color: hsl(190 88% 46%);
@@ -408,7 +422,7 @@
 /* Preview prose styles */
 .prose-odessay {
   color: hsl(var(--ink));
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.85;
 }
 
@@ -452,11 +466,14 @@
 }
 
 .prose-odessay blockquote {
-  border-left: 3px solid hsl(var(--ink-4));
-  padding-left: 1.2em;
-  margin: 1.4em 0;
-  font-style: italic;
+  border-left: 2px solid hsl(var(--ink-3));
   color: hsl(var(--ink-2));
+  font-family: var(--font-lora), Georgia, serif;
+  font-size: 22px;
+  font-style: italic;
+  line-height: 1.7;
+  margin: 1.2em 0;
+  padding-left: 1.2em;
 }
 
 .prose-odessay strong {
@@ -506,14 +523,20 @@
   margin: 0;
 }
 
+.prose-odessay mark {
+  background: hsl(45 90% 84%);
+  border-radius: 2px;
+  padding: 0 0.08em;
+}
+
 .prose-odessay em {
   font-style: italic;
 }
 
 .prose-odessay a {
-  color: hsl(var(--ink-2));
+  color: hsl(var(--cursor));
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-underline-offset: 2px;
 }
 
 .prose-odessay ul,

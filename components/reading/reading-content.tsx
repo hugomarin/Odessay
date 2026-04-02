@@ -78,6 +78,7 @@ export function ReadingContent({
         bodyTestId="reading-body"
         bodyRef={bodyRef}
         selectionPreviewRects={selectionPreviewRects ?? null}
+        showTitle={false}
       >
         {/* Author block */}
         <div className="mb-8 flex items-center gap-3 border-b-[0.5px] border-border pb-4 sm:mb-11 sm:pb-6">
