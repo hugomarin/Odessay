@@ -58,6 +58,33 @@ Reglas de implementación:
 
 ---
 
+## Reglas de construcción CSS (frontend)
+
+Cuando implementes o refactorices CSS para UI textual:
+
+- Agrupa selectores compartidos para evitar reglas duplicadas entre `.odessay-editor-content` y `.prose-odessay` (por ejemplo `h1/h2/h3`, tipografía base y comportamiento de wrap).
+- Separa claramente:
+  - `reglas compartidas` (contrato común),
+  - `ajustes por superficie` (solo márgenes, spacing o layout específico del shell).
+- No declares dos veces la misma propiedad tipográfica para los mismos elementos en modos distintos, salvo que exista una excepción documentada.
+- Si agregas una nueva regla textual (tables, `pre/code`, URLs largas, overflow), primero añádela al contrato común y luego solo extiende lo estrictamente necesario por superficie.
+- En revisiones CSS, prioriza reducción de divergencia semántica sobre “fixes locales” rápidos.
+
+Patrón recomendado:
+
+```css
+.odessay-editor-content h1,
+.prose-odessay h1 {
+  /* shared rule */
+}
+
+.prose-odessay h1 {
+  /* surface-specific spacing only */
+}
+```
+
+---
+
 ## Velocidad e inmediatez — reglas no negociables
 
 Estas reglas no son optimizaciones opcionales. Son criterios de corrección del producto.
@@ -638,6 +665,7 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] Sombras `shadow-float`, `shadow-float-md`, `shadow-float-lg`
 - [ ] Sidebar mini: iconos centrados, labels ocultos, avatar no cortado
 - [ ] Si el issue toca presentación de texto: paridad validada entre `write`, `preview`, `shared` y `public` (tablas, `pre/code`, URLs largas, overflow)
+- [ ] Reglas CSS compartidas agrupadas sin duplicación innecesaria entre `.odessay-editor-content` y `.prose-odessay`
 
 ### Arquitectura
 - [ ] Server Component por default, Client solo si necesario

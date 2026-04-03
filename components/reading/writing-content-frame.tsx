@@ -37,7 +37,7 @@ export function WritingContentFrame({
         id={bodyId}
         data-section={bodyId}
         data-testid={bodyTestId}
-        className="prose-odessay"
+        className="prose-odessay odessay-rich-content"
         dangerouslySetInnerHTML={{ __html: bodyHtml }}
       />
 

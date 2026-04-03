@@ -110,6 +110,8 @@ describe("test link access guards", () => {
     })
 
     expect(rendered.mode).toBe("rich")
+    expect(rendered.bodyHtml).toContain("odessay-table-wrap")
+    expect(rendered.bodyHtml).toContain("prose-odessay-table-wrap")
     expect(rendered.bodyHtml).toContain("<table")
     expect(rendered.bodyHtml).toContain("<th")
     expect(rendered.bodyHtml).toContain("<td")
