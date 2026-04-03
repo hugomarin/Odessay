@@ -33,6 +33,21 @@ Antes de entregar un issue que involucra UI, recorre el flujo completo manualmen
 4. ¿Los errores se manejan con mensajes amables?
 5. ¿El flujo termina donde el usuario espera?
 
+## Paridad cross-mode de presentación textual
+
+Si un issue toca cómo se presenta el contenido de un writing, validar explícitamente paridad entre:
+
+1. `/write/[id]`
+2. `/preview/[token]`
+3. `/shared/[id]`
+4. `/{username}/{slug}`
+
+Qué validar en cada una:
+- Tablas anchas: scroll horizontal interno (no en toda la página).
+- `pre/code` con URLs largas: wrap multilinea consistente, sin desbordar viewport.
+- Links largos en párrafo/celda: misma semántica de break y legibilidad.
+- Ausencia de divergencias visuales no intencionales entre superficies.
+
 ## Flujos críticos que siempre necesitan test E2E
 
 Estos flujos son el corazón de Odessay. Si alguno se rompe, el producto no funciona:
@@ -131,3 +146,4 @@ Este checklist cubre la validación de UX durante la implementación. Antes de a
 - [ ] ¿No hay UI innecesaria que distraiga?
 - [ ] Si aplica contrato de performance, ¿hay trace before/after y comparación explícita?
 - [ ] ¿El trace after pasa `ops:perf:gate` sin `required_failures`?
+- [ ] Si el issue toca presentación textual, ¿hay evidencia de paridad cross-mode (`write`, `preview`, `shared`, `public`)?

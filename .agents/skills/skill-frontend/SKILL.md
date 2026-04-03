@@ -40,6 +40,24 @@ Geist Sans + Lora — tipografía (ver skill-design.md)
 
 ---
 
+## Contrato de presentación textual (cross-mode)
+
+Cuando un issue toca renderizado de writings, aplica una sola regla: **el shell puede cambiar, la presentación textual no**.
+
+Superficies cubiertas:
+- `/write/[id]`
+- `/preview/[token]`
+- `/shared/[id]`
+- `/{username}/{slug}`
+
+Reglas de implementación:
+- Mantener un contrato CSS base compartido (ej. `odessay-rich-content`) para tipografía, wrap y overflow.
+- `tables`, `pre/code` y links largos deben comportarse igual entre superficies.
+- Wrappers técnicos distintos (`tableWrapper`, wrappers de renderer) son válidos solo si mapean al mismo contrato visual.
+- Evitar parches locales por vista; si cambias una regla de presentación textual, sincroniza todas las superficies del contrato en el mismo PR.
+
+---
+
 ## Velocidad e inmediatez — reglas no negociables
 
 Estas reglas no son optimizaciones opcionales. Son criterios de corrección del producto.
@@ -619,6 +637,7 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] Bordes `border-[0.5px]`
 - [ ] Sombras `shadow-float`, `shadow-float-md`, `shadow-float-lg`
 - [ ] Sidebar mini: iconos centrados, labels ocultos, avatar no cortado
+- [ ] Si el issue toca presentación de texto: paridad validada entre `write`, `preview`, `shared` y `public` (tablas, `pre/code`, URLs largas, overflow)
 
 ### Arquitectura
 - [ ] Server Component por default, Client solo si necesario
