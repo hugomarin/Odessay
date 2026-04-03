@@ -1,6 +1,7 @@
 import type { JSONContent } from "@tiptap/core"
 import { generateHTML } from "@tiptap/html"
 import {
+  containWideTables,
   WRITING_BODY_EXTENSIONS,
   isRenderableBodyJson,
   renderPlainTextHtml,
@@ -20,7 +21,7 @@ export const renderWritingBodyHtml = (
       const renderRichHtml = options.renderRichHtml ?? ((value: JSONContent) => generateHTML(value, WRITING_BODY_EXTENSIONS))
 
       return {
-        bodyHtml: renderRichHtml(sanitizedBodyJson),
+        bodyHtml: containWideTables(renderRichHtml(sanitizedBodyJson)),
         mode: "rich",
       }
     } catch (error) {

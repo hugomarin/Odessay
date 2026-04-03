@@ -40,6 +40,51 @@ Geist Sans + Lora — tipografía (ver skill-design.md)
 
 ---
 
+## Contrato de presentación textual (cross-mode)
+
+Cuando un issue toca renderizado de writings, aplica una sola regla: **el shell puede cambiar, la presentación textual no**.
+
+Superficies cubiertas:
+- `/write/[id]`
+- `/preview/[token]`
+- `/shared/[id]`
+- `/{username}/{slug}`
+
+Reglas de implementación:
+- Mantener un contrato CSS base compartido (ej. `odessay-rich-content`) para tipografía, wrap y overflow.
+- `tables`, `pre/code` y links largos deben comportarse igual entre superficies.
+- Wrappers técnicos distintos (`tableWrapper`, wrappers de renderer) son válidos solo si mapean al mismo contrato visual.
+- Evitar parches locales por vista; si cambias una regla de presentación textual, sincroniza todas las superficies del contrato en el mismo PR.
+
+---
+
+## Reglas de construcción CSS (frontend)
+
+Cuando implementes o refactorices CSS para UI textual:
+
+- Agrupa selectores compartidos para evitar reglas duplicadas entre `.odessay-editor-content` y `.prose-odessay` (por ejemplo `h1/h2/h3`, tipografía base y comportamiento de wrap).
+- Separa claramente:
+  - `reglas compartidas` (contrato común),
+  - `ajustes por superficie` (solo márgenes, spacing o layout específico del shell).
+- No declares dos veces la misma propiedad tipográfica para los mismos elementos en modos distintos, salvo que exista una excepción documentada.
+- Si agregas una nueva regla textual (tables, `pre/code`, URLs largas, overflow), primero añádela al contrato común y luego solo extiende lo estrictamente necesario por superficie.
+- En revisiones CSS, prioriza reducción de divergencia semántica sobre “fixes locales” rápidos.
+
+Patrón recomendado:
+
+```css
+.odessay-editor-content h1,
+.prose-odessay h1 {
+  /* shared rule */
+}
+
+.prose-odessay h1 {
+  /* surface-specific spacing only */
+}
+```
+
+---
+
 ## Velocidad e inmediatez — reglas no negociables
 
 Estas reglas no son optimizaciones opcionales. Son criterios de corrección del producto.
@@ -619,6 +664,8 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] Bordes `border-[0.5px]`
 - [ ] Sombras `shadow-float`, `shadow-float-md`, `shadow-float-lg`
 - [ ] Sidebar mini: iconos centrados, labels ocultos, avatar no cortado
+- [ ] Si el issue toca presentación de texto: paridad validada entre `write`, `preview`, `shared` y `public` (tablas, `pre/code`, URLs largas, overflow)
+- [ ] Reglas CSS compartidas agrupadas sin duplicación innecesaria entre `.odessay-editor-content` y `.prose-odessay`
 
 ### Arquitectura
 - [ ] Server Component por default, Client solo si necesario

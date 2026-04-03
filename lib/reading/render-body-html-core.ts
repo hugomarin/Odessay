@@ -51,6 +51,12 @@ export type RenderWritingBodyHtmlOptions = {
   onRichRenderError?: (errorMessage: string) => void
 }
 
+export const containWideTables = (html: string) =>
+  html.replace(
+    /<table\b[\s\S]*?<\/table>/g,
+    (tableHtml) => `<div class="odessay-table-wrap prose-odessay-table-wrap">${tableHtml}</div>`,
+  )
+
 export const isRenderableBodyJson = (value: JSONContent | null | undefined): value is JSONContent =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 

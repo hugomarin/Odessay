@@ -257,6 +257,15 @@ body:      Geist Sans 17-18px, line-height 1.85
 blockquote: border-left 2px ink-3, Lora italic 18px, padding-left 1.4em
 ```
 
+### Contrato textual compartido (`write`/`preview`/`shared`/`public`)
+```
+regla:          misma semántica de presentación textual entre superficies
+tables:         ancho mínimo del contenedor + expansión de columnas + scroll horizontal interno
+pre/code:       multilinea cuando excede ancho; no overflow horizontal global de página
+urls largas:    wrap consistente (break controlado), sin desbordar viewport
+wrappers:       permitidos por superficie (ej. tableWrapper), pero mapeados al mismo contrato visual
+```
+
 ### Highlights
 ```
 default:       bg hsl(45,90%,84%)

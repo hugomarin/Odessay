@@ -419,7 +419,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
       immediatelyRender: false,
       editorProps: {
         attributes: {
-          class: "odessay-editor-content",
+          class: "odessay-editor-content odessay-rich-content",
           spellcheck: "true",
           autocorrect: "on",
           autocapitalize: "on",
@@ -465,7 +465,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     editor.setOptions({
       editorProps: {
         attributes: {
-          class: "odessay-editor-content",
+          class: "odessay-editor-content odessay-rich-content",
           spellcheck: spellcheckConfig.enabled ? "true" : "false",
           autocorrect: spellcheckConfig.autoCorrect,
           autocapitalize: spellcheckConfig.autoCapitalize,

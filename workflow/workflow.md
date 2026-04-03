@@ -33,6 +33,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
 9. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
 10. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
+    - Si el issue toca presentación de texto, incluir explícitamente `Presentation Contract` cross-mode (`/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}`) con criterios verificables.
 11. Crear los issues en Linear con su brief incluido.
 12. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
@@ -48,6 +49,10 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al dejar PR listo.
 
+**Invariante de presentación de texto (obligatorio):**
+- El shell puede variar entre vistas, pero el contrato de presentación del contenido textual debe ser equivalente en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` y cualquier nueva superficie de lectura/escritura.
+- `tables`, `pre/code`, URLs largas y overflow horizontal deben conservar la misma semántica de wrap, contención y scroll interno entre superficies.
+
 **Resolución de issue:**
 - Con argumento (`/wf-build ODE-22`): usar el issue indicado.
 - Sin argumento (`/wf-build`): consultar Linear → buscar issues en estado `Todo` o `Backlog` que tengan Issue Brief y pertenezcan a la fase activa en `status.json` → tomar el de mayor prioridad según orden del roadmap → confirmar al humano el issue seleccionado antes de iniciar.
@@ -56,11 +61,13 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 1. El Issue Brief desde Linear.
 2. Los skills técnicos que corresponden al área del issue (frontend, backend, database, design — consultar `workflow/docs.json`).
 3. Si el brief declara `Performance Contract` requerido: `workflow/perf-budgets.json` + `workflow/perf/editor-baseline.md`.
+4. Si el issue toca presentación de texto: `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-ux-testing/SKILL.md`.
 
 **No cargar por defecto:** documentos core, fundacional, flujos, páginas. Esa información debe estar sintetizada en el brief. Si falta algo crítico, es un error del brief — corregir en PLAN antes de continuar.
 
 **Secuencia:**
 1. Verificar que existe el Issue Brief en Linear y resolver su `Performance Contract` (`required`/`not required` con justificación).
+   - Si el issue toca presentación de texto, resolver también su `Presentation Contract` (`required`/`not required` con justificación).
 2. Correr pre-flight:
    - Base (siempre): `node --version`
    - Scripts opcionales (si existen en el repo): `npm run env:check --if-present` y `npm run ops:status:drift --if-present`.
@@ -81,8 +88,9 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
    Si `gh pr create` falla o no devuelve URL, el issue **no puede pasar a `In Review`** — corregir antes de continuar.
 9. Mover issue a `In Review` en Linear **solo tras confirmar que el PR existe** (`gh pr view` devuelve estado `OPEN`).
 10. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
+    - Si `Presentation Contract` es `required`, incluir evidencia de paridad cross-mode (`write`, `preview`, `shared`, `public`).
 
-**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido.
+**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido + evidencia de paridad cross-mode cuando `Presentation Contract` es requerido.
 
 ---
 
@@ -101,6 +109,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 2. El diff del PR.
 3. `.agents/skills/skill-code-review/SKILL.md`.
 4. Si el brief tiene `Performance Contract` requerido: artefactos de performance del PR (trace + report + output de gate).
+5. Si el brief tiene `Presentation Contract` requerido: evidencia cross-mode (`write`, `preview`, `shared`, `public`) con foco en tablas, `pre/code`, URLs largas y overflow.
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
@@ -131,6 +140,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - falta evidencia de performance cuando el contrato es requerido;
    - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
    - no existe justificación explícita cuando el brief marcó `Performance Contract: not required`.
+   - falta evidencia de paridad cross-mode cuando `Presentation Contract` es requerido.
 3. Mover issue a `In Progress`.
 4. No cerrar ni eliminar el PR — mantener rama activa.
 

@@ -25,6 +25,24 @@ El sistema tiene un focus mode donde la interfaz desaparece completamente — si
 
 ---
 
+## Invariante de presentación textual (cross-mode)
+
+El contenido de escritura/lectura puede vivir en shells distintos, pero su **presentación tipográfica y de overflow** debe ser equivalente en:
+
+- `/write/[id]`
+- `/preview/[token]`
+- `/shared/[id]`
+- `/{username}/{slug}`
+- cualquier nueva superficie que renderice writings
+
+Reglas:
+- Definir un contrato común en una clase base compartida (ej. `odessay-rich-content`).
+- No duplicar reglas incompatibles por vista para `table`, `pre/code`, links largos y wrapping de texto.
+- Si una vista necesita un wrapper técnico distinto (ej. `tableWrapper`), debe mapear al mismo contrato visual que las otras superficies.
+- Al cambiar reglas de presentación textual en una vista, actualizar simultáneamente las demás superficies del contrato.
+
+---
+
 ## Tokens de color
 
 Valores finales validados. Estos son los valores exactos — no aproximaciones.

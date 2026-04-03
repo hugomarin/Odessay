@@ -104,6 +104,56 @@
     }
   }
 
+  /* Canonical rich-content contract shared by write + shared + preview. */
+  .odessay-rich-content {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .odessay-rich-content > * {
+    max-width: 100%;
+  }
+
+  .odessay-rich-content a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .odessay-rich-content table {
+    border-collapse: collapse;
+    font-size: 0.98em;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .odessay-rich-content pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .odessay-rich-content pre code {
+    white-space: inherit;
+    overflow-wrap: inherit;
+    word-break: inherit;
+  }
+
+  .odessay-rich-content th,
+  .odessay-rich-content td {
+    max-width: 24rem;
+    min-width: 11rem;
+    overflow-wrap: normal;
+    white-space: normal;
+    word-break: normal;
+  }
+
+  .odessay-rich-content th a,
+  .odessay-rich-content td a {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .odessay-editor-content {
     min-height: 55vh;
     caret-color: hsl(190 88% 46%);
@@ -160,24 +210,30 @@
 
   .odessay-editor-content h1,
   .odessay-editor-content h2,
-  .odessay-editor-content h3 {
+  .odessay-editor-content h3,
+  .prose-odessay h1,
+  .prose-odessay h2,
+  .prose-odessay h3 {
+    color: hsl(var(--ink));
     font-family: var(--font-lora), Georgia, serif;
     font-weight: 600;
     letter-spacing: -0.01em;
     line-height: 1.25;
   }
 
-  .odessay-editor-content h1 {
-    font-size: 30px;
+  .odessay-editor-content h1,
+  .prose-odessay h1 {
+    font-size: 1.75em;
   }
 
-  .odessay-editor-content h2 {
-    font-size: 24px;
+  .odessay-editor-content h2,
+  .prose-odessay h2 {
+    font-size: 1.35em;
   }
 
-  .odessay-editor-content h3 {
-    font-size: 20px;
-    line-height: 1.35;
+  .odessay-editor-content h3,
+  .prose-odessay h3 {
+    font-size: 1.1em;
   }
 
   /* Typographic rhythm: more air before headings, tighter entry into body copy. */
@@ -274,11 +330,12 @@
   }
 
   .odessay-editor-content table {
-    border-collapse: collapse;
-    font-size: 0.98em;
-    line-height: 1.55;
-    margin: 1.6em 0;
-    width: 100%;
+    display: block;
+    max-width: 100%;
+    min-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: max-content;
   }
 
   .odessay-editor-content th,
@@ -319,6 +376,17 @@
     background: hsl(45 90% 84%);
     border-radius: 2px;
     padding: 0 0.08em;
+  }
+
+  .odessay-editor-content .tableWrapper > table {
+    display: table;
+    margin: 0;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .odessay-editor-content > table {
+    margin: 1.6em 0;
   }
 
   .prose-odessay .hl {
@@ -436,33 +504,18 @@
 }
 
 .prose-odessay h1 {
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 1.75em;
-  font-weight: 600;
-  line-height: 1.25;
   margin-top: 1.6em;
   margin-bottom: 0.6em;
-  color: hsl(var(--ink));
 }
 
 .prose-odessay h2 {
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 1.35em;
-  font-weight: 600;
-  line-height: 1.3;
   margin-top: 1.4em;
   margin-bottom: 0.5em;
-  color: hsl(var(--ink));
 }
 
 .prose-odessay h3 {
-  font-family: var(--font-lora), Georgia, serif;
-  font-size: 1.1em;
-  font-weight: 600;
-  line-height: 1.4;
   margin-top: 1.2em;
   margin-bottom: 0.4em;
-  color: hsl(var(--ink));
 }
 
 .prose-odessay blockquote {
@@ -481,12 +534,22 @@
   color: hsl(var(--ink));
 }
 
-.prose-odessay table {
-  border-collapse: collapse;
-  font-size: 0.98em;
-  line-height: 1.55;
+.odessay-table-wrap,
+.prose-odessay-table-wrap,
+.odessay-rich-content .tableWrapper {
   margin: 1.6em 0;
+  max-width: 100%;
   width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.odessay-table-wrap > table,
+.prose-odessay-table-wrap > table,
+.odessay-rich-content .tableWrapper > table {
+  min-width: 100%;
+  width: max-content;
 }
 
 .prose-odessay th,
