@@ -155,6 +155,7 @@ export function ReadingInteractiveShell({
   const [annotationMode, setAnnotationMode] = useState(false)
   const [margins, setMargins] = useState<MarginData[]>([])
   const bodyRef = useRef<HTMLDivElement>(null)
+  const selectionRangeRef = useRef<Range | null>(null)
 
   // ─── Fetch margins ─────────────────────────────────────────────────────────
 
@@ -217,6 +218,7 @@ export function ReadingInteractiveShell({
   // ─── Selection handling ────────────────────────────────────────────────────
 
   const dismissSelection = useCallback(() => {
+    selectionRangeRef.current = null
     setSelectionInfo(null)
     setAnnotationMode(false)
   }, [])
@@ -253,6 +255,7 @@ export function ReadingInteractiveShell({
         anchorEnd: offsets.end,
       })
       if (!geometry) return
+      selectionRangeRef.current = range.cloneRange()
 
       setAnnotationMode(false)
       setSelectionInfo({
@@ -268,6 +271,57 @@ export function ReadingInteractiveShell({
     document.addEventListener("mouseup", handleMouseUp)
     return () => document.removeEventListener("mouseup", handleMouseUp)
   }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated || !selectionInfo) return
+
+    const body = bodyRef.current
+    if (!body) return
+    const { anchorStart, anchorEnd } = selectionInfo
+
+    const scrollContainer = body.closest("#reading-text")
+
+    function syncSelectionGeometry() {
+      const range = selectionRangeRef.current
+      const bodyNode = bodyRef.current
+      if (!range || !bodyNode) return
+      if (!bodyNode.contains(range.startContainer) || !bodyNode.contains(range.endContainer)) {
+        dismissSelection()
+        return
+      }
+
+      const geometry = buildSelectionGeometry({
+        rects: Array.from(range.getClientRects()),
+        bodyRect: bodyNode.getBoundingClientRect(),
+        anchorStart,
+        anchorEnd,
+      })
+
+      if (!geometry) {
+        dismissSelection()
+        return
+      }
+
+      setSelectionInfo((prev) =>
+        prev
+          ? {
+              ...prev,
+              popupPosition: geometry.popupPosition,
+              bubblePosition: geometry.bubblePosition,
+              selectionRects: geometry.previewRects,
+            }
+          : prev,
+      )
+    }
+
+    window.addEventListener("resize", syncSelectionGeometry)
+    scrollContainer?.addEventListener("scroll", syncSelectionGeometry, { passive: true })
+
+    return () => {
+      window.removeEventListener("resize", syncSelectionGeometry)
+      scrollContainer?.removeEventListener("scroll", syncSelectionGeometry)
+    }
+  }, [isAuthenticated, selectionInfo, dismissSelection])
 
   // Dismiss popup on Escape
   useEffect(() => {
