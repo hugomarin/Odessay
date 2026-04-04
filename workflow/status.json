@@ -645,6 +645,15 @@
       "commit": "dd2565a",
       "date": "2026-03-27",
       "notes": "Se actualizó el protocolo de /wf-review en workflow/workflow.md y skill-code-review para exigir post-merge `git switch main` + `git pull --ff-only origin main`."
+    },
+    {
+      "what": "Fix rich editor format actions so selection does not spill into following text",
+      "phase": "Fase 1",
+      "issue": "ODE-80",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-80/bug-formatting-selection-sometimes-extends-into-following-text-in",
+      "commit": "67744a8",
+      "date": "2026-04-04",
+      "notes": "Se preserva/restaura selección de Rich al ejecutar acciones desde toolbar y menú compacto, y se agrega e2e repetitivo para validar que bold no extiende formato fuera del rango."
     }
   ]
 }
