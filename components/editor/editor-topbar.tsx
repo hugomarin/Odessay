@@ -1,6 +1,6 @@
 "use client"
 
-import type { ComponentType } from "react"
+import { useRef, type ComponentType } from "react"
 import type { Editor } from "@tiptap/react"
 import {
   AlignLeft,
@@ -38,6 +38,8 @@ import {
   EDITOR_TOPBAR_COMPACT_TRIGGER_ID,
   EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS,
   EDITOR_TOPBAR_TITLE_CONTAINER_CLASS,
+  type RichSelectionRange,
+  type RunEditorAction,
   runCompactTopbarAction,
 } from "@/lib/editor/topbar-compact"
 import { cn } from "@/lib/utils"
@@ -51,7 +53,7 @@ type EditorTopbarProps = {
   onToggleFocusMode: () => void
   onTogglePanel: (panel: "notes" | "properties") => void
   onOpenRenameModal: () => void
-  onRunAction: (action: EditorShortcutAction) => void
+  onRunAction: RunEditorAction
 }
 
 type TopbarActionItem = {
@@ -171,6 +173,24 @@ export function EditorTopbar({
   onOpenRenameModal,
   onRunAction,
 }: EditorTopbarProps) {
+  const pendingRichSelectionRef = useRef<RichSelectionRange | null>(null)
+  const captureSelectionAndKeepFocus = (event: { preventDefault: () => void }) => {
+    event.preventDefault()
+
+    if (mode !== "rich" || !editor) {
+      pendingRichSelectionRef.current = null
+      return
+    }
+
+    const { from, to } = editor.state.selection
+    pendingRichSelectionRef.current = { from, to }
+  }
+  const consumeRichSelection = (): RichSelectionRange | undefined => {
+    const pending = pendingRichSelectionRef.current
+    pendingRichSelectionRef.current = null
+    return pending ?? undefined
+  }
+
   const formatButtons = FORMAT_ACTIONS.map((actionItem) => {
     const Icon = actionItem.icon
 
@@ -186,11 +206,9 @@ export function EditorTopbar({
           type="button"
           onMouseDown={(event) => {
             // Keep editor/textarea selection stable when triggering formatting from toolbar.
-            if (mode === "markdown" || mode === "rich") {
-              event.preventDefault()
-            }
+            captureSelectionAndKeepFocus(event)
           }}
-          onClick={() => onRunAction(actionItem.action)}
+          onClick={() => onRunAction(actionItem.action, { richSelection: consumeRichSelection() })}
           aria-label={actionItem.label}
           className={cn(
             "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
@@ -215,11 +233,9 @@ export function EditorTopbar({
         type="button"
         onMouseDown={(event) => {
           // Prevent focus-stealing click from collapsing markdown selection before applying style.
-          if (mode === "markdown" || mode === "rich") {
-            event.preventDefault()
-          }
+          captureSelectionAndKeepFocus(event)
         }}
-        onClick={() => onRunAction(actionItem.action)}
+        onClick={() => onRunAction(actionItem.action, { richSelection: consumeRichSelection() })}
         aria-label={actionItem.label}
         className={cn(
           "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
@@ -237,7 +253,12 @@ export function EditorTopbar({
     return (
       <DropdownMenuItem
         key={`${actionItem.id}-compact-quick`}
-        onSelect={(event) => runCompactTopbarAction(onRunAction, actionItem.action, event)}
+        onSelect={(event) =>
+          runCompactTopbarAction(onRunAction, actionItem.action, {
+            event,
+            richSelection: consumeRichSelection(),
+          })
+        }
         aria-label={actionItem.label}
         className={cn(
           "h-8 justify-center rounded-[8px] p-0",
@@ -257,7 +278,11 @@ export function EditorTopbar({
     return (
       <DropdownMenuItem
         key={`${actionItem.id}-compact-list`}
-        onSelect={() => runCompactTopbarAction(onRunAction, actionItem.action)}
+        onSelect={() =>
+          runCompactTopbarAction(onRunAction, actionItem.action, {
+            richSelection: consumeRichSelection(),
+          })
+        }
         className={cn("h-9 rounded-[8px] px-2.5 text-[14px]", active ? "bg-muted text-ink" : "text-ink-2")}
       >
         <span
@@ -299,6 +324,10 @@ export function EditorTopbar({
                   <button
                     id={EDITOR_TOPBAR_COMPACT_TRIGGER_ID}
                     type="button"
+                    onMouseDown={(event) => {
+                      // Preserve rich selection before opening the compact menu.
+                      captureSelectionAndKeepFocus(event)
+                    }}
                     aria-label="Format menu"
                     className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border-[0.5px] border-border bg-sb px-2.5 text-[13px] text-ink-2 transition-colors hover:bg-muted hover:text-ink"
                   >

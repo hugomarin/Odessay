@@ -22,10 +22,10 @@ describe("editor topbar compact responsive behavior", () => {
     const onRunAction = vi.fn()
     const preventDefault = vi.fn()
 
-    runCompactTopbarAction(onRunAction, "bold", { preventDefault })
+    runCompactTopbarAction(onRunAction, "bold", { event: { preventDefault } })
 
     expect(preventDefault).toHaveBeenCalledTimes(1)
-    expect(onRunAction).toHaveBeenCalledWith("bold")
+    expect(onRunAction).toHaveBeenCalledWith("bold", undefined)
   })
 
   it("runs compact dropdown action without event", () => {
@@ -33,6 +33,6 @@ describe("editor topbar compact responsive behavior", () => {
 
     runCompactTopbarAction(onRunAction, "heading1")
 
-    expect(onRunAction).toHaveBeenCalledWith("heading1")
+    expect(onRunAction).toHaveBeenCalledWith("heading1", undefined)
   })
 })
