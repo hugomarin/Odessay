@@ -711,6 +711,26 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
+      const runGlobalAction = () => {
+        switch (action) {
+          case "focusMode":
+            setIsFocusMode((currentState) => !currentState)
+            return true
+          case "newWriting":
+            router.push("/write")
+            return true
+          case "settings":
+            router.push("/settings")
+            return true
+          default:
+            return false
+        }
+      }
+
+      if (runGlobalAction()) {
+        return
+      }
+
       const captureSelection = () => {
         if (!editor) {
           return
@@ -951,9 +971,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
           case "table":
             setTableModalOpen(true)
             return
-          case "focusMode":
-            setIsFocusMode((currentState) => !currentState)
-            return
           default:
             return
         }
@@ -1064,14 +1081,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
         case "table":
           setTableModalOpen(true)
           return
-        case "focusMode":
-          setIsFocusMode((currentState) => !currentState)
-          return
         default:
           return
       }
     },
-    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
+    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, router],
   )
 
   const handleToggleMode = useCallback(

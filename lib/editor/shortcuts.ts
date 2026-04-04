@@ -17,6 +17,8 @@ export type EditorShortcutAction =
   | "bulletList"
   | "orderedList"
   | "focusMode"
+  | "newWriting"
+  | "settings"
   | "table"
 
 export type KeyboardLikeEvent = {
@@ -28,38 +30,33 @@ export type KeyboardLikeEvent = {
   altKey: boolean
 }
 
-const EDITOR_SHORTCUT_LABELS: Partial<Record<EditorShortcutAction, ShortcutDisplay>> = {
-  bold: { mac: "⌘B", windows: "Ctrl+B" },
-  italic: { mac: "⌘I", windows: "Ctrl+I" },
-  strike: { mac: "⌘⌥U", windows: "Ctrl+Alt+U" },
+const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
+  bold: { mac: "⌘⇧H", windows: "Ctrl+Shift+H" },
+  italic: { mac: "⌘⇧L", windows: "Ctrl+Shift+L" },
+  strike: { mac: "⌘⇧X", windows: "Ctrl+Shift+X" },
   highlight: { mac: "⌘⇧U", windows: "Ctrl+Shift+U" },
-  inlineCode: { mac: "⌘J", windows: "Ctrl+J" },
-  codeBlock: { mac: "⌘⇧J", windows: "Ctrl+Shift+J" },
-  link: { mac: "⌘K", windows: "Ctrl+K" },
-  footnote: { mac: "⌃⌘K", windows: "Ctrl+Alt+K" },
-  paragraph: { mac: "⌘⌥P", windows: "Ctrl+Alt+P" },
-  heading1: { mac: "⌘⌥1", windows: "Ctrl+Alt+1" },
-  heading2: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
-  heading3: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
-  blockquote: { mac: "⌘⌥Q", windows: "Ctrl+Alt+Q" },
-  bulletList: { mac: "⌘⇧8", windows: "Ctrl+Shift+8" },
+  inlineCode: { mac: "⌘⇧E", windows: "Ctrl+Shift+E" },
+  codeBlock: { mac: "⌘⇧D", windows: "Ctrl+Shift+D" },
+  link: { mac: "⌘⇧K", windows: "Ctrl+Shift+K" },
+  footnote: { mac: "⌘⇧A", windows: "Ctrl+Shift+A" },
+  paragraph: { mac: "⌘⇧4", windows: "Ctrl+Shift+4" },
+  heading1: { mac: "⌘⇧1", windows: "Ctrl+Shift+1" },
+  heading2: { mac: "⌘⇧2", windows: "Ctrl+Shift+2" },
+  heading3: { mac: "⌘⇧3", windows: "Ctrl+Shift+3" },
+  blockquote: { mac: "⌘⇧5", windows: "Ctrl+Shift+5" },
+  bulletList: { mac: "⌘⇧6", windows: "Ctrl+Shift+6" },
   orderedList: { mac: "⌘⇧7", windows: "Ctrl+Shift+7" },
   focusMode: { mac: "⌘⇧F", windows: "Ctrl+Shift+F" },
-  table: { mac: "⌘⇧T", windows: "Ctrl+Shift+T" },
+  newWriting: { mac: "⌘⇧Y", windows: "Ctrl+Shift+Y" },
+  settings: { mac: "⌘⇧<", windows: "Ctrl+Shift+<" },
+  table: { mac: "⌘⇧8", windows: "Ctrl+Shift+8" },
 }
 
 const isCommandKey = (event: KeyboardLikeEvent) =>
   isMacPlatform() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
 
-const hasNoExtraModifiers = (
-  event: KeyboardLikeEvent,
-  options: { shift?: boolean; alt?: boolean } = {},
-) => {
-  const expectedShift = options.shift ?? false
-  const expectedAlt = options.alt ?? false
-
-  return event.shiftKey === expectedShift && event.altKey === expectedAlt
-}
+const hasNoExtraModifiers = (event: KeyboardLikeEvent, options: { shift?: boolean } = {}) =>
+  event.shiftKey === (options.shift ?? false) && !event.altKey
 
 const matchesKey = (event: KeyboardLikeEvent, key: string, code?: string) => {
   if (event.key.toLowerCase() === key) {
@@ -73,102 +70,89 @@ const matchesKey = (event: KeyboardLikeEvent, key: string, code?: string) => {
   return event.code === code
 }
 
-const matches = (
-  event: KeyboardLikeEvent,
-  key: string,
-  options: { shift?: boolean; alt?: boolean; code?: string } = {},
-) => matchesKey(event, key, options.code) && isCommandKey(event) && hasNoExtraModifiers(event, options)
-
-const isFootnoteShortcut = (event: KeyboardLikeEvent) => {
-  if (!matchesKey(event, "k", "KeyK")) {
-    return false
-  }
-
-  if (isMacPlatform()) {
-    return event.metaKey && event.ctrlKey && !event.shiftKey && !event.altKey
-  }
-
-  return event.ctrlKey && event.altKey && !event.shiftKey && !event.metaKey
-}
+const matches = (event: KeyboardLikeEvent, key: string, options: { shift?: boolean; code?: string } = {}) =>
+  matchesKey(event, key, options.code) && isCommandKey(event) && hasNoExtraModifiers(event, options)
 
 export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcutAction | null => {
-  if (matches(event, "q", { alt: true, code: "KeyQ" })) {
-    return "blockquote"
-  }
-
-  if (matches(event, "b")) {
+  if (matches(event, "h", { shift: true, code: "KeyH" })) {
     return "bold"
   }
 
-  if (matches(event, "i")) {
+  if (matches(event, "l", { shift: true, code: "KeyL" })) {
     return "italic"
   }
 
-  if (matches(event, "u", { alt: true })) {
+  if (matches(event, "x", { shift: true, code: "KeyX" })) {
     return "strike"
   }
 
-  if (matches(event, "u", { shift: true })) {
+  if (matches(event, "u", { shift: true, code: "KeyU" })) {
     return "highlight"
   }
 
-  if (matches(event, "j")) {
+  if (matches(event, "e", { shift: true, code: "KeyE" })) {
     return "inlineCode"
   }
 
-  if (matches(event, "j", { shift: true })) {
+  if (matches(event, "d", { shift: true, code: "KeyD" })) {
     return "codeBlock"
   }
 
-  if (matches(event, "k")) {
+  if (matches(event, "k", { shift: true, code: "KeyK" })) {
     return "link"
   }
 
-  if (isFootnoteShortcut(event)) {
+  if (matches(event, "a", { shift: true, code: "KeyA" })) {
     return "footnote"
   }
 
-  if (matches(event, "p", { alt: true, code: "KeyP" })) {
+  if (matches(event, "4", { shift: true, code: "Digit4" })) {
     return "paragraph"
   }
 
-  if (matches(event, "1", { alt: true, code: "Digit1" })) {
+  if (matches(event, "1", { shift: true, code: "Digit1" })) {
     return "heading1"
   }
 
-  if (matches(event, "2", { alt: true, code: "Digit2" })) {
+  if (matches(event, "2", { shift: true, code: "Digit2" })) {
     return "heading2"
   }
 
-  if (matches(event, "3", { alt: true, code: "Digit3" })) {
+  if (matches(event, "3", { shift: true, code: "Digit3" })) {
     return "heading3"
   }
 
-  if (matches(event, "8", { shift: true })) {
+  if (matches(event, "5", { shift: true, code: "Digit5" })) {
+    return "blockquote"
+  }
+
+  if (matches(event, "6", { shift: true, code: "Digit6" })) {
     return "bulletList"
   }
 
-  if (matches(event, "7", { shift: true })) {
+  if (matches(event, "7", { shift: true, code: "Digit7" })) {
     return "orderedList"
   }
 
-  if (matches(event, "f", { shift: true })) {
+  if (matches(event, "8", { shift: true, code: "Digit8" })) {
+    return "table"
+  }
+
+  if (matches(event, "f", { shift: true, code: "KeyF" })) {
     return "focusMode"
   }
 
-  if (matches(event, "t", { shift: true })) {
-    return "table"
+  if (matches(event, "y", { shift: true, code: "KeyY" })) {
+    return "newWriting"
+  }
+
+  if (matches(event, "<", { shift: true, code: "Comma" })) {
+    return "settings"
   }
 
   return null
 }
 
 export const getEditorShortcutLabel = (action: EditorShortcutAction): string | null => {
-  const shortcut = EDITOR_SHORTCUT_LABELS[action]
-
-  if (!shortcut) {
-    return null
-  }
-
-  return getShortcutForPlatform(shortcut)
+  return getShortcutForPlatform(EDITOR_SHORTCUT_LABELS[action])
 }

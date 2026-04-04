@@ -29,19 +29,17 @@ async function dispatchShortcut(page: Page, payload: ShortcutPayload) {
 test("editor shortcuts map to isolated actions without collisions", async ({ page }) => {
   await openEditorHarness(page)
   const isMac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/i.test(navigator.platform))
-  const commandModifiers = isMac ? { metaKey: true } : { ctrlKey: true }
-  const altCommandModifiers = isMac ? { metaKey: true, altKey: true } : { ctrlKey: true, altKey: true }
   const shiftCommandModifiers = isMac ? { metaKey: true, shiftKey: true } : { ctrlKey: true, shiftKey: true }
 
   const editor = page.locator(".odessay-editor-content")
   await editor.click()
-  await editor.type("Shortcut target")
+  await editor.type("Shortcut target line")
   await editor.click({ clickCount: 3 })
 
-  await dispatchShortcut(page, { key: "q", code: "KeyQ", ...altCommandModifiers })
+  await dispatchShortcut(page, { key: "5", code: "Digit5", ...shiftCommandModifiers })
   await switchToMarkdown(page)
   let textarea = await markdownTextarea(page)
-  await expect(textarea).toHaveValue(/> Shortcut target/)
+  await expect(textarea).toHaveValue(/> Shortcut target line/)
 
   await textarea.fill("Paragraph target")
   await textarea.focus()
@@ -49,33 +47,61 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
     const node = element as HTMLTextAreaElement
     node.setSelectionRange(0, node.value.length)
   })
-  await dispatchShortcut(page, { key: "1", code: "Digit1", ...altCommandModifiers })
+  await dispatchShortcut(page, { key: "1", code: "Digit1", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^# Paragraph target$/)
-  await dispatchShortcut(page, { key: "2", code: "Digit2", ...altCommandModifiers })
+  await dispatchShortcut(page, { key: "2", code: "Digit2", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^## Paragraph target$/)
-  await dispatchShortcut(page, { key: "3", code: "Digit3", ...altCommandModifiers })
+  await dispatchShortcut(page, { key: "3", code: "Digit3", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^### Paragraph target$/)
-  await dispatchShortcut(page, { key: "p", code: "KeyP", ...altCommandModifiers })
+  await dispatchShortcut(page, { key: "4", code: "Digit4", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^Paragraph target$/)
+  await dispatchShortcut(page, { key: "6", code: "Digit6", ...shiftCommandModifiers })
+  await expect(textarea).toHaveValue(/^- Paragraph target$/)
+  await dispatchShortcut(page, { key: "7", code: "Digit7", ...shiftCommandModifiers })
+  await expect(textarea).toHaveValue(/^1\. Paragraph target$/)
 
   await page.getByRole("button", { name: "Rich" }).click()
   await expect(editor).toBeVisible()
   await editor.click()
   await page.keyboard.press(isMac ? "Meta+A" : "Control+A")
 
+  await dispatchShortcut(page, { key: "h", code: "KeyH", ...shiftCommandModifiers })
+  await expect(page.locator(".odessay-editor-content strong")).toContainText("Paragraph target")
+  await dispatchShortcut(page, { key: "l", code: "KeyL", ...shiftCommandModifiers })
+  await expect(page.locator(".odessay-editor-content em")).toContainText("Paragraph target")
+  await dispatchShortcut(page, { key: "x", code: "KeyX", ...shiftCommandModifiers })
+  await expect(page.locator(".odessay-editor-content s")).toContainText("Paragraph target")
   await dispatchShortcut(page, { key: "u", code: "KeyU", ...shiftCommandModifiers })
   await expect(page.locator(".odessay-editor-content mark")).toContainText("Paragraph target")
-  await dispatchShortcut(page, { key: "u", code: "KeyU", ...shiftCommandModifiers })
-  await expect(page.locator(".odessay-editor-content mark")).toHaveCount(0)
+  await dispatchShortcut(page, { key: "e", code: "KeyE", ...shiftCommandModifiers })
+  await expect(page.locator(".odessay-editor-content code")).toContainText("Paragraph target")
+  await dispatchShortcut(page, { key: "d", code: "KeyD", ...shiftCommandModifiers })
+  await expect(page.locator(".odessay-editor-content pre")).toHaveCount(1)
 
-  await dispatchShortcut(page, { key: "k", code: "KeyK", ...commandModifiers })
+  await dispatchShortcut(page, { key: "k", code: "KeyK", ...shiftCommandModifiers })
   await expect(page.getByRole("dialog", { name: "Insert link" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog", { name: "Insert link" })).toBeHidden()
 
-  const footnoteModifiers = isMac ? { metaKey: true, ctrlKey: true } : { ctrlKey: true, altKey: true }
-  await dispatchShortcut(page, { key: "k", code: "KeyK", ...footnoteModifiers })
+  await dispatchShortcut(page, { key: "a", code: "KeyA", ...shiftCommandModifiers })
   await expect(page.getByRole("dialog", { name: "Insert footnote" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog", { name: "Insert footnote" })).toBeHidden()
+
+  await dispatchShortcut(page, { key: "8", code: "Digit8", ...shiftCommandModifiers })
+  await expect(page.getByRole("dialog", { name: "Insert table" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog", { name: "Insert table" })).toBeHidden()
+
+  await dispatchShortcut(page, { key: "f", code: "KeyF", ...shiftCommandModifiers })
+  await expect(page.locator("#editor-topbar")).toBeHidden()
+  await dispatchShortcut(page, { key: "f", code: "KeyF", ...shiftCommandModifiers })
+  await expect(page.locator("#editor-topbar")).toBeVisible()
+
+  await dispatchShortcut(page, { key: "<", code: "Comma", ...shiftCommandModifiers })
+  await expect(page).toHaveURL(/\/login\?next=%2Fsettings$/)
+
+  await openEditorHarness(page)
+  await dispatchShortcut(page, { key: "y", code: "KeyY", ...shiftCommandModifiers })
+  await expect(page).toHaveURL(/\/login\?next=%2Fwrite$/)
 })
