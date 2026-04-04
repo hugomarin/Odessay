@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Fix editor flicker on paste in new writing: preemptively marks the new writing ID as hydrated in hydratedIdRef before the state update, and tracks self-initiated navigations via selfNavigatedIdRef so the routeWritingId effect does not reset hydration state, preventing the unnecessary Tiptap setContent re-render that caused the ~1s flicker.",
+      "phase": "Fase 2",
+      "issue": "ODE-82",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-82",
+      "commit": "eb2a2b0",
+      "date": "2026-04-04",
+      "notes": "Performance contract: not required (ref-only change, no new async work or render paths added). Presentation contract: not required (does not touch cross-mode text rendering)."
+    },
+    {
       "what": "Desk shared tab rows now expose clear desktop click affordance: interactive rows use pointer cursor, stronger hover/focus background, and underlined title on hover/focus-visible to communicate navigation intent without changing keyboard behavior.",
       "phase": "Fase 2",
       "issue": "ODE-81",
