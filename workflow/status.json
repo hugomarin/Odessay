@@ -30,9 +30,9 @@
       "phase": "Fase 2",
       "issue": "ODE-78",
       "linear_url": "https://linear.app/z9ne/issue/ODE-78",
-      "commit": "f1a978b",
+      "commit": "8c5f3e9",
       "date": "2026-04-04",
-      "notes": "Validation in green: npm run typecheck, npm run lint, npx vitest run tests/selection-geometry.test.ts tests/margins.test.ts. Se agrega harness unitario de geometría para prevenir regresiones de sistema de coordenadas. Performance contract: not required (sin cambios en keystroke/input path). Presentation contract: required (fix aplicado al shell de lectura compartida, con contrato geométrico único para popup/highlight/bubble)."
+      "notes": "Validation in green: npm run typecheck, npm run lint, npx vitest run tests/selection-geometry.test.ts tests/margins.test.ts. Se agrega harness unitario de geometría para prevenir regresiones de sistema de coordenadas y ajuste UX para mantener el popup anclado a la selección en scroll/resize + contenedor visual consistente de Mark/Annotate. Performance contract: not required (sin cambios en keystroke/input path). Presentation contract: required (fix aplicado al shell de lectura compartida, con contrato geométrico único para popup/highlight/bubble)."
     },
     {
       "what": "Consolidación del contrato tipográfico canónico cross-mode: unifica reglas compartidas para `.odessay-editor-content` y `.prose-odessay` en `app/globals.css` (escala Major Third, ritmo vertical, listas, blockquote, tablas, inline/code/kbd, captions y excepciones por contexto). Se elimina duplicación legacy de `.prose-odessay` y se preserva contención técnica de tablas en wrappers. Además se formaliza la fuente de verdad en `.agents/skills/skill-design/tipografia.md` y se referencia desde `SKILL.md` y `vistas.md`.",
