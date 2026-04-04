@@ -3,6 +3,7 @@ import { EditorShell } from "@/components/editor/editor-shell"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
+import { resolveWriteDetailRoute } from "@/lib/writings/write-detail-route"
 
 type WriteDetailPageProps = {
   params: Promise<{ id: string }>
@@ -48,13 +49,15 @@ export default async function WriteDetailPage({ params }: WriteDetailPageProps) 
 
   const writing = await resolveOwnedWriting(user.id, identifier)
 
-  if (!writing) {
+  const routeResolution = resolveWriteDetailRoute(identifier, writing)
+
+  if (routeResolution.kind === "not-found") {
     notFound()
   }
 
-  if (writing.slug && identifier !== writing.slug) {
-    permanentRedirect(`/write/${writing.slug}`)
+  if (routeResolution.kind === "redirect") {
+    permanentRedirect(routeResolution.href)
   }
 
-  return <EditorShell writingId={writing.id} />
+  return <EditorShell writingId={routeResolution.writingId} />
 }
