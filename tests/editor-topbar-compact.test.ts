@@ -15,7 +15,9 @@ describe("editor topbar compact responsive behavior", () => {
     expect(EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS).toContain("hidden")
 
     expect(EDITOR_TOPBAR_COMPACT_FORMAT_CLASS).toContain("min-[960px]:hidden")
-    expect(EDITOR_TOPBAR_TITLE_CONTAINER_CLASS).toContain("min-[960px]:px-[280px]")
+    expect(EDITOR_TOPBAR_TITLE_CONTAINER_CLASS).toContain("flex-1")
+    expect(EDITOR_TOPBAR_TITLE_CONTAINER_CLASS).toContain("min-w-0")
+    expect(EDITOR_TOPBAR_TITLE_CONTAINER_CLASS).toContain("pointer-events-none")
   })
 
   it("runs compact dropdown action and prevents default when event exists", () => {

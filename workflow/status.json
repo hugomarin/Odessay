@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Editor topbar title now uses bounded flex space between left format controls and right action controls, removing the absolute overlay hitbox that intercepted toolbar clicks at medium widths.",
+      "phase": "Fase 2",
+      "issue": "ODE-83",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-83",
+      "commit": "083ff78",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npm run test -- tests/editor-topbar-compact.test.ts. Performance contract: not required (layout-only topbar change). Presentation contract: not required (does not modify cross-mode rich-text rendering)."
+    },
+    {
       "what": "Fix editor flicker on paste in new writing: preemptively marks the new writing ID as hydrated in hydratedIdRef before the state update, and tracks self-initiated navigations via selfNavigatedIdRef so the routeWritingId effect does not reset hydration state, preventing the unnecessary Tiptap setContent re-render that caused the ~1s flicker.",
       "phase": "Fase 2",
       "issue": "ODE-82",
