@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Shortcut system redesign: unified editor shortcuts under cmd/ctrl+shift pattern, removed alt/option bindings, added global actions (new writing/settings/focus mode), and aligned sidebar/tooltips to the same centralized mapping with explicit Windows parity labels.",
+      "phase": "Fase 2",
+      "issue": "ODE-85",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-85",
+      "commit": "c4ddcc6",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npx vitest run tests/editor-shortcuts.test.ts and npx playwright test tests/playwright/editor-shortcuts.e2e.ts --reporter=line. Performance contract: not required (keyboard binding and navigation triggers only, no render-path changes). Presentation contract: not required (does not alter cross-mode rich-text presentation/overflow semantics). Windows mapping documented directly in shortcut labels (`cmd->ctrl`, `shift->shift`)."
+    },
+    {
       "what": "Keyboard shortcuts audit/fix in editor: removed conflicting blockquote shortcut, separated collections shortcut from link, stabilized structural shortcuts with key+code matching (including Alt/Option layouts), and added Playwright coverage for isolated shortcut dispatch (blockquote/link/footnote/highlight/P-H1-H2-H3).",
       "phase": "Fase 2",
       "issue": "ODE-84",
