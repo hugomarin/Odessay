@@ -42,7 +42,7 @@ const NAV_ITEMS: NavItem[] = [
     label: "Collections",
     icon: LibraryBig,
     section: "sidebar-nav-collections",
-    shortcut: { mac: "⌘K", windows: "Ctrl+K" },
+    shortcut: { mac: "⌘⇧K", windows: "Ctrl+Shift+K" },
   },
   { href: "/correspondences", label: "Correspondences", icon: Mails, section: "sidebar-nav-correspondences" },
 ]
@@ -50,6 +50,18 @@ const NAV_ITEMS: NavItem[] = [
 const SIDEBAR_WIDTH_EXPANDED = 292
 const SIDEBAR_WIDTH_COLLAPSED = 52
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  if (target.isContentEditable) {
+    return true
+  }
+
+  return Boolean(target.closest('input, textarea, [role="textbox"], [contenteditable="true"]'))
+}
 
 export function Sidebar({ children, user }: SidebarProps) {
   const pathname = usePathname()
@@ -84,6 +96,34 @@ export function Sidebar({ children, user }: SidebarProps) {
 
     toggleSidebarMode()
   }
+
+  useEffect(() => {
+    const onWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || !event.shiftKey) {
+        return
+      }
+
+      const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform)
+      const hasCommand = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
+
+      if (!hasCommand || event.key.toLowerCase() !== "k") {
+        return
+      }
+
+      if (isEditableTarget(event.target)) {
+        return
+      }
+
+      event.preventDefault()
+      setSidebarPanel(isCollectionsPanelOpen ? null : "collections")
+    }
+
+    window.addEventListener("keydown", onWindowKeyDown)
+
+    return () => {
+      window.removeEventListener("keydown", onWindowKeyDown)
+    }
+  }, [isCollectionsPanelOpen])
 
   return (
     <TooltipProvider delayDuration={120}>

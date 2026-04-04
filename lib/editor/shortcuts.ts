@@ -21,6 +21,7 @@ export type EditorShortcutAction =
 
 export type KeyboardLikeEvent = {
   key: string
+  code?: string
   metaKey: boolean
   ctrlKey: boolean
   shiftKey: boolean
@@ -36,11 +37,11 @@ const EDITOR_SHORTCUT_LABELS: Partial<Record<EditorShortcutAction, ShortcutDispl
   codeBlock: { mac: "⌘⇧J", windows: "Ctrl+Shift+J" },
   link: { mac: "⌘K", windows: "Ctrl+K" },
   footnote: { mac: "⌃⌘K", windows: "Ctrl+Alt+K" },
-  paragraph: { mac: "⌘⌥0", windows: "Ctrl+Alt+0" },
+  paragraph: { mac: "⌘⌥P", windows: "Ctrl+Alt+P" },
   heading1: { mac: "⌘⌥1", windows: "Ctrl+Alt+1" },
   heading2: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
   heading3: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
-  blockquote: { mac: "⌘⇧B", windows: "Ctrl+Shift+B" },
+  blockquote: { mac: "⌘⌥Q", windows: "Ctrl+Alt+Q" },
   bulletList: { mac: "⌘⇧8", windows: "Ctrl+Shift+8" },
   orderedList: { mac: "⌘⇧7", windows: "Ctrl+Shift+7" },
   focusMode: { mac: "⌘⇧F", windows: "Ctrl+Shift+F" },
@@ -60,14 +61,26 @@ const hasNoExtraModifiers = (
   return event.shiftKey === expectedShift && event.altKey === expectedAlt
 }
 
+const matchesKey = (event: KeyboardLikeEvent, key: string, code?: string) => {
+  if (event.key.toLowerCase() === key) {
+    return true
+  }
+
+  if (!code || !event.code) {
+    return false
+  }
+
+  return event.code === code
+}
+
 const matches = (
   event: KeyboardLikeEvent,
   key: string,
-  options: { shift?: boolean; alt?: boolean } = {},
-) => event.key.toLowerCase() === key && isCommandKey(event) && hasNoExtraModifiers(event, options)
+  options: { shift?: boolean; alt?: boolean; code?: string } = {},
+) => matchesKey(event, key, options.code) && isCommandKey(event) && hasNoExtraModifiers(event, options)
 
 const isFootnoteShortcut = (event: KeyboardLikeEvent) => {
-  if (event.key.toLowerCase() !== "k") {
+  if (!matchesKey(event, "k", "KeyK")) {
     return false
   }
 
@@ -79,7 +92,7 @@ const isFootnoteShortcut = (event: KeyboardLikeEvent) => {
 }
 
 export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcutAction | null => {
-  if (matches(event, "b", { shift: true })) {
+  if (matches(event, "q", { alt: true, code: "KeyQ" })) {
     return "blockquote"
   }
 
@@ -115,19 +128,19 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "footnote"
   }
 
-  if (matches(event, "0", { alt: true })) {
+  if (matches(event, "p", { alt: true, code: "KeyP" })) {
     return "paragraph"
   }
 
-  if (matches(event, "1", { alt: true })) {
+  if (matches(event, "1", { alt: true, code: "Digit1" })) {
     return "heading1"
   }
 
-  if (matches(event, "2", { alt: true })) {
+  if (matches(event, "2", { alt: true, code: "Digit2" })) {
     return "heading2"
   }
 
-  if (matches(event, "3", { alt: true })) {
+  if (matches(event, "3", { alt: true, code: "Digit3" })) {
     return "heading3"
   }
 
