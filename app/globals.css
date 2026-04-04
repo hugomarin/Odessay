@@ -32,6 +32,9 @@
   --input: var(--border);
   --ring: var(--ink);
   --od-ease-layout: cubic-bezier(0.4, 0, 0.15, 1);
+  --od-font-prose: var(--font-lora), Georgia, serif;
+  --od-font-ui:    var(--font-dm-sans), system-ui, sans-serif;
+  --od-font-meta:  var(--font-dm-sans), system-ui, sans-serif;
 }
 
 @theme {
@@ -127,6 +130,16 @@
     margin: 0;
   }
 
+  .odessay-editor-content table,
+  .prose-odessay table {
+    display: block;
+    max-width: 100%;
+    min-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: max-content;
+  }
+
   .odessay-rich-content pre {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -157,7 +170,7 @@
   .odessay-editor-content,
   .prose-odessay {
     color: hsl(var(--ink-2));
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--od-font-ui);
     font-size: 18px;
     font-weight: 400;
     line-height: 1.85;
@@ -206,29 +219,35 @@
   .prose-odessay h2,
   .prose-odessay h3 {
     color: hsl(var(--ink));
-    font-family: var(--font-lora), Georgia, serif;
+    font-family: var(--od-font-prose);
     font-weight: 500;
   }
 
   .odessay-editor-content h1,
   .prose-odessay h1 {
-    font-size: 2.441em;
-    line-height: 1.15;
+    font-size: 1.75em;
+    line-height: 1.2;
     letter-spacing: -0.02em;
+    margin-top: 1.8em;
+    margin-bottom: 0.3em;
   }
 
   .odessay-editor-content h2,
   .prose-odessay h2 {
-    font-size: 1.953em;
+    font-size: 1.5em;
     line-height: 1.25;
     letter-spacing: -0.015em;
+    margin-top: 1.5em;
+    margin-bottom: 0.3em;
   }
 
   .odessay-editor-content h3,
   .prose-odessay h3 {
-    font-size: 1.563em;
+    font-size: 1.25em;
     line-height: 1.3;
     letter-spacing: -0.01em;
+    margin-top: 1.2em;
+    margin-bottom: 0.25em;
   }
 
   .odessay-editor-content p + h1,
@@ -305,6 +324,17 @@
   .odessay-editor-content li:last-child,
   .prose-odessay li:last-child { margin-bottom: 0; }
 
+  .odessay-editor-content li p,
+  .prose-odessay li p {
+    margin-top: 0;
+    margin-bottom: 0.25em;
+  }
+
+  .odessay-editor-content li p:last-child,
+  .prose-odessay li p:last-child {
+    margin-bottom: 0;
+  }
+
   .odessay-editor-content li ul,
   .odessay-editor-content li ol,
   .prose-odessay li ul,
@@ -318,7 +348,7 @@
   .prose-odessay blockquote {
     border-left: 1.5px solid hsl(var(--cursor));
     color: hsl(var(--ink-3));
-    font-family: var(--font-lora), Georgia, serif;
+    font-family: var(--od-font-prose);
     font-size: 1.35em;
     font-style: italic;
     font-weight: 400;
@@ -333,7 +363,7 @@
   .prose-odessay blockquote cite {
     display: block;
     margin-top: 0.6em;
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--od-font-meta);
     font-size: 0.65em;
     font-style: normal;
     font-weight: 400;
@@ -356,7 +386,7 @@
   .prose-odessay mark {
     background: hsl(45 90% 84%);
     border-radius: 2px;
-    padding: 0 0.08em;
+    padding: 0;
     color: inherit;
   }
 
@@ -403,7 +433,7 @@
 
   .odessay-editor-content kbd,
   .prose-odessay kbd {
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--od-font-meta);
     font-size: 0.8em;
     font-weight: 500;
     line-height: 1;
@@ -426,7 +456,7 @@
 
   .odessay-editor-content th,
   .prose-odessay th {
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--od-font-meta);
     font-size: 0.72em;
     font-weight: 500;
     letter-spacing: 0.08em;
@@ -460,7 +490,7 @@
   .odessay-editor-content .caption,
   .prose-odessay figcaption,
   .prose-odessay .caption {
-    font-family: var(--font-geist-sans), system-ui, sans-serif;
+    font-family: var(--od-font-meta);
     font-size: 0.8em;
     font-weight: 400;
     line-height: 1.4;
@@ -532,7 +562,7 @@
     background: hsl(45 90% 84%);
     border-radius: 2px;
     cursor: pointer;
-    padding: 0 0.08em;
+    padding: 0;
     box-decoration-break: clone;
     -webkit-box-decoration-break: clone;
     transition: background 0.15s ease;
@@ -634,4 +664,17 @@
 .odessay-rich-content .tableWrapper > table {
   min-width: 100%;
   width: max-content;
+}
+
+.odessay-editor-content .tableWrapper > table,
+.prose-odessay .tableWrapper > table {
+  display: table;
+  margin: 0;
+  max-width: none;
+  overflow: visible;
+}
+
+.odessay-editor-content > table,
+.prose-odessay > table {
+  margin: 1.6em 0;
 }

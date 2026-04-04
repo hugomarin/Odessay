@@ -110,6 +110,9 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - [ ] ¿Respeta la simplicidad radical? ¿No agrega UI innecesaria?
 - [ ] ¿No introduce métricas visibles para el usuario?
 - [ ] ¿Tipografía y spacing consistentes con `skill-design.md`?
+- [ ] Si toca presentación textual: ¿cumple contrato en `.agents/skills/skill-design/tipografia.md`?
+- [ ] Si toca tipografía: ¿paridad entre `.odessay-editor-content` y `.prose-odessay` sin divergencias?
+- [ ] ¿Se preserva overflow de tablas grandes (`tableWrapper`, `width:max-content`, scroll horizontal interno)?
 - [ ] ¿ShadCN customizado para la marca, no con defaults?
 - [ ] ¿El AI editor nunca genera texto?
 - [ ] ¿Los bordes son `0.5px`? ¿Los iconos tienen `strokeWidth={1.5}`?
@@ -145,6 +148,9 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - No hay test para flujo crítico nuevo.
 - El AI editor genera texto en algún caso.
 - Se agregó UI que el issue no pedía.
+- Se cambió tipografía en una sola superficie (`.odessay-editor-content` o `.prose-odessay`) sin espejo en la otra.
+- Se alteró el contrato tipográfico sin actualizar/verificar `.agents/skills/skill-design/tipografia.md`.
+- Se rompió el overflow interno de tablas grandes (regresión de scroll horizontal en contenido ancho).
 - Se agregaron dependencias pesadas sin justificación.
 - El issue exige `Performance Contract: required` y no hay trace/evidencia objetiva.
 - `check-performance-gate` reporta `required_failures > 0` o métricas requeridas faltantes.
