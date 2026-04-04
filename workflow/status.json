@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Fix de carrera en /write/[id]: cuando la fila remota aún no existe pero el identificador es UUID-like, la ruta deja de caer en 404 y abre EditorShell con fallback local-first. Se extrae `resolveWriteDetailRoute` para centralizar resolución (editor/not-found/redirect canónico) y se agrega harness E2E en /perf/write-transient-race con loop de 20 iteraciones de apertura + pegado inmediato.",
+      "phase": "Fase 2",
+      "issue": "ODE-79",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-79",
+      "commit": "8d2b3e9",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npm test -- tests/write-detail-route.test.ts tests/writing-route.test.ts; CI=1 ODE_TEST_LINK_FIXTURES=1 npx playwright test tests/playwright/write-transient-race.e2e.ts tests/playwright/writing-route-canonical.e2e.ts --reporter=line. Performance contract: not required (no cambio en hot path de input/render). Presentation contract: not required (bug de enrutamiento/availability, sin cambios de semántica visual cross-mode)."
+    },
+    {
       "what": "Fix selección/márgenes en reading: introduce `lib/reading/selection-geometry.ts` como fuente única de coordenadas para preview + popup + annotation bubble. La capa de preview se reposiciona al wrapper del body (`WritingContentFrame`) para evitar drift por offsets del frame/header, y annotation bubble usa coordenadas viewport consistentes con SelectionPopup.",
       "phase": "Fase 2",
       "issue": "ODE-78",
