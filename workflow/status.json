@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Desk shared tab rows now expose clear desktop click affordance: interactive rows use pointer cursor, stronger hover/focus background, and underlined title on hover/focus-visible to communicate navigation intent without changing keyboard behavior.",
+      "phase": "Fase 2",
+      "issue": "ODE-81",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-81",
+      "commit": "084d8f8",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npx playwright test tests/playwright/desk-shared-tab.e2e.ts --reporter=line (includes cursor CSS assertion). Performance contract: not required (visual affordance-only update, no editor/read critical-path interaction). Presentation contract: not required (does not modify rich-text cross-mode rendering contract)."
+    },
+    {
       "what": "Fix de carrera en /write/[id]: cuando la fila remota aún no existe pero el identificador es UUID-like, la ruta deja de caer en 404 y abre EditorShell con fallback local-first. Se extrae `resolveWriteDetailRoute` para centralizar resolución (editor/not-found/redirect canónico) y se agrega harness E2E en /perf/write-transient-race con loop de 20 iteraciones de apertura + pegado inmediato.",
       "phase": "Fase 2",
       "issue": "ODE-79",
@@ -57,7 +66,7 @@
       "phase": "Fase 2",
       "issue": "ODE-75",
       "linear_url": "https://linear.app/z9ne/issue/ODE-75",
-      "commit": "b53dfe4",
+      "commit": "eae010a",
       "date": "2026-04-03",
       "notes": "Validation in green: npm run typecheck, npm run lint, npm test (177/177). Performance contract: not required — CSS-only fix, no editor interaction. Presentation Contract: required — fix applies cross-mode (write, preview, shared, public)."
     },
