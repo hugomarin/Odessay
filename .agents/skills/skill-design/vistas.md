@@ -266,6 +266,8 @@ urls largas:    wrap consistente (break controlado), sin desbordar viewport
 wrappers:       permitidos por superficie (ej. tableWrapper), pero mapeados al mismo contrato visual
 ```
 
+Referencia obligatoria: `.agents/skills/skill-design/tipografia.md` (fuente de verdad del contrato tipográfico canónico).
+
 ### Highlights
 ```
 default:       bg hsl(45,90%,84%)
