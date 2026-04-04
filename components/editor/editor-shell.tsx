@@ -42,6 +42,7 @@ import {
 } from "@/lib/editor/spellcheck"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
+import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
@@ -698,7 +699,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   )
 
   const handleRunAction = useCallback(
-    (action: EditorShortcutAction) => {
+    (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
       const captureSelection = () => {
         if (!editor) {
           return
@@ -951,58 +952,94 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
+      const getValidatedRichSelection = (): RichSelectionRange | null => {
+        const docSelectionMax = editor.state.doc.content.size + 1
+        const minPos = 1
+        const candidate = options?.richSelection
+
+        if (
+          candidate &&
+          Number.isInteger(candidate.from) &&
+          Number.isInteger(candidate.to) &&
+          candidate.from >= minPos &&
+          candidate.to <= docSelectionMax &&
+          candidate.from <= candidate.to
+        ) {
+          return candidate
+        }
+
+        const { from, to } = editor.state.selection
+
+        if (from < minPos || to > docSelectionMax || from > to) {
+          return null
+        }
+
+        return { from, to }
+      }
+
+      const runWithRichSelection = (command: (chain: ReturnType<Editor["chain"]>) => ReturnType<Editor["chain"]>) => {
+        const selectedRange = getValidatedRichSelection()
+        let chain = editor.chain().focus()
+
+        if (selectedRange) {
+          chain = chain.setTextSelection(selectedRange)
+        }
+
+        command(chain).run()
+      }
+
       switch (action) {
         case "bold":
-          editor.chain().focus().toggleBold().run()
+          runWithRichSelection((chain) => chain.toggleBold())
           return
         case "italic":
-          editor.chain().focus().toggleItalic().run()
+          runWithRichSelection((chain) => chain.toggleItalic())
           return
         case "strike":
-          editor.chain().focus().toggleStrike().run()
+          runWithRichSelection((chain) => chain.toggleStrike())
           return
         case "highlight":
-          editor.chain().focus().toggleHighlight().run()
+          runWithRichSelection((chain) => chain.toggleHighlight())
           return
         case "inlineCode":
-          editor.chain().focus().toggleCode().run()
+          runWithRichSelection((chain) => chain.toggleCode())
           return
         case "codeBlock":
-          editor.chain().focus().toggleCodeBlock().run()
+          runWithRichSelection((chain) => chain.toggleCodeBlock())
           return
         case "paragraph":
           preserveViewport(() => {
-            editor.chain().focus().setParagraph().run()
+            runWithRichSelection((chain) => chain.setParagraph())
           })
           return
         case "heading1":
           preserveViewport(() => {
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
+            runWithRichSelection((chain) => chain.toggleHeading({ level: 1 }))
           })
           return
         case "heading2":
           preserveViewport(() => {
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
+            runWithRichSelection((chain) => chain.toggleHeading({ level: 2 }))
           })
           return
         case "heading3":
           preserveViewport(() => {
-            editor.chain().focus().toggleHeading({ level: 3 }).run()
+            runWithRichSelection((chain) => chain.toggleHeading({ level: 3 }))
           })
           return
         case "blockquote":
           preserveViewport(() => {
-            editor.chain().focus().toggleBlockquote().run()
+            runWithRichSelection((chain) => chain.toggleBlockquote())
           })
           return
         case "bulletList":
           preserveViewport(() => {
-            editor.chain().focus().toggleBulletList().run()
+            runWithRichSelection((chain) => chain.toggleBulletList())
           })
           return
         case "orderedList":
           preserveViewport(() => {
-            editor.chain().focus().toggleOrderedList().run()
+            runWithRichSelection((chain) => chain.toggleOrderedList())
           })
           return
         case "link":

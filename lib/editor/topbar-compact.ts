@@ -14,11 +14,24 @@ type PreventableEvent = {
   preventDefault?: () => void
 }
 
-export const runCompactTopbarAction = (
-  onRunAction: (action: EditorShortcutAction) => void,
+export type RichSelectionRange = {
+  from: number
+  to: number
+}
+
+export type RunEditorAction = (
   action: EditorShortcutAction,
-  event?: PreventableEvent,
+  options?: { richSelection?: RichSelectionRange },
+) => void
+
+export const runCompactTopbarAction = (
+  onRunAction: RunEditorAction,
+  action: EditorShortcutAction,
+  options?: {
+    event?: PreventableEvent
+    richSelection?: RichSelectionRange
+  },
 ) => {
-  event?.preventDefault?.()
-  onRunAction(action)
+  options?.event?.preventDefault?.()
+  onRunAction(action, options?.richSelection ? { richSelection: options.richSelection } : undefined)
 }
