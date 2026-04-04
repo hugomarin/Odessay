@@ -8,6 +8,7 @@ description: Arquitectura y estándares de implementación frontend de Odessay (
 Lee `skill-design.md` antes de implementar cualquier componente con UI.
 
 Lee `.agents/skills/skill-design/vistas.md` antes de implementar cualquier vista. Contiene los valores exactos de padding, tipografía, colores y comportamiento de cada componente en cada vista (Desk, Collections, Correspondences, Reading, Editor), más el checklist de validación para verificar que tu implementación coincide con la referencia visual.
+Si el issue toca presentación textual (`.odessay-editor-content`/`.prose-odessay`), leer también `.agents/skills/skill-design/tipografia.md` como fuente de verdad del contrato tipográfico.
 
 ---
 
@@ -55,6 +56,7 @@ Reglas de implementación:
 - `tables`, `pre/code` y links largos deben comportarse igual entre superficies.
 - Wrappers técnicos distintos (`tableWrapper`, wrappers de renderer) son válidos solo si mapean al mismo contrato visual.
 - Evitar parches locales por vista; si cambias una regla de presentación textual, sincroniza todas las superficies del contrato en el mismo PR.
+- Toda decisión tipográfica (escala, pesos, color de body/strong, ritmo vertical) debe alinearse a `.agents/skills/skill-design/tipografia.md`.
 
 ---
 
@@ -666,6 +668,7 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] Sidebar mini: iconos centrados, labels ocultos, avatar no cortado
 - [ ] Si el issue toca presentación de texto: paridad validada entre `write`, `preview`, `shared` y `public` (tablas, `pre/code`, URLs largas, overflow)
 - [ ] Reglas CSS compartidas agrupadas sin duplicación innecesaria entre `.odessay-editor-content` y `.prose-odessay`
+- [ ] Si hay cambios tipográficos: validados contra `.agents/skills/skill-design/tipografia.md` (escala, ritmo vertical, pesos, color base y `strong`)
 
 ### Arquitectura
 - [ ] Server Component por default, Client solo si necesario

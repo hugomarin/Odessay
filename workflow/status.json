@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Consolidación del contrato tipográfico canónico cross-mode: unifica reglas compartidas para `.odessay-editor-content` y `.prose-odessay` en `app/globals.css` (escala Major Third, ritmo vertical, listas, blockquote, tablas, inline/code/kbd, captions y excepciones por contexto). Se elimina duplicación legacy de `.prose-odessay` y se preserva contención técnica de tablas en wrappers. Además se formaliza la fuente de verdad en `.agents/skills/skill-design/tipografia.md` y se referencia desde `SKILL.md` y `vistas.md`.",
+      "phase": "Fase 2",
+      "issue": "ODE-77",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-77",
+      "commit": "2071c7e",
+      "date": "2026-04-03",
+      "notes": "Validación en verde: npm run lint, npm run typecheck, npm test (177/177). Performance contract: not required. Ajustes posteriores: escala editorial de headings, contraste body/strong, corrección de overflow de tablas grandes y hardening explícito del contrato tipográfico en skills de frontend/review. Presentation contract: required; Playwright de preview/reading falla en este entorno con 404 de rutas fixture (/preview/[token], /perf/reading-harness), evidencia en test-results/*/error-context.md."
+    },
+    {
       "what": "Contain wide-table and long-link overflow in all reading views. Adds containWideTables() to wrap <table> in a scrollable div via server and client renderers; canonical .odessay-rich-content CSS contract enforces overflow-wrap: anywhere on links/pre and display:block + overflow-x:auto on tables inside the editor shell. Applies across /write, /shared/[id], /preview/[token], and /{username}/{slug}.",
       "phase": "Fase 2",
       "issue": "ODE-75",
