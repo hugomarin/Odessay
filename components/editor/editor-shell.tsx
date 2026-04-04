@@ -190,6 +190,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const isApplyingContentRef = useRef(false)
   const hydratedIdRef = useRef<string | null>(null)
   const navigatedToDraftRef = useRef(false)
+  const selfNavigatedIdRef = useRef<string | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -236,10 +237,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
             : nextDerivedTitle
 
       if (!currentWritingId) {
+        // Mark the editor as already-hydrated for this new ID so the hydration
+        // effect does not re-apply content and trigger a visible flicker.
+        hydratedIdRef.current = nextId
         setCurrentWritingId(nextId)
 
         if (!routeWritingId && !navigatedToDraftRef.current) {
           navigatedToDraftRef.current = true
+          selfNavigatedIdRef.current = nextId
           router.replace(`/write/${nextId}`)
         }
       }
@@ -505,6 +510,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [writingVisibility])
 
   useEffect(() => {
+    if (routeWritingId && routeWritingId === selfNavigatedIdRef.current) {
+      // This route change was triggered by this editor creating a new draft.
+      // Content is already in the editor — clear the marker and skip re-hydration.
+      selfNavigatedIdRef.current = null
+      return
+    }
     setCurrentWritingId(routeWritingId)
     hydratedIdRef.current = null
     navigatedToDraftRef.current = false
