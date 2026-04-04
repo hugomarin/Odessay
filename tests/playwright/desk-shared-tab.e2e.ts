@@ -9,7 +9,9 @@ test("desk shared tab shows shared writing", async ({ page }) => {
     "true",
   )
   await expect(page.getByTestId("desk-shared-list")).toBeVisible()
-  await expect(page.getByTestId("desk-shared-writing-item")).toBeVisible()
+  const sharedWritingItem = page.getByTestId("desk-shared-writing-item")
+  await expect(sharedWritingItem).toBeVisible()
+  await expect(sharedWritingItem).toHaveCSS("cursor", "pointer")
   await expect(page.getByText("Shared fixture letter")).toBeVisible()
   await expect(page.getByText("Fixture Author @fixture-author")).toBeVisible()
 })

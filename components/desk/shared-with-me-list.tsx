@@ -83,7 +83,7 @@ export function SharedWithMeList({ items, isLoading = false, error = null }: Sha
                   tabIndex={0}
                   aria-label={`Open shared writing ${item.title ?? "Untitled"}`}
                   className={cn(
-                    "group border-b-[0.5px] border-border transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+                    "group cursor-pointer border-b-[0.5px] border-border transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
                   )}
                   onClick={() => {
                     router.push(buildWritingRouteHref("/shared", item))
@@ -103,7 +103,7 @@ export function SharedWithMeList({ items, isLoading = false, error = null }: Sha
                         maskImage: "linear-gradient(90deg, #000 86%, transparent)",
                       }}
                     >
-                      <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                      <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink transition-[text-decoration-color] group-hover:underline group-hover:decoration-ink-3/60 group-hover:underline-offset-4 group-focus-visible:underline group-focus-visible:decoration-ink-3/60 group-focus-visible:underline-offset-4">
                         {item.title ?? "Untitled"}
                       </p>
                       <p className="truncate pt-1 text-[12px] text-ink-3">{item.excerpt}</p>
