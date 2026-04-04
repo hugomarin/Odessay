@@ -66,7 +66,7 @@
       "phase": "Fase 2",
       "issue": "ODE-75",
       "linear_url": "https://linear.app/z9ne/issue/ODE-75",
-      "commit": "b53dfe4",
+      "commit": "eae010a",
       "date": "2026-04-03",
       "notes": "Validation in green: npm run typecheck, npm run lint, npm test (177/177). Performance contract: not required — CSS-only fix, no editor interaction. Presentation Contract: required — fix applies cross-mode (write, preview, shared, public)."
     },
