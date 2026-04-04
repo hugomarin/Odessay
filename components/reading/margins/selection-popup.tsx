@@ -45,8 +45,7 @@ export function SelectionPopup({ position, onMark, onAnnotate, onDismiss }: Sele
       }}
     >
       <div
-        className="flex items-center rounded-[10px] px-0.5 py-0.5"
-        style={{ background: "var(--ink)" }}
+        className="flex items-center rounded-[10px] bg-ink px-0.5 py-0.5"
       >
         <button
           onPointerDown={(e) => {
@@ -59,14 +58,14 @@ export function SelectionPopup({ position, onMark, onAnnotate, onDismiss }: Sele
         >
           Mark
         </button>
-        <span className="h-4 w-px opacity-25" style={{ background: "var(--bg)" }} />
+        <span className="h-4 w-px bg-bg/25" />
         <button
           onPointerDown={(e) => {
             e.preventDefault()
             e.stopPropagation()
             onAnnotate()
           }}
-          className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-ink-2"
+          className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
           aria-label="Annotate passage"
         >
           Annotate

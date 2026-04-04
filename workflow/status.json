@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-04-03",
+  "last_updated": "2026-04-04",
   "active_phase": {
     "name": "Fase 2 — Compartir y leer",
     "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
     "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "Fix selección/márgenes en reading: introduce `lib/reading/selection-geometry.ts` como fuente única de coordenadas para preview + popup + annotation bubble. La capa de preview se reposiciona al wrapper del body (`WritingContentFrame`) para evitar drift por offsets del frame/header, y annotation bubble usa coordenadas viewport consistentes con SelectionPopup.",
+      "phase": "Fase 2",
+      "issue": "ODE-78",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-78",
+      "commit": "8c5f3e9",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npx vitest run tests/selection-geometry.test.ts tests/margins.test.ts. Se agrega harness unitario de geometría para prevenir regresiones de sistema de coordenadas y ajuste UX para mantener el popup anclado a la selección en scroll/resize + contenedor visual consistente de Mark/Annotate. Performance contract: not required (sin cambios en keystroke/input path). Presentation contract: required (fix aplicado al shell de lectura compartida, con contrato geométrico único para popup/highlight/bubble)."
+    },
     {
       "what": "Consolidación del contrato tipográfico canónico cross-mode: unifica reglas compartidas para `.odessay-editor-content` y `.prose-odessay` en `app/globals.css` (escala Major Third, ritmo vertical, listas, blockquote, tablas, inline/code/kbd, captions y excepciones por contexto). Se elimina duplicación legacy de `.prose-odessay` y se preserva contención técnica de tablas en wrappers. Además se formaliza la fuente de verdad en `.agents/skills/skill-design/tipografia.md` y se referencia desde `SKILL.md` y `vistas.md`.",
       "phase": "Fase 2",
