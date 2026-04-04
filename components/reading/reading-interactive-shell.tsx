@@ -10,6 +10,7 @@ import { HighlightLayer, type MarginHighlight } from "./margins/highlight-layer"
 import { MarginsPanel } from "./margins/margins-panel"
 import type { SelectionPreviewRect } from "./margins/selection-preview-layer"
 import type { MarginData } from "./margins/margin-entry"
+import { buildSelectionGeometry } from "@/lib/reading/selection-geometry"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ type SelectionInfo = {
   anchorEnd: number
   anchorText: string
   popupPosition: { x: number; y: number }
+  bubblePosition: { x: number; y: number }
   selectionRects: SelectionPreviewRect[]
 }
 
@@ -244,36 +246,22 @@ export function ReadingInteractiveShell({
       const rects = Array.from(range.getClientRects())
       if (!rects.length) return
 
-      const firstRect = rects[0]
-      if (!firstRect) return
-
-      const scrollContainer = body.closest("#reading-text") as HTMLElement | null
-      const scrollContainerRect = scrollContainer?.getBoundingClientRect()
-      const scrollTop = scrollContainer?.scrollTop ?? 0
-      const scrollLeft = scrollContainer?.scrollLeft ?? 0
-
-      const selectionRects = rects
-        .filter((rect) => rect.width > 0 && rect.height > 0)
-        .map((rect, index) => ({
-          top: scrollContainerRect ? rect.top - scrollContainerRect.top + scrollTop : rect.top,
-          left: scrollContainerRect ? rect.left - scrollContainerRect.left + scrollLeft : rect.left,
-          width: rect.width,
-          height: rect.height,
-          key: `${offsets.start}-${offsets.end}-${index}`,
-        }))
-
-      const popupPosition = {
-        x: firstRect.left + firstRect.width / 2,
-        y: firstRect.top - 8,
-      }
+      const geometry = buildSelectionGeometry({
+        rects,
+        bodyRect: body.getBoundingClientRect(),
+        anchorStart: offsets.start,
+        anchorEnd: offsets.end,
+      })
+      if (!geometry) return
 
       setAnnotationMode(false)
       setSelectionInfo({
         anchorStart: offsets.start,
         anchorEnd: offsets.end,
         anchorText: offsets.text,
-        popupPosition,
-        selectionRects,
+        popupPosition: geometry.popupPosition,
+        bubblePosition: geometry.bubblePosition,
+        selectionRects: geometry.previewRects,
       })
     }
 
@@ -340,13 +328,7 @@ export function ReadingInteractiveShell({
     note: m.note,
   }))
 
-  const annotationBubblePosition =
-    selectionInfo
-      ? {
-          x: selectionInfo.popupPosition.x,
-          y: Math.max(...selectionInfo.selectionRects.map((rect) => rect.top + rect.height)),
-        }
-      : null
+  const annotationBubblePosition = selectionInfo?.bubblePosition ?? null
 
   return (
     <section

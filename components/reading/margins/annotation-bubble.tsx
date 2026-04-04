@@ -52,7 +52,7 @@ export function AnnotationBubble({ position, onConfirm, onCancel }: AnnotationBu
       style={{
         position: "fixed",
         left: position.x,
-        top: position.y + 8,
+        top: position.y,
         transform: "translateX(-50%)",
         width: 260,
         zIndex: 50,

@@ -32,16 +32,18 @@ export function WritingContentFrame({
         </h1>
       ) : null}
 
-      <div
-        ref={bodyRef}
-        id={bodyId}
-        data-section={bodyId}
-        data-testid={bodyTestId}
-        className="prose-odessay odessay-rich-content"
-        dangerouslySetInnerHTML={{ __html: bodyHtml }}
-      />
+      <div className="relative">
+        <div
+          ref={bodyRef}
+          id={bodyId}
+          data-section={bodyId}
+          data-testid={bodyTestId}
+          className="prose-odessay odessay-rich-content"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
 
-      <SelectionPreviewLayer rects={selectionPreviewRects ?? null} />
+        <SelectionPreviewLayer rects={selectionPreviewRects ?? null} />
+      </div>
     </div>
   )
 }
