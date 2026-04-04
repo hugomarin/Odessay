@@ -8,7 +8,7 @@ export const EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS =
 export const EDITOR_TOPBAR_COMPACT_FORMAT_CLASS = "min-[960px]:hidden"
 
 export const EDITOR_TOPBAR_TITLE_CONTAINER_CLASS =
-  "pointer-events-none absolute inset-x-0 flex justify-center px-[88px] min-[960px]:px-[280px]"
+  "pointer-events-none mx-2 flex min-w-0 flex-1 justify-center"
 
 type PreventableEvent = {
   preventDefault?: () => void
