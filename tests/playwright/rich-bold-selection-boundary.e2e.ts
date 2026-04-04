@@ -1,9 +1,9 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 import { markdownTextarea, openEditorHarness, switchToMarkdown, switchToRich, typeInRichEditor } from "./helpers/editor"
 
 const SHORTCUT_MODIFIER = process.platform === "darwin" ? "Meta" : "Control"
 
-async function resetRichContent(page: Parameters<typeof test>[0]["page"], text: string) {
+async function resetRichContent(page: Page, text: string) {
   await switchToMarkdown(page)
   const textarea = await markdownTextarea(page)
   await textarea.fill(text)
@@ -11,12 +11,12 @@ async function resetRichContent(page: Parameters<typeof test>[0]["page"], text: 
 }
 
 async function selectSubstringInRichParagraph(
-  page: Parameters<typeof test>[0]["page"],
+  page: Page,
   fullText: string,
   selectedText: string,
 ) {
   await page.locator(".odessay-editor-content").evaluate(
-    (root, payload) => {
+    (root: Element, payload: { fullText: string; selectedText: string }) => {
       const container = root as HTMLElement
       const paragraph = container.querySelector("p")
       const textNode = paragraph?.firstChild
