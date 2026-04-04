@@ -52,15 +52,15 @@ Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato
 
 | Elemento | Regla |
 |---|---|
-| body / p | color `--ink-3` |
-| strong / b | `font-weight: 600`, color `--ink` |
+| body / p | color `--ink-2` |
+| strong / b | `font-weight: 500`, color `--ink` |
 
 ## CSS canónico (alineado al estado real de `app/globals.css`)
 
 ```css
 .odessay-editor-content,
 .prose-odessay {
-  color: hsl(var(--ink-3));
+  color: hsl(var(--ink-2));
   font-family: var(--od-font-ui);
   font-size: 18px;
   font-weight: 400;
@@ -211,7 +211,7 @@ Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato
 .odessay-editor-content b,
 .prose-odessay strong,
 .prose-odessay b {
-  font-weight: 600;
+  font-weight: 500;
   color: hsl(var(--ink));
 }
 
@@ -304,4 +304,4 @@ Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato
 ## Qué NO hacer
 
 - `font-size: 2.441em` en `h1` — la escala es editorial, no display.
-- Usar `--ink-2` en body — el color base canónico es `--ink-3` para mayor contraste con `strong`.
+- `font-weight: 600` en `strong/b` — el peso canónico es 500 para mantener la jerarquía dentro de la escala DM Sans.
