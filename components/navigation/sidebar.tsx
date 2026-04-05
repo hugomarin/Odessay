@@ -8,6 +8,7 @@ import { SidebarListPanel } from "@/components/navigation/sidebar-list-panel"
 import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
 import { getShortcutForPlatform, type ShortcutDisplay } from "@/lib/keyboard-shortcuts"
 import {
   initializeUiShellStore,
@@ -99,14 +100,12 @@ export function Sidebar({ children, user }: SidebarProps) {
 
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || !event.shiftKey) {
+      if (event.defaultPrevented) {
         return
       }
 
-      const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform)
-      const hasCommand = isMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
-
-      if (!hasCommand || event.key.toLowerCase() !== "k") {
+      const action = getEditorShortcutAction(event)
+      if (!action) {
         return
       }
 
@@ -114,8 +113,22 @@ export function Sidebar({ children, user }: SidebarProps) {
         return
       }
 
-      event.preventDefault()
-      setSidebarPanel(isCollectionsPanelOpen ? null : "collections")
+      if (action === "newWriting") {
+        event.preventDefault()
+        window.location.href = "/write"
+        return
+      }
+
+      if (action === "settings") {
+        event.preventDefault()
+        window.location.href = "/settings"
+        return
+      }
+
+      if (action === "link") {
+        event.preventDefault()
+        setSidebarPanel(isCollectionsPanelOpen ? null : "collections")
+      }
     }
 
     window.addEventListener("keydown", onWindowKeyDown)
@@ -179,7 +192,7 @@ export function Sidebar({ children, user }: SidebarProps) {
             data-testid="sidebar-actions"
             className="SidebarActions border-b-[0.5px] border-border p-2"
           >
-            <ActionTooltip label="New writing" side="right">
+            <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
                 href="/write"
                 className={cn(

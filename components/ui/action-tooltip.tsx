@@ -29,8 +29,8 @@ export function ActionTooltip({
         align={align}
         className={cn("flex items-center gap-2", contentClassName)}
       >
-        <span>{label}</span>
-        {shortcut ? <span className="font-mono text-[11px] text-bg/70">{shortcut}</span> : null}
+        <span className="text-[14px] leading-none">{label}</span>
+        {shortcut ? <span className="font-mono text-[14px] font-semibold leading-none text-bg/80">{shortcut}</span> : null}
       </TooltipContent>
     </Tooltip>
   )

@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ChevronRight, Settings } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { getEditorShortcutLabel } from "@/lib/editor/shortcuts"
 import { cn } from "@/lib/utils"
 
 type UserBarProps = {
@@ -24,7 +25,7 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
       data-testid="sidebar-bottom"
       className="SidebarBottom border-t-[0.5px] border-border px-2 py-2"
     >
-      <ActionTooltip label="Settings" side="right">
+      <ActionTooltip label="Settings" shortcut={getEditorShortcutLabel("settings")} side="right">
         <Link
           href="/settings"
           className={cn(
