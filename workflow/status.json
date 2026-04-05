@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Editor topbar active formatting now follows live cursor/selection state from Tiptap instead of last interaction; heading and paragraph states update on every cursor move, and mixed block selections keep structural controls inactive.",
+      "phase": "Fase 2",
+      "issue": "ODE-87",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-87",
+      "commit": "c033ce5",
+      "date": "2026-04-04",
+      "notes": "Introduces hooks/useEditorState.ts to subscribe via useEditorState and compute deterministic action states for toolbar controls. Structural state (P/H1/H2/H3) is resolved from selection content, returning no active option for mixed-node ranges. Validation in green: npm run typecheck, npm run lint. Performance contract: not required (state subscription over existing editor transactions, no new async/render pipeline). Presentation contract: not required (no cross-mode typography/overflow changes)."
+    },
+    {
       "what": "Write editor annotate flow now reuses the shared annotation bubble: highlight action opens an inline annotation composer from current rich selection, confirms by applying highlight + creating a linked footnote, and auto-opens Notes panel to continue editing annotations.",
       "phase": "Fase 2",
       "issue": "ODE-86",
