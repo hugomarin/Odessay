@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Write editor annotate flow now reuses the shared annotation bubble: highlight action opens an inline annotation composer from current rich selection, confirms by applying highlight + creating a linked footnote, and auto-opens Notes panel to continue editing annotations.",
+      "phase": "Fase 2",
+      "issue": "ODE-86",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-86",
+      "commit": "3fc0a2b",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npm run typecheck, npm run lint. Performance contract: not required (selection UX + editor command wiring only, no hot-path rendering or input pipeline changes). Presentation contract: not required (write-only interaction update; no cross-mode typography/overflow rendering contract modified)."
+    },
+    {
       "what": "Shortcut system redesign: unified editor shortcuts under cmd/ctrl+shift pattern, removed alt/option bindings, added global actions (new writing/settings/focus mode), and aligned sidebar/tooltips to the same centralized mapping with explicit Windows parity labels.",
       "phase": "Fase 2",
       "issue": "ODE-85",

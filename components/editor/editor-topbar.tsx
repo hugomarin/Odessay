@@ -74,7 +74,7 @@ const FORMAT_ACTIONS: TopbarActionItem[] = [
   { id: "editor-action-bold", label: "Bold", action: "bold", icon: Bold },
   { id: "editor-action-italic", label: "Italic", action: "italic", icon: Italic },
   { id: "editor-action-strike", label: "Strike", action: "strike", icon: Strikethrough },
-  { id: "editor-action-highlight", label: "Highlight", action: "highlight", icon: Highlighter },
+  { id: "editor-action-highlight", label: "Annotate", action: "highlight", icon: Highlighter },
   { id: "editor-action-link", label: "Link", action: "link", icon: Link },
   { id: "editor-action-footnote", label: "Footnote", action: "footnote", icon: Superscript },
   { id: "editor-action-blockquote", label: "Quote", action: "blockquote", icon: MessageSquareQuote },

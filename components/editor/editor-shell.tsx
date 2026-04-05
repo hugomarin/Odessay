@@ -13,6 +13,7 @@ import { WritingEditorContent } from "@/components/editor/editor-content"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
+import { AnnotationBubble } from "@/components/reading/margins/annotation-bubble"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
@@ -65,6 +66,13 @@ type MarkdownSelectionSnapshot = {
   start: number
   end: number
   text: string
+}
+
+type PendingAnnotationSnapshot = {
+  from: number
+  to: number
+  text: string
+  position: { x: number; y: number }
 }
 
 type EditorPanel = "notes" | "properties" | null
@@ -178,6 +186,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [footnoteModalOpen, setFootnoteModalOpen] = useState(false)
   const [tableModalOpen, setTableModalOpen] = useState(false)
   const [isFocusMode, setIsFocusMode] = useState(false)
+  const [pendingAnnotation, setPendingAnnotation] = useState<PendingAnnotationSnapshot | null>(null)
 
   const modeRef = useRef(mode)
   const titleRef = useRef(title)
@@ -1027,7 +1036,29 @@ export function EditorShell({ writingId }: EditorShellProps) {
           runWithRichSelection((chain) => chain.toggleStrike())
           return
         case "highlight":
-          runWithRichSelection((chain) => chain.toggleHighlight())
+          {
+            const selectedRange = getValidatedRichSelection()
+            if (!selectedRange || selectedRange.from === selectedRange.to) {
+              return
+            }
+
+            const selectedText = editor.state.doc.textBetween(selectedRange.from, selectedRange.to, " ").trim()
+            if (!selectedText) {
+              return
+            }
+
+            const fromCoords = editor.view.coordsAtPos(selectedRange.from)
+            const toCoords = editor.view.coordsAtPos(selectedRange.to)
+            setPendingAnnotation({
+              from: selectedRange.from,
+              to: selectedRange.to,
+              text: selectedText,
+              position: {
+                x: (fromCoords.left + toCoords.right) / 2,
+                y: Math.max(fromCoords.bottom, toCoords.bottom) + 10,
+              },
+            })
+          }
           return
         case "inlineCode":
           runWithRichSelection((chain) => chain.toggleCode())
@@ -1086,6 +1117,33 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
     },
     [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, router],
+  )
+
+  const handleConfirmAnnotation = useCallback(
+    (note: string) => {
+      if (!editor || !pendingAnnotation) {
+        return
+      }
+
+      const trimmedNote = note.trim()
+      if (!trimmedNote) {
+        return
+      }
+
+      editor
+        .chain()
+        .focus()
+        .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
+        .setHighlight()
+        .addFootnote(trimmedNote)
+        .run()
+
+      setPendingAnnotation(null)
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
+      setActivePanel("notes")
+    },
+    [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
   )
 
   const handleToggleMode = useCallback(
@@ -1593,6 +1651,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
       <InsertFootnoteModal open={footnoteModalOpen} onOpenChange={setFootnoteModalOpen} onConfirm={handleInsertFootnote} />
 
       <InsertTableModal open={tableModalOpen} onOpenChange={setTableModalOpen} onConfirm={handleInsertTable} />
+
+      <AnnotationBubble
+        position={pendingAnnotation?.position ?? null}
+        onConfirm={handleConfirmAnnotation}
+        onCancel={() => setPendingAnnotation(null)}
+      />
     </section>
   )
 }
