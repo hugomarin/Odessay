@@ -17,10 +17,12 @@ import {
   toggleSidebarMode,
   useUiShellStore,
 } from "@/lib/stores/ui-shell-store"
+import { type SidebarMode } from "@/lib/stores/ui-shell-state"
 import { cn } from "@/lib/utils"
 
 type SidebarProps = Readonly<{
   children: React.ReactNode
+  initialSidebarMode?: SidebarMode
   user: {
     displayName: string | null
     email: string | null
@@ -64,14 +66,14 @@ const isEditableTarget = (target: EventTarget | null) => {
   return Boolean(target.closest('input, textarea, [role="textbox"], [contenteditable="true"]'))
 }
 
-export function Sidebar({ children, user }: SidebarProps) {
+export function Sidebar({ children, initialSidebarMode = "collapsed", user }: SidebarProps) {
   const pathname = usePathname()
   const shellState = useUiShellStore()
 
   useIsomorphicLayoutEffect(() => {
-    initializeUiShellStore()
+    initializeUiShellStore({ sidebarMode: initialSidebarMode })
     syncSidebarPanelWithPath(pathname)
-  }, [pathname])
+  }, [initialSidebarMode, pathname])
 
   const isCollapsed = shellState.sidebarMode === "collapsed"
   const isCollectionsPanelOpen = shellState.panel === "collections"

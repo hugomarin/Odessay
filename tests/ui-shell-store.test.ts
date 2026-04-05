@@ -1,38 +1,38 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-type MemoryStorage = {
-  getItem: (key: string) => string | null
-  setItem: (key: string, value: string) => void
-  removeItem: (key: string) => void
-  clear: () => void
+const COOKIE_KEY = "odessay-sidebar-mode"
+
+type CookieDocument = {
+  cookie: string
 }
 
-const STORAGE_KEY = "odessay-ui-shell"
-
-const createMemoryStorage = (): MemoryStorage => {
-  const store = new Map<string, string>()
-
+const createCookieDocument = (): CookieDocument => {
+  const cookieMap = new Map<string, string>()
   return {
-    getItem: (key) => store.get(key) ?? null,
-    setItem: (key, value) => {
-      store.set(key, value)
+    get cookie() {
+      return Array.from(cookieMap.entries())
+        .map(([key, value]) => `${key}=${value}`)
+        .join("; ")
     },
-    removeItem: (key) => {
-      store.delete(key)
-    },
-    clear: () => {
-      store.clear()
+    set cookie(rawValue) {
+      const [pair] = rawValue.split(";")
+      const separatorIndex = pair.indexOf("=")
+      if (separatorIndex <= 0) {
+        return
+      }
+
+      const key = pair.slice(0, separatorIndex).trim()
+      const value = pair.slice(separatorIndex + 1).trim()
+      cookieMap.set(key, value)
     },
   }
 }
 
 beforeEach(() => {
   vi.resetModules()
-  const sessionStorage = createMemoryStorage()
+  const document = createCookieDocument()
 
-  vi.stubGlobal("window", {
-    sessionStorage,
-  })
+  vi.stubGlobal("document", document)
 })
 
 describe("ui-shell-store", () => {
@@ -44,10 +44,7 @@ describe("ui-shell-store", () => {
     store.setSidebarPanel("collections")
     store.setSidebarPanel(null)
 
-    const persisted = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? "{}")
-
-    expect(persisted.sidebarMode).toBe("collapsed")
-    expect(persisted.panel).toBeNull()
+    expect(document.cookie).toContain(`${COOKIE_KEY}=collapsed`)
   })
 
   it("preserves expanded preference when collections panel is toggled off", async () => {
@@ -58,9 +55,6 @@ describe("ui-shell-store", () => {
     store.setSidebarPanel("collections")
     store.setSidebarPanel(null)
 
-    const persisted = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? "{}")
-
-    expect(persisted.sidebarMode).toBe("expanded")
-    expect(persisted.panel).toBeNull()
+    expect(document.cookie).toContain(`${COOKIE_KEY}=expanded`)
   })
 })

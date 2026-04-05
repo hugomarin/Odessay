@@ -1,8 +1,13 @@
 "use client"
 
 import { useSyncExternalStore } from "react"
+import {
+  parseSidebarModeCookie,
+  SIDEBAR_MODE_COOKIE_KEY,
+  SIDEBAR_MODE_COOKIE_MAX_AGE_SECONDS,
+  type SidebarMode,
+} from "@/lib/stores/ui-shell-state"
 
-export type SidebarMode = "expanded" | "collapsed"
 export type SidebarPanel = "collections" | null
 
 export type UiShellState = {
@@ -12,15 +17,14 @@ export type UiShellState = {
 
 type UiShellListener = () => void
 
-const STORAGE_KEY = "odessay-ui-shell"
 const DEFAULT_STATE: UiShellState = {
-  sidebarMode: "expanded",
+  sidebarMode: "collapsed",
   panel: null,
 }
 
 let state: UiShellState = DEFAULT_STATE
 const listeners = new Set<UiShellListener>()
-let hasHydratedFromStorage = false
+let hasPrimedInitialState = false
 
 function emitChange() {
   listeners.forEach((listener) => listener())
@@ -38,40 +42,14 @@ function getSnapshot() {
 }
 
 function persist(nextState: UiShellState) {
-  if (typeof window === "undefined") {
+  if (typeof document === "undefined") {
     return
   }
 
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextState))
-}
-
-function loadFromStorage() {
-  if (typeof window === "undefined" || hasHydratedFromStorage) {
-    return
-  }
-
-  hasHydratedFromStorage = true
-  const rawState = window.sessionStorage.getItem(STORAGE_KEY)
-
-  if (!rawState) {
-    return
-  }
-
-  try {
-    const parsedState = JSON.parse(rawState) as Partial<UiShellState>
-
-    state = {
-      sidebarMode: parsedState.sidebarMode === "collapsed" ? "collapsed" : "expanded",
-      panel: parsedState.panel === "collections" ? "collections" : null,
-    }
-  } catch {
-    state = DEFAULT_STATE
-  }
+  document.cookie = `${SIDEBAR_MODE_COOKIE_KEY}=${nextState.sidebarMode}; Path=/; Max-Age=${SIDEBAR_MODE_COOKIE_MAX_AGE_SECONDS}; SameSite=Lax`
 }
 
 function setState(updater: (current: UiShellState) => UiShellState) {
-  loadFromStorage()
-
   const nextState = updater(state)
   if (nextState.sidebarMode === state.sidebarMode && nextState.panel === state.panel) {
     return
@@ -86,9 +64,45 @@ export function useUiShellStore() {
   return useSyncExternalStore(subscribe, getSnapshot, () => DEFAULT_STATE)
 }
 
-export function initializeUiShellStore() {
+export function initializeUiShellStore(initialState?: Partial<UiShellState>) {
+  if (initialState) {
+    const normalized: UiShellState = {
+      sidebarMode:
+        initialState.sidebarMode === undefined
+          ? state.sidebarMode
+          : parseSidebarModeCookie(initialState.sidebarMode),
+      panel: initialState.panel === "collections" ? "collections" : null,
+    }
+
+    if (
+      normalized.sidebarMode !== state.sidebarMode ||
+      normalized.panel !== state.panel
+    ) {
+      state = normalized
+      emitChange()
+    }
+
+    hasPrimedInitialState = true
+    return
+  }
+
+  if (hasPrimedInitialState) {
+    return
+  }
+
   const previousState = state
-  loadFromStorage()
+  if (typeof document !== "undefined") {
+    const cookieEntry = document.cookie
+      .split("; ")
+      .find((entry) => entry.startsWith(`${SIDEBAR_MODE_COOKIE_KEY}=`))
+    const cookieValue = cookieEntry?.split("=")[1]
+    state = {
+      ...state,
+      sidebarMode: parseSidebarModeCookie(cookieValue),
+    }
+  }
+
+  hasPrimedInitialState = true
 
   if (previousState.sidebarMode !== state.sidebarMode || previousState.panel !== state.panel) {
     emitChange()
@@ -127,11 +141,9 @@ export function setSidebarPanel(panel: SidebarPanel) {
 
 export function syncSidebarPanelWithPath(pathname: string) {
   const panel = pathname.startsWith("/collections") ? "collections" : null
-  const isEditorPath = pathname === "/write" || pathname.startsWith("/write/")
 
   setState((current) => ({
     ...current,
     panel,
-    sidebarMode: isEditorPath ? "collapsed" : current.sidebarMode,
   }))
 }

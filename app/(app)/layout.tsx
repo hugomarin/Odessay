@@ -1,5 +1,7 @@
+import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { Sidebar } from "@/components/navigation/sidebar"
+import { parseSidebarModeCookie, SIDEBAR_MODE_COOKIE_KEY } from "@/lib/stores/ui-shell-state"
 import { createClient } from "@/lib/supabase/server"
 
 type AppLayoutProps = Readonly<{
@@ -7,6 +9,8 @@ type AppLayoutProps = Readonly<{
 }>
 
 export default async function AppLayout({ children }: AppLayoutProps) {
+  const cookieStore = await cookies()
+  const initialSidebarMode = parseSidebarModeCookie(cookieStore.get(SIDEBAR_MODE_COOKIE_KEY)?.value)
   const supabase = await createClient()
   const {
     data: { user },
@@ -24,6 +28,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <Sidebar
+      initialSidebarMode={initialSidebarMode}
       user={{
         email: user.email ?? null,
         displayName: profile?.display_name ?? null,
