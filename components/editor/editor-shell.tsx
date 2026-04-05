@@ -14,6 +14,7 @@ import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
 import { AnnotationBubble } from "@/components/reading/margins/annotation-bubble"
+import { SelectionPopup } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
@@ -73,6 +74,14 @@ type PendingAnnotationSnapshot = {
   to: number
   text: string
   position: { x: number; y: number }
+}
+
+type PendingRichSelectionSnapshot = {
+  from: number
+  to: number
+  text: string
+  popupPosition: { x: number; y: number }
+  bubblePosition: { x: number; y: number }
 }
 
 type EditorPanel = "notes" | "properties" | null
@@ -187,6 +196,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [tableModalOpen, setTableModalOpen] = useState(false)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [pendingAnnotation, setPendingAnnotation] = useState<PendingAnnotationSnapshot | null>(null)
+  const [pendingRichSelection, setPendingRichSelection] = useState<PendingRichSelectionSnapshot | null>(null)
 
   const modeRef = useRef(mode)
   const titleRef = useRef(title)
@@ -218,6 +228,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     windowScrollX?: number
     windowScrollY?: number
   } | null>(null)
+  const suppressNextSelectionPopupRef = useRef(false)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -718,6 +729,39 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
 
+  const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
+    if (!editor || modeRef.current !== "rich") {
+      return null
+    }
+
+    const { from, to } = editor.state.selection
+    if (from === to) {
+      return null
+    }
+
+    const selectedText = editor.state.doc.textBetween(from, to, " ").trim()
+    if (!selectedText) {
+      return null
+    }
+
+    const fromCoords = editor.view.coordsAtPos(from)
+    const toCoords = editor.view.coordsAtPos(to)
+
+    return {
+      from,
+      to,
+      text: selectedText,
+      popupPosition: {
+        x: (fromCoords.left + toCoords.right) / 2,
+        y: Math.min(fromCoords.top, toCoords.top) - 8,
+      },
+      bubblePosition: {
+        x: (fromCoords.left + toCoords.right) / 2,
+        y: Math.max(fromCoords.bottom, toCoords.bottom) + 10,
+      },
+    }
+  }, [editor])
+
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
       const runGlobalAction = () => {
@@ -1037,27 +1081,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
         case "highlight":
           {
-            const selectedRange = getValidatedRichSelection()
-            if (!selectedRange || selectedRange.from === selectedRange.to) {
+            const snapshot = captureRichSelectionSnapshot()
+            if (!snapshot) {
               return
             }
-
-            const selectedText = editor.state.doc.textBetween(selectedRange.from, selectedRange.to, " ").trim()
-            if (!selectedText) {
-              return
-            }
-
-            const fromCoords = editor.view.coordsAtPos(selectedRange.from)
-            const toCoords = editor.view.coordsAtPos(selectedRange.to)
-            setPendingAnnotation({
-              from: selectedRange.from,
-              to: selectedRange.to,
-              text: selectedText,
-              position: {
-                x: (fromCoords.left + toCoords.right) / 2,
-                y: Math.max(fromCoords.bottom, toCoords.bottom) + 10,
-              },
-            })
+            setPendingRichSelection(snapshot)
+            setPendingAnnotation(null)
           }
           return
         case "inlineCode":
@@ -1116,8 +1145,46 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
       }
     },
-    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, router],
+    [captureRichSelectionSnapshot, editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore, router],
   )
+
+  const dismissSelectionPopup = useCallback(() => {
+    suppressNextSelectionPopupRef.current = true
+    setPendingRichSelection(null)
+  }, [])
+
+  const handleMarkSelection = useCallback(() => {
+    if (!editor || !pendingRichSelection) {
+      return
+    }
+
+    suppressNextSelectionPopupRef.current = true
+    editor
+      .chain()
+      .focus()
+      .setTextSelection({ from: pendingRichSelection.from, to: pendingRichSelection.to })
+      .setHighlight()
+      .setTextSelection(pendingRichSelection.to)
+      .run()
+
+    setPendingRichSelection(null)
+    updateDerivedEditorState(editor)
+    void persistEditorSnapshot(editor)
+  }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
+
+  const handleAnnotateSelection = useCallback(() => {
+    if (!pendingRichSelection) {
+      return
+    }
+
+    setPendingAnnotation({
+      from: pendingRichSelection.from,
+      to: pendingRichSelection.to,
+      text: pendingRichSelection.text,
+      position: pendingRichSelection.bubblePosition,
+    })
+    setPendingRichSelection(null)
+  }, [pendingRichSelection])
 
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
@@ -1130,12 +1197,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
+      suppressNextSelectionPopupRef.current = true
       editor
         .chain()
         .focus()
         .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
         .setHighlight()
         .addFootnote(trimmedNote)
+        .setTextSelection(pendingAnnotation.to)
         .run()
 
       setPendingAnnotation(null)
@@ -1145,6 +1214,43 @@ export function EditorShell({ writingId }: EditorShellProps) {
     },
     [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
   )
+
+  useEffect(() => {
+    if (!editor) {
+      return
+    }
+
+    const handleSelectionUpdate = () => {
+      if (suppressNextSelectionPopupRef.current) {
+        suppressNextSelectionPopupRef.current = false
+        setPendingRichSelection(null)
+        return
+      }
+
+      if (modeRef.current !== "rich" || pendingAnnotation) {
+        return
+      }
+
+      const snapshot = captureRichSelectionSnapshot()
+      if (!snapshot) {
+        setPendingRichSelection(null)
+        return
+      }
+
+      setPendingRichSelection((current) => {
+        if (current && current.from === snapshot.from && current.to === snapshot.to) {
+          return current
+        }
+        return snapshot
+      })
+    }
+
+    editor.on("selectionUpdate", handleSelectionUpdate)
+
+    return () => {
+      editor.off("selectionUpdate", handleSelectionUpdate)
+    }
+  }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
 
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {
@@ -1454,6 +1560,18 @@ export function EditorShell({ writingId }: EditorShellProps) {
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (pendingAnnotation) {
+          event.preventDefault()
+          setPendingAnnotation(null)
+          return
+        }
+
+        if (pendingRichSelection) {
+          event.preventDefault()
+          setPendingRichSelection(null)
+          return
+        }
+
         const intent = resolveEscapeIntent({
           hasOpenPanel: activePanel !== null,
           isFocusMode,
@@ -1489,7 +1607,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown)
     }
-  }, [activePanel, footnoteModalOpen, handleRunAction, isFocusMode, linkModalOpen, renameModalOpen, tableModalOpen])
+  }, [
+    activePanel,
+    footnoteModalOpen,
+    handleRunAction,
+    isFocusMode,
+    linkModalOpen,
+    pendingAnnotation,
+    pendingRichSelection,
+    renameModalOpen,
+    tableModalOpen,
+  ])
 
   return (
     <section id="editor" data-page="editor" className="min-h-screen bg-bg">
@@ -1651,6 +1779,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
       <InsertFootnoteModal open={footnoteModalOpen} onOpenChange={setFootnoteModalOpen} onConfirm={handleInsertFootnote} />
 
       <InsertTableModal open={tableModalOpen} onOpenChange={setTableModalOpen} onConfirm={handleInsertTable} />
+
+      <SelectionPopup
+        position={pendingRichSelection?.popupPosition ?? null}
+        onMark={handleMarkSelection}
+        onAnnotate={handleAnnotateSelection}
+        onDismiss={dismissSelectionPopup}
+      />
 
       <AnnotationBubble
         position={pendingAnnotation?.position ?? null}

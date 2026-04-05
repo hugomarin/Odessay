@@ -149,8 +149,10 @@ export default function DeskPage() {
   const syncRemoteWritings = useCallback(async () => {
     try {
       await hydrateLocalWritingsFromRemote()
+      return true
     } catch (error) {
       console.error("[desk:hydrate]", error)
+      return false
     }
   }, [])
 
@@ -160,8 +162,8 @@ export default function DeskPage() {
         return
       }
 
-      await syncRemoteWritings()
-      hasHydratedRemoteRef.current = true
+      const hydrated = await syncRemoteWritings()
+      hasHydratedRemoteRef.current = hydrated
     },
     [syncRemoteWritings],
   )
