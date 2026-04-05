@@ -23,7 +23,7 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
       id="sidebar-bottom"
       data-section="sidebar-bottom"
       data-testid="sidebar-bottom"
-      className="SidebarBottom border-t-[0.5px] border-border px-2 py-2"
+      className="SidebarBottom px-2 py-2"
     >
       <ActionTooltip label="Settings" shortcut={getEditorShortcutLabel("settings")} side="right">
         <Link
