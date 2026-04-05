@@ -4,7 +4,7 @@ import type { Editor } from "@tiptap/react"
 import { useEditorState } from "@tiptap/react"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 
-type TopbarTrackedAction = Extract<
+export type TopbarTrackedAction = Extract<
   EditorShortcutAction,
   | "bold"
   | "italic"
@@ -42,7 +42,7 @@ const DEFAULT_EDITOR_ACTION_STATE: Readonly<Record<TopbarTrackedAction, boolean>
   table: false,
 }
 
-const resolveStructureState = (editor: Editor): StructureAction | null => {
+export const resolveStructureState = (editor: Editor): StructureAction | null => {
   const { selection, doc } = editor.state
 
   if (selection.empty) {
@@ -135,11 +135,10 @@ export const useEditorActionState = (editor: Editor | null): Readonly<Record<Top
         heading1: selectedStructure === "heading1",
         heading2: selectedStructure === "heading2",
         heading3: selectedStructure === "heading3",
-        table: false,
+        table: currentEditor.isActive("table"),
       }
     },
   })
 
   return actionState ?? DEFAULT_EDITOR_ACTION_STATE
 }
-

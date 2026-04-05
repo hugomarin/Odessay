@@ -43,7 +43,7 @@ import {
   runCompactTopbarAction,
 } from "@/lib/editor/topbar-compact"
 import { cn } from "@/lib/utils"
-import { useEditorActionState } from "@/hooks/useEditorState"
+import { useEditorActionState, type TopbarTrackedAction } from "@/hooks/useEditorState"
 
 type EditorTopbarProps = {
   editor: Editor | null
@@ -126,10 +126,30 @@ const COMPACT_LIST_ACTIONS: Array<{
   { id: "editor-action-table", label: "Table", action: "table" },
 ]
 
+const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
+  "bold",
+  "italic",
+  "strike",
+  "highlight",
+  "link",
+  "blockquote",
+  "bulletList",
+  "orderedList",
+  "inlineCode",
+  "paragraph",
+  "heading1",
+  "heading2",
+  "heading3",
+  "table",
+])
+
+const isTopbarTrackedAction = (action: EditorShortcutAction): action is TopbarTrackedAction =>
+  TOPBAR_TRACKED_ACTIONS.has(action as TopbarTrackedAction)
+
 const isActionActive = (
   actionState: ReturnType<typeof useEditorActionState>,
   action: EditorShortcutAction,
-) => actionState[action as keyof typeof actionState] ?? false
+) => (isTopbarTrackedAction(action) ? actionState[action] : false)
 
 export function EditorTopbar({
   editor,
