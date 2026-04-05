@@ -29,6 +29,7 @@ async function dispatchShortcut(page: Page, payload: ShortcutPayload) {
 test("editor shortcuts map to isolated actions without collisions", async ({ page }) => {
   await openEditorHarness(page)
   const isMac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/i.test(navigator.platform))
+  const commandModifiers = isMac ? { metaKey: true } : { ctrlKey: true }
   const shiftCommandModifiers = isMac ? { metaKey: true, shiftKey: true } : { ctrlKey: true, shiftKey: true }
 
   const editor = page.locator(".odessay-editor-content")
@@ -36,7 +37,7 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
   await editor.type("Shortcut target line")
   await editor.click({ clickCount: 3 })
 
-  await dispatchShortcut(page, { key: "5", code: "Digit5", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "6", code: "Digit6", ...shiftCommandModifiers })
   await switchToMarkdown(page)
   let textarea = await markdownTextarea(page)
   await expect(textarea).toHaveValue(/> Shortcut target line/)
@@ -51,13 +52,13 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
   await expect(textarea).toHaveValue(/^# Paragraph target$/)
   await dispatchShortcut(page, { key: "2", code: "Digit2", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^## Paragraph target$/)
-  await dispatchShortcut(page, { key: "3", code: "Digit3", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "9", code: "Digit9", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^### Paragraph target$/)
-  await dispatchShortcut(page, { key: "4", code: "Digit4", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "0", code: "Digit0", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^Paragraph target$/)
-  await dispatchShortcut(page, { key: "6", code: "Digit6", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "l", code: "KeyL", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^- Paragraph target$/)
-  await dispatchShortcut(page, { key: "7", code: "Digit7", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "o", code: "KeyO", ...shiftCommandModifiers })
   await expect(textarea).toHaveValue(/^1\. Paragraph target$/)
 
   await page.getByRole("button", { name: "Rich" }).click()
@@ -65,20 +66,20 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
   await editor.click()
   await page.keyboard.press(isMac ? "Meta+A" : "Control+A")
 
-  await dispatchShortcut(page, { key: "h", code: "KeyH", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "b", code: "KeyB", ...commandModifiers })
   await expect(page.locator(".odessay-editor-content strong")).toContainText("Paragraph target")
-  await dispatchShortcut(page, { key: "l", code: "KeyL", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "i", code: "KeyI", ...commandModifiers })
   await expect(page.locator(".odessay-editor-content em")).toContainText("Paragraph target")
   await dispatchShortcut(page, { key: "x", code: "KeyX", ...shiftCommandModifiers })
   await expect(page.locator(".odessay-editor-content s")).toContainText("Paragraph target")
-  await dispatchShortcut(page, { key: "u", code: "KeyU", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "h", code: "KeyH", ...shiftCommandModifiers })
   await expect(page.locator(".odessay-editor-content mark")).toContainText("Paragraph target")
-  await dispatchShortcut(page, { key: "e", code: "KeyE", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "c", code: "KeyC", ...shiftCommandModifiers })
   await expect(page.locator(".odessay-editor-content code")).toContainText("Paragraph target")
   await dispatchShortcut(page, { key: "d", code: "KeyD", ...shiftCommandModifiers })
   await expect(page.locator(".odessay-editor-content pre")).toHaveCount(1)
 
-  await dispatchShortcut(page, { key: "k", code: "KeyK", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "k", code: "KeyK", ...commandModifiers })
   await expect(page.getByRole("dialog", { name: "Insert link" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog", { name: "Insert link" })).toBeHidden()
@@ -88,7 +89,7 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog", { name: "Insert footnote" })).toBeHidden()
 
-  await dispatchShortcut(page, { key: "8", code: "Digit8", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "t", code: "KeyT", ...shiftCommandModifiers })
   await expect(page.getByRole("dialog", { name: "Insert table" })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(page.getByRole("dialog", { name: "Insert table" })).toBeHidden()
@@ -98,10 +99,10 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
   await dispatchShortcut(page, { key: "f", code: "KeyF", ...shiftCommandModifiers })
   await expect(page.locator("#editor-topbar")).toBeVisible()
 
-  await dispatchShortcut(page, { key: "<", code: "Comma", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: ",", code: "Comma", ...commandModifiers })
   await expect(page).toHaveURL(/\/login\?next=%2Fsettings$/)
 
   await openEditorHarness(page)
-  await dispatchShortcut(page, { key: "y", code: "KeyY", ...shiftCommandModifiers })
+  await dispatchShortcut(page, { key: "n", code: "KeyN", ...shiftCommandModifiers })
   await expect(page).toHaveURL(/\/login\?next=%2Fwrite$/)
 })

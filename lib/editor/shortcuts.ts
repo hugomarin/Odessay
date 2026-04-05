@@ -31,25 +31,25 @@ export type KeyboardLikeEvent = {
 }
 
 const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
-  bold: { mac: "⌘⇧H", windows: "Ctrl+Shift+H" },
-  italic: { mac: "⌘⇧L", windows: "Ctrl+Shift+L" },
+  bold: { mac: "⌘B", windows: "Ctrl+B" },
+  italic: { mac: "⌘I", windows: "Ctrl+I" },
   strike: { mac: "⌘⇧X", windows: "Ctrl+Shift+X" },
-  highlight: { mac: "⌘⇧U", windows: "Ctrl+Shift+U" },
-  inlineCode: { mac: "⌘⇧E", windows: "Ctrl+Shift+E" },
+  highlight: { mac: "⌘⇧H", windows: "Ctrl+Shift+H" },
+  inlineCode: { mac: "⌘⇧C", windows: "Ctrl+Shift+C" },
   codeBlock: { mac: "⌘⇧D", windows: "Ctrl+Shift+D" },
-  link: { mac: "⌘⇧K", windows: "Ctrl+Shift+K" },
+  link: { mac: "⌘K", windows: "Ctrl+K" },
   footnote: { mac: "⌘⇧A", windows: "Ctrl+Shift+A" },
-  paragraph: { mac: "⌘⇧4", windows: "Ctrl+Shift+4" },
+  paragraph: { mac: "⌘⇧0", windows: "Ctrl+Shift+0" },
   heading1: { mac: "⌘⇧1", windows: "Ctrl+Shift+1" },
   heading2: { mac: "⌘⇧2", windows: "Ctrl+Shift+2" },
-  heading3: { mac: "⌘⇧3", windows: "Ctrl+Shift+3" },
-  blockquote: { mac: "⌘⇧5", windows: "Ctrl+Shift+5" },
-  bulletList: { mac: "⌘⇧6", windows: "Ctrl+Shift+6" },
-  orderedList: { mac: "⌘⇧7", windows: "Ctrl+Shift+7" },
+  heading3: { mac: "⌘⇧9", windows: "Ctrl+Shift+9" },
+  blockquote: { mac: "⌘⇧6", windows: "Ctrl+Shift+6" },
+  bulletList: { mac: "⌘⇧L", windows: "Ctrl+Shift+L" },
+  orderedList: { mac: "⌘⇧O", windows: "Ctrl+Shift+O" },
   focusMode: { mac: "⌘⇧F", windows: "Ctrl+Shift+F" },
-  newWriting: { mac: "⌘⇧Y", windows: "Ctrl+Shift+Y" },
-  settings: { mac: "⌘⇧<", windows: "Ctrl+Shift+<" },
-  table: { mac: "⌘⇧8", windows: "Ctrl+Shift+8" },
+  newWriting: { mac: "⌘⇧N", windows: "Ctrl+Shift+N" },
+  settings: { mac: "⌘,", windows: "Ctrl+," },
+  table: { mac: "⌘⇧T", windows: "Ctrl+Shift+T" },
 }
 
 const isCommandKey = (event: KeyboardLikeEvent) =>
@@ -74,11 +74,11 @@ const matches = (event: KeyboardLikeEvent, key: string, options: { shift?: boole
   matchesKey(event, key, options.code) && isCommandKey(event) && hasNoExtraModifiers(event, options)
 
 export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcutAction | null => {
-  if (matches(event, "h", { shift: true, code: "KeyH" })) {
+  if (matches(event, "b", { code: "KeyB" })) {
     return "bold"
   }
 
-  if (matches(event, "l", { shift: true, code: "KeyL" })) {
+  if (matches(event, "i", { code: "KeyI" })) {
     return "italic"
   }
 
@@ -86,11 +86,11 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "strike"
   }
 
-  if (matches(event, "u", { shift: true, code: "KeyU" })) {
+  if (matches(event, "h", { shift: true, code: "KeyH" })) {
     return "highlight"
   }
 
-  if (matches(event, "e", { shift: true, code: "KeyE" })) {
+  if (matches(event, "c", { shift: true, code: "KeyC" })) {
     return "inlineCode"
   }
 
@@ -98,7 +98,7 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "codeBlock"
   }
 
-  if (matches(event, "k", { shift: true, code: "KeyK" })) {
+  if (matches(event, "k", { code: "KeyK" })) {
     return "link"
   }
 
@@ -106,7 +106,7 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "footnote"
   }
 
-  if (matches(event, "4", { shift: true, code: "Digit4" })) {
+  if (matches(event, "0", { shift: true, code: "Digit0" })) {
     return "paragraph"
   }
 
@@ -118,23 +118,23 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "heading2"
   }
 
-  if (matches(event, "3", { shift: true, code: "Digit3" })) {
+  if (matches(event, "9", { shift: true, code: "Digit9" })) {
     return "heading3"
   }
 
-  if (matches(event, "5", { shift: true, code: "Digit5" })) {
+  if (matches(event, "6", { shift: true, code: "Digit6" })) {
     return "blockquote"
   }
 
-  if (matches(event, "6", { shift: true, code: "Digit6" })) {
+  if (matches(event, "l", { shift: true, code: "KeyL" })) {
     return "bulletList"
   }
 
-  if (matches(event, "7", { shift: true, code: "Digit7" })) {
+  if (matches(event, "o", { shift: true, code: "KeyO" })) {
     return "orderedList"
   }
 
-  if (matches(event, "8", { shift: true, code: "Digit8" })) {
+  if (matches(event, "t", { shift: true, code: "KeyT" })) {
     return "table"
   }
 
@@ -142,11 +142,11 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "focusMode"
   }
 
-  if (matches(event, "y", { shift: true, code: "KeyY" })) {
+  if (matches(event, "n", { shift: true, code: "KeyN" })) {
     return "newWriting"
   }
 
-  if (matches(event, "<", { shift: true, code: "Comma" })) {
+  if (matches(event, ",", { code: "Comma" })) {
     return "settings"
   }
 
