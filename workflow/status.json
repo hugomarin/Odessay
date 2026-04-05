@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Sidebar visual polish: switched Odessay logo to sans-serif with a warmer tone and slightly larger size, removed the divider between logo/actions and navigation, and removed the divider above the user avatar bar.",
+      "phase": "Fase 2",
+      "issue": "ODE-89",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-89",
+      "commit": "4a2759d",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npm run lint, npm run typecheck. Performance contract: not required (visual-only sidebar styling updates, no write/read critical-path changes). Presentation contract: not required (does not modify cross-mode rich-text rendering contract)."
+    },
+    {
       "what": "Editor topbar active formatting now follows live cursor/selection state from Tiptap instead of last interaction; heading and paragraph states update on every cursor move, and mixed block selections keep structural controls inactive.",
       "phase": "Fase 2",
       "issue": "ODE-87",
