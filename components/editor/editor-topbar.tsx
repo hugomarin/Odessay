@@ -43,6 +43,7 @@ import {
   runCompactTopbarAction,
 } from "@/lib/editor/topbar-compact"
 import { cn } from "@/lib/utils"
+import { useEditorActionState, type TopbarTrackedAction } from "@/hooks/useEditorState"
 
 type EditorTopbarProps = {
   editor: Editor | null
@@ -125,42 +126,30 @@ const COMPACT_LIST_ACTIONS: Array<{
   { id: "editor-action-table", label: "Table", action: "table" },
 ]
 
-const isActionActive = (editor: Editor | null, action: EditorShortcutAction) => {
-  if (!editor) {
-    return false
-  }
+const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
+  "bold",
+  "italic",
+  "strike",
+  "highlight",
+  "link",
+  "blockquote",
+  "bulletList",
+  "orderedList",
+  "inlineCode",
+  "paragraph",
+  "heading1",
+  "heading2",
+  "heading3",
+  "table",
+])
 
-  switch (action) {
-    case "bold":
-      return editor.isActive("bold")
-    case "italic":
-      return editor.isActive("italic")
-    case "strike":
-      return editor.isActive("strike")
-    case "highlight":
-      return editor.isActive("highlight")
-    case "link":
-      return editor.isActive("link")
-    case "blockquote":
-      return editor.isActive("blockquote")
-    case "bulletList":
-      return editor.isActive("bulletList")
-    case "orderedList":
-      return editor.isActive("orderedList")
-    case "inlineCode":
-      return editor.isActive("code")
-    case "paragraph":
-      return editor.isActive("paragraph")
-    case "heading1":
-      return editor.isActive("heading", { level: 1 })
-    case "heading2":
-      return editor.isActive("heading", { level: 2 })
-    case "heading3":
-      return editor.isActive("heading", { level: 3 })
-    default:
-      return false
-  }
-}
+const isTopbarTrackedAction = (action: EditorShortcutAction): action is TopbarTrackedAction =>
+  TOPBAR_TRACKED_ACTIONS.has(action as TopbarTrackedAction)
+
+const isActionActive = (
+  actionState: ReturnType<typeof useEditorActionState>,
+  action: EditorShortcutAction,
+) => (isTopbarTrackedAction(action) ? actionState[action] : false)
 
 export function EditorTopbar({
   editor,
@@ -174,6 +163,7 @@ export function EditorTopbar({
   onRunAction,
 }: EditorTopbarProps) {
   const pendingRichSelectionRef = useRef<RichSelectionRange | null>(null)
+  const actionState = useEditorActionState(editor)
   const captureSelectionAndKeepFocus = (event: { preventDefault: () => void }) => {
     event.preventDefault()
 
@@ -212,7 +202,7 @@ export function EditorTopbar({
           aria-label={actionItem.label}
           className={cn(
             "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
-            isActionActive(editor, actionItem.action) ? "bg-muted text-ink" : "hover:bg-muted hover:text-ink",
+            isActionActive(actionState, actionItem.action) ? "bg-muted text-ink" : "hover:bg-muted hover:text-ink",
           )}
         >
           <Icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
@@ -239,7 +229,7 @@ export function EditorTopbar({
         aria-label={actionItem.label}
         className={cn(
           "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
-          isActionActive(editor, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
+          isActionActive(actionState, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
         )}
       >
         {actionItem.text}
@@ -262,7 +252,7 @@ export function EditorTopbar({
         aria-label={actionItem.label}
         className={cn(
           "h-8 justify-center rounded-[8px] p-0",
-          isActionActive(editor, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
+          isActionActive(actionState, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
         )}
       >
         <Icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
@@ -271,7 +261,7 @@ export function EditorTopbar({
   })
 
   const compactListButtons = COMPACT_LIST_ACTIONS.map((actionItem) => {
-    const active = isActionActive(editor, actionItem.action)
+    const active = isActionActive(actionState, actionItem.action)
     const shortcut = getEditorShortcutLabel(actionItem.action)
     const displayText = actionItem.text ?? actionItem.label
 
