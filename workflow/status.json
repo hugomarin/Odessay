@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Sidebar state boot now starts collapsed without hydration flicker by removing sessionStorage-first hydration, persisting sidebar mode in cookie, and reading that cookie in app layout to SSR the correct initial mode. Expanded state now survives reloads without flash.",
+      "phase": "Fase 2",
+      "issue": "ODE-90",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-90",
+      "commit": "a52dbdf",
+      "date": "2026-04-04",
+      "notes": "Validation in green: npm run test -- tests/ui-shell-store.test.ts, npm run ops:delivery:gate. Performance contract: not required (state boot/persistence change only). Presentation contract: not required (no cross-mode text rendering changes)."
+    },
+    {
       "what": "Sidebar visual polish: switched Odessay logo to sans-serif with a warmer tone and slightly larger size, removed the divider between logo/actions and navigation, and removed the divider above the user avatar bar.",
       "phase": "Fase 2",
       "issue": "ODE-89",
