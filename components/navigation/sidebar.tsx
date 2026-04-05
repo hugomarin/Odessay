@@ -157,14 +157,14 @@ export function Sidebar({ children, user }: SidebarProps) {
             data-section="sidebar-top"
             data-testid="sidebar-top"
             className={cn(
-              "SidebarTop flex h-[46px] items-center gap-2 border-b-[0.5px] border-border",
+              "SidebarTop flex h-[46px] items-center gap-2",
               isIconOnly ? "justify-center px-2" : "justify-between px-3",
             )}
           >
             <Link
               href="/desk"
               className={cn(
-                "overflow-hidden font-lora text-[18px] font-semibold text-[#1021d8] transition-[width,opacity,color] duration-200 hover:text-[#0c1ab3]",
+                "overflow-hidden font-sans text-[19px] font-semibold text-[hsl(25_32%_28%)] transition-[width,opacity,color] duration-200 hover:text-[hsl(25_38%_22%)]",
                 isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
               )}
             >
@@ -190,7 +190,7 @@ export function Sidebar({ children, user }: SidebarProps) {
             id="sidebar-actions"
             data-section="sidebar-actions"
             data-testid="sidebar-actions"
-            className="SidebarActions border-b-[0.5px] border-border p-2"
+            className="SidebarActions p-2"
           >
             <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
