@@ -15,8 +15,10 @@ export function SyncBootstrap() {
     const hydrateFromRemote = async () => {
       try {
         await hydrateLocalWritingsFromRemote();
+        return true;
       } catch (error) {
         console.error("[sync:bootstrap]", error);
+        return false;
       }
     };
 
