@@ -140,56 +140,44 @@ Dependencias: Build reading view.
 
 ---
 
-## Fase 3 — Corresponder
+## Fase 3 — Organizar y publicar
 
-Al terminar esta fase: dos o más personas pueden intercambiar writings y ver su correspondencia completa como árbol navegable con la identidad visual definida.
-
----
-
-**Implement reply mechanism — /write?reply_to={id}** `[backend, frontend]`
-Editor pre-cargado como respuesta a un writing específico. Writing creado con parent_id apuntando al original. Referencia sutil al writing que se responde visible en el editor. El espacio de escritura es autónomo.
-Dependencias: Build reading view.
-Referencia: `workflow/context/core/odessay-flujos.md` (sección: Leer y Responder), `workflow/context/core/odessay-paginas.md`.
-
-**Implement correspondence creation and tree structure** `[backend, database]`
-Crear correspondence automáticamente cuando un writing recibe su primera respuesta. Asignar correspondence_id al writing raíz y a todas las respuestas del árbol. Respuestas subsiguientes heredan el correspondence_id. Trigger para actualizar correspondences.updated_at.
-Dependencias: Implement reply mechanism.
-Referencia: `workflow/context/core/odessay-modelo-datos.md` (sección: correspondences).
-
-**Build /correspondences — thread view** `[frontend, backend]`
-Vista de correspondencia: participants bar con avatares apilados y stats, secuencia de mini-documentos con línea vertical conectora, reply prompt terracota al fondo. Lista de correspondencias donde el usuario participa. Pill "Your turn" / "Waiting".
-Dependencias: Implement correspondence creation.
-Referencia: `workflow/context/features/odessay-correspondencias.md`, `workflow/context/core/odessay-arquitectura.md` (sección: Correspondences), `.agents/skills/skill-design/vistas.md` (sección: Correspondences), `workflow/context/reference/correspondences.html`.
+Al terminar esta fase: el modo Organizar está completo y el autor tiene un flujo real de preparación para publicación. Puede clasificar su archivo en collections, trabajar con múltiples documentos abiertos, recuperar y gestionar su cuenta, compartir previews con comentarios visibles, optimizar texto antes de publicar y navegar documentos recientes desde el sidebar.
 
 ---
 
-## Fase 4 — Organizar
-
-Al terminar esta fase: el tercer modo de Odessay (Organizar) está completo. El autor puede clasificar su archivo en collections, ver sugerencias del AI de agrupación, y gestionar su biblioteca desde una sola vista.
-
----
-
-**Implement collections — CRUD and writing assignment** `[frontend, backend, database]`
+**Implement collections — CRUD and writing assignment** `[frontend, backend, database]` `[critical-path]`
 Crear, editar, eliminar collections. Asignar writings a collections desde el editor (panel Properties) y desde la vista /collections. Un writing puede estar en múltiples collections. Collections públicas visibles en el espacio público del autor. Banner uncategorized siempre visible cuando hay writings sin clasificar. Colecciones expandibles sin navegación a otra página.
 Dependencias: Build /desk, Implement writing states.
 Referencia: `workflow/context/features/odessay-collections.md`, `workflow/context/core/odessay-arquitectura.md` (sección: Collections), `.agents/skills/skill-design/vistas.md` (sección: Collections), `workflow/context/reference/collections.html`.
 
----
+**Build multi-document workspace — editor tabs and recent documents** `[frontend, backend]`
+Permitir múltiples writings abiertos en paralelo dentro del editor como pestañas de trabajo. Cada pestaña muestra título, estado de guardado y cambios pendientes. Cambiar entre pestañas sin salir del editor ni pasar por el desk. Restaurar sesión (pestañas + posición de cursor) al reabrir app. En sidebar, añadir bloque "Recientes" con los últimos 8 writings ordenados por `updated_at`; hacer clic abre en nueva pestaña directamente desde el sidebar, sin redirigir al desk. Si el writing ya está abierto, el clic lleva foco a esa pestaña.
+Dependencias: Implement TipTap editor, Implement auto-save, Build global sidebar shell (3 estados).
+Referencia: `workflow/context/core/odessay-arquitectura.md` (sección: Sidebar/List panel), `workflow/context/features/odessay-editor.md`.
 
-## Fase 5 — Invitar
+**Implement find & replace in editor** `[frontend]`
+Panel de búsqueda integrado en el editor (no modal). `Cmd+F` / `Ctrl+F` abre búsqueda; resalta todas las coincidencias en tiempo real mientras se escribe. Navegación entre coincidencias con `Enter` / `Shift+Enter`. `Cmd+H` / `Ctrl+H` expande el campo de reemplazo: reemplazar coincidencia activa (y avanza a la siguiente) o reemplazar todas con confirmación del número de cambios. Opción de distinción de mayúsculas/minúsculas. `Escape` cierra el panel y devuelve foco al editor.
+Dependencias: Implement TipTap editor.
 
-Al terminar esta fase: el producto puede crecer. Un autor puede traer a alguien nuevo a Odessay y la primera experiencia de esa persona es leer la carta que le escribieron. Las páginas públicas y el espacio de distribución están listos.
+**Add selection metrics to editor statusbar** `[frontend]`
+Cuando el autor selecciona texto, la statusbar reemplaza las métricas del documento por las métricas de la selección activa: palabras seleccionadas y caracteres seleccionados. Al deseleccionar, vuelve a las métricas del documento completo (palabras, caracteres, oraciones, tiempo de lectura, páginas). La transición es inmediata sin parpadeo. Complementa el panel de métricas del lado derecho definido en Fase 1.
+Dependencias: Implement TipTap editor.
 
----
+**Implement preview sharing with visible margin notes** `[frontend, backend, database]`
+Cuando un writing se comparte en preview, el destinatario puede ver highlights y anotaciones de márgenes que el autor haya marcado como compartibles. Mantener distinción entre notas privadas y compartidas, con control explícito de visibilidad por nota.
+Dependencias: Implement writing_shares, Implement margins.
+Referencia: `workflow/context/features/odessay-margenes.md`, `workflow/context/core/odessay-modelo-datos.md` (tabla: margins).
 
-**Implement invitations — token generation and sharing link** `[backend, database]`
-Crear invitación con token único. Generar link /invite/{token} que el autor comparte por cualquier canal (WhatsApp, email, lo que prefiera). La invitación referencia el writing si existe. Estado: pending, accepted, expired.
-Dependencias: Implement correspondence creation.
-Referencia: `workflow/context/features/odessay-invitaciones.md`, `workflow/context/core/odessay-flujos.md` (sección: Invitar).
+**Implement publication optimization mode in editor** `[frontend, backend]`
+Agregar un modo "Ready for publication" con acciones concretas: corrección ortográfica, mejoras de redacción, sugerencias de claridad/fluidez, ajuste de tono y checklist de publicación con comentarios accionables. Mostrar sugerencias con diff claro y aplicación selectiva por bloque o global.
+Dependencias: Implement TipTap editor, Implement auto-save.
+Referencia: `workflow/context/features/odessay-editor.md`, `workflow/context/core/odessay-fundacional.md`.
 
-**Build /invite/{token} — invitation landing page** `[frontend]`
-Página de llegada para invitados sin autenticación. Muestra el writing-invitación si existe. Lleva al signup con email prellenado si viene de un link con email. La primera experiencia en Odessay es leer lo que alguien escribió para ti.
-Dependencias: Implement invitations.
+**Improve text rendering consistency across editor, preview, and public reading** `[frontend]`
+Unificar renderizado tipográfico y de bloques (párrafos, headings, listas, blockquotes, code, links, highlights) para que el texto se vea consistente en /write, preview y /{username}/{slug}. Corregir desajustes de spacing, line-height y cortes visuales.
+Dependencias: Build reading view, Build public author space, Implement publication optimization mode in editor.
+Referencia: `workflow/context/features/odessay-editor.md`, `.agents/skills/skill-design/vistas.md`.
 
 **Implement password recovery flow** `[backend, frontend]`
 Flujo completo de recuperación de contraseña: página /forgot-password con formulario de solicitud, email vía Supabase Auth, ruta /auth/reset-password para ingresar nueva contraseña, redirect post-reset a /desk. Diseño coherente con /login y /signup.
@@ -197,20 +185,141 @@ Dependencias: Implement authentication (Fase 0).
 
 **Implement profile settings — email and password update** `[backend, frontend]`
 Página de ajustes de perfil para usuario autenticado: cambio de email (con reconfirmación vía Supabase), cambio de contraseña, actualización de username y display name. Validación en cliente con Zod. Feedback visual de éxito/error. Accesible desde el sidebar.
-Dependencias: Implement authentication (Fase 0).
+Dependencias: Implement authentication (Fase 0), Build global sidebar shell (3 estados).
 
 **Integrate Resend for transactional email** `[backend, infra]`
-Notificación por email cuando un writing es compartido. Email de invitación epistolar como canal complementario al link. Templates simples, coherentes con la marca. En staging, emails no llegan a destinatarios reales.
-Dependencias: Build /invite/{token}.
+Integrar Resend como proveedor de correo transaccional para recuperación de contraseña y notificaciones de writing compartido. En staging, usar configuración segura para no enviar a destinatarios reales.
+Dependencias: Implement password recovery flow, Implement writing_shares.
 Referencia: `.agents/skills/skill-backend/SKILL.md` (sección: Resend).
 
 **Design transactional email templates** `[frontend, infra]`
-Templates de email con identidad visual de Odessay: confirmación de cuenta post-signup, recuperación de contraseña, notificación de writing recibido, invitación epistolar. Tipografía y tono coherentes con `workflow/context/core/odessay-fundacional.md`. Implementados vía Resend.
+Templates de email con identidad visual de Odessay: confirmación de cuenta post-signup, recuperación de contraseña y notificación de writing recibido por share. Tipografía y tono coherentes con `workflow/context/core/odessay-fundacional.md`. Implementados vía Resend.
 Dependencias: Integrate Resend for transactional email.
 
 **Build public pages — landing, manifesto, about, terms, privacy** `[frontend]`
 Páginas públicas sin autenticación. Landing como filtro: quien lo lee y siente algo, entra. Manifiesto completo. Tono y diseño coherentes con `workflow/context/core/odessay-fundacional.md`. Acceso a login y signup.
 Dependencias: Implement design system.
+
+Estructura de diseño por página:
+
+- **Landing** — columna única `max-w-[640px] mx-auto`. Sin hero genérico, sin grid de features. Estructura: (1) logo Lora 17px centrado, (2) párrafo fundacional en Lora 22px line-height 1.7 — la premisa del producto en 3-4 líneas sin bullets, (3) botón terracota "Crear cuenta" centrado, (4) link secundario `ink-4` "Iniciar sesión". Above the fold solo estos cuatro elementos. Debajo del fold: manifiesto completo en Lora, sin chrome adicional. La landing es la puerta del manifiesto.
+- **Manifiesto** `/manifesto` — página standalone sin sidebar ni topbar. Solo texto. `max-w-[660px] mx-auto`, Lora 18px, line-height 1.85, fondo `bg-bg`. Al final: link "Crear cuenta" en terracota.
+- **About, Terms, Privacy** — misma estructura que el manifiesto: texto en columna única sin navegación compleja. About incluye logo y link de vuelta.
+- **Regla transversal:** ninguna página pública tiene más de un CTA visible a la vez. El único color de acción es terracota. Sin emojis. Sin animaciones de entrada.
+
+---
+
+### Mejoras de diseño transversales — Fase 3
+
+Estas especificaciones aplican a los issues de frontend de esta fase y de las anteriores. Son parte del definition of done de cada componente UI — no son issues separados.
+
+**Estados de interacción**
+
+Cada feature de UI cubre los cuatro estados. "No items found." no es un diseño — es un bug de UX.
+
+| Feature | Estado vacío | Estado de carga | Estado de error |
+|---|---|---|---|
+| **Desk — tabla de actividad** | Ilustración lineal mínima (pluma sobre papel) + "Tu escritorio está en blanco." en Lora italic + botón terracota "Escribe tu primera carta" | Skeleton de 3 filas con `animate-pulse`, mismas proporciones que la tabla real | Toast destructivo "No pudimos cargar tu escritorio. Intentando de nuevo…" con reintentos automáticos |
+| **Desk — hero drafts** | Sección oculta hasta que haya al menos un draft — nunca se muestra vacía | Skeleton horizontal de 1 card a 220px | Sección omitida silenciosamente si falla la carga |
+| **Editor — auto-save** | — | "Guardando…" en `ink-4` 11px en statusbar | "No se pudo guardar" en destructive + ícono `AlertCircle` 12px; nunca bloquear la escritura |
+| **Reading view** | — | Skeleton: título 30px + 8 líneas de cuerpo con `animate-pulse` fondo `muted` | Página dedicada: "Este texto no está disponible." + link volver |
+| **Correspondences — inbox** | "Todavía no tienes correspondencias." + 2 líneas en Lora italic sobre el concepto epistolar + botón "Comparte tu primer escrito" | Skeleton de 2 hilos con avatar + título + badge | Toast "No pudimos cargar tus correspondencias." |
+| **Collections** | Banner "Tienes X escritos sin clasificar" siempre visible + "Ninguna colección todavía." con botón inline | Skeleton de lista con 2 items | Toast + reintentar |
+| **Public author space** | Sin escritos públicos: "Este espacio está en construcción." en Lora italic — sin disculpa, solo calidez | Skeleton de grid de writings | 404 con identidad Odessay, no genérico de Next.js |
+| **AI observations** | Sin observaciones: el margen permanece limpio — sin placeholder ni "El agente está observando…" | Nada — las observaciones aparecen cuando están listas | Observación descartada silenciosamente; nunca mostrar error mientras el autor escribe |
+
+Regla para estados vacíos: nunca fríos. El vacío es la primera experiencia de muchos usuarios — siempre con calidez y una acción clara. Los mensajes de estado vacío usan Lora italic; el CTA usa Geist Sans.
+
+**Arco emocional — los tres momentos que definen el producto**
+
+Odessay no es un editor de texto. Estos tres momentos determinan si se siente especial o como otra app de escritura.
+
+- **Primera carta (Fase 1):** placeholder del título "Sin título" en Lora italic `ink-4`. Placeholder del cuerpo: "Comienza a escribir…" en Lora italic `ink-4` — sin instrucciones superpuestas, sin onboarding. El sidebar arranca en mini (52px). La primera letra hace desaparecer ambos placeholders al mismo tiempo. El cursor terracota parpadea en el título hasta que el usuario escribe.
+- **Primera respuesta recibida (Fase 4):** no hay badge numérico — hay un cambio de estado en el hilo: "Tu turno" en terracota, sin parpadeo, sin animación agresiva. Al abrir el hilo, la respuesta aparece debajo del writing propio con la línea conectora visible. El botón "Escribir respuesta" en terracota es el único CTA prominente — nada compite con él.
+- **Primera invitación enviada (Fase 5):** confirmación mínima: toast "Link copiado. Envíalo como quieras." — sin celebración exagerada, sin confetti, sin modal. El link está en el portapapeles. El autor ya sabe lo que hacer.
+
+**Contrato de accesibilidad**
+
+Aplica a todos los issues de frontend. Parte del definition of done de cada componente.
+
+Navegación por teclado:
+- Sidebar: `Tab` navega todos los items en orden DOM. `Enter`/`Space` activa. `Escape` colapsa si está expandido
+- Editor: todos los controles de topbar accesibles por teclado. El área de escritura recibe foco al cargar
+- Reading view: `ArrowLeft`/`ArrowRight` navegan writings. `Escape` vuelve (ya en el issue)
+- Modales y dialogs: foco atrapado dentro mientras están abiertos. `Escape` cierra. Foco regresa al trigger
+- Correspondence thread: `ArrowUp`/`ArrowDown` navega entre mini-docs del hilo
+
+ARIA y semántica:
+- Sidebar: `role="navigation"` + `aria-label="Navegación principal"`. Items activos con `aria-current="page"`
+- Topbar: `role="banner"`. Título de vista con `aria-live="polite"` para cambios de ruta
+- Estados de carga: `aria-busy="true"` en el contenedor + `aria-label="Cargando…"` en el skeleton
+- Estados de error: `role="alert"` en toasts de error
+- Editor TipTap: `role="textbox"` + `aria-multiline="true"` + `aria-label="Editor de escritura"`
+- Cada mini-doc en correspondencias: `role="article"`. Badge de turno: `aria-label="Tu turno de responder"`
+
+Contraste:
+- Todos los textos de UI cumplen WCAG AA mínimo (4.5:1 texto normal, 3:1 texto grande)
+- El terracota `hsl(22 55% 38%)` sobre `bg-bg` cumple 4.5:1 — verificado
+- Nunca transmitir información solo mediante color: los badges de estado siempre incluyen texto, no solo color
+
+Touch targets (reading view y espacio público en mobile, Fase 2):
+- Mínimo 44×44px para todos los elementos interactivos
+- Topbar en mobile: 52px de alto para acomodar touch targets
+- Margen mínimo de 8px entre elementos interactivos para evitar toques accidentales
+
+---
+
+## Fase 4 — Corresponder
+
+Al terminar esta fase: dos o más personas pueden sostener una conversación epistolar completa en Odessay. El flujo queda cerrado de punta a punta: iniciar respuesta desde lectura, persistir la relación entre writings, navegar el hilo completo y saber claramente si te toca responder.
+
+---
+
+**Implement reply mechanism — /write?reply_to={id}** `[backend, frontend]` `[critical-path]`
+Entrada de respuesta desde reading view y desde /shared. El editor se abre pre-cargado como respuesta al writing origen, con contexto mínimo visible (autor + título + extracto corto) sin romper el foco de escritura. El writing nuevo se crea con `parent_id` y conserva independencia como pieza editorial.
+Dependencias: Build reading view, Implement writing_shares.
+Referencia: `workflow/context/core/odessay-flujos.md` (sección: Leer y Responder), `workflow/context/core/odessay-paginas.md`.
+
+**Implement correspondence creation and tree structure** `[backend, database]` `[critical-path]`
+Crear correspondence automáticamente en la primera respuesta. Asignar `correspondence_id` al writing raíz y a todas las respuestas del árbol. Garantizar orden cronológico estable y relación padre-hijo consistente para reconstrucción de hilo en cliente. Trigger para actualizar `correspondences.updated_at` en cada nueva carta.
+Dependencias: Implement reply mechanism.
+Referencia: `workflow/context/core/odessay-modelo-datos.md` (sección: correspondences).
+
+**Implement correspondence participation and access rules** `[backend, database]`
+Definir quién puede ver y responder cada correspondencia según visibilidad del writing raíz y shares activos. Solo participantes autorizados acceden al hilo completo. Cambios de visibilidad y revocaciones de share no deben romper el historial ya emitido, pero sí bloquear accesos futuros no permitidos.
+Dependencias: Implement correspondence creation and tree structure, Implement shared and public visibility.
+Referencia: `workflow/context/core/odessay-modelo-datos.md`, `workflow/context/core/odessay-flujos.md` (sección: Leer y Responder).
+
+**Build /correspondences — thread view** `[frontend, backend]`
+Vista de correspondencias con dos capas: inbox de hilos donde el usuario participa + detalle navegable del hilo seleccionado. Incluir participants bar (avatares apilados y stats), secuencia de mini-documentos con línea conectora y CTA claro para responder. Estado por hilo: `Your turn` / `Waiting` derivado del último writing del árbol.
+Dependencias: Implement correspondence participation and access rules.
+Referencia: `workflow/context/features/odessay-correspondencias.md`, `workflow/context/core/odessay-arquitectura.md` (sección: Correspondences), `.agents/skills/skill-design/vistas.md` (sección: Correspondences), `workflow/context/reference/correspondences.html`.
+
+**Validate correspondence flow — end-to-end thread loop** `[frontend, backend]`
+Validar de punta a punta: lectura → responder → creación/actualización de correspondence → visualización del hilo → nuevo turno. Cubrir casos 1:1 y 1:N, además de regresiones de permisos (usuario sin acceso, share revocado, writing privado).
+Dependencias: Build /correspondences — thread view.
+Referencia: `.agents/skills/skill-ux-testing/SKILL.md`, `workflow/context/features/odessay-correspondencias.md`.
+
+---
+
+## Fase 5 — Invitar y distribuir
+
+Al terminar esta fase: el producto puede crecer y distribuirse. Un autor puede traer a alguien nuevo a Odessay, la primera experiencia de esa persona es leer la carta que le escribieron y el contenido público está optimizado para descubrimiento y difusión.
+
+---
+
+**Implement invitations — token generation and sharing link** `[backend, database]`
+Crear invitación con token único. Generar link /invite/{token} que el autor comparte por cualquier canal (WhatsApp, email, lo que prefiera). La invitación referencia el writing si existe. Estado: pending, accepted, expired.
+Dependencias: Implement correspondence creation and tree structure.
+Referencia: `workflow/context/features/odessay-invitaciones.md`, `workflow/context/core/odessay-flujos.md` (sección: Invitar).
+
+**Build /invite/{token} — invitation landing page** `[frontend]`
+Página de llegada para invitados sin autenticación. Muestra el writing-invitación si existe. Lleva al signup con email prellenado si viene de un link con email. La primera experiencia en Odessay es leer lo que alguien escribió para ti.
+Dependencias: Implement invitations.
+
+**Extend transactional email templates for invitations** `[frontend, backend, infra]`
+Añadir variante de email de invitación epistolar usando Resend y plantillas transaccionales existentes. El canal por link sigue siendo principal; email funciona como canal complementario.
+Dependencias: Build /invite/{token}, Design transactional email templates.
 
 **Implement i18n — English and Spanish** `[frontend, infra]`
 next-intl configurado. Inglés como idioma default. Español como segundo idioma prioritario. Todas las cadenas de UI traducidas en ambos idiomas. URLs en inglés.
@@ -222,7 +331,7 @@ Dependencias: Build public author space, Build public pages.
 
 **Seed data — staging completo** `[infra, database]`
 Seed data completo para staging: correspondencias con múltiples participantes y árbol de respuestas, collections con writings clasificados y sin clasificar, márgenes de ejemplo, invitaciones en diferentes estados. Sin esto, los agentes no pueden testear flujos complejos de forma autónoma.
-Dependencias: Implement collections, Implement margins, Build /correspondences.
+Dependencias: Implement collections, Implement margins, Build /correspondences — thread view, Implement invitations.
 
 ---
 
