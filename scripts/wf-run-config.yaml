@@ -12,7 +12,7 @@ agents:
     cwd: repo_root
 
 build:
-  agent: claude
+  agent: codex
 
 review:
   agent: codex
