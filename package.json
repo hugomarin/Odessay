@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "wf-run": "tsx scripts/wf-run.ts",
     "env:check": "node scripts/check-env.mjs",
     "env:check:template": "node scripts/check-env.mjs .env.example --template",
     "ops:process:sync": "node scripts/check-process-sync.mjs",
@@ -57,6 +58,7 @@
     "clsx": "^2.1.1",
     "docx": "^9.6.1",
     "geist": "^1.7.0",
+    "js-yaml": "^4.1.1",
     "lucide-react": "^0.474.0",
     "next": "^15.0.0",
     "react": "^19.0.0",
@@ -68,6 +70,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.1",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -77,6 +80,7 @@
     "playwright": "^1.58.2",
     "postcss": "^8.4.49",
     "tailwindcss": "^4.2.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vitest": "^4.1.0"
   }
