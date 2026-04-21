@@ -319,6 +319,7 @@ Ver `odessay-editor.md` para la spec completa de TipTap (extensiones, shortcuts,
 ```
 Sidebar (292px/52px) | Editor area (flex-1) | Right panels (248-280px)
 Topbar (46px) — sobre editor area
+Find & Replace bar (0px → 40px / 80px) — bajo topbar, sobre el contenido
 Statusbar (32px) — bajo editor area
 ```
 
@@ -326,14 +327,218 @@ Statusbar (32px) — bajo editor area
 ```
 left:   Mode toggle (Rich/Markdown) + format toolbar
 center: Título del writing (editable, Lora, sin borde)
-right:  Focus | Notes | AI | Properties — icon buttons 14×14px
+right:  Focus | Notes | AI | Pulir | Properties — icon buttons 14×14px
+```
+
+El ícono de Pulir usa Sparkles (Lucide). Estado activo: `background var(--muted)`, color `var(--ink)`. Mismo comportamiento que los otros toggles de panel derecho: abre el panel, cierra los demás.
+
+### Find & Replace bar
+
+Referencia visual: iA Writer. Barra anclada directamente bajo el topbar, full width del área de edición (no sobre el texto como floating). Empuja el contenido hacia abajo — no hace overlay.
+
+**Anatomía — dos filas**
+
+```
+Fila 1 — Buscar (siempre visible cuando el panel está abierto):
+  height:        40px
+  background:    var(--sb)
+  border-bottom: 0.5px solid var(--border)
+  padding:       0 12px
+  layout:        flex, align-center, gap 8px
+
+  [ campo de búsqueda (flex-1) ]  [ counter ]  [ < ]  [ > ]  [ "Replace" toggle ]
+
+Campo de búsqueda:
+  font:          Geist Sans 13px, color var(--ink)
+  placeholder:   "Find…" — color var(--ink-4)
+  background:    transparent
+  border:        none, sin outline — el foco lo da la barra completa
+  caret:         var(--cursor)
+
+Counter (inline, al final del campo):
+  Geist Sans 11px, color var(--ink-4)
+  formato:       "12" cuando sin selección activa, "3 of 12" cuando navegando
+  Al hacer ×:    limpia el campo y cierra el panel
+  ×:             icon X 12px, color var(--ink-4), hover var(--ink)
+
+Flechas de navegación < >:
+  ChevronLeft / ChevronRight — Lucide, 14×14px, strokeWidth 1.5
+  color:         var(--ink-3), hover var(--ink)
+  disabled:      var(--ink-4), no-pointer
+
+Toggle "Replace":
+  Geist Sans 12px, color var(--ink-4)
+  activo:        color var(--ink), font-weight 500
+  padding:       4px 6px, border-radius 6px
+  hover:         background var(--muted)
+  Actúa como botón, no como checkbox — click muestra/oculta la fila 2
+
+Fila 2 — Reemplazar (visible solo cuando "Replace" está activo):
+  height:        40px
+  background:    var(--sb)
+  border-bottom: 0.5px solid var(--border)
+  padding:       0 12px
+  layout:        flex, align-center, gap 8px
+
+  [ campo replace (flex-1) ]  [ "Replace" btn ]  [ "All" btn ]  [ "Done" btn ]
+
+Campo replace:
+  mismo estilo que campo de búsqueda
+  placeholder:   "Replace with…"
+
+Botones:
+  "Replace":  Geist Sans 12px, color var(--ink-2), padding 4px 10px,
+              border: 0.5px solid var(--border), border-radius 6px, hover bg var(--muted)
+  "All":      mismo estilo que "Replace"
+  "Done":     Geist Sans 12px, font-weight 500, color var(--ink-4), sin borde
+              hover: color var(--ink)
+```
+
+**Apertura y cierre**
+
+```
+Cmd+F / Ctrl+F   → abre fila 1, foco en campo de búsqueda
+Cmd+H / Ctrl+H   → abre fila 1 + fila 2
+Escape           → cierra todo el panel, limpia highlights, foco vuelve al editor
+Animación:       height 0→40px (o 0→80px) con overflow hidden, 150ms ease-out
+```
+
+**Highlights de coincidencias en el texto**
+
+```
+Coincidencias inactivas:  bg hsl(45,90%,84%) — mismo ámbar que highlights de márgenes
+Coincidencia activa:      bg hsl(45,90%,60%) — más saturado/oscuro, distinguible
+                          + outline 1.5px solid hsl(35,80%,55%)
+Sin resultados:           campo de búsqueda color hsl(0,72%,51%) — destructive
+                          counter muestra "0"
+```
+
+**Comportamiento mientras el panel está abierto**
+
+```
+El autor puede hacer clic en el área de escritura sin cerrar el panel.
+El panel no captura el foco del editor — escritura sigue funcionando.
+Al escribir en el editor con el panel abierto: re-busca con debounce 150ms.
 ```
 
 ### Right panels
 ```
 Notes:      248px, writings de footnotes
 AI Editor:  280px, observaciones del AI — ver odessay-ai-editor.md
+Pulir:      280px — opciones + análisis AI + resultados
 Properties: 248px — Status, Visibility, Collections, correspondence card, Info
+```
+
+### Panel Pulir (280px)
+
+Panel de preparación para publicación. Se abre desde el icono Sparkles en la topbar.
+
+**Header (46px)**
+```
+label:    "Polish" — Geist Sans 13px, font-weight 600, ink
+close:    X — icon 14×14px, ink-4, hover ink
+```
+
+**Sección de opciones**
+```
+label de sección:  "REVISAR" — Geist Sans 10px, font-weight 500, ink-4, uppercase, letter-spacing 0.08em
+                   Mismo estilo que "STATUS", "VISIBILITY" en Properties panel
+
+4 opciones con toggle ShadCN Switch:
+  · Ortografía      — Geist Sans 13px, ink-2
+  · Redacción       — Geist Sans 13px, ink-2
+  · Frases largas   — Geist Sans 13px, ink-2
+  · Formato         — Geist Sans 13px, ink-2
+
+Cada fila: flex justify-between, padding 8px 16px
+Switch: tamaño sm (ShadCN default), checked bg var(--ink)
+Todas las opciones activas por default al abrir el panel
+```
+
+**Botón Analizar**
+```
+margin:        16px (horizontal)
+width:         calc(100% - 32px)
+height:        34px
+background:    var(--ink)
+color:         var(--bg)
+border-radius: 8px
+font:          Geist Sans 13px, font-weight 500
+label default: "Analyze"
+label loading: "Analyzing…" + spinner 12px inline-left
+```
+
+**Estado de carga (mientras AI procesa)**
+```
+El botón cambia a "Analizando…" + spinner, deshabilitado.
+Debajo del botón: skeleton de 3 sugerencias con animate-pulse:
+  cada skeleton: height 56px, border-radius 8px, bg var(--muted), margin 8px 16px
+No mostrar ningún mensaje adicional — el skeleton es suficiente.
+```
+
+**Estado de error**
+```
+Debajo del botón: toast inline (no global):
+  background:    hsl(0,72%,97%)
+  border:        0.5px solid hsl(0,72%,85%)
+  border-radius: 8px
+  margin:        0 16px
+  padding:       10px 12px
+  icon:          AlertCircle 12px, color hsl(0,72%,51%)
+  texto:         Geist Sans 12px, ink-2 — "Could not analyze the text."
+  botón:         "Try again" — Geist Sans 12px, color var(--cursor), sin fondo
+```
+
+**Resultados — secciones expandibles**
+
+Las tres secciones (Ortografía/Gramática, Redacción, Checklist) solo aparecen cuando hay resultados. Cada una es un acordeón con el mismo patrón que las collections expandibles.
+
+```
+header de sección:
+  padding:       12px 16px
+  font:          Geist Sans 12px, font-weight 600, ink-2
+  chevron:       ink-4, rotación 90deg cuando open, 280ms cubic-bezier
+  count badge:   Geist Sans 11px, bg var(--muted), color ink-3, border-radius 10px, padding 1px 6px
+
+Sección Ortografía/Gramática:
+  Una sugerencia por fila:
+    padding:       10px 16px
+    texto original: Lora 13px, tachado, color ink-4
+    texto sugerido: Geist Sans 13px, color hsl(140,40%,32%) — mismo verde que badge Done
+    botones:       "Accept" (ink, font-weight 500) | "Ignore" (ink-4) — Geist Sans 12px
+
+Sección Redacción:
+  Una sugerencia por bloque:
+    padding:       10px 16px
+    etiqueta:      pill con motivo — "Claridad" / "Fluidez" / "Redundancia"
+                   bg var(--muted), color ink-3, Geist Sans 10px uppercase
+    fragmento:     Geist Sans 12px, ink-3, 2 líneas clamp, Lora italic para la cita original
+    botones:       "View suggestion" → expande diff inline | "Ignore"
+
+Sección Checklist:
+  Lista de ítems accionables:
+    · Checkbox ShadCN (unchecked default, checked al resolver)
+    · Texto: Geist Sans 12px, ink-2
+    · Link "Ir" en terracota cuando hay ubicación específica
+```
+
+**Footer — acciones globales**
+```
+border-top:  0.5px solid var(--border)
+padding:     12px 16px
+flex row, gap 8px
+
+"Apply all"  — bg var(--ink), color var(--bg), border-radius 8px, height 30px, Geist Sans 12px 500
+"Re-analyze"    — border 0.5px solid var(--border), bg transparent, color ink-2, mismas dimensiones
+```
+
+**Estado vacío (sin resultados)**
+```
+padding:     32px 16px
+text-align:  center
+icono:       CheckCircle2 20px, color hsl(140,40%,45%)
+texto:       "Looking good." — Geist Sans 13px, ink-2
+subtexto:    Lora italic 12px, ink-4 — "No issues found with the selected checks."
 ```
 
 ### Correspondence card (panel Properties)
@@ -399,3 +604,21 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Panels (Notes / AI / Properties) con lazy load
 - [ ] Statusbar visible, indicador de sync sutil
 - [ ] Focus mode colapsa todo: sidebar, topbar, statusbar, panels
+- [ ] Icono Sparkles visible en topbar right, entre AI y Properties
+- [ ] Find & Replace bar anclada bajo topbar, empuja contenido (no overlay)
+- [ ] Fila 1 (search): counter "N of M", flechas < >, toggle "Replace"
+- [ ] Fila 2 (replace): solo visible con Replace activo, misma altura 40px
+- [ ] Match activo: ámbar hsl(45,90%,60%) + outline hsl(35,80%,55%)
+- [ ] Sin resultados: campo color destructive hsl(0,72%,51%)
+- [ ] Escape cierra y devuelve foco al editor sin mover el cursor
+
+### Panel Pulir
+- [ ] Panel 280px, mismo patrón de apertura que AI Editor (cierra otros panels)
+- [ ] Sección "REVISAR" con 4 toggles — todos activos por default
+- [ ] Botón Analyze bg var(--ink), full width menos 32px, border-radius 8px
+- [ ] Estado loading: label "Analizando…" + spinner + 3 skeletons animate-pulse
+- [ ] Estado error: toast inline terracota-suave con "Try again"
+- [ ] Resultados en 3 secciones expandibles con chevron y count badge
+- [ ] Sugerencia ortográfica: tachado ink-4 → sugerido verde hsl(140,40%,32%)
+- [ ] "Apply all" bg var(--ink) | "Re-analyze" border var(--border)
+- [ ] Estado vacío: CheckCircle2 verde + "Looking good." en Geist Sans + Lora italic subtexto
