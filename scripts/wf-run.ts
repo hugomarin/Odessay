@@ -3,7 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { execFileSync, spawnSync } from "node:child_process";
 import yaml from "js-yaml";
-import { type WfRunConfig, runAgent } from "./wf-run-adapter";
+import { type AgentArtifactPaths, type WfRunConfig, runAgent } from "./wf-run-adapter";
 
 interface CliOptions {
   issueIds: string[];
@@ -15,6 +15,7 @@ interface PollResult {
   found: boolean;
   marker: string | null;
   comment: string;
+  observations: PollObservation[];
 }
 
 interface IssueResult {
@@ -29,11 +30,17 @@ interface HandoffDetails {
   reason: string;
   completed: string;
   needed: string;
+  artifactsPath?: string;
 }
 
 interface RecentComment {
   body: string;
   createdAt: string;
+}
+
+interface PollObservation {
+  polledAt: string;
+  comments: RecentComment[];
 }
 
 interface RecentCommentQuery {
@@ -92,6 +99,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function makeRunId(date = now()): string {
+  return date.toISOString().replace(/[:.]/g, "-");
 }
 
 function parseIssueIds(rawValue: string): string[] {
@@ -207,6 +218,7 @@ function loadConfig(repoRoot: string): WfRunConfig {
 }
 
 function createLogger(repoRoot: string): {
+  runDirectory: string;
   logPath: string;
   log: (message: string) => void;
   writeBlock: (block: string) => void;
@@ -214,21 +226,28 @@ function createLogger(repoRoot: string): {
   const logsDir = path.join(repoRoot, LOG_DIRECTORY);
   fs.mkdirSync(logsDir, { recursive: true });
 
-  const logPath = path.join(logsDir, `wf-run-${localDateStamp()}.log`);
+  const runDirectory = path.join(logsDir, "wf-run", makeRunId());
+  fs.mkdirSync(runDirectory, { recursive: true });
+
+  const logPath = path.join(runDirectory, "run.log");
+  const dailyLogPath = path.join(logsDir, `wf-run-${localDateStamp()}.log`);
   fs.appendFileSync(logPath, `=== Run iniciado ${isoTimestamp()} ===\n`);
+  fs.appendFileSync(dailyLogPath, `=== Run iniciado ${isoTimestamp()} :: ${path.relative(repoRoot, runDirectory)} ===\n`);
 
   const log = (message: string): void => {
     const line = `[${timeStamp()}] ${message}`;
     console.log(line);
     fs.appendFileSync(logPath, `${line}\n`);
+    fs.appendFileSync(dailyLogPath, `${line}\n`);
   };
 
   const writeBlock = (block: string): void => {
     console.log(block);
     fs.appendFileSync(logPath, `${block}\n`);
+    fs.appendFileSync(dailyLogPath, `${block}\n`);
   };
 
-  return { logPath, log, writeBlock };
+  return { runDirectory, logPath, log, writeBlock };
 }
 
 async function linearGraphQL<T>(query: string, variables: Record<string, unknown>): Promise<T> {
@@ -315,9 +334,14 @@ async function pollForComment(
   const [approvedMarker, rejectedMarker] = markers;
   const deadline = Date.now() + timeoutSec * 1000;
   const sinceMs = since.getTime();
+  const observations: PollObservation[] = [];
 
   while (Date.now() <= deadline) {
     const comments = await getRecentComments(issueId, 5);
+    observations.push({
+      polledAt: new Date().toISOString(),
+      comments,
+    });
     let approvedComment = "";
     let rejectedComment = "";
 
@@ -336,11 +360,11 @@ async function pollForComment(
     }
 
     if (rejectedComment) {
-      return { found: true, marker: rejectedMarker, comment: rejectedComment };
+      return { found: true, marker: rejectedMarker, comment: rejectedComment, observations };
     }
 
     if (approvedComment) {
-      return { found: true, marker: approvedMarker, comment: approvedComment };
+      return { found: true, marker: approvedMarker, comment: approvedComment, observations };
     }
 
     await sleep(intervalSec * 1000);
@@ -350,6 +374,7 @@ async function pollForComment(
     found: false,
     marker: null,
     comment: "",
+    observations,
   };
 }
 
@@ -402,7 +427,7 @@ function isInterpretableGateFailureComment(comment: string): boolean {
 }
 
 function formatHandoffBlock(details: HandoffDetails): string {
-  return [
+  const lines = [
     "⏸ HANDOFF REQUERIDO",
     "",
     `Issue:       ${details.issueId}`,
@@ -411,7 +436,13 @@ function formatHandoffBlock(details: HandoffDetails): string {
     `Completé:    ${details.completed}`,
     `Necesito:    ${details.needed}`,
     `Reanudación: npx tsx scripts/wf-run.ts ${details.issueId}`,
-  ].join("\n");
+  ];
+
+  if (details.artifactsPath) {
+    lines.splice(lines.length - 1, 0, `Artefactos:  ${details.artifactsPath}`);
+  }
+
+  return lines.join("\n");
 }
 
 function formatHandoffLinearComment(
@@ -433,7 +464,8 @@ function formatHandoffLinearComment(
   lines.push(
     `Etapa: ${details.stage}`,
     `Razón: ${details.reason}`,
-    `Log: ${path.relative(process.cwd(), logPath)}`,
+    `Log: ${logPath}`,
+    ...(details.artifactsPath ? [`Artefactos: ${details.artifactsPath}`] : []),
     "",
     "Acción requerida: revisar manualmente y re-ejecutar:",
     `npx tsx scripts/wf-run.ts ${details.issueId}`,
@@ -447,6 +479,7 @@ function formatSummaryComment(
   attentionIssues: Array<{ issueId: string; reason: string }>,
   dryRunIssues: string[],
   logPath: string,
+  runDirectory: string,
   totalIssues: number,
 ): string {
   const approvedText = approvedIssues.length > 0 ? approvedIssues.join(", ") : "ninguno";
@@ -468,7 +501,8 @@ function formatSummaryComment(
 
   lines.push(
     `Total: ${totalIssues} issues · ${approvedIssues.length} aprobados · ${attentionIssues.length} requieren atención${dryRunIssues.length > 0 ? ` · ${dryRunIssues.length} dry-run` : ""}`,
-    `Log: ${path.relative(process.cwd(), logPath)}`,
+    `Log: ${logPath}`,
+    `Artefactos: ${runDirectory}`,
   );
 
   return lines.join("\n");
@@ -479,6 +513,7 @@ function formatSummaryBlock(
   attentionIssues: Array<{ issueId: string; reason: string }>,
   dryRunIssues: string[],
   logPath: string,
+  runDirectory: string,
   totalIssues: number,
 ): string {
   const approvedText = approvedIssues.length > 0 ? approvedIssues.join(", ") : "ninguno";
@@ -501,7 +536,8 @@ function formatSummaryBlock(
 
   lines.push(
     `  Total: ${totalIssues} issues · ${approvedIssues.length} aprobados · ${attentionIssues.length} requieren atención${dryRunIssues.length > 0 ? ` · ${dryRunIssues.length} dry-run` : ""}`,
-    `  Log: ${path.relative(process.cwd(), logPath)}`,
+    `  Log: ${logPath}`,
+    `  Artefactos: ${runDirectory}`,
     "─────────────────────────────────────────",
   );
 
@@ -524,6 +560,33 @@ async function emitHandoff(
     dryRun,
     log,
   );
+}
+
+function writeJsonArtifact(filePath: string, payload: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
+function toRepoRelativePath(repoRoot: string, targetPath: string): string {
+  return path.relative(repoRoot, targetPath) || ".";
+}
+
+function getIssueArtifactsDirectory(runDirectory: string, issueId: string): string {
+  return path.join(runDirectory, issueId);
+}
+
+function createStageArtifactPaths(
+  runDirectory: string,
+  issueId: string,
+  label: string,
+): AgentArtifactPaths {
+  const issueDirectory = getIssueArtifactsDirectory(runDirectory, issueId);
+
+  return {
+    stdoutPath: path.join(issueDirectory, `${label}.stdout.log`),
+    stderrPath: path.join(issueDirectory, `${label}.stderr.log`),
+    metaPath: path.join(issueDirectory, `${label}.meta.json`),
+  };
 }
 
 function runPreflight(repoRoot: string, config: WfRunConfig, dryRun: boolean, log: (msg: string) => void): void {
@@ -557,6 +620,8 @@ function runPreflight(repoRoot: string, config: WfRunConfig, dryRun: boolean, lo
 }
 
 async function runIssueLoop(
+  repoRoot: string,
+  runDirectory: string,
   issueId: string,
   config: WfRunConfig,
   dryRun: boolean,
@@ -565,7 +630,10 @@ async function runIssueLoop(
   log: (msg: string) => void,
   writeBlock: (block: string) => void,
 ): Promise<IssueResult> {
+  const issueArtifactsPath = toRepoRelativePath(repoRoot, getIssueArtifactsDirectory(runDirectory, issueId));
+
   if (dryRun) {
+    const buildArtifacts = createStageArtifactPaths(runDirectory, issueId, "cycle-1-build");
     log(`→ BUILD iniciando: ${issueId} (intento 1/${config.loop.max_retries})`);
     await runAgent({
       stage: "build",
@@ -573,9 +641,16 @@ async function runIssueLoop(
       config,
       dryRun: true,
       verbose,
+      artifactPaths: buildArtifacts,
+      metadata: {
+        issueId,
+        stage: "build",
+        cycle: 1,
+      },
       log,
     });
 
+    const reviewArtifacts = createStageArtifactPaths(runDirectory, issueId, "cycle-1-review");
     log(`→ REVIEW iniciando: ${issueId} (ciclo 1)`);
     await runAgent({
       stage: "review",
@@ -583,6 +658,12 @@ async function runIssueLoop(
       config,
       dryRun: true,
       verbose,
+      artifactPaths: reviewArtifacts,
+      metadata: {
+        issueId,
+        stage: "review",
+        cycle: 1,
+      },
       log,
     });
 
@@ -596,25 +677,56 @@ async function runIssueLoop(
 
   let attempt = 0;
   let rejectionComment = "";
+  let currentStage: HandoffDetails["stage"] = "BUILD";
 
   try {
   while (attempt < config.loop.max_retries) {
+    const cycle = attempt + 1;
+    currentStage = "BUILD";
+    const buildStartedAt = new Date();
+    const buildArtifacts = createStageArtifactPaths(runDirectory, issueId, `cycle-${cycle}-build`);
+
     log(`→ BUILD iniciando: ${issueId} (intento ${attempt + 1}/${config.loop.max_retries})`);
 
-    const buildExitCode = await runAgent({
+    const buildResult = await runAgent({
       stage: "build",
       issueId,
       config,
       extraContext: rejectionComment || undefined,
       dryRun,
       verbose,
+      artifactPaths: buildArtifacts,
+      metadata: {
+        issueId,
+        stage: "build",
+        cycle,
+        extraContextProvided: Boolean(rejectionComment),
+      },
       log,
     });
 
-    if (buildExitCode !== 0) {
-      log(`✗ BUILD proceso terminó con error (exit ${buildExitCode})`);
+    if (buildResult.exitCode !== 0) {
+      log(`✗ BUILD proceso terminó con error (exit ${buildResult.exitCode})`);
       const comments = await getRecentComments(issueId, 5);
-      const gateFailure = comments.find((comment) => isInterpretableGateFailureComment(comment.body));
+      const recentCommentsPath = path.join(
+        getIssueArtifactsDirectory(runDirectory, issueId),
+        `cycle-${cycle}-build-linear-comments.json`,
+      );
+      writeJsonArtifact(recentCommentsPath, {
+        issueId,
+        stage: "build",
+        cycle,
+        collectedAt: new Date().toISOString(),
+        since: buildStartedAt.toISOString(),
+        comments,
+      });
+      const gateFailure = comments.find((comment) => {
+        if (new Date(comment.createdAt).getTime() < buildStartedAt.getTime()) {
+          return false;
+        }
+
+        return isInterpretableGateFailureComment(comment.body);
+      });
 
       if (gateFailure) {
         rejectionComment = gateFailure.body;
@@ -626,9 +738,10 @@ async function runIssueLoop(
         {
           issueId,
           stage: "BUILD",
-          reason: `BUILD terminó con exit ${buildExitCode} y no hubo comentario interpretable en Linear.`,
+          reason: `BUILD terminó con exit ${buildResult.exitCode} y no hubo comentario interpretable en Linear.`,
           completed: "Se ejecutó wf-build y se inspeccionaron los últimos 5 comentarios de Linear.",
           needed: "Revisar el fallo real del agente o dejar un comentario de gate fallido trazable antes de reanudar.",
+          artifactsPath: issueArtifactsPath,
         },
         attempt + 1,
         config.loop.max_retries,
@@ -649,6 +762,13 @@ async function runIssueLoop(
 
     if (issueStatus !== config.linear.status_in_review) {
       for (let closeRetry = 0; closeRetry < config.loop.max_close_retries; closeRetry += 1) {
+        currentStage = "BUILD";
+        const closeRetryArtifacts = createStageArtifactPaths(
+          runDirectory,
+          issueId,
+          `cycle-${cycle}-build-close-retry-${closeRetry + 1}`,
+        );
+
         await runAgent({
           stage: "build",
           issueId,
@@ -659,6 +779,14 @@ async function runIssueLoop(
             "Completa esos pasos ahora.",
           dryRun,
           verbose,
+          artifactPaths: closeRetryArtifacts,
+          metadata: {
+            issueId,
+            stage: "build",
+            cycle,
+            closeRetry: closeRetry + 1,
+            reason: "close-gate-retry",
+          },
           log,
         });
 
@@ -677,6 +805,7 @@ async function runIssueLoop(
           reason: `BUILD terminó pero ${issueId} no quedó en ${config.linear.status_in_review}.`,
           completed: "Se ejecutó wf-build y se reintentó el cierre del gate de salida.",
           needed: "Mover manualmente el issue a In Review con comentario de trazabilidad válido o corregir wf-build.",
+          artifactsPath: issueArtifactsPath,
         },
         attempt + 1,
         config.loop.max_retries,
@@ -693,15 +822,23 @@ async function runIssueLoop(
       };
     }
 
+    currentStage = "REVIEW";
+    const reviewArtifacts = createStageArtifactPaths(runDirectory, issueId, `cycle-${cycle}-review`);
     log(`→ REVIEW iniciando: ${issueId} (ciclo ${attempt + 1})`);
     const reviewStartedAt = new Date();
 
-    await runAgent({
+    const reviewResult = await runAgent({
       stage: "review",
       issueId,
       config,
       dryRun,
       verbose,
+      artifactPaths: reviewArtifacts,
+      metadata: {
+        issueId,
+        stage: "review",
+        cycle,
+      },
       log,
     });
 
@@ -712,15 +849,33 @@ async function runIssueLoop(
       config.loop.poll_timeout_seconds,
       reviewStartedAt,
     );
+    writeJsonArtifact(
+      path.join(getIssueArtifactsDirectory(runDirectory, issueId), `cycle-${cycle}-review-linear-comments.json`),
+      {
+        issueId,
+        stage: "review",
+        cycle,
+        since: reviewStartedAt.toISOString(),
+        markerFound: pollResult.marker,
+        reviewExitCode: reviewResult.exitCode,
+        observations: pollResult.observations,
+      },
+    );
 
     if (!pollResult.found || !pollResult.marker) {
+      const reason =
+        reviewResult.exitCode !== 0
+          ? `REVIEW terminó con exit ${reviewResult.exitCode} y no dejó marker interpretable en Linear.`
+          : "Timeout esperando marcador de REVIEW en los últimos 5 comentarios de Linear.";
+
       await emitHandoff(
         {
           issueId,
           stage: "REVIEW",
-          reason: "Timeout esperando marcador de REVIEW en los últimos 5 comentarios de Linear.",
+          reason,
           completed: "Se ejecutó wf-review y se hizo polling hasta agotar el timeout configurado.",
           needed: "Revisar manualmente el issue en Linear y reanudar cuando exista comentario con marker explícito.",
+          artifactsPath: issueArtifactsPath,
         },
         attempt + 1,
         config.loop.max_retries,
@@ -733,11 +888,14 @@ async function runIssueLoop(
       return {
         issueId,
         outcome: "handoff",
-        reason: "timeout",
+        reason: reviewResult.exitCode !== 0 ? "review exit error" : "timeout",
       };
     }
 
     if (pollResult.marker === config.linear.approved_marker) {
+      if (reviewResult.exitCode !== 0) {
+        log(`⚠ REVIEW dejó marker aprobado con exit ${reviewResult.exitCode}; se prioriza el marker.`);
+      }
       log(`✓ REVIEW APROBADO: ${issueId}`);
       return {
         issueId,
@@ -746,6 +904,9 @@ async function runIssueLoop(
     }
 
     log(`✗ REVIEW RECHAZADO: ${issueId} (ciclo ${attempt + 1}) — re-build con contexto`);
+    if (reviewResult.exitCode !== 0) {
+      log(`⚠ REVIEW dejó marker rechazado con exit ${reviewResult.exitCode}; se prioriza el marker.`);
+    }
     rejectionComment = pollResult.comment;
     attempt += 1;
   }
@@ -759,6 +920,7 @@ async function runIssueLoop(
       reason: `Se alcanzó max_retries (${config.loop.max_retries}).`,
       completed: "Se agotaron los ciclos automáticos build → review para este issue.",
       needed: "Inspeccionar el issue manualmente, corregir el bloqueo y reanudar el run para este issue.",
+      artifactsPath: issueArtifactsPath,
     },
     config.loop.max_retries,
     config.loop.max_retries,
@@ -780,10 +942,11 @@ async function runIssueLoop(
     await emitHandoff(
       {
         issueId,
-        stage: "BUILD",
+        stage: currentStage,
         reason: `Error inesperado: ${message}`,
         completed: `Se procesó ${issueId} hasta que falló una llamada externa (Linear/agente).`,
         needed: "Revisar log para diagnóstico, corregir el error subyacente y reanudar el run.",
+        artifactsPath: issueArtifactsPath,
       },
       attempt + 1,
       config.loop.max_retries,
@@ -805,7 +968,9 @@ async function main(): Promise<void> {
   const cli = parseCliArgs(process.argv.slice(2));
   const repoRoot = resolveRepoRoot();
   const config = loadConfig(repoRoot);
-  const { logPath, log, writeBlock } = createLogger(repoRoot);
+  const { runDirectory, logPath, log, writeBlock } = createLogger(repoRoot);
+  const relativeLogPath = toRepoRelativePath(repoRoot, logPath);
+  const relativeRunDirectory = toRepoRelativePath(repoRoot, runDirectory);
 
   try {
     runPreflight(repoRoot, config, cli.dryRun, log);
@@ -817,11 +982,22 @@ async function main(): Promise<void> {
 
   log(`Pre-flight OK — repo limpio, sincronizado${cli.dryRun ? " (dry-run)" : ""}`);
   log(`Issues a procesar: ${cli.issueIds.join(", ")}`);
+  log(`Artefactos del run: ${relativeRunDirectory}`);
 
   const results: IssueResult[] = [];
 
   for (const [index, issueId] of cli.issueIds.entries()) {
-    const result = await runIssueLoop(issueId, config, cli.dryRun, cli.verbose, logPath, log, writeBlock);
+    const result = await runIssueLoop(
+      repoRoot,
+      runDirectory,
+      issueId,
+      config,
+      cli.dryRun,
+      cli.verbose,
+      relativeLogPath,
+      log,
+      writeBlock,
+    );
     results.push(result);
 
     const isLastIssue = index === cli.issueIds.length - 1;
@@ -845,10 +1021,11 @@ async function main(): Promise<void> {
           reason: `git sync falló: ${message}`,
           completed: `Se terminó el procesamiento de ${issueId} y se intentó sincronizar main antes del siguiente issue.`,
           needed: "Corregir el problema de sincronización del repo antes de reanudar el run.",
+          artifactsPath: toRepoRelativePath(repoRoot, getIssueArtifactsDirectory(runDirectory, issueId)),
         },
         null,
         config.loop.max_retries,
-        logPath,
+        relativeLogPath,
         cli.dryRun,
         log,
         writeBlock,
@@ -866,12 +1043,28 @@ async function main(): Promise<void> {
       reason: result.reason ?? "handoff",
     }));
 
-  writeBlock(formatSummaryBlock(approvedIssues, attentionIssues, dryRunIssues, logPath, cli.issueIds.length));
+  writeBlock(
+    formatSummaryBlock(
+      approvedIssues,
+      attentionIssues,
+      dryRunIssues,
+      relativeLogPath,
+      relativeRunDirectory,
+      cli.issueIds.length,
+    ),
+  );
 
   if (cli.issueIds.length > 0) {
     await safePostComment(
       cli.issueIds[0],
-      formatSummaryComment(approvedIssues, attentionIssues, dryRunIssues, logPath, cli.issueIds.length),
+      formatSummaryComment(
+        approvedIssues,
+        attentionIssues,
+        dryRunIssues,
+        relativeLogPath,
+        relativeRunDirectory,
+        cli.issueIds.length,
+      ),
       cli.dryRun,
       log,
     );
