@@ -62,11 +62,6 @@ export interface RunAgentParams {
   log: (msg: string) => void;
 }
 
-const STAGE_PROMPTS: Record<RunAgentParams["stage"], string> = {
-  build: "/wf-build",
-  review: "/wf-review",
-};
-
 function splitFlags(flags: string): string[] {
   return flags
     .split(/\s+/)
@@ -75,9 +70,34 @@ function splitFlags(flags: string): string[] {
 }
 
 function buildPrompt(stage: RunAgentParams["stage"], issueId: string, extraContext?: string): string {
-  const basePrompt = `${STAGE_PROMPTS[stage]} ${issueId}`;
   const context = extraContext?.trim();
-  return context ? `${basePrompt}\n\n${context}` : basePrompt;
+
+  if (stage === "build") {
+    return [
+      `Ejecuta el protocolo /wf-build para ${issueId} en este repositorio.`,
+      "",
+      "Instrucciones obligatorias:",
+      "1. Lee workflow/agents.md.",
+      "2. Lee workflow/workflow.md y sigue estrictamente la sección `/wf-build [issue-id?]`.",
+      "3. Usa el issue indicado y carga solo el contexto adicional que el protocolo requiera.",
+      "4. Ejecuta BUILD end-to-end: implementación, validaciones, PR y comentario de evidencia en Linear.",
+      "5. Si no puedes cerrar el gate, deja trazabilidad clara en Linear con el motivo exacto.",
+      ...(context ? ["", "Contexto adicional del orquestador:", context] : []),
+    ].join("\n");
+  }
+
+  return [
+    `Ejecuta el protocolo /wf-review para ${issueId} en este repositorio.`,
+    "",
+    "Instrucciones obligatorias:",
+    "1. Lee workflow/agents.md.",
+    "2. Lee workflow/workflow.md y sigue estrictamente la sección `/wf-review [issue-id?]`.",
+    "3. Usa el issue indicado y carga solo el contexto adicional que el protocolo requiera.",
+    "4. Ejecuta REVIEW end-to-end: validar gates, revisar PR, aprobar o rechazar, y actualizar Linear.",
+    "5. Si apruebas, el comentario final en Linear debe incluir exactamente el marker `REVIEW APROBADO`.",
+    "6. Si rechazas, el comentario final en Linear debe incluir exactamente el marker `REVIEW RECHAZADO`.",
+    ...(context ? ["", "Contexto adicional del orquestador:", context] : []),
+  ].join("\n");
 }
 
 function formatCommand(command: string, args: string[]): string {

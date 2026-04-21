@@ -310,7 +310,7 @@ async function getRecentComments(issueId: string, count = 5): Promise<RecentComm
   const data = await linearGraphQL<RecentCommentQuery>(
     `query($id: String!, $count: Int!) {
       issue(id: $id) {
-        comments(last: $count, orderBy: { field: createdAt, direction: DESC }) {
+        comments(last: $count, orderBy: createdAt) {
           nodes {
             body
             createdAt
