@@ -201,6 +201,11 @@ function loadConfig(repoRoot: string): WfRunConfig {
       throw new Error(`Missing prompt_pattern for interactive agent "${agentName}"`);
     }
 
+    if (agent.mode === "codex_exec") {
+      agent.output_last_message_artifact = agent.output_last_message_artifact ?? true;
+      agent.required_env = Array.from(new Set([...(agent.required_env ?? []), "OPENAI_API_KEY"]));
+    }
+
     if (agent.cwd === "repo_root") {
       agent.cwd = repoRoot;
     }
@@ -578,15 +583,20 @@ function createStageArtifactPaths(
     stdoutPath: path.join(issueDirectory, `${label}.stdout.log`),
     stderrPath: path.join(issueDirectory, `${label}.stderr.log`),
     metaPath: path.join(issueDirectory, `${label}.meta.json`),
+    promptPath: path.join(issueDirectory, `${label}.prompt.txt`),
+    lastMessagePath: path.join(issueDirectory, `${label}.last-message.md`),
   };
 }
 
 function runPreflight(repoRoot: string, config: WfRunConfig, dryRun: boolean, log: (msg: string) => void): void {
+  const activeAgents = [config.build.agent, config.review.agent]
+    .map((agentName) => config.agents[agentName])
+    .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent));
   const requiredCommands = [
     config.agents[config.build.agent]?.cmd,
     config.agents[config.review.agent]?.cmd,
     "gh",
-    ...(Object.values(config.agents).some((agent) => agent.mode === "interactive_terminal") ? ["expect"] : []),
+    ...(activeAgents.some((agent) => agent.mode === "interactive_terminal") ? ["expect"] : []),
   ];
 
   for (const command of requiredCommands) {
@@ -597,6 +607,18 @@ function runPreflight(repoRoot: string, config: WfRunConfig, dryRun: boolean, lo
 
   if (!process.env.LINEAR_API_KEY?.trim()) {
     throw new Error("Pre-flight failed: missing LINEAR_API_KEY");
+  }
+
+  const missingEnv = Array.from(
+    new Set(
+      activeAgents
+        .flatMap((agent) => agent.required_env ?? [])
+        .filter((name) => !process.env[name]?.trim()),
+    ),
+  );
+
+  if (missingEnv.length > 0) {
+    throw new Error(`Pre-flight failed: missing ${missingEnv.join(", ")}`);
   }
 
   const statusOutput = execFileSync("git", ["status", "--porcelain"], {

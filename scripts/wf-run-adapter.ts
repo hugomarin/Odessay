@@ -6,12 +6,14 @@ import { execFileSync, spawn } from "node:child_process";
 export interface WfRunAgentConfig {
   cmd: string;
   cwd: string;
-  mode?: "one_shot" | "interactive_terminal";
+  mode?: "one_shot" | "interactive_terminal" | "codex_exec";
   prompt_flag?: string;
   flags?: string;
   prompt_pattern?: string;
   startup_timeout_seconds?: number;
   command_timeout_seconds?: number;
+  output_last_message_artifact?: boolean;
+  required_env?: string[];
 }
 
 export interface WfRunConfig {
@@ -41,6 +43,8 @@ export interface AgentArtifactPaths {
   stdoutPath: string;
   stderrPath: string;
   metaPath: string;
+  promptPath?: string;
+  lastMessagePath?: string;
 }
 
 export interface RunAgentResult {
@@ -53,6 +57,8 @@ export interface RunAgentResult {
   stdoutPath?: string;
   stderrPath?: string;
   metaPath?: string;
+  promptPath?: string;
+  lastMessagePath?: string;
 }
 
 export interface RunAgentParams {
@@ -78,7 +84,11 @@ function buildInteractiveCommand(stage: RunAgentParams["stage"], issueId: string
   return `${stage === "build" ? "wf-build" : "wf-review"} ${issueId}`;
 }
 
-function buildOneShotPrompt(stage: RunAgentParams["stage"], issueId: string, extraContext?: string): string {
+export function buildAgentPrompt(
+  stage: RunAgentParams["stage"],
+  issueId: string,
+  extraContext?: string,
+): string {
   const context = extraContext?.trim();
 
   if (stage === "build") {
@@ -107,6 +117,22 @@ function buildOneShotPrompt(stage: RunAgentParams["stage"], issueId: string, ext
     "6. Si rechazas, el comentario final en Linear debe incluir exactamente el marker `REVIEW RECHAZADO`.",
     ...(context ? ["", "Contexto adicional del orquestador:", context] : []),
   ].join("\n");
+}
+
+export function buildCodexExecArgs(
+  agentConfig: WfRunAgentConfig,
+  prompt: string,
+  artifactPaths?: AgentArtifactPaths,
+): string[] {
+  const args = ["exec", ...splitFlags(agentConfig.flags)];
+
+  if (agentConfig.output_last_message_artifact && artifactPaths?.lastMessagePath) {
+    args.push("--output-last-message", artifactPaths.lastMessagePath);
+  }
+
+  args.push(prompt);
+
+  return args;
 }
 
 function formatCommand(command: string, args: string[]): string {
@@ -146,6 +172,14 @@ function prepareArtifactDirectories(artifactPaths?: AgentArtifactPaths): void {
   fs.mkdirSync(path.dirname(artifactPaths.stdoutPath), { recursive: true });
   fs.mkdirSync(path.dirname(artifactPaths.stderrPath), { recursive: true });
   fs.mkdirSync(path.dirname(artifactPaths.metaPath), { recursive: true });
+
+  if (artifactPaths.promptPath) {
+    fs.mkdirSync(path.dirname(artifactPaths.promptPath), { recursive: true });
+  }
+
+  if (artifactPaths.lastMessagePath) {
+    fs.mkdirSync(path.dirname(artifactPaths.lastMessagePath), { recursive: true });
+  }
 }
 
 function writeMetaArtifact(
@@ -177,6 +211,8 @@ function createBaseResult(
     stdoutPath: artifactPaths?.stdoutPath,
     stderrPath: artifactPaths?.stderrPath,
     metaPath: artifactPaths?.metaPath,
+    promptPath: artifactPaths?.promptPath,
+    lastMessagePath: artifactPaths?.lastMessagePath,
   };
 }
 
@@ -390,7 +426,7 @@ async function runOneShotAgent(
   agentName: string,
   agentConfig: WfRunAgentConfig,
 ): Promise<RunAgentResult> {
-  const prompt = buildOneShotPrompt(params.stage, params.issueId, params.extraContext);
+  const prompt = buildAgentPrompt(params.stage, params.issueId, params.extraContext);
   const args = splitFlags(agentConfig.flags);
 
   if (agentConfig.prompt_flag?.trim()) {
@@ -525,6 +561,157 @@ async function runOneShotAgent(
   });
 }
 
+async function runCodexExecAgent(
+  params: RunAgentParams,
+  agentName: string,
+  agentConfig: WfRunAgentConfig,
+): Promise<RunAgentResult> {
+  const prompt = buildAgentPrompt(params.stage, params.issueId, params.extraContext);
+  const args = buildCodexExecArgs(agentConfig, prompt, params.artifactPaths);
+  const printableArgs = args.map((arg) => (arg === prompt ? "<prompt>" : arg));
+  const printableCommand = formatCommand(agentConfig.cmd, printableArgs);
+  prepareArtifactDirectories(params.artifactPaths);
+
+  if (params.artifactPaths?.promptPath) {
+    fs.writeFileSync(params.artifactPaths.promptPath, `${prompt}\n`);
+  }
+
+  params.log(`  agente: ${agentName} | cmd: ${printableCommand}`);
+
+  if (params.dryRun) {
+    const startedAt = new Date();
+    const finishedAt = new Date();
+    const result = createBaseResult(
+      agentConfig,
+      printableCommand,
+      startedAt,
+      finishedAt,
+      0,
+      params.artifactPaths,
+    );
+
+    if (params.artifactPaths) {
+      fs.writeFileSync(params.artifactPaths.stdoutPath, "");
+      fs.writeFileSync(params.artifactPaths.stderrPath, "");
+
+      if (params.artifactPaths.lastMessagePath) {
+        fs.writeFileSync(params.artifactPaths.lastMessagePath, "");
+      }
+    }
+
+    writeMetaArtifact(params.artifactPaths, {
+      ...params.metadata,
+      ...getRepoSnapshot(agentConfig.cwd),
+      mode: "codex_exec",
+      command: printableCommand,
+      cwd: agentConfig.cwd,
+      startedAt: result.startedAt,
+      finishedAt: result.finishedAt,
+      durationMs: result.durationMs,
+      exitCode: result.exitCode,
+      stdoutPath: result.stdoutPath,
+      stderrPath: result.stderrPath,
+      promptPath: result.promptPath,
+      lastMessagePath: result.lastMessagePath,
+      requiredEnv: agentConfig.required_env ?? [],
+      dryRun: true,
+    });
+
+    params.log(`[DRY-RUN] ${printableCommand}`);
+    return result;
+  }
+
+  const startedAt = new Date();
+  const proc = spawn(agentConfig.cmd, args, {
+    cwd: agentConfig.cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stdoutBuffer = "";
+  let stderrBuffer = "";
+  const stdoutStream = params.artifactPaths ? fs.createWriteStream(params.artifactPaths.stdoutPath) : null;
+  const stderrStream = params.artifactPaths ? fs.createWriteStream(params.artifactPaths.stderrPath) : null;
+
+  proc.stdout?.on("data", (chunk) => {
+    const value = chunk.toString();
+    stdoutStream?.write(value);
+
+    if (params.verbose) {
+      process.stdout.write(value);
+    } else {
+      stdoutBuffer += value;
+    }
+  });
+
+  proc.stderr?.on("data", (chunk) => {
+    const value = chunk.toString();
+    stderrStream?.write(value);
+
+    if (params.verbose) {
+      process.stderr.write(value);
+    } else {
+      stderrBuffer += value;
+    }
+  });
+
+  return await new Promise<RunAgentResult>((resolve, reject) => {
+    proc.on("error", (error) => {
+      stdoutStream?.end();
+      stderrStream?.end();
+      reject(error);
+    });
+
+    proc.on("close", (code) => {
+      const exitCode = code ?? 1;
+      const finishedAt = new Date();
+      stdoutStream?.end();
+      stderrStream?.end();
+
+      if (!params.verbose && exitCode !== 0) {
+        if (stdoutBuffer.trim()) {
+          for (const line of stdoutBuffer.trimEnd().split("\n")) {
+            params.log(`  stdout | ${line}`);
+          }
+        }
+
+        if (stderrBuffer.trim()) {
+          for (const line of stderrBuffer.trimEnd().split("\n")) {
+            params.log(`  stderr | ${line}`);
+          }
+        }
+      }
+
+      const result = createBaseResult(
+        agentConfig,
+        printableCommand,
+        startedAt,
+        finishedAt,
+        exitCode,
+        params.artifactPaths,
+      );
+
+      writeMetaArtifact(params.artifactPaths, {
+        ...params.metadata,
+        ...getRepoSnapshot(agentConfig.cwd),
+        mode: "codex_exec",
+        command: printableCommand,
+        cwd: agentConfig.cwd,
+        startedAt: result.startedAt,
+        finishedAt: result.finishedAt,
+        durationMs: result.durationMs,
+        exitCode: result.exitCode,
+        stdoutPath: result.stdoutPath,
+        stderrPath: result.stderrPath,
+        promptPath: result.promptPath,
+        lastMessagePath: result.lastMessagePath,
+        requiredEnv: agentConfig.required_env ?? [],
+      });
+
+      resolve(result);
+    });
+  });
+}
+
 export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> {
   const agentName =
     params.stage === "build" ? params.config.build.agent : params.config.review.agent;
@@ -535,6 +722,10 @@ export async function runAgent(params: RunAgentParams): Promise<RunAgentResult> 
   }
 
   const mode = agentConfig.mode ?? "one_shot";
+
+  if (mode === "codex_exec") {
+    return await runCodexExecAgent(params, agentName, agentConfig);
+  }
 
   if (mode === "interactive_terminal") {
     return await runInteractiveTerminalAgent(params, agentName, agentConfig);

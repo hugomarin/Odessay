@@ -1,25 +1,27 @@
 agents:
-  claude:
-    cmd: claude
-    cwd: repo_root
-    mode: interactive_terminal
-    prompt_pattern: "❯"
-    startup_timeout_seconds: 30
-    command_timeout_seconds: 1800
-
-  codex:
+  codex_build:
     cmd: codex
     cwd: repo_root
-    mode: interactive_terminal
-    prompt_pattern: "❯"
-    startup_timeout_seconds: 30
-    command_timeout_seconds: 1800
+    mode: codex_exec
+    flags: --full-auto --color never
+    output_last_message_artifact: true
+    required_env:
+      - OPENAI_API_KEY
+
+  codex_review:
+    cmd: codex
+    cwd: repo_root
+    mode: codex_exec
+    flags: --full-auto --color never
+    output_last_message_artifact: true
+    required_env:
+      - OPENAI_API_KEY
 
 build:
-  agent: codex
+  agent: codex_build
 
 review:
-  agent: codex
+  agent: codex_review
 
 loop:
   max_retries: 3

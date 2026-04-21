@@ -1,34 +1,39 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-04-20",
+  "last_updated": "2026-04-21",
   "active_phase": {
-    "name": "Fase 3 — Organizar y publicar",
-    "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
+    "name": "Fase 2 — Compartir y leer",
+    "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
     "roadmap_ref": "workflow/define/roadmap.md"
   },
   "phase_plan": {
-    "phase": "Fase 3 — Organizar y publicar",
+    "phase": "Fase 2 — Compartir y leer",
     "source_of_truth": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-3.md",
-    "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
+    "definition_of_done": "workflow/define/dod-fase-2.md",
+    "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
     "linear_issues": [
-      "ODE-93",
-      "ODE-94",
-      "ODE-95",
-      "ODE-96",
-      "ODE-97",
-      "ODE-98",
-      "ODE-99",
-      "ODE-100",
-      "ODE-101",
-      "ODE-102",
-      "ODE-103",
-      "ODE-104"
+      "ODE-61",
+      "ODE-62",
+      "ODE-63",
+      "ODE-64",
+      "ODE-65",
+      "ODE-66",
+      "ODE-67",
+      "ODE-68"
     ],
-    "notes": "PLAN completo. DoD co-creado (workflow/define/dod-fase-3.md). Issues creados el 2026-04-20 vía /wf-define. Objetivo de fase: Odessay reemplaza cualquier herramienta externa de escritura. Alcance: ODE-93 collections (critical-path), ODE-94 multi-doc workspace + recientes, ODE-95 find&replace, ODE-96 métricas de selección, ODE-97 preview compartida con márgenes, ODE-98 publication optimization AI (critical-path, handoff: ANTHROPIC_API_KEY), ODE-99 consistencia tipográfica cross-mode, ODE-100 password recovery (handoff: RESEND_API_KEY), ODE-101 profile settings, ODE-102 integración Resend (handoff: dominio verificado + keys), ODE-103 templates email transaccional, ODE-104 páginas públicas (landing/manifesto/about/terms/privacy). Orden sugerido: primero ODE-102 (habilita auth flows) y ODE-99 (canon tipográfico) en paralelo; luego ODE-93/94/95/96 (editor workspace) y ODE-100/101/103 (account+email); cerrar con ODE-97/98/104."
+    "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "wf-run now executes Codex through the official non-interactive `codex exec` path with distinct `codex_build` and `codex_review` agents, per-stage prompt/stdout/stderr/last-message/meta artifacts, and preflight checks scoped to the active agents' exported API credentials.",
+      "phase": "Fase 3",
+      "issue": "ODE-105",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-105",
+      "commit": "64f1fd0",
+      "date": "2026-04-21",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test. Performance contract: not required (CLI orchestration only). Controlled wf-run evidence captured at /private/tmp/ode105-wfrun-validate.5PXkgC/logs/wf-run/2026-04-21T19-40-48-248Z with preflight OK on clean main and BUILD launched via codex exec for ODE-88."
+    },
     {
       "what": "Sidebar state boot now starts collapsed without hydration flicker by removing sessionStorage-first hydration, persisting sidebar mode in cookie, and reading that cookie in app layout to SSR the correct initial mode. Expanded state now survives reloads without flash.",
       "phase": "Fase 2",

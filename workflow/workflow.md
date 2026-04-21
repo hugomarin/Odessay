@@ -212,6 +212,7 @@ Después de cada issue (aprobado o HANDOFF) y antes de iniciar el siguiente: `gi
 **Restricción:** `/wf-run` no toma decisiones de calidad ni de scope, no mueve estados en Linear, no hace merges, no gestiona ramas. Cualquier desviación de los gates de `wf-build` o `wf-review` es responsabilidad de esos comandos.
 
 **Configuración:** `scripts/wf-run-config.yaml` — agentes, modo de invocación, markers y timeouts. Para agentes con suscripción que sólo funcionan de forma consistente en sesión interactiva, usar `mode: interactive_terminal` con `prompt_pattern` explícito. El yaml no debe reescribir el protocolo de BUILD/REVIEW: sólo define cómo abrir la sesión del agente y cuánto esperar.
+En la configuración vigente de esta fase, BUILD y REVIEW deben declararse como agentes lógicos distintos (`codex_build`, `codex_review`) y cada etapa corre en un proceso nuevo vía `codex exec`; nunca se reutiliza la misma sesión entre etapas.
 
 **Log:** cada run escribe `logs/wf-run/{run-id}/run.log` y artefactos por issue/etapa dentro del mismo directorio. Además se mantiene un append diario en `logs/wf-run-{fecha}.log`. Todo `logs/wf-run/` va ignorado por git.
 
