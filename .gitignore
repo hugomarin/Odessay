@@ -24,6 +24,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+logs/*.log
+logs/wf-run/
 
 # Tooling
 .vercel/
@@ -33,6 +35,7 @@ pnpm-debug.log*
 # Editors/IDE
 .idea/
 .vscode/
+.claude/worktrees/
 
 # Testing artifacts
 playwright-report/

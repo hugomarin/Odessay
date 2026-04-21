@@ -1,0 +1,37 @@
+agents:
+  codex_build:
+    cmd: codex
+    cwd: repo_root
+    mode: codex_exec
+    flags: --full-auto --color never
+    output_last_message_artifact: true
+    required_env:
+      - OPENAI_API_KEY
+
+  codex_review:
+    cmd: codex
+    cwd: repo_root
+    mode: codex_exec
+    flags: --full-auto --color never
+    output_last_message_artifact: true
+    required_env:
+      - OPENAI_API_KEY
+
+build:
+  agent: codex_build
+
+review:
+  agent: codex_review
+
+loop:
+  max_retries: 3
+  max_close_retries: 2
+  poll_interval_seconds: 30
+  poll_timeout_seconds: 600
+
+linear:
+  status_in_progress: "In Progress"
+  status_in_review: "In Review"
+  status_done: "Done"
+  approved_marker: "REVIEW APROBADO"
+  rejected_marker: "REVIEW RECHAZADO"
