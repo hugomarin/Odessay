@@ -182,13 +182,13 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 Si cualquier check falla: el script sale con exit 1 sin iniciar ningún issue.
 
 **Loop por issue (resumen):**
-1. **BUILD** — invoca `/wf-build {id}`. En reintentos appendea el comentario de rechazo o de gate fallido como contexto.
-2. Verifica en Linear que el issue quedó en `In Review`. Si no, reintenta el cierre del gate hasta `max_close_retries` veces.
+1. **BUILD** — invoca `/wf-build {id}` como una etapa aislada. `wf-run` no appendea contexto narrativo ni re-explica el repo.
+2. Verifica de forma determinista el gate de salida de BUILD: rama actual, PR abierto para esa rama y estado del issue en Linear. Si falla, HANDOFF; no se relanza BUILD para cerrar el gate.
 3. **REVIEW** — invoca `/wf-review {id}`. Captura timestamp antes de invocar.
 4. Hace polling a Linear buscando los markers `REVIEW APROBADO` o `REVIEW RECHAZADO` en comentarios creados después del timestamp del paso 3.
 5. **APROBADO** → fin del issue (el merge ya lo hizo `wf-review`).
-6. **RECHAZADO** → re-build con el comentario de rechazo como contexto, sobre la misma rama. Hasta `max_retries`.
-7. **Timeout o max_retries** → HANDOFF y siguiente issue.
+6. **RECHAZADO** → HANDOFF. `wf-run` no re-builda automáticamente con contexto heredado del review.
+7. **Timeout** → HANDOFF y siguiente issue.
 
 **Markers obligatorios para el agente de REVIEW:**
 - `REVIEW APROBADO` — en el comentario final cuando aprueba.
@@ -207,12 +207,12 @@ Después de cada issue (aprobado o HANDOFF) y antes de iniciar el siguiente: `gi
 - En `BUILD` o `REVIEW` el run continúa con el siguiente issue.
 - En `TRANSICIÓN` el run se detiene completo.
 
-**Gate de salida:** todos los issues de la lista terminados — aprobados, en HANDOFF o agotados por max_retries — y resumen posteado en Linear.
+**Gate de salida:** todos los issues de la lista terminados — aprobados o en HANDOFF — y resumen posteado en Linear.
 
 **Restricción:** `/wf-run` no toma decisiones de calidad ni de scope, no mueve estados en Linear, no hace merges, no gestiona ramas. Cualquier desviación de los gates de `wf-build` o `wf-review` es responsabilidad de esos comandos.
 
-**Configuración:** `scripts/wf-run-config.yaml` — agentes, modo de invocación, markers y timeouts. Para agentes con suscripción que sólo funcionan de forma consistente en sesión interactiva, usar `mode: interactive_terminal` con `prompt_pattern` explícito. El yaml no debe reescribir el protocolo de BUILD/REVIEW: sólo define cómo abrir la sesión del agente y cuánto esperar.
-En la configuración vigente de esta fase, BUILD y REVIEW deben declararse como agentes lógicos distintos (`codex_build`, `codex_review`) y cada etapa corre en un proceso nuevo vía `codex exec`; nunca se reutiliza la misma sesión entre etapas.
+**Configuración:** `scripts/wf-run-config.yaml` — agentes, modo de invocación, markers y timeouts. Para agentes con suscripción que sólo funcionan de forma consistente en sesión interactiva, usar `mode: interactive_terminal` con `prompt_pattern` explícito. El yaml no debe reescribir el protocolo de BUILD/REVIEW: sólo define cómo abrir cada etapa.
+En la configuración vigente de esta fase, BUILD y REVIEW deben declararse como agentes lógicos distintos (`codex_build`, `codex_review`) y cada etapa corre en un proceso nuevo. El prompt inicial debe ser delgado: equivalente a “ejecuta `/wf-build {id}`” o “ejecuta `/wf-review {id}`”, sin contexto adicional de orquestación.
 
 **Log:** cada run escribe `logs/wf-run/{run-id}/run.log` y artefactos por issue/etapa dentro del mismo directorio. Además se mantiene un append diario en `logs/wf-run-{fecha}.log`. Todo `logs/wf-run/` va ignorado por git.
 

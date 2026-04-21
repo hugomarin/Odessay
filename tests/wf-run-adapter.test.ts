@@ -2,19 +2,18 @@ import { describe, expect, it } from "vitest";
 import { buildAgentPrompt, buildCodexExecArgs, type WfRunAgentConfig } from "@/scripts/wf-run-adapter";
 
 describe("wf-run adapter prompts", () => {
-  it("builds a wf-build prompt with optional orchestration context", () => {
-    const prompt = buildAgentPrompt("build", "ODE-105", "REVIEW rechazado en el ciclo anterior.");
+  it("builds a thin supervisor prompt for wf-build", () => {
+    const prompt = buildAgentPrompt("build", "ODE-105");
 
-    expect(prompt).toContain("Ejecuta el protocolo /wf-build para ODE-105");
-    expect(prompt).toContain("Lee workflow/agents.md.");
-    expect(prompt).toContain("Contexto adicional del orquestador:");
-    expect(prompt).toContain("REVIEW rechazado en el ciclo anterior.");
+    expect(prompt).toContain("Actua exactamente como si el humano hubiera ejecutado `/wf-build ODE-105`");
+    expect(prompt).toContain("No asumas el rol de `wf-run`");
+    expect(prompt).not.toContain("Lee workflow/agents.md.");
   });
 
   it("builds a wf-review prompt with required review markers", () => {
     const prompt = buildAgentPrompt("review", "ODE-88");
 
-    expect(prompt).toContain("Ejecuta el protocolo /wf-review para ODE-88");
+    expect(prompt).toContain("Actua exactamente como si el humano hubiera ejecutado `/wf-review ODE-88`");
     expect(prompt).toContain("REVIEW APROBADO");
     expect(prompt).toContain("REVIEW RECHAZADO");
   });

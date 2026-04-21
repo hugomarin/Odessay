@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "wf-run now acts as a thin supervisor: BUILD and REVIEW are invoked with minimal stage prompts equivalent to `/wf-build {id}` and `/wf-review {id}`, the post-BUILD gate is checked deterministically through branch/PR/Linear state, and failed close/review paths hand off instead of relaunching BUILD with inherited orchestration context.",
+      "phase": "Fase 3",
+      "issue": "ODE-108",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-108",
+      "commit": "d2715e1",
+      "date": "2026-04-21",
+      "notes": "Validation in green: npm run typecheck, npm test, npm run lint. Performance contract: not required (workflow orchestration/runtime cost control only; no editor hot path change)."
+    },
+    {
       "what": "wf-run now executes Codex through the official non-interactive `codex exec` path with distinct `codex_build` and `codex_review` agents, per-stage prompt/stdout/stderr/last-message/meta artifacts, and preflight checks scoped to the active agents' exported API credentials.",
       "phase": "Fase 3",
       "issue": "ODE-105",
