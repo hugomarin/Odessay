@@ -34,6 +34,7 @@ logs/*.log
 # Editors/IDE
 .idea/
 .vscode/
+.claude/worktrees/
 
 # Testing artifacts
 playwright-report/
