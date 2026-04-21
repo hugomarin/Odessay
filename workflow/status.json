@@ -35,6 +35,15 @@
       "notes": "Validation in green: npm run typecheck, npm run lint, npm test. Performance contract: not required (CLI orchestration only). Controlled wf-run evidence captured at /private/tmp/ode105-wfrun-validate.5PXkgC/logs/wf-run/2026-04-21T19-40-48-248Z with preflight OK on clean main and BUILD launched via codex exec for ODE-88."
     },
     {
+      "what": "Editor format toolbar now rests with lower visual weight: inactive format/panel controls use reduced opacity, toolbar icon strokes are slightly lighter, and button spacing is tighter while preserving the existing actions, position, and 24px click targets. Hover/active states still restore full presence.",
+      "phase": "Fase 2",
+      "issue": "ODE-88",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-88",
+      "commit": "c64d97f",
+      "date": "2026-04-21",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npx vitest run tests/editor-topbar-compact.test.ts tests/editor-topbar-state.test.ts. Performance contract: not required (toolbar styling/state presentation only, no hot-path rendering changes). Presentation contract: not required (does not modify cross-mode rich-text presentation or overflow semantics)."
+    },
+    {
       "what": "Sidebar state boot now starts collapsed without hydration flicker by removing sessionStorage-first hydration, persisting sidebar mode in cookie, and reading that cookie in app layout to SSR the correct initial mode. Expanded state now survives reloads without flash.",
       "phase": "Fase 2",
       "issue": "ODE-90",

@@ -151,6 +151,32 @@ const isActionActive = (
   action: EditorShortcutAction,
 ) => (isTopbarTrackedAction(action) ? actionState[action] : false)
 
+const TOPBAR_ICON_STROKE_WIDTH = 1.35
+
+const TOPBAR_ICON_BUTTON_BASE_CLASS =
+  "inline-flex h-6 w-6 items-center justify-center rounded-[6px] transition-[background-color,color,opacity] duration-150 ease-out"
+
+const TOPBAR_ICON_BUTTON_INACTIVE_CLASS = "text-ink-4/70 opacity-80 hover:bg-muted/80 hover:text-ink hover:opacity-100"
+
+const TOPBAR_ICON_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
+
+const TOPBAR_STRUCTURE_BUTTON_BASE_CLASS =
+  "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-[3px] text-[11px] font-medium tracking-[-0.01em] transition-[background-color,color,opacity] duration-150 ease-out"
+
+const TOPBAR_STRUCTURE_BUTTON_INACTIVE_CLASS =
+  "text-ink-4/75 opacity-80 hover:bg-muted/80 hover:text-ink hover:opacity-100"
+
+const TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
+
+const getTopbarIconButtonClass = (active: boolean) =>
+  cn(TOPBAR_ICON_BUTTON_BASE_CLASS, active ? TOPBAR_ICON_BUTTON_ACTIVE_CLASS : TOPBAR_ICON_BUTTON_INACTIVE_CLASS)
+
+const getTopbarStructureButtonClass = (active: boolean) =>
+  cn(
+    TOPBAR_STRUCTURE_BUTTON_BASE_CLASS,
+    active ? TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS : TOPBAR_STRUCTURE_BUTTON_INACTIVE_CLASS,
+  )
+
 export function EditorTopbar({
   editor,
   title,
@@ -183,6 +209,7 @@ export function EditorTopbar({
 
   const formatButtons = FORMAT_ACTIONS.map((actionItem) => {
     const Icon = actionItem.icon
+    const isActive = isActionActive(actionState, actionItem.action)
 
     return (
       <ActionTooltip
@@ -200,42 +227,40 @@ export function EditorTopbar({
           }}
           onClick={() => onRunAction(actionItem.action, { richSelection: consumeRichSelection() })}
           aria-label={actionItem.label}
-          className={cn(
-            "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors",
-            isActionActive(actionState, actionItem.action) ? "bg-muted text-ink" : "hover:bg-muted hover:text-ink",
-          )}
+          className={getTopbarIconButtonClass(isActive)}
         >
-          <Icon className="h-[13px] w-[13px]" strokeWidth={1.5} />
+          <Icon className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
         </button>
       </ActionTooltip>
     )
   })
 
-  const structureButtons = STRUCTURE_ACTIONS.map((actionItem) => (
-    <ActionTooltip
-      key={actionItem.id}
-      label={actionItem.label}
-      shortcut={getEditorShortcutLabel(actionItem.action)}
-      side="bottom"
-    >
-      <button
-        id={actionItem.id}
-        type="button"
-        onMouseDown={(event) => {
-          // Prevent focus-stealing click from collapsing markdown selection before applying style.
-          captureSelectionAndKeepFocus(event)
-        }}
-        onClick={() => onRunAction(actionItem.action, { richSelection: consumeRichSelection() })}
-        aria-label={actionItem.label}
-        className={cn(
-          "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-1 text-[11px] font-medium transition-colors",
-          isActionActive(actionState, actionItem.action) ? "bg-muted text-ink" : "text-ink-3 hover:bg-muted hover:text-ink",
-        )}
+  const structureButtons = STRUCTURE_ACTIONS.map((actionItem) => {
+    const isActive = isActionActive(actionState, actionItem.action)
+
+    return (
+      <ActionTooltip
+        key={actionItem.id}
+        label={actionItem.label}
+        shortcut={getEditorShortcutLabel(actionItem.action)}
+        side="bottom"
       >
-        {actionItem.text}
-      </button>
-    </ActionTooltip>
-  ))
+        <button
+          id={actionItem.id}
+          type="button"
+          onMouseDown={(event) => {
+            // Prevent focus-stealing click from collapsing markdown selection before applying style.
+            captureSelectionAndKeepFocus(event)
+          }}
+          onClick={() => onRunAction(actionItem.action, { richSelection: consumeRichSelection() })}
+          aria-label={actionItem.label}
+          className={getTopbarStructureButtonClass(isActive)}
+        >
+          {actionItem.text}
+        </button>
+      </ActionTooltip>
+    )
+  })
 
   const compactQuickButtons = COMPACT_QUICK_ACTIONS.map((actionItem) => {
     const Icon = actionItem.icon
@@ -302,7 +327,7 @@ export function EditorTopbar({
           >
             {formatButtons}
 
-            <span className="mx-1 h-4 w-px bg-border" aria-hidden="true" />
+            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
 
             {structureButtons}
           </div>
@@ -359,7 +384,7 @@ export function EditorTopbar({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <ActionTooltip
             label={isFocusMode ? "Exit focus mode" : "Focus mode"}
             shortcut={getEditorShortcutLabel("focusMode")}
@@ -368,13 +393,13 @@ export function EditorTopbar({
             <button
               type="button"
               onClick={onToggleFocusMode}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+              className={getTopbarIconButtonClass(isFocusMode)}
               aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
             >
               {isFocusMode ? (
-                <Minimize2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                <Minimize2 className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
               ) : (
-                <Expand className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                <Expand className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
               )}
             </button>
           </ActionTooltip>
@@ -383,14 +408,11 @@ export function EditorTopbar({
             <button
               type="button"
               onClick={() => onTogglePanel("notes")}
-              className={cn(
-                "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
-                activePanel === "notes" && "bg-muted text-ink",
-              )}
+              className={getTopbarIconButtonClass(activePanel === "notes")}
               aria-label="Notes panel"
               aria-pressed={activePanel === "notes"}
             >
-              <AlignLeft className="h-[13px] w-[13px]" strokeWidth={1.5} />
+              <AlignLeft className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
 
@@ -398,14 +420,11 @@ export function EditorTopbar({
             <button
               type="button"
               onClick={() => onTogglePanel("properties")}
-              className={cn(
-                "inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
-                activePanel === "properties" && "bg-muted text-ink",
-              )}
+              className={getTopbarIconButtonClass(activePanel === "properties")}
               aria-label="Properties panel"
               aria-pressed={activePanel === "properties"}
             >
-              <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={1.5} />
+              <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
         </div>

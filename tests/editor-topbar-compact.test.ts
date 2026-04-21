@@ -13,6 +13,8 @@ describe("editor topbar compact responsive behavior", () => {
 
     expect(EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS).toContain("min-[960px]:flex")
     expect(EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS).toContain("hidden")
+    expect(EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS).toContain("gap-px")
+    expect(EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS).toContain("px-0.5")
 
     expect(EDITOR_TOPBAR_COMPACT_FORMAT_CLASS).toContain("min-[960px]:hidden")
     expect(EDITOR_TOPBAR_TITLE_CONTAINER_CLASS).toContain("flex-1")
