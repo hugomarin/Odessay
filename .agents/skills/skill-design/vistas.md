@@ -323,14 +323,83 @@ Find & Replace bar (0px → 40px / 80px) — bajo topbar, sobre el contenido
 Statusbar (32px) — bajo editor area
 ```
 
-### Topbar — tres columnas
+### Topbar — una sola barra de 46px
+
+La barra única combina tabs de navegación (izquierda) y herramientas (derecha). No hay título centrado — el título vive en el tab activo. El toggle Rich/Md se queda en la statusbar.
+
 ```
-left:   Mode toggle (Rich/Markdown) + format toolbar
-center: Título del writing (editable, Lora, sin borde)
-right:  Focus | Notes | AI | Pulir | Properties — icon buttons 14×14px
+[tabs elásticos + +]  |  [B] [I] [S] [Highlight] [Link] [H1] [H2] [H3]  |  [Focus] [Notes] [AI] [Polish] [Properties]
 ```
 
-El ícono de Pulir usa Sparkles (Lucide). Estado activo: `background var(--muted)`, color `var(--ink)`. Mismo comportamiento que los otros toggles de panel derecho: abre el panel, cierra los demás.
+**Tabs (izquierda, flex: 1)**
+
+```
+Contenedor: flex: 1, min-width: 0, overflow: hidden
+
+Cada tab:
+  flex:          1                  — se reparten el espacio por igual
+  min-width:     64px               — mínimo antes de truncar con ellipsis
+  max-width:     180px              — cap para tabs con título corto
+  height:        46px (full bar)
+  padding:       0 10px 0 12px
+  border-right:  0.5px solid var(--border)
+  font:          Geist Sans 13px, color var(--ink-4)
+
+Estado inactive:
+  background:  transparent
+  color:       var(--ink-4)
+  hover:       background var(--muted), color var(--ink-2)
+  × en hover:  opacity 0 → 1, 100ms
+
+Estado active:
+  background:  var(--bg)      — mismo que el área de escritura, "conecta" visualmente
+  color:       var(--ink), font-weight 500
+  línea inferior: 1.5px solid var(--ink), position absolute bottom
+
+× (cerrar tab):
+  tamaño:      16×16px, border-radius 4px
+  color:       var(--ink-4); hover: bg var(--muted-h), color var(--ink)
+  visibilidad: opacity 0 por defecto, 1 en hover del tab
+  posición:    margin-left auto (pegado a la derecha dentro del tab)
+
+Punto • (unsaved):
+  tamaño:      6×6px, border-radius 50%
+  color:       var(--cursor)
+  posición:    margin-left auto (mismo lugar que ×)
+  comportamiento: visible en reposo; en hover del tab se oculta y aparece el ×
+
+Botón +:
+  width:         38px fijo, flex-shrink 0
+  border-right:  0.5px solid var(--border)
+  color:         var(--ink-4); hover bg var(--muted), color var(--ink)
+  font-size:     20px, font-weight 300
+
+Comportamiento elástico:
+  Con 1–4 tabs:  llegan a max-width 180px, espacio sobrante queda vacío
+  Con 5–8 tabs:  cada tab obtiene su parte proporcional del espacio disponible
+  Con 9–10 tabs: comprimen hasta min-width 64px con ellipsis en el título
+  Límite blando:  advertir al abrir el tab 11
+```
+
+**Format tools + panel icons (derecha, flex-shrink: 0)**
+
+```
+Separados del área de tabs con border-left: 0.5px solid var(--border)
+padding: 0 8px, gap: 1px
+
+Format tools (mismo estilo que antes):
+  B  I  S  |  Highlight  Link  |  H1  H2  H3
+
+Panel icons (30×30px, border-radius 6px):
+  Focus | Notes | AI | Polish (Sparkles) | Properties
+
+Polish usa ícono Sparkles (Lucide). Activo: background var(--muted), color var(--ink).
+Todos los iconos: color var(--ink-4); hover background var(--muted), color var(--ink).
+```
+
+**Rich/Md toggle**
+
+Se elimina del topbar. Vive en la statusbar (derecha), igual que hoy.
 
 ### Find & Replace bar
 
@@ -550,6 +619,139 @@ icono:         FileStack, color var(--cursor)
 título:        Geist Sans 12px, font-weight 600
 body:          Geist Sans 11px, ink-3
 botón:         "Invite to respond" — bg var(--cursor), color white
+```
+
+---
+
+## Transactional email templates
+
+Referencia visual: emails de Claude (Anthropic). Diseño minimalista centrado, sin imágenes decorativas, un solo CTA negro.
+
+```
+Container:     max-width 560px, margin auto, fondo blanco (#FFFFFF)
+Padding outer: 40px arriba/abajo, 0 lateral (el cliente de email lo maneja)
+Padding inner: 0 40px en el contenido
+```
+
+**Estructura de cada template**
+
+```
+1. Header
+   wordmark:    "Odessay" — Lora, 20px, font-weight 500, color #1C1612
+               centrado, padding-top 40px, padding-bottom 32px
+   separator:  border-bottom 1px solid #E8E7E4
+
+2. Body
+   padding:    32px 40px
+   text-align: center
+
+   título:     Lora, 22px, font-weight 500, color #1C1612
+               line-height 1.4, margin-bottom 16px
+
+   cuerpo:     font-family: Georgia, 'Times New Roman', serif (web-safe fallback de Lora)
+               — alternativa sans: Arial, Helvetica, sans-serif
+               font-size: 15px, line-height 1.7
+               color: #695E59 (ink-3 en hex)
+               margin-bottom 24px
+
+   Nota: NO cargar fuentes externas (@font-face / Google Fonts) — mala compatibilidad
+         con Outlook. Usar Georgia como serif y Arial como sans-serif.
+
+3. CTA button
+   display:        inline-block (centrado con text-align: center en el wrapper)
+   background:     #1C1612  (ink en hex — negro tipográfico Odessay)
+   color:          #FAF9F7  (bg en hex)
+   padding:        12px 28px
+   border-radius:  8px
+   font-family:    Arial, Helvetica, sans-serif
+   font-size:      14px, font-weight: bold
+   text-decoration: none
+   margin-bottom:  24px
+
+4. Secondary text (si aplica)
+   font-size:  12px, color #8C837E (ink-4 en hex)
+   text-align: center, line-height 1.6
+
+5. Footer
+   border-top:  1px solid #E8E7E4
+   padding:     24px 40px
+   font-size:   11px, color #8C837E
+   text-align:  center
+   contenido:   © {año} Odessay · dirección física (requisito anti-spam)
+               + link "Gestionar notificaciones" (stub)
+```
+
+**Tokens HSL → HEX (para usar en emails)**
+
+```
+--ink    hsl(25,18%,10%)  →  #1C1612
+--ink-2  hsl(25,12%,22%)  →  #3D3530
+--ink-3  hsl(25,10%,38%)  →  #695E59
+--ink-4  hsl(25, 8%,52%)  →  #8C837E
+--bg     hsl(38,12%,98%)  →  #FAF9F7
+--border hsl(38, 8%,90%)  →  #E8E7E4
+--cursor hsl(22,55%,38%)  →  #943D1F
+```
+
+**No usar:** dark mode media queries, gradientes, imágenes de fondo, tablas anidadas complejas.
+
+---
+
+## Settings (`/settings`)
+
+Referencia visual: Claude settings. Dos columnas: nav lateral izquierda + contenido derecho.
+
+```
+Layout: flex row, sin sidebar global de Odessay (pantalla completa)
+        o con sidebar de Odessay colapsado en mini (52px)
+
+Nav lateral:
+  width:       180px, flex-shrink 0
+  padding:     24px 12px
+  border-right: 0.5px solid var(--border)
+
+  Título "Settings":
+    font: Lora 17px, font-weight 500, color var(--ink)
+    padding: 0 8px, margin-bottom 20px
+
+  Nav items:
+    padding:       8px 10px
+    border-radius: 8px
+    font-size:     14px, color var(--ink-3)
+    hover:         background var(--muted), color var(--ink-2)
+    active:        background var(--muted), color var(--ink), font-weight 500
+
+  Secciones Fase 3 (pocas opciones):
+    · Account    → email, contraseña, username, display name
+    · Privacy    → futuro
+    · Billing    → futuro
+
+Área de contenido:
+  max-width:   640px
+  padding:     32px 40px
+  overflow-y:  auto
+
+  Section header:
+    font: Geist Sans 16px, font-weight 600, color var(--ink)
+    margin-bottom: 24px
+    border-bottom: 0.5px solid var(--border), padding-bottom 12px
+
+  Field group:
+    margin-bottom: 24px
+    label:  Geist Sans 12px, font-weight 500, color var(--ink-2), margin-bottom 6px
+    input:  ShadCN Input, ancho completo del área
+
+  Form states (por campo):
+    inactive:   input sin borde de foco
+    dirty:      botón "Save" activo (bg var(--ink), color var(--bg))
+    submitting: botón "Saving…" deshabilitado + spinner 12px
+    success:    mensaje "Saved." Geist Sans 12px, color hsl(140,40%,32%), 3s → desaparece
+    error:      mensaje inline en destructive, accionable
+
+  Botón Save por sección (no global):
+    height: 32px, padding 0 16px, border-radius 8px
+    bg var(--ink), color var(--bg), font-size 13px, font-weight 500
+    Aparece solo cuando hay cambios (dirty state)
 ```
 
 ---
