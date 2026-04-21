@@ -34,6 +34,11 @@ import {
 import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
+import {
+  createNewWritingSessionState,
+  createRouteHydrationSessionState,
+  resolveExternalWritingLoad,
+} from "@/lib/editor/hydration-session"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
 import {
   buildEditorSpellcheckConfig,
@@ -173,8 +178,10 @@ const getWordCount = (editor: Editor | null) => {
 export function EditorShell({ writingId }: EditorShellProps) {
   const router = useRouter()
   const routeWritingId = writingId ?? null
+  const initialHydrationSession = createRouteHydrationSessionState(routeWritingId)
 
-  const [currentWritingId, setCurrentWritingId] = useState<string | null>(routeWritingId)
+  const [currentWritingId, setCurrentWritingId] = useState<string | null>(initialHydrationSession.activeWritingId)
+  const [hydrationWritingId, setHydrationWritingId] = useState<string | null>(initialHydrationSession.hydrationWritingId)
   const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
@@ -207,9 +214,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const visibilityRef = useRef<WritingVisibility>(writingVisibility)
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
-  const hydratedIdRef = useRef<string | null>(null)
+  const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const navigatedToDraftRef = useRef(false)
-  const selfNavigatedIdRef = useRef<string | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -257,14 +263,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
             : nextDerivedTitle
 
       if (!currentWritingId) {
-        // Mark the editor as already-hydrated for this new ID so the hydration
-        // effect does not re-apply content and trigger a visible flicker.
-        hydratedIdRef.current = nextId
-        setCurrentWritingId(nextId)
+        const nextWritingSession = createNewWritingSessionState(nextId)
+        currentWritingIdRef.current = nextWritingSession.activeWritingId
+        setCurrentWritingId(nextWritingSession.activeWritingId)
+        setHydrationWritingId(nextWritingSession.hydrationWritingId)
 
         if (!routeWritingId && !navigatedToDraftRef.current) {
           navigatedToDraftRef.current = true
-          selfNavigatedIdRef.current = nextId
           router.replace(`/write/${nextId}`)
         }
       }
@@ -530,16 +535,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [writingVisibility])
 
   useEffect(() => {
-    if (routeWritingId && routeWritingId === selfNavigatedIdRef.current) {
-      // This route change was triggered by this editor creating a new draft.
-      // Content is already in the editor — clear the marker and skip re-hydration.
-      selfNavigatedIdRef.current = null
+    const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
+
+    if (!nextExternalLoad) {
       return
     }
-    setCurrentWritingId(routeWritingId)
-    hydratedIdRef.current = null
+
+    currentWritingIdRef.current = nextExternalLoad.activeWritingId
+    setCurrentWritingId(nextExternalLoad.activeWritingId)
+    setHydrationWritingId(nextExternalLoad.hydrationWritingId)
     navigatedToDraftRef.current = false
   }, [routeWritingId])
+
+  useEffect(() => {
+    currentWritingIdRef.current = currentWritingId
+  }, [currentWritingId])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -565,24 +575,24 @@ export function EditorShell({ writingId }: EditorShellProps) {
     updateDerivedEditorState(editor)
 
     if (!currentWritingId) {
-      hydratedIdRef.current = null
       setWritingStatus("draft")
       setWritingVisibility("private")
       return
     }
 
-    if (hydratedIdRef.current === currentWritingId) {
+    if (!hydrationWritingId) {
       return
     }
 
     let cancelled = false
+    const targetWritingId = hydrationWritingId
 
     const hydrateEditor = async () => {
-      let localWriting = await localDB.writings.get(currentWritingId)
+      let localWriting = await localDB.writings.get(targetWritingId)
 
       if (!localWriting) {
         try {
-          await hydrateLocalWritingFromRemote(currentWritingId)
+          await hydrateLocalWritingFromRemote(targetWritingId)
         } catch {
           // The writing might not exist remotely yet; keep local fallback behavior.
         }
@@ -591,7 +601,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
         }
 
-        localWriting = await localDB.writings.get(currentWritingId)
+        localWriting = await localDB.writings.get(targetWritingId)
       }
 
       if (cancelled) {
@@ -635,7 +645,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setBodyText("")
       }
 
-      hydratedIdRef.current = currentWritingId
+      setHydrationWritingId(null)
     }
 
     void hydrateEditor()
@@ -643,7 +653,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [currentWritingId, editor, updateDerivedEditorState])
+  }, [currentWritingId, editor, hydrationWritingId, updateDerivedEditorState])
 
   useEffect(() => {
     if (!currentWritingId) {
