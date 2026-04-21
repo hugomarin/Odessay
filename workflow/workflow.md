@@ -148,6 +148,75 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 
 ---
 
+## `/wf-run ODE-{ids}` — ORQUESTACIÓN BUILD ↔ REVIEW
+
+**Objetivo:** ejecutar `/wf-build` y `/wf-review` en loop automático sobre uno o varios issues, sin intervención humana entre ciclos.
+
+`/wf-run` no reemplaza a BUILD ni a REVIEW: los compone. La rama la crea `wf-build`, el merge lo hace `wf-review`, los comentarios de evidencia los dejan los agentes invocados. El script sólo orquesta y deja comentarios de orquestación (HANDOFF y resumen final).
+
+**Cuándo usarlo:**
+- Cuando hay 1+ issues con brief listo y se quiere correr la cadena BUILD → REVIEW desatendida.
+- Cuando se quiere reanudar un issue que quedó a medias (re-invocar `/wf-run ODE-XX` continúa sobre la misma rama gracias a la lógica de `wf-build`).
+
+**Cuándo NO usarlo:**
+- Cuando el issue requiere decisión humana antes de ejecutar (usar `/wf-build` directo).
+- Cuando el brief no existe (correr `/wf-define` primero).
+
+**Resolución de issues:**
+- Siempre con argumento posicional. Acepta `ODE-50,51,52` o `ODE-50,ODE-51`. Sin argumento, error.
+- No hay fallback a Linear — el set de issues lo decide el humano explícitamente.
+
+**Instrucción al agente que recibe `/wf-run ODE-{ids}`:**
+1. Verificar que existe `scripts/wf-run.ts` en el repo.
+2. Ejecutar desde la raíz del repo: `npx tsx scripts/wf-run.ts {ids} [--dry-run] [--verbose]`.
+3. Hacer streaming del output al humano en tiempo real.
+4. Si aparece `⏸ HANDOFF REQUERIDO` en el output, reportarlo y pausar.
+5. No modificar código ni tomar decisiones — sólo invocar y reportar.
+
+**Pre-flight (lo hace el script, no el agente):**
+- Comandos de los agentes (`claude`, `codex`) y `gh` en PATH.
+- `LINEAR_API_KEY` en el entorno.
+- Working tree limpio (`git status --porcelain` vacío).
+- `git switch main && git pull --ff-only origin main` exitoso.
+
+Si cualquier check falla: el script sale con exit 1 sin iniciar ningún issue.
+
+**Loop por issue (resumen):**
+1. **BUILD** — invoca `/wf-build {id}`. En reintentos appendea el comentario de rechazo o de gate fallido como contexto.
+2. Verifica en Linear que el issue quedó en `In Review`. Si no, reintenta el cierre del gate hasta `max_close_retries` veces.
+3. **REVIEW** — invoca `/wf-review {id}`. Captura timestamp antes de invocar.
+4. Hace polling a Linear buscando los markers `REVIEW APROBADO` o `REVIEW RECHAZADO` en comentarios creados después del timestamp del paso 3.
+5. **APROBADO** → fin del issue (el merge ya lo hizo `wf-review`).
+6. **RECHAZADO** → re-build con el comentario de rechazo como contexto, sobre la misma rama. Hasta `max_retries`.
+7. **Timeout o max_retries** → HANDOFF y siguiente issue.
+
+**Markers obligatorios para el agente de REVIEW:**
+- `REVIEW APROBADO` — en el comentario final cuando aprueba.
+- `REVIEW RECHAZADO` — en el comentario final cuando rechaza.
+
+Sin alguno de estos markers `/wf-run` interpreta el resultado como timeout y emite HANDOFF.
+
+**Transición entre issues:**
+Después de cada issue (aprobado o HANDOFF) y antes de iniciar el siguiente: `git switch main && git pull --ff-only origin main`. Si falla → HANDOFF de etapa `TRANSICIÓN` y se detiene el run completo (un repo desincronizado afecta a todos los siguientes).
+
+**Comentarios en Linear:**
+- Los agentes (`wf-build`, `wf-review`) dejan la evidencia por ciclo. Eso no cambia.
+- El script sólo deja: HANDOFF en el issue afectado y un resumen final en el primer issue de la lista.
+
+**HANDOFF:**
+- En `BUILD` o `REVIEW` el run continúa con el siguiente issue.
+- En `TRANSICIÓN` el run se detiene completo.
+
+**Gate de salida:** todos los issues de la lista terminados — aprobados, en HANDOFF o agotados por max_retries — y resumen posteado en Linear.
+
+**Restricción:** `/wf-run` no toma decisiones de calidad ni de scope, no mueve estados en Linear, no hace merges, no gestiona ramas. Cualquier desviación de los gates de `wf-build` o `wf-review` es responsabilidad de esos comandos.
+
+**Configuración:** `scripts/wf-run-config.yaml` — agentes, flags, markers, timeouts. Cambios al yaml deben respetar las decisiones del spec (`--dangerously-skip-permissions` y `--full-auto` son fijos).
+
+**Log:** `logs/wf-run-{fecha}.log` — append por run, ignorado por git.
+
+---
+
 ## `/wf-debrief [issue-id?]` — POST-ENTREGA
 
 **Objetivo:** capturar observaciones post-entrega y convertir las relevantes en issues de mejora en Linear, sin reabrir ni modificar el issue original.

@@ -1,0 +1,31 @@
+agents:
+  claude:
+    cmd: claude
+    prompt_flag: "-p"
+    flags: "--dangerously-skip-permissions"
+    cwd: repo_root
+
+  codex:
+    cmd: codex
+    prompt_flag: ""
+    flags: "--full-auto"
+    cwd: repo_root
+
+build:
+  agent: claude
+
+review:
+  agent: codex
+
+loop:
+  max_retries: 3
+  max_close_retries: 2
+  poll_interval_seconds: 30
+  poll_timeout_seconds: 600
+
+linear:
+  status_in_progress: "In Progress"
+  status_in_review: "In Review"
+  status_done: "Done"
+  approved_marker: "REVIEW APROBADO"
+  rejected_marker: "REVIEW RECHAZADO"
