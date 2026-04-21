@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Refactor editor hydration effect to distinguish external load vs new writing session. Introduces lib/editor/hydration-session.ts with explicit session state factories and resolveExternalWritingLoad. Removes selfNavigatedIdRef and hydratedIdRef; the two hydration paths are now driven by an explicit hydrationWritingId state instead of defensive guards.",
+      "phase": "Fase 2",
+      "issue": "ODE-91",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-91",
+      "commit": "a123b67",
+      "date": "2026-04-21",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npx vitest run tests/editor-hydration-session.test.ts. Performance contract: not required (ref/state refactor only, no new async work or render paths). Presentation contract: not required (does not touch cross-mode text rendering)."
+    },
+    {
       "what": "wf-run now acts as a thin supervisor: BUILD and REVIEW are invoked with minimal stage prompts equivalent to `/wf-build {id}` and `/wf-review {id}`, the post-BUILD gate is checked deterministically through branch/PR/Linear state, and failed close/review paths hand off instead of relaunching BUILD with inherited orchestration context.",
       "phase": "Fase 3",
       "issue": "ODE-108",
