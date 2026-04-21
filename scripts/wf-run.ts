@@ -62,6 +62,19 @@ interface IssueStatusQuery {
   } | null;
 }
 
+interface PullRequestListItem {
+  number: number;
+  state: string;
+  url: string;
+  headRefName: string;
+}
+
+interface CloseGateCheckResult {
+  branchName: string | null;
+  openPullRequest: PullRequestListItem | null;
+  issueStatus: string;
+}
+
 interface CommentCreateMutation {
   commentCreate: {
     success: boolean;
@@ -180,6 +193,14 @@ function runGitCommand(repoRoot: string, args: string[], dryRun: boolean, log: (
     const baseMessage = error instanceof Error ? error.message : String(error);
     throw new Error(stderr ? `${baseMessage}\n${stderr}` : baseMessage);
   }
+}
+
+function readGitCommand(repoRoot: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
 }
 
 function loadConfig(repoRoot: string): WfRunConfig {
@@ -301,6 +322,84 @@ async function getIssueStatus(issueId: string): Promise<string> {
   }
 
   return data.issue.state.name;
+}
+
+function getCurrentBranchName(repoRoot: string): string | null {
+  const branchName = readGitCommand(repoRoot, ["branch", "--show-current"]);
+  return branchName || null;
+}
+
+function getOpenPullRequestForBranch(repoRoot: string, branchName: string): PullRequestListItem | null {
+  const output = execFileSync(
+    "gh",
+    ["pr", "list", "--head", branchName, "--json", "number,state,url,headRefName"],
+    {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+
+  const pullRequests = JSON.parse(output) as PullRequestListItem[];
+  return pullRequests.find((pullRequest) => pullRequest.state === "OPEN") ?? null;
+}
+
+async function verifyBuildCloseGate(
+  repoRoot: string,
+  issueId: string,
+  expectedStatus: string,
+  maxChecks: number,
+  intervalSec: number,
+  dryRun: boolean,
+  log: (msg: string) => void,
+): Promise<CloseGateCheckResult> {
+  if (dryRun) {
+    return {
+      branchName: `codex/${issueId.toLowerCase()}-dry-run`,
+      openPullRequest: {
+        number: 0,
+        state: "OPEN",
+        url: "https://example.com/dry-run",
+        headRefName: `codex/${issueId.toLowerCase()}-dry-run`,
+      },
+      issueStatus: expectedStatus,
+    };
+  }
+
+  const attempts = Math.max(maxChecks, 1);
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const branchName = getCurrentBranchName(repoRoot);
+    const openPullRequest =
+      branchName && branchName !== "main" ? getOpenPullRequestForBranch(repoRoot, branchName) : null;
+    const issueStatus = await getIssueStatus(issueId);
+
+    if (branchName && branchName !== "main" && openPullRequest && issueStatus === expectedStatus) {
+      return {
+        branchName,
+        openPullRequest,
+        issueStatus,
+      };
+    }
+
+    if (attempt < attempts - 1) {
+      log(
+        `⋯ BUILD gate pendiente: branch=${branchName ?? "none"} pr=${openPullRequest ? "open" : "missing"} status=${issueStatus}`,
+      );
+      await sleep(intervalSec * 1000);
+    }
+  }
+
+  const branchName = getCurrentBranchName(repoRoot);
+  const openPullRequest =
+    branchName && branchName !== "main" ? getOpenPullRequestForBranch(repoRoot, branchName) : null;
+  const issueStatus = await getIssueStatus(issueId);
+
+  return {
+    branchName,
+    openPullRequest,
+    issueStatus,
+  };
 }
 
 async function getRecentComments(issueId: string, count = 5): Promise<RecentComment[]> {
@@ -690,24 +789,20 @@ async function runIssueLoop(
     };
   }
 
-  let attempt = 0;
-  let rejectionComment = "";
   let currentStage: HandoffDetails["stage"] = "BUILD";
 
   try {
-  while (attempt < config.loop.max_retries) {
-    const cycle = attempt + 1;
+    const cycle = 1;
     currentStage = "BUILD";
     const buildStartedAt = new Date();
     const buildArtifacts = createStageArtifactPaths(runDirectory, issueId, `cycle-${cycle}-build`);
 
-    log(`→ BUILD iniciando: ${issueId} (intento ${attempt + 1}/${config.loop.max_retries})`);
+    log(`→ BUILD iniciando: ${issueId}`);
 
     const buildResult = await runAgent({
       stage: "build",
       issueId,
       config,
-      extraContext: rejectionComment || undefined,
       dryRun,
       verbose,
       artifactPaths: buildArtifacts,
@@ -715,7 +810,6 @@ async function runIssueLoop(
         issueId,
         stage: "build",
         cycle,
-        extraContextProvided: Boolean(rejectionComment),
       },
       log,
     });
@@ -743,22 +837,18 @@ async function runIssueLoop(
         return isInterpretableGateFailureComment(comment.body);
       });
 
-      if (gateFailure) {
-        rejectionComment = gateFailure.body;
-        attempt += 1;
-        continue;
-      }
-
       await emitHandoff(
         {
           issueId,
           stage: "BUILD",
-          reason: `BUILD terminó con exit ${buildResult.exitCode} y no hubo comentario interpretable en Linear.`,
-          completed: "Se ejecutó wf-build y se inspeccionaron los últimos 5 comentarios de Linear.",
-          needed: "Revisar el fallo real del agente o dejar un comentario de gate fallido trazable antes de reanudar.",
+          reason:
+            gateFailure?.body ||
+            `BUILD terminó con exit ${buildResult.exitCode} y no hubo comentario interpretable en Linear.`,
+          completed: "Se ejecutó wf-build una vez y se inspeccionaron los últimos 5 comentarios de Linear sin relanzar BUILD.",
+          needed: "Revisar el fallo real del agente o del gate antes de reanudar manualmente.",
           artifactsPath: issueArtifactsPath,
         },
-        attempt + 1,
+        1,
         config.loop.max_retries,
         logPath,
         dryRun,
@@ -773,56 +863,40 @@ async function runIssueLoop(
       };
     }
 
-    let issueStatus = await getIssueStatus(issueId);
+    const closeGate = await verifyBuildCloseGate(
+      repoRoot,
+      issueId,
+      config.linear.status_in_review,
+      config.loop.max_close_retries,
+      config.loop.poll_interval_seconds,
+      dryRun,
+      log,
+    );
 
-    if (issueStatus !== config.linear.status_in_review) {
-      for (let closeRetry = 0; closeRetry < config.loop.max_close_retries; closeRetry += 1) {
-        currentStage = "BUILD";
-        const closeRetryArtifacts = createStageArtifactPaths(
-          runDirectory,
-          issueId,
-          `cycle-${cycle}-build-close-retry-${closeRetry + 1}`,
-        );
+    writeJsonArtifact(
+      path.join(getIssueArtifactsDirectory(runDirectory, issueId), `cycle-${cycle}-build-close-check.json`),
+      {
+        issueId,
+        stage: "build",
+        cycle,
+        checkedAt: new Date().toISOString(),
+        branchName: closeGate.branchName,
+        openPullRequest: closeGate.openPullRequest,
+        issueStatus: closeGate.issueStatus,
+      },
+    );
 
-        await runAgent({
-          stage: "build",
-          issueId,
-          config,
-          extraContext:
-            `El build de ${issueId} terminó pero el issue no está en In Review en Linear. ` +
-            "Tu gate de salida requiere mover el issue y dejar comentario de trazabilidad. " +
-            "Completa esos pasos ahora.",
-          dryRun,
-          verbose,
-          artifactPaths: closeRetryArtifacts,
-          metadata: {
-            issueId,
-            stage: "build",
-            cycle,
-            closeRetry: closeRetry + 1,
-            reason: "close-gate-retry",
-          },
-          log,
-        });
-
-        issueStatus = await getIssueStatus(issueId);
-        if (issueStatus === config.linear.status_in_review) {
-          break;
-        }
-      }
-    }
-
-    if (issueStatus !== config.linear.status_in_review) {
+    if (!closeGate.branchName || closeGate.branchName === "main" || !closeGate.openPullRequest) {
       await emitHandoff(
         {
           issueId,
           stage: "BUILD",
-          reason: `BUILD terminó pero ${issueId} no quedó en ${config.linear.status_in_review}.`,
-          completed: "Se ejecutó wf-build y se reintentó el cierre del gate de salida.",
-          needed: "Mover manualmente el issue a In Review con comentario de trazabilidad válido o corregir wf-build.",
+          reason: `BUILD terminó pero no dejó un PR abierto verificable para la rama actual (${closeGate.branchName ?? "sin rama"}).`,
+          completed: "Se ejecutó wf-build y el script verificó branch + PR sin relanzar BUILD.",
+          needed: "Abrir o reparar el PR del issue y reanudar manualmente.",
           artifactsPath: issueArtifactsPath,
         },
-        attempt + 1,
+        1,
         config.loop.max_retries,
         logPath,
         dryRun,
@@ -833,13 +907,40 @@ async function runIssueLoop(
       return {
         issueId,
         outcome: "handoff",
-        reason: "close retry failed",
+        reason: "missing open pr",
+      };
+    }
+
+    if (closeGate.issueStatus !== config.linear.status_in_review) {
+      await emitHandoff(
+        {
+          issueId,
+          stage: "BUILD",
+          reason:
+            `BUILD dejó PR abierto (${closeGate.openPullRequest.url}) pero ${issueId} quedó en ` +
+            `${closeGate.issueStatus} en lugar de ${config.linear.status_in_review}.`,
+          completed: "Se ejecutó wf-build y el script verificó el gate de salida sin relanzar BUILD.",
+          needed: "Corregir el estado/trazabilidad en Linear y reanudar manualmente.",
+          artifactsPath: issueArtifactsPath,
+        },
+        1,
+        config.loop.max_retries,
+        logPath,
+        dryRun,
+        log,
+        writeBlock,
+      );
+
+      return {
+        issueId,
+        outcome: "handoff",
+        reason: "invalid linear status",
       };
     }
 
     currentStage = "REVIEW";
     const reviewArtifacts = createStageArtifactPaths(runDirectory, issueId, `cycle-${cycle}-review`);
-    log(`→ REVIEW iniciando: ${issueId} (ciclo ${attempt + 1})`);
+    log(`→ REVIEW iniciando: ${issueId}`);
     const reviewStartedAt = new Date();
 
     const reviewResult = await runAgent({
@@ -853,6 +954,8 @@ async function runIssueLoop(
         issueId,
         stage: "review",
         cycle,
+        branchName: closeGate.branchName,
+        pullRequestUrl: closeGate.openPullRequest.url,
       },
       log,
     });
@@ -888,11 +991,11 @@ async function runIssueLoop(
           issueId,
           stage: "REVIEW",
           reason,
-          completed: "Se ejecutó wf-review y se hizo polling hasta agotar el timeout configurado.",
+          completed: "Se ejecutó wf-review una vez y se hizo polling hasta agotar el timeout configurado.",
           needed: "Revisar manualmente el issue en Linear y reanudar cuando exista comentario con marker explícito.",
           artifactsPath: issueArtifactsPath,
         },
-        attempt + 1,
+        1,
         config.loop.max_retries,
         logPath,
         dryRun,
@@ -918,38 +1021,32 @@ async function runIssueLoop(
       };
     }
 
-    log(`✗ REVIEW RECHAZADO: ${issueId} (ciclo ${attempt + 1}) — re-build con contexto`);
     if (reviewResult.exitCode !== 0) {
       log(`⚠ REVIEW dejó marker rechazado con exit ${reviewResult.exitCode}; se prioriza el marker.`);
     }
-    rejectionComment = pollResult.comment;
-    attempt += 1;
-  }
 
-  log(`⚠ MAX_RETRIES alcanzado: ${issueId}`);
+    await emitHandoff(
+      {
+        issueId,
+        stage: "REVIEW",
+        reason: pollResult.comment || `REVIEW RECHAZADO para ${issueId}.`,
+        completed: "Se ejecutó wf-review una vez sin relanzar BUILD automaticamente.",
+        needed: "Atender los hallazgos del review y reanudar manualmente con un nuevo BUILD cuando corresponda.",
+        artifactsPath: issueArtifactsPath,
+      },
+      1,
+      config.loop.max_retries,
+      logPath,
+      dryRun,
+      log,
+      writeBlock,
+    );
 
-  await emitHandoff(
-    {
+    return {
       issueId,
-      stage: "REVIEW",
-      reason: `Se alcanzó max_retries (${config.loop.max_retries}).`,
-      completed: "Se agotaron los ciclos automáticos build → review para este issue.",
-      needed: "Inspeccionar el issue manualmente, corregir el bloqueo y reanudar el run para este issue.",
-      artifactsPath: issueArtifactsPath,
-    },
-    config.loop.max_retries,
-    config.loop.max_retries,
-    logPath,
-    dryRun,
-    log,
-    writeBlock,
-  );
-
-  return {
-    issueId,
-    outcome: "handoff",
-    reason: "max retries",
-  };
+      outcome: "handoff",
+      reason: "review rejected",
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log(`✗ Error inesperado durante ${issueId}: ${message}`);
@@ -963,7 +1060,7 @@ async function runIssueLoop(
         needed: "Revisar log para diagnóstico, corregir el error subyacente y reanudar el run.",
         artifactsPath: issueArtifactsPath,
       },
-      attempt + 1,
+      1,
       config.loop.max_retries,
       logPath,
       dryRun,

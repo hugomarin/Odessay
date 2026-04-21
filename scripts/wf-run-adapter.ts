@@ -65,7 +65,6 @@ export interface RunAgentParams {
   stage: "build" | "review";
   issueId: string;
   config: WfRunConfig;
-  extraContext?: string;
   dryRun?: boolean;
   verbose?: boolean;
   artifactPaths?: AgentArtifactPaths;
@@ -87,35 +86,30 @@ function buildInteractiveCommand(stage: RunAgentParams["stage"], issueId: string
 export function buildAgentPrompt(
   stage: RunAgentParams["stage"],
   issueId: string,
-  extraContext?: string,
 ): string {
-  const context = extraContext?.trim();
+  const slashCommand = `/${stage === "build" ? "wf-build" : "wf-review"} ${issueId}`;
 
   if (stage === "build") {
     return [
-      `Ejecuta el protocolo /wf-build para ${issueId} en este repositorio.`,
+      `Actua exactamente como si el humano hubiera ejecutado \`${slashCommand}\` en una sesion nueva de Codex para este repositorio.`,
       "",
-      "Instrucciones obligatorias:",
-      "1. Lee workflow/agents.md.",
-      "2. Lee workflow/workflow.md y sigue estrictamente la sección `/wf-build [issue-id?]`.",
-      "3. Usa el issue indicado y carga solo el contexto adicional que el protocolo requiera.",
-      "4. Ejecuta BUILD end-to-end: implementación, validaciones, PR y comentario de evidencia en Linear.",
-      "5. Si no puedes cerrar el gate, deja trazabilidad clara en Linear con el motivo exacto.",
-      ...(context ? ["", "Contexto adicional del orquestador:", context] : []),
+      "Reglas:",
+      "1. Tu unica responsabilidad es completar ese comando end-to-end.",
+      "2. No asumas el rol de `wf-run` ni hagas orquestacion adicional fuera de `/wf-build`.",
+      "3. Carga solo el contexto que `/wf-build` requiera por si mismo.",
+      "4. Si BUILD no puede cerrar su gate, deja trazabilidad clara con el motivo exacto dentro del flujo normal de `/wf-build`.",
     ].join("\n");
   }
 
   return [
-    `Ejecuta el protocolo /wf-review para ${issueId} en este repositorio.`,
+    `Actua exactamente como si el humano hubiera ejecutado \`${slashCommand}\` en una sesion nueva de Codex para este repositorio.`,
     "",
-    "Instrucciones obligatorias:",
-    "1. Lee workflow/agents.md.",
-    "2. Lee workflow/workflow.md y sigue estrictamente la sección `/wf-review [issue-id?]`.",
-    "3. Usa el issue indicado y carga solo el contexto adicional que el protocolo requiera.",
-    "4. Ejecuta REVIEW end-to-end: validar gates, revisar PR, aprobar o rechazar, y actualizar Linear.",
-    "5. Si apruebas, el comentario final en Linear debe incluir exactamente el marker `REVIEW APROBADO`.",
-    "6. Si rechazas, el comentario final en Linear debe incluir exactamente el marker `REVIEW RECHAZADO`.",
-    ...(context ? ["", "Contexto adicional del orquestador:", context] : []),
+    "Reglas:",
+    "1. Tu unica responsabilidad es completar ese comando end-to-end.",
+    "2. No asumas el rol de `wf-run` ni hagas orquestacion adicional fuera de `/wf-review`.",
+    "3. Carga solo el contexto que `/wf-review` requiera por si mismo.",
+    "4. Si apruebas, el comentario final en Linear debe incluir exactamente el marker `REVIEW APROBADO`.",
+    "5. Si rechazas, el comentario final en Linear debe incluir exactamente el marker `REVIEW RECHAZADO`.",
   ].join("\n");
 }
 
@@ -426,7 +420,7 @@ async function runOneShotAgent(
   agentName: string,
   agentConfig: WfRunAgentConfig,
 ): Promise<RunAgentResult> {
-  const prompt = buildAgentPrompt(params.stage, params.issueId, params.extraContext);
+  const prompt = buildAgentPrompt(params.stage, params.issueId);
   const args = splitFlags(agentConfig.flags);
 
   if (agentConfig.prompt_flag?.trim()) {
@@ -566,7 +560,7 @@ async function runCodexExecAgent(
   agentName: string,
   agentConfig: WfRunAgentConfig,
 ): Promise<RunAgentResult> {
-  const prompt = buildAgentPrompt(params.stage, params.issueId, params.extraContext);
+  const prompt = buildAgentPrompt(params.stage, params.issueId);
   const args = buildCodexExecArgs(agentConfig, prompt, params.artifactPaths);
   const printableArgs = args.map((arg) => (arg === prompt ? "<prompt>" : arg));
   const printableCommand = formatCommand(agentConfig.cmd, printableArgs);
