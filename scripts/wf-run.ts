@@ -70,10 +70,6 @@ interface CommentCreateMutation {
 
 const CONFIG_PATH = "scripts/wf-run-config.yaml";
 const LOG_DIRECTORY = "logs";
-const FIXED_AGENT_FLAGS = {
-  claude: "--dangerously-skip-permissions",
-  codex: "--full-auto",
-} as const;
 
 function pad(value: number): string {
   return String(value).padStart(2, "0");
@@ -196,17 +192,13 @@ function loadConfig(repoRoot: string): WfRunConfig {
 
   const config = parsed as WfRunConfig;
 
-  for (const [agentName, fixedFlags] of Object.entries(FIXED_AGENT_FLAGS)) {
-    const agent = config.agents?.[agentName];
-
-    if (!agent) {
-      throw new Error(`Missing config for agent "${agentName}"`);
+  for (const [agentName, agent] of Object.entries(config.agents ?? {})) {
+    if (!agent?.cmd) {
+      throw new Error(`Missing command for agent "${agentName}"`);
     }
 
-    if (agent.flags !== fixedFlags) {
-      throw new Error(
-        `Invalid flags for agent "${agentName}". Expected "${fixedFlags}" as defined by the spec.`,
-      );
+    if (agent.mode === "interactive_terminal" && !agent.prompt_pattern?.trim()) {
+      throw new Error(`Missing prompt_pattern for interactive agent "${agentName}"`);
     }
 
     if (agent.cwd === "repo_root") {
@@ -594,6 +586,7 @@ function runPreflight(repoRoot: string, config: WfRunConfig, dryRun: boolean, lo
     config.agents[config.build.agent]?.cmd,
     config.agents[config.review.agent]?.cmd,
     "gh",
+    ...(Object.values(config.agents).some((agent) => agent.mode === "interactive_terminal") ? ["expect"] : []),
   ];
 
   for (const command of requiredCommands) {

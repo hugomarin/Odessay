@@ -1,15 +1,19 @@
 agents:
   claude:
     cmd: claude
-    prompt_flag: "-p"
-    flags: "--dangerously-skip-permissions"
     cwd: repo_root
+    mode: interactive_terminal
+    prompt_pattern: "❯"
+    startup_timeout_seconds: 30
+    command_timeout_seconds: 1800
 
   codex:
     cmd: codex
-    prompt_flag: ""
-    flags: "--full-auto"
     cwd: repo_root
+    mode: interactive_terminal
+    prompt_pattern: "❯"
+    startup_timeout_seconds: 30
+    command_timeout_seconds: 1800
 
 build:
   agent: codex
