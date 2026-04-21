@@ -197,7 +197,7 @@ set cwd [lindex $argv 2]
 set command_timeout ${commandTimeoutSeconds}
 set args [lrange $argv 3 end]
 cd $cwd
-spawn -noecho -- $cmd {*}$args
+spawn -noecho $cmd {*}$args
 expect {
   -re $prompt_pattern {}
   timeout {
