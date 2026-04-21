@@ -25,6 +25,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 logs/*.log
+logs/wf-run/
 
 # Tooling
 .vercel/
