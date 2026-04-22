@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createEntityKey, localDB, setLocalDBScope, subscribeToLocalDBScopeChanges } from "../lib/local-db";
+import { createEmptyEditorSession } from "../lib/local-db/editor-sessions";
 import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
 
 const createWriting = (id: string, version: number): LocalWriting => ({
@@ -91,5 +92,24 @@ describe("localDB", () => {
     expect(onScopeChange).toHaveBeenCalledTimes(2);
     expect(onScopeChange).toHaveBeenNthCalledWith(1, firstScope);
     expect(onScopeChange).toHaveBeenNthCalledWith(2, secondScope);
+  });
+
+  it("persists editor workspace sessions per scope", async () => {
+    setLocalDBScope("editor-user-a");
+    await localDB.editorSessions.save({
+      ...createEmptyEditorSession(),
+      active_tab_id: "writing-a",
+    });
+
+    setLocalDBScope("editor-user-b");
+    expect(await localDB.editorSessions.get("workspace")).toBeNull();
+
+    await localDB.editorSessions.save({
+      ...createEmptyEditorSession(),
+      active_tab_id: "writing-b",
+    });
+
+    setLocalDBScope("editor-user-a");
+    expect((await localDB.editorSessions.get("workspace"))?.active_tab_id).toBe("writing-a");
   });
 });

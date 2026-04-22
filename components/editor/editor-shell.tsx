@@ -39,6 +39,7 @@ import {
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
+import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
 import {
   buildEditorSpellcheckConfig,
@@ -56,6 +57,16 @@ import type { LocalWriting, WritingLifecycle, WritingStatus, WritingVisibility }
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { hydrateLocalWritingFromRemote } from "@/lib/sync/remote-bootstrap"
+import {
+  closeTab,
+  focusTab,
+  initializeEditorSessionStore,
+  openDraftTab,
+  openWritingTab,
+  publishTabState,
+  saveTabViewState,
+  useEditorSessionStore,
+} from "@/lib/stores/editor-session-store"
 import { setSidebarMode } from "@/lib/stores/ui-shell-store"
 
 type EditorShellProps = {
@@ -177,6 +188,7 @@ const getWordCount = (editor: Editor | null) => {
 
 export function EditorShell({ writingId }: EditorShellProps) {
   const router = useRouter()
+  const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
   const routeWritingId = writingId ?? null
   const initialHydrationSession = createRouteHydrationSessionState(routeWritingId)
 
@@ -191,6 +203,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
   const [version, setVersion] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
+  const [writingSlug, setWritingSlug] = useState<string | null>(null)
   const [writingStatus, setWritingStatus] = useState<WritingStatus>("draft")
   const [writingVisibility, setWritingVisibility] = useState<WritingVisibility>("private")
   const [lifecycle, setLifecycle] = useState<WritingLifecycle>("local-only")
@@ -212,6 +225,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const hasExplicitTitleRef = useRef(hasExplicitTitle)
   const versionRef = useRef(version)
   const createdAtRef = useRef<string | null>(createdAt)
+  const writingSlugRef = useRef<string | null>(null)
   const statusRef = useRef<WritingStatus>(writingStatus)
   const visibilityRef = useRef<WritingVisibility>(writingVisibility)
   const markdownSaveTimeoutRef = useRef<number | null>(null)
@@ -481,6 +495,34 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [editorExtensions, flushQueuedRichModeUpdate],
   )
 
+  const persistCurrentWorkspaceViewState = useCallback(() => {
+    const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
+    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+
+    saveTabViewState({
+      tabId,
+      viewState: {
+        mode: modeRef.current,
+        scrollTop: editorViewport?.scrollTop ?? 0,
+        scrollLeft: editorViewport?.scrollLeft ?? 0,
+        selectionFrom: modeRef.current === "rich" && editor ? editor.state.selection.from : null,
+        selectionTo: modeRef.current === "rich" && editor ? editor.state.selection.to : null,
+        markdownSelectionStart:
+          modeRef.current === "markdown"
+            ? markdownSelectionRef.current?.start ?? markdownTextareaRef.current?.selectionStart ?? null
+            : null,
+        markdownSelectionEnd:
+          modeRef.current === "markdown"
+            ? markdownSelectionRef.current?.end ?? markdownTextareaRef.current?.selectionEnd ?? null
+            : null,
+      },
+    })
+  }, [editor])
+
+  useEffect(() => {
+    void initializeEditorSessionStore()
+  }, [])
+
   useEffect(() => {
     setSpellcheckScope(getLocalDBScope())
 
@@ -532,6 +574,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [createdAt])
 
   useEffect(() => {
+    writingSlugRef.current = writingSlug
+  }, [writingSlug])
+
+  useEffect(() => {
     statusRef.current = writingStatus
   }, [writingStatus])
 
@@ -559,6 +605,30 @@ export function EditorShell({ writingId }: EditorShellProps) {
   useEffect(() => {
     currentWritingIdRef.current = currentWritingId
   }, [currentWritingId])
+
+  useEffect(() => {
+    if (!sessionLoaded || !routeWritingId) {
+      return
+    }
+
+    openWritingTab({ writingId: routeWritingId, replaceDraft: false })
+  }, [routeWritingId, sessionLoaded])
+
+  useEffect(() => {
+    if (!sessionLoaded || routeWritingId) {
+      return
+    }
+
+    if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
+      const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
+      if (activeTab?.writing_id) {
+        router.replace(`/write/${activeTab.slug ?? activeTab.writing_id}`)
+        return
+      }
+    }
+
+    openDraftTab()
+  }, [editorSession.active_tab_id, editorSession.tabs, routeWritingId, router, sessionLoaded])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -634,6 +704,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setHasExplicitTitle(loadedHasExplicitTitle)
         setVersion(localWriting.version)
         setCreatedAt(localWriting.created_at)
+        setWritingSlug(localWriting.slug ?? null)
         setWritingStatus(localWriting.status ?? "draft")
         setWritingVisibility(localWriting.visibility ?? "private")
         setLifecycle(localWriting.lifecycle ?? "local-only")
@@ -644,11 +715,61 @@ export function EditorShell({ writingId }: EditorShellProps) {
           ),
         )
         updateDerivedEditorState(editor)
+
+        const activeTab =
+          editorSession.tabs.find((tab) => tab.writing_id === localWriting.id) ??
+          editorSession.tabs.find((tab) => tab.id === routeWritingId) ??
+          editorSession.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
+        const viewState = activeTab?.view_state
+
+        if (viewState?.mode === "markdown") {
+          const nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
+          modeRef.current = "markdown"
+          setMode("markdown")
+          setMarkdownValue(nextMarkdown)
+
+          window.requestAnimationFrame(() => {
+            queueMarkdownSelectionRestore(
+              viewState.markdownSelectionStart ?? 0,
+              viewState.markdownSelectionEnd ?? viewState.markdownSelectionStart ?? 0,
+              {
+                scrollTop: viewState.scrollTop,
+                scrollLeft: viewState.scrollLeft,
+                editorScrollTop: viewState.scrollTop,
+                editorScrollLeft: viewState.scrollLeft,
+              },
+            )
+          })
+        } else if (viewState) {
+          modeRef.current = "rich"
+          setMode("rich")
+          window.requestAnimationFrame(() => {
+            const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+            if (editorViewport) {
+              editorViewport.scrollTop = viewState.scrollTop
+              editorViewport.scrollLeft = viewState.scrollLeft
+            }
+
+            if (
+              typeof viewState.selectionFrom === "number" &&
+              typeof viewState.selectionTo === "number" &&
+              viewState.selectionFrom >= 1 &&
+              viewState.selectionTo >= viewState.selectionFrom
+            ) {
+              editor
+                .chain()
+                .focus()
+                .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
+                .run()
+            }
+          })
+        }
       } else {
         setTitle(UNTITLED_WRITING_TITLE)
         setHasExplicitTitle(false)
         setVersion(0)
         setCreatedAt(null)
+        setWritingSlug(null)
         setWritingStatus("draft")
         setWritingVisibility("private")
         setSyncStatus("saved")
@@ -663,7 +784,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [currentWritingId, editor, hydrationWritingId, updateDerivedEditorState])
+  }, [currentWritingId, editor, editorSession.tabs, hydrationWritingId, queueMarkdownSelectionRestore, routeWritingId, updateDerivedEditorState])
 
   useEffect(() => {
     if (!currentWritingId) {
@@ -688,6 +809,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
         }
 
+        setWritingSlug(localWriting.slug)
         router.replace(`/write/${localWriting.slug}`)
       })()
     })
@@ -711,8 +833,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
       richUpdateEditorRef.current = null
       markdownSelectionRafRef.current = null
       pendingMarkdownSelectionRef.current = null
+      persistCurrentWorkspaceViewState()
     }
-  }, [])
+  }, [persistCurrentWorkspaceViewState])
 
   const applyMarkdownFromPanel = useCallback(
     (nextMarkdown: string) => {
@@ -1518,6 +1641,89 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [hasExplicitTitle, title, bodyText, createdAt],
   )
 
+  useEffect(() => {
+    if (!sessionLoaded) {
+      return
+    }
+
+    publishTabState({
+      routeWritingId,
+      writingId: currentWritingId,
+      slug: writingSlug,
+      title: displayTitle,
+      saveState: syncStatus === "saved-local" ? "saved-local" : syncStatus,
+      hasPendingSync: syncStatus !== "saved",
+    })
+  }, [currentWritingId, displayTitle, routeWritingId, sessionLoaded, syncStatus, writingSlug])
+
+  const handleSelectWorkspaceTab = useCallback(
+    (tabId: string) => {
+      const nextTab = editorSession.tabs.find((tab) => tab.id === tabId)
+      if (!nextTab) {
+        return
+      }
+
+      persistCurrentWorkspaceViewState()
+      focusTab(tabId)
+
+      if (nextTab.writing_id) {
+        router.push(`/write/${nextTab.slug ?? nextTab.writing_id}`)
+        return
+      }
+
+      router.push("/write")
+    },
+    [editorSession.tabs, persistCurrentWorkspaceViewState, router],
+  )
+
+  const handleCloseWorkspaceTab = useCallback(
+    (tabId: string) => {
+      const targetTab = editorSession.tabs.find((tab) => tab.id === tabId)
+      if (!targetTab) {
+        return
+      }
+
+      if (targetTab.has_pending_sync) {
+        const confirmed = window.confirm("This writing still has unsynced changes. Close it anyway?")
+        if (!confirmed) {
+          return
+        }
+      }
+
+      if (tabId === (currentWritingId ?? EDITOR_DRAFT_TAB_ID)) {
+        persistCurrentWorkspaceViewState()
+      }
+
+      const nextActiveTabId = closeTab(tabId)
+
+      if (tabId !== (currentWritingId ?? EDITOR_DRAFT_TAB_ID)) {
+        return
+      }
+
+      const nextTab = editorSession.tabs.find((tab) => tab.id === nextActiveTabId)
+      if (nextTab?.writing_id) {
+        router.push(`/write/${nextTab.slug ?? nextTab.writing_id}`)
+        return
+      }
+
+      router.push("/write")
+    },
+    [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState, router],
+  )
+
+  const handleCreateWorkspaceTab = useCallback(() => {
+    if (editorSession.tabs.length >= 10) {
+      const confirmed = window.confirm("You already have many tabs open. Open another writing anyway?")
+      if (!confirmed) {
+        return
+      }
+    }
+
+    persistCurrentWorkspaceViewState()
+    openDraftTab()
+    router.push("/write")
+  }, [editorSession.tabs.length, persistCurrentWorkspaceViewState, router])
+
   const exportFileBaseName = useMemo(
     () =>
       getExportFileBaseName({
@@ -1645,15 +1851,18 @@ export function EditorShell({ writingId }: EditorShellProps) {
         {!isFocusMode ? (
           <EditorTopbar
             editor={editor}
-            title={displayTitle}
             mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
+            tabs={editorSession.tabs}
+            activeTabId={editorSession.active_tab_id}
+            onSelectTab={handleSelectWorkspaceTab}
+            onCloseTab={handleCloseWorkspaceTab}
+            onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
             }}
-            onOpenRenameModal={() => setRenameModalOpen(true)}
             onRunAction={handleRunAction}
           />
         ) : null}

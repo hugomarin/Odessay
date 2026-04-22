@@ -22,6 +22,7 @@ import {
   Table,
 } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { EditorTabs } from "@/components/editor/editor-tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,23 +38,26 @@ import {
   EDITOR_TOPBAR_COMPACT_FORMAT_CLASS,
   EDITOR_TOPBAR_COMPACT_TRIGGER_ID,
   EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS,
-  EDITOR_TOPBAR_TITLE_CONTAINER_CLASS,
   type RichSelectionRange,
   type RunEditorAction,
   runCompactTopbarAction,
 } from "@/lib/editor/topbar-compact"
 import { cn } from "@/lib/utils"
 import { useEditorActionState, type TopbarTrackedAction } from "@/hooks/useEditorState"
+import type { LocalEditorSessionTab } from "@/lib/local-db/schema"
 
 type EditorTopbarProps = {
   editor: Editor | null
-  title: string
   mode: "rich" | "markdown"
   isFocusMode: boolean
   activePanel: "notes" | "properties" | null
+  tabs: LocalEditorSessionTab[]
+  activeTabId: string | null
+  onSelectTab: (tabId: string) => void
+  onCloseTab: (tabId: string) => void
+  onNewTab: () => void
   onToggleFocusMode: () => void
   onTogglePanel: (panel: "notes" | "properties") => void
-  onOpenRenameModal: () => void
   onRunAction: RunEditorAction
 }
 
@@ -179,13 +183,16 @@ const getTopbarStructureButtonClass = (active: boolean) =>
 
 export function EditorTopbar({
   editor,
-  title,
   mode,
   isFocusMode,
   activePanel,
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onNewTab,
   onToggleFocusMode,
   onTogglePanel,
-  onOpenRenameModal,
   onRunAction,
 }: EditorTopbarProps) {
   const pendingRichSelectionRef = useRef<RichSelectionRange | null>(null)
@@ -318,13 +325,20 @@ export function EditorTopbar({
         id="editor-topbar"
         data-section="editor-topbar"
         data-testid="editor-topbar"
-        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center justify-between border-b-[0.5px] border-border/80 bg-bg/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-bg/85"
+        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center border-b-[0.5px] border-border/80 bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/85"
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <div
-            className={EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS}
-            aria-disabled={false}
-          >
+        <div className="flex min-w-0 flex-1 items-center">
+          <EditorTabs
+            tabs={tabs}
+            activeTabId={activeTabId}
+            onSelectTab={onSelectTab}
+            onCloseTab={onCloseTab}
+            onNewTab={onNewTab}
+          />
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3 border-l-[0.5px] border-border/80 px-3">
+          <div className={EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS} aria-disabled={false}>
             {formatButtons}
 
             <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
@@ -371,20 +385,8 @@ export function EditorTopbar({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
 
-        <div className={EDITOR_TOPBAR_TITLE_CONTAINER_CLASS}>
-          <button
-            type="button"
-            onClick={onOpenRenameModal}
-            className="pointer-events-auto w-full max-w-[460px] truncate px-3 text-center font-sans text-[13px] text-ink-3 transition-colors hover:text-ink"
-            title={title}
-          >
-            {title}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
           <ActionTooltip
             label={isFocusMode ? "Exit focus mode" : "Focus mode"}
             shortcut={getEditorShortcutLabel("focusMode")}
@@ -427,6 +429,7 @@ export function EditorTopbar({
               <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
+          </div>
         </div>
       </div>
     </TooltipProvider>
