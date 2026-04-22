@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const payloadSchema = z.object({
@@ -22,7 +21,7 @@ async function getCurrentUserId() {
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -53,7 +52,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -67,59 +66,27 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
 
   const { id } = await context.params;
   const collectionIds = Array.from(new Set(parsed.data.collection_ids));
-  const { data: writing, error: writingError } = await supabase
-    .from("writings")
-    .select("id")
-    .eq("id", id)
-    .eq("author_id", userId)
-    .maybeSingle();
+  const updatedAt = parsed.data.updated_at ?? new Date().toISOString();
+  const { error } = await supabase.rpc("replace_writing_collections", {
+    p_writing_id: id,
+    p_collection_ids: collectionIds,
+    p_added_at: updatedAt,
+  });
 
-  if (writingError) {
-    return jsonError(500, "DB_ERROR", writingError.message);
-  }
-
-  if (!writing) {
-    return jsonError(404, "NOT_FOUND", "Writing not found.");
-  }
-
-  if (collectionIds.length > 0) {
-    const { data: ownedCollections, error: collectionsError } = await supabase
-      .from("collections")
-      .select("id")
-      .eq("owner_id", userId)
-      .in("id", collectionIds);
-
-    if (collectionsError) {
-      return jsonError(500, "DB_ERROR", collectionsError.message);
+  if (error) {
+    if (error.code === "PT404") {
+      return jsonError(404, "NOT_FOUND", "Writing not found.");
     }
 
-    if ((ownedCollections ?? []).length !== collectionIds.length) {
-      return jsonError(403, "FORBIDDEN", "One or more collections do not belong to the active user.");
+    if (error.code === "PT403") {
+      return jsonError(
+        403,
+        "FORBIDDEN",
+        "One or more collections do not belong to the active user.",
+      );
     }
-  }
 
-  const { error: deleteError } = await supabase
-    .from("writing_collections")
-    .delete()
-    .eq("writing_id", id);
-
-  if (deleteError) {
-    return jsonError(500, "DB_ERROR", deleteError.message);
-  }
-
-  if (collectionIds.length > 0) {
-    const rows = collectionIds.map((collectionId) => ({
-      writing_id: id,
-      collection_id: collectionId,
-      added_at: parsed.data.updated_at ?? new Date().toISOString(),
-    }));
-    const { error: insertError } = await supabase
-      .from("writing_collections")
-      .insert(rows);
-
-    if (insertError) {
-      return jsonError(500, "DB_ERROR", insertError.message);
-    }
+    return jsonError(500, "DB_ERROR", error.message);
   }
 
   return NextResponse.json(
