@@ -30,7 +30,7 @@
       "phase": "Fase 3",
       "issue": "ODE-97",
       "linear_url": "https://linear.app/z9ne/issue/ODE-97",
-      "commit": null,
+      "commit": "ae84356",
       "date": "2026-04-22",
       "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (229 tests). Performance contract: not required (reading view margin rendering, no editor hot-path change). Presentation contract: required — shared margin highlights render equivalently in preview and shared reading views via the same HighlightLayer component."
     },
