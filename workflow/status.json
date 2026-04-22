@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Authenticated settings now ship with a dedicated `/settings/account` surface styled to match Odessay's warm shell language. Authors can update display name and username inline with Zod validation and live availability feedback, request a secured email change through dual confirmation links sent to the current and new inboxes, rotate password after verifying the current credential, and rely on a new username reservation flow that keeps the previous handle reserved for 7 days via a dedicated migration and RPC.",
+      "phase": "Fase 3",
+      "issue": "ODE-101",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-101",
+      "commit": "167c802",
+      "date": "2026-04-22",
+      "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (247 tests). Performance contract: not required — settings/account updates do not touch the editor, reading runtime, or any keystroke-critical path. Presentation contract: not required (new authenticated settings shell only; no cross-mode rich-text rendering changed). Email flow uses Supabase admin email-change links plus Resend delivery; username reservation is enforced through supabase/migrations/20260422153000_settings_account_username_reservations.sql and public.claim_profile_username(text)."
+    },
+    {
       "what": "Editor now exposes a non-destructive publication review mode with an AI-powered side panel. The mode can be toggled from the topbar and Properties panel, caches review results locally per writing/version hash, shows spelling/grammar diffs, block-level redaction suggestions, a publication checklist with jump-to-location, and supports individual accept/reject plus apply-all without mutating the writing until the author confirms each change.",
       "phase": "Fase 3",
       "issue": "ODE-98",
