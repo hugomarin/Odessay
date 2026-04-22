@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { WritingContentFrame } from "@/components/reading/writing-content-frame"
+import { PreviewBodyWithMargins } from "@/components/reading/preview-body-with-margins"
 import { getPreviewWritingFromTestLink } from "@/lib/sharing/test-link-access"
 
 export const dynamic = "force-dynamic"
@@ -14,19 +14,6 @@ export const metadata: Metadata = {
 
 type PreviewPageProps = {
   params: Promise<{ token: string }>
-}
-
-const formatDate = (value: string) => {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown date"
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date)
 }
 
 const ErrorState = ({ title, description }: { title: string; description: string }) => (
@@ -74,6 +61,8 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     )
   }
 
+  const authorName = result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"
+
   return (
     <section id="preview-reading" data-page="preview-reading" className="min-h-screen bg-bg">
       <header className="PreviewTopbar sticky top-0 z-10 h-[46px] border-b-[0.5px] border-border bg-bg/90 backdrop-blur-sm">
@@ -85,18 +74,15 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
 
       <main className="PreviewContent w-full">
         <article className="w-full">
-          <WritingContentFrame
-            title={result.writing.title}
-            bodyHtml={result.writing.bodyHtml}
-            bodyId="preview-body"
-            bodyTestId="preview-body"
-            showTitle={false}
-          >
-            <div className="border-b-[0.5px] border-border pb-5">
-              <p className="text-[12px] text-ink-4">By {result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"}</p>
-              <p className="mt-3 text-[12px] text-ink-4">Updated {formatDate(result.writing.updatedAt)}</p>
-            </div>
-          </WritingContentFrame>
+          <div className="mx-auto max-w-[860px] px-6 py-8">
+            <PreviewBodyWithMargins
+              token={token}
+              title={result.writing.title}
+              bodyHtml={result.writing.bodyHtml}
+              updatedAt={result.writing.updatedAt}
+              authorName={authorName}
+            />
+          </div>
         </article>
       </main>
     </section>

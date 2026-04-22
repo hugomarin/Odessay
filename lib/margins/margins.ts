@@ -21,6 +21,10 @@ export const patchMarginNoteSchema = z.object({
   note: z.string().nullable(),
 })
 
+export const patchMarginShareSchema = z.object({
+  shared: z.boolean(),
+})
+
 export const shareMarginsBatchSchema = z.object({
   writing_id: z.string().uuid(),
 })
@@ -40,6 +44,14 @@ export function parsePatchMarginPayload(
   body: unknown,
 ): z.infer<typeof patchMarginNoteSchema> | null {
   const result = patchMarginNoteSchema.safeParse(body)
+  return result.success ? result.data : null
+}
+
+/** Validates and returns the payload for toggling a margin's shared state; returns null on failure. */
+export function parsePatchMarginSharePayload(
+  body: unknown,
+): z.infer<typeof patchMarginShareSchema> | null {
+  const result = patchMarginShareSchema.safeParse(body)
   return result.success ? result.data : null
 }
 

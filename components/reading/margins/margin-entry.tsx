@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Trash2 } from "lucide-react"
+import { Trash2, Eye, EyeOff } from "lucide-react"
 
 export type MarginData = {
   id: string
@@ -21,9 +21,18 @@ type MarginEntryProps = {
   onBlur: () => void
   onUpdateNote: (id: string, note: string | null) => void
   onDelete: (id: string) => void
+  onToggleShare?: (id: string, shared: boolean) => void
 }
 
-export function MarginEntry({ margin, focused, onFocus, onBlur, onUpdateNote, onDelete }: MarginEntryProps) {
+export function MarginEntry({
+  margin,
+  focused,
+  onFocus,
+  onBlur,
+  onUpdateNote,
+  onDelete,
+  onToggleShare,
+}: MarginEntryProps) {
   const [noteValue, setNoteValue] = useState(margin.note ?? "")
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -53,10 +62,26 @@ export function MarginEntry({ margin, focused, onFocus, onBlur, onUpdateNote, on
       style={{ borderLeft: `2.5px solid ${borderColor}`, marginLeft: -2.5 }}
       onMouseLeave={() => setShowDeleteConfirm(false)}
     >
-      {/* Passage */}
-      <p className="font-lora italic text-[12px] text-ink-4 leading-relaxed line-clamp-2">
-        &ldquo;{margin.anchor_text}&rdquo;
-      </p>
+      {/* Header: passage + share toggle */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-lora italic text-[12px] text-ink-4 leading-relaxed line-clamp-2">
+          &ldquo;{margin.anchor_text}&rdquo;
+        </p>
+        {onToggleShare && (
+          <button
+            onClick={() => onToggleShare(margin.id, !margin.shared)}
+            className="mt-0.5 shrink-0 text-ink-4 transition-colors hover:text-ink-2"
+            aria-label={margin.shared ? "Unshare margin" : "Share margin"}
+            title={margin.shared ? "Shared with author" : "Private — click to share"}
+          >
+            {margin.shared ? (
+              <Eye strokeWidth={1.5} className="h-[12px] w-[12px] text-cursor" />
+            ) : (
+              <EyeOff strokeWidth={1.5} className="h-[12px] w-[12px]" />
+            )}
+          </button>
+        )}
+      </div>
 
       {/* Note textarea */}
       <textarea

@@ -105,6 +105,18 @@ async function apiShareMargins(writingId: string): Promise<MarginData[]> {
   return json.data ?? []
 }
 
+async function apiToggleMarginShare(id: string, shared: boolean): Promise<MarginData> {
+  const res = await fetch(`/api/margins/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shared }),
+  })
+  const json: { data: MarginData | null; error: { message: string } | null } = await res.json()
+  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Failed to toggle margin share")
+  if (!json.data) throw new Error("No data returned")
+  return json.data
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export type ReadingInteractiveShellProps = {
@@ -211,6 +223,14 @@ export function ReadingInteractiveShell({
             return found ?? m
           }),
         )
+      })
+      .catch(console.error)
+  }
+
+  function handleToggleShare(id: string, shared: boolean) {
+    apiToggleMarginShare(id, shared)
+      .then((updated) => {
+        setMargins((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
       })
       .catch(console.error)
   }
@@ -446,6 +466,7 @@ export function ReadingInteractiveShell({
             onUpdateNote={handleUpdateNote}
             onDelete={handleDelete}
             onShare={handleShare}
+            onToggleShare={handleToggleShare}
             alreadyShared={alreadyShared}
             onClose={() => setMarginPanelOpen(false)}
           />

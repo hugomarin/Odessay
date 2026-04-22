@@ -18,6 +18,7 @@ type MarginsPanelProps = {
   onUpdateNote: (id: string, note: string | null) => void
   onDelete: (id: string) => void
   onShare: () => void
+  onToggleShare?: (id: string, shared: boolean) => void
   alreadyShared: boolean
   onClose: () => void
 }
@@ -50,6 +51,7 @@ export function MarginsPanel({
   onUpdateNote,
   onDelete,
   onShare,
+  onToggleShare,
   alreadyShared,
   onClose,
 }: MarginsPanelProps) {
@@ -91,9 +93,9 @@ export function MarginsPanel({
                   <button
                     onClick={onShare}
                     className="font-sans text-[12px] text-cursor transition-colors hover:underline"
-                    aria-label={`Share margins with ${authorName}`}
+                    aria-label={`Share all margins with ${authorName}`}
                   >
-                    Share
+                    Share all
                   </button>
                 ) : alreadyShared ? (
                   <span className="font-sans text-[11px] text-ink-4">Shared ({sharedCount})</span>
@@ -120,6 +122,7 @@ export function MarginsPanel({
                       onBlur={() => setFocusedId(null)}
                       onUpdateNote={onUpdateNote}
                       onDelete={onDelete}
+                      onToggleShare={onToggleShare}
                     />
                   ))}
                 </div>
@@ -130,14 +133,14 @@ export function MarginsPanel({
               <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
                 {alreadyShared ? (
                   <p className="text-center font-sans text-[12px] text-ink-4">
-                    Margins shared with {authorName}
+                    All margins shared with {authorName}
                   </p>
                 ) : (
                   <button
                     onClick={onShare}
                     className="w-full rounded-[8px] border-[0.5px] border-dashed border-border py-2 font-sans text-[12px] text-ink-3 transition-colors hover:border-cursor hover:text-ink-2"
                   >
-                    Share margins with {authorName}…
+                    Share all margins with {authorName}…
                   </button>
                 )}
               </div>
@@ -177,9 +180,9 @@ export function MarginsPanel({
               <button
                 onClick={onShare}
                 className="font-sans text-[12px] text-cursor transition-colors hover:underline"
-                aria-label={`Share margins with ${authorName}`}
+                aria-label={`Share all margins with ${authorName}`}
               >
-                Share
+                Share all
               </button>
             )}
             {alreadyShared && (
@@ -204,6 +207,7 @@ export function MarginsPanel({
                     onBlur={() => setFocusedId(null)}
                     onUpdateNote={onUpdateNote}
                     onDelete={onDelete}
+                    onToggleShare={onToggleShare}
                   />
                 ))}
               </div>
@@ -215,14 +219,14 @@ export function MarginsPanel({
             <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
               {alreadyShared ? (
                 <p className="text-center font-sans text-[12px] text-ink-4">
-                  Margins shared with {authorName}
+                  All margins shared with {authorName}
                 </p>
               ) : (
                 <button
                   onClick={onShare}
                   className="w-full rounded-[8px] border-[0.5px] border-dashed border-border py-2 font-sans text-[12px] text-ink-3 transition-colors hover:border-cursor hover:text-ink-2"
                 >
-                  Share margins with {authorName}…
+                  Share all margins with {authorName}…
                 </button>
               )}
             </div>
