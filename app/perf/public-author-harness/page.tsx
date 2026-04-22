@@ -60,7 +60,10 @@ export default function PublicAuthorPerfHarnessPage() {
               {
                 id: "public-author-harness-collection",
                 name: "Letters",
-                publicWritingsCount: 2,
+                writingIds: [
+                  "public-author-harness-1",
+                  "public-author-harness-2",
+                ],
               },
             ]}
           />

@@ -126,15 +126,16 @@ export default async function PublicAuthorPage({ params }: PageProps) {
   const writings = (writingsData ?? []) as WritingRow[]
   const collections = (collectionsData ?? []) as CollectionRow[]
   const publicWritingIds = (publicWritingsData ?? []).map((row: { id: string }) => row.id)
+  const visibleWritingIds = isOwner ? writings.map((writing) => writing.id) : publicWritingIds
   const collectionIds = collections.map((collection) => collection.id)
 
   let writingCollections: WritingCollectionRow[] = []
-  if (collectionIds.length > 0 && publicWritingIds.length > 0) {
+  if (collectionIds.length > 0 && visibleWritingIds.length > 0) {
     const { data: writingCollectionsData, error: writingCollectionsError } = await admin
       .from("writing_collections")
       .select("collection_id, writing_id")
       .in("collection_id", collectionIds)
-      .in("writing_id", publicWritingIds)
+      .in("writing_id", visibleWritingIds)
 
     if (writingCollectionsError) {
       throw new Error(writingCollectionsError.message)
@@ -143,15 +144,18 @@ export default async function PublicAuthorPage({ params }: PageProps) {
     writingCollections = (writingCollectionsData ?? []) as WritingCollectionRow[]
   }
 
-  const countsByCollection = new Map<string, number>()
+  const writingIdsByCollection = new Map<string, string[]>()
   for (const row of writingCollections) {
-    countsByCollection.set(row.collection_id, (countsByCollection.get(row.collection_id) ?? 0) + 1)
+    writingIdsByCollection.set(row.collection_id, [
+      ...(writingIdsByCollection.get(row.collection_id) ?? []),
+      row.writing_id,
+    ])
   }
 
   const collectionItems = collections.map((collection) => ({
     id: collection.id,
     name: collection.name,
-    publicWritingsCount: countsByCollection.get(collection.id) ?? 0,
+    writingIds: writingIdsByCollection.get(collection.id) ?? [],
   }))
 
   return (

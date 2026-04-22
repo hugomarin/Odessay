@@ -1,5 +1,11 @@
 import { localDB } from "@/lib/local-db";
-import type { LocalWriting, SyncMutation } from "@/lib/local-db/schema";
+import { createEntityKey } from "@/lib/local-db";
+import type {
+  LocalCollection,
+  LocalWriting,
+  RemoteWritingPayload,
+  SyncMutation,
+} from "@/lib/local-db/schema";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { getSyncWorker } from "@/lib/sync/worker";
 
@@ -11,7 +17,7 @@ const createMutationId = () => {
   return `mutation-${Date.now()}`;
 };
 
-const toRemotePayload = (writing: LocalWriting): SyncMutation["payload"] => ({
+const toRemotePayload = (writing: LocalWriting): RemoteWritingPayload => ({
   author_id: writing.author_id ?? null,
   title: writing.title ?? null,
   body_json: writing.body_json,
@@ -28,11 +34,13 @@ const toRemotePayload = (writing: LocalWriting): SyncMutation["payload"] => ({
 
 const enqueueMutation = async (
   writing: LocalWriting,
-  operation: SyncMutation["operation"] = "upsert",
+  operation: Extract<SyncMutation, { entity_kind: "writing" }>["operation"] = "upsert",
 ) => {
   await localDB.syncQueue.enqueue({
     id: createMutationId(),
-    writing_id: writing.id,
+    entity_kind: "writing",
+    entity_id: writing.id,
+    entity_key: createEntityKey("writing", writing.id),
     operation,
     payload: toRemotePayload(writing),
     created_at: Date.now(),
@@ -71,4 +79,12 @@ export const enqueueWritingDelete = async (writingId: string) => {
   }
 
   await enqueueMutation(deletedWriting, "delete");
+};
+
+export const markCollectionPending = async (collection: LocalCollection) => {
+  await localDB.collections.save({
+    ...collection,
+    sync_status: "pending",
+    local_updated_at: Date.now(),
+  });
 };

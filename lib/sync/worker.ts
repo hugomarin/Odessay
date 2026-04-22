@@ -7,9 +7,24 @@ import { mapRemoteWritingToLocal, type RemoteWritingRecord } from "@/lib/sync/re
 type SyncTransport = {
   upsertWriting: (
     writingId: string,
-    payload: SyncMutation["payload"],
+    payload: Extract<SyncMutation, { entity_kind: "writing" }>["payload"],
   ) => Promise<RemoteWritingRecord | null>;
-  deleteWriting: (writingId: string, payload: SyncMutation["payload"]) => Promise<void>;
+  deleteWriting: (
+    writingId: string,
+    payload: Extract<SyncMutation, { entity_kind: "writing" }>["payload"],
+  ) => Promise<void>;
+  upsertCollection: (
+    collectionId: string,
+    payload: Extract<SyncMutation, { entity_kind: "collection" }>["payload"],
+  ) => Promise<void>;
+  deleteCollection: (
+    collectionId: string,
+    payload: Extract<SyncMutation, { entity_kind: "collection" }>["payload"],
+  ) => Promise<void>;
+  setWritingCollections: (
+    writingId: string,
+    payload: Extract<SyncMutation, { entity_kind: "writing-collections" }>["payload"],
+  ) => Promise<void>;
 };
 
 type SyncEnvelope = {
@@ -71,6 +86,35 @@ const defaultTransport: SyncTransport = {
         updated_at: payload.updated_at,
         version: payload.version,
       }),
+    });
+
+    await parseEnvelope(response);
+  },
+  upsertCollection: async (collectionId, payload) => {
+    const response = await fetch(`/api/collections/${collectionId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    await parseEnvelope(response);
+  },
+  deleteCollection: async (collectionId) => {
+    const response = await fetch(`/api/collections/${collectionId}`, {
+      method: "DELETE",
+    });
+
+    await parseEnvelope(response);
+  },
+  setWritingCollections: async (writingId, payload) => {
+    const response = await fetch(`/api/writings/${writingId}/collections`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     });
 
     await parseEnvelope(response);
@@ -172,10 +216,12 @@ class SyncWorker {
       const pendingMutations = await this.localDb.syncQueue.getPending();
 
       pendingMutations.forEach((mutation) => {
-        emitSyncStatusChange({
-          writingId: mutation.writing_id,
-          status: "offline",
-        });
+        if (mutation.entity_kind === "writing") {
+          emitSyncStatusChange({
+            writingId: mutation.entity_id,
+            status: "offline",
+          });
+        }
       });
 
       return;
@@ -199,7 +245,10 @@ class SyncWorker {
   };
 
   private async processMutation(mutation: SyncMutation) {
-    const currentMutation = await this.localDb.syncQueue.getCurrentForWriting(mutation.writing_id);
+    const currentMutation = await this.localDb.syncQueue.getCurrentForEntity(
+      mutation.entity_kind,
+      mutation.entity_id,
+    );
 
     if (!currentMutation || currentMutation.id !== mutation.id) {
       return;
@@ -207,11 +256,14 @@ class SyncWorker {
 
     try {
       emitSyncStatusChange({
-        writingId: mutation.writing_id,
-        status: "syncing",
+        writingId: mutation.entity_id,
+        status: mutation.entity_kind === "writing" ? "syncing" : "pending",
       });
 
-      const localWriting = await this.localDb.writings.get(mutation.writing_id);
+      const localWriting =
+        mutation.entity_kind === "writing"
+          ? await this.localDb.writings.get(mutation.entity_id)
+          : null;
 
       if (localWriting && localWriting.lifecycle !== "syncing") {
         await this.localDb.writings.save({
@@ -220,29 +272,45 @@ class SyncWorker {
         });
       }
 
-      if (mutation.operation === "delete") {
-        await this.transport.deleteWriting(mutation.writing_id, mutation.payload);
-      } else {
-        const remoteWriting = await this.transport.upsertWriting(mutation.writing_id, mutation.payload);
+      if (mutation.entity_kind === "writing") {
+        if (mutation.operation === "delete") {
+          await this.transport.deleteWriting(mutation.entity_id, mutation.payload);
+        } else {
+          const remoteWriting = await this.transport.upsertWriting(
+            mutation.entity_id,
+            mutation.payload,
+          );
 
-        if (remoteWriting) {
-          await this.localDb.writings.save(mapRemoteWritingToLocal(remoteWriting));
+          if (remoteWriting) {
+            await this.localDb.writings.save(mapRemoteWritingToLocal(remoteWriting));
+          }
         }
+      } else if (mutation.entity_kind === "collection") {
+        if (mutation.operation === "delete") {
+          await this.transport.deleteCollection(mutation.entity_id, mutation.payload);
+        } else {
+          await this.transport.upsertCollection(mutation.entity_id, mutation.payload);
+        }
+      } else {
+        await this.transport.setWritingCollections(mutation.entity_id, mutation.payload);
       }
 
       await this.localDb.syncQueue.markSynced(mutation.id);
 
-      emitSyncStatusChange({
-        writingId: mutation.writing_id,
-        status: "synced",
-      });
+      if (mutation.entity_kind === "writing") {
+        emitSyncStatusChange({
+          writingId: mutation.entity_id,
+          status: "synced",
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown sync error";
       const syncError = error as SyncRemoteError;
 
       this.logError("[sync:remote]", {
         mutationId: mutation.id,
-        writingId: mutation.writing_id,
+        writingId: mutation.entity_id,
+        entityKind: mutation.entity_kind,
         operation: mutation.operation,
         attempt: mutation.attempts + 1,
         error: message,
@@ -251,10 +319,12 @@ class SyncWorker {
         url: typeof syncError?.url === "string" ? syncError.url : undefined,
       });
 
-      emitSyncStatusChange({
-        writingId: mutation.writing_id,
-        status: "retrying",
-      });
+      if (mutation.entity_kind === "writing") {
+        emitSyncStatusChange({
+          writingId: mutation.entity_id,
+          status: "retrying",
+        });
+      }
 
       if (!canRetryMutation(mutation.attempts + 1)) {
         await this.localDb.syncQueue.markFailed(mutation.id, message, Number.MAX_SAFE_INTEGER);
