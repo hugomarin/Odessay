@@ -13,6 +13,7 @@ const createWriting = (partial: Partial<LocalWriting> & Pick<LocalWriting, "id">
   visibility: partial.visibility ?? "private",
   version: partial.version ?? 1,
   sync_status: partial.sync_status ?? "synced",
+  lifecycle: partial.lifecycle ?? "server-confirmed",
   created_at: partial.created_at ?? "2026-03-10T00:00:00.000Z",
   updated_at: partial.updated_at ?? "2026-03-10T00:00:00.000Z",
   local_updated_at: partial.local_updated_at ?? 1,

@@ -32,6 +32,7 @@ const makeWriting = (overrides: Partial<LocalWriting> = {}): LocalWriting => ({
   correspondence_id: null,
   version: 1,
   sync_status: "synced",
+  lifecycle: "server-confirmed",
   deleted_at: null,
   created_at: "2026-03-31T00:00:00.000Z",
   updated_at: "2026-03-31T00:00:00.000Z",

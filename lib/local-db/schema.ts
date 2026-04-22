@@ -1,5 +1,5 @@
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 2;
+export const LOCAL_DB_VERSION = 3;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -9,6 +9,7 @@ export const LOCAL_DB_STORES = {
 export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
 export type WritingStatus = "draft" | "finished";
 export type WritingVisibility = "private" | "shared" | "public";
+export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed";
 export type SyncOperation = "upsert" | "delete";
 
 export type LocalWriting = {
@@ -24,6 +25,7 @@ export type LocalWriting = {
   correspondence_id?: string | null;
   version: number;
   sync_status: LocalSyncStatus;
+  lifecycle: WritingLifecycle;
   deleted_at?: string | null;
   created_at: string;
   updated_at: string;

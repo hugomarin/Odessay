@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Define explicit local-only → syncing → server-confirmed lifecycle for new writings. Adds WritingLifecycle type to LocalWriting, bumps IndexedDB to v3 with migration, updates sync worker to transition lifecycle during flush, and updates editor-shell hydration to track lifecycle explicitly instead of inferring from route state or UUID heuristics.",
+      "phase": "Fase 3",
+      "issue": "ODE-92",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-92",
+      "commit": "2d7c8c6",
+      "date": "2026-04-21",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test (204 tests). Performance contract: not required (no new render paths or async work). Presentation contract: not required (does not touch cross-mode text rendering)."
+    },
+    {
       "what": "Refactor editor hydration effect to distinguish external load vs new writing session. Introduces lib/editor/hydration-session.ts with explicit session state factories and resolveExternalWritingLoad. Removes selfNavigatedIdRef and hydratedIdRef; the two hydration paths are now driven by an explicit hydrationWritingId state instead of defensive guards.",
       "phase": "Fase 2",
       "issue": "ODE-91",

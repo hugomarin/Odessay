@@ -97,6 +97,7 @@ export const mapRemoteWritingToLocal = (remoteWriting: RemoteWritingRecord): Loc
     correspondence_id: remoteWriting.correspondence_id ?? null,
     version: normalizeVersion(remoteWriting.version),
     sync_status: remoteWriting.deleted_at ? "deleted" : "synced",
+    lifecycle: "server-confirmed",
     deleted_at: remoteWriting.deleted_at ?? null,
     created_at: remoteWriting.created_at,
     updated_at: remoteWriting.updated_at,

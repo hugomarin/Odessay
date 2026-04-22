@@ -15,6 +15,7 @@ const createWriting = (): LocalWriting => ({
   visibility: "private",
   version: 1,
   sync_status: "pending",
+  lifecycle: "local-only",
   created_at: "2026-03-17T00:00:00.000Z",
   updated_at: "2026-03-17T00:00:00.000Z",
   local_updated_at: 1,
