@@ -30,7 +30,7 @@
       "phase": "Fase 3",
       "issue": "ODE-96",
       "linear_url": "https://linear.app/z9ne/issue/ODE-96",
-      "commit": "2588081",
+      "commit": "cdc9286",
       "date": "2026-04-22",
       "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (229 tests), npx playwright test tests/playwright/editor-selection-metrics.e2e.ts (5/5 passed). Performance contract: required. Evidence captured at artifacts/perf/editor-trace-ode96.json.gz; perf gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace-ode96.json.gz. Presentation contract: not required (statusbar chrome only; no cross-mode text rendering contract modified)."
     },
