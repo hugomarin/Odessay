@@ -25,6 +25,9 @@ import {
   areAllMarginsShared,
   countAnnotations,
   sortMarginsByPosition,
+  isShared,
+  toggleShare,
+  getSharedForToken,
 } from "@/lib/margins/margins"
 
 const VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
@@ -259,5 +262,61 @@ describe("sortMarginsByPosition", () => {
 
   it("handles an empty array", () => {
     expect(sortMarginsByPosition([])).toEqual([])
+  })
+})
+
+// ─── 9. isShared ──────────────────────────────────────────────────────────────
+
+describe("isShared", () => {
+  it("returns true when shared is true", () => {
+    expect(isShared({ shared: true })).toBe(true)
+  })
+
+  it("returns false when shared is false", () => {
+    expect(isShared({ shared: false })).toBe(false)
+  })
+})
+
+// ─── 10. toggleShare ───────────────────────────────────────────────────────────
+
+describe("toggleShare", () => {
+  it("returns false when current is true", () => {
+    expect(toggleShare(true)).toBe(false)
+  })
+
+  it("returns true when current is false", () => {
+    expect(toggleShare(false)).toBe(true)
+  })
+})
+
+// ─── 11. getSharedForToken ─────────────────────────────────────────────────────
+
+describe("getSharedForToken", () => {
+  it("returns only shared margins for a valid token", () => {
+    const margins = [
+      { id: "a", shared: true },
+      { id: "b", shared: false },
+      { id: "c", shared: true },
+    ]
+    const result = getSharedForToken(margins, "valid-token-123")
+    expect(result).toHaveLength(2)
+    expect(result.map((m) => m.id)).toEqual(["a", "c"])
+  })
+
+  it("returns empty array when token is empty", () => {
+    expect(getSharedForToken([{ shared: true }], "")).toEqual([])
+    expect(getSharedForToken([{ shared: true }], "   ")).toEqual([])
+  })
+
+  it("returns empty array when no margins are shared", () => {
+    const margins = [
+      { id: "a", shared: false },
+      { id: "b", shared: false },
+    ]
+    expect(getSharedForToken(margins, "token")).toEqual([])
+  })
+
+  it("returns empty array for empty margins", () => {
+    expect(getSharedForToken([], "token")).toEqual([])
   })
 })

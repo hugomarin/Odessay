@@ -21,6 +21,10 @@ export const patchMarginNoteSchema = z.object({
   note: z.string().nullable(),
 })
 
+export const patchMarginShareSchema = z.object({
+  shared: z.boolean(),
+})
+
 export const shareMarginsBatchSchema = z.object({
   writing_id: z.string().uuid(),
 })
@@ -40,6 +44,14 @@ export function parsePatchMarginPayload(
   body: unknown,
 ): z.infer<typeof patchMarginNoteSchema> | null {
   const result = patchMarginNoteSchema.safeParse(body)
+  return result.success ? result.data : null
+}
+
+/** Validates and returns the payload for toggling a margin's shared state; returns null on failure. */
+export function parsePatchMarginSharePayload(
+  body: unknown,
+): z.infer<typeof patchMarginShareSchema> | null {
+  const result = patchMarginShareSchema.safeParse(body)
   return result.success ? result.data : null
 }
 
@@ -84,6 +96,33 @@ export function areAllMarginsShared(margins: Array<{ shared: boolean }>): boolea
  */
 export function countAnnotations(margins: Array<{ note: string | null }>): number {
   return margins.filter((m) => m.note !== null).length
+}
+
+/**
+ * Returns true if the margin has been shared.
+ */
+export function isShared(margin: { shared: boolean }): boolean {
+  return margin.shared === true
+}
+
+/**
+ * Toggles the shared state of a margin.
+ * Returns the new shared value.
+ */
+export function toggleShare(currentShared: boolean): boolean {
+  return !currentShared
+}
+
+/**
+ * Given a list of margins and a preview token, returns only the shared margins.
+ * The token is validated to be non-empty; if invalid, returns an empty array.
+ */
+export function getSharedForToken<T extends { shared: boolean }>(
+  margins: T[],
+  token: string,
+): T[] {
+  if (!token || token.trim().length === 0) return []
+  return margins.filter((m) => m.shared)
 }
 
 /**

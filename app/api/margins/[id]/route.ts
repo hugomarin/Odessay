@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
 
-// PATCH /api/margins/[id] — edit a margin's note
+// PATCH /api/margins/[id] — edit a margin's note or toggle its shared state
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
   const {
@@ -21,14 +21,32 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return jsonError(400, "INVALID_INPUT", "Invalid JSON body.")
   }
 
-  const parsed = z.object({ note: z.string().nullable() }).safeParse(body)
+  const parsed = z
+    .object({
+      note: z.string().nullable().optional(),
+      shared: z.boolean().optional(),
+    })
+    .refine((data) => data.note !== undefined || data.shared !== undefined, {
+      message: "At least one of note or shared must be provided.",
+    })
+    .safeParse(body)
+
   if (!parsed.success) return jsonError(400, "INVALID_INPUT", parsed.error.message)
 
   const { id } = await context.params
 
+  const updateData: { note?: string | null; shared?: boolean; shared_at?: string | null } = {}
+  if (parsed.data.note !== undefined) {
+    updateData.note = parsed.data.note
+  }
+  if (parsed.data.shared !== undefined) {
+    updateData.shared = parsed.data.shared
+    updateData.shared_at = parsed.data.shared ? new Date().toISOString() : null
+  }
+
   const { data, error } = await supabase
     .from("margins")
-    .update({ note: parsed.data.note })
+    .update(updateData)
     .eq("id", id)
     .eq("reader_id", user.id)
     .select()

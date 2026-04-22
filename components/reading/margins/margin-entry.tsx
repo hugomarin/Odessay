@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import { Trash2 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 
 export type MarginData = {
   id: string
@@ -21,9 +22,18 @@ type MarginEntryProps = {
   onBlur: () => void
   onUpdateNote: (id: string, note: string | null) => void
   onDelete: (id: string) => void
+  onToggleShare?: (id: string, shared: boolean) => void
 }
 
-export function MarginEntry({ margin, focused, onFocus, onBlur, onUpdateNote, onDelete }: MarginEntryProps) {
+export function MarginEntry({
+  margin,
+  focused,
+  onFocus,
+  onBlur,
+  onUpdateNote,
+  onDelete,
+  onToggleShare,
+}: MarginEntryProps) {
   const [noteValue, setNoteValue] = useState(margin.note ?? "")
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -53,10 +63,29 @@ export function MarginEntry({ margin, focused, onFocus, onBlur, onUpdateNote, on
       style={{ borderLeft: `2.5px solid ${borderColor}`, marginLeft: -2.5 }}
       onMouseLeave={() => setShowDeleteConfirm(false)}
     >
-      {/* Passage */}
-      <p className="font-lora italic text-[12px] text-ink-4 leading-relaxed line-clamp-2">
-        &ldquo;{margin.anchor_text}&rdquo;
-      </p>
+      {/* Header: passage + share toggle */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-lora italic text-[12px] text-ink-4 leading-relaxed line-clamp-2">
+          &ldquo;{margin.anchor_text}&rdquo;
+        </p>
+        {onToggleShare && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Switch
+              id={`margin-share-${margin.id}`}
+              checked={margin.shared}
+              onCheckedChange={(checked) => onToggleShare(margin.id, checked)}
+              className="h-4 w-7 data-[state=checked]:bg-cursor"
+              aria-label={margin.shared ? "Shared with author" : "Private — toggle to share"}
+            />
+            <label
+              htmlFor={`margin-share-${margin.id}`}
+              className="sr-only"
+            >
+              {margin.shared ? "Shared with author" : "Private"}
+            </label>
+          </div>
+        )}
+      </div>
 
       {/* Note textarea */}
       <textarea

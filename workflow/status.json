@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Preview sharing now renders author margin highlights and annotations marked as shared. Added per-margin share toggle in the margins panel (Eye/EyeOff icon per entry), a new preview API endpoint to read shared margins by token, updated RLS so writing_share recipients and public viewers can see shared margins, and HighlightLayer integration in the preview page for read-only shared highlights.",
+      "phase": "Fase 3",
+      "issue": "ODE-97",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-97",
+      "commit": "ce0dd5d",
+      "date": "2026-04-22",
+      "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (229 tests). Performance contract: not required (reading view margin rendering, no editor hot-path change). Presentation contract: required — shared margin highlights render equivalently in preview and shared reading views via the same HighlightLayer component. Review fixes: ShadCN Switch con label accesible, helpers pure isShared/toggleShare/getSharedForToken con tests, preview route sin reader_id en SELECT, test E2E preview-shared-margins.e2e.ts (2/2 passed)."
+    },
+    {
       "what": "Editor statusbar now shows selection metrics (words and characters) when text is selected in Rich or Markdown mode, and reverts to full document metrics (words, characters, sentences, reading time, pages) when there is no selection. The transition is immediate with CSS opacity transition, no layout shift, and selection calculation uses useEditorState for Rich mode and textarea selection events for Markdown mode.",
       "phase": "Fase 3",
       "issue": "ODE-96",
