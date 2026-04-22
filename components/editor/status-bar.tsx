@@ -1,9 +1,12 @@
+import { memo } from "react"
 import { cn } from "@/lib/utils"
 import type { EditorSaveState } from "@/components/editor/save-state"
+import type { SelectionMetrics, TextMetrics } from "@/lib/editor/text-metrics"
 
 type StatusBarProps = {
   mode: "rich" | "markdown"
-  wordCount: number
+  metrics: TextMetrics
+  selectionMetrics: SelectionMetrics | null
   saveState: EditorSaveState
   onToggleMode: (mode: "rich" | "markdown") => void
 }
@@ -20,7 +23,18 @@ const SAVE_STATE_COLORS: Record<EditorSaveState, string> = {
   "saved-local": "text-ink-4",
 }
 
-export function EditorStatusBar({ mode, wordCount, saveState, onToggleMode }: StatusBarProps) {
+function formatMetrics(metrics: TextMetrics): string {
+  const { words, characters, sentences, readingTimeMinutes, pages } = metrics
+  return `${words.toLocaleString()} words · ${characters.toLocaleString()} chars · ${sentences.toLocaleString()} sentences · ${readingTimeMinutes} min · ${pages} pg`
+}
+
+function formatSelectionMetrics(metrics: SelectionMetrics): string {
+  return `${metrics.words.toLocaleString()} words · ${metrics.characters.toLocaleString()} chars selected`
+}
+
+function StatusBarInner({ mode, metrics, selectionMetrics, saveState, onToggleMode }: StatusBarProps) {
+  const metricsLabel = selectionMetrics ? formatSelectionMetrics(selectionMetrics) : formatMetrics(metrics)
+
   return (
     <div
       id="editor-statusbar"
@@ -32,9 +46,15 @@ export function EditorStatusBar({ mode, wordCount, saveState, onToggleMode }: St
       <p className={SAVE_STATE_COLORS[saveState]} aria-live="polite">
         {SAVE_STATE_LABELS[saveState]}
       </p>
-      <div className="flex items-center gap-3">
-        <span>{wordCount.toLocaleString()} words</span>
-        <div className="inline-flex items-center gap-0.5 rounded-[7px] bg-muted p-[3px]">
+      <div className="flex items-center gap-3 overflow-hidden">
+        <span
+          className="truncate transition-opacity duration-150"
+          data-testid="editor-statusbar-metrics"
+          title={metricsLabel}
+        >
+          {metricsLabel}
+        </span>
+        <div className="inline-flex shrink-0 items-center gap-0.5 rounded-[7px] bg-muted p-[3px]">
           <button
             type="button"
             onClick={() => onToggleMode("rich")}
@@ -64,3 +84,5 @@ export function EditorStatusBar({ mode, wordCount, saveState, onToggleMode }: St
     </div>
   )
 }
+
+export const EditorStatusBar = memo(StatusBarInner)

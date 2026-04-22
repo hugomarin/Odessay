@@ -6,6 +6,11 @@ export type TextMetrics = {
   pages: number;
 };
 
+export type SelectionMetrics = {
+  words: number;
+  characters: number;
+};
+
 const SENTENCE_END_REGEX = /[.!?]+(?=\s|$)/g;
 
 export const calculateTextMetrics = (text: string): TextMetrics => {
@@ -34,4 +39,17 @@ export const calculateTextMetrics = (text: string): TextMetrics => {
     readingTimeMinutes,
     pages,
   };
+};
+
+export const calculateSelectionMetrics = (text: string): SelectionMetrics => {
+  const normalized = text.trim();
+
+  if (!normalized) {
+    return { words: 0, characters: 0 };
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean).length;
+  const characters = text.length;
+
+  return { words, characters };
 };
