@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const collectionPayloadSchema = z.object({
@@ -14,6 +13,10 @@ const collectionPayloadSchema = z.object({
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status });
 
+const logRouteError = (route: string, error: unknown) => {
+  console.error(`[${route}]`, error);
+};
+
 async function getCurrentUserId() {
   const supabase = await createClient();
   const {
@@ -25,7 +28,7 @@ async function getCurrentUserId() {
 
 export async function GET() {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -45,10 +48,11 @@ export async function GET() {
     ]);
 
   if (collectionsError || assignmentsError) {
+    logRouteError("api/collections.GET", collectionsError ?? assignmentsError);
     return jsonError(
       500,
       "DB_ERROR",
-      collectionsError?.message ?? assignmentsError?.message ?? "Failed to load collections.",
+      "Failed to load collections.",
     );
   }
 
@@ -70,7 +74,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -95,7 +99,8 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.from("collections").insert(record).select().single();
 
   if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+    logRouteError("api/collections.POST", error);
+    return jsonError(500, "DB_ERROR", "Failed to create collection.");
   }
 
   return NextResponse.json({ data, error: null }, { status: 201 });

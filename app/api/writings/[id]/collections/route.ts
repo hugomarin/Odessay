@@ -7,8 +7,16 @@ const payloadSchema = z.object({
   updated_at: z.string().datetime().optional(),
 });
 
+const paramsSchema = z.object({
+  id: z.string().uuid(),
+});
+
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status });
+
+const logRouteError = (route: string, error: unknown) => {
+  console.error(`[${route}]`, error);
+};
 
 async function getCurrentUserId() {
   const supabase = await createClient();
@@ -27,7 +35,13 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     return jsonError(401, "UNAUTHORIZED", "No active session.");
   }
 
-  const { id } = await context.params;
+  const parsedParams = paramsSchema.safeParse(await context.params);
+
+  if (!parsedParams.success) {
+    return jsonError(400, "INVALID_WRITING_ID", "Invalid writing ID.");
+  }
+
+  const { id } = parsedParams.data;
   const { data, error } = await supabase
     .from("writing_collections")
     .select("collection_id, added_at, collections!inner(owner_id)")
@@ -35,7 +49,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     .eq("collections.owner_id", userId);
 
   if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+    logRouteError("api/writings/[id]/collections.GET", error);
+    return jsonError(500, "DB_ERROR", "Failed to load writing collections.");
   }
 
   return NextResponse.json(
@@ -64,7 +79,13 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
     return jsonError(400, "INVALID_INPUT", parsed.error.message);
   }
 
-  const { id } = await context.params;
+  const parsedParams = paramsSchema.safeParse(await context.params);
+
+  if (!parsedParams.success) {
+    return jsonError(400, "INVALID_WRITING_ID", "Invalid writing ID.");
+  }
+
+  const { id } = parsedParams.data;
   const collectionIds = Array.from(new Set(parsed.data.collection_ids));
   const updatedAt = parsed.data.updated_at ?? new Date().toISOString();
   const { error } = await supabase.rpc("replace_writing_collections", {
@@ -86,7 +107,8 @@ export async function PUT(request: Request, context: { params: Promise<{ id: str
       );
     }
 
-    return jsonError(500, "DB_ERROR", error.message);
+    logRouteError("api/writings/[id]/collections.PUT", error);
+    return jsonError(500, "DB_ERROR", "Failed to update writing collections.");
   }
 
   return NextResponse.json(

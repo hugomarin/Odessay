@@ -39,6 +39,8 @@ commit;
 -- drop index if exists public.idx_writing_collections_writing_id;
 -- drop index if exists public.idx_collections_public_owner;
 -- drop index if exists public.idx_collections_owner_updated_at;
+-- Policy baseline before/after this migration is the same as the initial schema in
+-- supabase/migrations/20260317145743_initial_schema.sql. Recreate that baseline if needed:
 -- drop policy if exists collections_select_visible on public.collections;
 -- create policy collections_select_visible
 -- on public.collections

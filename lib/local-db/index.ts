@@ -74,6 +74,22 @@ const createEntityKey = (entityKind: SyncEntityKind, entityId: string) =>
 const createWritingCollectionId = (writingId: string, collectionId: string) =>
   `${writingId}:${collectionId}`;
 
+const getEntityStoreName = (entityKind: SyncEntityKind) => {
+  if (entityKind === "writing") {
+    return LOCAL_DB_STORES.writings;
+  }
+
+  if (entityKind === "collection") {
+    return LOCAL_DB_STORES.collections;
+  }
+
+  if (entityKind === "writing-collections") {
+    return LOCAL_DB_STORES.writings;
+  }
+
+  return null;
+};
+
 const filterCollections = (
   collections: LocalCollection[],
   filters: CollectionListFilters = {},
@@ -187,7 +203,7 @@ const openDatabase = () => {
             syncStore.deleteIndex("by-writing-id");
           }
 
-          if (!syncStore.indexNames.contains("by-entity-key")) {
+          if (!syncStore.indexNames.contains("by-entity-key") && oldVersion >= 4) {
             syncStore.createIndex("by-entity-key", "entity_key", { unique: true });
           }
         }
@@ -204,6 +220,9 @@ const openDatabase = () => {
             const result = cursor.result;
 
             if (!result) {
+              if (!store.indexNames.contains("by-entity-key")) {
+                store.createIndex("by-entity-key", "entity_key", { unique: true });
+              }
               return;
             }
 
@@ -412,28 +431,31 @@ const replaceWritingCollections = async (writingId: string, collectionIds: strin
   const existingRows = (await runRequest(
     index.getAll(IDBKeyRange.only(writingId)),
   )) as LocalWritingCollection[];
-  const existingIds = new Set(existingRows.map((row) => row.id));
+  const existingRowsById = new Map(existingRows.map((row) => [row.id, row]));
   const now = Date.now();
+  const addedAt = new Date().toISOString();
+  const requests: IDBRequest[] = [];
 
   for (const row of existingRows) {
-    await runRequest(store.delete(row.id));
+    requests.push(store.delete(row.id));
   }
 
   for (const collectionId of collectionIds) {
     const id = createWritingCollectionId(writingId, collectionId);
-    await runRequest(
+    const existingRow = existingRowsById.get(id);
+
+    requests.push(
       store.put({
         id,
         writing_id: writingId,
         collection_id: collectionId,
-        added_at: new Date().toISOString(),
-        local_updated_at: existingIds.has(id)
-          ? existingRows.find((row) => row.id === id)?.local_updated_at ?? now
-          : now,
+        added_at: existingRow?.added_at ?? addedAt,
+        local_updated_at: existingRow?.local_updated_at ?? now,
       } satisfies LocalWritingCollection),
     );
   }
 
+  await Promise.all(requests.map((request) => runRequest(request)));
   await completion;
 };
 
@@ -445,11 +467,13 @@ const removeCollectionAssignments = async (collectionId: string) => {
   const rows = (await runRequest(
     store.index("by-collection-id").getAll(IDBKeyRange.only(collectionId)),
   )) as LocalWritingCollection[];
+  const requests: IDBRequest[] = [];
 
   for (const row of rows) {
-    await runRequest(store.delete(row.id));
+    requests.push(store.delete(row.id));
   }
 
+  await Promise.all(requests.map((request) => runRequest(request)));
   await completion;
 };
 
@@ -458,17 +482,20 @@ const enqueueMutation = async (mutation: SyncMutation) => {
     const entityKey =
       mutation.entity_key ?? createEntityKey(mutation.entity_kind, mutation.entity_id);
     const existingKey = await runRequest(store.index("by-entity-key").getKey(entityKey));
+    const requests: IDBRequest[] = [];
 
     if (existingKey) {
-      await runRequest(store.delete(existingKey));
+      requests.push(store.delete(existingKey));
     }
 
-    await runRequest(
+    requests.push(
       store.put({
         ...mutation,
         entity_key: entityKey,
       } satisfies SyncMutation),
     );
+
+    await Promise.all(requests.map((request) => runRequest(request)));
   });
 };
 
@@ -526,12 +553,40 @@ const setEntitySyncState = async (
       sync_status: syncStatus,
       lifecycle: lifecycle ?? collection.lifecycle,
     });
+    return;
+  }
+
+  if (entityKind === "writing-collections") {
+    const writing = await getWriting(entityId);
+
+    if (!writing || writing.sync_status === "deleted") {
+      return;
+    }
+
+    await saveWriting({
+      ...writing,
+      sync_status: syncStatus,
+      lifecycle: lifecycle ?? writing.lifecycle,
+    });
   }
 };
 
 const markMutationSynced = async (id: string) => {
   const database = await openDatabase();
-  const transaction = database.transaction(LOCAL_DB_STORES.syncMutations, "readwrite");
+  const initialTransaction = database.transaction(LOCAL_DB_STORES.syncMutations, "readonly");
+  const initialStore = initialTransaction.objectStore(LOCAL_DB_STORES.syncMutations);
+  const initialMutation = (await runRequest(initialStore.get(id))) as SyncMutation | undefined;
+  await waitForTransaction(initialTransaction, "Load synced mutation");
+
+  if (!initialMutation) {
+    return;
+  }
+
+  const entityStoreName = getEntityStoreName(initialMutation.entity_kind);
+  const storeNames = entityStoreName
+    ? [LOCAL_DB_STORES.syncMutations, entityStoreName]
+    : [LOCAL_DB_STORES.syncMutations];
+  const transaction = database.transaction(storeNames, "readwrite");
   const mutationStore = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
   const completion = waitForTransaction(transaction, "Synced mutation");
   const mutation = (await runRequest(mutationStore.get(id))) as SyncMutation | undefined;
@@ -547,11 +602,34 @@ const markMutationSynced = async (id: string) => {
     mutationStore.index("by-entity-key").get(mutation.entity_key),
   )) as SyncMutation | undefined;
 
-  await completion;
+  if (!remainingMutation && entityStoreName) {
+    const entityStore = transaction.objectStore(entityStoreName);
+    const entity = await runRequest(entityStore.get(mutation.entity_id));
 
-  if (!remainingMutation) {
-    await setEntitySyncState(mutation.entity_kind, mutation.entity_id, "synced", "server-confirmed");
+    if (entityStoreName === LOCAL_DB_STORES.collections) {
+      const collection = entity as LocalCollection | undefined;
+
+      if (collection && collection.sync_status !== "deleted") {
+        entityStore.put({
+          ...collection,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+        } satisfies LocalCollection);
+      }
+    } else {
+      const writing = entity as LocalWriting | undefined;
+
+      if (writing && writing.sync_status !== "deleted") {
+        entityStore.put({
+          ...writing,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+        } satisfies LocalWriting);
+      }
+    }
   }
+
+  await completion;
 };
 
 const markMutationFailed = async (id: string, error: string, nextRetryAt: number) => {

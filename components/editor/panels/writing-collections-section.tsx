@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { FolderPlus } from "lucide-react"
 import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap"
 import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
@@ -17,26 +17,46 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [newCollectionName, setNewCollectionName] = useState("")
+  const selectedIdsRef = useRef<string[]>([])
+
+  const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
+    const [nextCollections, assignments] = await Promise.all([
+      localDB.collections.getAll(),
+      localDB.writingCollections.listForWriting(currentWritingId),
+    ])
+
+    if (cancelled?.()) {
+      return
+    }
+
+    const nextSelectedIds = assignments.map((assignment) => assignment.collection_id)
+    selectedIdsRef.current = nextSelectedIds
+    setCollections(nextCollections)
+    setSelectedIds(nextSelectedIds)
+  }
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds
+  }, [selectedIds])
 
   useEffect(() => {
     let cancelled = false
 
-    const load = async () => {
+    const hydrate = async () => {
       await hydrateLocalCollectionsFromRemote().catch(() => null)
-      const [nextCollections, assignments] = await Promise.all([
-        localDB.collections.getAll(),
-        localDB.writingCollections.listForWriting(writingId),
-      ])
-
-      if (cancelled) {
-        return
-      }
-
-      setCollections(nextCollections)
-      setSelectedIds(assignments.map((assignment) => assignment.collection_id))
+      await loadLocalState(writingId, () => cancelled)
     }
 
-    void load()
+    void hydrate()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void loadLocalState(writingId, () => cancelled)
 
     return () => {
       cancelled = true
@@ -49,10 +69,12 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
   )
 
   const toggleCollection = async (collectionId: string) => {
-    const nextIds = selectedIds.includes(collectionId)
-      ? selectedIds.filter((id) => id !== collectionId)
-      : [...selectedIds, collectionId]
+    const currentIds = selectedIdsRef.current
+    const nextIds = currentIds.includes(collectionId)
+      ? currentIds.filter((id) => id !== collectionId)
+      : [...currentIds, collectionId]
 
+    selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
     getSyncWorker().schedule(0)
@@ -68,8 +90,9 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
       ownerId: ownerId === "anonymous" ? null : ownerId,
       name: newCollectionName.trim(),
     })
-    const nextIds = [...selectedIds, collection.id]
+    const nextIds = [...selectedIdsRef.current, collection.id]
 
+    selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
     setNewCollectionName("")
     await setLocalWritingCollections(writingId, nextIds)

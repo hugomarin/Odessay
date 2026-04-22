@@ -11,7 +11,13 @@ security definer
 set search_path = public
 as $$
 declare
-  normalized_collection_ids uuid[] := coalesce(p_collection_ids, '{}');
+  normalized_collection_ids uuid[] := coalesce(
+    array(
+      select distinct collection_id
+      from unnest(coalesce(p_collection_ids, '{}')) as collection_id
+    ),
+    '{}'
+  );
   matched_collection_count integer := 0;
 begin
   if auth.uid() is null then
@@ -23,6 +29,7 @@ begin
     from public.writings w
     where w.id = p_writing_id
       and w.author_id = auth.uid()
+      and w.deleted_at is null
   ) then
     raise sqlstate 'PT404' using message = 'Writing not found.';
   end if;
@@ -32,6 +39,7 @@ begin
     into matched_collection_count
     from public.collections c
     where c.owner_id = auth.uid()
+      and c.deleted_at is null
       and c.id = any(normalized_collection_ids);
 
     if matched_collection_count <> array_length(normalized_collection_ids, 1) then

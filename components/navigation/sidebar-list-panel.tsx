@@ -21,12 +21,16 @@ export function SidebarListPanel({ open }: SidebarListPanelProps) {
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [assignments, setAssignments] = useState<LocalWritingCollection[]>([])
 
-  const loadState = async () => {
+  const loadState = async (cancelled?: () => boolean) => {
     const [nextWritings, nextCollections, nextAssignments] = await Promise.all([
       localDB.writings.getAll(),
       localDB.collections.getAll(),
       localDB.writingCollections.listAll(),
     ])
+
+    if (cancelled?.()) {
+      return
+    }
 
     setWritings(nextWritings)
     setCollections(nextCollections)
@@ -34,12 +38,19 @@ export function SidebarListPanel({ open }: SidebarListPanelProps) {
   }
 
   useEffect(() => {
+    let cancelled = false
+
     void Promise.all([
       hydrateLocalWritingsFromRemote().catch(() => null),
       hydrateLocalCollectionsFromRemote().catch(() => null),
-    ]).then(() => loadState())
+    ]).then(() => loadState(() => cancelled))
 
-    return subscribeToLocalDBScopeChanges(() => void loadState())
+    const unsubscribe = subscribeToLocalDBScopeChanges(() => void loadState(() => cancelled))
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [])
 
   const uncategorizedCount = useMemo(

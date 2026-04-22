@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 const collectionPayloadSchema = z.object({
@@ -10,8 +9,16 @@ const collectionPayloadSchema = z.object({
   updated_at: z.string().datetime(),
 });
 
+const paramsSchema = z.object({
+  id: z.string().uuid(),
+});
+
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status });
+
+const logRouteError = (route: string, error: unknown) => {
+  console.error(`[${route}]`, error);
+};
 
 async function getCurrentUserId() {
   const supabase = await createClient();
@@ -24,13 +31,19 @@ async function getCurrentUserId() {
 
 export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
   }
 
-  const { id } = await context.params;
+  const parsedParams = paramsSchema.safeParse(await context.params);
+
+  if (!parsedParams.success) {
+    return jsonError(400, "INVALID_COLLECTION_ID", "Invalid collection ID.");
+  }
+
+  const { id } = parsedParams.data;
   const { data, error } = await supabase
     .from("collections")
     .select("id, owner_id, name, description, visibility, created_at, updated_at")
@@ -39,7 +52,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     .maybeSingle();
 
   if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+    logRouteError("api/collections/[id].GET", error);
+    return jsonError(500, "DB_ERROR", "Failed to load collection.");
   }
 
   if (!data) {
@@ -51,7 +65,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -63,54 +77,57 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return jsonError(400, "INVALID_INPUT", parsed.error.message);
   }
 
-  const { id } = await context.params;
+  const parsedParams = paramsSchema.safeParse(await context.params);
+
+  if (!parsedParams.success) {
+    return jsonError(400, "INVALID_COLLECTION_ID", "Invalid collection ID.");
+  }
+
+  const { id } = parsedParams.data;
   const record = {
-    id,
-    owner_id: userId,
     name: parsed.data.name,
     description: parsed.data.description ?? null,
     visibility: parsed.data.visibility,
     updated_at: parsed.data.updated_at,
   };
 
-  const { data: updated, error: updateError } = await supabase
+  const insertRecord = {
+    id,
+    owner_id: userId,
+    ...record,
+  };
+
+  const { data: upserted, error: upsertError } = await supabase
     .from("collections")
-    .update(record)
-    .eq("id", id)
-    .eq("owner_id", userId)
-    .select()
-    .maybeSingle();
-
-  if (updateError) {
-    return jsonError(500, "DB_ERROR", updateError.message);
-  }
-
-  if (updated) {
-    return NextResponse.json({ data: updated, error: null }, { status: 200 });
-  }
-
-  const { data: inserted, error: insertError } = await supabase
-    .from("collections")
-    .insert(record)
+    .upsert(insertRecord, {
+      onConflict: "id",
+    })
     .select()
     .single();
 
-  if (insertError) {
-    return jsonError(500, "DB_ERROR", insertError.message);
+  if (upsertError) {
+    logRouteError("api/collections/[id].PATCH.upsert", upsertError);
+    return jsonError(500, "DB_ERROR", "Failed to upsert collection.");
   }
 
-  return NextResponse.json({ data: inserted, error: null }, { status: 200 });
+  return NextResponse.json({ data: upserted, error: null }, { status: 200 });
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   const userId = await getCurrentUserId();
-  const supabase = createAdminClient();
+  const supabase = await createClient();
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
   }
 
-  const { id } = await context.params;
+  const parsedParams = paramsSchema.safeParse(await context.params);
+
+  if (!parsedParams.success) {
+    return jsonError(400, "INVALID_COLLECTION_ID", "Invalid collection ID.");
+  }
+
+  const { id } = parsedParams.data;
   const { error } = await supabase
     .from("collections")
     .delete()
@@ -118,7 +135,8 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
     .eq("owner_id", userId);
 
   if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+    logRouteError("api/collections/[id].DELETE", error);
+    return jsonError(500, "DB_ERROR", "Failed to delete collection.");
   }
 
   return NextResponse.json({ data: { id }, error: null }, { status: 200 });

@@ -1,5 +1,5 @@
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 4;
+export const LOCAL_DB_VERSION = 5;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",

@@ -78,6 +78,22 @@ export const hydrateLocalCollectionsFromRemote = async () => {
   const payload = await parseEnvelope<RemoteCollectionsBootstrap>(response);
 
   for (const collection of payload.collections) {
+    const localCollection = await localDB.collections.get(collection.id);
+    const hasPendingMutation = await localDB.syncQueue.getCurrentForEntity(
+      "collection",
+      collection.id,
+    );
+
+    if (
+      localCollection &&
+      (localCollection.sync_status === "pending" ||
+        localCollection.sync_status === "failed" ||
+        hasPendingMutation ||
+        localCollection.local_updated_at > parseTimestamp(collection.updated_at))
+    ) {
+      continue;
+    }
+
     await localDB.collections.save(toLocalCollection(collection));
   }
 
@@ -95,6 +111,15 @@ export const hydrateLocalCollectionsFromRemote = async () => {
   }
 
   for (const writingId of writingIds) {
+    const pendingMutation = await localDB.syncQueue.getCurrentForEntity(
+      "writing-collections",
+      writingId,
+    );
+
+    if (pendingMutation) {
+      continue;
+    }
+
     await localDB.writingCollections.replaceForWriting(
       writingId,
       assignmentsByWriting.get(writingId) ?? [],
