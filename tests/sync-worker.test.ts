@@ -99,6 +99,10 @@ const createLocalDbMock = () => {
       save: vi.fn(async () => undefined),
       get: vi.fn(async () => null),
     },
+    publicationReviews: {
+      save: vi.fn(async () => undefined),
+      getByWritingAndHash: vi.fn(async () => null),
+    },
   } satisfies LocalDB;
 };
 

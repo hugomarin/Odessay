@@ -6,6 +6,7 @@ import {
   type LocalEditorSession,
   type LocalCollection,
   type LocalDBScope,
+  type LocalPublicationReview,
   type LocalSyncStatus,
   type LocalWriting,
   type LocalWritingCollection,
@@ -50,6 +51,10 @@ type LocalDB = {
     save: (session: LocalEditorSession) => Promise<void>;
     get: (id: string) => Promise<LocalEditorSession | null>;
   };
+  publicationReviews: {
+    save: (review: LocalPublicationReview) => Promise<void>;
+    getByWritingAndHash: (writingId: string, sourceHash: string) => Promise<LocalPublicationReview | null>;
+  };
 };
 
 const DEFAULT_SCOPE = "anonymous";
@@ -78,6 +83,9 @@ const createEntityKey = (entityKind: SyncEntityKind, entityId: string) =>
 
 const createWritingCollectionId = (writingId: string, collectionId: string) =>
   `${writingId}:${collectionId}`;
+
+const createPublicationReviewLookupKey = (writingId: string, sourceHash: string) =>
+  `${writingId}:${sourceHash}`;
 
 const getEntityStoreName = (entityKind: SyncEntityKind) => {
   if (entityKind === "writing") {
@@ -218,6 +226,28 @@ const openDatabase = () => {
         database.createObjectStore(LOCAL_DB_STORES.editorSessions, {
           keyPath: "id",
         });
+      }
+
+      if (!database.objectStoreNames.contains(LOCAL_DB_STORES.publicationReviews)) {
+        const publicationReviewStore = database.createObjectStore(LOCAL_DB_STORES.publicationReviews, {
+          keyPath: "id",
+        });
+        publicationReviewStore.createIndex("by-lookup-key", "lookup_key", { unique: true });
+        publicationReviewStore.createIndex("by-writing-id", "writing_id", { unique: false });
+      } else {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const publicationReviewStore = transaction.objectStore(LOCAL_DB_STORES.publicationReviews);
+
+          if (!publicationReviewStore.indexNames.contains("by-lookup-key")) {
+            publicationReviewStore.createIndex("by-lookup-key", "lookup_key", { unique: true });
+          }
+
+          if (!publicationReviewStore.indexNames.contains("by-writing-id")) {
+            publicationReviewStore.createIndex("by-writing-id", "writing_id", { unique: false });
+          }
+        }
       }
 
       if (oldVersion < 3 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
@@ -398,6 +428,20 @@ const getEditorSession = async (id: string) =>
   withStore(LOCAL_DB_STORES.editorSessions, "readonly", async (store) => {
     const session = await runRequest(store.get(id));
     return (session as LocalEditorSession | undefined) ?? null;
+  });
+
+const savePublicationReview = async (review: LocalPublicationReview) => {
+  await withStore(LOCAL_DB_STORES.publicationReviews, "readwrite", async (store) => {
+    await runRequest(store.put(review));
+  });
+};
+
+const getPublicationReviewByWritingAndHash = async (writingId: string, sourceHash: string) =>
+  withStore(LOCAL_DB_STORES.publicationReviews, "readonly", async (store) => {
+    const review = await runRequest(
+      store.index("by-lookup-key").get(createPublicationReviewLookupKey(writingId, sourceHash)),
+    );
+    return (review as LocalPublicationReview | undefined) ?? null;
   });
 
 const getCollection = async (id: string) =>
@@ -713,8 +757,12 @@ const localDBInstance: LocalDB = {
     save: saveEditorSession,
     get: getEditorSession,
   },
+  publicationReviews: {
+    save: savePublicationReview,
+    getByWritingAndHash: getPublicationReviewByWritingAndHash,
+  },
 };
 
 export type { LocalDB };
-export { createEntityKey, createWritingCollectionId };
+export { createEntityKey, createPublicationReviewLookupKey, createWritingCollectionId };
 export const localDB = localDBInstance;

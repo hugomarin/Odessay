@@ -1,5 +1,5 @@
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 6;
+export const LOCAL_DB_VERSION = 7;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -7,6 +7,7 @@ export const LOCAL_DB_STORES = {
   writingCollections: "writing-collections",
   syncMutations: "sync-mutations",
   editorSessions: "editor-sessions",
+  publicationReviews: "publication-reviews",
 } as const;
 
 export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
@@ -171,4 +172,44 @@ export type LocalEditorSession = {
   tabs: LocalEditorSessionTab[];
   recent_writings: LocalEditorRecentWriting[];
   updated_at: number;
+};
+
+export type PublicationSuggestionKind = "spelling" | "rewriting";
+export type PublicationSuggestionStatus = "pending" | "accepted" | "rejected" | "conflict";
+export type PublicationChecklistStatus = "pending" | "done";
+
+export type PublicationSuggestion = {
+  id: string;
+  kind: PublicationSuggestionKind;
+  title: string;
+  reason: string;
+  original_text: string;
+  replacement_text: string;
+  context_before?: string | null;
+  context_after?: string | null;
+  status: PublicationSuggestionStatus;
+};
+
+export type PublicationChecklistItem = {
+  id: string;
+  label: string;
+  detail: string;
+  target_text?: string | null;
+  status: PublicationChecklistStatus;
+};
+
+export type LocalPublicationReview = {
+  id: string;
+  writing_id: string;
+  source_hash: string;
+  source_markdown: string;
+  title?: string | null;
+  model: string;
+  suggestions: PublicationSuggestion[];
+  checklist: PublicationChecklistItem[];
+  summary?: string | null;
+  created_at: string;
+  updated_at: string;
+  lookup_key: string;
+  last_error?: string | null;
 };

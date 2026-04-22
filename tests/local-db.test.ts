@@ -1,8 +1,14 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createEntityKey, localDB, setLocalDBScope, subscribeToLocalDBScopeChanges } from "../lib/local-db";
+import {
+  createEntityKey,
+  createPublicationReviewLookupKey,
+  localDB,
+  setLocalDBScope,
+  subscribeToLocalDBScopeChanges,
+} from "../lib/local-db";
 import { createEmptyEditorSession } from "../lib/local-db/editor-sessions";
-import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
+import type { LocalPublicationReview, LocalWriting, SyncMutation } from "../lib/local-db/schema";
 
 const createWriting = (id: string, version: number): LocalWriting => ({
   id,
@@ -39,6 +45,22 @@ const createMutation = (id: string, writingId: string, version: number): SyncMut
   },
   created_at: version,
   attempts: 0,
+});
+
+const createPublicationReview = (writingId: string, sourceHash: string): LocalPublicationReview => ({
+  id: `publication-review:${writingId}:${sourceHash}`,
+  writing_id: writingId,
+  source_hash: sourceHash,
+  source_markdown: "Original markdown",
+  title: "Untitled writing",
+  model: "claude-sonnet-4-20250514",
+  suggestions: [],
+  checklist: [],
+  summary: "Ready to polish.",
+  created_at: "2026-03-17T00:00:00.000Z",
+  updated_at: "2026-03-17T00:00:00.000Z",
+  lookup_key: createPublicationReviewLookupKey(writingId, sourceHash),
+  last_error: null,
 });
 
 beforeEach(() => {
@@ -111,5 +133,15 @@ describe("localDB", () => {
 
     setLocalDBScope("editor-user-a");
     expect((await localDB.editorSessions.get("workspace"))?.active_tab_id).toBe("writing-a");
+  });
+
+  it("persists publication reviews by writing id and source hash", async () => {
+    setLocalDBScope("publication-user");
+    const review = createPublicationReview("writing-a", "pub-123");
+
+    await localDB.publicationReviews.save(review);
+
+    expect(await localDB.publicationReviews.getByWritingAndHash("writing-a", "pub-123")).toEqual(review);
+    expect(await localDB.publicationReviews.getByWritingAndHash("writing-a", "pub-missing")).toBeNull();
   });
 });
