@@ -211,6 +211,15 @@ class SyncWorker {
         status: "syncing",
       });
 
+      const localWriting = await this.localDb.writings.get(mutation.writing_id);
+
+      if (localWriting && localWriting.lifecycle !== "syncing") {
+        await this.localDb.writings.save({
+          ...localWriting,
+          lifecycle: "syncing",
+        });
+      }
+
       if (mutation.operation === "delete") {
         await this.transport.deleteWriting(mutation.writing_id, mutation.payload);
       } else {

@@ -5,6 +5,7 @@ import {
   type LocalDBScope,
   type LocalWriting,
   type SyncMutation,
+  type WritingLifecycle,
   type WritingListFilters,
 } from "@/lib/local-db/schema";
 import { filterWritings, sortWritings } from "@/lib/local-db/writings";
@@ -87,8 +88,9 @@ const openDatabase = () => {
   dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(getDatabaseName(), LOCAL_DB_VERSION);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const database = request.result;
+      const oldVersion = event.oldVersion;
 
       if (!database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
         database.createObjectStore(LOCAL_DB_STORES.writings, {
@@ -111,6 +113,37 @@ const openDatabase = () => {
           if (!syncStore.indexNames.contains("by-writing-id")) {
             syncStore.createIndex("by-writing-id", "writing_id", { unique: true });
           }
+        }
+      }
+
+      // Migrate v2 → v3: add lifecycle field to existing writings.
+      if (oldVersion < 3 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writings);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const writing = result.value as LocalWriting & { lifecycle?: WritingLifecycle };
+
+            if (!writing.lifecycle) {
+              const lifecycle: WritingLifecycle =
+                writing.sync_status === "synced" || writing.sync_status === "deleted"
+                  ? "server-confirmed"
+                  : "local-only";
+
+              result.update({ ...writing, lifecycle });
+            }
+
+            result.continue();
+          };
         }
       }
     };
@@ -251,6 +284,7 @@ const markMutationSynced = async (id: string) => {
         writingStore.put({
           ...writing,
           sync_status: "synced",
+          lifecycle: "server-confirmed",
         } satisfies LocalWriting),
       );
     }

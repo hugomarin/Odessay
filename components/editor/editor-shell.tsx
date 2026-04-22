@@ -52,7 +52,7 @@ import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
-import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import type { LocalWriting, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { hydrateLocalWritingFromRemote } from "@/lib/sync/remote-bootstrap"
@@ -193,6 +193,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [createdAt, setCreatedAt] = useState<string | null>(null)
   const [writingStatus, setWritingStatus] = useState<WritingStatus>("draft")
   const [writingVisibility, setWritingVisibility] = useState<WritingVisibility>("private")
+  const [lifecycle, setLifecycle] = useState<WritingLifecycle>("local-only")
+  const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
@@ -276,6 +278,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       setSyncStatus("saving")
 
+      const nextLifecycle = !currentWritingId ? "local-only" : lifecycleRef.current
+
       const nextWriting: LocalWriting = {
         id: nextId,
         title: nextTitle,
@@ -285,6 +289,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         visibility: overrides?.visibility ?? visibilityRef.current,
         version: nextVersion,
         sync_status: "pending",
+        lifecycle: nextLifecycle,
         created_at: baseCreatedAt,
         updated_at: nowIso,
         local_updated_at: Date.now(),
@@ -535,6 +540,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [writingVisibility])
 
   useEffect(() => {
+    lifecycleRef.current = lifecycle
+  }, [lifecycle])
+
+  useEffect(() => {
     const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
 
     if (!nextExternalLoad) {
@@ -627,6 +636,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setCreatedAt(localWriting.created_at)
         setWritingStatus(localWriting.status ?? "draft")
         setWritingVisibility(localWriting.visibility ?? "private")
+        setLifecycle(localWriting.lifecycle ?? "local-only")
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
             localWriting.sync_status,

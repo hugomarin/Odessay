@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { resolveWriteDetailRoute } from "@/lib/writings/write-detail-route"
 
 describe("write detail route resolution", () => {
-  it("keeps editor available for UUID identifiers while remote row is missing", () => {
+  it("routes UUID identifiers to editor as a fallback for local-only drafts", () => {
     expect(resolveWriteDetailRoute("550e8400-e29b-41d4-a716-446655440000", null)).toEqual({
       kind: "editor",
       writingId: "550e8400-e29b-41d4-a716-446655440000",

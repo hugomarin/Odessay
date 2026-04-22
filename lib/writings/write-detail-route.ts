@@ -15,8 +15,12 @@ export const resolveWriteDetailRoute = (
   writing: OwnedWritingRouteRow | null,
 ): WriteDetailRouteResolution => {
   if (!writing) {
+    // Routing fallback for local-first drafts: UUID-shaped identifiers may
+    // correspond to writings that exist only in localDB (lifecycle: "local-only").
+    // The server cannot inspect IndexedDB, so we use the UUID convention as a
+    // coarse signal to route to the editor shell instead of 404. The client
+    // then resolves the actual lifecycle from localDB and decides how to hydrate.
     if (isUuidLikeWritingIdentifier(identifier)) {
-      // Allow local-first drafts to load while remote sync catches up.
       return { kind: "editor", writingId: identifier }
     }
 

@@ -34,6 +34,7 @@ const createDemoWriting = (): LocalWriting => {
     visibility: "private",
     version: 1,
     sync_status: "pending",
+    lifecycle: "local-only",
     created_at: timestamp.toISOString(),
     updated_at: timestamp.toISOString(),
     local_updated_at: timestamp.getTime(),
