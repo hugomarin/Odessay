@@ -57,9 +57,11 @@ export function PublicationPanel({
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
   const requestInFlightRef = useRef(false);
+  const reviewRef = useRef<LocalPublicationReview | null>(null);
 
   const persistReview = useCallback(async (nextReview: LocalPublicationReview) => {
     await localDB.publicationReviews.save(nextReview);
+    reviewRef.current = nextReview;
     setReview(nextReview);
   }, []);
 
@@ -116,9 +118,9 @@ export function PublicationPanel({
         const message = nextError instanceof Error ? nextError.message : "Publication review failed.";
         setError(message);
 
-        if (mode === "manual" && review) {
+        if (mode === "manual" && reviewRef.current) {
           await persistReview({
-            ...review,
+            ...reviewRef.current,
             updated_at: new Date().toISOString(),
             last_error: message,
           });
@@ -128,7 +130,7 @@ export function PublicationPanel({
         setIsLoading(false);
       }
     },
-    [bodyText, currentHash, markdown, persistReview, review, title, writingId],
+    [bodyText, currentHash, markdown, persistReview, title, writingId],
   );
 
   useEffect(() => {
@@ -149,11 +151,13 @@ export function PublicationPanel({
       }
 
       if (cachedReview) {
+        reviewRef.current = cachedReview;
         setReview(cachedReview);
         setError(cachedReview.last_error ?? null);
         return;
       }
 
+      reviewRef.current = null;
       setReview(null);
       setError(null);
 
@@ -287,9 +291,6 @@ export function PublicationPanel({
             </button>
           </div>
 
-          {review?.model ? (
-            <p className="mt-2 text-[10px] uppercase tracking-[0.07em] text-ink-4">Model: {review.model}</p>
-          ) : null}
           {review?.summary ? <p className="mt-2 text-[11px] leading-relaxed text-ink-3">{review.summary}</p> : null}
           {isStale ? (
             <p className="mt-2 rounded-md border-[0.5px] border-[hsl(22,40%,84%)] bg-bg px-2 py-1.5 text-[11px] text-ink-3">
