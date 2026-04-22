@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Editor statusbar now shows selection metrics (words and characters) when text is selected in Rich or Markdown mode, and reverts to full document metrics (words, characters, sentences, reading time, pages) when there is no selection. The transition is immediate with CSS opacity transition, no layout shift, and selection calculation uses useEditorState for Rich mode and textarea selection events for Markdown mode.",
+      "phase": "Fase 3",
+      "issue": "ODE-96",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-96",
+      "commit": "cdc9286",
+      "date": "2026-04-22",
+      "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (229 tests), npx playwright test tests/playwright/editor-selection-metrics.e2e.ts (5/5 passed). Performance contract: required. Evidence captured at artifacts/perf/editor-trace-ode96.json.gz; perf gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace-ode96.json.gz. Presentation contract: not required (statusbar chrome only; no cross-mode text rendering contract modified)."
+    },
+    {
       "what": "The editor now includes an integrated find and replace panel for Rich and Markdown modes. `Cmd/Ctrl+F` opens inline search with live highlights and active-match navigation, `Cmd/Ctrl+H` expands replacement controls, single replace advances automatically, replace-all confirms the exact substitution count, `Escape` restores the previous editor selection, and the rich editor keeps ProseMirror decorations isolated from the canonical text DOM while Markdown mode mirrors highlights in the semantic overlay.",
       "phase": "Fase 3",
       "issue": "ODE-95",

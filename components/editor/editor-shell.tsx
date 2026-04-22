@@ -65,6 +65,7 @@ import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
+import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type { LocalWriting, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
@@ -89,12 +90,6 @@ type EditorShellProps = {
 type SelectionSnapshot = {
   from: number
   to: number
-  text: string
-}
-
-type MarkdownSelectionSnapshot = {
-  start: number
-  end: number
   text: string
 }
 
@@ -205,20 +200,6 @@ const createWritingId = () => {
   throw new Error("Unable to generate a UUID for the writing.")
 }
 
-const getWordCount = (editor: Editor | null) => {
-  if (!editor) {
-    return 0
-  }
-
-  const words = editor.storage.characterCount?.words
-
-  if (typeof words !== "function") {
-    return 0
-  }
-
-  return words()
-}
-
 export function EditorShell({ writingId }: EditorShellProps) {
   const router = useRouter()
   const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
@@ -231,8 +212,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
+
   const [bodyText, setBodyText] = useState("")
-  const [wordCount, setWordCount] = useState(0)
+  const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
   const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
   const [version, setVersion] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
@@ -300,7 +282,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
   )
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
-    setWordCount(getWordCount(editorInstance))
     setBodyText(editorInstance.getText())
   }, [])
 
@@ -1028,7 +1009,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
           isApplyingContentRef.current = true
           editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
           isApplyingContentRef.current = false
-          setWordCount(getWordCount(editor))
           setBodyText(editor.getText())
           void persistEditorSnapshot(editor)
           markdownSaveTimeoutRef.current = null
@@ -1512,7 +1492,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
         // Update metrics from TipTap but do NOT derive markdownValue from it —
         // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
         // In Markdown mode the textarea is the source of truth; markdownValue is already correct.
-        setWordCount(getWordCount(editor))
         setBodyText(editor.getText())
         void persistEditorSnapshot(editor)
         markdownSaveTimeoutRef.current = null
@@ -1554,7 +1533,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
             isApplyingContentRef.current = true
             editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
             isApplyingContentRef.current = false
-            setWordCount(getWordCount(editor))
             setBodyText(editor.getText())
             void persistEditorSnapshot(editor)
             markdownSaveTimeoutRef.current = null
@@ -1693,6 +1671,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return getMarkdownFootnotes(markdownValue)
   }, [editor, markdownValue, mode, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
+  const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
     () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
     [hasExplicitTitle, title, bodyText, createdAt],
@@ -2261,6 +2240,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
               onMarkdownChange={handleMarkdownChange}
               onMarkdownSelectionChange={(selection) => {
                 markdownSelectionRef.current = selection
+                setMarkdownSelectionState(selection)
               }}
               markdownTextareaRef={markdownTextareaRef}
               markdownOverlayHtml={markdownOverlayHtml}
@@ -2289,7 +2269,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
               }
             />
 
-            {!isFocusMode ? <EditorStatusBar mode={mode} wordCount={wordCount} saveState={syncStatus} onToggleMode={handleToggleMode} /> : null}
+            {!isFocusMode ? (
+              <EditorStatusBar
+                mode={mode}
+                metrics={textMetrics}
+                selectionMetrics={selectionMetrics}
+                saveState={syncStatus}
+                onToggleMode={handleToggleMode}
+              />
+            ) : null}
           </div>
         </div>
 
