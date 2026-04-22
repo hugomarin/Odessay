@@ -20,6 +20,8 @@ export type EditorShortcutAction =
   | "newWriting"
   | "settings"
   | "table"
+  | "find"
+  | "replace"
 
 export type KeyboardLikeEvent = {
   key: string
@@ -50,6 +52,8 @@ const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
   newWriting: { mac: "⌘⇧N", windows: "Ctrl+Shift+N" },
   settings: { mac: "⌘,", windows: "Ctrl+," },
   table: { mac: "⌘⇧T", windows: "Ctrl+Shift+T" },
+  find: { mac: "⌘F", windows: "Ctrl+F" },
+  replace: { mac: "⌘H", windows: "Ctrl+H" },
 }
 
 const isCommandKey = (event: KeyboardLikeEvent) =>
@@ -136,6 +140,14 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
 
   if (matches(event, "t", { shift: true, code: "KeyT" })) {
     return "table"
+  }
+
+  if (matches(event, "f", { code: "KeyF" })) {
+    return "find"
+  }
+
+  if (matches(event, "h", { code: "KeyH" })) {
+    return "replace"
   }
 
   if (matches(event, "f", { shift: true, code: "KeyF" })) {

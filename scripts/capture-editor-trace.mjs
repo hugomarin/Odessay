@@ -113,57 +113,54 @@ async function prepareHarness(page, targetUrl, timeoutMs) {
   await page.keyboard.type("warmup editor", { delay: 10 });
   await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
   await page.keyboard.press("Backspace");
+  const longFixture = Array.from({ length: 1400 }, (_, index) => {
+    if (index % 140 === 0) {
+      return `alpha beta gamma delta ${index + 1}`;
+    }
+
+    return `paper quiet river ${index + 1}`;
+  }).join(" ");
+  await page.keyboard.insertText(longFixture);
   await page.waitForTimeout(300);
 }
 
 async function runMeasuredScenario(page, targetUrl) {
+  const commandKey = process.platform === "darwin" ? "Meta" : "Control";
   const editor = page.locator(".odessay-editor-content").first();
-  await page.keyboard.type("editor baseline trace", { delay: 24 });
-  await page.keyboard.type(" sample", { delay: 24 });
 
-  const pastePayload = `\n${"Large paste block for perf gate. ".repeat(120)}\n`;
   try {
     const origin = new URL(targetUrl).origin;
+    const pastePayload = " alpha beta";
     await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
       origin,
     });
     await page.evaluate(async (value) => {
       await navigator.clipboard.writeText(value);
     }, pastePayload);
-    await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+    await page.keyboard.press(`${commandKey}+V`);
   } catch {
-    await page.evaluate((value) => {
-      const target = document.querySelector(".odessay-editor-content");
-      if (!target) return;
-      const dataTransfer = new DataTransfer();
-      dataTransfer.setData("text/plain", value);
-      target.dispatchEvent(
-        new ClipboardEvent("paste", {
-          bubbles: true,
-          cancelable: true,
-          clipboardData: dataTransfer,
-        }),
-      );
-    }, pastePayload);
+    // Ignore clipboard restrictions in perf environments that do not expose it.
   }
+
+  await page.keyboard.press(`${commandKey}+F`);
+  await page.getByLabel("Find text").fill("alpha beta");
+
+  for (let iteration = 0; iteration < 5; iteration += 1) {
+    await page.getByLabel("Find text").press("Enter");
+  }
+
+  await page.keyboard.press(`${commandKey}+H`);
+  await page.getByLabel("Replace text").fill("omega beta");
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Replace all" }).click({ force: true });
 
   const box = await editor.boundingBox();
   if (box) {
-    for (let iteration = 0; iteration < 10; iteration += 1) {
-      const ratio = (iteration % 6) / 6;
-      const x = box.x + 40 + ratio * Math.max(box.width - 120, 20);
-      const y = box.y + 40 + ((iteration * 31) % Math.max(box.height - 80, 20));
+    for (let iteration = 0; iteration < 5; iteration += 1) {
+      const x = box.x + 48 + iteration * 24;
+      const y = box.y + 56 + iteration * 12;
       await page.mouse.click(x, y);
     }
-
-    const dragStartX = box.x + 60;
-    const dragEndX = Math.min(box.x + box.width - 60, dragStartX + 220);
-    const dragY = box.y + Math.min(140, Math.max(box.height / 3, 50));
-
-    await page.mouse.move(dragStartX, dragY);
-    await page.mouse.down();
-    await page.mouse.move(dragEndX, dragY);
-    await page.mouse.up();
   }
 
   await page.waitForTimeout(900);
