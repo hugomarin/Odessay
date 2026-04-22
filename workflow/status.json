@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "The editor now includes an integrated find and replace panel for Rich and Markdown modes. `Cmd/Ctrl+F` opens inline search with live highlights and active-match navigation, `Cmd/Ctrl+H` expands replacement controls, single replace advances automatically, replace-all confirms the exact substitution count, `Escape` restores the previous editor selection, and the rich editor keeps ProseMirror decorations isolated from the canonical text DOM while Markdown mode mirrors highlights in the semantic overlay.",
+      "phase": "Fase 3",
+      "issue": "ODE-95",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-95",
+      "commit": "4b6c9e9",
+      "date": "2026-04-22",
+      "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (222 tests), npx playwright test tests/playwright/editor-find-replace.e2e.ts. Performance contract: required. Evidence captured at artifacts/perf/editor-find-trace.json.gz; perf gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-find-trace.json.gz. Presentation contract: not required (find highlights are transient editor overlays and do not modify the shared cross-mode text rendering contract)."
+    },
+    {
       "what": "Write workspace now supports persistent multi-document tabs and sidebar recents. The editor session is persisted in IndexedDB per user scope, `/write` restores open tabs plus cursor/scroll mode snapshots after refresh, the topbar turns into a tab workspace with close/new-tab actions, and the expanded sidebar exposes the 8 most recent writings while reusing existing tabs instead of duplicating them.",
       "phase": "Fase 3",
       "issue": "ODE-94",

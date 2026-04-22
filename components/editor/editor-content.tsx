@@ -3,7 +3,7 @@
 import type { Editor } from "@tiptap/react"
 import { EditorContent } from "@tiptap/react"
 import { useMemo, useRef } from "react"
-import type { CSSProperties, RefObject, UIEvent } from "react"
+import type { CSSProperties, ReactNode, RefObject, UIEvent } from "react"
 import { renderMarkdownSemanticHtml } from "@/lib/editor/markdown-format"
 import { cn } from "@/lib/utils"
 
@@ -14,6 +14,8 @@ type EditorContentProps = {
   onMarkdownChange: (markdown: string) => void
   onMarkdownSelectionChange?: (selection: { start: number; end: number; text: string }) => void
   markdownTextareaRef?: RefObject<HTMLTextAreaElement | null>
+  topSlot?: ReactNode
+  markdownOverlayHtml?: string
 }
 
 export function WritingEditorContent({
@@ -23,9 +25,14 @@ export function WritingEditorContent({
   onMarkdownChange,
   onMarkdownSelectionChange,
   markdownTextareaRef,
+  topSlot,
+  markdownOverlayHtml,
 }: EditorContentProps) {
   const markdownSemanticRef = useRef<HTMLPreElement | null>(null)
-  const semanticHtml = useMemo(() => renderMarkdownSemanticHtml(markdownValue), [markdownValue])
+  const semanticHtml = useMemo(
+    () => markdownOverlayHtml ?? renderMarkdownSemanticHtml(markdownValue),
+    [markdownOverlayHtml, markdownValue],
+  )
 
   const handleMarkdownScroll = (event: UIEvent<HTMLTextAreaElement>) => {
     const target = event.currentTarget
@@ -52,6 +59,7 @@ export function WritingEditorContent({
       className="EditorWritingArea min-h-0 flex-1 overflow-y-auto"
     >
       <div className="odessay-content-frame">
+        {topSlot}
         {mode === "markdown" ? (
           <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
             <pre

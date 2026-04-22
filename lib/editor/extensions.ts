@@ -22,6 +22,7 @@ import { TableHeader } from "@tiptap/extension-table-header"
 import { TableRow } from "@tiptap/extension-table-row"
 import Text from "@tiptap/extension-text"
 import { Markdown } from "tiptap-markdown"
+import { FindReplaceExtension } from "@/lib/editor/find-replace"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { FootnoteReferenceNode } from "@/lib/editor/footnote-node"
 
@@ -60,6 +61,7 @@ export const createEditorExtensions = (): Extensions => [
   TableRow,
   TableHeader,
   TableCell,
+  FindReplaceExtension,
   FootnoteReferenceNode,
   FootnoteExtension,
   History,
