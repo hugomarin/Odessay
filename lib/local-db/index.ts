@@ -3,6 +3,7 @@ import {
   LOCAL_DB_STORES,
   LOCAL_DB_VERSION,
   type CollectionListFilters,
+  type LocalEditorSession,
   type LocalCollection,
   type LocalDBScope,
   type LocalSyncStatus,
@@ -44,6 +45,10 @@ type LocalDB = {
     getCurrentForWriting: (writingId: string) => Promise<SyncMutation | null>;
     markSynced: (id: string) => Promise<void>;
     markFailed: (id: string, error: string, nextRetryAt: number) => Promise<void>;
+  };
+  editorSessions: {
+    save: (session: LocalEditorSession) => Promise<void>;
+    get: (id: string) => Promise<LocalEditorSession | null>;
   };
 };
 
@@ -207,6 +212,12 @@ const openDatabase = () => {
             syncStore.createIndex("by-entity-key", "entity_key", { unique: true });
           }
         }
+      }
+
+      if (!database.objectStoreNames.contains(LOCAL_DB_STORES.editorSessions)) {
+        database.createObjectStore(LOCAL_DB_STORES.editorSessions, {
+          keyPath: "id",
+        });
       }
 
       if (oldVersion < 3 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
@@ -376,6 +387,18 @@ const saveCollection = async (collection: LocalCollection) => {
     await runRequest(store.put(collection));
   });
 };
+
+const saveEditorSession = async (session: LocalEditorSession) => {
+  await withStore(LOCAL_DB_STORES.editorSessions, "readwrite", async (store) => {
+    await runRequest(store.put(session));
+  });
+};
+
+const getEditorSession = async (id: string) =>
+  withStore(LOCAL_DB_STORES.editorSessions, "readonly", async (store) => {
+    const session = await runRequest(store.get(id));
+    return (session as LocalEditorSession | undefined) ?? null;
+  });
 
 const getCollection = async (id: string) =>
   withStore(LOCAL_DB_STORES.collections, "readonly", async (store) => {
@@ -685,6 +708,10 @@ const localDBInstance: LocalDB = {
       getCurrentMutationForEntity("writing", writingId),
     markSynced: markMutationSynced,
     markFailed: markMutationFailed,
+  },
+  editorSessions: {
+    save: saveEditorSession,
+    get: getEditorSession,
   },
 };
 

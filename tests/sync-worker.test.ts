@@ -95,6 +95,10 @@ const createLocalDbMock = () => {
       markSynced: vi.fn(async () => undefined),
       markFailed: vi.fn(async () => undefined),
     },
+    editorSessions: {
+      save: vi.fn(async () => undefined),
+      get: vi.fn(async () => null),
+    },
   } satisfies LocalDB;
 };
 

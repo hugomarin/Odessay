@@ -1,11 +1,12 @@
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 5;
+export const LOCAL_DB_VERSION = 6;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
   collections: "collections",
   writingCollections: "writing-collections",
   syncMutations: "sync-mutations",
+  editorSessions: "editor-sessions",
 } as const;
 
 export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
@@ -132,3 +133,42 @@ export type CollectionListFilters = {
 };
 
 export type LocalDBScope = string | null | undefined;
+
+export type EditorTabSaveState = "saved" | "saving" | "saved-local" | "error";
+export type EditorTabMode = "rich" | "markdown";
+
+export type LocalEditorTabViewState = {
+  mode: EditorTabMode;
+  scrollTop: number;
+  scrollLeft: number;
+  selectionFrom: number | null;
+  selectionTo: number | null;
+  markdownSelectionStart: number | null;
+  markdownSelectionEnd: number | null;
+};
+
+export type LocalEditorSessionTab = {
+  id: string;
+  writing_id: string | null;
+  slug?: string | null;
+  title: string;
+  save_state: EditorTabSaveState;
+  has_pending_sync: boolean;
+  last_touched_at: number;
+  view_state?: LocalEditorTabViewState | null;
+};
+
+export type LocalEditorRecentWriting = {
+  writing_id: string;
+  slug?: string | null;
+  title: string;
+  last_touched_at: number;
+};
+
+export type LocalEditorSession = {
+  id: string;
+  active_tab_id: string | null;
+  tabs: LocalEditorSessionTab[];
+  recent_writings: LocalEditorRecentWriting[];
+  updated_at: number;
+};

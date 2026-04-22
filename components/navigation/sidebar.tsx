@@ -5,6 +5,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { FileText, LibraryBig, Mails, PanelLeftClose, Plus, Search } from "lucide-react"
 import { SidebarListPanel } from "@/components/navigation/sidebar-list-panel"
+import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -328,6 +329,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 )
               })}
             </div>
+
+            <SidebarRecentWritings collapsed={isIconOnly} />
           </div>
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
