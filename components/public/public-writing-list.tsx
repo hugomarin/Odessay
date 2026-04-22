@@ -16,7 +16,7 @@ import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 type PublicCollectionListItem = {
   id: string
   name: string
-  publicWritingsCount: number
+  writingIds: string[]
 }
 
 type PublicWritingListItem = {
@@ -153,13 +153,33 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
         data-section="public-collections"
         className="PublicCollections flex flex-col gap-2 sm:gap-3"
       >
-        {collections.map((collection) => (
-          <div key={collection.id} className="flex items-center gap-3">
-            <span className="text-[13px] text-ink-2 sm:text-[14px]">{collection.name}</span>
-            <span className="h-1 w-1 rounded-full bg-ink-4" />
-            <span className="text-[12px] text-ink-4 sm:text-[13px]">{collection.publicWritingsCount} writings</span>
-          </div>
-        ))}
+        {collections.map((collection) => {
+          const visibleCount = collection.writingIds.filter((writingId) => {
+            const writing = items.find((candidate) => candidate.id === writingId)
+
+            if (!writing) {
+              return false
+            }
+
+            if (!isOwner || viewMode === "public") {
+              return writing.visibility === "public"
+            }
+
+            return true
+          }).length
+
+          if (visibleCount === 0) {
+            return null
+          }
+
+          return (
+            <div key={collection.id} className="flex items-center gap-3">
+              <span className="text-[13px] text-ink-2 sm:text-[14px]">{collection.name}</span>
+              <span className="h-1 w-1 rounded-full bg-ink-4" />
+              <span className="text-[12px] text-ink-4 sm:text-[13px]">{visibleCount} writings</span>
+            </div>
+          )
+        })}
       </section>
       ) : null}
 

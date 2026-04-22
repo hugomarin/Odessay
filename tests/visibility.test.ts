@@ -138,21 +138,21 @@ describe("sync queue — visibility in remote payload", () => {
     const writing = makeWriting({ visibility: "private", sync_status: "synced" });
     await enqueueWritingUpsert(writing);
     const mutation = await localDB.syncQueue.getCurrentForWriting(writing.id);
-    expect(mutation?.payload.visibility).toBe("private");
+    expect(mutation && mutation.entity_kind === "writing" ? mutation.payload.visibility : null).toBe("private");
   });
 
   it("enqueues upsert with visibility=shared", async () => {
     const writing = makeWriting({ visibility: "shared", sync_status: "synced" });
     await enqueueWritingUpsert(writing);
     const mutation = await localDB.syncQueue.getCurrentForWriting(writing.id);
-    expect(mutation?.payload.visibility).toBe("shared");
+    expect(mutation && mutation.entity_kind === "writing" ? mutation.payload.visibility : null).toBe("shared");
   });
 
   it("enqueues upsert with visibility=public", async () => {
     const writing = makeWriting({ visibility: "public", sync_status: "synced" });
     await enqueueWritingUpsert(writing);
     const mutation = await localDB.syncQueue.getCurrentForWriting(writing.id);
-    expect(mutation?.payload.visibility).toBe("public");
+    expect(mutation && mutation.entity_kind === "writing" ? mutation.payload.visibility : null).toBe("public");
   });
 });
 

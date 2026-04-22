@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Collections now ship as a local-first feature set: IndexedDB persists collections plus writing assignments, the shared sync queue flushes collection CRUD and assignment mutations to Supabase, `/collections` renders the uncategorized banner and inline expandable groups, the editor Properties panel and sidebar list panel can create/assign collections, and the public author space surfaces public collections with counts that respect the owner visibility toggle.",
+      "phase": "Fase 3",
+      "issue": "ODE-93",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-93",
+      "commit": "430a7ab",
+      "date": "2026-04-21",
+      "notes": "Validation in green: npm run typecheck, npm run lint, npm test (209 tests). Performance contract: not required (CRUD/list organization flow only; no editor hot-path trace required). Presentation contract: not required (does not modify the cross-mode `.odessay-rich-content` rendering contract)."
+    },
+    {
       "what": "Define explicit local-only → syncing → server-confirmed lifecycle for new writings. Adds WritingLifecycle type to LocalWriting, bumps IndexedDB to v3 with migration, updates sync worker to transition lifecycle during flush, and updates editor-shell hydration to track lifecycle explicitly instead of inferring from route state or UUID heuristics.",
       "phase": "Fase 3",
       "issue": "ODE-92",

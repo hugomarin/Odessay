@@ -1,6 +1,8 @@
 ---
 name: skill-code-review
-description: Estándares de code review y checklist de entrega para Odessay. Consulta este skill antes de abrir un PR. Autoevalúa tu trabajo con este checklist.
+description: |
+  Estándares de code review y checklist de entrega para Odessay. Consulta este skill antes de abrir un PR.
+  Autoevalúa tu trabajo con este checklist. Portable — funciona con cualquier agente. Claude enhancements disponibles.
 ---
 
 # Skill: Code Review (Odessay)
@@ -39,6 +41,7 @@ npm run typecheck
 npm run lint
 npm test
 ```
+
 Sin estos tres outputs en el PR, el review no empieza.
 
 ---
@@ -148,15 +151,106 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - No hay test para flujo crítico nuevo.
 - El AI editor genera texto en algún caso.
 - Se agregó UI que el issue no pedía.
-- Se cambió tipografía en una sola superficie (`.odessay-editor-content` o `.prose-odessay`) sin espejo en la otra.
+- Se cambió tipografía en una sola superficie sin espejo en la otra.
 - Se alteró el contrato tipográfico sin actualizar/verificar `.agents/skills/skill-design/tipografia.md`.
-- Se rompió el overflow interno de tablas grandes (regresión de scroll horizontal en contenido ancho).
+- Se rompió el overflow interno de tablas grandes.
 - Se agregaron dependencias pesadas sin justificación.
 - El issue exige `Performance Contract: required` y no hay trace/evidencia objetiva.
-- `check-performance-gate` reporta `required_failures > 0` o métricas requeridas faltantes.
+- `check-performance-gate` reporta `required_failures > 0`.
 - Se marcó `Performance Contract: not required` sin justificación explícita.
 - No hay descripción del PR o no referencia el issue.
 - Se operó contra producción.
+
+---
+
+## Formato de findings estructurado
+
+Todo finding del review debe usar ESTRICTAMENTE este formato:
+
+```
+[SEVERIDAD] (confidence: N/10) archivo:linea — categoria: descripción
+  Fix: fix recomendado o "necesita juicio humano"
+```
+
+**Ejemplos correctos:**
+```
+[P2] (confidence: 9/10) editor-shell.tsx:648 — performance: setHydrationWritingId(null) dispara re-render no declarado en la PR note
+  Fix: envolver en startTransition(() => setHydrationWritingId(null))
+
+[P3] (confidence: 7/10) editor-hydration-session.test.ts:8 — test-gap: createRouteHydrationSessionState(null) sin test de ruta /write sin ID
+  Fix: agregar it() con null como parámetro
+
+[P3] (confidence: 6/10) app/api/writings/route.ts — missing-edge-case: resolveExternalWritingLoad(null, 'writing-1') no cubierto
+  Fix: agregar assertion en test existente
+```
+
+**Reglas:**
+- `categoria:` es obligatoria. Sin ella el finding es inválido.
+- `confidence: N/10` es obligatorio para TODO finding, incluso P3.
+- `archivo:linea` es obligatorio. Si no aplica línea exacta, usar `archivo —` (con espacio antes del em-dash).
+- NO usar bullets sueltos. Cada finding debe ser una línea con el formato completo.
+
+**Severidades:**
+- `[P0]` — Bloqueante. Seguridad, corrupción de datos, crash en producción.
+- `[P1]` — Crítico. Bug funcional, performance degradation en critical path.
+- `[P2]` — Importante. Deuda técnica, edge case no manejado, inconsistencia de diseño.
+- `[P3]` — Informativo. Sugerencia de mejora, optimización menor, estilo.
+
+**Confidence (1-10):**
+| Score | Significado | Regla de display |
+|-------|-------------|------------------|
+| 9-10 | Verificado leyendo código concreto. Bug o exploit demostrable. | Mostrar normal |
+| 7-8 | Match de patrón de alta confianza. Muy probable que sea correcto. | Mostrar normal |
+| 5-6 | Moderado. Puede ser falso positivo. | Mostrar con caveat: "Medium confidence, verificar" |
+| 3-4 | Baja confianza. Patrón sospechoso pero puede estar bien. | Apéndice solo |
+| 1-2 | Especulación. | Suprimir |
+
+**Fingerprint:** `{archivo}:{linea}:{categoría}` — para deduplicar si múltiples revisores encuentran lo mismo.
+
+---
+
+## PR Quality Score
+
+Al final de todo review, computar:
+
+```
+score = max(0, 10 - (P0_count * 3 + P1_count * 2 + P2_count * 0.5 + P3_count * 0.25))
+```
+
+Cap en 10. Redondear a 1 decimal.
+
+### Cálculo obligatorio
+
+Escribir EXPLÍCITAMENTE antes del veredicto:
+
+```
+Findings contabilizados:
+- P0 = __
+- P1 = __
+- P2 = __
+- P3 = __
+
+Penalización: (P0×3) + (P1×2) + (P2×0.5) + (P3×0.25) = __
+Score = max(0, 10 - __) = __/10
+```
+
+El score del veredicto debe coincidir exactamente con este cálculo. Si no se muestra el paso a paso, el review está incompleto.
+
+| Score | Veredicto |
+|-------|-----------|
+| 9.0 - 10 | Aprobado sin reservas |
+| 7.0 - 8.9 | Aprobado con observaciones menores |
+| 5.0 - 6.9 | Requiere cambios antes de merge |
+| < 5.0 | Rechazado — necesita trabajo significativo |
+
+**Ajustes especiales:**
+- P0 activo → score máximo 4.0 (rechazado).
+- P1 en critical path del editor → score máximo 6.9 (cambios requeridos).
+- Performance gate con `required_failures > 0` → score máximo 5.0.
+- Sin proof of work (typecheck/lint/tests) → score = 0.0.
+- Findings investigados y descartados como falso positivo → NO contar en el score.
+
+El score no reemplaza el juicio humano, pero da una medida objetiva de calidad que puede trackearse entre PRs.
 
 ---
 
@@ -201,15 +295,62 @@ Si falta el comentario de trazabilidad → **rechazar**. La conexión Linear ↔
 - Revisar la lista de Red flags de este skill contra los cambios del PR.
 - Si se detecta alguno → **rechazar** con descripción del problema específico.
 
-**6. status.json actualizado**
+**6. Score y findings estructurados**
+- Revisar el diff aplicando el formato de findings estructurado.
+- Computar PR Quality Score.
+- Si score < 5.0 → **rechazar**.
+- Si score < 7.0 → **solicitar cambios**.
+
+**7. status.json actualizado**
 - ¿Se agregó una entrada en `workflow/status.json → built` con el issue ID, commit SHA y fecha?
 - Si el issue era el último de la fase activa → ¿se actualizó `active_phase`?
 
+### 8. Persistencia del score
+
+Al finalizar cualquier review (aprobado, rechazado o con cambios solicitados), appendear el resultado a `workflow/review-history.jsonl`:
+
+```bash
+BRANCH=$(git branch --show-current)
+COMMIT=$(git rev-parse --short HEAD)
+node -e "
+const fs = require('fs');
+const entry = JSON.stringify({
+  ts: new Date().toISOString(),
+  issue: 'ODE-XX',
+  branch: process.env.BRANCH,
+  score: 8.3,
+  P0: 0, P1: 1, P2: 2, P3: 1,
+  reviewer: 'kimi',
+  commit: process.env.COMMIT,
+  verdict: 'approved|changes_requested|rejected'
+}) + '\n';
+fs.appendFileSync('workflow/review-history.jsonl', entry);
+"
+```
+
+Si el archivo no existe, crearlo. Este log es la fuente de verdad para tendencias de calidad.
+
+### Integración con Linear
+
+Usar `scripts/linear-cli.mjs` para sincronizar el estado del review:
+
+```bash
+# Obtener contexto del issue
+node scripts/linear-cli.mjs get ODE-XX
+
+# Postear resultado
+node scripts/linear-cli.mjs comment ODE-XX "Review result..."
+
+# Mover estado si aplica
+node scripts/linear-cli.mjs move ODE-XX "In Progress"  # si hay cambios solicitados
+node scripts/linear-cli.mjs move ODE-XX "Done"         # si está aprobado
+```
+
 ### Decisión final
 
-**Si todos los checks pasan:**
+**Si todos los checks pasan y score >= 7.0:**
 ```
-✅ REVIEW APROBADO
+✅ REVIEW APROBADO — Score: X/10
 
 Issue: [ODE-XX]
 PR: [link]
@@ -219,19 +360,21 @@ Trazabilidad: comentario en Linear ✅ | status.json actualizado ✅
 
 Acción: aprobación técnica completa. Ejecutando merge.
 ```
+
 Con REVIEW APROBADO, ejecutar en este orden:
 
-→ Usar Linear MCP (`save_comment`) para postear el texto anterior como comentario en el issue.
+→ Postear el texto anterior como comentario en Linear (`scripts/linear-cli.mjs comment`).
+  **El comentario debe incluir el PR Quality Score en la primera línea.**
 → Hacer merge del PR: `gh pr merge {número} --merge`.
 → Volver a `main`: `git switch main`.
 → Sincronizar `main`: `git pull --ff-only origin main`.
-→ Mover el issue a Done en Linear.
+→ Mover el issue a Done en Linear (`scripts/linear-cli.mjs move`).
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
 **Si algún check falla:**
 ```
-⛔ REVIEW RECHAZADO
+⛔ REVIEW RECHAZADO — Score: X/10
 
 Issue: [ODE-XX]
 Problema: [descripción exacta del problema]
@@ -239,8 +382,8 @@ Acción requerida: [qué debe corregir el agente implementador]
 
 El issue vuelve a In Progress hasta que se corrija.
 ```
-→ Comentar en el issue de Linear con el formato anterior.
-→ No hacer merge. Mover issue de `In Review` → `In Progress`.
+→ Comentar en Linear con el formato anterior (`scripts/linear-cli.mjs comment`).
+→ No hacer merge. Mover issue de `In Review` → `In Progress` (`scripts/linear-cli.mjs move`).
 → No modificar el código — el agente revisor no implementa.
 
 ### Lo que el agente revisor NO hace
@@ -251,3 +394,11 @@ El issue vuelve a In Progress hasta que se corrija.
 - No hace merge si el review fue rechazado o si el humano indicó explícitamente que quiere hacerlo manualmente.
 - No hace merge si hay red flags activos.
 - No evalúa si el código "se ve bien" — solo verifica que las condiciones objetivas se cumplan.
+
+---
+
+## Claude Enhancement (opcional — solo si el agente lo soporta)
+
+Si el agente ejecutor tiene acceso a la herramienta `Agent` (subagentes), leer `claude-enhancements.md` y aplicar el modo especialista. Esto multiplica la cobertura del review pero no es obligatorio para que el skill funcione.
+
+Si el agente NO soporta `Agent`, ignorar esta sección. El review base ya es completo.

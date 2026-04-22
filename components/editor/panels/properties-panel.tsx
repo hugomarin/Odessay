@@ -6,6 +6,7 @@ import type { WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import { cn } from "@/lib/utils"
+import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
 
 type PropertiesPanelProps = {
@@ -319,6 +320,10 @@ export function PropertiesPanel({
             <p className="mt-1 text-[11px] text-ink-4">{visibilityCopy.description}</p>
           </div>
         </section>
+
+        {writingId ? (
+          <WritingCollectionsSection writingId={writingId} />
+        ) : null}
 
         {writingId ? (
           <WritingSharesSection

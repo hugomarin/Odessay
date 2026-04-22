@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { localDB, setLocalDBScope, subscribeToLocalDBScopeChanges } from "../lib/local-db";
+import { createEntityKey, localDB, setLocalDBScope, subscribeToLocalDBScopeChanges } from "../lib/local-db";
 import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
 
 const createWriting = (id: string, version: number): LocalWriting => ({
@@ -22,7 +22,9 @@ const createWriting = (id: string, version: number): LocalWriting => ({
 
 const createMutation = (id: string, writingId: string, version: number): SyncMutation => ({
   id,
-  writing_id: writingId,
+  entity_kind: "writing",
+  entity_id: writingId,
+  entity_key: createEntityKey("writing", writingId),
   operation: "upsert",
   payload: {
     body_json: {
@@ -70,7 +72,8 @@ describe("localDB", () => {
 
     const current = await localDB.syncQueue.getCurrentForWriting("writing-1");
     expect(current?.id).toBe("mutation-2");
-    expect(current?.payload.version).toBe(2);
+    expect(current?.entity_kind).toBe("writing");
+    expect(current && current.entity_kind === "writing" ? current.payload.version : null).toBe(2);
   });
 
   it("notifies listeners when the local DB scope changes", () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LocalDB } from "../lib/local-db";
+import { createEntityKey, type LocalDB } from "../lib/local-db";
 import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
 import { getRetryDelayMs } from "../lib/sync/retry";
 import type { RemoteWritingRecord } from "../lib/sync/remote-bootstrap";
@@ -21,9 +21,13 @@ const createWriting = (): LocalWriting => ({
   local_updated_at: 1,
 });
 
-const createMutation = (overrides: Partial<SyncMutation> = {}): SyncMutation => ({
+const createMutation = (
+  overrides: Partial<Extract<SyncMutation, { entity_kind: "writing" }>> = {},
+): Extract<SyncMutation, { entity_kind: "writing" }> => ({
   id: "mutation-1",
-  writing_id: "writing-1",
+  entity_kind: "writing",
+  entity_id: "writing-1",
+  entity_key: createEntityKey("writing", "writing-1"),
   operation: "upsert",
   payload: {
     body_json: {
@@ -71,9 +75,22 @@ const createLocalDbMock = () => {
       getAll: vi.fn(async () => [writing]),
       delete: vi.fn(async () => undefined),
     },
+    collections: {
+      save: vi.fn(async () => undefined),
+      get: vi.fn(async () => null),
+      getAll: vi.fn(async () => []),
+      delete: vi.fn(async () => undefined),
+    },
+    writingCollections: {
+      replaceForWriting: vi.fn(async () => undefined),
+      listForWriting: vi.fn(async () => []),
+      listAll: vi.fn(async () => []),
+      removeCollection: vi.fn(async () => undefined),
+    },
     syncQueue: {
       enqueue: vi.fn(async () => undefined),
       getPending: vi.fn(async () => [createMutation()]),
+      getCurrentForEntity: vi.fn(async () => createMutation()),
       getCurrentForWriting: vi.fn(async () => createMutation()),
       markSynced: vi.fn(async () => undefined),
       markFailed: vi.fn(async () => undefined),
@@ -98,8 +115,11 @@ describe("SyncWorker", () => {
   it("skips superseded mutations before sending them", async () => {
     const localDb = createLocalDbMock();
     localDb.syncQueue.getPending = vi.fn(async () => [createMutation()]);
-    localDb.syncQueue.getCurrentForWriting = vi.fn(async () =>
-      createMutation({ id: "mutation-2", payload: { ...createMutation().payload, version: 2 } }),
+    localDb.syncQueue.getCurrentForEntity = vi.fn(async () =>
+      createMutation({
+        id: "mutation-2",
+        payload: { ...createMutation().payload, version: 2 },
+      }),
     );
 
     const upsertWriting = vi.fn(async () => createRemoteWriting());
@@ -109,6 +129,9 @@ describe("SyncWorker", () => {
       transport: {
         upsertWriting,
         deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
       },
     });
 
@@ -122,7 +145,7 @@ describe("SyncWorker", () => {
     const localDb = createLocalDbMock();
     const mutation = createMutation();
     localDb.syncQueue.getPending = vi.fn(async () => [mutation]);
-    localDb.syncQueue.getCurrentForWriting = vi.fn(async () => mutation);
+    localDb.syncQueue.getCurrentForEntity = vi.fn(async () => mutation);
 
     const now = 1000;
     vi.useFakeTimers();
@@ -136,6 +159,9 @@ describe("SyncWorker", () => {
           throw new Error("network");
         }),
         deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
       },
     });
 
@@ -152,7 +178,7 @@ describe("SyncWorker", () => {
     const localDb = createLocalDbMock();
     const mutation = createMutation();
     localDb.syncQueue.getPending = vi.fn(async () => [mutation]);
-    localDb.syncQueue.getCurrentForWriting = vi.fn(async () => mutation);
+    localDb.syncQueue.getCurrentForEntity = vi.fn(async () => mutation);
 
     let isOnline = false;
     const upsertWriting = vi.fn(async () => createRemoteWriting());
@@ -162,6 +188,9 @@ describe("SyncWorker", () => {
       transport: {
         upsertWriting,
         deleteWriting: vi.fn(async () => undefined),
+        upsertCollection: vi.fn(async () => undefined),
+        deleteCollection: vi.fn(async () => undefined),
+        setWritingCollections: vi.fn(async () => undefined),
       },
     });
 

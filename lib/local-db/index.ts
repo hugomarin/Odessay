@@ -2,8 +2,13 @@ import {
   LOCAL_DB_NAME,
   LOCAL_DB_STORES,
   LOCAL_DB_VERSION,
+  type CollectionListFilters,
+  type LocalCollection,
   type LocalDBScope,
+  type LocalSyncStatus,
   type LocalWriting,
+  type LocalWritingCollection,
+  type SyncEntityKind,
   type SyncMutation,
   type WritingLifecycle,
   type WritingListFilters,
@@ -17,9 +22,25 @@ type LocalDB = {
     getAll: (filters?: WritingListFilters) => Promise<LocalWriting[]>;
     delete: (id: string) => Promise<void>;
   };
+  collections: {
+    save: (collection: LocalCollection) => Promise<void>;
+    get: (id: string) => Promise<LocalCollection | null>;
+    getAll: (filters?: CollectionListFilters) => Promise<LocalCollection[]>;
+    delete: (id: string) => Promise<void>;
+  };
+  writingCollections: {
+    replaceForWriting: (writingId: string, collectionIds: string[]) => Promise<void>;
+    listForWriting: (writingId: string) => Promise<LocalWritingCollection[]>;
+    listAll: () => Promise<LocalWritingCollection[]>;
+    removeCollection: (collectionId: string) => Promise<void>;
+  };
   syncQueue: {
     enqueue: (mutation: SyncMutation) => Promise<void>;
     getPending: () => Promise<SyncMutation[]>;
+    getCurrentForEntity: (
+      entityKind: SyncEntityKind,
+      entityId: string,
+    ) => Promise<SyncMutation | null>;
     getCurrentForWriting: (writingId: string) => Promise<SyncMutation | null>;
     markSynced: (id: string) => Promise<void>;
     markFailed: (id: string, error: string, nextRetryAt: number) => Promise<void>;
@@ -46,6 +67,46 @@ const normalizeScope = (scope?: LocalDBScope) => {
 };
 
 const getDatabaseName = () => `${LOCAL_DB_NAME}-${currentScope}`;
+
+const createEntityKey = (entityKind: SyncEntityKind, entityId: string) =>
+  `${entityKind}:${entityId}`;
+
+const createWritingCollectionId = (writingId: string, collectionId: string) =>
+  `${writingId}:${collectionId}`;
+
+const getEntityStoreName = (entityKind: SyncEntityKind) => {
+  if (entityKind === "writing") {
+    return LOCAL_DB_STORES.writings;
+  }
+
+  if (entityKind === "collection") {
+    return LOCAL_DB_STORES.collections;
+  }
+
+  if (entityKind === "writing-collections") {
+    return LOCAL_DB_STORES.writings;
+  }
+
+  return null;
+};
+
+const filterCollections = (
+  collections: LocalCollection[],
+  filters: CollectionListFilters = {},
+) =>
+  collections
+    .filter((collection) => {
+      if (!filters.includeDeleted && collection.sync_status === "deleted") {
+        return false;
+      }
+
+      if (filters.visibility && collection.visibility !== filters.visibility) {
+        return false;
+      }
+
+      return true;
+    })
+    .sort((left, right) => right.local_updated_at - left.local_updated_at);
 
 const resetDatabaseHandle = () => {
   if (databaseInstance) {
@@ -98,25 +159,56 @@ const openDatabase = () => {
         });
       }
 
+      if (!database.objectStoreNames.contains(LOCAL_DB_STORES.collections)) {
+        database.createObjectStore(LOCAL_DB_STORES.collections, {
+          keyPath: "id",
+        });
+      }
+
+      if (!database.objectStoreNames.contains(LOCAL_DB_STORES.writingCollections)) {
+        const store = database.createObjectStore(LOCAL_DB_STORES.writingCollections, {
+          keyPath: "id",
+        });
+        store.createIndex("by-writing-id", "writing_id", { unique: false });
+        store.createIndex("by-collection-id", "collection_id", { unique: false });
+      } else {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writingCollections);
+
+          if (!store.indexNames.contains("by-writing-id")) {
+            store.createIndex("by-writing-id", "writing_id", { unique: false });
+          }
+
+          if (!store.indexNames.contains("by-collection-id")) {
+            store.createIndex("by-collection-id", "collection_id", { unique: false });
+          }
+        }
+      }
+
       if (!database.objectStoreNames.contains(LOCAL_DB_STORES.syncMutations)) {
         const syncStore = database.createObjectStore(LOCAL_DB_STORES.syncMutations, {
           keyPath: "id",
         });
         syncStore.createIndex("by-created-at", "created_at", { unique: false });
-        syncStore.createIndex("by-writing-id", "writing_id", { unique: true });
+        syncStore.createIndex("by-entity-key", "entity_key", { unique: true });
       } else {
         const transaction = request.transaction;
 
         if (transaction) {
           const syncStore = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
 
-          if (!syncStore.indexNames.contains("by-writing-id")) {
-            syncStore.createIndex("by-writing-id", "writing_id", { unique: true });
+          if (syncStore.indexNames.contains("by-writing-id")) {
+            syncStore.deleteIndex("by-writing-id");
+          }
+
+          if (!syncStore.indexNames.contains("by-entity-key") && oldVersion >= 4) {
+            syncStore.createIndex("by-entity-key", "entity_key", { unique: true });
           }
         }
       }
 
-      // Migrate v2 → v3: add lifecycle field to existing writings.
       if (oldVersion < 3 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
         const transaction = request.transaction;
 
@@ -128,6 +220,9 @@ const openDatabase = () => {
             const result = cursor.result;
 
             if (!result) {
+              if (!store.indexNames.contains("by-entity-key")) {
+                store.createIndex("by-entity-key", "entity_key", { unique: true });
+              }
               return;
             }
 
@@ -140,6 +235,48 @@ const openDatabase = () => {
                   : "local-only";
 
               result.update({ ...writing, lifecycle });
+            }
+
+            result.continue();
+          };
+        }
+      }
+
+      if (oldVersion > 0 && oldVersion < 4 && database.objectStoreNames.contains(LOCAL_DB_STORES.syncMutations)) {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const mutation = result.value as
+              | (SyncMutation & { writing_id?: string })
+              | {
+                  id: string;
+                  writing_id?: string;
+                  operation: SyncMutation["operation"];
+                  payload: SyncMutation["payload"];
+                  created_at: number;
+                  attempts: number;
+                  last_error?: string;
+                  next_retry_at?: number;
+                };
+
+            if (!("entity_kind" in mutation) || !mutation.entity_kind) {
+              const entityId = mutation.writing_id ?? "";
+              result.update({
+                ...mutation,
+                entity_kind: "writing",
+                entity_id: entityId,
+                entity_key: createEntityKey("writing", entityId),
+              });
             }
 
             result.continue();
@@ -168,6 +305,18 @@ const runRequest = <T>(request: IDBRequest<T>) =>
     request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed."));
   });
 
+const waitForTransaction = (
+  transaction: IDBTransaction,
+  message: string,
+) =>
+  new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error(`${message} transaction failed.`));
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error(`${message} transaction aborted.`));
+  });
+
 const withStore = async <T>(
   storeName: (typeof LOCAL_DB_STORES)[keyof typeof LOCAL_DB_STORES],
   mode: IDBTransactionMode,
@@ -176,16 +325,13 @@ const withStore = async <T>(
   const database = await openDatabase();
   const transaction = database.transaction(storeName, mode);
   const store = transaction.objectStore(storeName);
+  const completion = waitForTransaction(
+    transaction,
+    `IndexedDB transaction for ${storeName}`,
+  );
 
   const result = await handler(store);
-
-  await new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error(`IndexedDB transaction failed for ${storeName}.`));
-    transaction.onabort = () =>
-      reject(transaction.error ?? new Error(`IndexedDB transaction aborted for ${storeName}.`));
-  });
+  await completion;
 
   return result;
 };
@@ -225,15 +371,131 @@ const softDeleteWriting = async (id: string) => {
   });
 };
 
+const saveCollection = async (collection: LocalCollection) => {
+  await withStore(LOCAL_DB_STORES.collections, "readwrite", async (store) => {
+    await runRequest(store.put(collection));
+  });
+};
+
+const getCollection = async (id: string) =>
+  withStore(LOCAL_DB_STORES.collections, "readonly", async (store) => {
+    const collection = await runRequest(store.get(id));
+    return (collection as LocalCollection | undefined) ?? null;
+  });
+
+const getAllCollections = async (filters?: CollectionListFilters) =>
+  withStore(LOCAL_DB_STORES.collections, "readonly", async (store) => {
+    const collections = (await runRequest(store.getAll())) as LocalCollection[];
+    return filterCollections(collections, filters);
+  });
+
+const softDeleteCollection = async (id: string) => {
+  const existing = await getCollection(id);
+
+  if (!existing) {
+    return;
+  }
+
+  await saveCollection({
+    ...existing,
+    deleted_at: new Date().toISOString(),
+    local_updated_at: Date.now(),
+    sync_status: "deleted",
+    updated_at: new Date().toISOString(),
+  });
+
+  await removeCollectionAssignments(id);
+};
+
+const listWritingCollectionsForWriting = async (writingId: string) =>
+  withStore(LOCAL_DB_STORES.writingCollections, "readonly", async (store) => {
+    const rows = (await runRequest(
+      store.index("by-writing-id").getAll(IDBKeyRange.only(writingId)),
+    )) as LocalWritingCollection[];
+
+    return rows.sort((left, right) => left.added_at.localeCompare(right.added_at));
+  });
+
+const listAllWritingCollections = async () =>
+  withStore(LOCAL_DB_STORES.writingCollections, "readonly", async (store) => {
+    const rows = (await runRequest(store.getAll())) as LocalWritingCollection[];
+    return rows.sort((left, right) => right.local_updated_at - left.local_updated_at);
+  });
+
+const replaceWritingCollections = async (writingId: string, collectionIds: string[]) => {
+  const database = await openDatabase();
+  const transaction = database.transaction(LOCAL_DB_STORES.writingCollections, "readwrite");
+  const store = transaction.objectStore(LOCAL_DB_STORES.writingCollections);
+  const index = store.index("by-writing-id");
+  const completion = waitForTransaction(transaction, "Writing collection replacement");
+  const existingRows = (await runRequest(
+    index.getAll(IDBKeyRange.only(writingId)),
+  )) as LocalWritingCollection[];
+  const existingRowsById = new Map(existingRows.map((row) => [row.id, row]));
+  const now = Date.now();
+  const addedAt = new Date().toISOString();
+  const requests: IDBRequest[] = [];
+
+  for (const row of existingRows) {
+    requests.push(store.delete(row.id));
+  }
+
+  for (const collectionId of collectionIds) {
+    const id = createWritingCollectionId(writingId, collectionId);
+    const existingRow = existingRowsById.get(id);
+
+    requests.push(
+      store.put({
+        id,
+        writing_id: writingId,
+        collection_id: collectionId,
+        added_at: existingRow?.added_at ?? addedAt,
+        local_updated_at: existingRow?.local_updated_at ?? now,
+      } satisfies LocalWritingCollection),
+    );
+  }
+
+  await Promise.all(requests.map((request) => runRequest(request)));
+  await completion;
+};
+
+const removeCollectionAssignments = async (collectionId: string) => {
+  const database = await openDatabase();
+  const transaction = database.transaction(LOCAL_DB_STORES.writingCollections, "readwrite");
+  const store = transaction.objectStore(LOCAL_DB_STORES.writingCollections);
+  const completion = waitForTransaction(transaction, "Collection assignment removal");
+  const rows = (await runRequest(
+    store.index("by-collection-id").getAll(IDBKeyRange.only(collectionId)),
+  )) as LocalWritingCollection[];
+  const requests: IDBRequest[] = [];
+
+  for (const row of rows) {
+    requests.push(store.delete(row.id));
+  }
+
+  await Promise.all(requests.map((request) => runRequest(request)));
+  await completion;
+};
+
 const enqueueMutation = async (mutation: SyncMutation) => {
   await withStore(LOCAL_DB_STORES.syncMutations, "readwrite", async (store) => {
-    const existingKey = await runRequest(store.index("by-writing-id").getKey(mutation.writing_id));
+    const entityKey =
+      mutation.entity_key ?? createEntityKey(mutation.entity_kind, mutation.entity_id);
+    const existingKey = await runRequest(store.index("by-entity-key").getKey(entityKey));
+    const requests: IDBRequest[] = [];
 
     if (existingKey) {
-      await runRequest(store.delete(existingKey));
+      requests.push(store.delete(existingKey));
     }
 
-    await runRequest(store.put(mutation));
+    requests.push(
+      store.put({
+        ...mutation,
+        entity_key: entityKey,
+      } satisfies SyncMutation),
+    );
+
+    await Promise.all(requests.map((request) => runRequest(request)));
   });
 };
 
@@ -247,20 +509,86 @@ const getPendingMutations = async () =>
       .sort((left, right) => left.created_at - right.created_at);
   });
 
-const getCurrentMutationForWriting = async (writingId: string) =>
+const getCurrentMutationForEntity = async (
+  entityKind: SyncEntityKind,
+  entityId: string,
+) =>
   withStore(LOCAL_DB_STORES.syncMutations, "readonly", async (store) => {
-    const mutation = await runRequest(store.index("by-writing-id").get(writingId));
+    const mutation = await runRequest(
+      store.index("by-entity-key").get(createEntityKey(entityKind, entityId)),
+    );
     return (mutation as SyncMutation | undefined) ?? null;
   });
 
+const setEntitySyncState = async (
+  entityKind: SyncEntityKind,
+  entityId: string,
+  syncStatus: LocalSyncStatus,
+  lifecycle?: WritingLifecycle,
+) => {
+  if (entityKind === "writing") {
+    const writing = await getWriting(entityId);
+
+    if (!writing || writing.sync_status === "deleted") {
+      return;
+    }
+
+    await saveWriting({
+      ...writing,
+      sync_status: syncStatus,
+      lifecycle: lifecycle ?? writing.lifecycle,
+    });
+    return;
+  }
+
+  if (entityKind === "collection") {
+    const collection = await getCollection(entityId);
+
+    if (!collection || collection.sync_status === "deleted") {
+      return;
+    }
+
+    await saveCollection({
+      ...collection,
+      sync_status: syncStatus,
+      lifecycle: lifecycle ?? collection.lifecycle,
+    });
+    return;
+  }
+
+  if (entityKind === "writing-collections") {
+    const writing = await getWriting(entityId);
+
+    if (!writing || writing.sync_status === "deleted") {
+      return;
+    }
+
+    await saveWriting({
+      ...writing,
+      sync_status: syncStatus,
+      lifecycle: lifecycle ?? writing.lifecycle,
+    });
+  }
+};
+
 const markMutationSynced = async (id: string) => {
   const database = await openDatabase();
-  const transaction = database.transaction(
-    [LOCAL_DB_STORES.syncMutations, LOCAL_DB_STORES.writings],
-    "readwrite",
-  );
+  const initialTransaction = database.transaction(LOCAL_DB_STORES.syncMutations, "readonly");
+  const initialStore = initialTransaction.objectStore(LOCAL_DB_STORES.syncMutations);
+  const initialMutation = (await runRequest(initialStore.get(id))) as SyncMutation | undefined;
+  await waitForTransaction(initialTransaction, "Load synced mutation");
+
+  if (!initialMutation) {
+    return;
+  }
+
+  const entityStoreName = getEntityStoreName(initialMutation.entity_kind);
+  const storeNames = entityStoreName
+    ? [LOCAL_DB_STORES.syncMutations, entityStoreName]
+    : [LOCAL_DB_STORES.syncMutations];
+  const transaction = database.transaction(storeNames, "readwrite");
   const mutationStore = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
-  const writingStore = transaction.objectStore(LOCAL_DB_STORES.writings);
+  const completion = waitForTransaction(transaction, "Synced mutation");
   const mutation = (await runRequest(mutationStore.get(id))) as SyncMutation | undefined;
 
   if (!mutation) {
@@ -271,42 +599,44 @@ const markMutationSynced = async (id: string) => {
   await runRequest(mutationStore.delete(id));
 
   const remainingMutation = (await runRequest(
-    mutationStore.index("by-writing-id").get(mutation.writing_id),
+    mutationStore.index("by-entity-key").get(mutation.entity_key),
   )) as SyncMutation | undefined;
 
-  if (!remainingMutation) {
-    const writing = (await runRequest(writingStore.get(mutation.writing_id))) as
-      | LocalWriting
-      | undefined;
+  if (!remainingMutation && entityStoreName) {
+    const entityStore = transaction.objectStore(entityStoreName);
+    const entity = await runRequest(entityStore.get(mutation.entity_id));
 
-    if (writing && writing.sync_status !== "deleted") {
-      await runRequest(
-        writingStore.put({
+    if (entityStoreName === LOCAL_DB_STORES.collections) {
+      const collection = entity as LocalCollection | undefined;
+
+      if (collection && collection.sync_status !== "deleted") {
+        entityStore.put({
+          ...collection,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+        } satisfies LocalCollection);
+      }
+    } else {
+      const writing = entity as LocalWriting | undefined;
+
+      if (writing && writing.sync_status !== "deleted") {
+        entityStore.put({
           ...writing,
           sync_status: "synced",
           lifecycle: "server-confirmed",
-        } satisfies LocalWriting),
-      );
+        } satisfies LocalWriting);
+      }
     }
   }
 
-  await new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error("Unable to mark sync mutation as synced."));
-    transaction.onabort = () =>
-      reject(transaction.error ?? new Error("Synced mutation transaction aborted."));
-  });
+  await completion;
 };
 
 const markMutationFailed = async (id: string, error: string, nextRetryAt: number) => {
   const database = await openDatabase();
-  const transaction = database.transaction(
-    [LOCAL_DB_STORES.syncMutations, LOCAL_DB_STORES.writings],
-    "readwrite",
-  );
+  const transaction = database.transaction(LOCAL_DB_STORES.syncMutations, "readwrite");
   const mutationStore = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
-  const writingStore = transaction.objectStore(LOCAL_DB_STORES.writings);
+  const completion = waitForTransaction(transaction, "Failed mutation");
   const mutation = (await runRequest(mutationStore.get(id))) as SyncMutation | undefined;
 
   if (!mutation) {
@@ -323,26 +653,9 @@ const markMutationFailed = async (id: string, error: string, nextRetryAt: number
 
   await runRequest(mutationStore.put(updatedMutation));
 
-  const localWriting = (await runRequest(writingStore.get(mutation.writing_id))) as
-    | LocalWriting
-    | undefined;
+  await completion;
 
-  if (localWriting && localWriting.sync_status !== "deleted") {
-    await runRequest(
-      writingStore.put({
-        ...localWriting,
-        sync_status: "failed",
-      } satisfies LocalWriting),
-    );
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () =>
-      reject(transaction.error ?? new Error("Unable to persist failed sync mutation."));
-    transaction.onabort = () =>
-      reject(transaction.error ?? new Error("Failed sync mutation transaction aborted."));
-  });
+  await setEntitySyncState(mutation.entity_kind, mutation.entity_id, "failed");
 };
 
 const localDBInstance: LocalDB = {
@@ -352,14 +665,29 @@ const localDBInstance: LocalDB = {
     getAll: getAllWritings,
     delete: softDeleteWriting,
   },
+  collections: {
+    save: saveCollection,
+    get: getCollection,
+    getAll: getAllCollections,
+    delete: softDeleteCollection,
+  },
+  writingCollections: {
+    replaceForWriting: replaceWritingCollections,
+    listForWriting: listWritingCollectionsForWriting,
+    listAll: listAllWritingCollections,
+    removeCollection: removeCollectionAssignments,
+  },
   syncQueue: {
     enqueue: enqueueMutation,
     getPending: getPendingMutations,
-    getCurrentForWriting: getCurrentMutationForWriting,
+    getCurrentForEntity: getCurrentMutationForEntity,
+    getCurrentForWriting: (writingId: string) =>
+      getCurrentMutationForEntity("writing", writingId),
     markSynced: markMutationSynced,
     markFailed: markMutationFailed,
   },
 };
 
 export type { LocalDB };
+export { createEntityKey, createWritingCollectionId };
 export const localDB = localDBInstance;
