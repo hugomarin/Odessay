@@ -128,7 +128,7 @@ type EditorCursorSnapshot =
       windowScrollY?: number
     }
 
-type EditorPanel = "notes" | "properties" | null
+type EditorPanel = "notes" | "properties" | "publication" | null
 
 type PersistSnapshotOverrides = {
   title?: string
@@ -143,6 +143,12 @@ const NotesPanel = lazy(() =>
 const PropertiesPanel = lazy(() =>
   import("@/components/editor/panels/properties-panel").then((module) => ({
     default: module.PropertiesPanel,
+  })),
+)
+
+const PublicationPanel = lazy(() =>
+  import("@/components/editor/panels/publication-panel").then((module) => ({
+    default: module.PublicationPanel,
   })),
 )
 
@@ -226,6 +232,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
+  const [isPublicationModeEnabled, setIsPublicationModeEnabled] = useState(false)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
@@ -661,6 +668,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
 
     if (isFocusMode) {
+      if (activePanel === "publication") {
+        setIsPublicationModeEnabled(false)
+      }
       setActivePanel(null)
       setIsFindReplaceOpen(false)
     }
@@ -668,7 +678,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       document.body.classList.remove("od-editor-focus-mode")
     }
-  }, [isFocusMode])
+  }, [activePanel, isFocusMode])
 
   useEffect(() => {
     if (!editor) {
@@ -895,6 +905,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
     },
     [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
+
+  const closeActivePanel = useCallback(() => {
+    if (activePanel === "publication") {
+      setIsPublicationModeEnabled(false)
+    }
+
+    setActivePanel(null)
+  }, [activePanel])
 
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
     if (!editor || modeRef.current !== "rich") {
@@ -1676,6 +1694,22 @@ export function EditorShell({ writingId }: EditorShellProps) {
     () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
     [hasExplicitTitle, title, bodyText, createdAt],
   )
+  const currentDocumentMarkdown = useMemo(() => {
+    if (mode === "markdown") {
+      return normalizeMarkdownForRoundTrip(markdownValue)
+    }
+
+    if (!editor) {
+      return ""
+    }
+
+    const contentRevision = version
+    void contentRevision
+
+    return normalizeMarkdownForRoundTrip(
+      getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+    )
+  }, [editor, markdownValue, mode, version])
   const markdownFindMatches = useMemo(
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
@@ -1897,6 +1931,54 @@ export function EditorShell({ writingId }: EditorShellProps) {
       syncActiveRichMatchSelection(nextActiveIndex)
     },
     [activeMatchIndex, matchCount, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
+  )
+
+  const jumpToPublicationTarget = useCallback(
+    (targetText: string) => {
+      const normalizedTarget = targetText.trim()
+
+      if (!normalizedTarget) {
+        return
+      }
+
+      if (modeRef.current === "markdown") {
+        const matches = findTextMatches(markdownValue, normalizedTarget, false)
+        const targetMatch = matches[0]
+
+        if (!targetMatch || !markdownTextareaRef.current) {
+          return
+        }
+
+        markdownTextareaRef.current.focus()
+        markdownTextareaRef.current.setSelectionRange(targetMatch.start, targetMatch.end)
+        markdownTextareaRef.current.scrollIntoView({ block: "nearest" })
+        markdownSelectionRef.current = {
+          start: targetMatch.start,
+          end: targetMatch.end,
+          text: markdownTextareaRef.current.value.slice(targetMatch.start, targetMatch.end),
+        }
+        return
+      }
+
+      if (!editor) {
+        return
+      }
+
+      const matches = findDocumentMatches(editor.state.doc, normalizedTarget, false)
+      const targetMatch = matches[0]
+
+      if (!targetMatch) {
+        return
+      }
+
+      const transaction = editor.state.tr
+      transaction.setSelection(TextSelection.create(transaction.doc, targetMatch.from, targetMatch.to))
+      transaction.scrollIntoView()
+      transaction.setMeta("addToHistory", false)
+      editor.view.dispatch(transaction)
+      editor.commands.focus()
+    },
+    [editor, markdownValue],
   )
 
   const handleReplaceCurrentMatch = useCallback(() => {
@@ -2167,7 +2249,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         if (intent === "close-panel") {
           event.preventDefault()
-          setActivePanel(null)
+          closeActivePanel()
         } else if (intent === "exit-focus") {
           event.preventDefault()
           setIsFocusMode(false)
@@ -2203,6 +2285,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     isFindReplaceOpen,
     linkModalOpen,
     closeFindReplacePanel,
+    closeActivePanel,
     pendingAnnotation,
     pendingRichSelection,
     renameModalOpen,
@@ -2218,6 +2301,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
+            isPublicationModeEnabled={isPublicationModeEnabled}
             tabs={editorSession.tabs}
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
@@ -2225,6 +2309,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onTogglePanel={(panel) => {
+              if (panel === "publication") {
+                setIsPublicationModeEnabled((currentState) => {
+                  const nextEnabled = !currentState
+                  setActivePanel(nextEnabled ? "publication" : null)
+                  return nextEnabled
+                })
+                return
+              }
+
               setActivePanel((current) => (current === panel ? null : panel))
             }}
             onRunAction={handleRunAction}
@@ -2286,7 +2379,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             {activePanel === "notes" ? (
               <NotesPanel
                 footnotes={footnotes}
-                onClose={() => setActivePanel(null)}
+                onClose={closeActivePanel}
                 onAddFootnote={(text) => {
                   if (mode === "rich" && editor) {
                     editor.commands.addFootnote(text)
@@ -2318,7 +2411,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                   }
                 }}
               />
-            ) : (
+            ) : activePanel === "properties" ? (
               <PropertiesPanel
                 writingId={currentWritingId}
                 title={displayTitle}
@@ -2327,10 +2420,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 metrics={textMetrics}
                 spellcheckPreference={spellcheckPreference}
                 spellcheckLanguage={spellcheckConfig.language}
+                publicationModeEnabled={isPublicationModeEnabled}
                 onExportMarkdown={exportMarkdown}
                 onExportPdf={() => exportBinary("pdf")}
                 onExportDocx={() => exportBinary("docx")}
-                onClose={() => setActivePanel(null)}
+                onClose={closeActivePanel}
                 onStatusChange={(nextStatus) => {
                   if (nextStatus === writingStatus) {
                     return
@@ -2371,6 +2465,20 @@ export function EditorShell({ writingId }: EditorShellProps) {
                   setSpellcheckPreference(nextPreference)
                   persistEditorSpellcheckPreference(spellcheckScope, nextPreference)
                 }}
+                onTogglePublicationMode={(nextEnabled) => {
+                  setIsPublicationModeEnabled(nextEnabled)
+                  setActivePanel(nextEnabled ? "publication" : null)
+                }}
+              />
+            ) : (
+              <PublicationPanel
+                writingId={currentWritingId}
+                title={displayTitle}
+                markdown={currentDocumentMarkdown}
+                bodyText={bodyText}
+                onApplyMarkdown={applyMarkdownFromPanel}
+                onJumpToText={jumpToPublicationTarget}
+                onClose={closeActivePanel}
               />
             )}
           </Suspense>

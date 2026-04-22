@@ -26,6 +26,15 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@tiptap/core": [
+        "./node_modules/.pnpm/@tiptap+core@3.22.4_@tiptap+pm@3.22.4/node_modules/@tiptap/core"
+      ],
+      "@tiptap/html/server": [
+        "./node_modules/.pnpm/@tiptap+html@3.22.4_@tiptap+core@3.22.4_@tiptap+pm@3.22.4__@tiptap+pm@3.22.4_happy-dom@20.9.0/node_modules/@tiptap/html/server"
+      ],
+      "@tiptap/pm/*": [
+        "./node_modules/.pnpm/@tiptap+pm@3.22.4/node_modules/@tiptap/pm/*"
       ]
     }
   },

@@ -16,6 +16,7 @@ import {
   ListOrdered,
   MessageSquareQuote,
   Minimize2,
+  Sparkles,
   SlidersHorizontal,
   Strikethrough,
   Superscript,
@@ -50,14 +51,15 @@ type EditorTopbarProps = {
   editor: Editor | null
   mode: "rich" | "markdown"
   isFocusMode: boolean
-  activePanel: "notes" | "properties" | null
+  activePanel: "notes" | "properties" | "publication" | null
+  isPublicationModeEnabled: boolean
   tabs: LocalEditorSessionTab[]
   activeTabId: string | null
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
   onNewTab: () => void
   onToggleFocusMode: () => void
-  onTogglePanel: (panel: "notes" | "properties") => void
+  onTogglePanel: (panel: "notes" | "properties" | "publication") => void
   onRunAction: RunEditorAction
 }
 
@@ -186,6 +188,7 @@ export function EditorTopbar({
   mode,
   isFocusMode,
   activePanel,
+  isPublicationModeEnabled,
   tabs,
   activeTabId,
   onSelectTab,
@@ -427,6 +430,18 @@ export function EditorTopbar({
               aria-pressed={activePanel === "properties"}
             >
               <SlidersHorizontal className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+            </button>
+          </ActionTooltip>
+
+          <ActionTooltip label="Ready to publish" side="bottom">
+            <button
+              type="button"
+              onClick={() => onTogglePanel("publication")}
+              className={getTopbarIconButtonClass(isPublicationModeEnabled || activePanel === "publication")}
+              aria-label="Ready to publish"
+              aria-pressed={isPublicationModeEnabled || activePanel === "publication"}
+            >
+              <Sparkles className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
           </div>

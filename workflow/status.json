@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Editor now exposes a non-destructive publication review mode with an AI-powered side panel. The mode can be toggled from the topbar and Properties panel, caches review results locally per writing/version hash, shows spelling/grammar diffs, block-level redaction suggestions, a publication checklist with jump-to-location, and supports individual accept/reject plus apply-all without mutating the writing until the author confirms each change.",
+      "phase": "Fase 3",
+      "issue": "ODE-98",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-98",
+      "commit": "374cf98",
+      "date": "2026-04-22",
+      "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (242 tests). Performance contract: required. Evidence captured at artifacts/perf/editor-trace.json.gz; perf gate passed via npm run ops:perf:gate -- --trace artifacts/perf/editor-trace.json.gz with 1 warning on event_dispatch_ms.input_p95 and no required failures. Presentation contract: not required (publication suggestions live in editor chrome and do not alter the canonical cross-mode rendering until accepted). Review follow-up: branch cleaned from unrelated skill commit and publication model IDs aligned to the brief."
+    },
+    {
       "what": "Preview sharing now renders author margin highlights and annotations marked as shared. Added per-margin share toggle in the margins panel (Eye/EyeOff icon per entry), a new preview API endpoint to read shared margins by token, updated RLS so writing_share recipients and public viewers can see shared margins, and HighlightLayer integration in the preview page for read-only shared highlights.",
       "phase": "Fase 3",
       "issue": "ODE-97",

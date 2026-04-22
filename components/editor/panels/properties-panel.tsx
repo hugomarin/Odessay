@@ -5,6 +5,7 @@ import { X } from "lucide-react"
 import type { WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
@@ -17,9 +18,11 @@ type PropertiesPanelProps = {
   metrics: TextMetrics
   spellcheckPreference: EditorSpellcheckPreference
   spellcheckLanguage: string
+  publicationModeEnabled: boolean
   onStatusChange: (next: WritingStatus) => void
   onVisibilityChange: (next: WritingVisibility) => void
   onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
+  onTogglePublicationMode: (nextEnabled: boolean) => void
   onExportMarkdown: () => Promise<void> | void
   onExportPdf: () => Promise<void> | void
   onExportDocx: () => Promise<void> | void
@@ -93,12 +96,14 @@ export function PropertiesPanel({
   metrics,
   spellcheckPreference,
   spellcheckLanguage,
+  publicationModeEnabled,
   onExportMarkdown,
   onExportPdf,
   onExportDocx,
   onStatusChange,
   onVisibilityChange,
   onSpellcheckPreferenceChange,
+  onTogglePublicationMode,
   onClose,
 }: PropertiesPanelProps) {
   const [shareLink, setShareLink] = useState<ShareLinkState>(DEFAULT_SHARE_LINK_STATE)
@@ -288,6 +293,21 @@ export function PropertiesPanel({
       </div>
 
       <div className="space-y-5 p-4">
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Publication</p>
+          <div className="rounded-lg border-[0.5px] border-border bg-[hsl(22,55%,97%)] p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-[12px] font-medium text-ink">Ready to publish</p>
+                <p className="text-[11px] leading-relaxed text-ink-3">
+                  Open the AI publication review panel for spelling, redaction, and final checklist suggestions.
+                </p>
+              </div>
+              <Switch checked={publicationModeEnabled} onCheckedChange={onTogglePublicationMode} aria-label="Toggle ready to publish mode" />
+            </div>
+          </div>
+        </section>
+
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Status</p>
           <div className="grid grid-cols-2 gap-2">
