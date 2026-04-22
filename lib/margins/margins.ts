@@ -99,6 +99,33 @@ export function countAnnotations(margins: Array<{ note: string | null }>): numbe
 }
 
 /**
+ * Returns true if the margin has been shared.
+ */
+export function isShared(margin: { shared: boolean }): boolean {
+  return margin.shared === true
+}
+
+/**
+ * Toggles the shared state of a margin.
+ * Returns the new shared value.
+ */
+export function toggleShare(currentShared: boolean): boolean {
+  return !currentShared
+}
+
+/**
+ * Given a list of margins and a preview token, returns only the shared margins.
+ * The token is validated to be non-empty; if invalid, returns an empty array.
+ */
+export function getSharedForToken<T extends { shared: boolean }>(
+  margins: T[],
+  token: string,
+): T[] {
+  if (!token || token.trim().length === 0) return []
+  return margins.filter((m) => m.shared)
+}
+
+/**
  * Sorts margins by anchor_start ascending (reading order).
  */
 export function sortMarginsByPosition<T extends { anchor_start: number }>(margins: T[]): T[] {

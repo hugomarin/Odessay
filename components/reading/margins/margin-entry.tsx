@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Trash2, Eye, EyeOff } from "lucide-react"
+import { Trash2 } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 
 export type MarginData = {
   id: string
@@ -68,18 +69,21 @@ export function MarginEntry({
           &ldquo;{margin.anchor_text}&rdquo;
         </p>
         {onToggleShare && (
-          <button
-            onClick={() => onToggleShare(margin.id, !margin.shared)}
-            className="mt-0.5 shrink-0 text-ink-4 transition-colors hover:text-ink-2"
-            aria-label={margin.shared ? "Unshare margin" : "Share margin"}
-            title={margin.shared ? "Shared with author" : "Private — click to share"}
-          >
-            {margin.shared ? (
-              <Eye strokeWidth={1.5} className="h-[12px] w-[12px] text-cursor" />
-            ) : (
-              <EyeOff strokeWidth={1.5} className="h-[12px] w-[12px]" />
-            )}
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Switch
+              id={`margin-share-${margin.id}`}
+              checked={margin.shared}
+              onCheckedChange={(checked) => onToggleShare(margin.id, checked)}
+              className="h-4 w-7 data-[state=checked]:bg-cursor"
+              aria-label={margin.shared ? "Shared with author" : "Private — toggle to share"}
+            />
+            <label
+              htmlFor={`margin-share-${margin.id}`}
+              className="sr-only"
+            >
+              {margin.shared ? "Shared with author" : "Private"}
+            </label>
+          </div>
         )}
       </div>
 
