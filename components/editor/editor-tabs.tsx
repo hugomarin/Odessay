@@ -16,7 +16,7 @@ type EditorTabsProps = {
 export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: EditorTabsProps) {
   return (
     <div className="flex h-full min-w-0 flex-1 items-end gap-2 overflow-hidden bg-[linear-gradient(180deg,hsla(38,10%,94%,0.72),hsla(38,10%,94%,0.18))] px-3 pt-[6px]">
-      <div className="flex min-w-0 max-w-[calc(100%-42px)] flex-none items-end gap-1.5 overflow-x-auto pb-0">
+      <div className="flex min-w-0 flex-1 items-end gap-1.5 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((tab) => (
           <EditorTabItem
             key={tab.id}
@@ -35,7 +35,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTa
           className="mb-[2px] inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
           aria-label="New writing"
         >
-          <Plus className="h-4 w-4" strokeWidth={1.5} />
+          <Plus className="h-[18px] w-[18px]" strokeWidth={1.45} />
         </button>
       </ActionTooltip>
     </div>

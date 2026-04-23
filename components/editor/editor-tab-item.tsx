@@ -15,10 +15,10 @@ export function EditorTabItem({ tab, active, onSelect, onClose }: EditorTabItemP
   return (
     <div
       className={cn(
-        "group relative flex h-10 w-[clamp(148px,18vw,280px)] max-w-[280px] shrink-0 items-center overflow-hidden rounded-t-[12px] border border-b-0 border-transparent text-left font-sans transition-[background-color,border-color,box-shadow,color,transform] duration-150 ease-out",
+        "group relative flex h-10 min-w-[112px] max-w-[240px] flex-[1_1_168px] items-center overflow-hidden rounded-t-[12px] border border-b-0 border-transparent text-left font-sans transition-[background-color,border-color,color] duration-150 ease-out",
         active
-          ? "translate-y-px border-border/90 bg-[linear-gradient(180deg,hsla(38,10%,97%,0.94),hsla(38,10%,96%,0.8))] text-ink shadow-float"
-          : "bg-transparent text-ink-3 hover:bg-muted/85 hover:text-ink-2",
+          ? "translate-y-px border-border/90 bg-bg text-ink"
+          : "bg-transparent text-ink-4 hover:bg-muted/80 hover:text-ink-3",
       )}
     >
       <button
@@ -29,7 +29,7 @@ export function EditorTabItem({ tab, active, onSelect, onClose }: EditorTabItemP
         aria-label={`Open ${tab.title}`}
       />
       <div className="pointer-events-none relative z-10 flex min-w-0 flex-1 items-center gap-2 px-3.5">
-        <span className={cn("block min-w-0 flex-1 truncate text-[14px] leading-none tracking-[-0.01em]", active && "font-medium text-ink")}>
+        <span className={cn("block min-w-0 flex-1 truncate text-[14px] font-normal leading-none tracking-[-0.01em]", active ? "text-ink" : "text-inherit")}>
           {tab.title}
         </span>
         <button
@@ -43,13 +43,13 @@ export function EditorTabItem({ tab, active, onSelect, onClose }: EditorTabItemP
           )}
           aria-label={`Close ${tab.title}`}
         >
-          <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <X className="h-4 w-4" strokeWidth={1.4} />
         </button>
       </div>
       {active ? (
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute inset-x-[10px] bottom-[-1px] h-[2px] bg-[hsl(38_11%_96.4%)]"
+          className="pointer-events-none absolute inset-x-[10px] bottom-[-1px] h-[2px] bg-bg"
         />
       ) : null}
       {tab.save_state === "error" ? (
