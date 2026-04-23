@@ -30,9 +30,9 @@
       "phase": "Fase 3",
       "issue": "ODE-110",
       "linear_url": "https://linear.app/z9ne/issue/ODE-110",
-      "commit": "7cac72b",
+      "commit": "e3dd259",
       "date": "2026-04-23",
-      "notes": "Validation in green: node --version (v20.19.1), npm run env:check --if-present, npm run ops:status:drift --if-present, npm run typecheck, npm run lint (repo warnings only), npm test (247 tests). Performance contract: not required — visual hierarchy/layout update for editor chrome only, no typing/rendering hot path changes. Browser verification: /perf/editor-harness loaded successfully on local dev server; topbar and tools gradient verified, but the harness did not populate multiple live tabs in this session, so multi-tab behavior still needs review against a live multi-document state before final merge."
+      "notes": "Validation in green: node --version (v20.19.1), npm run env:check --if-present, npm run ops:status:drift --if-present, npm run typecheck, npm run lint (repo warnings only), npm test (247 tests), npm run ops:delivery:gate. Performance contract: not required — visual hierarchy/layout update for editor chrome only, no typing/rendering hot path changes. Browser verification completed in a live authenticated multi-tab editor session: active/inactive hierarchy, hover hit area, responsive tab shrinking, + placement, tab ordering, tool rail contrast, and final toolbar contrast/stroke adjustments were iterated and approved visually before handoff to review."
     },
     {
       "what": "The editor find/replace chrome now behaves like persistent document UI instead of a floating card. Search and replace live in a unified two-row bar with consistent controls, the panel stays fixed under the editor topbar while open, typing in the search field only updates highlights without hijacking scroll, and explicit navigation (`Enter` / arrows / replace actions) moves the viewport to the active match in Rich and Markdown modes.",
