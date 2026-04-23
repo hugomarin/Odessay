@@ -14,10 +14,13 @@ type EditorTabsProps = {
 };
 
 export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: EditorTabsProps) {
+  const tabCount = Math.max(tabs.length, 1);
+  const tabWidth = `clamp(72px, calc((100% - 46px - ${(tabCount - 1) * 6}px) / ${tabCount}), 240px)`;
+
   return (
     <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden bg-[linear-gradient(180deg,hsla(38,10%,94%,0.72),hsla(38,10%,94%,0.18))] px-3 pt-[6px]">
       <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        <div className="inline-flex min-w-max items-end gap-1.5 pr-3">
+        <div className="inline-flex min-w-full items-end gap-1.5 pr-3">
           {tabs.map((tab) => (
             <EditorTabItem
               key={tab.id}
@@ -25,6 +28,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTa
               active={tab.id === activeTabId}
               onSelect={onSelectTab}
               onClose={onCloseTab}
+              widthStyle={tabWidth}
             />
           ))}
 
