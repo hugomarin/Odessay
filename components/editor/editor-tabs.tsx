@@ -15,29 +15,31 @@ type EditorTabsProps = {
 
 export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: EditorTabsProps) {
   return (
-    <div className="flex h-full min-w-0 flex-1 items-end gap-2 overflow-hidden bg-[linear-gradient(180deg,hsla(38,10%,94%,0.72),hsla(38,10%,94%,0.18))] px-3 pt-[6px]">
-      <div className="flex min-w-0 flex-1 items-end gap-1.5 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {tabs.map((tab) => (
-          <EditorTabItem
-            key={tab.id}
-            tab={tab}
-            active={tab.id === activeTabId}
-            onSelect={onSelectTab}
-            onClose={onCloseTab}
-          />
-        ))}
-      </div>
+    <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden bg-[linear-gradient(180deg,hsla(38,10%,94%,0.72),hsla(38,10%,94%,0.18))] px-3 pt-[6px]">
+      <div className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="inline-flex min-w-max items-end gap-1.5 pr-3">
+          {tabs.map((tab) => (
+            <EditorTabItem
+              key={tab.id}
+              tab={tab}
+              active={tab.id === activeTabId}
+              onSelect={onSelectTab}
+              onClose={onCloseTab}
+            />
+          ))}
 
-      <ActionTooltip label="New writing" side="bottom">
-        <button
-          type="button"
-          onClick={onNewTab}
-          className="mb-[2px] inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
-          aria-label="New writing"
-        >
-          <Plus className="h-[18px] w-[18px]" strokeWidth={1.45} />
-        </button>
-      </ActionTooltip>
+          <ActionTooltip label="New writing" side="bottom">
+            <button
+              type="button"
+              onClick={onNewTab}
+              className="mb-[2px] inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
+              aria-label="New writing"
+            >
+              <Plus className="h-[18px] w-[18px]" strokeWidth={1.45} />
+            </button>
+          </ActionTooltip>
+        </div>
+      </div>
     </div>
   );
 }
