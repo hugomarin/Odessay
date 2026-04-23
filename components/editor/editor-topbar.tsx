@@ -340,7 +340,7 @@ export function EditorTopbar({
           />
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 border-l-[0.5px] border-border/80 bg-[linear-gradient(180deg,hsla(38,10%,97%,0.94),hsla(38,10%,96%,0.8))] px-3">
+        <div className="flex shrink-0 items-center gap-3 border-l-[0.5px] border-border/80 bg-transparent px-3">
           <div className={EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS} aria-disabled={false}>
             {formatButtons}
 

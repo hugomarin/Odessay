@@ -55,7 +55,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTa
   }, [availableWidth, tabs.length]);
 
   return (
-    <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden bg-[linear-gradient(180deg,hsla(38,10%,94%,0.72),hsla(38,10%,94%,0.18))] px-3 pt-[6px]">
+    <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden bg-transparent px-3 pt-[6px]">
       <div
         ref={scrollerRef}
         className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
