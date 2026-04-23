@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
+  buildCollectionDetailItems,
   buildCollectionSummaries,
   buildCollectionWritingMap,
   dedupeCollectionIds,
   getUncategorizedWritings,
   getWritingCollectionIds,
+  UNCATEGORIZED_COLLECTION_ID,
 } from "../lib/collections/collections"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "../lib/local-db/schema"
 
@@ -76,6 +78,13 @@ const assignments: LocalWritingCollection[] = [
     added_at: "2026-04-22T00:00:00.000Z",
     local_updated_at: 2,
   },
+  {
+    id: "writing-2:collection-1",
+    writing_id: "writing-2",
+    collection_id: "collection-1",
+    added_at: "2026-04-22T00:00:00.000Z",
+    local_updated_at: 2,
+  },
 ]
 
 describe("collections helpers", () => {
@@ -86,7 +95,7 @@ describe("collections helpers", () => {
   })
 
   it("returns collection ids for a writing", () => {
-    expect(getWritingCollectionIds("writing-2", assignments)).toEqual(["collection-2"])
+    expect(getWritingCollectionIds("writing-2", assignments)).toEqual(["collection-2", "collection-1"])
   })
 
   it("builds summaries ordered by count and recency", () => {
@@ -96,6 +105,30 @@ describe("collections helpers", () => {
   it("groups writings by collection", () => {
     const grouped = buildCollectionWritingMap(writings, assignments)
     expect(grouped.get("collection-2")?.[0]?.id).toBe("writing-2")
+  })
+
+  it("builds detail items for a collection and uncategorized", () => {
+    expect(
+      buildCollectionDetailItems({
+        collectionId: "collection-2",
+        writings,
+        collections,
+        assignments,
+      })[0],
+    ).toMatchObject({
+      id: "writing-2",
+      otherCollections: [{ id: "collection-1", name: "Letters" }],
+      wordCount: 1,
+    })
+
+    expect(
+      buildCollectionDetailItems({
+        collectionId: UNCATEGORIZED_COLLECTION_ID,
+        writings,
+        collections,
+        assignments,
+      }).map((item) => item.id),
+    ).toEqual(["writing-1"])
   })
 
   it("dedupes collection ids", () => {

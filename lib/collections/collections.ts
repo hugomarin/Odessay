@@ -4,6 +4,9 @@ import type {
   LocalWriting,
   LocalWritingCollection,
 } from "@/lib/local-db/schema";
+import { calculateSelectionMetrics } from "@/lib/editor/text-metrics";
+
+export const UNCATEGORIZED_COLLECTION_ID = "uncategorized";
 
 export type CollectionSummary = {
   id: string;
@@ -21,6 +24,21 @@ export type CollectionWritingItem = {
   status: LocalWriting["status"];
   visibility: LocalWriting["visibility"];
   updatedAt: string;
+};
+
+export type CollectionOption = {
+  id: string;
+  name: string;
+};
+
+export type CollectionDetailWritingItem = {
+  id: string;
+  title: string;
+  excerpt: string;
+  wordCount: number;
+  status: LocalWriting["status"];
+  updatedAt: string;
+  otherCollections: CollectionOption[];
 };
 
 export const getWritingCollectionIds = (
@@ -80,6 +98,85 @@ export const buildCollectionSummaries = (
 
       return right.updatedAt.localeCompare(left.updatedAt);
     });
+};
+
+const buildExcerpt = (bodyText: string) => {
+  const normalized = bodyText.replace(/\s+/g, " ").trim();
+
+  if (!normalized) {
+    return "No content yet.";
+  }
+
+  return normalized.length > 160 ? `${normalized.slice(0, 157)}...` : normalized;
+};
+
+const buildWritingTitle = (title: string | null | undefined) => {
+  const trimmed = title?.trim();
+  return trimmed?.length ? trimmed : "Untitled writing";
+};
+
+export const buildCollectionOptions = (collections: LocalCollection[]): CollectionOption[] =>
+  collections
+    .filter((collection) => collection.sync_status !== "deleted")
+    .map((collection) => ({
+      id: collection.id,
+      name: collection.name,
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }));
+
+export const buildCollectionDetailItems = ({
+  collectionId,
+  writings,
+  collections,
+  assignments,
+}: {
+  collectionId: string;
+  writings: LocalWriting[];
+  collections: LocalCollection[];
+  assignments: LocalWritingCollection[];
+}): CollectionDetailWritingItem[] => {
+  const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted");
+  const optionById = new Map(buildCollectionOptions(collections).map((option) => [option.id, option]));
+  const collectionIdsByWritingId = new Map<string, string[]>();
+
+  for (const assignment of assignments) {
+    const nextIds = collectionIdsByWritingId.get(assignment.writing_id) ?? [];
+    nextIds.push(assignment.collection_id);
+    collectionIdsByWritingId.set(assignment.writing_id, nextIds);
+  }
+
+  return activeWritings
+    .filter((writing) => {
+      const assignedCollectionIds = collectionIdsByWritingId.get(writing.id) ?? [];
+
+      if (collectionId === UNCATEGORIZED_COLLECTION_ID) {
+        return assignedCollectionIds.length === 0;
+      }
+
+      return assignedCollectionIds.includes(collectionId);
+    })
+    .map((writing) => {
+      const assignedCollectionIds = collectionIdsByWritingId.get(writing.id) ?? [];
+      const otherCollections = assignedCollectionIds
+        .filter((assignedCollectionId) =>
+          collectionId === UNCATEGORIZED_COLLECTION_ID
+            ? true
+            : assignedCollectionId !== collectionId,
+        )
+        .map((assignedCollectionId) => optionById.get(assignedCollectionId))
+        .filter((option): option is CollectionOption => Boolean(option));
+
+      return {
+        id: writing.id,
+        title: buildWritingTitle(writing.title),
+        excerpt: buildExcerpt(writing.body_text),
+        wordCount: calculateSelectionMetrics(writing.body_text).words,
+        status: writing.status,
+        updatedAt: writing.updated_at,
+        otherCollections,
+      };
+    })
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 };
 
 export const buildCollectionWritingMap = (

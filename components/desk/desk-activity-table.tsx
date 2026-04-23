@@ -2,8 +2,10 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Trash2 } from "lucide-react"
+import { FolderOpen, Trash2 } from "lucide-react"
+import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { cn } from "@/lib/utils"
@@ -11,6 +13,10 @@ import { cn } from "@/lib/utils"
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
   isLoading?: boolean
+  collectionOptions: CollectionOption[]
+  collectionIdsByWritingId: Record<string, string[]>
+  onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
+  onCreateCollection: (writingId: string, name: string) => Promise<void>
   onDeleteRequest?: (id: string) => void
 }
 
@@ -28,7 +34,15 @@ const buildInitials = (value: string) =>
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("")
 
-export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }: DeskActivityTableProps) {
+export function DeskActivityTable({
+  groups,
+  isLoading = false,
+  collectionOptions,
+  collectionIdsByWritingId,
+  onToggleCollection,
+  onCreateCollection,
+  onDeleteRequest,
+}: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
 
@@ -88,6 +102,8 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
                       router.push(row.destinationHref)
                     }
                   }
+
+                  const selectedCollectionIds = collectionIdsByWritingId[row.id] ?? []
 
                   return (
                     <tr
@@ -168,18 +184,37 @@ export function DeskActivityTable({ groups, isLoading = false, onDeleteRequest }
                       <td className="px-9 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
                         {row.dateLabel}
                       </td>
-                      <td
-                        className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          aria-label={`Delete writing ${row.title}`}
-                          onClick={() => setPendingDeleteId(row.id)}
-                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                      <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
+                        <div
+                          className="flex items-center justify-end gap-1 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100"
+                          onClick={(event) => event.stopPropagation()}
                         >
-                          <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                        </button>
+                          {isNavigable ? (
+                            <CollectionAssignmentMenu
+                              collections={collectionOptions}
+                              selectedIds={selectedCollectionIds}
+                              onToggleCollection={(collectionId) => onToggleCollection(row.id, collectionId)}
+                              onCreateCollection={(name) => onCreateCollection(row.id, name)}
+                              trigger={
+                                <button
+                                  type="button"
+                                  aria-label={`Assign ${row.title} to collections`}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                >
+                                  <FolderOpen className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                                </button>
+                              }
+                            />
+                          ) : null}
+                          <button
+                            type="button"
+                            aria-label={`Delete writing ${row.title}`}
+                            onClick={() => setPendingDeleteId(row.id)}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                          >
+                            <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

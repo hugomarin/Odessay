@@ -22,8 +22,8 @@ export default function Home() {
                 Global sidebar shell in home
               </h1>
               <p className="max-w-3xl text-[15px] leading-7 text-[hsl(var(--ink-3))]">
-                This page now renders the authenticated sidebar shell so you can validate collapsed,
-                expanded, and collections panel states without login.
+                This page now renders the authenticated sidebar shell so you can validate collapsed
+                and expanded navigation states without login.
               </p>
             </div>
 

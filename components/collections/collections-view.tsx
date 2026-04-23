@@ -1,17 +1,33 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CollectionItem } from "@/components/collections/collection-item"
-import { UncategorizedBanner } from "@/components/collections/uncategorized-banner"
+import { FolderOpen, Pencil, Plus, Trash2 } from "lucide-react"
+import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
+import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import {
+  buildCollectionDetailItems,
+  buildCollectionOptions,
   buildCollectionSummaries,
-  buildCollectionWritingMap,
+  dedupeCollectionIds,
   getUncategorizedWritings,
+  getWritingCollectionIds,
+  UNCATEGORIZED_COLLECTION_ID,
 } from "@/lib/collections/collections"
 import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap"
-import { createLocalCollection, deleteLocalCollection, setLocalWritingCollections, updateLocalCollection } from "@/lib/local-db/collections"
-import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import {
+  createLocalCollection,
+  deleteLocalCollection,
+  setLocalWritingCollections,
+  updateLocalCollection,
+} from "@/lib/local-db/collections"
+import {
+  getLocalDBScope,
+  localDB,
+  subscribeToLocalDBChanges,
+  subscribeToLocalDBScopeChanges,
+} from "@/lib/local-db"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { getSyncWorker } from "@/lib/sync/worker"
@@ -20,14 +36,30 @@ type CollectionsViewProps = {
   initialExpandedCollectionId?: string | null
 }
 
+const formatDate = (value: string) => {
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date"
+  }
+
+  return new Intl.DateTimeFormat("es-MX", {
+    month: "short",
+    day: "numeric",
+  }).format(date)
+}
+
+const buildStatusLabel = (status: LocalWriting["status"]) => (status === "finished" ? "Done" : "Draft")
+
 export function CollectionsView({ initialExpandedCollectionId = null }: CollectionsViewProps) {
   const router = useRouter()
   const [writings, setWritings] = useState<LocalWriting[]>([])
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [assignments, setAssignments] = useState<LocalWritingCollection[]>([])
-  const [selectedUncategorizedIds, setSelectedUncategorizedIds] = useState<string[]>([])
-  const [expandedCollectionId, setExpandedCollectionId] = useState<string | null>(initialExpandedCollectionId)
-  const [newCollectionName, setNewCollectionName] = useState("")
+  const [createOpen, setCreateOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
 
   const loadLocalState = useCallback(async () => {
     const [nextWritings, nextCollections, nextAssignments] = await Promise.all([
@@ -49,6 +81,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         hydrateLocalWritingsFromRemote().catch(() => null),
         hydrateLocalCollectionsFromRemote().catch(() => null),
       ])
+
       if (!cancelled) {
         await loadLocalState()
       }
@@ -57,162 +90,313 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     void bootstrap()
     getSyncWorker().schedule(0)
 
+    const unsubscribeChanges = subscribeToLocalDBChanges(() => void loadLocalState())
+    const unsubscribeScope = subscribeToLocalDBScopeChanges(() => void bootstrap())
+
     return () => {
       cancelled = true
+      unsubscribeChanges()
+      unsubscribeScope()
     }
   }, [loadLocalState])
 
-  useEffect(() => subscribeToLocalDBScopeChanges(() => void loadLocalState()), [loadLocalState])
-
-  const uncategorizedWritings = useMemo(
-    () => getUncategorizedWritings(writings, assignments),
-    [assignments, writings],
-  )
+  const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
   const collectionSummaries = useMemo(
     () => buildCollectionSummaries(collections, writings, assignments),
     [assignments, collections, writings],
   )
-  const writingMap = useMemo(
-    () => buildCollectionWritingMap(writings, assignments),
+  const uncategorizedCount = useMemo(
+    () => getUncategorizedWritings(writings, assignments).length,
     [assignments, writings],
   )
-  const collectionById = useMemo(
-    () => new Map(collections.map((collection) => [collection.id, collection])),
-    [collections],
+  const activeCollection = useMemo(
+    () =>
+      initialExpandedCollectionId && initialExpandedCollectionId !== UNCATEGORIZED_COLLECTION_ID
+        ? collections.find((collection) => collection.id === initialExpandedCollectionId) ?? null
+        : null,
+    [collections, initialExpandedCollectionId],
   )
+  const detailItems = useMemo(() => {
+    if (!initialExpandedCollectionId) {
+      return []
+    }
 
-  const toggleUncategorized = useCallback((writingId: string) => {
-    setSelectedUncategorizedIds((current) =>
-      current.includes(writingId)
-        ? current.filter((id) => id !== writingId)
-        : [...current, writingId],
-    )
+    return buildCollectionDetailItems({
+      collectionId: initialExpandedCollectionId,
+      writings,
+      collections,
+      assignments,
+    })
+  }, [assignments, collections, initialExpandedCollectionId, writings])
+
+  const createCollection = useCallback(async (name: string) => {
+    const ownerId = getLocalDBScope()
+    const collection = await createLocalCollection({
+      ownerId: ownerId === "anonymous" ? null : ownerId,
+      name,
+    })
+
+    getSyncWorker().schedule(0)
+    return collection
   }, [])
 
-  const assignSelectedToCollection = useCallback(
-    async (collectionId: string) => {
-      for (const writingId of selectedUncategorizedIds) {
-        const currentAssignments = assignments
-          .filter((assignment) => assignment.writing_id === writingId)
-          .map((assignment) => assignment.collection_id)
+  const toggleWritingCollection = useCallback(
+    async (writingId: string, collectionId: string) => {
+      const currentIds = getWritingCollectionIds(writingId, assignments)
+      const nextIds = currentIds.includes(collectionId)
+        ? currentIds.filter((id) => id !== collectionId)
+        : [...currentIds, collectionId]
 
-        await setLocalWritingCollections(writingId, [...currentAssignments, collectionId])
-      }
-
-      setSelectedUncategorizedIds([])
-      await loadLocalState()
+      await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
       getSyncWorker().schedule(0)
     },
-    [assignments, loadLocalState, selectedUncategorizedIds],
+    [assignments],
   )
 
   const createCollectionAndAssign = useCallback(
-    async (name: string) => {
-      const ownerId = getLocalDBScope()
-      const collection = await createLocalCollection({
-        ownerId: ownerId === "anonymous" ? null : ownerId,
-        name,
-      })
-
-      if (selectedUncategorizedIds.length > 0) {
-        for (const writingId of selectedUncategorizedIds) {
-          const currentAssignments = assignments
-            .filter((assignment) => assignment.writing_id === writingId)
-            .map((assignment) => assignment.collection_id)
-
-          await setLocalWritingCollections(writingId, [...currentAssignments, collection.id])
-        }
-
-        setSelectedUncategorizedIds([])
-      }
-
-      setExpandedCollectionId(collection.id)
-      await loadLocalState()
+    async (writingId: string, name: string) => {
+      const collection = await createCollection(name)
+      const currentIds = getWritingCollectionIds(writingId, assignments)
+      await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
       getSyncWorker().schedule(0)
     },
-    [assignments, loadLocalState, selectedUncategorizedIds],
+    [assignments, createCollection],
   )
 
-  const createTopLevelCollection = useCallback(async () => {
-    if (!newCollectionName.trim()) {
-      return
-    }
+  if (!initialExpandedCollectionId) {
+    return (
+      <section data-page="collections" className="flex min-h-screen flex-col bg-bg">
+        <header className="border-b-[0.5px] border-border">
+          <div className="flex h-[46px] items-center px-6 md:px-9">
+            <p className="font-lora text-[15px] text-ink-2">Collections</p>
+          </div>
+        </header>
 
-    await createCollectionAndAssign(newCollectionName.trim())
-    setNewCollectionName("")
-  }, [createCollectionAndAssign, newCollectionName])
+        <div className="flex-1 overflow-y-auto px-6 py-6 md:px-9">
+          <div className="mx-auto grid w-full max-w-[1040px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
+            <Link
+              href={`/collections/${UNCATEGORIZED_COLLECTION_ID}`}
+              className="flex min-h-[96px] flex-col justify-between rounded-[10px] border-[0.5px] border-dashed border-border bg-transparent px-[14px] py-3 transition-colors hover:bg-muted/40"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="font-lora text-[18px] font-medium text-ink">Uncategorized</h2>
+                <span className="rounded-full border-[0.5px] border-border px-2 py-0.5 text-[11px] text-ink-4">
+                  {uncategorizedCount}
+                </span>
+              </div>
+            </Link>
 
-  return (
-    <section data-page="collections" className="flex min-h-screen flex-col bg-bg">
-      <header className="border-b-[0.5px] border-border">
-        <div className="flex h-[46px] items-center justify-between px-6 md:px-9">
-          <p className="font-lora text-[15px] text-ink-2">Collections</p>
-          <div className="flex items-center gap-2">
-            <input
-              value={newCollectionName}
-              onChange={(event) => setNewCollectionName(event.target.value)}
-              placeholder="New collection"
-              className="hidden h-8 rounded-md border-[0.5px] border-border bg-sb px-3 text-[12px] text-ink outline-none placeholder:text-ink-4 md:block"
-            />
+            {collectionSummaries.map((summary) => (
+              <Link
+                key={summary.id}
+                href={`/collections/${summary.id}`}
+                className="flex min-h-[96px] flex-col justify-between rounded-[10px] border-[0.5px] border-border bg-sb px-[14px] py-3 transition-colors hover:bg-muted/30"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="font-lora text-[18px] font-medium text-ink">{summary.name}</h2>
+                  <span className="rounded-full border-[0.5px] border-border px-2 py-0.5 text-[11px] text-ink-4">
+                    {summary.writingsCount}
+                  </span>
+                </div>
+              </Link>
+            ))}
+
             <button
               type="button"
-              onClick={() => void createTopLevelCollection()}
-              className="h-8 rounded-md bg-ink px-3 text-[12px] font-medium text-bg transition-opacity hover:opacity-90"
+              onClick={() => setCreateOpen(true)}
+              className="flex min-h-[96px] flex-col justify-between rounded-[10px] border-[0.5px] border-dashed border-border bg-transparent px-[14px] py-3 text-left transition-colors hover:bg-muted/40"
             >
-              New collection
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="font-sans text-[14px] font-medium text-ink-2">New collection</h2>
+                <Plus className="h-4 w-4 text-ink-4" strokeWidth={1.5} />
+              </div>
             </button>
           </div>
         </div>
+
+        <CollectionCreateDialog
+          open={createOpen}
+          pending={isCreating}
+          onOpenChange={setCreateOpen}
+          onSubmit={async (name) => {
+            setIsCreating(true)
+            try {
+              const collection = await createCollection(name)
+              setCreateOpen(false)
+              router.push(`/collections/${collection.id}`)
+            } finally {
+              setIsCreating(false)
+            }
+          }}
+        />
+      </section>
+    )
+  }
+
+  const isUncategorizedView = initialExpandedCollectionId === UNCATEGORIZED_COLLECTION_ID
+  const collectionName = isUncategorizedView ? "Uncategorized" : activeCollection?.name ?? "Collection"
+
+  return (
+    <section data-page="collections-detail" className="flex min-h-screen flex-col bg-bg">
+      <header className="border-b-[0.5px] border-border">
+        <div className="flex min-h-[88px] items-end justify-between gap-4 px-6 py-5 md:px-9">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[12px] text-ink-4">
+              <Link href="/collections" className="transition-colors hover:text-ink-2">
+                Collections
+              </Link>
+              <span>{">"}</span>
+              <span className="truncate">{collectionName}</span>
+            </div>
+            <h1 className="pt-2 font-lora text-[28px] font-medium text-ink">{collectionName}</h1>
+          </div>
+
+          {activeCollection ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setRenameOpen(true)}
+                className="inline-flex h-9 items-center gap-2 rounded-[8px] border-[0.5px] border-border px-3 text-[13px] font-medium text-ink-2 transition-colors hover:bg-muted"
+              >
+                <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm(`Delete "${activeCollection.name}"? Writings will remain available in Desk.`)) {
+                    return
+                  }
+
+                  void deleteLocalCollection(activeCollection).then(() => {
+                    getSyncWorker().schedule(0)
+                    router.push("/collections")
+                  })
+                }}
+                className="inline-flex h-9 items-center gap-2 rounded-[8px] border-[0.5px] border-border px-3 text-[13px] font-medium text-ink-2 transition-colors hover:bg-muted hover:text-[hsl(0_72%_42%)]"
+              >
+                <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
+                Delete
+              </button>
+            </div>
+          ) : null}
+        </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-6 pb-10 pt-6 md:px-9">
-        <div className="mx-auto flex w-full max-w-[980px] flex-col gap-5">
-          <UncategorizedBanner
-            writings={uncategorizedWritings}
-            collections={collections}
-            selectedIds={selectedUncategorizedIds}
-            onToggleWriting={toggleUncategorized}
-            onAssign={assignSelectedToCollection}
-            onCreateCollection={createCollectionAndAssign}
-          />
+      <div className="flex-1 overflow-y-auto px-6 pb-10 pt-4 md:px-9">
+        <div className="mx-auto w-full max-w-[980px]">
+          {!isUncategorizedView && !activeCollection ? (
+            <p className="font-lora text-[18px] italic text-ink-3">Collection not found.</p>
+          ) : detailItems.length === 0 ? (
+            <p className="font-lora text-[18px] italic text-ink-3">No writings here yet.</p>
+          ) : (
+            <div>
+              {detailItems.map((item) => {
+                const selectedIds = getWritingCollectionIds(item.id, assignments)
 
-          {collectionSummaries.map((summary) => {
-            const collection = collectionById.get(summary.id)
+                return (
+                  <div
+                    key={item.id}
+                    className="group grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b-[0.5px] border-border px-1 py-4 transition-colors duration-150 ease-out hover:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <Link href={`/write/${item.id}`} className="block">
+                        <h2 className="font-lora text-[16px] font-medium text-ink transition-colors duration-150 ease-out group-hover:text-cursor">
+                          {item.title}
+                        </h2>
+                      </Link>
+                      <p className="mt-1 line-clamp-2 text-[14px] italic text-ink-3">{item.excerpt}</p>
+                      {item.otherCollections.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {item.otherCollections.map((collection) => (
+                            <span
+                              key={collection.id}
+                              className="rounded-[13px] border-[0.5px] border-border bg-muted px-2 py-0.5 text-[11px] text-ink-3"
+                            >
+                              {collection.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
 
-            if (!collection) {
-              return null
-            }
+                    <div className="flex items-start gap-3">
+                      <div className="text-right text-[12px] text-ink-4">
+                        <p>{`${item.wordCount.toLocaleString()} words · ${formatDate(item.updatedAt)} · ${buildStatusLabel(item.status)}`}</p>
+                      </div>
+                      <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100">
+                        {isUncategorizedView ? (
+                          <CollectionAssignmentMenu
+                            collections={collectionOptions}
+                            selectedIds={selectedIds}
+                            onToggleCollection={async (collectionId) => {
+                              await toggleWritingCollection(item.id, collectionId)
+                            }}
+                            onCreateCollection={async (name) => {
+                              await createCollectionAndAssign(item.id, name)
+                            }}
+                            trigger={
+                              <button
+                                type="button"
+                                className="inline-flex h-7 items-center rounded-[6px] border-[0.5px] border-border px-2 text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                              >
+                                Assign to collection
+                              </button>
+                            }
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void setLocalWritingCollections(
+                                item.id,
+                                selectedIds.filter((collectionId) => collectionId !== initialExpandedCollectionId),
+                              ).then(() => getSyncWorker().schedule(0))
+                            }
+                            className="inline-flex h-7 items-center rounded-[6px] border-[0.5px] border-border px-2 text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                          >
+                            Remove from collection
+                          </button>
+                        )}
 
-            return (
-              <CollectionItem
-                key={summary.id}
-                collection={collection}
-                writings={writingMap.get(summary.id) ?? []}
-                expanded={expandedCollectionId === summary.id}
-                onToggle={() => {
-                  const nextId = expandedCollectionId === summary.id ? null : summary.id
-                  setExpandedCollectionId(nextId)
-                  router.replace(nextId ? `/collections/${nextId}` : "/collections", { scroll: false })
-                }}
-                onSave={async (updates) => {
-                  await updateLocalCollection(collection, updates)
-                  await loadLocalState()
-                  getSyncWorker().schedule(0)
-                }}
-                onDelete={async () => {
-                  await deleteLocalCollection(collection)
-                  if (expandedCollectionId === collection.id) {
-                    setExpandedCollectionId(null)
-                    router.replace("/collections", { scroll: false })
-                  }
-                  await loadLocalState()
-                  getSyncWorker().schedule(0)
-                }}
-              />
-            )
-          })}
+                        <Link
+                          href={`/write/${item.id}`}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border-[0.5px] border-border text-ink-2 transition-colors hover:bg-muted"
+                          aria-label={`Open ${item.title}`}
+                        >
+                          <FolderOpen className="h-3.5 w-3.5" strokeWidth={1.5} />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
+
+      {activeCollection ? (
+        <CollectionCreateDialog
+          open={renameOpen}
+          title="Rename collection"
+          description="Update the label name used across Desk, Collections, and the editor."
+          confirmLabel="Save"
+          initialName={activeCollection.name}
+          pending={isRenaming}
+          onOpenChange={setRenameOpen}
+          onSubmit={async (name) => {
+            setIsRenaming(true)
+            try {
+              await updateLocalCollection(activeCollection, { name })
+              getSyncWorker().schedule(0)
+              setRenameOpen(false)
+            } finally {
+              setIsRenaming(false)
+            }
+          }}
+        />
+      ) : null}
     </section>
   )
 }

@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { FolderPlus } from "lucide-react"
+import { Plus } from "lucide-react"
+import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
+import { buildCollectionOptions } from "@/lib/collections/collections"
 import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap"
 import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
-import { getLocalDBScope, localDB } from "@/lib/local-db"
+import { getLocalDBScope, localDB, subscribeToLocalDBChanges } from "@/lib/local-db"
 import type { LocalCollection } from "@/lib/local-db/schema"
 import { getSyncWorker } from "@/lib/sync/worker"
 import { cn } from "@/lib/utils"
@@ -16,7 +18,8 @@ type WritingCollectionsSectionProps = {
 export function WritingCollectionsSection({ writingId }: WritingCollectionsSectionProps) {
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [newCollectionName, setNewCollectionName] = useState("")
+  const [createOpen, setCreateOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
   const selectedIdsRef = useRef<string[]>([])
 
   const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
@@ -48,11 +51,13 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     }
 
     void hydrate()
+    const unsubscribe = subscribeToLocalDBChanges(() => void loadLocalState(writingId, () => cancelled))
 
     return () => {
       cancelled = true
+      unsubscribe()
     }
-  }, [])
+  }, [writingId])
 
   useEffect(() => {
     let cancelled = false
@@ -63,10 +68,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     }
   }, [writingId])
 
-  const activeCollections = useMemo(
-    () => collections.filter((collection) => collection.sync_status !== "deleted"),
-    [collections],
-  )
+  const options = useMemo(() => buildCollectionOptions(collections), [collections])
 
   const toggleCollection = async (collectionId: string) => {
     const currentIds = selectedIdsRef.current
@@ -80,21 +82,16 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     getSyncWorker().schedule(0)
   }
 
-  const createAndAssign = async () => {
-    if (!newCollectionName.trim()) {
-      return
-    }
-
+  const createAndAssign = async (name: string) => {
     const ownerId = getLocalDBScope()
     const collection = await createLocalCollection({
       ownerId: ownerId === "anonymous" ? null : ownerId,
-      name: newCollectionName.trim(),
+      name,
     })
     const nextIds = [...selectedIdsRef.current, collection.id]
 
     selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
-    setNewCollectionName("")
     await setLocalWritingCollections(writingId, nextIds)
     setCollections((current) => [collection, ...current])
     getSyncWorker().schedule(0)
@@ -104,11 +101,11 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     <section className="space-y-2">
       <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Collections</p>
       <div className="space-y-3 rounded-lg border-[0.5px] border-border bg-bg p-3">
-        {activeCollections.length === 0 ? (
+        {options.length === 0 ? (
           <p className="text-[11px] text-ink-4">No collections yet. Create one and assign this writing.</p>
         ) : (
           <div className="grid gap-2">
-            {activeCollections.map((collection) => {
+            {options.map((collection) => {
               const selected = selectedIds.includes(collection.id)
 
               return (
@@ -123,7 +120,17 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
                       : "border-border text-ink-3 hover:bg-muted hover:text-ink",
                   )}
                 >
-                  <span>{collection.name}</span>
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "flex h-4 w-4 items-center justify-center rounded-[4px] border border-border text-[10px]",
+                        selected ? "border-ink bg-ink text-bg" : "bg-sb text-transparent",
+                      )}
+                    >
+                      ✓
+                    </span>
+                    <span>{collection.name}</span>
+                  </span>
                   <span>{selected ? "Assigned" : "Assign"}</span>
                 </button>
               )
@@ -131,23 +138,30 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <input
-            value={newCollectionName}
-            onChange={(event) => setNewCollectionName(event.target.value)}
-            placeholder="New collection"
-            className="h-8 flex-1 rounded-md border-[0.5px] border-border bg-sb px-3 text-[12px] text-ink outline-none placeholder:text-ink-4"
-          />
-          <button
-            type="button"
-            onClick={() => void createAndAssign()}
-            className="inline-flex h-8 items-center gap-1 rounded-md bg-ink px-3 text-[12px] font-medium text-bg transition-opacity hover:opacity-90"
-          >
-            <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Create
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-dashed border-border px-3 text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
+          New collection...
+        </button>
       </div>
+
+      <CollectionCreateDialog
+        open={createOpen}
+        pending={isCreating}
+        onOpenChange={setCreateOpen}
+        onSubmit={async (name) => {
+          setIsCreating(true)
+          try {
+            await createAndAssign(name)
+            setCreateOpen(false)
+          } finally {
+            setIsCreating(false)
+          }
+        }}
+      />
     </section>
   )
 }
