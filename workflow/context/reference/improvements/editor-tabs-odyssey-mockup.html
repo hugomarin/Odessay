@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odessay - Editor Tabs Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg: hsl(38 12% 98%);
+    --sb: hsl(0 0% 100%);
+    --muted: hsl(38 8% 93%);
+    --muted-h: hsl(38 8% 90%);
+    --border: hsl(38 8% 90%);
+    --ink: hsl(25 18% 10%);
+    --ink-2: hsl(25 12% 22%);
+    --ink-3: hsl(25 10% 38%);
+    --ink-4: hsl(25 8% 52%);
+    --cursor: hsl(22 55% 38%);
+    --shadow-float: 0 2px 12px 0 hsla(25,18%,12%,0.06), 0 1px 3px 0 hsla(25,18%,12%,0.04);
+    --sidebar-mini: 52px;
+    --topbar-h: 46px;
+    --tab-radius: 12px;
+    --tab-max: 320px;
+    --tab-min: 148px;
+  }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: linear-gradient(180deg, hsl(38 14% 97%), var(--bg));
+    color: var(--ink);
+    font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button {
+    font: inherit;
+  }
+
+  .app-shell {
+    height: 100vh;
+    display: grid;
+    grid-template-columns: var(--sidebar-mini) 1fr;
+  }
+
+  .sidebar {
+    background: var(--sb);
+    border-right: 0.5px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 0 12px;
+    gap: 14px;
+  }
+
+  .side-button {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-3);
+    display: grid;
+    place-items: center;
+  }
+
+  .side-button.primary {
+    background: var(--ink);
+    color: var(--bg);
+    margin-top: 8px;
+  }
+
+  .side-spacer {
+    flex: 1;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-rows: var(--topbar-h) 1fr;
+    min-width: 0;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+    background: color-mix(in srgb, var(--sb) 88%, var(--bg));
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .tabs-region {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 6px 12px 0;
+    background:
+      linear-gradient(180deg, hsla(38, 10%, 94%, 0.72), hsla(38, 10%, 94%, 0.18)),
+      linear-gradient(180deg, transparent calc(100% - 1px), var(--border) calc(100% - 1px));
+    overflow: hidden;
+  }
+
+  .tabs-list {
+    min-width: 0;
+    flex: 0 1 auto;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    max-width: calc(100% - 42px);
+  }
+
+  .tab {
+    position: relative;
+    min-width: var(--tab-min);
+    max-width: var(--tab-max);
+    height: 40px;
+    flex: 1 1 220px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px 0 14px;
+    border: 0.5px solid transparent;
+    border-bottom: none;
+    border-radius: var(--tab-radius) var(--tab-radius) 0 0;
+    background: transparent;
+    color: var(--ink-3);
+    cursor: pointer;
+    transition:
+      background 140ms ease,
+      color 140ms ease,
+      border-color 140ms ease,
+      transform 140ms ease;
+  }
+
+  .tab:hover {
+    background: var(--muted);
+    color: var(--ink-2);
+  }
+
+  .tab.active {
+    background: linear-gradient(180deg, hsla(38, 10%, 97%, 0.94), hsla(38, 10%, 96%, 0.8));
+    color: var(--ink);
+    border-color: var(--border);
+    box-shadow: var(--shadow-float);
+    transform: translateY(1px);
+  }
+
+  .tab.active::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -1px;
+    height: 2px;
+    background: hsl(38 11% 96.4%);
+  }
+
+  .tab-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .tab.active .tab-title {
+    color: var(--ink);
+  }
+
+  .tab-meta {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .close {
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ink-4);
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    transition: opacity 100ms ease, background 120ms ease, color 120ms ease;
+  }
+
+  .tab:hover .close,
+  .tab.active .close {
+    opacity: 1;
+  }
+
+  .close:hover {
+    background: var(--muted-h);
+    color: var(--ink);
+  }
+
+  .new-tab {
+    width: 34px;
+    height: 34px;
+    margin-bottom: 2px;
+    border: 0.5px solid transparent;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ink-4);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  }
+
+  .new-tab:hover {
+    background: var(--muted);
+    color: var(--ink);
+    border-color: var(--border);
+  }
+
+  .tools {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 12px;
+    border-left: 0.5px solid var(--border);
+    background: linear-gradient(180deg, hsla(38, 10%, 97%, 0.94), hsla(38, 10%, 96%, 0.8));
+  }
+
+  .tool {
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-4);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .tool:hover,
+  .tool.active {
+    background: var(--muted);
+    color: var(--ink);
+  }
+
+  .editor-surface {
+    position: relative;
+    overflow: auto;
+    background:
+      radial-gradient(circle at top right, hsla(38, 20%, 92%, 0.55), transparent 28%),
+      linear-gradient(180deg, hsl(38 18% 98%), var(--bg));
+  }
+
+  .editor-surface::before {
+    content: "";
+    position: sticky;
+    top: 0;
+    display: block;
+    height: 18px;
+    background: linear-gradient(180deg, hsla(38, 18%, 98%, 0.94), transparent);
+    pointer-events: none;
+  }
+
+  .sheet {
+    width: min(860px, calc(100% - 96px));
+    margin: 34px auto 72px;
+    padding: 0 0 80px;
+  }
+
+  .eyebrow {
+    margin-bottom: 18px;
+    color: var(--ink-4);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .title {
+    margin: 0 0 28px;
+    font-family: "Lora", Georgia, serif;
+    font-size: 36px;
+    font-weight: 500;
+    line-height: 1.18;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .body {
+    max-width: 720px;
+    color: var(--ink-2);
+    font-size: 18px;
+    line-height: 1.85;
+  }
+
+  .body p {
+    margin: 0 0 28px;
+  }
+
+  .notes {
+    position: absolute;
+    top: 28px;
+    right: 32px;
+    width: 240px;
+    padding: 14px 14px 16px;
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    background: hsla(0, 0%, 100%, 0.82);
+    box-shadow: var(--shadow-float);
+    backdrop-filter: blur(8px);
+  }
+
+  .notes h2 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  .notes ul {
+    margin: 0;
+    padding-left: 16px;
+    color: var(--ink-3);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .notes li + li {
+    margin-top: 8px;
+  }
+
+  svg {
+    display: block;
+  }
+
+  @media (max-width: 1180px) {
+    .notes {
+      display: none;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .tools {
+      display: none;
+    }
+
+    .tabs-region {
+      padding-right: 10px;
+    }
+
+    .tab {
+      min-width: 120px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .tab {
+      min-width: 96px;
+      padding-inline: 10px;
+      gap: 8px;
+    }
+
+    .tab-title {
+      font-size: 14px;
+    }
+
+    .sheet {
+      width: calc(100% - 40px);
+      margin-top: 28px;
+    }
+
+    .title {
+      font-size: 31px;
+    }
+
+    .body {
+      font-size: 17px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Sidebar">
+      <button class="side-button" aria-label="Toggle sidebar">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M7 4.5V13.5" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M11 6L8.5 9L11 12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <button class="side-button primary" aria-label="New writing">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <path d="M9 3.5V14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M3.5 9H14.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button class="side-button" aria-label="Search">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+          <circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M12.5 12.5L15.2 15.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="side-spacer"></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="tabs-region">
+          <div class="tabs-list" id="tabs-list"></div>
+          <button class="new-tab" id="new-tab" aria-label="New tab">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 3V13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M3 8H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="tools" aria-label="Formatting tools">
+          <button class="tool"><strong>B</strong></button>
+          <button class="tool"><em>I</em></button>
+          <button class="tool"><span style="text-decoration: line-through;">S</span></button>
+          <button class="tool">H1</button>
+          <button class="tool">H2</button>
+          <button class="tool active" aria-current="true">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+              <path d="M3 4.5H12" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <path d="M3 7.5H10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+              <path d="M3 10.5H11.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="editor-surface">
+        <aside class="notes">
+          <h2>Mockup Intent</h2>
+          <ul>
+            <li>Tabs read as objects, not as a split header.</li>
+            <li>Active tab detaches from the rail and connects to the page.</li>
+            <li>Hover covers the full tab, not just the text label.</li>
+            <li>The topbar keeps status quieter and lets the title lead.</li>
+          </ul>
+        </aside>
+
+        <article class="sheet">
+          <div class="eyebrow">Editor mockup · proposed tab bar</div>
+          <h1 class="title">Me invitaron como mentor al Claude Impact Lab.</h1>
+          <div class="body">
+            <p>Este mockup mueve la barra de tabs de una logica casi plana a una logica de piezas. Cada pestana tiene borde propio, un ancho maximo claro y una jerarquia visual mucho mas evidente entre activa e inactivas.</p>
+            <p>La pestana activa ya no necesita decir <em>Saving...</em>. Si hay cambios pendientes, basta con un punto discreto. El usuario entiende el estado sin contaminar el titulo ni romper el ritmo del editor.</p>
+            <p>Tambien cambia la tipografia: en tabs la serif debilita la lectura funcional. En UI de navegacion, sans serif se siente mas precisa, mas estable y mas cercana al patron mental que ya traen apps como Obsidian.</p>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+<script>
+  const titles = [
+    "Metodologia de contexto fundacional Este",
+    "Me invitaron como mentor al Claude Impact Lab.",
+    "Carta para Bruno sobre el tercer lugar",
+    "Notes"
+  ];
+
+  let tabs = [
+    { id: 1, title: titles[0], dirty: false },
+    { id: 2, title: titles[1], dirty: true },
+    { id: 3, title: titles[2], dirty: false }
+  ];
+
+  let activeId = 2;
+  let nextId = 4;
+
+  const tabsList = document.getElementById("tabs-list");
+  const newTabButton = document.getElementById("new-tab");
+
+  function setActive(id) {
+    activeId = id;
+    render();
+  }
+
+  function closeTab(id) {
+    tabs = tabs.filter((tab) => tab.id !== id);
+
+    if (!tabs.length) {
+      tabs = [{ id: nextId++, title: titles[3], dirty: false }];
+    }
+
+    if (!tabs.some((tab) => tab.id === activeId)) {
+      activeId = tabs[tabs.length - 1].id;
+    }
+
+    render();
+  }
+
+  function addTab() {
+    const title = titles[(nextId - 1) % titles.length];
+    const tab = {
+      id: nextId++,
+      title
+    };
+
+    tabs = [...tabs, tab];
+    activeId = tab.id;
+    render();
+  }
+
+  function render() {
+    tabsList.innerHTML = "";
+
+    tabs.forEach((tab) => {
+      const button = document.createElement("button");
+      button.className = `tab${tab.id === activeId ? " active" : ""}`;
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(tab.id === activeId));
+      button.title = tab.title;
+      button.addEventListener("click", () => setActive(tab.id));
+
+      const title = document.createElement("span");
+      title.className = "tab-title";
+      title.textContent = tab.title;
+
+      const meta = document.createElement("span");
+      meta.className = "tab-meta";
+
+      const close = document.createElement("button");
+      close.className = "close";
+      close.type = "button";
+      close.setAttribute("aria-label", `Close ${tab.title}`);
+      close.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 3L9 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M9 3L3 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+      `;
+      close.addEventListener("click", (event) => {
+        event.stopPropagation();
+        closeTab(tab.id);
+      });
+
+      meta.appendChild(close);
+      button.append(title, meta);
+      tabsList.appendChild(button);
+    });
+  }
+
+  newTabButton.addEventListener("click", addTab);
+  render();
+</script>
+</body>
+</html>
