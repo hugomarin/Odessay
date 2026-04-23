@@ -157,12 +157,12 @@ const isActionActive = (
   action: EditorShortcutAction,
 ) => (isTopbarTrackedAction(action) ? actionState[action] : false)
 
-const TOPBAR_ICON_STROKE_WIDTH = 1.35
+const TOPBAR_ICON_STROKE_WIDTH = 2
 
 const TOPBAR_ICON_BUTTON_BASE_CLASS =
   "inline-flex h-7 w-7 items-center justify-center rounded-[6px] transition-[background-color,color,opacity] duration-150 ease-out"
 
-const TOPBAR_ICON_BUTTON_INACTIVE_CLASS = "text-ink-4/70 opacity-80 hover:bg-muted/80 hover:text-ink hover:opacity-100"
+const TOPBAR_ICON_BUTTON_INACTIVE_CLASS = "text-ink-3/90 opacity-90 hover:bg-muted hover:text-ink hover:opacity-100"
 
 const TOPBAR_ICON_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
 
@@ -170,7 +170,7 @@ const TOPBAR_STRUCTURE_BUTTON_BASE_CLASS =
   "inline-flex h-7 min-w-7 items-center justify-center rounded-[6px] px-[4px] text-[12px] font-medium tracking-[-0.01em] transition-[background-color,color,opacity] duration-150 ease-out"
 
 const TOPBAR_STRUCTURE_BUTTON_INACTIVE_CLASS =
-  "text-ink-4/75 opacity-80 hover:bg-muted/80 hover:text-ink hover:opacity-100"
+  "text-ink-3/90 opacity-90 hover:bg-muted hover:text-ink hover:opacity-100"
 
 const TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
 
