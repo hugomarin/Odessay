@@ -59,7 +59,7 @@ export function WritingEditorContent({
       className="EditorWritingArea min-h-0 flex-1 overflow-y-auto"
     >
       <div className="odessay-content-frame">
-        {topSlot}
+        {topSlot ? <div className="odessay-sticky-slot">{topSlot}</div> : null}
         {mode === "markdown" ? (
           <div className="odessay-markdown-shell relative min-h-[55vh] w-full">
             <pre

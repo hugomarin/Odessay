@@ -242,7 +242,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
   const [findQuery, setFindQuery] = useState("")
   const [replaceValue, setReplaceValue] = useState("")
-  const [findReplaceExpanded, setFindReplaceExpanded] = useState(false)
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
   const [findActiveIndex, setFindActiveIndex] = useState(0)
   const [pendingAnnotation, setPendingAnnotation] = useState<PendingAnnotationSnapshot | null>(null)
@@ -955,7 +954,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             openFindReplacePanel()
             return true
           case "replace":
-            openFindReplacePanel({ expandReplace: true, focusReplace: true })
+            openFindReplacePanel({ focusReplace: true })
             return true
           case "focusMode":
             setIsFocusMode((currentState) => !currentState)
@@ -1773,15 +1772,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
-    if (mode === "markdown") {
-      window.requestAnimationFrame(() => {
-        syncActiveMarkdownMatchSelection(0)
-      })
-      return
-    }
-
-    syncActiveRichMatchSelection(0)
-  }, [findCaseSensitive, findQuery, isFindReplaceOpen, mode])
+    setFindActiveIndex(0)
+  }, [findCaseSensitive, findQuery, isFindReplaceOpen])
 
   function captureEditorCursorSnapshot(): EditorCursorSnapshot | null {
     if (modeRef.current === "markdown") {
@@ -1842,7 +1834,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
     setIsFindReplaceOpen(false)
     setFindQuery("")
     setReplaceValue("")
-    setFindReplaceExpanded(false)
     setFindActiveIndex(0)
 
     if (editor) {
@@ -1856,7 +1847,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
   }
 
-  function openFindReplacePanel(options?: { expandReplace?: boolean; focusReplace?: boolean }) {
+  function openFindReplacePanel(options?: { focusReplace?: boolean }) {
     editorCursorSnapshotRef.current = captureEditorCursorSnapshot()
 
     if (!isFindReplaceOpen) {
@@ -1864,10 +1855,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     setIsFindReplaceOpen(true)
-    setFindReplaceExpanded((currentState) => options?.expandReplace ? true : currentState)
 
     window.requestAnimationFrame(() => {
-      if (options?.focusReplace && options.expandReplace) {
+      if (options?.focusReplace) {
         replaceInputRef.current?.focus()
         return
       }
@@ -1893,6 +1883,48 @@ export function EditorShell({ writingId }: EditorShellProps) {
     transaction.scrollIntoView()
     transaction.setMeta("addToHistory", false)
     editor.view.dispatch(transaction)
+
+    window.requestAnimationFrame(() => {
+      const activeMatchElement = editor.view.dom.querySelector<HTMLElement>(".od-find-match-active")
+
+      if (activeMatchElement) {
+        activeMatchElement.scrollIntoView({
+          block: "center",
+          inline: "nearest",
+          behavior: "auto",
+        })
+        return
+      }
+
+      const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+      const startCoords = editor.view.coordsAtPos(targetMatch.from)
+      const endCoords = editor.view.coordsAtPos(targetMatch.to)
+
+      if (!editorViewport) {
+        return
+      }
+
+      const viewportRect = editorViewport.getBoundingClientRect()
+      const matchTop = startCoords.top
+      const matchBottom = Math.max(startCoords.bottom, endCoords.bottom)
+      const topInset = 96
+      const bottomInset = 56
+
+      if (matchTop < viewportRect.top + topInset) {
+        editorViewport.scrollBy({
+          top: matchTop - viewportRect.top - topInset,
+          behavior: "auto",
+        })
+        return
+      }
+
+      if (matchBottom > viewportRect.bottom - bottomInset) {
+        editorViewport.scrollBy({
+          top: matchBottom - viewportRect.bottom + bottomInset,
+          behavior: "auto",
+        })
+      }
+    })
   }
 
   function syncActiveMarkdownMatchSelection(nextActiveIndex: number) {
@@ -1903,8 +1935,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
+    textarea.focus()
     textarea.setSelectionRange(targetMatch.start, targetMatch.end)
-    textarea.scrollIntoView({ block: "nearest" })
     markdownSelectionRef.current = {
       start: targetMatch.start,
       end: targetMatch.end,
@@ -2343,13 +2375,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
                     searchValue={findQuery}
                     replaceValue={replaceValue}
                     caseSensitive={findCaseSensitive}
-                    replaceExpanded={findReplaceExpanded}
                     matchCount={matchCount}
                     activeMatchNumber={matchCount > 0 ? activeMatchIndex + 1 : 0}
                     onSearchChange={setFindQuery}
                     onReplaceChange={setReplaceValue}
                     onToggleCaseSensitive={() => setFindCaseSensitive((currentState) => !currentState)}
-                    onToggleReplaceExpanded={() => setFindReplaceExpanded((currentState) => !currentState)}
                     onNavigatePrevious={() => navigateFindMatches(-1)}
                     onNavigateNext={() => navigateFindMatches(1)}
                     onReplaceOne={handleReplaceCurrentMatch}
