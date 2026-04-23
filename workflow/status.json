@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-04-22",
+  "last_updated": "2026-04-23",
   "active_phase": {
     "name": "Fase 2 — Compartir y leer",
     "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
     "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "The editor find/replace chrome now behaves like persistent document UI instead of a floating card. Search and replace live in a unified two-row bar with consistent controls, the panel stays fixed under the editor topbar while open, typing in the search field only updates highlights without hijacking scroll, and explicit navigation (`Enter` / arrows / replace actions) moves the viewport to the active match in Rich and Markdown modes.",
+      "phase": "Fase 3",
+      "issue": "ODE-109",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-109",
+      "commit": "991707e",
+      "date": "2026-04-23",
+      "notes": "Validation in green: npm run typecheck, npm run lint (repo warnings only), npm test (247 tests), npx playwright test tests/playwright/editor-find-replace.e2e.ts (1/1 passed). Performance contract: not required — this issue refines editor chrome and viewport-follow behavior for an existing feature without changing the underlying typing/rendering hot path. Presentation contract: not required (transient editor UI only; no cross-mode rich-text presentation contract modified)."
+    },
     {
       "what": "Authenticated settings now ship with a dedicated `/settings/account` surface styled to match Odessay's warm shell language. Authors can update display name and username inline with Zod validation and live availability feedback, request a secured email change through dual confirmation links sent to the current and new inboxes, rotate password after verifying the current credential, and rely on a new username reservation flow that keeps the previous handle reserved for 7 days via a dedicated migration and RPC.",
       "phase": "Fase 3",
