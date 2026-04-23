@@ -111,7 +111,7 @@
       "phase": "Fase 3",
       "issue": "ODE-92",
       "linear_url": "https://linear.app/z9ne/issue/ODE-92",
-      "commit": "2d7c8c6",
+      "commit": "7b4fc50",
       "date": "2026-04-21",
       "notes": "Validation in green: npm run typecheck, npm run lint, npm test (204 tests). Performance contract: not required (no new render paths or async work). Presentation contract: not required (does not touch cross-mode text rendering)."
     },
