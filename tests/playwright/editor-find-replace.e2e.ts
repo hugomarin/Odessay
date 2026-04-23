@@ -52,9 +52,7 @@ test("editor supports integrated find and replace in rich and markdown modes", a
   const replaceInput = page.getByLabel("Replace text")
   await expect(replaceInput).toBeVisible()
   await replaceInput.fill("omega")
-  await page.getByRole("button", { name: "Replace one" }).click({ force: true })
-
-  await expect(panel).toContainText("2 pending replacements")
+  await page.getByRole("button", { name: "Replace", exact: true }).click({ force: true })
   await expect(editor).toContainText("alpha beta omega gamma alpha delta")
 
   await switchToMarkdown(page)

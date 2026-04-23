@@ -1,20 +1,18 @@
 "use client"
 
-import type { RefObject } from "react"
-import { ChevronDown, ChevronUp, Replace, Search, X } from "lucide-react"
+import { useEffect, useRef, useState, type RefObject } from "react"
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type EditorFindReplaceProps = {
   searchValue: string
   replaceValue: string
   caseSensitive: boolean
-  replaceExpanded: boolean
   matchCount: number
   activeMatchNumber: number
   onSearchChange: (value: string) => void
   onReplaceChange: (value: string) => void
   onToggleCaseSensitive: () => void
-  onToggleReplaceExpanded: () => void
   onNavigatePrevious: () => void
   onNavigateNext: () => void
   onReplaceOne: () => void
@@ -24,26 +22,28 @@ type EditorFindReplaceProps = {
   replaceInputRef?: RefObject<HTMLInputElement | null>
 }
 
-const buttonClass =
-  "inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-border/80 bg-sb px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted/70 hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
+const controlButtonClass =
+  "inline-flex h-8 items-center justify-center rounded-[8px] border border-border bg-[hsl(var(--bg))] px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted hover:text-ink"
 
 const iconButtonClass =
-  "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border/80 bg-sb text-ink-3 transition-colors hover:bg-muted/70 hover:text-ink disabled:cursor-not-allowed disabled:opacity-45"
+  "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border border-border bg-[hsl(var(--bg))] text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:border-border/60 disabled:bg-transparent disabled:text-ink-4 disabled:opacity-100"
 
 const inputClass =
-  "h-9 w-full rounded-[9px] border-[0.5px] border-border/80 bg-sb px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-4 focus:border-cursor/55"
+  "h-full w-full border-none bg-transparent px-0 text-[13px] text-ink outline-none placeholder:text-ink-4/95"
+
+const rowInputWrapClass = "flex h-11 min-w-0 flex-1 items-center gap-2 px-4"
+const controlsRailClass = "flex w-[420px] shrink-0 items-center justify-end gap-2 px-4"
+const PANEL_FIXED_GAP = 10
 
 export function EditorFindReplace({
   searchValue,
   replaceValue,
   caseSensitive,
-  replaceExpanded,
   matchCount,
   activeMatchNumber,
   onSearchChange,
   onReplaceChange,
   onToggleCaseSensitive,
-  onToggleReplaceExpanded,
   onNavigatePrevious,
   onNavigateNext,
   onReplaceOne,
@@ -53,18 +53,98 @@ export function EditorFindReplace({
   replaceInputRef,
 }: EditorFindReplaceProps) {
   const hasMatches = matchCount > 0
+  const statusLabel = hasMatches ? `${activeMatchNumber} of ${matchCount}` : searchValue.trim() ? "No matches" : ""
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLElement | null>(null)
+  const [fixedLayout, setFixedLayout] = useState<{
+    top: number
+    left: number
+    width: number
+    height: number
+  }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    height: 0,
+  })
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    const panel = panelRef.current
+    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+
+    if (!wrapper || !panel || !editorViewport) {
+      return
+    }
+
+    const updateLayout = () => {
+      const topbar = document.querySelector<HTMLElement>('[data-testid="editor-topbar"]')
+      const wrapperRect = wrapper.getBoundingClientRect()
+      const panelHeight = panel.offsetHeight
+      const fixedTop = (topbar?.getBoundingClientRect().bottom ?? 46) + PANEL_FIXED_GAP
+
+      setFixedLayout((current) => {
+        const nextState = {
+          top: fixedTop,
+          left: wrapperRect.left,
+          width: wrapperRect.width,
+          height: panelHeight,
+        }
+
+        if (
+          current.top === nextState.top &&
+          current.left === nextState.left &&
+          current.width === nextState.width &&
+          current.height === nextState.height
+        ) {
+          return current
+        }
+
+        return nextState
+      })
+    }
+
+    updateLayout()
+
+    editorViewport.addEventListener("scroll", updateLayout, { passive: true })
+    window.addEventListener("resize", updateLayout)
+
+    return () => {
+      editorViewport.removeEventListener("scroll", updateLayout)
+      window.removeEventListener("resize", updateLayout)
+    }
+  }, [])
 
   return (
-    <div className="pointer-events-none sticky top-4 z-20 mb-4 flex justify-end">
+    <div
+      ref={wrapperRef}
+      className="relative"
+      style={{ height: fixedLayout.height || undefined }}
+    >
       <section
+        ref={panelRef}
         aria-label="Find and replace"
-        className="pointer-events-auto w-full max-w-[420px] rounded-[12px] border-[0.5px] border-border/80 bg-sb/95 p-3 shadow-float-md backdrop-blur"
+        className="fixed z-40 overflow-visible rounded-[10px] border border-border/80 bg-sb/96 shadow-float-md backdrop-blur supports-[backdrop-filter]:bg-sb/92"
+        style={{
+          top: fixedLayout.top,
+          left: fixedLayout.left,
+          width: fixedLayout.width,
+        }}
       >
-        <div className="flex items-start gap-2">
-          <div className="grid flex-1 gap-2">
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-ink-4" strokeWidth={1.5} />
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute -right-3 -top-3 inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/70 bg-sb/92 text-ink-4/80 shadow-float transition-colors hover:bg-muted hover:text-ink"
+          aria-label="Close find and replace"
+        >
+          <X className="h-3 w-3" strokeWidth={1.5} />
+        </button>
+
+        <div className="flex min-h-0 flex-col">
+          <div className="flex min-h-[44px] items-center gap-3 border-b border-border/80">
+            <div className={rowInputWrapClass}>
+              <Search className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+              <div className="min-w-0 flex-1">
                 <input
                   ref={searchInputRef}
                   value={searchValue}
@@ -79,53 +159,54 @@ export function EditorFindReplace({
                       }
                     }
                   }}
-                  className={cn(inputClass, "pl-9")}
-                  placeholder="Find in writing"
+                  className={inputClass}
+                  placeholder="Type to search…"
                   aria-label="Find text"
                 />
               </div>
+            </div>
+
+            <div className={cn(controlsRailClass, "text-ink-4")} aria-live="polite">
+              <span className="min-w-[90px] text-right text-[12px] leading-none tabular-nums">{statusLabel}</span>
 
               <button
                 type="button"
-                onClick={onToggleReplaceExpanded}
-                className={buttonClass}
-                aria-pressed={replaceExpanded}
-                aria-label="Toggle replace controls"
+                onClick={onNavigatePrevious}
+                className={iconButtonClass}
+                disabled={!hasMatches}
+                aria-label="Previous match"
               >
-                <Replace className="mr-1.5 h-[13px] w-[13px]" strokeWidth={1.5} />
-                Replace
+                <ChevronLeft className="h-[14px] w-[14px]" strokeWidth={1.5} />
               </button>
 
-              <button type="button" onClick={onClose} className={iconButtonClass} aria-label="Close find and replace">
-                <X className="h-[14px] w-[14px]" strokeWidth={1.5} />
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="min-w-[72px] text-[12px] text-ink-4" aria-live="polite">
-                {hasMatches ? `${activeMatchNumber} of ${matchCount}` : searchValue.trim() ? "No matches" : "Type to search"}
-              </div>
-
-              <button type="button" onClick={onNavigatePrevious} className={iconButtonClass} disabled={!hasMatches} aria-label="Previous match">
-                <ChevronUp className="h-[14px] w-[14px]" strokeWidth={1.5} />
-              </button>
-
-              <button type="button" onClick={onNavigateNext} className={iconButtonClass} disabled={!hasMatches} aria-label="Next match">
-                <ChevronDown className="h-[14px] w-[14px]" strokeWidth={1.5} />
+              <button
+                type="button"
+                onClick={onNavigateNext}
+                className={iconButtonClass}
+                disabled={!hasMatches}
+                aria-label="Next match"
+              >
+                <ChevronRight className="h-[14px] w-[14px]" strokeWidth={1.5} />
               </button>
 
               <button
                 type="button"
                 onClick={onToggleCaseSensitive}
-                className={cn(buttonClass, caseSensitive ? "border-cursor/50 bg-[hsl(var(--cursor)/0.12)] text-cursor" : "")}
+                className={cn(
+                  controlButtonClass,
+                  caseSensitive ? "border-border bg-muted text-ink" : "",
+                )}
                 aria-pressed={caseSensitive}
               >
                 Match case
               </button>
             </div>
+          </div>
 
-            {replaceExpanded ? (
-              <div className="grid gap-2 border-t border-border/70 pt-2">
+          <div className="flex min-h-[44px] items-center gap-3">
+            <div className={rowInputWrapClass}>
+              <Search className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+              <div className="min-w-0 flex-1">
                 <input
                   ref={replaceInputRef}
                   value={replaceValue}
@@ -137,25 +218,24 @@ export function EditorFindReplace({
                     }
                   }}
                   className={inputClass}
-                  placeholder="Replace with"
+                  placeholder="Replace with…"
                   aria-label="Replace text"
                 />
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button type="button" onClick={onReplaceOne} className={buttonClass} disabled={!hasMatches}>
-                    Replace one
-                  </button>
-
-                  <button type="button" onClick={onReplaceAll} className={buttonClass} disabled={!hasMatches}>
-                    Replace all
-                  </button>
-
-                  {hasMatches ? (
-                    <span className="text-[11px] text-ink-4">{matchCount} pending replacement{matchCount === 1 ? "" : "s"}</span>
-                  ) : null}
-                </div>
               </div>
-            ) : null}
+            </div>
+
+            <div className={controlsRailClass}>
+              <div className="w-[90px]" />
+              <div className="w-8" />
+              <div className="w-8" />
+              <button type="button" onClick={onReplaceOne} className="inline-flex h-8 min-w-[116px] items-center justify-center rounded-[8px] border border-border bg-[hsl(var(--bg))] px-3 text-[12px] font-medium text-ink transition-colors hover:bg-muted hover:border-border/90 disabled:cursor-not-allowed disabled:border-border/60 disabled:bg-transparent disabled:text-ink-4 disabled:opacity-100" disabled={!hasMatches}>
+                Replace
+              </button>
+
+              <button type="button" onClick={onReplaceAll} className="inline-flex h-8 min-w-[116px] items-center justify-center rounded-[8px] border border-border bg-[hsl(var(--bg))] px-3 text-[12px] font-medium text-ink transition-colors hover:bg-muted hover:border-border/90 disabled:cursor-not-allowed disabled:border-border/60 disabled:bg-transparent disabled:text-ink-4 disabled:opacity-100" disabled={!hasMatches}>
+                Replace all
+              </button>
+            </div>
           </div>
         </div>
       </section>
