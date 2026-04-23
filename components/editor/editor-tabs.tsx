@@ -76,7 +76,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTa
             <button
               type="button"
               onClick={onNewTab}
-              className="mb-[2px] inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
+              className="inline-flex h-[36px] w-[36px] shrink-0 items-center justify-center self-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
               aria-label="New writing"
             >
               <Plus className="h-[18px] w-[18px]" strokeWidth={1.45} />
