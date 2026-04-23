@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Editor tabs now read as discrete document navigation instead of a split header: tabs use sans-serif UI typography, the active tab sits on a warm elevated surface instead of pure white, hover applies to the full tab container, widths are capped to avoid one tab consuming the whole rail, the new-tab action sits with the tab cluster, and save copy was removed from the tab strip so the status bar carries persistence feedback.",
+      "phase": "Fase 3",
+      "issue": "ODE-110",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-110",
+      "commit": "7cac72b",
+      "date": "2026-04-23",
+      "notes": "Validation in green: node --version (v20.19.1), npm run env:check --if-present, npm run ops:status:drift --if-present, npm run typecheck, npm run lint (repo warnings only), npm test (247 tests). Performance contract: not required — visual hierarchy/layout update for editor chrome only, no typing/rendering hot path changes. Browser verification: /perf/editor-harness loaded successfully on local dev server; topbar and tools gradient verified, but the harness did not populate multiple live tabs in this session, so multi-tab visual verification remains partially covered by the committed mockup reference at workflow/context/reference/improvements/editor-tabs-odyssey-mockup.html."
+    },
+    {
       "what": "The editor find/replace chrome now behaves like persistent document UI instead of a floating card. Search and replace live in a unified two-row bar with consistent controls, the panel stays fixed under the editor topbar while open, typing in the search field only updates highlights without hijacking scroll, and explicit navigation (`Enter` / arrows / replace actions) moves the viewport to the active match in Rich and Markdown modes.",
       "phase": "Fase 3",
       "issue": "ODE-109",
