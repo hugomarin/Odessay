@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Rewrote /settings/account presentation to match vistas.md spec: 180px left nav with flat border-right styling, 640px content area, Lora nav title, single-line nav items, Sign out in nav footer. Removed SectionCard, eyebrow labels, icons-in-circles, radial-gradient background, and 3-column grid. Profile section uses section header + 2-column grid with single Save button visible only on dirty state. Sign in section uses cred-list container with Email and Password rows that expand inline forms on Change/Cancel. Danger zone section at bottom with delete account stub.",
+      "phase": "Fase 3",
+      "issue": "ODE-112",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-112/rewrite-settings-page-layout-and-account-form-to-match-design-spec",
+      "commit": "4141fe1",
+      "date": "2026-04-23",
+      "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors). Performance contract: not required — pure CSS/JSX restructure with no new data fetching, rendering paths, or animations. Presentation contract: required — settings UI presentation updated, no cross-mode text rendering changes."
+    },
+    {
       "what": "Collections were redesigned around the label mental model: the sidebar now exposes a single Collections entry, `/collections` is a compact grid with explicit Uncategorized and New collection cards, collection detail rows align visually with Desk, and the add/remove-to-collections interaction is now a shared multi-select picker reused across Collections, Desk, and the Properties panel.",
       "phase": "Fase 3",
       "issue": "ODE-111",
