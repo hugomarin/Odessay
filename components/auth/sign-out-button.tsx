@@ -3,9 +3,15 @@
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 
-export function SignOutButton() {
+type SignOutButtonProps = {
+  variant?: "outline" | "ghost" | "default"
+  className?: string
+}
+
+export function SignOutButton({ variant = "outline", className }: SignOutButtonProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
 
@@ -20,11 +26,11 @@ export function SignOutButton() {
 
   return (
     <Button
-      className="h-10 px-4 text-[13px]"
+      className={cn("h-10 px-4 text-[13px]", className)}
       disabled={isPending}
       onClick={handleSignOut}
       type="button"
-      variant="outline"
+      variant={variant}
     >
       {isPending ? "Signing out..." : "Sign out"}
     </Button>
