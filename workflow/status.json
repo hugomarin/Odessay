@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-04-23",
+  "last_updated": "2026-04-24",
   "active_phase": {
     "name": "Fase 2 — Compartir y leer",
     "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
     "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "Guard publishTabState from firing with a stale title during hydration. When switching tabs, displayTitle briefly derives from the previous writing's bodyText until hydration settles. By skipping publishTabState while hydrationWritingId !== null, the tab bar keeps its correct title from the session store (set by focusTab) and avoids both the transient flash and session-store corruption from desynchronized routeWritingId/currentWritingId pairs.",
+      "phase": "Fase 3",
+      "issue": "ODE-114",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-114",
+      "commit": "5fb5130",
+      "date": "2026-04-24",
+      "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors), npm test (249 tests). Performance contract: not required — single guard in existing effect, no new render paths or async work. Presentation contract: not required — fix applies to editor chrome tab state only, no cross-mode text rendering changes. Scope: components/editor/editor-shell.tsx publishTabState effect."
+    },
     {
       "what": "Reverted ODE-113 (stabilize tab switching hydration). The pendingTabTitle approach introduced a critical bug: it fed into displayTitle which publishTabState uses as a dependency, causing publishTabState to fire with mismatched routeWritingId/currentWritingId during tab transitions and overwriting the wrong tab entry — creating duplicate writing_id entries in the session store. The correct fix is tracked in ODE-114.",
       "phase": "Fase 3",
