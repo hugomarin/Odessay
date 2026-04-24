@@ -30,7 +30,7 @@
       "phase": "Fase 3",
       "issue": "ODE-114",
       "linear_url": "https://linear.app/z9ne/issue/ODE-114",
-      "commit": "5fb5130",
+      "commit": "d96d127",
       "date": "2026-04-24",
       "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors), npm test (249 tests). Performance contract: not required — single guard in existing effect, no new render paths or async work. Presentation contract: not required — fix applies to editor chrome tab state only, no cross-mode text rendering changes. Scope: components/editor/editor-shell.tsx publishTabState effect."
     },
