@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Collections were redesigned around the label mental model: the sidebar now exposes a single Collections entry, `/collections` is a compact grid with explicit Uncategorized and New collection cards, collection detail rows align visually with Desk, and the add/remove-to-collections interaction is now a shared multi-select picker reused across Collections, Desk, and the Properties panel.",
+      "phase": "Fase 3",
+      "issue": "ODE-111",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-111/redesign-collections-label-model-single-entry-point-and-interaction",
+      "commit": "8c7d566",
+      "date": "2026-04-23",
+      "notes": "Validation in green: npm run typecheck, npm test (248 tests), npm run build. Performance contract: required by the brief, but trace evidence for `/collections` and `/collections/[id]` is still pending before moving the Linear issue to In Review. Review feedback applied in follow-up commit 8c7d566: collection rows now expose separate Add to collections and Remove from collection actions, the Desk action uses the same picker language as Collections, and the shared collection picker supports multi-select with explicit close/create actions."
+    },
+    {
       "what": "The editor find/replace chrome now behaves like persistent document UI instead of a floating card. Search and replace live in a unified two-row bar with consistent controls, the panel stays fixed under the editor topbar while open, typing in the search field only updates highlights without hijacking scroll, and explicit navigation (`Enter` / arrows / replace actions) moves the viewport to the active match in Rich and Markdown modes.",
       "phase": "Fase 3",
       "issue": "ODE-109",
