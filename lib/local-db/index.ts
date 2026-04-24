@@ -59,6 +59,7 @@ type LocalDB = {
 
 const DEFAULT_SCOPE = "anonymous";
 type LocalDBScopeListener = (scope: string) => void;
+type LocalDBChangeListener = () => void;
 
 const assertBrowser = () => {
   if (typeof window === "undefined" || typeof indexedDB === "undefined") {
@@ -70,6 +71,7 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 let databaseInstance: IDBDatabase | null = null;
 let currentScope = DEFAULT_SCOPE;
 const scopeListeners = new Set<LocalDBScopeListener>();
+const changeListeners = new Set<LocalDBChangeListener>();
 
 const normalizeScope = (scope?: LocalDBScope) => {
   const value = scope?.trim();
@@ -149,6 +151,18 @@ export const subscribeToLocalDBScopeChanges = (listener: LocalDBScopeListener) =
 
   return () => {
     scopeListeners.delete(listener);
+  };
+};
+
+const emitLocalDBChange = () => {
+  changeListeners.forEach((listener) => listener());
+};
+
+export const subscribeToLocalDBChanges = (listener: LocalDBChangeListener) => {
+  changeListeners.add(listener);
+
+  return () => {
+    changeListeners.delete(listener);
   };
 };
 
@@ -381,6 +395,7 @@ const saveWriting = async (writing: LocalWriting) => {
   await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
     await runRequest(store.put(writing));
   });
+  emitLocalDBChange();
 };
 
 const getWriting = async (id: string) =>
@@ -416,12 +431,14 @@ const saveCollection = async (collection: LocalCollection) => {
   await withStore(LOCAL_DB_STORES.collections, "readwrite", async (store) => {
     await runRequest(store.put(collection));
   });
+  emitLocalDBChange();
 };
 
 const saveEditorSession = async (session: LocalEditorSession) => {
   await withStore(LOCAL_DB_STORES.editorSessions, "readwrite", async (store) => {
     await runRequest(store.put(session));
   });
+  emitLocalDBChange();
 };
 
 const getEditorSession = async (id: string) =>
@@ -434,6 +451,7 @@ const savePublicationReview = async (review: LocalPublicationReview) => {
   await withStore(LOCAL_DB_STORES.publicationReviews, "readwrite", async (store) => {
     await runRequest(store.put(review));
   });
+  emitLocalDBChange();
 };
 
 const getPublicationReviewByWritingAndHash = async (writingId: string, sourceHash: string) =>
@@ -524,6 +542,7 @@ const replaceWritingCollections = async (writingId: string, collectionIds: strin
 
   await Promise.all(requests.map((request) => runRequest(request)));
   await completion;
+  emitLocalDBChange();
 };
 
 const removeCollectionAssignments = async (collectionId: string) => {
@@ -542,6 +561,7 @@ const removeCollectionAssignments = async (collectionId: string) => {
 
   await Promise.all(requests.map((request) => runRequest(request)));
   await completion;
+  emitLocalDBChange();
 };
 
 const enqueueMutation = async (mutation: SyncMutation) => {
@@ -564,6 +584,7 @@ const enqueueMutation = async (mutation: SyncMutation) => {
 
     await Promise.all(requests.map((request) => runRequest(request)));
   });
+  emitLocalDBChange();
 };
 
 const getPendingMutations = async () =>
@@ -697,6 +718,7 @@ const markMutationSynced = async (id: string) => {
   }
 
   await completion;
+  emitLocalDBChange();
 };
 
 const markMutationFailed = async (id: string, error: string, nextRetryAt: number) => {
@@ -721,6 +743,7 @@ const markMutationFailed = async (id: string, error: string, nextRetryAt: number
   await runRequest(mutationStore.put(updatedMutation));
 
   await completion;
+  emitLocalDBChange();
 
   await setEntitySyncState(mutation.entity_kind, mutation.entity_id, "failed");
 };
