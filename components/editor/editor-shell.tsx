@@ -698,6 +698,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     updateDerivedEditorState(editor)
 
     if (!currentWritingId) {
+      setPendingTabTitle(null)
       setWritingStatus("draft")
       setWritingVisibility("private")
       return
