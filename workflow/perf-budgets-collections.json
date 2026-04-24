@@ -1,0 +1,93 @@
+{
+  "_description": "Performance budgets for the collections views (ODE-111). No text input or paste — those metrics are not applicable. Budgets derived from the reading baseline; click and long-task thresholds match the editor contract.",
+  "version": "2026-04-23",
+  "scope": "collections",
+  "evaluation": {
+    "pass_rule": "pass if value <= warn_lte",
+    "warn_rule": "warn if warn_lte < value <= fail_lte",
+    "fail_rule": "fail if value > fail_lte",
+    "approval_rule": "A trace is approved when every required metric is pass or warn and no required metric is fail.",
+    "rejection_rule": "A trace is rejected when at least one required metric is fail or a required metric is missing."
+  },
+  "budgets": {
+    "event_dispatch_ms": {
+      "keydown_p95": {
+        "required": true,
+        "warn_lte": 20,
+        "fail_lte": 25
+      },
+      "input_p95": {
+        "required": false,
+        "note": "Collections view has no free-text input — metric will not be present in collections traces."
+      },
+      "paste_max": {
+        "required": false,
+        "note": "Collections view has no paste target — metric will not be present in collections traces."
+      },
+      "click_p95": {
+        "required": true,
+        "warn_lte": 63,
+        "fail_lte": 68
+      },
+      "click_max": {
+        "required": true,
+        "warn_lte": 66,
+        "fail_lte": 70
+      }
+    },
+    "event_timing_ms": {
+      "keydown_p95": {
+        "required": true,
+        "warn_lte": 62,
+        "fail_lte": 65
+      },
+      "input_p95": {
+        "required": false,
+        "note": "Collections view has no free-text input — metric will not be present in collections traces."
+      },
+      "click_p95": {
+        "required": true,
+        "warn_lte": 145,
+        "fail_lte": 150
+      },
+      "click_max": {
+        "required": true,
+        "warn_lte": 160,
+        "fail_lte": 170
+      },
+      "paste_p95": {
+        "required": false,
+        "note": "Collections view has no paste target — metric will not be present in collections traces."
+      }
+    },
+    "interaction_latency_ms": {
+      "editor_inputs_p95": {
+        "required": true,
+        "warn_lte": 130,
+        "fail_lte": 140
+      },
+      "editor_inputs_max": {
+        "required": true,
+        "warn_lte": 160,
+        "fail_lte": 170
+      },
+      "with_interaction_id_p95": {
+        "required": true,
+        "warn_lte": 130,
+        "fail_lte": 140
+      }
+    },
+    "long_tasks_ge_50ms": {
+      "count": {
+        "required": true,
+        "warn_lte": 8,
+        "fail_lte": 10
+      },
+      "max_ms": {
+        "required": true,
+        "warn_lte": 360,
+        "fail_lte": 400
+      }
+    }
+  }
+}

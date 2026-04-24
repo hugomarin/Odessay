@@ -8,18 +8,14 @@ import {
   type SidebarMode,
 } from "@/lib/stores/ui-shell-state"
 
-export type SidebarPanel = "collections" | null
-
 export type UiShellState = {
   sidebarMode: SidebarMode
-  panel: SidebarPanel
 }
 
 type UiShellListener = () => void
 
 const DEFAULT_STATE: UiShellState = {
   sidebarMode: "collapsed",
-  panel: null,
 }
 
 let state: UiShellState = DEFAULT_STATE
@@ -51,7 +47,7 @@ function persist(nextState: UiShellState) {
 
 function setState(updater: (current: UiShellState) => UiShellState) {
   const nextState = updater(state)
-  if (nextState.sidebarMode === state.sidebarMode && nextState.panel === state.panel) {
+  if (nextState.sidebarMode === state.sidebarMode) {
     return
   }
 
@@ -71,13 +67,9 @@ export function initializeUiShellStore(initialState?: Partial<UiShellState>) {
         initialState.sidebarMode === undefined
           ? state.sidebarMode
           : parseSidebarModeCookie(initialState.sidebarMode),
-      panel: initialState.panel === "collections" ? "collections" : null,
     }
 
-    if (
-      normalized.sidebarMode !== state.sidebarMode ||
-      normalized.panel !== state.panel
-    ) {
+    if (normalized.sidebarMode !== state.sidebarMode) {
       state = normalized
       emitChange()
     }
@@ -104,12 +96,17 @@ export function initializeUiShellStore(initialState?: Partial<UiShellState>) {
 
   hasPrimedInitialState = true
 
-  if (previousState.sidebarMode !== state.sidebarMode || previousState.panel !== state.panel) {
+  if (previousState.sidebarMode !== state.sidebarMode) {
     emitChange()
   }
 }
 
 export function setSidebarMode(sidebarMode: SidebarMode) {
+  if (sidebarMode === state.sidebarMode) {
+    persist(state)
+    return
+  }
+
   setState((current) => ({
     ...current,
     sidebarMode,
@@ -117,33 +114,7 @@ export function setSidebarMode(sidebarMode: SidebarMode) {
 }
 
 export function toggleSidebarMode() {
-  setState((current) => {
-    if (current.sidebarMode === "expanded") {
-      return {
-        sidebarMode: "collapsed",
-        panel: null,
-      }
-    }
-
-    return {
-      sidebarMode: "expanded",
-      panel: current.panel,
-    }
-  })
-}
-
-export function setSidebarPanel(panel: SidebarPanel) {
   setState((current) => ({
-    ...current,
-    panel,
-  }))
-}
-
-export function syncSidebarPanelWithPath(pathname: string) {
-  const panel = pathname.startsWith("/collections") ? "collections" : null
-
-  setState((current) => ({
-    ...current,
-    panel,
+    sidebarMode: current.sidebarMode === "expanded" ? "collapsed" : "expanded",
   }))
 }

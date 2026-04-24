@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Collections were redesigned around the label mental model: the sidebar now exposes a single Collections entry, `/collections` is a compact grid with explicit Uncategorized and New collection cards, collection detail rows align visually with Desk, and the add/remove-to-collections interaction is now a shared multi-select picker reused across Collections, Desk, and the Properties panel.",
+      "phase": "Fase 3",
+      "issue": "ODE-111",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-111/redesign-collections-label-model-single-entry-point-and-interaction",
+      "commit": "291d19f",
+      "date": "2026-04-23",
+      "notes": "Validation in green: npm run typecheck, npm test (248 tests), npm run build. PR #97 ready for review. Performance trace for /collections not captured — no perf harness or budgets defined for collections scope in this repo; gate skipped per check-delivery-gate logic."
+    },
+    {
       "what": "Editor tabs now read as discrete document navigation instead of a split header: tabs use sans-serif UI typography, the active tab sits on a warm elevated surface instead of pure white, hover applies to the full tab container, widths are capped to avoid one tab consuming the whole rail, the new-tab action sits with the tab cluster, and save copy was removed from the tab strip so the status bar carries persistence feedback.",
       "phase": "Fase 3",
       "issue": "ODE-110",

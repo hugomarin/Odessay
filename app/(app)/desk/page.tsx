@@ -8,7 +8,20 @@ import { DeskFilterBar } from "@/components/desk/desk-filter-bar"
 import { DeskHero } from "@/components/desk/desk-hero"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
-import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import {
+  buildCollectionOptions,
+  dedupeCollectionIds,
+  getWritingCollectionIds,
+} from "@/lib/collections/collections"
+import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap"
+import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
+import {
+  getLocalDBScope,
+  localDB,
+  subscribeToLocalDBChanges,
+  subscribeToLocalDBScopeChanges,
+} from "@/lib/local-db"
+import type { LocalCollection, LocalWritingCollection } from "@/lib/local-db/schema"
 import {
   buildDeskActivitySummary,
   type DeskActivityFilter,
@@ -17,6 +30,7 @@ import {
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete } from "@/lib/sync/queue"
+import { getSyncWorker } from "@/lib/sync/worker"
 
 type ApiEnvelope<T> = {
   data: T | null
@@ -68,6 +82,8 @@ export default function DeskPage() {
   const [sharedItems, setSharedItems] = useState<SharedWritingListItem[]>([])
   const [isSharedLoading, setIsSharedLoading] = useState(false)
   const [sharedError, setSharedError] = useState<string | null>(null)
+  const [collections, setCollections] = useState<LocalCollection[]>([])
+  const [writingCollections, setWritingCollections] = useState<LocalWritingCollection[]>([])
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
 
@@ -148,7 +164,10 @@ export default function DeskPage() {
 
   const syncRemoteWritings = useCallback(async () => {
     try {
-      await hydrateLocalWritingsFromRemote()
+      await Promise.all([
+        hydrateLocalWritingsFromRemote(),
+        hydrateLocalCollectionsFromRemote(),
+      ])
       return true
     } catch (error) {
       console.error("[desk:hydrate]", error)
@@ -170,6 +189,10 @@ export default function DeskPage() {
 
   const loadDeskActivity = useCallback(async (filter: DeskActivityFilter) => {
     const localWritings = await localDB.writings.getAll()
+    const [nextCollections, nextAssignments] = await Promise.all([
+      localDB.collections.getAll(),
+      localDB.writingCollections.listAll(),
+    ])
     const localScope = getLocalDBScope()
     const recipientPreviewsByWritingId = await loadRecipientPreviews(
       localWritings
@@ -184,6 +207,8 @@ export default function DeskPage() {
         recipientPreviewsByWritingId,
       }),
     )
+    setCollections(nextCollections)
+    setWritingCollections(nextAssignments)
   }, [loadRecipientPreviews])
 
   const loadSharedWritings = useCallback(
@@ -258,6 +283,14 @@ export default function DeskPage() {
   }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity])
 
   useEffect(() => {
+    return subscribeToLocalDBChanges(() => {
+      if (activeView === "mine") {
+        void loadDeskActivity(activeFilter)
+      }
+    })
+  }, [activeFilter, activeView, loadDeskActivity])
+
+  useEffect(() => {
     const handleRefresh = () => {
       if (activeView === "mine") {
         void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
@@ -277,6 +310,18 @@ export default function DeskPage() {
   }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadSharedWritings])
 
   const counts = useMemo(() => summary.counts, [summary.counts])
+  const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
+  const collectionIdsByWritingId = useMemo(() => {
+    const grouped = new Map<string, string[]>()
+
+    for (const assignment of writingCollections) {
+      const nextIds = grouped.get(assignment.writing_id) ?? []
+      nextIds.push(assignment.collection_id)
+      grouped.set(assignment.writing_id, nextIds)
+    }
+
+    return Object.fromEntries(grouped)
+  }, [writingCollections])
 
   return (
     <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
@@ -302,6 +347,27 @@ export default function DeskPage() {
           <DeskActivityTable
             groups={summary.groups}
             isLoading={isLoading}
+            collectionOptions={collectionOptions}
+            collectionIdsByWritingId={collectionIdsByWritingId}
+            onToggleCollection={async (writingId, collectionId) => {
+              const currentIds = getWritingCollectionIds(writingId, writingCollections)
+              const nextIds = currentIds.includes(collectionId)
+                ? currentIds.filter((id) => id !== collectionId)
+                : [...currentIds, collectionId]
+
+              await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
+              getSyncWorker().schedule(0)
+            }}
+            onCreateCollection={async (writingId, name) => {
+              const ownerId = getLocalDBScope()
+              const collection = await createLocalCollection({
+                ownerId: ownerId === "anonymous" ? null : ownerId,
+                name,
+              })
+              const currentIds = getWritingCollectionIds(writingId, writingCollections)
+              await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
+              getSyncWorker().schedule(0)
+            }}
             onDeleteRequest={async (id) => {
               await enqueueWritingDelete(id)
               await loadDeskActivity(activeFilter)

@@ -36,25 +36,22 @@ beforeEach(() => {
 })
 
 describe("ui-shell-store", () => {
-  it("preserves collapsed preference after opening and closing collections panel", async () => {
+  it("persists collapsed preference", async () => {
     const store = await import("../lib/stores/ui-shell-store")
 
     store.initializeUiShellStore()
     store.setSidebarMode("collapsed")
-    store.setSidebarPanel("collections")
-    store.setSidebarPanel(null)
 
     expect(document.cookie).toContain(`${COOKIE_KEY}=collapsed`)
   })
 
-  it("preserves expanded preference when collections panel is toggled off", async () => {
+  it("toggles between expanded and collapsed", async () => {
     const store = await import("../lib/stores/ui-shell-store")
 
     store.initializeUiShellStore()
     store.setSidebarMode("expanded")
-    store.setSidebarPanel("collections")
-    store.setSidebarPanel(null)
+    store.toggleSidebarMode()
 
-    expect(document.cookie).toContain(`${COOKIE_KEY}=expanded`)
+    expect(document.cookie).toContain(`${COOKIE_KEY}=collapsed`)
   })
 })
