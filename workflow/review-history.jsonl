@@ -9,3 +9,4 @@
 {"ts":"2026-04-22T15:16:02.310Z","issue":"ODE-96","branch":"codex/ode-96-selection-metrics","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"cdc9286","verdict":"approved"}
 {"ts":"2026-04-22T18:09:20.087Z","issue":"ODE-97","branch":"feat/ode-97-preview-sharing-margin-notes","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"3813f52","verdict":"approved"}
 {"ts":"2026-04-24T00:48:49.715Z","issue":"ODE-111","branch":"codex/ode-111-collections-label-model","score":4,"P0":1,"P1":1,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"8c7d566","verdict":"rejected"}
+{"ts":"2026-04-24T01:46:53.323Z","issue":"ODE-110","branch":"codex/ode-110-editor-tabs","score":9,"P0":0,"P1":0,"P2":1,"P3":2,"reviewer":"kimi","verdict":"approved"}
