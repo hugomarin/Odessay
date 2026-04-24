@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PUBLICATION_PRIMARY_MODEL = "claude-opus-4-7";
+export const PUBLICATION_PRIMARY_MODEL = "claude-haiku-4-5-20251001";
 export const PUBLICATION_FALLBACK_MODEL = "claude-sonnet-4-6";
 export const ANTHROPIC_API_VERSION = "2023-06-01";
 
