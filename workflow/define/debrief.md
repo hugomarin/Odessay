@@ -71,7 +71,9 @@ _(sin entradas aún)_
 
 ## Fase 3 — Corresponder
 
-_(sin entradas aún)_
+- IMP-2026-04-24-01 | bug | ODE-113 introdujo corrupción del session store: `pendingTabTitle` se inyectó en `displayTitle`, que es dependencia del efecto `publishTabState`. Al cambiar de tab, `displayTitle` cambia inmediatamente (con el título de la nueva tab) pero `routeWritingId` sigue apuntando a la escritura anterior (RSC aún en vuelo). `publishTabState` encuentra el tab anterior por `routeWritingId` y lo sobreescribe con los datos del nuevo → dos entries con el mismo `writing_id` en el store → tabs duplicados. Corregido por revert de ODE-113. | next-sprint | pendiente
+
+- IMP-2026-04-24-02 | ux-friction | Fix correcto al parpadeo de título durante cambio de tabs (objetivo original de ODE-113, no logrado): la causa raíz es que `publishTabState` se dispara con `displayTitle` derivado del `bodyText`/`createdAt` de la escritura anterior mientras `currentWritingId` ya avanzó a la nueva. Fix mínimo: no publicar `title` en `publishTabState` mientras `hydrationWritingId !== null` (hidratación en curso), o usar el estado `title` raw en lugar de `displayTitle` (el raw solo cambia tras completar la hidratación). | next-sprint | ODE-114
 
 ---
 
