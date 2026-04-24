@@ -1,4 +1,3 @@
-
 {"ts":"2026-04-21T23:31:15.978Z","issue":"ODE-91","branch":"codex/ode-91-refactor-editor-hydration","score":8.25,"P0":0,"P1":0,"P2":2,"P3":3,"reviewer":"claude-sonnet-4-6","commit":"f26771e","verdict":"approved"}
 {"ts":"2026-04-21T23:41:46.945Z","issue":"ODE-75","branch":"codex/ode-75-overflow-containment","score":8.8,"P0":0,"P1":0,"P2":1,"P3":3,"reviewer":"claude-sonnet-4-6","commit":"eae010a","verdict":"approved"}
 {"ts":"2026-04-22T00:36:04.207Z","issue":"ODE-92","branch":"feat/ODE-92-explicit-lifecycle","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"7b4fc50","verdict":"approved"}
@@ -8,5 +7,10 @@
 {"ts":"2026-04-22T13:38:36.450Z","issue":"ODE-95","branch":"codex/ode-95-find-replace","score":8.5,"P0":0,"P1":0,"P2":2,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"4b6c9e9","verdict":"approved"}
 {"ts":"2026-04-22T15:16:02.310Z","issue":"ODE-96","branch":"codex/ode-96-selection-metrics","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"cdc9286","verdict":"approved"}
 {"ts":"2026-04-22T18:09:20.087Z","issue":"ODE-97","branch":"feat/ode-97-preview-sharing-margin-notes","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"3813f52","verdict":"approved"}
+{"ts":"2026-04-22T19:29:25.608Z","issue":"ODE-98","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","verdict":"approved"}
+{"ts":"2026-04-22T20:52:40.007Z","issue":"ODE-101","branch":"codex/ode-101-settings-account","score":8.75,"P0":0,"P1":0,"P2":1,"P3":3,"reviewer":"claude-sonnet-4-6","commit":"167c802","verdict":"approved"}
+{"ts":"2026-04-23T18:06:00.641Z","issue":"ODE-109","branch":"codex/ode-109-find-replace-native-chrome","score":9,"P0":0,"P1":0,"P2":0,"P3":4,"reviewer":"claude-sonnet-4-6","commit":"4b90028","verdict":"approved"}
+{"ts":"2026-04-23T21:56:38.427Z","issue":"ODE-110","score":5.5,"P0":0,"P1":1,"P2":4,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"8c7d566","verdict":"changes_requested"}
 {"ts":"2026-04-24T00:48:49.715Z","issue":"ODE-111","branch":"codex/ode-111-collections-label-model","score":4,"P0":1,"P1":1,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"8c7d566","verdict":"rejected"}
 {"ts":"2026-04-24T01:46:53.323Z","issue":"ODE-110","branch":"codex/ode-110-editor-tabs","score":9,"P0":0,"P1":0,"P2":1,"P3":2,"reviewer":"kimi","verdict":"approved"}
+{"ts":"2026-04-24T21:17:50.804Z","issue":"ODE-114","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"kimi","verdict":"approved","notes":"CI traceability check failed on pre-existing perf flake (keydown p95 barely over budget). Change is a single effect guard with no interaction-path impact. Approved after investigation."}

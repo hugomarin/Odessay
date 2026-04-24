@@ -15,7 +15,12 @@ Prioridades: `next-sprint` / `backlog` / `won't-do`
 
 ## Fase 0 — Cimientos
 
-_(sin entradas aún)_
+- IMP-2026-04-23-03 | ux-friction | Settings page redesign: implementación ignoró el spec de `vistas.md` (referencia: Claude settings) y produjo layout card-heavy con AI slop patterns. Diseño validado en mockup: nav lateral 180px plana, secciones Profile / Sign in (credential rows colapsables estilo GitHub) / Danger zone aislada, Sign out en footer de nav. | next-sprint | ODE-112
+  - **Scope**:
+    - `layout.tsx`: eliminar page header (h1 Lora 3.1rem + descripción + notification card). Layout `flex row`. Nav 180px con `border-right` y sin fondo. Título "Settings" Lora 17px. Nav items una línea, 14px. Sign out en footer con `border-top`. Eliminar "Flow" info box.
+    - `account-form.tsx`: eliminar `SectionCard` (eyebrow uppercase + Lora title + ícono en círculo terracota). Sección **Profile**: grid 2col (display name + username), un solo Save que aparece solo en dirty state, hint de URL pública bajo el campo. Sección **Sign in**: cred-list con filas colapsables para Email y Password (expand inline al hacer clic en "Change"). Sección **Danger zone**: aislada al fondo sin card, `border-top`, botón destructive solo al hover. Inputs en ShadCN defaults (34px, rounded-8px). Eliminar radial-gradient background.
+    - Lógica JS (validación, fetch handlers, dirty state) se conserva intacta.
+  - **Visuals**: `/tmp/odessay-settings-redesign.html` (mockup aprobado)
 
 ---
 
@@ -71,6 +76,10 @@ _(sin entradas aún)_
 
 ## Fase 3 — Corresponder
 
+- IMP-2026-04-23-01 | ux-friction | Editor tab bar lacks clear tab hierarchy: active tab is hard to identify, contrast against the rail is too flat, hover applies to text instead of the full tab, tabs can overgrow the available width, `Saving...` adds noise, and the `+` action feels detached from the tab group. Direction validated in mockup: warm active surface instead of pure white, sans serif for tabs, explicit max width, full-tab hover, `+` aligned to the tab cluster, and reevaluate whether any dirty indicator is necessary. | next-sprint | ODE-110
+  - **Reference**: `workflow/context/reference/improvements/editor-tabs-odyssey-mockup.html`
+  - **Origin**: follow-up debrief for `ODE-109`
+
 - IMP-2026-04-24-01 | bug | ODE-113 introdujo corrupción del session store: `pendingTabTitle` se inyectó en `displayTitle`, que es dependencia del efecto `publishTabState`. Al cambiar de tab, `displayTitle` cambia inmediatamente (con el título de la nueva tab) pero `routeWritingId` sigue apuntando a la escritura anterior (RSC aún en vuelo). `publishTabState` encuentra el tab anterior por `routeWritingId` y lo sobreescribe con los datos del nuevo → dos entries con el mismo `writing_id` en el store → tabs duplicados. Corregido por revert de ODE-113. | next-sprint | pendiente
 
 - IMP-2026-04-24-02 | ux-friction | Fix correcto al parpadeo de título durante cambio de tabs (objetivo original de ODE-113, no logrado): la causa raíz es que `publishTabState` se dispara con `displayTitle` derivado del `bodyText`/`createdAt` de la escritura anterior mientras `currentWritingId` ya avanzó a la nueva. Fix mínimo: no publicar `title` en `publishTabState` mientras `hydrationWritingId !== null` (hidratación en curso), o usar el estado `title` raw en lugar de `displayTitle` (el raw solo cambia tras completar la hidratación). | next-sprint | ODE-114
@@ -79,7 +88,9 @@ _(sin entradas aún)_
 
 ## Fase 4 — Organizar
 
-_(sin entradas aún)_
+- IMP-2026-04-23-02 | ux-friction | Collections navigation and interaction model redesign: current implementation has multiple creation entry points with inconsistent behavior, sidebar nesting that conflicts with the label/tag mental model, full document text shown inside collection cards, double-action on sidebar click (opens panel AND navigates), and a broken "Create" button. Design decision: collections are labels (a writing can belong to many), not folders. Direction validated in HTML prototype: Option B — single Collections entry point in sidebar leading to a dedicated /collections page. | next-sprint | ODE-111
+  - **Reference**: `/tmp/odessay-collections-v2.html`
+  - **Origin**: product design session 2026-04-23
 
 ---
 

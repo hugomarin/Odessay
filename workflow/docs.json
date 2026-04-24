@@ -122,6 +122,11 @@
       "type": "ops",
       "description": "Baseline reproducible del editor (trace de referencia, métricas p95/max por interacción, criterios de aprobación/rechazo y pasos para regenerar comparativas before/after)."
     },
+    {
+      "path": "workflow/context/reference/improvements/editor-tabs-odyssey-mockup.html",
+      "type": "ops",
+      "description": "Mockup HTML interactivo para explorar una nueva barra de tabs del editor: tabs con ancho maximo, hover sobre toda la pieza, estado activo mas claro, sans serif en navegacion y estado unsaved reducido a un punto discreto."
+    },
 
     {
       "path": "workflow/context/framework/framework-mece.md",
