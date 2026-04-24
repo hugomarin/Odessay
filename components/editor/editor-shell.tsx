@@ -156,6 +156,7 @@ const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled writing"
+
 function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
   const text = bodyText.trim()
 
@@ -214,7 +215,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [currentWritingId, setCurrentWritingId] = useState<string | null>(initialHydrationSession.activeWritingId)
   const [hydrationWritingId, setHydrationWritingId] = useState<string | null>(initialHydrationSession.hydrationWritingId)
   const [title, setTitle] = useState(UNTITLED_WRITING_TITLE)
-  const [pendingTabTitle, setPendingTabTitle] = useState<string | null>(null)
   const [hasExplicitTitle, setHasExplicitTitle] = useState(false)
   const [mode, setMode] = useState<"rich" | "markdown">("rich")
   const [markdownValue, setMarkdownValue] = useState("")
@@ -258,9 +258,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
-  const hydrationRequestIdRef = useRef(0)
-  const editorSessionTabsRef = useRef(editorSession.tabs)
-  const routeWritingIdRef = useRef(routeWritingId)
   const navigatedToDraftRef = useRef(false)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
@@ -622,14 +619,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [lifecycle])
 
   useEffect(() => {
-    editorSessionTabsRef.current = editorSession.tabs
-  }, [editorSession.tabs])
-
-  useEffect(() => {
-    routeWritingIdRef.current = routeWritingId
-  }, [routeWritingId])
-
-  useEffect(() => {
     const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
 
     if (!nextExternalLoad) {
@@ -698,7 +687,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
     updateDerivedEditorState(editor)
 
     if (!currentWritingId) {
-      setPendingTabTitle(null)
       setWritingStatus("draft")
       setWritingVisibility("private")
       return
@@ -710,11 +698,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
     let cancelled = false
     const targetWritingId = hydrationWritingId
-    const requestId = hydrationRequestIdRef.current + 1
-    hydrationRequestIdRef.current = requestId
-
-    const isCurrentHydrationRequest = () =>
-      !cancelled && hydrationRequestIdRef.current === requestId && currentWritingIdRef.current === targetWritingId
 
     const hydrateEditor = async () => {
       let localWriting = await localDB.writings.get(targetWritingId)
@@ -726,19 +709,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
           // The writing might not exist remotely yet; keep local fallback behavior.
         }
 
-        if (!isCurrentHydrationRequest()) {
+        if (cancelled) {
           return
         }
 
         localWriting = await localDB.writings.get(targetWritingId)
       }
 
-      if (!isCurrentHydrationRequest()) {
+      if (cancelled) {
         return
       }
 
       if (localWriting) {
         isApplyingContentRef.current = true
+        // Load JSON first to get the markdown serialization, then re-parse as markdown
+        // so that footnote references are converted to footnoteReference nodes.
         editor.commands.setContent(localWriting.body_json)
         const loadedMarkdown = normalizeMarkdownForRoundTrip(getEditorMarkdown(editor))
         if (loadedMarkdown) {
@@ -748,7 +733,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         const loadedTitle = localWriting.title?.trim() || UNTITLED_WRITING_TITLE
         const loadedHasExplicitTitle = isExplicitWritingTitle(loadedTitle, localWriting.body_text, localWriting.created_at)
-        setPendingTabTitle(null)
         setTitle(loadedTitle)
         setHasExplicitTitle(loadedHasExplicitTitle)
         setVersion(localWriting.version)
@@ -765,11 +749,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
         )
         updateDerivedEditorState(editor)
 
-        const tabs = editorSessionTabsRef.current
         const activeTab =
-          tabs.find((tab) => tab.writing_id === localWriting.id) ??
-          tabs.find((tab) => tab.id === routeWritingIdRef.current) ??
-          tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
+          editorSession.tabs.find((tab) => tab.writing_id === localWriting.id) ??
+          editorSession.tabs.find((tab) => tab.id === routeWritingId) ??
+          editorSession.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
         const viewState = activeTab?.view_state
 
         if (viewState?.mode === "markdown") {
@@ -815,7 +798,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
           })
         }
       } else {
-        setPendingTabTitle(null)
         setTitle(UNTITLED_WRITING_TITLE)
         setHasExplicitTitle(false)
         setVersion(0)
@@ -827,10 +809,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setBodyText("")
       }
 
-      if (!isCurrentHydrationRequest()) {
-        return
-      }
-
       setHydrationWritingId(null)
     }
 
@@ -839,7 +817,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [currentWritingId, editor, hydrationWritingId, queueMarkdownSelectionRestore, updateDerivedEditorState])
+  }, [currentWritingId, editor, editorSession.tabs, hydrationWritingId, queueMarkdownSelectionRestore, routeWritingId, updateDerivedEditorState])
 
   useEffect(() => {
     if (!currentWritingId) {
@@ -1712,8 +1690,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
-    () => pendingTabTitle ?? (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
-    [pendingTabTitle, hasExplicitTitle, title, bodyText, createdAt],
+    () => (hasExplicitTitle ? title : deriveAutoTitle(bodyText, createdAt)),
+    [hasExplicitTitle, title, bodyText, createdAt],
   )
   const currentDocumentMarkdown = useMemo(() => {
     if (mode === "markdown") {
@@ -2155,19 +2133,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
       focusTab(tabId)
 
       if (nextTab.writing_id) {
-        setPendingTabTitle(nextTab.title)
-        currentWritingIdRef.current = nextTab.writing_id
-        setCurrentWritingId(nextTab.writing_id)
-        setHydrationWritingId(nextTab.writing_id)
-        navigatedToDraftRef.current = false
         router.push(`/write/${nextTab.slug ?? nextTab.writing_id}`)
         return
       }
 
-      setPendingTabTitle(nextTab.title)
-      currentWritingIdRef.current = null
-      setCurrentWritingId(null)
-      setHydrationWritingId(null)
       router.push("/write")
     },
     [editorSession.tabs, persistCurrentWorkspaceViewState, router],

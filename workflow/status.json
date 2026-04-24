@@ -26,15 +26,6 @@
   },
   "built": [
     {
-      "what": "Stabilize editor tab switching hydration. Adds pendingTabTitle state to show destination title immediately on tab select, hydrationRequestIdRef triple-guard to cancel stale async hydrations, editorSessionTabsRef/routeWritingIdRef to decouple hydration effect from tab/route state changes, and clears pendingTabTitle correctly for both writing and draft tab paths.",
-      "phase": "Fase 3",
-      "issue": "ODE-113",
-      "linear_url": "https://linear.app/z9ne/issue/ODE-113",
-      "commit": "5fac164",
-      "date": "2026-04-24",
-      "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (pre-existing warnings only), npm test (249/249). Performance contract: not required — transition-stability fix for editor tab chrome, not a keystroke/input hot-path change. Presentation contract: not required (no cross-mode rich-text rendering changes)."
-    },
-    {
       "what": "Rewrote /settings/account presentation to match vistas.md spec: 180px left nav with flat border-right styling, 640px content area, Lora nav title, single-line nav items, Sign out in nav footer. Removed SectionCard, eyebrow labels, icons-in-circles, radial-gradient background, and 3-column grid. Profile section uses section header + 2-column grid with single Save button visible only on dirty state. Sign in section uses cred-list container with Email and Password rows that expand inline forms on Change/Cancel. Danger zone section at bottom with delete account stub.",
       "phase": "Fase 3",
       "issue": "ODE-112",
