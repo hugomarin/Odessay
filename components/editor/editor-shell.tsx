@@ -156,8 +156,6 @@ const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled writing"
-const HYDRATION_REPARSE_RE = /(?:\[\^[^\]]+\]|<mark\b|==[^=\n]+==|<table\b)/i
-
 function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
   const text = bodyText.trim()
 
@@ -186,10 +184,6 @@ function isExplicitWritingTitle(title: string | null | undefined, bodyText: stri
   }
 
   return normalizedTitle !== deriveAutoTitle(bodyText, createdAt)
-}
-
-function shouldReparseHydratedMarkdown(markdown: string): boolean {
-  return HYDRATION_REPARSE_RE.test(markdown)
 }
 
 const createWritingId = () => {
@@ -265,6 +259,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const hydrationRequestIdRef = useRef(0)
+  const editorSessionTabsRef = useRef(editorSession.tabs)
+  const routeWritingIdRef = useRef(routeWritingId)
   const navigatedToDraftRef = useRef(false)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
@@ -626,6 +622,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [lifecycle])
 
   useEffect(() => {
+    editorSessionTabsRef.current = editorSession.tabs
+  }, [editorSession.tabs])
+
+  useEffect(() => {
+    routeWritingIdRef.current = routeWritingId
+  }, [routeWritingId])
+
+  useEffect(() => {
     const nextExternalLoad = resolveExternalWritingLoad(currentWritingIdRef.current, routeWritingId)
 
     if (!nextExternalLoad) {
@@ -635,13 +639,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
     currentWritingIdRef.current = nextExternalLoad.activeWritingId
     setCurrentWritingId(nextExternalLoad.activeWritingId)
     setHydrationWritingId(nextExternalLoad.hydrationWritingId)
-    const nextTabTitle =
-      editorSession.tabs.find((tab) => tab.writing_id === routeWritingId)?.title ??
-      editorSession.tabs.find((tab) => tab.id === routeWritingId)?.title ??
-      null
-    setPendingTabTitle(nextTabTitle)
     navigatedToDraftRef.current = false
-  }, [editorSession.tabs, routeWritingId])
+  }, [routeWritingId])
 
   useEffect(() => {
     currentWritingIdRef.current = currentWritingId
@@ -739,11 +738,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       if (localWriting) {
         isApplyingContentRef.current = true
-        // Hydrate directly from stored JSON and reserve markdown reparsing for
-        // writings that actually contain markdown-only constructs.
         editor.commands.setContent(localWriting.body_json)
         const loadedMarkdown = normalizeMarkdownForRoundTrip(getEditorMarkdown(editor))
-        if (loadedMarkdown && shouldReparseHydratedMarkdown(loadedMarkdown)) {
+        if (loadedMarkdown) {
           editor.commands.setContent(materializeMarkdownForRichParser(loadedMarkdown))
         }
         isApplyingContentRef.current = false
@@ -767,10 +764,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
         )
         updateDerivedEditorState(editor)
 
+        const tabs = editorSessionTabsRef.current
         const activeTab =
-          editorSession.tabs.find((tab) => tab.writing_id === localWriting.id) ??
-          editorSession.tabs.find((tab) => tab.id === routeWritingId) ??
-          editorSession.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
+          tabs.find((tab) => tab.writing_id === localWriting.id) ??
+          tabs.find((tab) => tab.id === routeWritingIdRef.current) ??
+          tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
         const viewState = activeTab?.view_state
 
         if (viewState?.mode === "markdown") {
@@ -840,7 +838,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [currentWritingId, editor, editorSession.tabs, hydrationWritingId, queueMarkdownSelectionRestore, routeWritingId, updateDerivedEditorState])
+  }, [currentWritingId, editor, hydrationWritingId, queueMarkdownSelectionRestore, updateDerivedEditorState])
 
   useEffect(() => {
     if (!currentWritingId) {
