@@ -178,4 +178,6 @@ Schema de entidades en `workflow/context/core/odessay-modelo-datos.md`.
 
 **Modales sobre prompts del navegador.** Acciones con input usan modales propios. Overlay crema con blur, animación suave, selección preservada.
 
+**Navegación interna vs navegación de página.** Dentro de una vista funcional (editor, desk, collections), los cambios de sub-estado (pestañas, filtros, paneles) son estado local, no rutas. La URL refleja el estado pero no lo controla. Los datos ya están en la base local (`localDB`), por lo que no debe dispararse un RSC fetch de Next.js. Ver `workflow/context/features/odessay-sync.md` §Principio de navegación interna y §Caso de estudio.
+
 **Documentos guardados completos, no por bloques.** El body_json de TipTap se guarda como documento completo. La granularidad de bloques (ProseMirror) es interna — no se expone en el schema. Simplifica sync, márgenes y AI en el MVP.

@@ -193,6 +193,7 @@ Usar siempre paths completos desde la raíz del repo.
 - Cualquier issue de backend/API → `.agents/skills/skill-backend/SKILL.md`
 - Cualquier issue de base de datos → `.agents/skills/skill-database/SKILL.md` + `workflow/core/odessay-modelo-datos.md`
 - Issues que tocan un feature con doc propio → el doc de `workflow/features/` correspondiente
+- Issues que tocan tabs, filtros, o navegación interna del editor → `workflow/context/features/odessay-sync.md` + `workflow/context/core/odessay-arquitectura.md`
 
 ## Delivery
 
@@ -396,3 +397,5 @@ Un spec doc en Files affected invierte la causalidad. Si `workflow/features/odes
 Un skill en Files affected es ruido. `.agents/skills/skill-design/SKILL.md (referencia)` en Files affected confunde a quien lee el issue: ese archivo no se toca, se consulta. Va en Reference docs.
 
 Un issue con checkpoint humano sin sección Handoff bloquea silenciosamente. Si el agente necesita que el humano cree un servicio externo o llene credenciales y no lo declara explícitamente, el agente intentará ejecutar contra un entorno inexistente y fallará sin diagnóstico claro. Cualquier issue que toque servicios externos (Supabase, Vercel, GitHub, APIs de terceros) necesita sección Handoff.
+
+Un issue que propone `router.push()` para estado interno contradice la arquitectura local-first. Si el issue describe tabs, filtros, o paneles que usan navegación de página para mostrar datos que ya están en `localDB`, debe ser reconsiderado. Ver `workflow/context/features/odessay-sync.md`.

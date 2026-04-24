@@ -205,6 +205,83 @@ Sentry captura estos errores automáticamente. Ver `.agents/skills/skill-backend
 
 ---
 
+## Principio de navegación interna
+
+El principio local-first — *la base local es la fuente de verdad operativa* — aplica también a la **navegación interna dentro de una vista funcional**.
+
+Cuando el usuario interactúa con elementos de una misma vista (pestañas, filtros, paneles, selección de items en una lista), eso es un **cambio de estado interno**, no una navegación de página. Si los datos ya están en `localDB`, no debe haber roundtrip al servidor.
+
+**Regla:**
+
+- **NO** usar `router.push()` para cambios de estado dentro de una vista. Eso dispara un RSC fetch completo, un re-render del shell, y una re-hidratación desde cero.
+- **SÍ** usar estado local + lectura directa de `localDB`. La URL se actualiza solo como espejo (`history.replaceState` o `router.replace` sin navegación).
+
+**Ejemplos:**
+
+| Contexto | Estado interno (correcto) | Navegación de página (incorrecto) |
+|----------|--------------------------|-----------------------------------|
+| Pestañas del editor | `setActiveWritingId(id)` + `localDB.get(id)` | `router.push(/write/${id})` |
+| Filtros del desk | `setActiveFilter(filter)` + estado local | `router.replace(/desk?tab=...)` |
+| Panel de colecciones | `setSelectedCollection(id)` + estado local | `router.push(/collections/${id})` |
+
+**Costo medido:** El patrón incorrecto cuesta 750-1350ms. El patrón correcto cuesta < 200ms.
+
+---
+
+## Caso de estudio: cambio de pestañas en el editor
+
+> Evidencia: `artifacts/perf/Trace-20260424T084909.json` (48,944 eventos)
+
+Este caso ilustra por qué el principio de navegación interna es crítico. El usuario reportó lentitud (1-2 segundos) al cambiar de pestaña en el editor, incluso en páginas ya visitadas.
+
+### Evolución del diagnóstico
+
+**Fase 1 — Hipótesis dispersas (sin evidencia):**
+Se sospecharon múltiples causas simultáneas: re-fetch agresivo en Desk, store global sin selectores atómicos, hidratación TipTap pesada, fetch sin caché en Collections. Este enfoque fue incorrecto: sin evidencia objetiva, no se puede priorizar.
+
+**Fase 2 — Análisis del trace:**
+El trace reveló que el problema no era ni la red ni el scripting pesado, sino el **uso de `router.push()` para cambiar de pestaña**.
+
+| Métrica | Click 1 | Click 2 |
+|---------|---------|---------|
+| Network RSC fetch | 458ms | 302ms |
+| Gap post-respuesta (React procesando) | **1,160ms** | **574ms** |
+| Scripting (TipTap + localDB) | ~150ms | ~150ms |
+| **Total percibido** | **~1,350ms** | **~750ms** |
+
+Hallazgos clave:
+- Next.js App Router dispara requests `?_rsc=` en cada cambio de tab
+- El gap de 600-1,100ms ocurre **después** de que el servidor responde — es procesamiento del cliente
+- El scripting de TipTap (`editor.commands.setContent()`) y localDB (`localDB.writings.get()`) suman solo ~150ms
+
+**Fase 3 — Causa raíz confirmada:**
+En `components/editor/editor-shell.tsx`, el handler de selección de pestaña ejecuta `router.push(/write/${id})`. Esto dispara:
+1. RSC fetch al servidor
+2. Re-render completo del shell con nuevo `routeWritingId`
+3. Re-hidratación desde localDB (a pesar de que los datos ya estaban allí)
+4. Re-inyección en TipTap
+
+Todo para mostrar un texto que **ya estaba en el navegador**.
+
+**Fase 4 — Corrección del razonamiento:**
+Se propusieron inicialmente "atajos" (prefetch, cachear RSC, no usar router). El usuario correctamente identificó estos como parches sintomáticos. La solución real es cambiar la arquitectura: estado local primero, URL como espejo.
+
+### Lecciones
+
+1. **No diagnosticar sin evidencia.** Si existe un trace, analizarlo antes de hipotetizar.
+2. **No proponer atajos para problemas arquitectónicos.** Prefetch y cache son parches cuando la causa es una mala decisión de implementación.
+3. **No externalizar responsabilidad al framework.** Next.js no es un actor externo — es una herramienta que el equipo usa. `router.push()` es una API que se eligió usar de forma incorrecta.
+4. **Entender la arquitectura antes de proponer cambios.** Validar local-first, IndexedDB, y sync antes de sugerir fixes de performance.
+
+### Regresión a evitar
+
+- [ ] No usar `router.push()` para cambios de estado interno dentro de una vista funcional
+- [ ] No confundir "URL debe reflejar el estado" con "URL debe controlar el estado"
+- [ ] No implementar tabs, filtros, o paneles como rutas navegables si son estado de UI
+- [ ] No permitir que Next.js RSC fetch bloquee la carga de datos que ya están en `localDB`
+
+---
+
 ## Lo que este doc NO cubre
 
 - Implementación del endpoint `PATCH /api/writings/{id}` → `.agents/skills/skill-backend/SKILL.md`

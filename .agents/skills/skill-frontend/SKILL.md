@@ -244,6 +244,39 @@ npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report ar
 - Ejecutar lógica AI síncrona en el camino de interacción del editor.
 - Introducir dependencias de UI pesadas sin presupuesto de impacto medido.
 
+### Navegación interna vs Navegación de página
+
+**Regla**: Dentro de una misma vista funcional (editor, desk, collections), el cambio de sub-estado NO debe usar `router.push()`.
+
+Las pestañas del editor son **estado interno**, no rutas. El contenido ya está en `localDB`. Usar `router.push()` para cambiar de tab dispara un RSC fetch completo al servidor, un re-render del shell, y una re-hidratación desde cero — todo para mostrar datos que ya están en el navegador.
+
+```tsx
+// ✗ INCORRECTO — dispara RSC fetch, re-render completo, re-hidratación
+// Cuesta 750-1350ms en producción
+router.push(`/write/${writingId}`)
+
+// ✓ CORRECTO — cambio de estado local, lectura de localDB, URL como espejo
+// Cuesta < 200ms
+setActiveWritingId(writingId)  // estado local del editor
+// Opcional: actualizar URL sin disparar navegación
+window.history.replaceState(null, '', `/write/${writingId}`)
+```
+
+**Cuándo SÍ usar `router.push()`**:
+- Navegar entre secciones del producto (editor → desk → collections)
+- Primer acceso a un recurso que no está en `localDB`
+- Links compartidos / acceso directo desde fuera de la app
+
+**Anti-patterns bloqueantes**:
+- `router.push()` dentro del editor para cambiar de pestaña
+- `router.push()` para cambiar de filtro dentro de una vista
+- Usar la URL como `source of truth` para estado que vive en `localDB`
+- Confundir "URL debe reflejar el estado" con "URL debe controlar el estado"
+
+**Referencias**:
+- `workflow/context/features/odessay-sync.md` — principio de navegación interna, arquitectura local-first, caso de estudio del editor
+- `workflow/context/core/odessay-arquitectura.md` — decisión de arquitectura sobre navegación interna vs navegación de página
+
 ---
 
 ## Nomenclatura semántica de componentes

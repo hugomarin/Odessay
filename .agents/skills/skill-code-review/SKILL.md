@@ -160,6 +160,13 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - Se marcó `Performance Contract: not required` sin justificación explícita.
 - No hay descripción del PR o no referencia el issue.
 - Se operó contra producción.
+- Usar `router.push()` para cambios de estado interno dentro de una vista funcional (tabs, filtros, paneles).
+- Disparar navegación RSC (`?_rsc=`) para datos que ya están en `localDB`.
+- Implementar tabs, filtros, o paneles como rutas navegables cuando son estado de UI.
+
+**Referencias para verificación:**
+- `workflow/context/features/odessay-sync.md` — principio de navegación interna, arquitectura local-first, caso de estudio del editor
+- `workflow/context/core/odessay-arquitectura.md` — decisión de arquitectura sobre navegación interna vs navegación de página
 
 ---
 
