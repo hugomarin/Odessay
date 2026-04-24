@@ -1,7 +1,7 @@
 {
   "_description": "Registro de decisiones arquitectónicas y técnicas del proyecto. Las decisiones globales aplican a todo el ciclo de vida, mientras que las de fase son específicas al ciclo de trabajo actual.",
   "_maintenance": "Debe actualizarse obligatoriamente mediante `/wf-decision` si se toma una decisión que altera el stack, la arquitectura o políticas globales.",
-  "last_updated": "2026-03-20",
+  "last_updated": "2026-04-24",
   "decisions_global": [
     {
       "decision": "Local-first con IndexedDB (no localStorage)",
@@ -38,6 +38,10 @@
     {
       "decision": "Tailwind CSS v4 (no v3) — migración decidida en Fase 0 con costo mínimo; v3 está en modo mantenimiento; ShadCN ya soporta v4; elimina necesidad de tailwind.config.ts y el global border-border problemático",
       "doc": "workflow/context/core/odessay-stack.md"
+    },
+    {
+      "decision": "Navegación interna del editor: estado local primero, URL como espejo",
+      "doc": "workflow/context/features/odessay-sync.md"
     }
   ],
   "decisions_phase_active": [
