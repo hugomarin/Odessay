@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { FolderOpen, Trash2 } from "lucide-react"
+import { Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { CollectionOption } from "@/lib/collections/collections"
@@ -88,11 +88,11 @@ export function DeskActivityTable({
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[56%]" />
-                <col className="w-[16%]" />
-                <col className="w-[16%]" />
-                <col className="w-[8%]" />
-                <col className="w-[4%]" />
+                <col className="w-[50%]" />
+                <col className="w-[14%]" />
+                <col className="w-[14%]" />
+                <col className="w-[10%]" />
+                <col className="w-[12%]" />
               </colgroup>
               <tbody>
                 {group.rows.map((row) => {
@@ -186,7 +186,7 @@ export function DeskActivityTable({
                       </td>
                       <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
                         <div
-                          className="flex items-center justify-end gap-1 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100"
+                          className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100"
                           onClick={(event) => event.stopPropagation()}
                         >
                           {isNavigable ? (
@@ -195,13 +195,16 @@ export function DeskActivityTable({
                               selectedIds={selectedCollectionIds}
                               onToggleCollection={(collectionId) => onToggleCollection(row.id, collectionId)}
                               onCreateCollection={(name) => onCreateCollection(row.id, name)}
+                              title="Add to collections"
+                              description="Choose multiple labels, then close when you're done."
                               trigger={
                                 <button
                                   type="button"
                                   aria-label={`Assign ${row.title} to collections`}
-                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                  className="inline-flex h-7 items-center gap-2 rounded-[999px] border-[0.5px] border-border px-3 text-[12px] text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                                 >
-                                  <FolderOpen className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                                  <Tags className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                                  <span>Collections</span>
                                 </button>
                               }
                             />

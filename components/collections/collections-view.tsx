@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { FolderOpen, Pencil, Plus, Trash2 } from "lucide-react"
+import { Pencil, Plus, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import {
@@ -249,6 +249,11 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
               <span className="truncate">{collectionName}</span>
             </div>
             <h1 className="pt-2 font-lora text-[28px] font-medium text-ink">{collectionName}</h1>
+            {isUncategorizedView ? (
+              <p className="pt-2 text-[12px] leading-relaxed text-ink-4">
+                Derived label for writings without collections. It cannot be renamed or deleted.
+              </p>
+            ) : null}
           </div>
 
           {activeCollection ? (
@@ -290,24 +295,31 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           ) : detailItems.length === 0 ? (
             <p className="font-lora text-[18px] italic text-ink-3">No writings here yet.</p>
           ) : (
-            <div>
+            <div className="border-t-[0.5px] border-border">
               {detailItems.map((item) => {
                 const selectedIds = getWritingCollectionIds(item.id, assignments)
 
                 return (
                   <div
                     key={item.id}
-                    className="group grid grid-cols-[minmax(0,1fr)_auto] gap-4 border-b-[0.5px] border-border px-1 py-4 transition-colors duration-150 ease-out hover:bg-muted/50"
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => router.push(`/write/${item.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        router.push(`/write/${item.id}`)
+                      }
+                    }}
+                    className="group grid grid-cols-[minmax(0,1fr)_auto_auto] gap-4 border-b-[0.5px] border-border px-1 py-[18px] transition-colors duration-150 ease-out hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                   >
                     <div className="min-w-0">
-                      <Link href={`/write/${item.id}`} className="block">
-                        <h2 className="font-lora text-[16px] font-medium text-ink transition-colors duration-150 ease-out group-hover:text-cursor">
-                          {item.title}
-                        </h2>
-                      </Link>
-                      <p className="mt-1 line-clamp-2 text-[14px] italic text-ink-3">{item.excerpt}</p>
+                      <h2 className="font-lora text-[15px] font-medium leading-[1.3] text-ink transition-colors duration-150 ease-out group-hover:text-cursor">
+                        {item.title}
+                      </h2>
+                      <p className="truncate pt-1 text-[12px] text-ink-3">{item.excerpt}</p>
                       {item.otherCollections.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-2 flex flex-wrap gap-2">
                           {item.otherCollections.map((collection) => (
                             <span
                               key={collection.id}
@@ -320,15 +332,24 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                       ) : null}
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <div className="text-right text-[12px] text-ink-4">
-                        <p>{`${item.wordCount.toLocaleString()} words · ${formatDate(item.updatedAt)} · ${buildStatusLabel(item.status)}`}</p>
-                      </div>
+                    <div className="pt-0.5 text-right text-[12px] text-ink-4">
+                      <p>{`${item.wordCount.toLocaleString()} words · ${formatDate(item.updatedAt)} · ${buildStatusLabel(item.status)}`}</p>
+                    </div>
+
+                    <div
+                      className="flex items-start justify-end"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                      }}
+                    >
                       <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100">
                         {isUncategorizedView ? (
                           <CollectionAssignmentMenu
                             collections={collectionOptions}
                             selectedIds={selectedIds}
+                            title="Add to collections"
+                            description="Choose multiple labels, then close when you're done."
                             onToggleCollection={async (collectionId) => {
                               await toggleWritingCollection(item.id, collectionId)
                             }}
@@ -338,34 +359,50 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                             trigger={
                               <button
                                 type="button"
-                                className="inline-flex h-7 items-center rounded-[6px] border-[0.5px] border-border px-2 text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                                className="inline-flex h-7 items-center gap-2 rounded-[999px] border-[0.5px] border-border px-3 text-[12px] text-ink-2 transition-colors hover:bg-muted"
                               >
-                                Assign to collection
+                                <Tags className="h-3.5 w-3.5" strokeWidth={1.5} />
+                                Add to collections
                               </button>
                             }
                           />
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void setLocalWritingCollections(
-                                item.id,
-                                selectedIds.filter((collectionId) => collectionId !== initialExpandedCollectionId),
-                              ).then(() => getSyncWorker().schedule(0))
-                            }
-                            className="inline-flex h-7 items-center rounded-[6px] border-[0.5px] border-border px-2 text-[12px] text-ink-2 transition-colors hover:bg-muted"
-                          >
-                            Remove from collection
-                          </button>
+                          <>
+                            <CollectionAssignmentMenu
+                              collections={collectionOptions}
+                              selectedIds={selectedIds}
+                              title="Add to collections"
+                              description="Choose multiple labels, then close when you're done."
+                              onToggleCollection={async (collectionId) => {
+                                await toggleWritingCollection(item.id, collectionId)
+                              }}
+                              onCreateCollection={async (name) => {
+                                await createCollectionAndAssign(item.id, name)
+                              }}
+                              trigger={
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 items-center gap-2 rounded-[999px] border-[0.5px] border-border px-3 text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                                >
+                                  <Tags className="h-3.5 w-3.5" strokeWidth={1.5} />
+                                  Add to collections
+                                </button>
+                              }
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void setLocalWritingCollections(
+                                  item.id,
+                                  selectedIds.filter((collectionId) => collectionId !== initialExpandedCollectionId),
+                                ).then(() => getSyncWorker().schedule(0))
+                              }
+                              className="inline-flex h-7 items-center rounded-[6px] border-[0.5px] border-border px-2 text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                            >
+                              Remove from collection
+                            </button>
+                          </>
                         )}
-
-                        <Link
-                          href={`/write/${item.id}`}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border-[0.5px] border-border text-ink-2 transition-colors hover:bg-muted"
-                          aria-label={`Open ${item.title}`}
-                        >
-                          <FolderOpen className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        </Link>
                       </div>
                     </div>
                   </div>
