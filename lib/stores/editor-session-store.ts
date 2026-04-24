@@ -175,13 +175,13 @@ export function openDraftTab() {
             : tab,
         )
       : [
+          ...current.tabs,
           createEditorSessionTab({
             id: EDITOR_DRAFT_TAB_ID,
             writingId: null,
             title: "Untitled writing",
             saveState: "saved",
           }),
-          ...current.tabs,
         ];
 
     return {
@@ -254,7 +254,7 @@ export function openWritingTab({
     return {
       ...current,
       active_tab_id: nextTab.id,
-      tabs: [nextTab, ...currentTabs],
+      tabs: [...currentTabs, nextTab],
       recent_writings: touchRecentFromTab(current.recent_writings, nextTab),
     };
   });

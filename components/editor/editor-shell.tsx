@@ -2177,7 +2177,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState, router],
   )
 
-  const handleCreateWorkspaceTab = useCallback(() => {
+  const handleCreateWorkspaceTab = useCallback(async () => {
     if (editorSession.tabs.length >= 10) {
       const confirmed = window.confirm("You already have many tabs open. Open another writing anyway?")
       if (!confirmed) {
@@ -2186,9 +2186,44 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     persistCurrentWorkspaceViewState()
+    const activeDraftTabId = currentWritingId ?? EDITOR_DRAFT_TAB_ID
+    const isActiveDraft =
+      !currentWritingId ||
+      editorSession.tabs.some((tab) => tab.id === activeDraftTabId && tab.writing_id === null)
+
+    if (isActiveDraft) {
+      const nowIso = new Date().toISOString()
+      const nextWritingId = createWritingId()
+      const nextTitle = deriveAutoTitle("", nowIso)
+
+      await localDB.writings.save({
+        id: nextWritingId,
+        title: nextTitle,
+        body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
+        body_text: "",
+        status: "draft",
+        visibility: "private",
+        version: 0,
+        sync_status: "synced",
+        lifecycle: "local-only",
+        created_at: nowIso,
+        updated_at: nowIso,
+        local_updated_at: Date.now(),
+      })
+
+      openWritingTab({
+        writingId: nextWritingId,
+        title: nextTitle,
+        saveState: "saved",
+        hasPendingSync: false,
+      })
+      router.push(`/write/${nextWritingId}`)
+      return
+    }
+
     openDraftTab()
     router.push("/write")
-  }, [editorSession.tabs.length, persistCurrentWorkspaceViewState, router])
+  }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState, router])
 
   const exportFileBaseName = useMemo(
     () =>

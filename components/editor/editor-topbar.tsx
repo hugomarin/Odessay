@@ -157,20 +157,20 @@ const isActionActive = (
   action: EditorShortcutAction,
 ) => (isTopbarTrackedAction(action) ? actionState[action] : false)
 
-const TOPBAR_ICON_STROKE_WIDTH = 1.35
+const TOPBAR_ICON_STROKE_WIDTH = 2
 
 const TOPBAR_ICON_BUTTON_BASE_CLASS =
-  "inline-flex h-6 w-6 items-center justify-center rounded-[6px] transition-[background-color,color,opacity] duration-150 ease-out"
+  "inline-flex h-7 w-7 items-center justify-center rounded-[6px] transition-[background-color,color,opacity] duration-150 ease-out"
 
-const TOPBAR_ICON_BUTTON_INACTIVE_CLASS = "text-ink-4/70 opacity-80 hover:bg-muted/80 hover:text-ink hover:opacity-100"
+const TOPBAR_ICON_BUTTON_INACTIVE_CLASS = "text-ink-3/90 opacity-90 hover:bg-muted hover:text-ink hover:opacity-100"
 
 const TOPBAR_ICON_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
 
 const TOPBAR_STRUCTURE_BUTTON_BASE_CLASS =
-  "inline-flex h-6 min-w-6 items-center justify-center rounded-[6px] px-[3px] text-[11px] font-medium tracking-[-0.01em] transition-[background-color,color,opacity] duration-150 ease-out"
+  "inline-flex h-7 min-w-7 items-center justify-center rounded-[6px] px-[4px] text-[12px] font-medium tracking-[-0.01em] transition-[background-color,color,opacity] duration-150 ease-out"
 
 const TOPBAR_STRUCTURE_BUTTON_INACTIVE_CLASS =
-  "text-ink-4/75 opacity-80 hover:bg-muted/80 hover:text-ink hover:opacity-100"
+  "text-ink-3/90 opacity-90 hover:bg-muted hover:text-ink hover:opacity-100"
 
 const TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
 
@@ -239,7 +239,7 @@ export function EditorTopbar({
           aria-label={actionItem.label}
           className={getTopbarIconButtonClass(isActive)}
         >
-          <Icon className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+          <Icon className="h-[14px] w-[14px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
         </button>
       </ActionTooltip>
     )
@@ -328,7 +328,7 @@ export function EditorTopbar({
         id="editor-topbar"
         data-section="editor-topbar"
         data-testid="editor-topbar"
-        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center border-b-[0.5px] border-border/80 bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/85"
+        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center border-b-[0.5px] border-border/80 bg-sb/95 backdrop-blur supports-[backdrop-filter]:bg-sb/85"
       >
         <div className="flex min-w-0 flex-1 items-center">
           <EditorTabs
@@ -340,7 +340,7 @@ export function EditorTopbar({
           />
         </div>
 
-        <div className="flex shrink-0 items-center gap-3 border-l-[0.5px] border-border/80 px-3">
+        <div className="flex shrink-0 items-center gap-3 border-l-[0.5px] border-border/80 bg-transparent px-3">
           <div className={EDITOR_TOPBAR_DESKTOP_FORMAT_CLASS} aria-disabled={false}>
             {formatButtons}
 

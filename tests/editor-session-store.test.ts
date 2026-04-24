@@ -61,7 +61,7 @@ describe("editorSessionStore", () => {
     const session = getEditorSessionState().session;
     expect(session.active_tab_id).toBe("writing-2");
     expect(session.tabs.some((tab) => tab.id === EDITOR_DRAFT_TAB_ID)).toBe(false);
-    expect(session.tabs[0]?.writing_id).toBe("writing-2");
+    expect(session.tabs.at(-1)?.writing_id).toBe("writing-2");
   });
 
   it("stores per-tab viewport state before tab switches", async () => {
@@ -94,5 +94,18 @@ describe("editorSessionStore", () => {
 
     expect(nextActive).toBe("writing-4");
     expect(getEditorSessionState().session.active_tab_id).toBe("writing-4");
+  });
+
+  it("appends newly opened writing tabs to the end of the rail", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-1", title: "First draft" });
+    openWritingTab({ writingId: "writing-2", title: "Second draft" });
+    openWritingTab({ writingId: "writing-3", title: "Third draft" });
+
+    expect(getEditorSessionState().session.tabs.map((tab) => tab.id)).toEqual([
+      "writing-1",
+      "writing-2",
+      "writing-3",
+    ]);
   });
 });
