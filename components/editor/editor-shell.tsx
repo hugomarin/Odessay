@@ -1733,6 +1733,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
+    // Guard: don't publish tab state with a stale title while hydration is in progress.
+    // During tab switching, displayTitle may still derive from the previous writing's
+    // bodyText until hydration settles. Skipping publishTabState here prevents both
+    // the transient title flash in the tab bar and session-store corruption from
+    // desynchronized routeWritingId/currentWritingId pairs.
+    if (hydrationWritingId !== null) {
+      return
+    }
+
     publishTabState({
       routeWritingId,
       writingId: currentWritingId,
@@ -1741,7 +1750,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
       saveState: syncStatus === "saved-local" ? "saved-local" : syncStatus,
       hasPendingSync: syncStatus !== "saved",
     })
-  }, [currentWritingId, displayTitle, routeWritingId, sessionLoaded, syncStatus, writingSlug])
+  }, [currentWritingId, displayTitle, hydrationWritingId, routeWritingId, sessionLoaded, syncStatus, writingSlug])
 
   useEffect(() => {
     if (!editor) {
