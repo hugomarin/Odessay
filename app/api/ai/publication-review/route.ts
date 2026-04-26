@@ -1,4 +1,4 @@
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -101,6 +101,7 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
     headers: {
       "content-type": "application/json",
       "authorization": `Bearer ${config.apiKey}`,
+      "user-agent": "Odessay/1.0",
     },
     body: JSON.stringify({
       model: config.model,
