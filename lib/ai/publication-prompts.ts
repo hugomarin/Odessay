@@ -20,10 +20,10 @@ const publicationChecklistItemSchema = z.object({
 });
 
 export const publicationReviewResponseSchema = z.object({
-  summary: z.string().trim().max(280).optional().default(""),
-  spelling: z.array(publicationSuggestionSchema).max(12).default([]),
-  rewriting: z.array(publicationSuggestionSchema).max(12).default([]),
-  checklist: z.array(publicationChecklistItemSchema).max(10).default([]),
+  summary: z.string().trim().max(200).optional().default(""),
+  spelling: z.array(publicationSuggestionSchema).max(8).default([]),
+  rewriting: z.array(publicationSuggestionSchema).max(6).default([]),
+  checklist: z.array(publicationChecklistItemSchema).max(5).default([]),
 });
 
 type BuildPublicationPromptArgs = {
@@ -93,11 +93,12 @@ Return JSON with this exact shape:
 }
 
 Rules:
-- Prefer 3-8 spelling items, 3-8 rewriting items, and 3-6 checklist items when useful.
+- MAXIMUM 5 spelling items, 5 rewriting items, and 3 checklist items. Fewer is fine.
 - If a category has nothing useful, return an empty array.
 - Do not suggest a full rewrite of the whole text.
 - Do not invent context that is not present in the markdown.
 - Keep replacementText close in length to originalText unless brevity is the point.
+- Keep every field concise. The response must fit in valid JSON.
 
 Markdown to review:
 """markdown

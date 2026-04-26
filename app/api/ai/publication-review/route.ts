@@ -116,7 +116,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1200,
+      max_tokens: 2000,
       temperature: 0.2,
       system: buildPublicationReviewSystemPrompt(),
       messages: [
@@ -147,7 +147,19 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     throw new Error("Anthropic returned an empty response.");
   }
 
-  const parsed = publicationReviewResponseSchema.parse(JSON.parse(extractJsonPayload(text)));
+  const jsonText = extractJsonPayload(text);
+  let parsedJson: unknown;
+
+  try {
+    parsedJson = JSON.parse(jsonText);
+  } catch (parseErr) {
+    console.log(`[pub-review] JSON parse failed. Raw text length=${jsonText.length}`);
+    console.log(`[pub-review] JSON raw text (first 800 chars): ${jsonText.slice(0, 800)}`);
+    console.log(`[pub-review] JSON raw text (last 800 chars): ${jsonText.slice(-800)}`);
+    throw new Error(`Anthropic returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+  }
+
+  const parsed = publicationReviewResponseSchema.parse(parsedJson);
   const t3 = Date.now();
   console.log(`[pub-review] schema validated totalLatencyMs=${t3 - t0}`);
 
