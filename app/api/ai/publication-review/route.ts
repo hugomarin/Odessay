@@ -158,11 +158,23 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
   const t3 = Date.now();
   console.log(`[pub-review] schema validated totalLatencyMs=${t3 - t0}`);
 
+  const validSuggestion = (s: { title: string; reason: string; originalText: string; replacementText: string }) =>
+    s.title.trim().length > 0 &&
+    s.reason.trim().length > 0 &&
+    s.originalText.trim().length > 0 &&
+    s.replacementText.trim().length > 0;
+
+  const validChecklist = (c: { label: string; detail: string }) =>
+    c.label.trim().length > 0 && c.detail.trim().length > 0;
+
   return {
     model: config.model,
     summary: parsed.summary || null,
-    suggestions: [...toSuggestions("spelling", parsed.spelling), ...toSuggestions("rewriting", parsed.rewriting)],
-    checklist: toChecklistItems(parsed.checklist),
+    suggestions: [
+      ...toSuggestions("spelling", parsed.spelling.filter(validSuggestion)),
+      ...toSuggestions("rewriting", parsed.rewriting.filter(validSuggestion)),
+    ],
+    checklist: toChecklistItems(parsed.checklist.filter(validChecklist)),
   };
 }
 
