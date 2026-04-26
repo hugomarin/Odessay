@@ -14,15 +14,16 @@
  */
 
 export function getAIProviderConfig() {
-  const baseUrl = process.env.AI_BASE_URL?.replace(/\/$/, "") ?? "";
-  const apiKey = process.env.AI_API_KEY ?? "";
-  const model = process.env.AI_MODEL ?? "";
+  // Support generic AI_* vars or Cerebras-specific CEREBRAS_* vars
+  const baseUrl = (process.env.AI_BASE_URL ?? process.env.CEREBRAS_BASE_URL)?.replace(/\/$/, "") ?? "";
+  const apiKey = process.env.AI_API_KEY ?? process.env.CEREBRAS_API_KEY ?? "";
+  const model = process.env.AI_MODEL ?? process.env.CEREBRAS_MODEL ?? "";
 
   if (!baseUrl || !apiKey || !model) {
     const missing = [
-      !baseUrl && "AI_BASE_URL",
-      !apiKey && "AI_API_KEY",
-      !model && "AI_MODEL",
+      !baseUrl && "AI_BASE_URL (or CEREBRAS_BASE_URL)",
+      !apiKey && "AI_API_KEY (or CEREBRAS_API_KEY)",
+      !model && "AI_MODEL (or CEREBRAS_MODEL)",
     ].filter(Boolean);
 
     throw new Error(`Missing AI provider config: ${missing.join(", ")}`);
@@ -33,8 +34,8 @@ export function getAIProviderConfig() {
     apiKey,
     model,
     chatCompletionsUrl: `${baseUrl}/chat/completions`,
-    maxCompletionTokens: Number(process.env.AI_MAX_TOKENS ?? 1000),
-    temperature: Number(process.env.AI_TEMPERATURE ?? 1.0),
-    topP: Number(process.env.AI_TOP_P ?? 0.95),
+    maxCompletionTokens: Number(process.env.AI_MAX_TOKENS ?? process.env.CEREBRAS_MAX_TOKENS ?? 1000),
+    temperature: Number(process.env.AI_TEMPERATURE ?? process.env.CEREBRAS_TEMPERATURE ?? 1.0),
+    topP: Number(process.env.AI_TOP_P ?? process.env.CEREBRAS_TOP_P ?? 0.95),
   };
 }
