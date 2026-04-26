@@ -1,8 +1,9 @@
+export const runtime = "edge";
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   ANTHROPIC_API_VERSION,
-  PUBLICATION_FALLBACK_MODEL,
   PUBLICATION_PRIMARY_MODEL,
   buildPublicationReviewSystemPrompt,
   buildPublicationReviewUserPrompt,
@@ -97,6 +98,15 @@ async function getCurrentUserId() {
 }
 
 async function requestPublicationReview(model: string, requestBody: z.infer<typeof requestSchema>) {
+  const t0 = Date.now();
+  const promptText = buildPublicationReviewUserPrompt({
+    title: requestBody.title,
+    markdown: requestBody.markdown,
+    bodyText: requestBody.bodyText,
+  });
+
+  console.log(`[pub-review] start model=${model} promptChars=${promptText.length}`);
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -106,29 +116,31 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2200,
+      max_tokens: 1200,
       temperature: 0.2,
       system: buildPublicationReviewSystemPrompt(),
       messages: [
         {
           role: "user",
-          content: buildPublicationReviewUserPrompt({
-            title: requestBody.title,
-            markdown: requestBody.markdown,
-            bodyText: requestBody.bodyText,
-          }),
+          content: promptText,
         },
       ],
     }),
-    signal: AbortSignal.timeout(10000),
   });
+
+  const t1 = Date.now();
+  console.log(`[pub-review] anthropic response status=${response.status} latencyMs=${t1 - t0}`);
 
   if (!response.ok) {
     const errorPayload = await response.text();
+    console.log(`[pub-review] anthropic error body=${errorPayload.slice(0, 500)}`);
     throw new Error(`Anthropic request failed (${response.status}): ${errorPayload}`);
   }
 
   const payload = await response.json();
+  const t2 = Date.now();
+  console.log(`[pub-review] json parsed parseLatencyMs=${t2 - t1}`);
+
   const text = parseAnthropicText(payload);
 
   if (!text) {
@@ -136,6 +148,8 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
   }
 
   const parsed = publicationReviewResponseSchema.parse(JSON.parse(extractJsonPayload(text)));
+  const t3 = Date.now();
+  console.log(`[pub-review] schema validated totalLatencyMs=${t3 - t0}`);
 
   return {
     model,
@@ -146,7 +160,12 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
 }
 
 export async function POST(request: Request) {
+  const tStart = Date.now();
+  console.log(`[pub-review] POST start`);
+
   const { userId } = await getCurrentUserId();
+  const tAuth = Date.now();
+  console.log(`[pub-review] auth done authMs=${tAuth - tStart}`);
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -164,51 +183,30 @@ export async function POST(request: Request) {
   }
 
   try {
-    const primaryResult = await requestPublicationReview(PUBLICATION_PRIMARY_MODEL, parsedRequest.data);
+    const result = await requestPublicationReview(PUBLICATION_PRIMARY_MODEL, parsedRequest.data);
+    const tEnd = Date.now();
+    console.log(`[pub-review] success totalRouteMs=${tEnd - tStart}`);
 
     return NextResponse.json(
       {
         data: {
           sourceHash: parsedRequest.data.sourceHash,
           sourceMarkdown: parsedRequest.data.markdown,
-          model: primaryResult.model,
-          suggestions: primaryResult.suggestions,
-          checklist: primaryResult.checklist,
-          summary: primaryResult.summary,
+          model: result.model,
+          suggestions: result.suggestions,
+          checklist: result.checklist,
+          summary: result.summary,
           fallbackUsed: false,
         },
         error: null,
       },
       { status: 200 },
     );
-  } catch (primaryError) {
-    try {
-      const fallbackResult = await requestPublicationReview(PUBLICATION_FALLBACK_MODEL, parsedRequest.data);
+  } catch (error) {
+    const tEnd = Date.now();
+    const message = error instanceof Error ? error.message : "Publication review request failed.";
+    console.log(`[pub-review] error totalRouteMs=${tEnd - tStart} message=${message}`);
 
-      return NextResponse.json(
-        {
-          data: {
-            sourceHash: parsedRequest.data.sourceHash,
-            sourceMarkdown: parsedRequest.data.markdown,
-            model: fallbackResult.model,
-            suggestions: fallbackResult.suggestions,
-            checklist: fallbackResult.checklist,
-            summary: fallbackResult.summary,
-            fallbackUsed: true,
-          },
-          error: null,
-        },
-        { status: 200 },
-      );
-    } catch (fallbackError) {
-      const message =
-        fallbackError instanceof Error
-          ? fallbackError.message
-          : primaryError instanceof Error
-            ? primaryError.message
-            : "Publication review request failed.";
-
-      return jsonError(502, "AI_REVIEW_FAILED", message);
-    }
+    return jsonError(502, "AI_REVIEW_FAILED", message);
   }
 }
