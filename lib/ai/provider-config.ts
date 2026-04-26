@@ -7,14 +7,17 @@
  *   AI_API_KEY     - e.g. sk-cerebras-...
  *   AI_MODEL       - e.g. zai-glm-4.7
  *
- * Optional:
- *   AI_MAX_TOKENS  - default 1000
- *   AI_TEMPERATURE - default 1.0
- *   AI_TOP_P       - default 0.95
+ * Or Cerebras-specific:
+ *   CEREBRAS_BASE_URL
+ *   CEREBRAS_API_KEY
+ *   CEREBRAS_MODEL
  */
 
+const DEFAULT_MAX_COMPLETION_TOKENS = 1000;
+const DEFAULT_TEMPERATURE = 1.0;
+const DEFAULT_TOP_P = 0.95;
+
 export function getAIProviderConfig() {
-  // Support generic AI_* vars or Cerebras-specific CEREBRAS_* vars
   const baseUrl = (process.env.AI_BASE_URL ?? process.env.CEREBRAS_BASE_URL)?.replace(/\/$/, "") ?? "";
   const apiKey = process.env.AI_API_KEY ?? process.env.CEREBRAS_API_KEY ?? "";
   const model = process.env.AI_MODEL ?? process.env.CEREBRAS_MODEL ?? "";
@@ -34,8 +37,8 @@ export function getAIProviderConfig() {
     apiKey,
     model,
     chatCompletionsUrl: `${baseUrl}/chat/completions`,
-    maxCompletionTokens: Number(process.env.AI_MAX_TOKENS ?? process.env.CEREBRAS_MAX_TOKENS ?? 1000),
-    temperature: Number(process.env.AI_TEMPERATURE ?? process.env.CEREBRAS_TEMPERATURE ?? 1.0),
-    topP: Number(process.env.AI_TOP_P ?? process.env.CEREBRAS_TOP_P ?? 0.95),
+    maxCompletionTokens: DEFAULT_MAX_COMPLETION_TOKENS,
+    temperature: DEFAULT_TEMPERATURE,
+    topP: DEFAULT_TOP_P,
   };
 }
