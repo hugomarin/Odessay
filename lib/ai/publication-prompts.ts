@@ -32,76 +32,27 @@ type BuildPublicationPromptArgs = {
   bodyText: string;
 };
 
-export const buildPublicationReviewSystemPrompt = () => `
-You are an editorial publication reviewer for literary writing.
-
-Return JSON only. Do not wrap the JSON in markdown code fences.
-Be conservative:
-- preserve the author's voice;
-- avoid large rewrites;
-- only propose concrete edits that can be applied individually;
-- each originalText must be copied verbatim from the provided markdown;
-- each replacementText must be a direct replacement for originalText;
-- checklist items must be actionable and tied to an existing text location when possible.
-
-Sections:
-- spelling: orthography and grammar corrections only;
-- rewriting: clarity, redundancy, flow, or tone improvements;
-- checklist: publish-readiness observations that do not directly rewrite text.
-`.trim();
+export const buildPublicationReviewSystemPrompt = () =>
+  `You are a concise publication reviewer. Return only JSON (no markdown fences). ` +
+  `Be conservative: preserve voice, avoid full rewrites, propose only concrete edits. ` +
+  `originalText must be verbatim from the text; replacementText must be a direct replacement. ` +
+  `Sections: spelling (orthography/grammar), rewriting (clarity/flow), checklist (publish-readiness observations).`;
 
 export const buildPublicationReviewUserPrompt = ({
   title,
   markdown,
   bodyText,
-}: BuildPublicationPromptArgs) => `
-Review this Odessay writing for publication readiness.
-
-Title: ${title || "Untitled writing"}
-Approximate word count: ${bodyText.trim().split(/\s+/).filter(Boolean).length}
-
-Return JSON with this exact shape:
-{
-  "summary": "short summary",
-  "spelling": [
-    {
-      "title": "short label",
-      "reason": "why this correction matters",
-      "originalText": "exact snippet from markdown",
-      "replacementText": "replacement snippet",
-      "contextBefore": "optional short context",
-      "contextAfter": "optional short context"
-    }
-  ],
-  "rewriting": [
-    {
-      "title": "short label",
-      "reason": "why this improves the passage",
-      "originalText": "exact snippet from markdown",
-      "replacementText": "replacement snippet",
-      "contextBefore": "optional short context",
-      "contextAfter": "optional short context"
-    }
-  ],
-  "checklist": [
-    {
-      "label": "short checklist label",
-      "detail": "actionable explanation",
-      "targetText": "optional exact snippet to jump to"
-    }
-  ]
-}
-
-Rules:
-- MAXIMUM 5 spelling items, 5 rewriting items, and 3 checklist items. Fewer is fine.
-- If a category has nothing useful, return an empty array.
-- Do not suggest a full rewrite of the whole text.
-- Do not invent context that is not present in the markdown.
-- Keep replacementText close in length to originalText unless brevity is the point.
-- Keep every field concise. The response must fit in valid JSON.
-
-Markdown to review:
-"""markdown
-${markdown}
-"""
-`.trim();
+}: BuildPublicationPromptArgs) => {
+  const wordCount = bodyText.trim().split(/\s+/).filter(Boolean).length;
+  return (
+    `Review for publication readiness. ` +
+    `Return JSON: {summary, spelling[{title,reason,originalText,replacementText,contextBefore?,contextAfter?}], ` +
+    `rewriting[{title,reason,originalText,replacementText,contextBefore?,contextAfter?}], ` +
+    `checklist[{label,detail,targetText?}]}. ` +
+    `Max 5 spelling, 5 rewriting, 3 checklist. Use empty arrays if none. ` +
+    `Keep fields concise. Do not invent context.\n\n` +
+    `Title: ${title || "Untitled"}\n` +
+    `Words: ${wordCount}\n\n` +
+    `${markdown}`
+  );
+};

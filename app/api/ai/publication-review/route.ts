@@ -116,7 +116,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     },
     body: JSON.stringify({
       model,
-      max_tokens: 2000,
+      max_tokens: 1500,
       temperature: 0.2,
       system: buildPublicationReviewSystemPrompt(),
       messages: [
