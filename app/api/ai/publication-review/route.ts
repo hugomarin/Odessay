@@ -3,11 +3,11 @@ export const runtime = "edge";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  PUBLICATION_PRIMARY_MODEL,
   buildPublicationReviewSystemPrompt,
   buildPublicationReviewUserPrompt,
   publicationReviewResponseSchema,
 } from "@/lib/ai/publication-prompts";
+import { getAIProviderConfig } from "@/lib/ai/provider-config";
 import type { PublicationChecklistItem, PublicationSuggestion } from "@/lib/local-db/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -84,28 +84,29 @@ async function getCurrentUserId() {
   return { userId: user?.id ?? null };
 }
 
-async function requestPublicationReview(model: string, requestBody: z.infer<typeof requestSchema>) {
+async function requestPublicationReview(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
+  const config = getAIProviderConfig();
+
   const promptText = buildPublicationReviewUserPrompt({
     title: requestBody.title,
     markdown: requestBody.markdown,
     bodyText: requestBody.bodyText,
   });
 
-  console.log(`[pub-review] start model=${model} promptChars=${promptText.length}`);
+  console.log(`[pub-review] start provider=${config.baseUrl} model=${config.model} promptChars=${promptText.length}`);
 
-  const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+  const response = await fetch(config.chatCompletionsUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "authorization": `Bearer ${process.env.CEREBRAS_API_KEY ?? ""}`,
+      "authorization": `Bearer ${config.apiKey}`,
     },
     body: JSON.stringify({
-      model,
-      max_completion_tokens: 1000,
-      temperature: 1,
-      top_p: 0.95,
-      reasoning_effort: "none",
+      model: config.model,
+      max_completion_tokens: config.maxCompletionTokens,
+      temperature: config.temperature,
+      top_p: config.topP,
       messages: [
         {
           role: "system",
@@ -120,12 +121,12 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
   });
 
   const t1 = Date.now();
-  console.log(`[pub-review] cerebras response status=${response.status} latencyMs=${t1 - t0}`);
+  console.log(`[pub-review] response status=${response.status} latencyMs=${t1 - t0}`);
 
   if (!response.ok) {
     const errorPayload = await response.text();
-    console.log(`[pub-review] cerebras error body=${errorPayload.slice(0, 500)}`);
-    throw new Error(`Cerebras request failed (${response.status}): ${errorPayload}`);
+    console.log(`[pub-review] error body=${errorPayload.slice(0, 500)}`);
+    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
   }
 
   const payload = await response.json() as {
@@ -137,7 +138,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
   const text = payload.choices?.[0]?.message?.content ?? "";
 
   if (!text) {
-    throw new Error("Cerebras returned an empty response.");
+    throw new Error("AI returned an empty response.");
   }
 
   const jsonText = extractJsonPayload(text);
@@ -149,7 +150,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     console.log(`[pub-review] JSON parse failed. Raw text length=${jsonText.length}`);
     console.log(`[pub-review] JSON raw text (first 800 chars): ${jsonText.slice(0, 800)}`);
     console.log(`[pub-review] JSON raw text (last 800 chars): ${jsonText.slice(-800)}`);
-    throw new Error(`Cerebras returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+    throw new Error(`AI returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
   }
 
   const parsed = publicationReviewResponseSchema.parse(parsedJson);
@@ -157,7 +158,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
   console.log(`[pub-review] schema validated totalLatencyMs=${t3 - t0}`);
 
   return {
-    model,
+    model: config.model,
     summary: parsed.summary || null,
     suggestions: [...toSuggestions("spelling", parsed.spelling), ...toSuggestions("rewriting", parsed.rewriting)],
     checklist: toChecklistItems(parsed.checklist),
@@ -176,8 +177,11 @@ export async function POST(request: Request) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
   }
 
-  if (!process.env.CEREBRAS_API_KEY) {
-    return jsonError(500, "MISSING_CONFIG", "CEREBRAS_API_KEY is not configured.");
+  try {
+    getAIProviderConfig();
+  } catch (configErr) {
+    const message = configErr instanceof Error ? configErr.message : "AI provider not configured.";
+    return jsonError(500, "MISSING_CONFIG", message);
   }
 
   const rawBody = await request.json();
@@ -188,7 +192,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await requestPublicationReview(PUBLICATION_PRIMARY_MODEL, parsedRequest.data);
+    const result = await requestPublicationReview(parsedRequest.data);
     const tEnd = Date.now();
     console.log(`[pub-review] success totalRouteMs=${tEnd - tStart}`);
 

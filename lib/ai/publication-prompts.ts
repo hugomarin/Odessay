@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-export const PUBLICATION_PRIMARY_MODEL = "zai-glm-4.7";
-export const PUBLICATION_FALLBACK_MODEL = "claude-haiku-4-5";
-export const ANTHROPIC_API_VERSION = "2023-06-01";
-
 const publicationSuggestionSchema = z.object({
   title: z.string().trim().min(1).max(60),
   reason: z.string().trim().min(1).max(80),
