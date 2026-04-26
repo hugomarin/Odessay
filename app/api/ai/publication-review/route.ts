@@ -72,8 +72,8 @@ const toSuggestions = (
     reason: item.reason,
     original_text: item.originalText,
     replacement_text: item.replacementText,
-    context_before: item.contextBefore ?? null,
-    context_after: item.contextAfter ?? null,
+    context_before: null,
+    context_after: null,
     status: "pending",
   }));
 
@@ -116,7 +116,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1500,
+      max_tokens: 1000,
       temperature: 0.2,
       system: buildPublicationReviewSystemPrompt(),
       messages: [
