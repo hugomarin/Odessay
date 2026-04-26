@@ -3,7 +3,6 @@ export const runtime = "edge";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  ANTHROPIC_API_VERSION,
   PUBLICATION_PRIMARY_MODEL,
   buildPublicationReviewSystemPrompt,
   buildPublicationReviewUserPrompt,
@@ -31,18 +30,6 @@ const jsonError = (status: number, code: string, message: string) =>
     },
     { status },
   );
-
-const parseAnthropicText = (payload: unknown) => {
-  const content = Array.isArray((payload as { content?: unknown })?.content)
-    ? (payload as { content: Array<{ type?: string; text?: string }> }).content
-    : [];
-
-  return content
-    .filter((item) => item.type === "text" && typeof item.text === "string")
-    .map((item) => item.text)
-    .join("\n")
-    .trim();
-};
 
 const extractJsonPayload = (value: string) => {
   const fencedMatch = value.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -107,19 +94,23 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
 
   console.log(`[pub-review] start model=${model} promptChars=${promptText.length}`);
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("https://api.cerebras.ai/v1/chat/completions", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY ?? "",
-      "anthropic-version": ANTHROPIC_API_VERSION,
+      "authorization": `Bearer ${process.env.CEREBRAS_API_KEY ?? ""}`,
     },
     body: JSON.stringify({
       model,
-      max_tokens: 1000,
-      temperature: 0.2,
-      system: buildPublicationReviewSystemPrompt(),
+      max_completion_tokens: 1000,
+      temperature: 1,
+      top_p: 0.95,
+      reasoning_effort: "none",
       messages: [
+        {
+          role: "system",
+          content: buildPublicationReviewSystemPrompt(),
+        },
         {
           role: "user",
           content: promptText,
@@ -129,22 +120,24 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
   });
 
   const t1 = Date.now();
-  console.log(`[pub-review] anthropic response status=${response.status} latencyMs=${t1 - t0}`);
+  console.log(`[pub-review] cerebras response status=${response.status} latencyMs=${t1 - t0}`);
 
   if (!response.ok) {
     const errorPayload = await response.text();
-    console.log(`[pub-review] anthropic error body=${errorPayload.slice(0, 500)}`);
-    throw new Error(`Anthropic request failed (${response.status}): ${errorPayload}`);
+    console.log(`[pub-review] cerebras error body=${errorPayload.slice(0, 500)}`);
+    throw new Error(`Cerebras request failed (${response.status}): ${errorPayload}`);
   }
 
-  const payload = await response.json();
+  const payload = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
   const t2 = Date.now();
   console.log(`[pub-review] json parsed parseLatencyMs=${t2 - t1}`);
 
-  const text = parseAnthropicText(payload);
+  const text = payload.choices?.[0]?.message?.content ?? "";
 
   if (!text) {
-    throw new Error("Anthropic returned an empty response.");
+    throw new Error("Cerebras returned an empty response.");
   }
 
   const jsonText = extractJsonPayload(text);
@@ -156,7 +149,7 @@ async function requestPublicationReview(model: string, requestBody: z.infer<type
     console.log(`[pub-review] JSON parse failed. Raw text length=${jsonText.length}`);
     console.log(`[pub-review] JSON raw text (first 800 chars): ${jsonText.slice(0, 800)}`);
     console.log(`[pub-review] JSON raw text (last 800 chars): ${jsonText.slice(-800)}`);
-    throw new Error(`Anthropic returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+    throw new Error(`Cerebras returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
   }
 
   const parsed = publicationReviewResponseSchema.parse(parsedJson);
@@ -183,8 +176,8 @@ export async function POST(request: Request) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return jsonError(500, "MISSING_CONFIG", "ANTHROPIC_API_KEY is not configured.");
+  if (!process.env.CEREBRAS_API_KEY) {
+    return jsonError(500, "MISSING_CONFIG", "CEREBRAS_API_KEY is not configured.");
   }
 
   const rawBody = await request.json();

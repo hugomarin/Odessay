@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-export const PUBLICATION_PRIMARY_MODEL = "claude-haiku-4-5";
-export const PUBLICATION_FALLBACK_MODEL = "claude-sonnet-4-6";
+export const PUBLICATION_PRIMARY_MODEL = "zai-glm-4.7";
+export const PUBLICATION_FALLBACK_MODEL = "claude-haiku-4-5";
 export const ANTHROPIC_API_VERSION = "2023-06-01";
 
 const publicationSuggestionSchema = z.object({
