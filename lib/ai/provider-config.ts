@@ -6,7 +6,7 @@
  */
 
 const BASE_URL = "https://api.cerebras.ai/v1";
-const MODEL = "zai-glm-4.7";
+const MODEL = "llama3.1-8b";
 const MAX_COMPLETION_TOKENS = 1000;
 const TEMPERATURE = 1.0;
 const TOP_P = 0.95;
