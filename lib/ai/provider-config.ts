@@ -1,44 +1,30 @@
 /**
- * Generic OpenAI-compatible AI provider configuration.
- * Supports Cerebras, Fireworks, Together, OpenRouter, or any OpenAI-compatible API.
+ * Cerebras GLM 4.7 provider configuration.
  *
- * Required environment variables:
- *   AI_BASE_URL    - e.g. https://api.cerebras.ai/v1
- *   AI_API_KEY     - e.g. sk-cerebras-...
- *   AI_MODEL       - e.g. zai-glm-4.7
- *
- * Or Cerebras-specific:
- *   CEREBRAS_BASE_URL
- *   CEREBRAS_API_KEY
- *   CEREBRAS_MODEL
+ * Required environment variable:
+ *   CEREBRAS_API_KEY  - Your Cerebras API key
  */
 
-const DEFAULT_MAX_COMPLETION_TOKENS = 1000;
-const DEFAULT_TEMPERATURE = 1.0;
-const DEFAULT_TOP_P = 0.95;
+const BASE_URL = "https://api.cerebras.ai/v1";
+const MODEL = "zai-glm-4.7";
+const MAX_COMPLETION_TOKENS = 1000;
+const TEMPERATURE = 1.0;
+const TOP_P = 0.95;
 
 export function getAIProviderConfig() {
-  const baseUrl = (process.env.AI_BASE_URL ?? process.env.CEREBRAS_BASE_URL)?.replace(/\/$/, "") ?? "";
-  const apiKey = process.env.AI_API_KEY ?? process.env.CEREBRAS_API_KEY ?? "";
-  const model = process.env.AI_MODEL ?? process.env.CEREBRAS_MODEL ?? "";
+  const apiKey = process.env.CEREBRAS_API_KEY ?? process.env.AI_API_KEY ?? "";
 
-  if (!baseUrl || !apiKey || !model) {
-    const missing = [
-      !baseUrl && "AI_BASE_URL (or CEREBRAS_BASE_URL)",
-      !apiKey && "AI_API_KEY (or CEREBRAS_API_KEY)",
-      !model && "AI_MODEL (or CEREBRAS_MODEL)",
-    ].filter(Boolean);
-
-    throw new Error(`Missing AI provider config: ${missing.join(", ")}`);
+  if (!apiKey) {
+    throw new Error("Missing CEREBRAS_API_KEY (or AI_API_KEY) environment variable.");
   }
 
   return {
-    baseUrl,
+    baseUrl: BASE_URL,
     apiKey,
-    model,
-    chatCompletionsUrl: `${baseUrl}/chat/completions`,
-    maxCompletionTokens: DEFAULT_MAX_COMPLETION_TOKENS,
-    temperature: DEFAULT_TEMPERATURE,
-    topP: DEFAULT_TOP_P,
+    model: MODEL,
+    chatCompletionsUrl: `${BASE_URL}/chat/completions`,
+    maxCompletionTokens: MAX_COMPLETION_TOKENS,
+    temperature: TEMPERATURE,
+    topP: TOP_P,
   };
 }
