@@ -20,7 +20,7 @@ const publicationChecklistItemSchema = z.object({
 });
 
 export const publicationReviewResponseSchema = z.object({
-  summary: z.string().trim().max(200).optional().default(""),
+  summary: z.string().trim().optional().default(""),
   spelling: z.array(publicationSuggestionSchema).max(8).default([]),
   rewriting: z.array(publicationSuggestionSchema).max(6).default([]),
   checklist: z.array(publicationChecklistItemSchema).max(5).default([]),
