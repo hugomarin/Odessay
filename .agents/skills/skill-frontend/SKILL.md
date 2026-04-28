@@ -243,6 +243,8 @@ npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report ar
 - Cálculos de word count/derivados fuera de TipTap en cada tecla.
 - Ejecutar lógica AI síncrona en el camino de interacción del editor.
 - Introducir dependencias de UI pesadas sin presupuesto de impacto medido.
+- **Await de datos remotos antes de renderizar datos de `localDB`.** La vista debe mostrar lo que tiene localmente de inmediato; el enriquecimiento remoto (shares, metadata, estado de sync) ocurre en background.
+- **N+1 fetches en el path de carga inicial de una vista.** Cada item de una lista no debe disparar su propia petición remota. Enriquecer en batch o en background, nunca secuencialmente durante el primer render.
 
 ### Navegación interna vs Navegación de página
 
@@ -686,6 +688,8 @@ Este checklist cubre lo específico de frontend durante la implementación. Ante
 - [ ] ¿Ninguna operación de AI bloquea el flujo de escritura?
 - [ ] Si el issue toca el critical path, ¿hay trace before/after en `artifacts/perf/`?
 - [ ] ¿`npm run ops:perf:gate` pasa para el trace `after` sin `required_failures`?
+- [ ] ¿La vista renderiza desde `localDB` antes de cualquier `await` remoto?
+- [ ] ¿El enriquecimiento de datos (shares, metadata, estado de sync) ocurre en background después del render inicial?
 
 ### Nomenclatura
 - [ ] Cada módulo tiene `id`, `data-page`, `data-section`, `data-testid`

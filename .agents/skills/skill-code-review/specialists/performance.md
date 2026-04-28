@@ -13,11 +13,13 @@ Si el diff toca cualquiera de estos, aplicar con máxima rigor:
 - [ ] ¿Sync remoto tiene debounce >= 1500ms?
 - [ ] ¿AI observaciones no bloquean el hilo principal?
 - [ ] ¿No se agregó dependencia de UI pesada sin presupuesto medido?
+- [ ] ¿Ningún `await` de datos remotos bloquea el primer render de una vista que tiene datos en `localDB`?
 
 ## Queries y base de datos
 
 - [ ] ¿Nueva query tiene índice adecuado?
 - [ ] ¿Evita N+1 queries (especialmente en correspondences con árbol)?
+- [ ] ¿Evita N+1 fetches de enriquecimiento en el path de carga inicial (shares, metadata, estado de sync por item)?
 - [ ] ¿Paginación es cursor-based, no offset?
 - [ ] ¿No hay `select('*')` innecesario?
 
@@ -44,7 +46,7 @@ Para cada finding:
 {"severity":"CRITICAL|HIGH|MEDIUM|LOW","confidence":N,"path":"file","line":N,"category":"performance/{categoria}","summary":"{descripción}","fix":"{recomendación}","specialist":"performance"}
 ```
 
-Categorías: `editor-island-violation`, `missing-debounce`, `n-plus-one`, `missing-index`, `heavy-dependency`, `no-lazy-load`
+Categorías: `editor-island-violation`, `missing-debounce`, `n-plus-one`, `missing-index`, `heavy-dependency`, `no-lazy-load`, `local-first-violation`, `n-plus-one-enrichment`
 
 Si no hay findings: output `NO FINDINGS` y nada más.
 Do not output anything else — no preamble, no summary, no commentary, no markdown blocks.

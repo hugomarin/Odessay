@@ -282,6 +282,63 @@ Se propusieron inicialmente "atajos" (prefetch, cachear RSC, no usar router). El
 
 ---
 
+## Render path y datos remotos
+
+El principio local-first no solo aplica al auto-save y al sync — aplica también al **camino de renderizado de cada vista**.
+
+### Patrón correcto
+
+```
+1. Leer localDB → render inmediato (< 50ms)
+2. En paralelo: enriquecer con datos remotos en background
+3. Re-renderizar solo cuando el enriquecimiento llega (si aplica)
+```
+
+Esto significa que **ninguna vista debe esperar una respuesta de Supabase antes de mostrar contenido** que ya existe en `localDB`. El usuario ve su escritorio, colecciones o correspondencias de inmediato; los contadores de shares, avatares de colaboradores o estado de sync remoto llegan después.
+
+```ts
+// ✓ CORRECTO — render local inmediato, enriquecimiento en background
+async function loadDesk() {
+  const writings = await localDB.writings.getAll()   // < 50ms
+  renderDesk(writings)                                // inmediato
+
+  // Enrichment en background — no bloquea el primer render
+  const enriched = await enrichSharesInBatch(writings)
+  renderDesk(enriched)                                // update silencioso
+}
+```
+
+### Anti-patrón: await remoto antes de render
+
+```ts
+// ✗ INCORRECTO — el usuario ve pantalla en blanco hasta que Supabase responda
+async function loadDesk() {
+  const writings = await localDB.writings.getAll()
+  for (const w of writings) {
+    w.shares = await supabase.from('shares').select('*').eq('writing_id', w.id)
+  }
+  renderDesk(writings)                                // bloqueado por N+1 fetches
+}
+```
+
+### Anti-patrón concreto: el caso del Desk
+
+En el Desk, cada fila de actividad mostraba shares y metadata obtenidos mediante `await` individual por writing. El resultado:
+
+- El render inicial esperaba a que todas las promesas de enriquecimiento se resolvieran.
+- Con 20 writings, eso significaba 20+ roundtrips a Supabase antes de mostrar cualquier cosa.
+- El usuario veía un skeleton durante segundos aunque los datos base ya estaban en `localDB`.
+
+**La corrección:** renderizar la tabla desde `localDB` inmediatamente, y cargar shares/avatars en background con batching o lazy loading por fila visible.
+
+### Reglas para agentes
+
+1. **Nunca `await` datos remotos antes de renderizar datos de `localDB`.**
+2. **Nunca N+1 fetches en el path de carga inicial.** Enriquecer en batch, en background, o bajo demanda (lazy).
+3. **El enriquecimiento debe ser opcional desde la perspectiva del primer render.** La vista sin enriquecimiento debe ser usable.
+
+---
+
 ## Lo que este doc NO cubre
 
 - Implementación del endpoint `PATCH /api/writings/{id}` → `.agents/skills/skill-backend/SKILL.md`
