@@ -37,19 +37,6 @@ type ApiEnvelope<T> = {
   error: { code: string; message: string } | null
 }
 
-type ShareProfile = {
-  username: string
-  display_name: string
-}
-
-type ShareEntry = {
-  id: string
-  shared_with_id: string
-  can_respond: boolean
-  created_at: string
-  profiles: ShareProfile | ShareProfile[] | null
-}
-
 type RecipientPreview = {
   username: string
   displayName: string
@@ -111,61 +98,40 @@ export default function DeskPage() {
     [pathname, router, searchParams],
   )
 
-  const normalizeProfile = useCallback((profiles: ShareEntry["profiles"]) => {
-    if (!profiles) {
-      return null
-    }
-
-    if (Array.isArray(profiles)) {
-      return profiles[0] ?? null
-    }
-
-    return profiles
-  }, [])
-
   const loadRecipientPreviews = useCallback(
     async (writingIds: string[]) => {
       if (writingIds.length === 0) {
         return {}
       }
 
-      const entries = await Promise.all(
-        writingIds.map(async (writingId) => {
-          try {
-            const response = await fetch(`/api/writings/${writingId}/shares`, {
-              cache: "no-store",
-            })
-            const payload = (await response.json()) as ApiEnvelope<ShareEntry[]>
+      try {
+        const response = await fetch(
+          `/api/writings/shares?ids=${encodeURIComponent(writingIds.join(","))}`,
+          { cache: "no-store" },
+        )
+        const payload = (await response.json()) as ApiEnvelope<
+          Record<string, RecipientPreview[]>
+        >
 
-            if (!response.ok || payload.error || !payload.data) {
-              return [writingId, [] as RecipientPreview[]] as const
-            }
+        if (!response.ok || payload.error || !payload.data) {
+          return Object.fromEntries(
+            writingIds.map((id) => [id, [] as RecipientPreview[]]),
+          )
+        }
 
-            const recipientPreviews = payload.data
-              .map((share) => {
-                const profile = normalizeProfile(share.profiles)
-
-                if (!profile) {
-                  return null
-                }
-
-                return {
-                  username: profile.username,
-                  displayName: profile.display_name,
-                }
-              })
-              .filter((item): item is RecipientPreview => Boolean(item))
-
-            return [writingId, recipientPreviews] as const
-          } catch {
-            return [writingId, [] as RecipientPreview[]] as const
-          }
-        }),
-      )
-
-      return Object.fromEntries(entries)
+        // Ensure every requested ID has an entry (backend returns [] for non-owned or missing)
+        const result: Record<string, RecipientPreview[]> = {}
+        for (const id of writingIds) {
+          result[id] = payload.data[id] ?? []
+        }
+        return result
+      } catch {
+        return Object.fromEntries(
+          writingIds.map((id) => [id, [] as RecipientPreview[]]),
+        )
+      }
     },
-    [normalizeProfile],
+    [],
   )
 
   const syncRemoteWritings = useCallback(async () => {
