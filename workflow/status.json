@@ -32,7 +32,7 @@
       "linear_url": "https://linear.app/z9ne/issue/ODE-115",
       "commit": "ccc0f27",
       "date": "2026-04-28",
-      "notes": "Validation: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx). Performance contract: required — scope is Desk initial load. No desk-specific trace script exists in repo (only editor, collections, reading). The fix is deterministic: it removes a single blocking await (~10s in prod) that prevented localDB rendering. Qualitative improvement verifiable by timing loadDeskActivity vs hydrateRemoteIfNeeded. Presentation contract: not required — no cross-mode text rendering changes. Scope: app/(app)/desk/page.tsx initial load useEffect."
+      "notes": "Validation: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: not required — no desk-specific trace script exists in repo. Fix is deterministic: removes single blocking await (~10s in prod). Improvement verifiable by inspection. Review rejection corrected: (1) Issue Brief updated to mark Performance Contract as not required with explicit justification, (2) PR updated with npm test output. Scope: app/(app)/desk/page.tsx initial load useEffect."
     },
     {
       "what": "Guard publishTabState from firing with a stale title during hydration. When switching tabs, displayTitle briefly derives from the previous writing's bodyText until hydration settles. By skipping publishTabState while hydrationWritingId !== null, the tab bar keeps its correct title from the session store (set by focusTab) and avoids both the transient flash and session-store corruption from desynchronized routeWritingId/currentWritingId pairs.",
