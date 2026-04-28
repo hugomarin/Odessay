@@ -251,11 +251,13 @@ export default function DeskPage() {
 
     const load = async () => {
       setIsLoading(true)
-      await hydrateRemoteIfNeeded()
+      // 1. Render local data immediately — don't wait for remote
       await loadDeskActivity(activeFilter)
       if (!cancelled) {
         setIsLoading(false)
       }
+      // 2. Hydrate from Supabase in background
+      void hydrateRemoteIfNeeded()
     }
 
     void load()
