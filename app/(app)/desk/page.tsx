@@ -279,7 +279,7 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     if (activeView !== "shared") {
