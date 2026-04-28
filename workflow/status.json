@@ -35,6 +35,15 @@
       "notes": "Validation: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: not required — no desk-specific trace script exists in repo. Fix is deterministic: removes single blocking await (~10s in prod). Improvement verifiable by inspection. Review rejection corrected: (1) Issue Brief updated to mark Performance Contract as not required with explicit justification, (2) PR updated with npm test output. Scope: app/(app)/desk/page.tsx initial load useEffect."
     },
     {
+      "what": "Desvincular loadRecipientPreviews del path crítico de render del Desk. loadDeskActivity ya no espera loadRecipientPreviews; la tabla renderiza inmediatamente desde localDB y los recipient previews se cargan en background vía loadRecipientPreviewsAsync. Un useEffect adicional re-construye el summary cuando los previews llegan, evitando el bloqueo observado con decenas de requests simultáneas a /api/writings/[id]/shares.",
+      "phase": "Fase 3",
+      "issue": "ODE-116",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-116",
+      "commit": "6d84aa4",
+      "date": "2026-04-28",
+      "notes": "Validation in green: npm run typecheck (0 errors), npx vitest run tests/desk-activity.test.ts (9/9 passed). Performance contract: not required — este fix reduce trabajo en el critical path de render del Desk sin agregar nuevos paths de render ni async en el editor. Presentation contract: not required — no se modifica el contrato de presentación textual cross-mode."
+    },
+    {
       "what": "Guard publishTabState from firing with a stale title during hydration. When switching tabs, displayTitle briefly derives from the previous writing's bodyText until hydration settles. By skipping publishTabState while hydrationWritingId !== null, the tab bar keeps its correct title from the session store (set by focusTab) and avoids both the transient flash and session-store corruption from desynchronized routeWritingId/currentWritingId pairs.",
       "phase": "Fase 3",
       "issue": "ODE-114",

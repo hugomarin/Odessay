@@ -84,8 +84,14 @@ export default function DeskPage() {
   const [sharedError, setSharedError] = useState<string | null>(null)
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [writingCollections, setWritingCollections] = useState<LocalWritingCollection[]>([])
+  const [recipientPreviewsByWritingId, setRecipientPreviewsByWritingId] = useState<
+    Record<string, RecipientPreview[]>
+  >({})
+  const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
+
+  recipientPreviewsRef.current = recipientPreviewsByWritingId
 
   const activeView: DeskViewMode = searchParams.get("tab") === "shared" ? "shared" : "mine"
 
@@ -194,21 +200,30 @@ export default function DeskPage() {
       localDB.writingCollections.listAll(),
     ])
     const localScope = getLocalDBScope()
-    const recipientPreviewsByWritingId = await loadRecipientPreviews(
-      localWritings
-        .filter((writing) => writing.visibility === "shared" && writing.sync_status !== "deleted")
-        .map((writing) => writing.id),
-    )
 
     setSummary(
       buildDeskActivitySummary(localWritings, {
         filter,
         userId: localScope === "anonymous" ? null : localScope,
-        recipientPreviewsByWritingId,
+        recipientPreviewsByWritingId: recipientPreviewsRef.current,
       }),
     )
     setCollections(nextCollections)
     setWritingCollections(nextAssignments)
+  }, [])
+
+  const loadRecipientPreviewsAsync = useCallback(async () => {
+    const localWritings = await localDB.writings.getAll()
+    const sharedWritingIds = localWritings
+      .filter((writing) => writing.visibility === "shared" && writing.sync_status !== "deleted")
+      .map((writing) => writing.id)
+
+    if (sharedWritingIds.length === 0) {
+      return
+    }
+
+    const previews = await loadRecipientPreviews(sharedWritingIds)
+    setRecipientPreviewsByWritingId((prev) => ({ ...prev, ...previews }))
   }, [loadRecipientPreviews])
 
   const loadSharedWritings = useCallback(
@@ -253,6 +268,7 @@ export default function DeskPage() {
       setIsLoading(true)
       // 1. Render local data immediately — don't wait for remote
       await loadDeskActivity(activeFilter)
+      void loadRecipientPreviewsAsync()
       if (!cancelled) {
         setIsLoading(false)
       }
@@ -265,7 +281,7 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     if (activeView !== "shared") {
@@ -276,26 +292,39 @@ export default function DeskPage() {
   }, [activeView, loadSharedWritings])
 
   useEffect(() => {
+    if (activeView === "mine") {
+      void loadDeskActivity(activeFilter)
+    }
+  }, [recipientPreviewsByWritingId, activeView, activeFilter, loadDeskActivity])
+
+  useEffect(() => {
     return subscribeToLocalDBScopeChanges(() => {
       hasHydratedRemoteRef.current = false
       if (activeView === "mine") {
-        void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
+        void hydrateRemoteIfNeeded(true).then(() => {
+          void loadDeskActivity(activeFilter)
+          void loadRecipientPreviewsAsync()
+        })
       }
     })
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     return subscribeToLocalDBChanges(() => {
       if (activeView === "mine") {
         void loadDeskActivity(activeFilter)
+        void loadRecipientPreviewsAsync()
       }
     })
-  }, [activeFilter, activeView, loadDeskActivity])
+  }, [activeFilter, activeView, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     const handleRefresh = () => {
       if (activeView === "mine") {
-        void hydrateRemoteIfNeeded(true).then(() => loadDeskActivity(activeFilter))
+        void hydrateRemoteIfNeeded(true).then(() => {
+          void loadDeskActivity(activeFilter)
+          void loadRecipientPreviewsAsync()
+        })
         return
       }
 
@@ -309,7 +338,7 @@ export default function DeskPage() {
       window.removeEventListener("focus", handleRefresh)
       window.removeEventListener("online", handleRefresh)
     }
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadSharedWritings])
+  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadSharedWritings])
 
   const counts = useMemo(() => summary.counts, [summary.counts])
   const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
@@ -373,6 +402,7 @@ export default function DeskPage() {
             onDeleteRequest={async (id) => {
               await enqueueWritingDelete(id)
               await loadDeskActivity(activeFilter)
+              void loadRecipientPreviewsAsync()
             }}
           />
         </>
