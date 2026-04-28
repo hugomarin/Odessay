@@ -26,6 +26,15 @@
   },
   "built": [
     {
+      "what": "Create batch shares endpoint GET /api/writings/shares to replace N+1 individual requests. The endpoint accepts up to 50 writing IDs, performs a single auth check + two batch Supabase queries (ownership verification + shares fetch), and returns Record<writingId, RecipientPreview[]>. Updated desk/page.tsx loadRecipientPreviews to call the batch endpoint instead of firing N parallel fetches to /api/writings/[id]/shares.",
+      "phase": "Fase 3",
+      "issue": "ODE-117",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-117",
+      "commit": "172189b",
+      "date": "2026-04-28",
+      "notes": "Validation: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npx vitest run tests/desk-activity.test.ts (9/9 passed). Performance contract: required — improvement is deterministic and verifiable by network-tab inspection: N parallel requests to /api/writings/[id]/shares are replaced by 1 request to /api/writings/shares. No desk-specific perf trace script exists in repo; delivery gate skips perf check when OPS_PERF_TRACE_PATH is unset. Backend response shape matches existing envelope contract. Scope: app/api/writings/shares/route.ts (new), app/(app)/desk/page.tsx loadRecipientPreviews refactor."
+    },
+    {
       "what": "Fix Desk load order to render from localDB first and hydrate Supabase in background. Inverts the sequence in the initial load useEffect: loadDeskActivity() now runs immediately (rendering local data in <200ms) and hydrateRemoteIfNeeded() fires afterwards without await. The existing subscribeToLocalDBChanges subscription handles re-render automatically when remote hydration updates localDB. Eliminates the ~10s 'Loading local activity...' blocker in production.",
       "phase": "Fase 3",
       "issue": "ODE-115",
