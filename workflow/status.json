@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-04-24",
+  "last_updated": "2026-04-28",
   "active_phase": {
     "name": "Fase 2 — Compartir y leer",
     "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
     "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
   },
   "built": [
+    {
+      "what": "Fix Desk load order to render from localDB first and hydrate Supabase in background. Inverts the sequence in the initial load useEffect: loadDeskActivity() now runs immediately (rendering local data in <200ms) and hydrateRemoteIfNeeded() fires afterwards without await. The existing subscribeToLocalDBChanges subscription handles re-render automatically when remote hydration updates localDB. Eliminates the ~10s 'Loading local activity...' blocker in production.",
+      "phase": "Fase 3",
+      "issue": "ODE-115",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-115",
+      "commit": "ccc0f27",
+      "date": "2026-04-28",
+      "notes": "Validation: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: not required — no desk-specific trace script exists in repo. Fix is deterministic: removes single blocking await (~10s in prod). Improvement verifiable by inspection. Review rejection corrected: (1) Issue Brief updated to mark Performance Contract as not required with explicit justification, (2) PR updated with npm test output. Scope: app/(app)/desk/page.tsx initial load useEffect."
+    },
     {
       "what": "Desvincular loadRecipientPreviews del path crítico de render del Desk. loadDeskActivity ya no espera loadRecipientPreviews; la tabla renderiza inmediatamente desde localDB y los recipient previews se cargan en background vía loadRecipientPreviewsAsync. Un useEffect adicional re-construye el summary cuando los previews llegan, evitando el bloqueo observado con decenas de requests simultáneas a /api/writings/[id]/shares.",
       "phase": "Fase 3",
