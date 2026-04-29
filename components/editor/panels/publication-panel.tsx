@@ -22,6 +22,7 @@ type PublicationPanelProps = {
   onApplyMarkdown: (nextMarkdown: string) => void;
   onJumpToText: (targetText: string) => void;
   onClose: () => void;
+  onSuggestionsChange?: (suggestions: PublicationSuggestion[]) => void;
 };
 
 type ApiEnvelope<TData> = {
@@ -50,6 +51,7 @@ export function PublicationPanel({
   onApplyMarkdown,
   onJumpToText,
   onClose,
+  onSuggestionsChange,
 }: PublicationPanelProps) {
   const currentHash = useMemo(() => hashPublicationSource(markdown), [markdown]);
   const [review, setReview] = useState<LocalPublicationReview | null>(null);
@@ -187,6 +189,16 @@ export function PublicationPanel({
   const isStale = review ? review.source_hash !== currentHash : false;
   const spellingSuggestions = review?.suggestions.filter((suggestion) => suggestion.kind === "spelling") ?? [];
   const rewritingSuggestions = review?.suggestions.filter((suggestion) => suggestion.kind === "rewriting") ?? [];
+
+  useEffect(() => {
+    onSuggestionsChange?.(review?.suggestions ?? [])
+  }, [review, onSuggestionsChange])
+
+  useEffect(() => {
+    return () => {
+      onSuggestionsChange?.([])
+    }
+  }, [onSuggestionsChange])
 
   const updateReview = useCallback(
     async (updater: (current: LocalPublicationReview) => LocalPublicationReview) => {

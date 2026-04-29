@@ -25,6 +25,7 @@ import { Markdown } from "tiptap-markdown"
 import { FindReplaceExtension } from "@/lib/editor/find-replace"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { FootnoteReferenceNode } from "@/lib/editor/footnote-node"
+import { PublicationSuggestionExtension } from "@/lib/editor/publication-suggestion-extension"
 
 export const EMPTY_EDITOR_JSON: JSONContent = {
   type: "doc",
@@ -62,6 +63,7 @@ export const createEditorExtensions = (): Extensions => [
   TableHeader,
   TableCell,
   FindReplaceExtension,
+  PublicationSuggestionExtension,
   FootnoteReferenceNode,
   FootnoteExtension,
   History,

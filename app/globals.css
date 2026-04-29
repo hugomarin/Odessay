@@ -695,3 +695,10 @@
 .prose-odessay > table {
   margin: 1.6em 0;
 }
+
+.pub-suggestion-pending {
+  text-decoration: underline;
+  text-decoration-color: hsl(22, 55%, 52%); /* terracota */
+  text-decoration-style: wavy;
+  text-underline-offset: 3px;
+}
