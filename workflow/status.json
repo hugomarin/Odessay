@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Fix publication review auto-reanalysis triggered on every suggestion apply. In loadCachedReview, when no cached review exists for the new hash but a review is already visible on screen, the function now returns early instead of discarding the active review and scheduling an automatic re-analysis. The user keeps seeing the stale review with the existing suggestions until they explicitly click Reanalyze.",
+            "phase": "Fase 3",
+            "issue": "ODE-121",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-121",
+            "commit": "657d6e4",
+            "date": "2026-04-28",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: not required — single guard in existing effect, no new render paths or async work. Presentation contract: not required — fix applies to publication review chrome only, no cross-mode text rendering changes. Scope: components/editor/panels/publication-panel.tsx loadCachedReview early-return when reviewRef.current !== null."
+        },
+        {
             "what": "Fix annotation text lost on editor hydration. In hydrateEditor, the double-setContent round-trip now includes footnote definitions via getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)) so that footnoteReference nodes preserve their text attribute across hydration. Previously, getEditorMarkdown emitted only [^n] without definitions, causing re-parse to create footnoteReference nodes with empty text.",
             "phase": "Fase 3",
             "issue": "ODE-120",
