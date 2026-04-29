@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Add inline editor decorations for pending publication review suggestions. New PublicationSuggestionExtension uses a ProseMirror plugin with DecorationSet to underline pending suggestion original_text in terracotta wavy. Panel exposes onSuggestionsChange to editor-shell, which syncs decorations when activePanel === 'publication' and mode === 'rich', clearing on close or markdown mode switch. Only first match per suggestion is decorated. Coexists with find-replace decorations.",
+            "phase": "Fase 3",
+            "issue": "ODE-122",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-122",
+            "commit": "6ead308",
+            "date": "2026-04-28",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: required — trace captured at artifacts/perf/editor-trace.json.gz. 2 baseline event_dispatch_ms metrics fail (keydown_p95=31.35, input_p95=26.56) pre-existing; long_tasks=0 confirms no jank from decorations. Presentation contract: not required — decorations are rich-mode only by design. Scope: lib/editor/publication-suggestion-extension.ts (new), lib/editor/extensions.ts, components/editor/panels/publication-panel.tsx, components/editor/editor-shell.tsx, app/globals.css."
+        },
+        {
             "what": "Fix publication review auto-reanalysis triggered on every suggestion apply. In loadCachedReview, when no cached review exists for the new hash but a review is already visible on screen, the function now returns early instead of discarding the active review and scheduling an automatic re-analysis. The user keeps seeing the stale review with the existing suggestions until they explicitly click Reanalyze.",
             "phase": "Fase 3",
             "issue": "ODE-121",
