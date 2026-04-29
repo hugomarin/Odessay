@@ -30,7 +30,7 @@
             "phase": "Fase 3",
             "issue": "ODE-122",
             "linear_url": "https://linear.app/z9ne/issue/ODE-122",
-            "commit": "9222c15",
+            "commit": "fd98124",
             "date": "2026-04-28",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: required — trace captured at artifacts/perf/editor-trace.json.gz. 2 baseline event_dispatch_ms metrics fail (keydown_p95=31.35, input_p95=26.56) pre-existing; long_tasks=0 confirms no jank from decorations. Presentation contract: not required — decorations are rich-mode only by design. Scope: lib/editor/publication-suggestion-extension.ts (new), lib/editor/extensions.ts, components/editor/panels/publication-panel.tsx, components/editor/editor-shell.tsx, app/globals.css."
         },
