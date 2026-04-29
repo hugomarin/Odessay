@@ -4,27 +4,49 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet } from "@tiptap/pm/view"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
-import { findDocumentMatches } from "@/lib/editor/find-replace"
+import { collectDocumentTextMap, findTextMatches } from "@/lib/editor/find-replace"
 
 export const publicationSuggestionPluginKey = new PluginKey<PublicationSuggestion[]>("odessay-publication-suggestions")
 
 const buildPublicationDecorations = (doc: ProseMirrorNode, suggestions: PublicationSuggestion[]): DecorationSet => {
+  const pendingSuggestions = suggestions.filter((suggestion) => suggestion.status === "pending")
+
+  if (pendingSuggestions.length === 0) {
+    return DecorationSet.empty
+  }
+
+  const { text, positions } = collectDocumentTextMap(doc)
   const decorations: Decoration[] = []
 
-  for (const suggestion of suggestions) {
-    if (suggestion.status !== "pending") {
+  for (const suggestion of pendingSuggestions) {
+    const query = suggestion.original_text.trim()
+
+    if (!query) {
       continue
     }
 
-    const matches = findDocumentMatches(doc, suggestion.original_text, true)
+    const matches = findTextMatches(text, query, true)
     const firstMatch = matches[0]
 
     if (!firstMatch) {
       continue
     }
 
+    const mappedPositions = positions.slice(firstMatch.start, firstMatch.end)
+
+    if (mappedPositions.some((position) => position === null)) {
+      continue
+    }
+
+    const from = mappedPositions[0]
+    const last = mappedPositions[mappedPositions.length - 1]
+
+    if (typeof from !== "number" || typeof last !== "number") {
+      continue
+    }
+
     decorations.push(
-      Decoration.inline(firstMatch.from, firstMatch.to, {
+      Decoration.inline(from, last + 1, {
         class: "pub-suggestion-pending",
       }),
     )

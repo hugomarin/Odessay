@@ -95,7 +95,7 @@ export const findTextMatches = (source: string, query: string, caseSensitive: bo
   return matches
 }
 
-const collectDocumentTextMap = (doc: ProseMirrorNode) => {
+export const collectDocumentTextMap = (doc: ProseMirrorNode) => {
   const textParts: string[] = []
   const positions: Array<number | null> = []
 
