@@ -2140,15 +2140,22 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       persistCurrentWorkspaceViewState()
       focusTab(tabId)
+      navigatedToDraftRef.current = false
 
       if (nextTab.writing_id) {
-        router.push(`/write/${nextTab.slug ?? nextTab.writing_id}`)
+        currentWritingIdRef.current = nextTab.writing_id
+        setCurrentWritingId(nextTab.writing_id)
+        setHydrationWritingId(nextTab.writing_id)
+        window.history.replaceState(null, "", `/write/${nextTab.slug ?? nextTab.writing_id}`)
         return
       }
 
-      router.push("/write")
+      currentWritingIdRef.current = null
+      setCurrentWritingId(null)
+      setHydrationWritingId(null)
+      window.history.replaceState(null, "", "/write")
     },
-    [editorSession.tabs, persistCurrentWorkspaceViewState, router],
+    [editorSession.tabs, persistCurrentWorkspaceViewState],
   )
 
   const handleCloseWorkspaceTab = useCallback(
@@ -2176,14 +2183,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
 
       const nextTab = editorSession.tabs.find((tab) => tab.id === nextActiveTabId)
+      navigatedToDraftRef.current = false
       if (nextTab?.writing_id) {
-        router.push(`/write/${nextTab.slug ?? nextTab.writing_id}`)
+        currentWritingIdRef.current = nextTab.writing_id
+        setCurrentWritingId(nextTab.writing_id)
+        setHydrationWritingId(nextTab.writing_id)
+        window.history.replaceState(null, "", `/write/${nextTab.slug ?? nextTab.writing_id}`)
         return
       }
 
-      router.push("/write")
+      currentWritingIdRef.current = null
+      setCurrentWritingId(null)
+      setHydrationWritingId(null)
+      window.history.replaceState(null, "", "/write")
     },
-    [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState, router],
+    [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
   )
 
   const handleCreateWorkspaceTab = useCallback(async () => {
@@ -2226,13 +2240,19 @@ export function EditorShell({ writingId }: EditorShellProps) {
         saveState: "saved",
         hasPendingSync: false,
       })
-      router.push(`/write/${nextWritingId}`)
+      currentWritingIdRef.current = nextWritingId
+      setCurrentWritingId(nextWritingId)
+      setHydrationWritingId(nextWritingId)
+      window.history.replaceState(null, "", `/write/${nextWritingId}`)
       return
     }
 
     openDraftTab()
-    router.push("/write")
-  }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState, router])
+    currentWritingIdRef.current = null
+    setCurrentWritingId(null)
+    setHydrationWritingId(null)
+    window.history.replaceState(null, "", "/write")
+  }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
 
   const exportFileBaseName = useMemo(
     () =>

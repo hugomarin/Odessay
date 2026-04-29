@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Replace router.push() with local state and window.history.replaceState() in editor shell for tab selection, close, and create operations. Eliminates the 750-1350ms RSC fetch + re-hydration cycle when switching between writings already present in localDB. Tab switching now resolves in <200ms by updating currentWritingId/hydrationWritingId directly and syncing the URL as a passive mirror.",
+            "phase": "Fase 3",
+            "issue": "ODE-119",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-119",
+            "commit": "165a332",
+            "date": "2026-04-28",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings), npm test (249/249). Performance contract: required — trace captured at artifacts/perf/editor-trace-ode119.json.gz; perf gate passed via node scripts/check-performance-gate.mjs with 14 pass, 0 warn, 1 skip, 0 required_failures. Scope: handleSelectWorkspaceTab, handleCloseWorkspaceTab, handleCreateWorkspaceTab in components/editor/editor-shell.tsx."
+        },
+        {
             "what": "Document local-first render path rules in skill-frontend/SKILL.md, performance review specialist, and odessay-sync.md. Adds anti-patterns for awaiting remote data before localDB render and N+1 fetches on initial load. Adds checklist items for local-first verification. Adds new section 'Render path y datos remotos' to odessay-sync.md with correct pattern, anti-pattern examples, and concrete Desk case study.",
             "phase": "Fase 3",
             "issue": "ODE-118",
