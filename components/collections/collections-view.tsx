@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Pencil, Plus, Tags, Trash2 } from "lucide-react"
-import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
+import { Pencil, Plus, Trash2 } from "lucide-react"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
+import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import {
   buildCollectionDetailItems,
   buildCollectionOptions,
@@ -29,27 +29,40 @@ import {
   subscribeToLocalDBScopeChanges,
 } from "@/lib/local-db"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
+import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { getSyncWorker } from "@/lib/sync/worker"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type CollectionsViewProps = {
   initialExpandedCollectionId?: string | null
 }
 
-const formatDate = (value: string) => {
-  const date = new Date(value)
+const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000
 
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown date"
+const buildDateLabel = (updatedAt: Date, now: Date) => {
+  if (updatedAt.toDateString() === now.toDateString()) {
+    return ""
   }
 
-  return new Intl.DateTimeFormat("es-MX", {
-    month: "short",
-    day: "numeric",
-  }).format(date)
+  if (now.getTime() - updatedAt.getTime() < WEEK_IN_MS) {
+    return new Intl.DateTimeFormat("es-MX", { weekday: "short" }).format(updatedAt)
+  }
+
+  return new Intl.DateTimeFormat("es-MX", { month: "short", day: "numeric" }).format(updatedAt)
 }
 
-const buildStatusLabel = (status: LocalWriting["status"]) => (status === "finished" ? "Done" : "Draft")
+const buildVisibilityState = (visibility: LocalWriting["visibility"]) => {
+  if (visibility === "shared") {
+    return { stateLabel: "Compartido", stateTone: "shared" as DeskBadgeTone }
+  }
+
+  if (visibility === "public") {
+    return { stateLabel: "Público", stateTone: "public" as DeskBadgeTone }
+  }
+
+  return { stateLabel: "Privado", stateTone: "private" as DeskBadgeTone }
+}
 
 export function CollectionsView({ initialExpandedCollectionId = null }: CollectionsViewProps) {
   const router = useRouter()
@@ -128,6 +141,45 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       assignments,
     })
   }, [assignments, collections, initialExpandedCollectionId, writings])
+  const detailGroups = useMemo<DeskActivityGroup[]>(() => {
+    const now = new Date()
+    const groups: DeskActivityGroup[] = [
+      { label: "Today", rows: [] },
+      { label: "This week", rows: [] },
+      { label: "Earlier", rows: [] },
+    ]
+
+    for (const item of detailItems) {
+      const updatedAt = new Date(item.updatedAt)
+      const visibilityState = buildVisibilityState(item.visibility)
+      const row = {
+        id: item.id,
+        title: item.title,
+        excerpt: item.excerpt,
+        stateLabel: visibilityState.stateLabel,
+        stateTone: visibilityState.stateTone,
+        withLabel: "",
+        recipientPreviews: [],
+        dateLabel: buildDateLabel(updatedAt, now),
+        isNew: false,
+        destinationHref: buildWritingRouteHref("/write", { id: item.id, slug: item.slug }),
+      }
+
+      if (updatedAt.toDateString() === now.toDateString()) {
+        groups[0].rows.push(row)
+        continue
+      }
+
+      if (now.getTime() - updatedAt.getTime() < WEEK_IN_MS) {
+        groups[1].rows.push(row)
+        continue
+      }
+
+      groups[2].rows.push(row)
+    }
+
+    return groups.filter((group) => group.rows.length > 0)
+  }, [detailItems])
 
   const createCollection = useCallback(async (name: string) => {
     const ownerId = getLocalDBScope()
@@ -166,9 +218,20 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   if (!initialExpandedCollectionId) {
     return (
       <section data-page="collections" className="flex min-h-screen flex-col bg-bg">
-        <header className="border-b-[0.5px] border-border">
-          <div className="flex h-[46px] items-center px-6 md:px-9">
-            <p className="font-lora text-[15px] text-ink-2">Collections</p>
+        <header className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))]">
+          <div className="flex h-[70px] items-center justify-between gap-4 px-6 md:px-9">
+            <div className="flex min-w-0 items-baseline gap-3">
+              <p className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Collections</p>
+              <p className="truncate text-[13px] text-ink-4">Organize writings by theme, project, and context.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+            >
+              <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
+              New collection
+            </button>
           </div>
         </header>
 
@@ -238,22 +301,16 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
   return (
     <section data-page="collections-detail" className="flex min-h-screen flex-col bg-bg">
-      <header className="border-b-[0.5px] border-border">
-        <div className="flex min-h-[88px] items-end justify-between gap-4 px-6 py-5 md:px-9">
+      <header className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))]">
+        <div className="flex min-h-[70px] items-center justify-between gap-4 px-6 py-4 md:px-9">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[12px] text-ink-4">
+            <p className="truncate text-[24px] font-medium tracking-[-0.03em] text-ink">{collectionName}</p>
+            <div className="pt-1 text-[13px] text-ink-4">
               <Link href="/collections" className="transition-colors hover:text-ink-2">
                 Collections
               </Link>
-              <span>{">"}</span>
-              <span className="truncate">{collectionName}</span>
+              <span>{isUncategorizedView ? " · Writings without a category." : " · Curated category for related writings."}</span>
             </div>
-            <h1 className="pt-2 font-lora text-[28px] font-medium text-ink">{collectionName}</h1>
-            {isUncategorizedView ? (
-              <p className="pt-2 text-[12px] leading-relaxed text-ink-4">
-                Derived label for writings without collections. It cannot be renamed or deleted.
-              </p>
-            ) : null}
           </div>
 
           {activeCollection ? (
@@ -296,118 +353,42 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
             <p className="font-lora text-[18px] italic text-ink-3">No writings here yet.</p>
           ) : (
             <div className="border-t-[0.5px] border-border">
-              {detailItems.map((item) => {
-                const selectedIds = getWritingCollectionIds(item.id, assignments)
-
-                return (
-                  <div
-                    key={item.id}
-                    role="link"
-                    tabIndex={0}
-                    onClick={() => router.push(`/write/${item.id}`)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault()
-                        router.push(`/write/${item.id}`)
-                      }
-                    }}
-                    className="group grid grid-cols-[minmax(0,1fr)_auto_auto] gap-4 border-b-[0.5px] border-border px-1 py-[18px] transition-colors duration-150 ease-out hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                  >
-                    <div className="min-w-0">
-                      <h2 className="font-lora text-[15px] font-medium leading-[1.3] text-ink transition-colors duration-150 ease-out group-hover:text-cursor">
-                        {item.title}
-                      </h2>
-                      <p className="truncate pt-1 text-[12px] text-ink-3">{item.excerpt}</p>
-                      {item.otherCollections.length > 0 ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {item.otherCollections.map((collection) => (
-                            <span
-                              key={collection.id}
-                              className="rounded-[13px] border-[0.5px] border-border bg-muted px-2 py-0.5 text-[11px] text-ink-3"
-                            >
-                              {collection.name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="pt-0.5 text-right text-[12px] text-ink-4">
-                      <p>{`${item.wordCount.toLocaleString()} words · ${formatDate(item.updatedAt)} · ${buildStatusLabel(item.status)}`}</p>
-                    </div>
-
-                    <div
-                      className="flex items-start justify-end"
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                      }}
-                    >
-                      <div className="flex items-center gap-2 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100">
-                        {isUncategorizedView ? (
-                          <CollectionAssignmentMenu
-                            collections={collectionOptions}
-                            selectedIds={selectedIds}
-                            title="Add to collections"
-                            description="Choose multiple labels, then close when you're done."
-                            onToggleCollection={async (collectionId) => {
-                              await toggleWritingCollection(item.id, collectionId)
-                            }}
-                            onCreateCollection={async (name) => {
-                              await createCollectionAndAssign(item.id, name)
-                            }}
-                            trigger={
-                              <button
-                                type="button"
-                                className="inline-flex h-7 items-center gap-2 rounded-[999px] border-[0.5px] border-border px-3 text-[12px] text-ink-2 transition-colors hover:bg-muted"
-                              >
-                                <Tags className="h-3.5 w-3.5" strokeWidth={1.5} />
-                                Add to collections
-                              </button>
-                            }
-                          />
-                        ) : (
-                          <>
-                            <CollectionAssignmentMenu
-                              collections={collectionOptions}
-                              selectedIds={selectedIds}
-                              title="Add to collections"
-                              description="Choose multiple labels, then close when you're done."
-                              onToggleCollection={async (collectionId) => {
-                                await toggleWritingCollection(item.id, collectionId)
-                              }}
-                              onCreateCollection={async (name) => {
-                                await createCollectionAndAssign(item.id, name)
-                              }}
-                              trigger={
-                                <button
-                                  type="button"
-                                  className="inline-flex h-7 items-center gap-2 rounded-[999px] border-[0.5px] border-border px-3 text-[12px] text-ink-2 transition-colors hover:bg-muted"
-                                >
-                                  <Tags className="h-3.5 w-3.5" strokeWidth={1.5} />
-                                  Add to collections
-                                </button>
-                              }
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                void setLocalWritingCollections(
-                                  item.id,
-                                  selectedIds.filter((collectionId) => collectionId !== initialExpandedCollectionId),
-                                ).then(() => getSyncWorker().schedule(0))
-                              }
-                              className="inline-flex h-7 items-center rounded-[6px] border-[0.5px] border-border px-2 text-[12px] text-ink-2 transition-colors hover:bg-muted"
-                            >
-                              Remove from collection
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+              <DeskActivityTable
+                groups={detailGroups}
+                collectionOptions={collectionOptions}
+                collectionIdsByWritingId={Object.fromEntries(
+                  detailItems.map((item) => [item.id, getWritingCollectionIds(item.id, assignments)]),
+                )}
+                onToggleCollection={async (writingId, collectionId) => {
+                  await toggleWritingCollection(writingId, collectionId)
+                }}
+                onCreateCollection={async (writingId, name) => {
+                  await createCollectionAndAssign(writingId, name)
+                }}
+                showDeleteAction={false}
+                renderExtraActions={
+                  isUncategorizedView
+                    ? undefined
+                    : (row) => (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            void setLocalWritingCollections(
+                              row.id,
+                              (getWritingCollectionIds(row.id, assignments) ?? []).filter(
+                                (collectionId) => collectionId !== initialExpandedCollectionId,
+                              ),
+                            ).then(() => getSyncWorker().schedule(0))
+                          }}
+                          className="inline-flex h-7 items-center rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[10px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                        >
+                          Remove
+                        </button>
+                      )
+                }
+              />
             </div>
           )}
         </div>

@@ -1,10 +1,9 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { SignOutButton } from "@/components/auth/sign-out-button"
+import { Plus } from "lucide-react"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
-import { DeskFilterBar } from "@/components/desk/desk-filter-bar"
 import { DeskHero } from "@/components/desk/desk-hero"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
@@ -24,7 +23,6 @@ import {
 import type { LocalCollection, LocalWritingCollection } from "@/lib/local-db/schema"
 import {
   buildDeskActivitySummary,
-  type DeskActivityFilter,
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
@@ -60,10 +58,6 @@ type SharedApiEnvelope<T> = {
 }
 
 export default function DeskPage() {
-  const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [activeFilter, setActiveFilter] = useState<DeskActivityFilter>("all")
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)
   const [isLoading, setIsLoading] = useState(true)
   const [sharedItems, setSharedItems] = useState<SharedWritingListItem[]>([])
@@ -71,6 +65,7 @@ export default function DeskPage() {
   const [sharedError, setSharedError] = useState<string | null>(null)
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [writingCollections, setWritingCollections] = useState<LocalWritingCollection[]>([])
+  const [activeView, setActiveView] = useState<DeskViewMode>("mine")
   const [recipientPreviewsByWritingId, setRecipientPreviewsByWritingId] = useState<
     Record<string, RecipientPreview[]>
   >({})
@@ -80,23 +75,9 @@ export default function DeskPage() {
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
 
-  const activeView: DeskViewMode = searchParams.get("tab") === "shared" ? "shared" : "mine"
-
-  const updateActiveView = useCallback(
-    (nextView: DeskViewMode) => {
-      const nextSearchParams = new URLSearchParams(searchParams.toString())
-
-      if (nextView === "shared") {
-        nextSearchParams.set("tab", "shared")
-      } else {
-        nextSearchParams.delete("tab")
-      }
-
-      const nextQuery = nextSearchParams.toString()
-      router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false })
-    },
-    [pathname, router, searchParams],
-  )
+  const updateActiveView = useCallback((nextView: DeskViewMode) => {
+    setActiveView(nextView)
+  }, [])
 
   const loadRecipientPreviews = useCallback(
     async (writingIds: string[]) => {
@@ -159,7 +140,7 @@ export default function DeskPage() {
     [syncRemoteWritings],
   )
 
-  const loadDeskActivity = useCallback(async (filter: DeskActivityFilter) => {
+  const loadDeskActivity = useCallback(async () => {
     const localWritings = await localDB.writings.getAll()
     const [nextCollections, nextAssignments] = await Promise.all([
       localDB.collections.getAll(),
@@ -169,7 +150,7 @@ export default function DeskPage() {
 
     setSummary(
       buildDeskActivitySummary(localWritings, {
-        filter,
+        filter: "all",
         userId: localScope === "anonymous" ? null : localScope,
         recipientPreviewsByWritingId: recipientPreviewsRef.current,
       }),
@@ -233,13 +214,20 @@ export default function DeskPage() {
     const load = async () => {
       setIsLoading(true)
       // 1. Render local data immediately — don't wait for remote
-      await loadDeskActivity(activeFilter)
+      await loadDeskActivity()
       void loadRecipientPreviewsAsync()
       if (!cancelled) {
         setIsLoading(false)
       }
       // 2. Hydrate from Supabase in background
-      void hydrateRemoteIfNeeded()
+      void hydrateRemoteIfNeeded().then(() => {
+        if (cancelled) {
+          return
+        }
+
+        void loadDeskActivity()
+        void loadRecipientPreviewsAsync()
+      })
     }
 
     void load()
@@ -247,7 +235,7 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
+  }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     if (activeView !== "shared") {
@@ -259,36 +247,36 @@ export default function DeskPage() {
 
   useEffect(() => {
     if (activeView === "mine") {
-      void loadDeskActivity(activeFilter)
+      void loadDeskActivity()
     }
-  }, [recipientPreviewsByWritingId, activeView, activeFilter, loadDeskActivity])
+  }, [recipientPreviewsByWritingId, activeView, loadDeskActivity])
 
   useEffect(() => {
     return subscribeToLocalDBScopeChanges(() => {
       hasHydratedRemoteRef.current = false
       if (activeView === "mine") {
         void hydrateRemoteIfNeeded(true).then(() => {
-          void loadDeskActivity(activeFilter)
+          void loadDeskActivity()
           void loadRecipientPreviewsAsync()
         })
       }
     })
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
+  }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     return subscribeToLocalDBChanges(() => {
       if (activeView === "mine") {
-        void loadDeskActivity(activeFilter)
+        void loadDeskActivity()
         void loadRecipientPreviewsAsync()
       }
     })
-  }, [activeFilter, activeView, loadDeskActivity, loadRecipientPreviewsAsync])
+  }, [activeView, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
     const handleRefresh = () => {
       if (activeView === "mine") {
         void hydrateRemoteIfNeeded(true).then(() => {
-          void loadDeskActivity(activeFilter)
+          void loadDeskActivity()
           void loadRecipientPreviewsAsync()
         })
         return
@@ -304,9 +292,7 @@ export default function DeskPage() {
       window.removeEventListener("focus", handleRefresh)
       window.removeEventListener("online", handleRefresh)
     }
-  }, [activeFilter, activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadSharedWritings])
-
-  const counts = useMemo(() => summary.counts, [summary.counts])
+  }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadSharedWritings])
   const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
   const collectionIdsByWritingId = useMemo(() => {
     const grouped = new Map<string, string[]>()
@@ -320,26 +306,42 @@ export default function DeskPage() {
     return Object.fromEntries(grouped)
   }, [writingCollections])
 
+  const viewCounts = useMemo(
+    () => ({
+      mine: summary.total,
+      shared: sharedItems.length,
+    }),
+    [sharedItems.length, summary.total],
+  )
+
   return (
     <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
       <div
         id="desk-topbar"
         data-section="desk-topbar"
         data-testid="desk-topbar"
-        className="DeskTopbar flex h-[46px] items-center justify-between gap-4 border-b-[0.5px] border-border px-5 sm:px-9"
+        className="DeskTopbar flex h-[70px] items-center justify-between gap-4 border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-5 sm:px-9"
       >
-        <div className="flex min-w-0 items-center gap-4">
-          <p className="shrink-0 font-lora text-[15px] text-ink-2">Desk</p>
-          <DeskViewToggle activeView={activeView} onViewChange={updateActiveView} />
+        <div className="flex min-w-0 items-baseline gap-3">
+          <p className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Desk</p>
+          <p className="truncate text-[13px] text-ink-4">Writing activity, shared drafts, and collection context.</p>
         </div>
-        <SignOutButton />
+        <Link
+          href="/write"
+          className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+        >
+          <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
+          New writing
+        </Link>
       </div>
 
       {activeView === "mine" ? (
         <>
           <DeskHero drafts={summary.heroDrafts} />
 
-          <DeskFilterBar activeFilter={activeFilter} counts={counts} onFilterChange={setActiveFilter} />
+          <div className="border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
+            <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
+          </div>
 
           <DeskActivityTable
             groups={summary.groups}
@@ -367,13 +369,18 @@ export default function DeskPage() {
             }}
             onDeleteRequest={async (id) => {
               await enqueueWritingDelete(id)
-              await loadDeskActivity(activeFilter)
+              await loadDeskActivity()
               void loadRecipientPreviewsAsync()
             }}
           />
         </>
       ) : (
-        <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
+        <>
+          <div className="border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
+            <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
+          </div>
+          <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
+        </>
       )}
     </section>
   )

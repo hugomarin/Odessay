@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useMemo, type CSSProperties } from "react"
+import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, LibraryBig, Mails, PanelLeftClose, Plus, Search } from "lucide-react"
+import { LayoutGrid, PanelLeftClose, Plus, Search } from "lucide-react"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
@@ -36,16 +37,35 @@ type NavItem = {
   shortcut?: ShortcutDisplay
 }
 
+function SquareLibraryIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 7v10" />
+      <path d="M16 7v10" />
+      <path d="M8 7v10" />
+      <path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  )
+}
+
 const NAV_ITEMS: NavItem[] = [
-  { href: "/desk", label: "Desk", icon: FileText, section: "sidebar-nav-desk" },
+  { href: "/desk", label: "Desk", icon: LayoutGrid, section: "sidebar-nav-desk" },
   {
     href: "/collections",
     label: "Collections",
-    icon: LibraryBig,
+    icon: SquareLibraryIcon,
     section: "sidebar-nav-collections",
     shortcut: { mac: "⌘⇧K", windows: "Ctrl+Shift+K" },
   },
-  { href: "/correspondences", label: "Correspondences", icon: Mails, section: "sidebar-nav-correspondences" },
 ]
 
 const SIDEBAR_WIDTH_EXPANDED = 292
@@ -147,17 +167,18 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             data-testid="sidebar-top"
             className={cn(
               "SidebarTop flex h-[46px] items-center gap-2",
-              isIconOnly ? "justify-center px-2" : "justify-between px-3",
+              isIconOnly ? "justify-between px-2" : "justify-between px-3",
             )}
           >
             <Link
               href="/desk"
               className={cn(
-                "overflow-hidden font-sans text-[19px] font-semibold text-[hsl(25_32%_28%)] transition-[width,opacity,color] duration-200 hover:text-[hsl(25_38%_22%)]",
+                "overflow-hidden transition-[width,opacity] duration-200",
                 isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
               )}
+              aria-label="Odessay"
             >
-              Odessay
+              <Image src="/odessay-logo.svg" alt="Odessay" width={80} height={26} className="h-[26px] w-auto max-w-none" />
             </Link>
 
             <ActionTooltip
@@ -187,7 +208,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 className={cn(
                   "flex h-8 items-center rounded-md text-[15px] font-medium transition-colors",
                   isIconOnly
-                    ? "justify-center bg-ink text-bg hover:bg-ink-2"
+                    ? "gap-2 px-2 bg-ink text-bg hover:bg-ink-2"
                     : "gap-2 px-2 text-ink hover:bg-muted",
                 )}
                 aria-label="New writing"
@@ -209,7 +230,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 type="button"
                 className={cn(
                   "mt-2 flex h-8 w-full items-center rounded-md text-[15px] text-ink-2 transition-colors hover:bg-muted hover:text-ink",
-                  isIconOnly ? "justify-center" : "gap-2 px-2",
+                  "gap-2 px-2",
                 )}
                 aria-label="Search"
               >
@@ -251,7 +272,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       data-testid={item.section}
                       className={cn(
                         "flex items-center rounded-md px-2 py-[10px] text-[15px] transition-colors",
-                        isIconOnly ? "justify-center" : "gap-2",
+                        "gap-2",
                         isActive ? "bg-muted font-medium text-ink" : "text-ink-2 hover:bg-muted-hover hover:text-ink",
                       )}
                       aria-label={item.label}
@@ -259,7 +280,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                       <span
                         className={cn(
-                          "overflow-hidden transition-[width,opacity] duration-200",
+                          "overflow-hidden whitespace-nowrap transition-[width,opacity] duration-200",
                           isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
                         )}
                       >
