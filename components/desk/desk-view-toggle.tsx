@@ -6,6 +6,7 @@ export type DeskViewMode = "mine" | "shared"
 
 type DeskViewToggleProps = {
   activeView: DeskViewMode
+  counts?: Record<DeskViewMode, number>
   onViewChange: (nextView: DeskViewMode) => void
 }
 
@@ -14,11 +15,12 @@ const VIEW_TABS: Array<{ value: DeskViewMode; label: string }> = [
   { value: "shared", label: "Shared with me" },
 ]
 
-export function DeskViewToggle({ activeView, onViewChange }: DeskViewToggleProps) {
+export function DeskViewToggle({ activeView, counts, onViewChange }: DeskViewToggleProps) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-lg bg-muted p-1">
+    <div className="inline-flex items-center gap-1 rounded-[14px] bg-muted p-1 shadow-[inset_0_0_0_0.5px_hsl(var(--border))]">
       {VIEW_TABS.map((tab) => {
         const isActive = activeView === tab.value
+        const count = counts?.[tab.value]
 
         return (
           <button
@@ -28,11 +30,16 @@ export function DeskViewToggle({ activeView, onViewChange }: DeskViewToggleProps
             data-testid={`desk-view-tab-${tab.value}`}
             onClick={() => onViewChange(tab.value)}
             className={cn(
-              "rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
-              isActive ? "bg-bg text-ink shadow-sm" : "text-ink-3 hover:text-ink-2",
+              "inline-flex items-center gap-[10px] rounded-[11px] px-4 py-[9px] text-[14px] font-medium transition-colors",
+              isActive ? "bg-bg text-ink shadow-float" : "text-ink-3 hover:text-ink-2",
             )}
           >
             {tab.label}
+            {typeof count === "number" ? (
+              <span className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-[hsl(220,44%,93%)] px-[7px] text-[11px] font-bold text-[hsl(220,50%,40%)]">
+                {count}
+              </span>
+            ) : null}
           </button>
         )
       })}

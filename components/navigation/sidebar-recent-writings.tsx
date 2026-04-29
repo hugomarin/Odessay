@@ -30,14 +30,17 @@ export function SidebarRecentWritings({ collapsed }: SidebarRecentWritingsProps)
             href={`/write/${writing.slug ?? writing.writingId}`}
             className="flex min-w-0 items-center gap-2 rounded-md px-2 py-[8px] text-left transition-colors hover:bg-muted-hover"
           >
+            {writing.isOpen ? <span className="w-[6px] shrink-0" aria-hidden="true" /> : (
+              <span aria-hidden="true" className="h-[6px] w-[6px] shrink-0 rounded-full bg-border" />
+            )}
             <span
-              aria-hidden="true"
               className={cn(
-                "h-[6px] w-[6px] shrink-0 rounded-full",
-                writing.isOpen ? "bg-cursor/80" : "bg-border",
+                "min-w-0 truncate font-sans text-[13px] text-ink-2",
+                writing.isOpen && "text-ink",
               )}
-            />
-            <span className="min-w-0 truncate font-lora text-[13px] text-ink-2">{writing.title}</span>
+            >
+              {writing.title}
+            </span>
           </Link>
         ))}
       </div>

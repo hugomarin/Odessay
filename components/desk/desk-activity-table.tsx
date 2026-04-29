@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import type { CollectionOption } from "@/lib/collections/collections"
-import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
+import type { DeskActivityGroup, DeskActivityRow, DeskBadgeTone } from "@/lib/queries/desk-activity"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { cn } from "@/lib/utils"
 
@@ -18,6 +18,8 @@ type DeskActivityTableProps = {
   onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onDeleteRequest?: (id: string) => void
+  renderExtraActions?: (row: DeskActivityRow) => ReactNode
+  showDeleteAction?: boolean
 }
 
 const BADGE_STYLES: Record<DeskBadgeTone, string> = {
@@ -42,9 +44,12 @@ export function DeskActivityTable({
   onToggleCollection,
   onCreateCollection,
   onDeleteRequest,
+  renderExtraActions,
+  showDeleteAction = true,
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const collectionOptionById = new Map(collectionOptions.map((option) => [option.id, option]))
 
   if (isLoading) {
     return (
@@ -88,11 +93,11 @@ export function DeskActivityTable({
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[50%]" />
+                <col className="w-[52%]" />
                 <col className="w-[14%]" />
-                <col className="w-[14%]" />
-                <col className="w-[10%]" />
                 <col className="w-[12%]" />
+                <col className="w-[8%]" />
+                <col className="w-[14%]" />
               </colgroup>
               <tbody>
                 {group.rows.map((row) => {
@@ -104,6 +109,9 @@ export function DeskActivityTable({
                   }
 
                   const selectedCollectionIds = collectionIdsByWritingId[row.id] ?? []
+                  const selectedCollections = selectedCollectionIds
+                    .map((collectionId) => collectionOptionById.get(collectionId))
+                    .filter((collection): collection is CollectionOption => Boolean(collection))
 
                   return (
                     <tr
@@ -130,17 +138,31 @@ export function DeskActivityTable({
                       )}
                     >
                       <td className="px-9 py-[18px] align-top md:align-middle">
-                        <div
-                          className="min-w-0"
-                          style={{
-                            WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-                            maskImage: "linear-gradient(90deg, #000 86%, transparent)",
-                          }}
-                        >
-                          <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
-                            {row.title}
-                          </p>
-                          <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                        <div className="min-w-0">
+                          <div
+                            style={{
+                              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                            }}
+                          >
+                            <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                              {row.title}
+                            </p>
+                            <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                          </div>
+                          {selectedCollections.length > 0 ? (
+                            <div className="flex flex-wrap gap-[7px] pt-3">
+                              {selectedCollections.map((collection) => (
+                                <span
+                                  key={collection.id}
+                                  className="inline-flex min-h-[24px] items-center gap-[6px] rounded-[9px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-[9px] text-[11px] font-medium tracking-[0.01em] text-[hsl(28_22%_22%)]"
+                                >
+                                  <Tags className="h-[11px] w-[11px] text-[hsl(28_18%_34%)]" strokeWidth={1.5} />
+                                  {collection.name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                       <td className="px-4 py-[18px] align-top md:align-middle">
@@ -181,8 +203,8 @@ export function DeskActivityTable({
                           </div>
                         ) : null}
                       </td>
-                      <td className="px-9 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
-                        {row.dateLabel}
+                      <td className="px-6 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
+                        <span className="whitespace-nowrap">{row.dateLabel}</span>
                       </td>
                       <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
                         <div
@@ -201,22 +223,25 @@ export function DeskActivityTable({
                                 <button
                                   type="button"
                                   aria-label={`Assign ${row.title} to collections`}
-                                  className="inline-flex h-7 items-center gap-2 rounded-[999px] border-[0.5px] border-border px-3 text-[12px] text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                  className="inline-flex h-7 items-center gap-[6px] rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[10px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                                 >
-                                  <Tags className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                                  <span>Collections</span>
+                                  <Tags className="h-[11px] w-[11px]" strokeWidth={1.5} />
+                                  <span>Add</span>
                                 </button>
                               }
                             />
                           ) : null}
-                          <button
-                            type="button"
-                            aria-label={`Delete writing ${row.title}`}
-                            onClick={() => setPendingDeleteId(row.id)}
-                            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                          >
-                            <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                          </button>
+                          {renderExtraActions ? renderExtraActions(row) : null}
+                          {showDeleteAction ? (
+                            <button
+                              type="button"
+                              aria-label={`Delete writing ${row.title}`}
+                              onClick={() => setPendingDeleteId(row.id)}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                            >
+                              <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

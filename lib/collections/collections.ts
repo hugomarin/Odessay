@@ -33,10 +33,12 @@ export type CollectionOption = {
 
 export type CollectionDetailWritingItem = {
   id: string;
+  slug: string | null;
   title: string;
   excerpt: string;
   wordCount: number;
   status: LocalWriting["status"];
+  visibility: LocalWriting["visibility"];
   updatedAt: string;
   otherCollections: CollectionOption[];
 };
@@ -168,10 +170,12 @@ export const buildCollectionDetailItems = ({
 
       return {
         id: writing.id,
+        slug: writing.slug ?? null,
         title: buildWritingTitle(writing.title),
         excerpt: buildExcerpt(writing.body_text),
         wordCount: calculateSelectionMetrics(writing.body_text).words,
         status: writing.status,
+        visibility: writing.visibility,
         updatedAt: writing.updated_at,
         otherCollections,
       };
