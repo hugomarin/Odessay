@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Fix annotation text lost on editor hydration. In hydrateEditor, the double-setContent round-trip now includes footnote definitions via getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)) so that footnoteReference nodes preserve their text attribute across hydration. Previously, getEditorMarkdown emitted only [^n] without definitions, causing re-parse to create footnoteReference nodes with empty text.",
+            "phase": "Fase 3",
+            "issue": "ODE-120",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-120",
+            "commit": null,
+            "date": "2026-04-28",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: not required — data correctness fix, no rendering path changes. Presentation contract: not required — no cross-mode text rendering changes. Scope: components/editor/editor-shell.tsx hydrateEditor double-setContent round-trip (line 728)."
+        },
+        {
             "what": "Replace router.push() with local state and window.history.replaceState() in editor shell for tab selection, close, and create operations. Eliminates the 750-1350ms RSC fetch + re-hydration cycle when switching between writings already present in localDB. Tab switching now resolves in <200ms by updating currentWritingId/hydrationWritingId directly and syncing the URL as a passive mirror.",
             "phase": "Fase 3",
             "issue": "ODE-119",
