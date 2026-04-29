@@ -48,6 +48,10 @@ import {
   setFindReplaceQueryState,
 } from "@/lib/editor/find-replace"
 import {
+  clearPublicationSuggestions,
+  setPublicationSuggestions as setEditorPublicationSuggestions,
+} from "@/lib/editor/publication-suggestion-extension"
+import {
   createNewWritingSessionState,
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
@@ -67,7 +71,7 @@ import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
-import type { LocalWriting, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import type { LocalWriting, PublicationSuggestion, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { hydrateLocalWritingFromRemote } from "@/lib/sync/remote-bootstrap"
@@ -233,6 +237,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
   const [isPublicationModeEnabled, setIsPublicationModeEnabled] = useState(false)
+  const [publicationSuggestions, setPublicationSuggestions] = useState<PublicationSuggestion[]>([])
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
@@ -585,6 +590,22 @@ export function EditorShell({ writingId }: EditorShellProps) {
   useEffect(() => {
     modeRef.current = mode
   }, [mode])
+
+  useEffect(() => {
+    if (!editor || activePanel !== "publication" || mode !== "rich") {
+      return
+    }
+
+    setEditorPublicationSuggestions(editor, publicationSuggestions)
+  }, [editor, activePanel, mode, publicationSuggestions])
+
+  useEffect(() => {
+    if (!editor || activePanel === "publication" || mode !== "rich") {
+      return
+    }
+
+    clearPublicationSuggestions(editor)
+  }, [editor, activePanel, mode])
 
   useEffect(() => {
     titleRef.current = title
@@ -2575,6 +2596,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 onApplyMarkdown={applyMarkdownFromPanel}
                 onJumpToText={jumpToPublicationTarget}
                 onClose={closeActivePanel}
+                onSuggestionsChange={setPublicationSuggestions}
               />
             )}
           </Suspense>
