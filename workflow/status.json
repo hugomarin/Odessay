@@ -30,7 +30,7 @@
             "phase": "Fase 3",
             "issue": "ODE-120",
             "linear_url": "https://linear.app/z9ne/issue/ODE-120",
-            "commit": null,
+            "commit": "62e1dba",
             "date": "2026-04-28",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings in editor-shell.tsx), npm test (249/249). Performance contract: not required — data correctness fix, no rendering path changes. Presentation contract: not required — no cross-mode text rendering changes. Scope: components/editor/editor-shell.tsx hydrateEditor double-setContent round-trip (line 728)."
         },
