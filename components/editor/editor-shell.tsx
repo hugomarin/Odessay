@@ -725,7 +725,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
         // Load JSON first to get the markdown serialization, then re-parse as markdown
         // so that footnote references are converted to footnoteReference nodes.
         editor.commands.setContent(localWriting.body_json)
-        const loadedMarkdown = normalizeMarkdownForRoundTrip(getEditorMarkdown(editor))
+        const loadedMarkdown = normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor))
+        )
         if (loadedMarkdown) {
           editor.commands.setContent(materializeMarkdownForRichParser(loadedMarkdown))
         }
