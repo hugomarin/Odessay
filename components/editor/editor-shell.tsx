@@ -1765,8 +1765,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
+    // Guard: nothing to publish for a blank draft tab. The draft tab is already
+    // initialized correctly by openDraftTab(). Publishing here would write the
+    // previous writing's stale displayTitle onto the draft tab because the title
+    // state is only reset once the next hydration cycle completes.
+    if (currentWritingId === null) {
+      return
+    }
+
+    // Only pass routeWritingId when it matches the currently loaded writing.
+    // After a soft tab switch (window.history.replaceState), routeWritingId stays
+    // at the old route's writing ID while currentWritingId has already moved on.
+    // Passing the stale routeWritingId would cause publishTabState to overwrite the
+    // old tab's data with the new document's id/title, corrupting all other tabs.
     publishTabState({
-      routeWritingId,
+      routeWritingId: routeWritingId === currentWritingId ? routeWritingId : null,
       writingId: currentWritingId,
       slug: writingSlug,
       title: displayTitle,
