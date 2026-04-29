@@ -157,7 +157,12 @@ export function PublicationPanel({
         return;
       }
 
-      reviewRef.current = null;
+      // Si ya hay un review en pantalla, mostrarlo como stale — el usuario está aplicando sugerencias.
+      // No descartar, no re-analizar automáticamente.
+      if (reviewRef.current !== null) {
+        return;
+      }
+
       setReview(null);
       setError(null);
 
