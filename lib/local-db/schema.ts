@@ -1,5 +1,7 @@
+import type { WritingStatus } from "@/lib/writings/status";
+
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 8;
+export const LOCAL_DB_VERSION = 9;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -11,7 +13,7 @@ export const LOCAL_DB_STORES = {
 } as const;
 
 export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
-export type WritingStatus = "draft" | "finished";
+export type { WritingStatus } from "@/lib/writings/status";
 export type WritingVisibility = "private" | "shared" | "public";
 export type CollectionVisibility = "private" | "public";
 export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed";

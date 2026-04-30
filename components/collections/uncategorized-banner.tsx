@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { Check, ChevronDown, FolderPlus, Sparkles } from "lucide-react"
 import type { LocalCollection, LocalWriting } from "@/lib/local-db/schema"
 import { cn } from "@/lib/utils"
+import { getWritingStatusLabel } from "@/lib/writings/status"
 
 type UncategorizedBannerProps = {
   writings: LocalWriting[]
@@ -129,9 +130,7 @@ export function UncategorizedBanner({
                     <span className="mt-1 line-clamp-2 block text-[13px] leading-relaxed text-ink-3">
                       {writing.body_text.trim() || "No content yet."}
                     </span>
-                    <span className="mt-2 block text-[11px] text-ink-4">
-                      {writing.status === "finished" ? "Done" : "Draft"}
-                    </span>
+                    <span className="mt-2 block text-[11px] text-ink-4">{getWritingStatusLabel(writing.status)}</span>
                   </span>
                 </button>
               )

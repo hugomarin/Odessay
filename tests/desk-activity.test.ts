@@ -42,7 +42,7 @@ describe("buildDeskActivitySummary", () => {
       body_text: "weekly correspondence content",
       updated_at: "2026-03-17T11:00:00.000Z",
       local_updated_at: 4,
-      status: "finished",
+      status: "done",
       visibility: "shared",
     }),
     createWriting({
@@ -51,7 +51,7 @@ describe("buildDeskActivitySummary", () => {
       body_text: "earlier reply content",
       updated_at: "2026-02-25T10:00:00.000Z",
       local_updated_at: 3,
-      status: "finished",
+      status: "done",
       visibility: "private",
       parent_id: "corr-week",
       author_id: "user-2",

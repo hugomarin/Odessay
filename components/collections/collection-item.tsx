@@ -6,6 +6,7 @@ import { ChevronDown, Globe, Lock, Pencil, Trash2 } from "lucide-react"
 import type { LocalCollection } from "@/lib/local-db/schema"
 import type { CollectionWritingItem } from "@/lib/collections/collections"
 import { cn } from "@/lib/utils"
+import { getWritingStatusLabel } from "@/lib/writings/status"
 
 type CollectionItemProps = {
   collection: LocalCollection
@@ -154,9 +155,7 @@ export function CollectionItem({
                   <p className="mt-1 line-clamp-1 text-[12px] text-ink-3">
                     {writing.bodyText.trim() || "No content yet."}
                   </p>
-                  <p className="mt-2 text-[11px] text-ink-4">
-                    {writing.status === "finished" ? "Done" : "Draft"}
-                  </p>
+                  <p className="mt-2 text-[11px] text-ink-4">{getWritingStatusLabel(writing.status)}</p>
                 </Link>
               ))}
             </div>
