@@ -575,15 +575,15 @@ export function PropertiesPanel({
                 aria-label="Enable spellcheck"
                 onClick={() => onSpellcheckPreferenceChange(spellcheckEnabled ? "off" : "system")}
                 className={cn(
-                  "relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-                  spellcheckEnabled ? "bg-ink" : "bg-[hsl(32_20%_86%)]",
+                  "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+                  spellcheckEnabled ? "bg-ink" : "bg-border",
                 )}
               >
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none absolute top-0.5 h-[14px] w-[14px] rounded-full bg-bg transition-transform",
-                    spellcheckEnabled ? "translate-x-[15px]" : "translate-x-[2px]",
+                    "pointer-events-none absolute left-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-transform",
+                    spellcheckEnabled ? "translate-x-[14px]" : "translate-x-0",
                   )}
                 />
               </button>
