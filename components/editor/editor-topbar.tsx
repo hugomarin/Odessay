@@ -3,13 +3,11 @@
 import { useRef, type ComponentType } from "react"
 import type { Editor } from "@tiptap/react"
 import {
-  AlignLeft,
   Bold,
   Check,
   ChevronDown,
   Code2,
   Expand,
-  Highlighter,
   Italic,
   Link,
   List,
@@ -19,7 +17,6 @@ import {
   Sparkles,
   SlidersHorizontal,
   Strikethrough,
-  Superscript,
   Table,
 } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
@@ -77,21 +74,19 @@ type StructureActionItem = {
   text: string
 }
 
+type MenuActionItem = {
+  id: string
+  label: string
+  action: EditorShortcutAction
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>
+}
+
 const FORMAT_ACTIONS: TopbarActionItem[] = [
   { id: "editor-action-bold", label: "Bold", action: "bold", icon: Bold },
   { id: "editor-action-italic", label: "Italic", action: "italic", icon: Italic },
   { id: "editor-action-strike", label: "Strike", action: "strike", icon: Strikethrough },
-  { id: "editor-action-highlight", label: "Annotate", action: "highlight", icon: Highlighter },
   { id: "editor-action-link", label: "Link", action: "link", icon: Link },
-  { id: "editor-action-footnote", label: "Footnote", action: "footnote", icon: Superscript },
   { id: "editor-action-blockquote", label: "Quote", action: "blockquote", icon: MessageSquareQuote },
-  { id: "editor-action-bullet-list", label: "Bullet list", action: "bulletList", icon: List },
-  {
-    id: "editor-action-ordered-list",
-    label: "Numbered list",
-    action: "orderedList",
-    icon: ListOrdered,
-  },
   { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode", icon: Code2 },
   { id: "editor-action-table", label: "Table", action: "table", icon: Table },
 ]
@@ -103,14 +98,13 @@ const STRUCTURE_ACTIONS: StructureActionItem[] = [
   { id: "editor-action-heading-3", label: "Heading 3", action: "heading3", text: "H3" },
 ]
 
+const LIST_MENU_ACTIONS: MenuActionItem[] = [
+  { id: "editor-action-bullet-list", label: "Bulleted list", action: "bulletList", icon: List },
+  { id: "editor-action-ordered-list", label: "Numbered list", action: "orderedList", icon: ListOrdered },
+]
+
 const COMPACT_QUICK_ACTIONS: TopbarActionItem[] = FORMAT_ACTIONS.filter(
-  ({ action }) =>
-    action === "bold" ||
-    action === "italic" ||
-    action === "strike" ||
-    action === "highlight" ||
-    action === "link" ||
-    action === "footnote",
+  ({ action }) => action === "bold" || action === "italic" || action === "strike" || action === "link",
 )
 
 const COMPACT_LIST_ACTIONS: Array<{
@@ -177,11 +171,11 @@ const TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS = "bg-muted/80 text-ink opacity-100"
 const getTopbarIconButtonClass = (active: boolean) =>
   cn(TOPBAR_ICON_BUTTON_BASE_CLASS, active ? TOPBAR_ICON_BUTTON_ACTIVE_CLASS : TOPBAR_ICON_BUTTON_INACTIVE_CLASS)
 
-const getTopbarStructureButtonClass = (active: boolean) =>
-  cn(
-    TOPBAR_STRUCTURE_BUTTON_BASE_CLASS,
-    active ? TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS : TOPBAR_STRUCTURE_BUTTON_INACTIVE_CLASS,
-  )
+const TOPBAR_MENU_TRIGGER_CLASS = cn(
+  TOPBAR_STRUCTURE_BUTTON_BASE_CLASS,
+  TOPBAR_STRUCTURE_BUTTON_INACTIVE_CLASS,
+  "gap-1.5 px-2.5",
+)
 
 export function EditorTopbar({
   editor,
@@ -245,33 +239,6 @@ export function EditorTopbar({
     )
   })
 
-  const structureButtons = STRUCTURE_ACTIONS.map((actionItem) => {
-    const isActive = isActionActive(actionState, actionItem.action)
-
-    return (
-      <ActionTooltip
-        key={actionItem.id}
-        label={actionItem.label}
-        shortcut={getEditorShortcutLabel(actionItem.action)}
-        side="bottom"
-      >
-        <button
-          id={actionItem.id}
-          type="button"
-          onMouseDown={(event) => {
-            // Prevent focus-stealing click from collapsing markdown selection before applying style.
-            captureSelectionAndKeepFocus(event)
-          }}
-          onClick={() => onRunAction(actionItem.action, { richSelection: consumeRichSelection() })}
-          aria-label={actionItem.label}
-          className={getTopbarStructureButtonClass(isActive)}
-        >
-          {actionItem.text}
-        </button>
-      </ActionTooltip>
-    )
-  })
-
   const compactQuickButtons = COMPACT_QUICK_ACTIONS.map((actionItem) => {
     const Icon = actionItem.icon
 
@@ -322,6 +289,35 @@ export function EditorTopbar({
     )
   })
 
+  const headingMenuItems = STRUCTURE_ACTIONS.map((actionItem) => {
+    const active = isActionActive(actionState, actionItem.action)
+    const shortcut = getEditorShortcutLabel(actionItem.action)
+
+    return (
+      <DropdownMenuItem
+        key={`${actionItem.id}-desktop-heading`}
+        onSelect={() =>
+          runCompactTopbarAction(onRunAction, actionItem.action, {
+            richSelection: consumeRichSelection(),
+          })
+        }
+        className={cn("h-9 rounded-[8px] px-2.5 text-[13px]", active ? "bg-muted text-ink" : "text-ink-2")}
+      >
+        <span
+          aria-hidden="true"
+          className={cn("mr-2 inline-flex h-4 min-w-4 items-center justify-center text-[12px] font-medium text-ink-4", active && "text-ink")}
+        >
+          {actionItem.text}
+        </span>
+        <span className="truncate">{actionItem.label}</span>
+        {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    )
+  })
+
+  const headingMenuLabel = actionState.heading1 ? "H1" : actionState.heading2 ? "H2" : actionState.heading3 ? "H3" : "H"
+  const listMenuLabel = actionState.orderedList ? "1." : actionState.bulletList ? "•" : "List"
+
   return (
     <TooltipProvider delayDuration={120}>
       <div
@@ -346,7 +342,67 @@ export function EditorTopbar({
 
             <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
 
-            {structureButtons}
+            <DropdownMenu>
+              <ActionTooltip label="Lists" side="bottom">
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      captureSelectionAndKeepFocus(event)
+                    }}
+                    aria-label="Lists"
+                    className={cn(TOPBAR_MENU_TRIGGER_CLASS, (actionState.bulletList || actionState.orderedList) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS)}
+                  >
+                    <span>{listMenuLabel}</span>
+                    <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+                  </button>
+                </DropdownMenuTrigger>
+              </ActionTooltip>
+              <DropdownMenuContent align="center" side="bottom" sideOffset={8} className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md">
+                {LIST_MENU_ACTIONS.map((actionItem) => {
+                  const Icon = actionItem.icon
+                  const active = isActionActive(actionState, actionItem.action)
+                  const shortcut = getEditorShortcutLabel(actionItem.action)
+
+                  return (
+                    <DropdownMenuItem
+                      key={actionItem.id}
+                      onSelect={() =>
+                        runCompactTopbarAction(onRunAction, actionItem.action, {
+                          richSelection: consumeRichSelection(),
+                        })
+                      }
+                      className={cn("h-9 rounded-[8px] px-2.5 text-[13px]", active ? "bg-muted text-ink" : "text-ink-2")}
+                    >
+                      <Icon className="mr-2 h-[14px] w-[14px]" strokeWidth={1.5} />
+                      <span className="truncate">{actionItem.label}</span>
+                      {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
+                    </DropdownMenuItem>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <ActionTooltip label="Headings" side="bottom">
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      captureSelectionAndKeepFocus(event)
+                    }}
+                    aria-label="Headings"
+                    className={cn(TOPBAR_MENU_TRIGGER_CLASS, (actionState.heading1 || actionState.heading2 || actionState.heading3) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS)}
+                  >
+                    <span>{headingMenuLabel}</span>
+                    <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+                  </button>
+                </DropdownMenuTrigger>
+              </ActionTooltip>
+              <DropdownMenuContent align="center" side="bottom" sideOffset={8} className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md">
+                {headingMenuItems}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className={EDITOR_TOPBAR_COMPACT_FORMAT_CLASS}>
@@ -406,18 +462,6 @@ export function EditorTopbar({
               ) : (
                 <Expand className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
               )}
-            </button>
-          </ActionTooltip>
-
-          <ActionTooltip label="Notes panel" side="bottom">
-            <button
-              type="button"
-              onClick={() => onTogglePanel("notes")}
-              className={getTopbarIconButtonClass(activePanel === "notes")}
-              aria-label="Notes panel"
-              aria-pressed={activePanel === "notes"}
-            >
-              <AlignLeft className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
 
