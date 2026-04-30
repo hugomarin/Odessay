@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Properties Panel — Redesign Reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          hsl(38, 12%, 98%);
+    --sb:          hsl(0, 0%, 100%);
+    --muted:       hsl(38, 8%, 93%);
+    --muted-h:     hsl(38, 8%, 90%);
+    --border:      hsl(38, 8%, 90%);
+    --ink:         hsl(25, 18%, 10%);
+    --ink-2:       hsl(25, 12%, 22%);
+    --ink-3:       hsl(25, 10%, 38%);
+    --ink-4:       hsl(25, 8%, 52%);
+    --cursor:      hsl(22, 55%, 38%);
+    --cursor-soft: hsl(22, 55%, 97%);
+    --shared-bg:   hsl(220, 40%, 96%);
+    --shared-ink:  hsl(220, 40%, 38%);
+    --shadow-md:   0 4px 24px 0 hsla(25,18%,12%,0.08), 0 2px 6px 0 hsla(25,18%,12%,0.04);
+  }
+
+  html, body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ── */
+  .page {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 48px;
+    padding: 48px 32px 80px;
+  }
+
+  .col-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+    margin-bottom: 10px;
+    padding-left: 2px;
+  }
+
+  /* ── Panel ── */
+  .panel {
+    width: 248px;
+    flex-shrink: 0;
+    border: 0.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--sb);
+    overflow: visible;
+    box-shadow: 0 2px 12px 0 hsla(25,18%,12%,0.06), 0 1px 3px 0 hsla(25,18%,12%,0.04);
+    position: relative;
+  }
+
+  .panel-header {
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 0.5px solid var(--border);
+    border-radius: 10px 10px 0 0;
+    overflow: hidden;
+  }
+
+  .panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 6px;
+    color: var(--ink-4);
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .icon-btn:hover { background: var(--muted); color: var(--ink); }
+
+  /* ── Panel body ── */
+  .panel-body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Section ── */
+  .section { display: flex; flex-direction: column; gap: 8px; position: relative; }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  /* ── Dropdown trigger ── */
+  .dropdown-trigger {
+    width: 100%;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+    transition: background 150ms ease, border-color 150ms ease;
+    position: relative;
+  }
+  .dropdown-trigger:hover { background: var(--muted); }
+  .dropdown-trigger.open { border-color: var(--ink-3); background: var(--sb); }
+
+  .trigger-icon { color: var(--ink-3); flex-shrink: 0; display: flex; align-items: center; }
+  .trigger-label { flex: 1; text-align: left; }
+  .trigger-chevron { color: var(--ink-4); flex-shrink: 0; display: flex; align-items: center; transition: transform 150ms ease; }
+  .dropdown-trigger.open .trigger-chevron { transform: rotate(180deg); }
+
+  /* ── Dropdown popover ── */
+  .dropdown-popover {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 50;
+    background: var(--sb);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-md);
+    padding: 5px;
+    display: none;
+  }
+  .dropdown-popover.open { display: block; }
+
+  .dropdown-item {
+    width: 100%;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 10px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--ink-2);
+    transition: background 100ms ease;
+    text-align: left;
+  }
+  .dropdown-item:hover { background: var(--muted); }
+  .dropdown-item.selected { font-weight: 500; color: var(--ink); }
+  .dropdown-item.selected::after {
+    content: '';
+    margin-left: auto;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--ink);
+    flex-shrink: 0;
+  }
+  .dropdown-item-icon { color: var(--ink-4); display: flex; align-items: center; flex-shrink: 0; }
+  .dropdown-item.selected .dropdown-item-icon { color: var(--ink-2); }
+
+  .dropdown-divider {
+    height: 0.5px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  /* ── Card ── */
+  .card {
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  /* ── Collections ── */
+  .add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    font-family: inherit;
+    transition: background 150ms ease;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .add-row:hover { background: var(--muted); }
+  .add-row-text { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+  .add-row-icon { color: var(--ink-4); display: flex; align-items: center; }
+
+  .empty-note {
+    padding: 9px 12px;
+    font-size: 11px;
+    color: var(--ink-4);
+  }
+
+  /* ── Sharing subcards ── */
+  .subcard {
+    padding: 11px 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .subcard:last-child { border-bottom: none; }
+
+  .subcard-head {
+    margin-bottom: 8px;
+  }
+  .subcard-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+  .subcard-desc {
+    font-size: 11px;
+    color: var(--ink-4);
+    line-height: 1.45;
+    margin-top: 2px;
+  }
+
+  .search-input {
+    width: 100%;
+    height: 30px;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    background: var(--sb);
+    padding: 0 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 150ms ease;
+  }
+  .search-input::placeholder { color: var(--ink-4); }
+  .search-input:focus { border-color: var(--ink-3); }
+
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 24px; padding: 0 10px;
+    border-radius: 6px; border: 0.5px solid var(--border);
+    background: var(--sb); font-size: 11px; font-weight: 500; color: var(--ink-3);
+  }
+  .chip.shared { background: var(--shared-bg); border-color: transparent; color: var(--shared-ink); }
+
+  .link-box {
+    padding: 8px 10px;
+    border: 0.5px dashed hsl(22, 28%, 78%);
+    border-radius: 6px;
+    background: hsl(22, 40%, 97%);
+    font-size: 11px;
+    color: var(--ink-3);
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+
+  .action-row { display: flex; gap: 6px; }
+
+  .action-btn {
+    height: 28px; padding: 0 10px;
+    border: 0.5px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--ink-3);
+    font-size: 11px; font-weight: 500; font-family: inherit; cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .action-btn:hover { background: var(--muted); color: var(--ink); }
+  .action-btn.primary { background: var(--cursor); border-color: var(--cursor); color: var(--sb); }
+  .action-btn.primary:hover { opacity: 0.9; }
+  .action-btn:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+
+  /* ── Export ── */
+  /* preview link actions */
+  .link-action-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .link-action-btn {
+    height: 28px; padding: 0 10px;
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 0.5px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--ink-3);
+    font-size: 11px; font-weight: 500; font-family: inherit; cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+  }
+  .link-action-btn:hover { background: var(--muted); color: var(--ink); }
+  .link-action-btn.ghost {
+    background: transparent; border-color: transparent; color: var(--ink-4);
+  }
+  .link-action-btn.ghost:hover { color: var(--ink); background: transparent; }
+
+  /* ── Spellcheck toggle row ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .toggle-row:last-of-type { border-bottom: none; }
+  .toggle-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+  }
+
+  /* CSS toggle switch */
+  .toggle-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    border-radius: 20px;
+    background: var(--border);
+    cursor: pointer;
+    transition: background 200ms ease;
+  }
+  .toggle-switch input:checked ~ .toggle-track { background: var(--ink); }
+  .toggle-thumb {
+    position: absolute;
+    width: 16px; height: 16px;
+    top: 2px; left: 2px;
+    border-radius: 50%;
+    background: white;
+    pointer-events: none;
+    transition: transform 200ms ease;
+    box-shadow: 0 1px 3px hsla(25,18%,12%,0.15);
+  }
+  .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(14px); }
+
+  .spell-hint {
+    padding: 0 12px 10px;
+    font-size: 11px;
+    color: var(--ink-4);
+    line-height: 1.5;
+  }
+  .spell-hint strong { color: var(--ink-3); font-weight: 600; }
+
+  /* ── Info ── */
+  .info-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 12px;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { font-size: 12px; color: var(--ink-4); }
+  .info-value { font-size: 12px; font-weight: 500; color: var(--ink-2); }
+
+  /* ── Notes column ── */
+  .notes { max-width: 340px; padding-top: 28px; }
+  .notes h2 {
+    font-family: "Lora", Georgia, serif;
+    font-size: 16px; font-weight: 500;
+    color: var(--ink); margin-bottom: 20px;
+  }
+  .note { padding: 12px 0; border-bottom: 0.5px solid var(--border); }
+  .note:first-of-type { border-top: 0.5px solid var(--border); }
+  .note-tag {
+    display: inline-block;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--cursor); margin-bottom: 4px;
+  }
+  .note-tag.removed { color: hsl(0, 52%, 42%); }
+  .note-tag.changed { color: hsl(220, 40%, 42%); }
+  .note-tag.new { color: hsl(140, 40%, 32%); }
+  .note-body { font-size: 13px; color: var(--ink-3); line-height: 1.55; }
+  .note-body strong { color: var(--ink-2); font-weight: 500; }
+  .note-body code {
+    font-family: "SF Mono", "JetBrains Mono", monospace; font-size: 11px;
+    background: var(--muted); padding: 1px 5px; border-radius: 4px; color: var(--ink-3);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── Panel ── -->
+  <div>
+    <p class="col-label">Redesigned panel</p>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Properties</span>
+        <button class="icon-btn" aria-label="Close">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="panel-body">
+
+        <!-- STATUS -->
+        <section class="section" id="status-section">
+          <span class="section-label">Status</span>
+          <button class="dropdown-trigger" id="status-trigger" onclick="toggleDropdown('status')">
+            <span class="trigger-icon" id="status-icon">
+              <!-- Circle (draft icon) -->
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/></svg>
+            </span>
+            <span class="trigger-label" id="status-label">Draft</span>
+            <span class="trigger-chevron">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </button>
+          <div class="dropdown-popover" id="status-popover">
+            <button class="dropdown-item" onclick="selectStatus('new', this)">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="3.5 2.5"><circle cx="12" cy="12" r="10"/></svg>
+              </span>
+              New
+            </button>
+            <button class="dropdown-item" onclick="selectStatus('exploring', this)">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
+              </span>
+              Exploring
+            </button>
+            <button class="dropdown-item selected" onclick="selectStatus('draft', this)">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/></svg>
+              </span>
+              Draft
+            </button>
+            <button class="dropdown-item" onclick="selectStatus('done', this)">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-5"/></svg>
+              </span>
+              Done
+            </button>
+          </div>
+        </section>
+
+        <!-- COLLECTIONS -->
+        <section class="section">
+          <span class="section-label">Collections</span>
+          <div class="card">
+            <button class="add-row">
+              <span class="add-row-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              </span>
+              <span class="add-row-text">Add to collections</span>
+            </button>
+            <p class="empty-note">No collections assigned yet.</p>
+          </div>
+        </section>
+
+        <!-- SHARING -->
+        <section class="section">
+          <span class="section-label">Sharing</span>
+          <div class="card">
+
+            <!-- People on Odessay -->
+            <div class="subcard">
+              <div class="subcard-head">
+                <p class="subcard-title">People</p>
+                <p class="subcard-desc">Invite Odessay users to read or respond.</p>
+              </div>
+              <input class="search-input" type="text" placeholder="Search by name or username…" />
+              <!-- Example shared state (uncomment to preview):
+              <div class="chip-row">
+                <span class="chip shared">Ana · can read</span>
+                <span class="chip">Diego · can respond</span>
+              </div>
+              -->
+            </div>
+
+            <!-- Preview link — anyone -->
+            <div class="subcard">
+              <div class="subcard-head">
+                <p class="subcard-title">Preview link</p>
+                <p class="subcard-desc">Share with anyone — no Odessay account needed.</p>
+              </div>
+              <!-- State: no link -->
+              <div id="link-state-empty">
+                <button class="action-btn" style="width:100%;justify-content:center;background:var(--ink);border-color:var(--ink);color:var(--sb);" onclick="generateLink()">Generate link</button>
+              </div>
+              <!-- State: link active -->
+              <div id="link-state-active" style="display:none;">
+                <div class="link-box">odessay.app/preview/t/7ks9f29s2kx8...</div>
+                <div class="link-action-row">
+                  <button class="link-action-btn" title="Copy link">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                  </button>
+                  <button class="link-action-btn" title="Regenerate link">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    Regenerate
+                  </button>
+                  <button class="link-action-btn ghost" title="Revoke link" onclick="revokeLink()">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- EXPORT -->
+        <section class="section" id="export-section">
+          <span class="section-label">Export</span>
+          <button class="dropdown-trigger" id="export-trigger" onclick="toggleDropdown('export')">
+            <span class="trigger-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 12-4-4m4 4 4-4"/><path d="M2 17l.621 2.485A2 2 0 0 0 4.561 21h14.878a2 2 0 0 0 1.94-1.515L22 17"/></svg>
+            </span>
+            <span class="trigger-label">Export as…</span>
+            <span class="trigger-chevron">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </button>
+          <div class="dropdown-popover" id="export-popover">
+            <button class="dropdown-item" onclick="closeDropdown('export')">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </span>
+              Markdown (.md)
+            </button>
+            <button class="dropdown-item" onclick="closeDropdown('export')">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </span>
+              PDF (.pdf)
+            </button>
+            <button class="dropdown-item" onclick="closeDropdown('export')">
+              <span class="dropdown-item-icon">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </span>
+              Word (.docx)
+            </button>
+            <div class="dropdown-divider"></div>
+            <p style="padding:6px 10px 4px;font-size:10px;color:var(--ink-4);line-height:1.4;">Markdown is local. PDF and Word require a saved writing.</p>
+          </div>
+        </section>
+
+        <!-- SPELLCHECK -->
+        <section class="section">
+          <span class="section-label">Spellcheck</span>
+          <div class="card">
+            <div class="toggle-row">
+              <span class="toggle-label">Enable</span>
+              <label class="toggle-switch">
+                <input type="checkbox" checked onchange="this.parentElement.parentElement.nextElementSibling.style.display = this.checked ? '' : 'none'">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+            <p class="spell-hint">Language hint: <strong>es-MX</strong>. Safari uses macOS Keyboard settings; Chrome and Edge use browser dictionaries.</p>
+          </div>
+        </section>
+
+        <!-- INFO -->
+        <section class="section">
+          <span class="section-label">Info</span>
+          <div class="card">
+            <div class="info-row"><span class="info-label">Words</span><span class="info-value">1,661</span></div>
+            <div class="info-row"><span class="info-label">Characters</span><span class="info-value">10,434</span></div>
+            <div class="info-row"><span class="info-label">Sentences</span><span class="info-value">82</span></div>
+            <div class="info-row"><span class="info-label">Reading time</span><span class="info-value">9 min</span></div>
+            <div class="info-row"><span class="info-label">Pages</span><span class="info-value">6.6</span></div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Notes ── -->
+  <div class="notes">
+    <h2>Implementation notes</h2>
+
+    <div class="note">
+      <span class="note-tag removed">Removed</span>
+      <p class="note-body"><strong>PUBLICATION section.</strong> Redundant with the Polish (Sparkles) panel already in the topbar. "Ready to publish" was misleading — it didn't publish, it opened a panel.</p>
+    </div>
+
+    <div class="note">
+      <span class="note-tag changed">Changed — schema</span>
+      <p class="note-body"><strong>STATUS → dropdown.</strong> Add <code>new</code> to <code>WritingStatus</code> + local DB migration. Trigger shows current state with icon + label. Three options: New (dashed circle) / Draft (circle) / Done (circle + check). Closes on selection.</p>
+    </div>
+
+    <div class="note">
+      <span class="note-tag removed">Removed</span>
+      <p class="note-body"><strong>VISIBILITY section.</strong> Public visibility doesn't exist yet in Odessay. Showing the toggle creates confusion — implies a publishing flow that isn't available. Reintroduce when public profiles ship.</p>
+    </div>
+
+    <div class="note">
+      <span class="note-tag changed">Changed</span>
+      <p class="note-body"><strong>SHARING → People + Preview link.</strong> Labels now clarify the distinction: <strong>People</strong> = Odessay users you invite directly. <strong>Preview link</strong> = anyone, no account needed. Same card, two subcards.</p>
+    </div>
+
+    <div class="note">
+      <span class="note-tag changed">Changed</span>
+      <p class="note-body"><strong>EXPORT → dropdown.</strong> Same trigger pattern as Status. "Export as…" opens Markdown / PDF / Word options. Selecting executes immediately. Note about local vs. saved is inside the popover.</p>
+    </div>
+
+    <div class="note">
+      <span class="note-tag changed">Changed</span>
+      <p class="note-body"><strong>SPELLCHECK → toggle.</strong> Replaces the System / Off two-button grid. Single on/off toggle row. Language hint stays as helper text below.</p>
+    </div>
+
+    <div class="note">
+      <span class="note-tag new">Order</span>
+      <p class="note-body">Status → Collections → Sharing → Export → Spellcheck → Info.</p>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  const STATUS_DATA = {
+    new: {
+      label: 'New',
+      icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="3.5 2.5"><circle cx="12" cy="12" r="10"/></svg>`
+    },
+    exploring: {
+      label: 'Exploring',
+      icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>`
+    },
+    draft: {
+      label: 'Draft',
+      icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/></svg>`
+    },
+    done: {
+      label: 'Done',
+      icon: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-5"/></svg>`
+    }
+  };
+
+  function toggleDropdown(id) {
+    const trigger = document.getElementById(id + '-trigger');
+    const popover = document.getElementById(id + '-popover');
+    const isOpen = popover.classList.contains('open');
+    // close all
+    document.querySelectorAll('.dropdown-popover').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('.dropdown-trigger').forEach(t => t.classList.remove('open'));
+    if (!isOpen) {
+      popover.classList.add('open');
+      trigger.classList.add('open');
+    }
+  }
+
+  function closeDropdown(id) {
+    document.getElementById(id + '-popover').classList.remove('open');
+    document.getElementById(id + '-trigger').classList.remove('open');
+  }
+
+  function selectStatus(value, el) {
+    const data = STATUS_DATA[value];
+    document.getElementById('status-icon').innerHTML = data.icon;
+    document.getElementById('status-label').textContent = data.label;
+    document.querySelectorAll('#status-popover .dropdown-item').forEach(i => i.classList.remove('selected'));
+    el.classList.add('selected');
+    closeDropdown('status');
+  }
+
+  function generateLink() {
+    document.getElementById('link-state-empty').style.display = 'none';
+    document.getElementById('link-state-active').style.display = '';
+  }
+  function revokeLink() {
+    document.getElementById('link-state-active').style.display = 'none';
+    document.getElementById('link-state-empty').style.display = '';
+  }
+
+  // Close on outside click
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.dropdown-trigger') && !e.target.closest('.dropdown-popover')) {
+      document.querySelectorAll('.dropdown-popover').forEach(p => p.classList.remove('open'));
+      document.querySelectorAll('.dropdown-trigger').forEach(t => t.classList.remove('open'));
+    }
+  });
+</script>
+</body>
+</html>

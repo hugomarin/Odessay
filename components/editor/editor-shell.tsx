@@ -1407,6 +1407,26 @@ export function EditorShell({ writingId }: EditorShellProps) {
     setPendingRichSelection(null)
   }, [pendingRichSelection])
 
+  const handleFootnoteSelection = useCallback(() => {
+    if (!pendingRichSelection) {
+      return
+    }
+
+    if (modeRef.current === "markdown") {
+      setPendingRichSelection(null)
+      setFootnoteModalOpen(true)
+      return
+    }
+
+    selectionRef.current = {
+      from: pendingRichSelection.from,
+      to: pendingRichSelection.to,
+      text: pendingRichSelection.text,
+    }
+    setPendingRichSelection(null)
+    setFootnoteModalOpen(true)
+  }, [pendingRichSelection])
+
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
       if (!editor || !pendingAnnotation) {
@@ -2500,7 +2520,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 metrics={textMetrics}
                 selectionMetrics={selectionMetrics}
                 saveState={syncStatus}
+                isNotesPanelOpen={activePanel === "notes"}
                 onToggleMode={handleToggleMode}
+                onToggleNotesPanel={() => {
+                  setActivePanel((current) => (current === "notes" ? null : "notes"))
+                }}
               />
             ) : null}
           </div>
@@ -2648,6 +2672,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         position={pendingRichSelection?.popupPosition ?? null}
         onMark={handleMarkSelection}
         onAnnotate={handleAnnotateSelection}
+        onFootnote={handleFootnoteSelection}
         onDismiss={dismissSelectionPopup}
       />
 
