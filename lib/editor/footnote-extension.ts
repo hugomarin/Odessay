@@ -1,4 +1,4 @@
-import { Extension } from "@tiptap/core"
+import { Extension, getMarkRange } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
 
 // ---------------------------------------------------------------------------
@@ -262,8 +262,17 @@ export const FootnoteExtension = Extension.create({
 
           if (!positions.length) return false
 
-          // Delete in reverse order
+          // Delete in reverse order; also remove any highlight mark on the
+          // text immediately preceding each ref (the annotated anchor text).
+          const highlightMarkType = editor.schema.marks.highlight
           for (const { pos, size } of [...positions].reverse()) {
+            if (highlightMarkType) {
+              const $beforeRef = tr.doc.resolve(pos)
+              const range = getMarkRange($beforeRef, highlightMarkType)
+              if (range) {
+                tr.removeMark(range.from, range.to, highlightMarkType)
+              }
+            }
             tr.delete(pos, pos + size)
           }
 

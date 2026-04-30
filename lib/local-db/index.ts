@@ -230,7 +230,7 @@ const openDatabase = () => {
             syncStore.deleteIndex("by-writing-id");
           }
 
-          if (!syncStore.indexNames.contains("by-entity-key") && oldVersion >= 4) {
+          if (!syncStore.indexNames.contains("by-entity-key")) {
             syncStore.createIndex("by-entity-key", "entity_key", { unique: true });
           }
         }

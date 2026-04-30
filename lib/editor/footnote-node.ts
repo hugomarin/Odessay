@@ -19,15 +19,18 @@ function setupMarkdownItRule(md: any) {
         children: { type: string; content: string }[] | null
       }[]
     }) => {
-      // Pass 1: collect all definitions from inline tokens
+      // Pass 1: collect all definitions from inline tokens.
+      // A paragraph may contain multiple definitions separated by \n (one markdown paragraph)
+      // so we iterate over each line rather than matching the whole content at once.
       const definitions = new Map<string, string>()
 
       for (const blockToken of state.tokens) {
         if (blockToken.type !== "inline") continue
-        const content = blockToken.content.trim()
-        const defMatch = FOOTNOTE_DEFINITION_LINE_RE.exec(content)
-        if (defMatch) {
-          definitions.set(defMatch[1], defMatch[2].trim())
+        for (const line of blockToken.content.split("\n")) {
+          const defMatch = FOOTNOTE_DEFINITION_LINE_RE.exec(line.trim())
+          if (defMatch) {
+            definitions.set(defMatch[1], defMatch[2].trim())
+          }
         }
       }
 
@@ -38,12 +41,17 @@ function setupMarkdownItRule(md: any) {
       while (i < state.tokens.length) {
         const token = state.tokens[i]
 
-        // Remove block-level footnote definitions: paragraph_open + inline([^n]: text) + paragraph_close
+        // Remove block-level footnote definitions: paragraph_open + inline([^n]: text) + paragraph_close.
+        // Handle both single-definition paragraphs and multi-definition paragraphs (lines joined by \n).
         if (
           token.type === "paragraph_open" &&
           i + 1 < state.tokens.length &&
           state.tokens[i + 1].type === "inline" &&
-          FOOTNOTE_DEFINITION_LINE_RE.test(state.tokens[i + 1].content.trim())
+          state.tokens[i + 1].content
+            .trim()
+            .split("\n")
+            .filter((l) => l.trim() !== "")
+            .every((l) => FOOTNOTE_DEFINITION_LINE_RE.test(l.trim()))
         ) {
           i += 3
           continue

@@ -14,3 +14,11 @@
 {"ts":"2026-04-24T00:48:49.715Z","issue":"ODE-111","branch":"codex/ode-111-collections-label-model","score":4,"P0":1,"P1":1,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"8c7d566","verdict":"rejected"}
 {"ts":"2026-04-24T01:46:53.323Z","issue":"ODE-110","branch":"codex/ode-110-editor-tabs","score":9,"P0":0,"P1":0,"P2":1,"P3":2,"reviewer":"kimi","verdict":"approved"}
 {"ts":"2026-04-24T21:17:50.804Z","issue":"ODE-114","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"kimi","verdict":"approved","notes":"CI traceability check failed on pre-existing perf flake (keydown p95 barely over budget). Change is a single effect guard with no interaction-path impact. Approved after investigation."}
+{"ts":"2026-04-28T21:30:01.028Z","issue":"ODE-116","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"kimi","verdict":"approved"}
+{"ts":"2026-04-28T22:42:14.464Z","issue":"ODE-117","branch":"codex/ODE-117-batch-shares","score":9.25,"P0":0,"P1":0,"P2":0,"P3":3,"reviewer":"claude-sonnet-4-6","commit":"172189b","verdict":"approved"}
+{"ts":"2026-04-28T23:59:00.307Z","issue":"ODE-118","branch":"codex/ODE-118-local-first-docs","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"dc6ebbd","verdict":"approved"}
+{"ts":"2026-04-29T00:36:43.191Z","issue":"ODE-119","branch":"codex/ode-119-fix-tab-switching-latency","score":9,"P0":0,"P1":0,"P2":0,"P3":4,"reviewer":"claude-sonnet-4-6","commit":"066c6f6","verdict":"approved"}
+{"ts":"2026-04-29T00:59:06.665Z","issue":"ODE-120","branch":"codex/ODE-120-footnote-hydration-fix","score":8,"P0":0,"P1":1,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"62e1dba","verdict":"rejected"}
+{"ts":"2026-04-29T01:06:48.397Z","issue":"ODE-120","branch":"codex/ODE-120-footnote-hydration-fix","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"dcb58e1","verdict":"approved"}
+{"ts":"2026-04-29T01:41:05.917Z","issue":"ODE-121","branch":"codex/ode-121-fix-publication-review-auto-reanalysis","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"657d6e4","verdict":"approved"}
+{"ts":"2026-04-29T02:12:03.036Z","issue":"ODE-122","branch":"feat/ODE-122-inline-publication-decorations","score":9.75,"P0":0,"P1":0,"P2":0,"P3":1,"reviewer":"claude-sonnet-4-6","commit":"fd98124","verdict":"approved"}
