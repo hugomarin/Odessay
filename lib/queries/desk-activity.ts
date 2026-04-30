@@ -1,4 +1,5 @@
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { getWritingStatusLabel, isOpenWritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
@@ -277,14 +278,14 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
 }
 
 const buildHeroDrafts = (writings: WritingMeta[], now: Date): DeskHeroDraft[] => {
-  const drafts = writings.filter((writing) => writing.status === "draft").slice(0, 8)
+  const drafts = writings.filter((writing) => isOpenWritingStatus(writing.status)).slice(0, 8)
 
   return drafts.map((draft, index) => ({
     id: draft.id,
     slug: draft.slug,
     title: draft.title,
     excerpt: draft.excerpt,
-    statusLabel: index === 0 ? "In progress" : "Draft",
+    statusLabel: index === 0 ? "In progress" : getWritingStatusLabel(draft.status),
     updatedLabel: buildDateLabel(draft.updatedAt, now),
     wordCount: draft.wordCount,
     isActive: index === 0,

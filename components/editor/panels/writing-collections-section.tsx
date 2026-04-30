@@ -97,7 +97,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
   return (
     <section className="space-y-2">
       <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Collections</p>
-      <div className="space-y-3 rounded-lg border-[0.5px] border-border bg-bg p-3">
+      <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
         <CollectionAssignmentMenu
           collections={options}
           selectedIds={selectedIds}
@@ -109,7 +109,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
           trigger={
             <button
               type="button"
-              className="inline-flex h-9 items-center gap-2 rounded-[8px] border-[0.5px] border-border px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
+              className="flex h-[37px] w-full items-center gap-2 border-b-[0.5px] border-border px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
             >
               <Tags className="h-3.5 w-3.5" strokeWidth={1.5} />
               {selectedIds.length > 0 ? `Collections (${selectedIds.length})` : "Add to collections"}
@@ -117,18 +117,20 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
           }
         />
 
-        <div className="flex flex-wrap gap-2">
+        <div className="px-3 py-[9px]">
           {selectedIds.length > 0 ? (
-            options
-              .filter((collection) => selectedIds.includes(collection.id))
-              .map((collection) => (
-                <span
-                  key={collection.id}
-                  className="rounded-[13px] border-[0.5px] border-border bg-muted px-2 py-0.5 text-[11px] text-ink-3"
-                >
-                  {collection.name}
-                </span>
-              ))
+            <div className="flex flex-wrap gap-1.5">
+              {options
+                .filter((collection) => selectedIds.includes(collection.id))
+                .map((collection) => (
+                  <span
+                    key={collection.id}
+                    className="rounded-[13px] border-[0.5px] border-border bg-muted px-2 py-0.5 text-[11px] text-ink-3"
+                  >
+                    {collection.name}
+                  </span>
+                ))}
+            </div>
           ) : (
             <p className="text-[11px] text-ink-4">No collections assigned yet.</p>
           )}

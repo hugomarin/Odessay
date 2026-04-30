@@ -2549,13 +2549,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
             ) : activePanel === "properties" ? (
               <PropertiesPanel
                 writingId={currentWritingId}
-                title={displayTitle}
                 status={writingStatus}
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 spellcheckPreference={spellcheckPreference}
                 spellcheckLanguage={spellcheckConfig.language}
-                publicationModeEnabled={isPublicationModeEnabled}
                 onExportMarkdown={exportMarkdown}
                 onExportPdf={() => exportBinary("pdf")}
                 onExportDocx={() => exportBinary("docx")}
@@ -2599,10 +2597,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
                   setSpellcheckPreference(nextPreference)
                   persistEditorSpellcheckPreference(spellcheckScope, nextPreference)
-                }}
-                onTogglePublicationMode={(nextEnabled) => {
-                  setIsPublicationModeEnabled(nextEnabled)
-                  setActivePanel(nextEnabled ? "publication" : null)
                 }}
               />
             ) : (

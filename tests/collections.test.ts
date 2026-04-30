@@ -30,7 +30,7 @@ const writings: LocalWriting[] = [
     title: "Two",
     body_json: { type: "doc" },
     body_text: "Second",
-    status: "finished",
+    status: "done",
     visibility: "public",
     version: 1,
     sync_status: "synced",

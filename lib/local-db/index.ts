@@ -15,6 +15,7 @@ import {
   type WritingLifecycle,
   type WritingListFilters,
 } from "@/lib/local-db/schema";
+import { normalizeWritingStatus } from "@/lib/writings/status";
 import { filterWritings, sortWritings } from "@/lib/local-db/writings";
 
 type LocalDB = {
@@ -332,6 +333,66 @@ const openDatabase = () => {
                 entity_id: entityId,
                 entity_key: createEntityKey("writing", entityId),
               });
+            }
+
+            result.continue();
+          };
+        }
+      }
+
+      if (oldVersion > 0 && oldVersion < 9) {
+        const transaction = request.transaction;
+
+        if (transaction && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writings);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const writing = result.value as LocalWriting;
+            const nextStatus = normalizeWritingStatus(writing.status);
+
+            if (writing.status !== nextStatus) {
+              result.update({
+                ...writing,
+                status: nextStatus,
+              });
+            }
+
+            result.continue();
+          };
+        }
+
+        if (transaction && database.objectStoreNames.contains(LOCAL_DB_STORES.syncMutations)) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const mutation = result.value as SyncMutation;
+
+            if (mutation.entity_kind === "writing") {
+              const nextStatus = normalizeWritingStatus(mutation.payload.status);
+
+              if (mutation.payload.status !== nextStatus) {
+                result.update({
+                  ...mutation,
+                  payload: {
+                    ...mutation.payload,
+                    status: nextStatus,
+                  },
+                });
+              }
             }
 
             result.continue();

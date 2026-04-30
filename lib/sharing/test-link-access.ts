@@ -3,6 +3,7 @@ import type { JSONContent } from "@tiptap/core"
 import { z } from "zod"
 import { isTestLinkEmail } from "@/lib/sharing/test-link"
 import { renderWritingBodyHtml } from "@/lib/reading/render-body-html"
+import type { WritingStatus } from "@/lib/writings/status"
 
 type InvitationRow = {
   id: string
@@ -18,7 +19,7 @@ type WritingRow = {
   title: string | null
   body_json: Record<string, unknown>
   body_text: string | null
-  status: "draft" | "finished"
+  status: WritingStatus
   visibility: "private" | "shared" | "public"
   created_at: string
   updated_at: string
@@ -60,7 +61,7 @@ export type PreviewWriting = {
   id: string
   title: string
   bodyHtml: string
-  status: "draft" | "finished"
+  status: WritingStatus
   visibility: "private" | "shared" | "public"
   createdAt: string
   updatedAt: string
