@@ -79,6 +79,40 @@ const getReadableDate = (value: string | null) => {
   }).format(date)
 }
 
+const copyTextWithFallback = async (value: string) => {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value)
+      return true
+    } catch {
+      // Fall through to the selection-based copy path for embedded browsers.
+    }
+  }
+
+  if (typeof document === "undefined") {
+    return false
+  }
+
+  const textarea = document.createElement("textarea")
+  textarea.value = value
+  textarea.setAttribute("readonly", "")
+  textarea.style.position = "fixed"
+  textarea.style.opacity = "0"
+  textarea.style.pointerEvents = "none"
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, value.length)
+
+  try {
+    return document.execCommand("copy")
+  } catch {
+    return false
+  } finally {
+    document.body.removeChild(textarea)
+  }
+}
+
 function WritingStatusIcon({ status, className }: { status: WritingStatus; className?: string }) {
   if (status === "new") {
     return (
@@ -325,17 +359,26 @@ export function PropertiesPanel({
   }, [shareApiPath])
 
   const handleCopyShareLink = useCallback(async () => {
-    if (!shareLink.link || typeof navigator === "undefined" || !navigator.clipboard) {
+    if (!shareLink.link) {
       return
     }
 
-    try {
-      await navigator.clipboard.writeText(shareLink.link)
+    const copied = await copyTextWithFallback(shareLink.link)
+
+    if (copied) {
       setShareFeedback("Preview link copied.")
       setShareError(null)
-    } catch {
-      setShareError("Failed to copy preview link.")
+      return
     }
+
+    if (typeof window !== "undefined") {
+      window.prompt("Copy preview link:", shareLink.link)
+      setShareFeedback("Copy the preview link from the prompt.")
+      setShareError(null)
+      return
+    }
+
+    setShareError("Failed to copy preview link.")
   }, [shareLink.link])
 
   const handleSharesStateChange = useCallback(
@@ -467,12 +510,12 @@ export function PropertiesPanel({
                   <div className="mb-2 break-all rounded-[6px] border-[0.5px] border-dashed border-[hsl(22_28%_78%)] bg-[hsl(22_40%_97%)] px-[10px] py-2 text-[11px] text-ink-3">
                     {shareLink.link}
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1.5">
                     <button
                       type="button"
                       onClick={() => void handleCopyShareLink()}
                       disabled={isSavingShareLink}
-                      className="inline-flex h-7 items-center gap-[5px] rounded-[6px] border-[0.5px] border-border bg-bg px-[10px] text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-7 min-w-0 items-center justify-center gap-[5px] rounded-[6px] border-[0.5px] border-border bg-bg px-[10px] text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <Clipboard className="h-[11px] w-[11px]" strokeWidth={1.5} />
                       Copy
@@ -481,7 +524,7 @@ export function PropertiesPanel({
                       type="button"
                       onClick={() => void handleGenerateShareLink()}
                       disabled={isSavingShareLink}
-                      className="inline-flex h-7 items-center gap-[5px] rounded-[6px] border-[0.5px] border-border bg-bg px-[10px] text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-7 min-w-0 items-center justify-center gap-[5px] rounded-[6px] border-[0.5px] border-border bg-bg px-[10px] text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <RefreshCw className="h-[11px] w-[11px]" strokeWidth={1.5} />
                       Regenerate
@@ -490,10 +533,11 @@ export function PropertiesPanel({
                       type="button"
                       onClick={() => void handleRevokeShareLink()}
                       disabled={isSavingShareLink}
-                      className="inline-flex h-7 items-center gap-[5px] rounded-[6px] px-[10px] text-[11px] font-medium text-ink-4 transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Revoke preview link"
+                      title="Revoke preview link"
                     >
                       <X className="h-[11px] w-[11px]" strokeWidth={1.5} />
-                      Revoke
                     </button>
                   </div>
                 </>
@@ -559,6 +603,8 @@ export function PropertiesPanel({
                 checked={spellcheckEnabled}
                 onCheckedChange={(checked) => onSpellcheckPreferenceChange(checked ? "system" : "off")}
                 aria-label="Enable spellcheck"
+                className="h-5 w-[34px] bg-[hsl(32_22%_88%)] data-[state=checked]:bg-ink data-[state=unchecked]:bg-[hsl(32_22%_88%)]"
+                thumbClassName="h-4 w-4 bg-bg shadow-none data-[state=checked]:translate-x-[14px] data-[state=unchecked]:translate-x-[2px]"
               />
             </div>
             <p className="px-3 pb-[10px] pt-0 text-[11px] leading-[1.5] text-ink-4">
