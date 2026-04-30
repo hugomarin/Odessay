@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Odessay - Desk Restructure Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --bg: hsl(38 12% 98%);
+    --sb: hsl(0 0% 100%);
+    --muted: hsl(38 8% 93%);
+    --muted-h: hsl(38 8% 90%);
+    --border: hsl(38 8% 90%);
+    --ink: hsl(25 18% 10%);
+    --ink-2: hsl(25 12% 22%);
+    --ink-3: hsl(25 10% 38%);
+    --ink-4: hsl(25 8% 52%);
+    --cursor: hsl(22 55% 38%);
+    --shared: hsl(220 40% 92%);
+    --shared-ink: hsl(220 50% 40%);
+    --soft-green: hsl(138 23% 92%);
+    --soft-green-ink: hsl(140 30% 30%);
+    --shadow-float: 0 2px 12px 0 hsla(25, 18%, 12%, 0.06), 0 1px 3px 0 hsla(25, 18%, 12%, 0.04);
+    --shadow-float-md: 0 4px 24px 0 hsla(25, 18%, 12%, 0.08), 0 2px 6px 0 hsla(25, 18%, 12%, 0.04);
+  }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(circle at top right, hsla(38, 25%, 92%, 0.72), transparent 34%),
+      linear-gradient(180deg, hsl(38 15% 97%), var(--bg));
+    color: var(--ink);
+    font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button { font: inherit; }
+
+  .app-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 78px 1fr;
+  }
+
+  .sidebar {
+    background: linear-gradient(180deg, hsl(38 18% 98%), hsl(38 12% 97%));
+    border-right: 0.5px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    padding: 20px 0 14px;
+  }
+
+  .side-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+  }
+
+  .icon-button {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--ink-3);
+    display: grid;
+    place-items: center;
+  }
+
+  .icon-button.primary {
+    background: var(--ink);
+    color: var(--bg);
+    box-shadow: var(--shadow-float);
+  }
+
+  .nav-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .nav-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    color: var(--ink-3);
+    background: transparent;
+    position: relative;
+  }
+
+  .nav-icon.active {
+    background: linear-gradient(180deg, hsl(38 12% 95%), hsl(38 10% 92%));
+    color: var(--ink);
+    box-shadow: inset 0 0 0 0.5px var(--border);
+  }
+
+  .nav-icon.active::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 10px;
+    bottom: 10px;
+    width: 2px;
+    border-radius: 999px;
+    background: var(--cursor);
+  }
+
+  .sidebar-spacer { flex: 1; }
+
+  .sidebar-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--bg);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .workspace {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .topbar {
+    height: 70px;
+    padding: 0 28px 0 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 0.5px solid var(--border);
+    background: color-mix(in srgb, var(--sb) 84%, var(--bg));
+    backdrop-filter: blur(10px);
+  }
+
+  .topbar-title {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .topbar-title h1 {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  .topbar-title p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-4);
+  }
+
+  .ghost-action {
+    height: 32px;
+    padding: 0 14px;
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--ink-3);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+
+  .ghost-action:hover {
+    background: var(--muted);
+    color: var(--ink-2);
+  }
+
+  .content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .hero {
+    padding: 28px 30px 22px;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .hero-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+
+  .section-label {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(220px, 1fr));
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .draft-card,
+  .new-card {
+    min-height: 176px;
+    border-radius: 14px;
+    border: 0.5px solid var(--border);
+    background: linear-gradient(180deg, hsla(0, 0%, 100%, 0.96), hsla(38, 25%, 98%, 0.98));
+    box-shadow: var(--shadow-float);
+    padding: 16px 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .draft-card .state {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--cursor);
+  }
+
+  .draft-card.muted .state { color: var(--ink-4); }
+
+  .draft-card h3,
+  .new-card h3 {
+    margin: 0;
+    font-family: "Lora", serif;
+    font-size: 17px;
+    line-height: 1.28;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .draft-card p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink-3);
+  }
+
+  .draft-card .meta,
+  .new-card .meta {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--ink-4);
+  }
+
+  .new-card {
+    border-style: dashed;
+    background: linear-gradient(180deg, hsla(38, 20%, 98%, 0.76), hsla(38, 20%, 97%, 0.46));
+    justify-content: center;
+    text-align: center;
+    color: var(--ink-4);
+  }
+
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 14px 30px;
+    border-bottom: 0.5px solid var(--border);
+    background: color-mix(in srgb, var(--bg) 84%, white);
+    backdrop-filter: blur(10px);
+  }
+
+  .view-tabs {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 14px;
+    background: linear-gradient(180deg, hsl(38 14% 94%), hsl(38 10% 92%));
+    box-shadow: inset 0 0 0 0.5px var(--border);
+  }
+
+  .view-tab {
+    border: none;
+    background: transparent;
+    color: var(--ink-3);
+    padding: 9px 16px;
+    border-radius: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .view-tab.active {
+    background: var(--sb);
+    color: var(--ink);
+    box-shadow: var(--shadow-float);
+  }
+
+  .count-pill {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: hsl(220 44% 93%);
+    color: var(--shared-ink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .toolbar-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--ink-4);
+  }
+
+  .list-shell { padding-bottom: 36px; }
+  .list-section[hidden] { display: none; }
+
+  .group-label {
+    padding: 18px 30px 10px;
+    border-bottom: 0.5px solid var(--border);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-4);
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) 140px 200px 92px;
+    gap: 18px;
+    align-items: center;
+    padding: 18px 30px;
+    border-bottom: 0.5px solid var(--border);
+    background: transparent;
+  }
+
+  .row:hover { background: hsla(38, 18%, 94%, 0.42); }
+
+  .row-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .row-main h3 {
+    margin: 0;
+    font-family: "Lora", serif;
+    font-size: 17px;
+    line-height: 1.28;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+
+  .row-main p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ink-3);
+    line-height: 1.55;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .collection-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .collection-badge,
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .collection-badge {
+    background: linear-gradient(180deg, hsla(38, 24%, 94%, 0.88), hsla(38, 20%, 92%, 0.88));
+    color: var(--ink-2);
+    box-shadow: inset 0 0 0 0.5px var(--border);
+  }
+
+  .collection-badge svg {
+    width: 12px;
+    height: 12px;
+    color: var(--ink-4);
+  }
+
+  .status-badge.private {
+    background: var(--muted);
+    color: var(--ink-4);
+  }
+
+  .status-badge.shared {
+    background: var(--shared);
+    color: var(--shared-ink);
+  }
+
+  .status-badge.public {
+    background: var(--soft-green);
+    color: var(--soft-green-ink);
+  }
+
+  .recipient {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink-2);
+    min-width: 0;
+  }
+
+  .recipient-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 999px;
+    background: var(--ink-2);
+    color: var(--bg);
+    display: grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .recipient span {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+  }
+
+  .date {
+    text-align: right;
+    font-size: 13px;
+    color: var(--ink-4);
+    white-space: nowrap;
+  }
+
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 30px 18px;
+    font-size: 12px;
+    color: var(--ink-4);
+  }
+
+  @media (max-width: 1180px) {
+    .hero-grid {
+      grid-template-columns: repeat(5, 220px);
+    }
+
+    .row {
+      grid-template-columns: minmax(0, 1.6fr) 120px 170px 80px;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .app-shell { grid-template-columns: 64px 1fr; }
+    .topbar,
+    .hero,
+    .toolbar,
+    .group-label,
+    .row,
+    .legend { padding-left: 20px; padding-right: 20px; }
+
+    .row {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .date { text-align: left; }
+    .toolbar { align-items: flex-start; flex-direction: column; }
+    .hero-head { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="side-rail">
+        <button class="icon-button" aria-label="Collapse sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            <path d="M9 3v18"></path>
+          </svg>
+        </button>
+        <button class="icon-button primary" aria-label="New writing">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+        </button>
+        <button class="icon-button" aria-label="Search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="M20 20l-3.5-3.5"></path>
+          </svg>
+        </button>
+        <div class="nav-stack">
+          <div class="nav-icon active" aria-current="page" title="Desk">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 9.728V16"></path>
+              <path d="M14 9.728V16"></path>
+              <path d="M18 20V4"></path>
+              <path d="m22 11-4-4A7.5 7.5 0 0 1 6 7l-4 4"></path>
+              <path d="M22 16H2"></path>
+              <path d="M6 20V4"></path>
+            </svg>
+          </div>
+          <div class="nav-icon" title="Collections">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 3h4v18H2z"></path>
+              <path d="M7 3h4v18H7z"></path>
+              <path d="M14 3l4 18"></path>
+              <path d="M12 3l4 18"></path>
+              <path d="M2 21h20"></path>
+            </svg>
+          </div>
+          <div class="nav-icon" title="Settings">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06A2 2 0 1 1 4.21 17l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82L4.21 7A2 2 0 0 1 7.04 4.2l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.5h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06A2 2 0 1 1 19.79 7l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.5 1z"></path>
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-avatar">HM</div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1>Desk</h1>
+          <p>Writing activity, shared drafts, and collection context.</p>
+        </div>
+        <button class="ghost-action" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14"></path>
+            <path d="M5 12h14"></path>
+          </svg>
+          New writing
+        </button>
+      </header>
+
+      <div class="content">
+        <section class="hero">
+          <div class="hero-head">
+            <p class="section-label">Open drafts</p>
+          </div>
+          <div class="hero-grid">
+            <article class="draft-card">
+              <span class="state">Current draft</span>
+              <h3>En la repetición de cada semana^1 y y en la</h3>
+              <p>En la repetición de cada semana^1 y y en la repetición de todas las semanas por venir...</p>
+              <div class="meta"><span>Today</span><span>108 words</span></div>
+            </article>
+            <article class="draft-card muted">
+              <span class="state">Draft</span>
+              <h3>9 meses de trabajo. Lancé una app. 2 usuarios</h3>
+              <p>9 meses de trabajo. Lancé una app. 2 usuarios recurrentes. Plop. Hace unos días...</p>
+              <div class="meta"><span>Today</span><span>322 words</span></div>
+            </article>
+            <article class="draft-card muted">
+              <span class="state">Draft</span>
+              <h3>VIII. El valor inicial y los aha moments El</h3>
+              <p>itogai: Decisiones estratégicas para alinear Documento de trabajo. Reunión con...</p>
+              <div class="meta"><span>Mon</span><span>665 words</span></div>
+            </article>
+            <article class="draft-card muted">
+              <span class="state">Draft</span>
+              <h3>itogai Documento Fundacional I. Por qué</h3>
+              <p>itogai Foundational Document. This document is infrastructure, not documentation...</p>
+              <div class="meta"><span>Mon</span><span>7,845 words</span></div>
+            </article>
+            <article class="new-card">
+              <h3>Start a new note</h3>
+              <p style="margin:0;font-size:13px;line-height:1.6;color:var(--ink-4);">Keep the draft rail airy, with no top terracotta border on the cards.</p>
+              <div class="meta"><span>Draft space</span><span>+</span></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="toolbar">
+          <div class="view-tabs" role="tablist" aria-label="Desk views">
+            <button class="view-tab active" type="button" role="tab" aria-selected="true" data-target="mine">
+              My writings
+              <span class="count-pill">38</span>
+            </button>
+            <button class="view-tab" type="button" role="tab" aria-selected="false" data-target="shared">
+              Shared with me
+              <span class="count-pill">6</span>
+            </button>
+          </div>
+          <div class="toolbar-meta">
+            <span>View switch now lives here instead of in the topbar.</span>
+          </div>
+        </section>
+
+        <div class="list-shell">
+          <section class="list-section" id="section-mine">
+            <div class="group-label">Today</div>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>En la repetición de cada semana^1 y y en la</h3>
+                <p>En la repetición de cada semana^1 y y en la repetición de todas las semanas por venir, nos sentimos...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Rituales
+                  </span>
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Process notes
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge private">Private</span></div>
+              <div class="recipient"><span>No recipients yet</span></div>
+              <div class="date">Today</div>
+            </article>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>9 meses de trabajo. Lancé una app. 2 usuarios</h3>
+                <p>9 meses de trabajo. Lancé una app. 2 usuarios recurrentes. Plop. Hace unos días presenté mi...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Founder letters
+                  </span>
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Product diary
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge shared">Shared</span></div>
+              <div class="recipient">
+                <span class="recipient-avatar">AM</span>
+                <span>@ana +1</span>
+              </div>
+              <div class="date">2h ago</div>
+            </article>
+
+            <div class="group-label">This week</div>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>VIII. El valor inicial y los aha moments El</h3>
+                <p>itogai: Decisiones estratégicas para alinear Documento de trabajo. Reunión con Mauricio. Abril...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Strategy
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge private">Private</span></div>
+              <div class="recipient"><span>No recipients yet</span></div>
+              <div class="date">Mon</div>
+            </article>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>itogai Documento Fundacional I. Por qué</h3>
+                <p>itogai Foundational Document. This document is infrastructure, not documentation. It is the fou...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Foundation
+                  </span>
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Public canon
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge public">Public</span></div>
+              <div class="recipient"><span>Published publicly</span></div>
+              <div class="date">Mon</div>
+            </article>
+
+            <div class="legend">Rows show collection badges inline so the list feels less rigid and each writing carries more context.</div>
+          </section>
+
+          <section class="list-section" id="section-shared" hidden>
+            <div class="group-label">Today</div>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>On building slowly, with trust</h3>
+                <p>A shared essay from Sofía about patience, cadence, and correspondence as product strategy...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Shared essays
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge shared">Shared</span></div>
+              <div class="recipient">
+                <span class="recipient-avatar">SC</span>
+                <span>Sofía Cabrera</span>
+              </div>
+              <div class="date">1d</div>
+            </article>
+
+            <div class="group-label">This week</div>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>A note on long-term software taste</h3>
+                <p>Thoughts on interfaces that age well, and why quiet products tend to feel more generous...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Reading queue
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge shared">Shared</span></div>
+              <div class="recipient">
+                <span class="recipient-avatar">MR</span>
+                <span>Mauricio R.</span>
+              </div>
+              <div class="date">3d</div>
+            </article>
+
+            <article class="row">
+              <div class="row-main">
+                <h3>Ritual de revisión para correspondences</h3>
+                <p>Una versión temprana compartida para evaluar estructura, tono y ritmo de respuesta...</p>
+                <div class="collection-badges">
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Shared essays
+                  </span>
+                  <span class="collection-badge">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V7a2 2 0 0 0-2-2h-5"></path><path d="M14 17H7a2 2 0 0 1-2-2V8"></path><path d="M15 2H9a2 2 0 0 0-2 2v4h8V2z"></path><path d="M2 12h20"></path></svg>
+                    Correspondence drafts
+                  </span>
+                </div>
+              </div>
+              <div><span class="status-badge shared">Shared</span></div>
+              <div class="recipient">
+                <span class="recipient-avatar">AL</span>
+                <span>Ana Lucía</span>
+              </div>
+              <div class="date">1w</div>
+            </article>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll(".view-tab"));
+    const sections = {
+      mine: document.getElementById("section-mine"),
+      shared: document.getElementById("section-shared"),
+    };
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const target = tab.dataset.target;
+        tabs.forEach((candidate) => {
+          const isActive = candidate === tab;
+          candidate.classList.toggle("active", isActive);
+          candidate.setAttribute("aria-selected", String(isActive));
+        });
+        sections.mine.hidden = target !== "mine";
+        sections.shared.hidden = target !== "shared";
+      });
+    });
+  </script>
+</body>
+</html>
