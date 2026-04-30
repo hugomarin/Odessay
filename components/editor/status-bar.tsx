@@ -1,3 +1,5 @@
+"use client"
+
 import { memo } from "react"
 import { AlignLeft } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
