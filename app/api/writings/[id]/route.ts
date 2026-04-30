@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { normalizeWritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status";
 
 const writingPayloadSchema = z.object({
   title: z.string().nullable().optional(),
   body_json: z.record(z.string(), z.unknown()),
   body_text: z.string(),
   slug: z.string().nullable().optional(),
-  status: z.enum(["draft", "finished"]).default("draft"),
+  status: z.enum([...WRITING_STATUS_VALUES, "finished"]).default("draft"),
   visibility: z.enum(["private", "shared", "public"]).default("private"),
   parent_id: z.string().uuid().nullable().optional(),
   correspondence_id: z.string().uuid().nullable().optional(),
@@ -111,7 +112,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     id,
     author_id: userId,
     ...parsed.data,
-    status: parsed.data.status ?? "draft",
+    status: normalizeWritingStatus(parsed.data.status),
     visibility,
   };
 

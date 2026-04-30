@@ -1,5 +1,6 @@
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import { normalizeWritingStatus } from "@/lib/writings/status"
 
 type ApiEnvelope<T> = {
   data: T
@@ -13,7 +14,7 @@ export type RemoteWritingRecord = {
   body_json: Record<string, unknown> | null
   body_text: string | null
   slug: string | null
-  status: WritingStatus | null
+  status: WritingStatus | "finished" | null
   visibility: WritingVisibility | null
   parent_id: string | null
   correspondence_id: string | null
@@ -45,9 +46,6 @@ const normalizeVersion = (value: number | null | undefined) => {
 
   return value as number
 }
-
-const normalizeStatus = (value: string | null | undefined): WritingStatus =>
-  value === "finished" ? "finished" : "draft"
 
 const normalizeVisibility = (value: string | null | undefined): WritingVisibility =>
   value === "shared" || value === "public" ? value : "private"
@@ -91,7 +89,7 @@ export const mapRemoteWritingToLocal = (remoteWriting: RemoteWritingRecord): Loc
     body_json: normalizeBodyJson(remoteWriting.body_json),
     body_text: remoteWriting.body_text ?? "",
     slug: remoteWriting.slug ?? null,
-    status: normalizeStatus(remoteWriting.status),
+    status: normalizeWritingStatus(remoteWriting.status),
     visibility: normalizeVisibility(remoteWriting.visibility),
     parent_id: remoteWriting.parent_id ?? null,
     correspondence_id: remoteWriting.correspondence_id ?? null,

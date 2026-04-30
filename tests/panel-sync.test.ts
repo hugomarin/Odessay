@@ -30,11 +30,11 @@ describe("panel sync integration", () => {
 
     const result = applyPanelMetaChange(
       { commands: { setContent: vi.fn() } },
-      { status: "finished" },
+      { status: "done" },
       { persistSnapshot },
     )
 
     expect(result).toBe(true)
-    expect(persistSnapshot).toHaveBeenCalledWith({ status: "finished" })
+    expect(persistSnapshot).toHaveBeenCalledWith({ status: "done" })
   })
 })

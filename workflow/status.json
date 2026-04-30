@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-04-28",
+    "last_updated": "2026-04-30",
     "active_phase": {
         "name": "Fase 2 — Compartir y leer",
         "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
         "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
     },
     "built": [
+        {
+            "what": "Restructure the Properties panel to match the approved mockup: remove Publication and Visibility from the rendered UI, replace binary status buttons with a four-state dropdown (new/exploring/draft/done), regroup Sharing into People + Preview link subcards, switch Export to a dropdown, simplify Spellcheck into a single toggle row, and keep Collections/Info aligned to the new order. Extend writing status across local DB + Supabase with a migration from finished -> done, add IndexedDB migration coverage plus shared status helpers, and update downstream labels/queries/tests so open-writing surfaces treat new/exploring/draft as active work while done remains closed.",
+            "phase": "Fase 3",
+            "issue": "ODE-125",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-125/restructure-properties-panel-per-approved-mockup",
+            "commit": "4b9df98",
+            "date": "2026-04-30",
+            "notes": "Validation in green: ./node_modules/.bin/tsc --noEmit, ./node_modules/.bin/next lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), ./node_modules/.bin/vitest run (35 files, 213 tests). Performance contract: not required — UI/schema refactor on existing panel, no new critical-path rendering or fetch work. Presentation contract: not required — editor chrome only, no cross-mode rich-text rendering contract changed. Browser verification completed on /perf/editor-harness with Playwright MCP: Properties panel opens from topbar, Status dropdown exposes New/Exploring/Draft/Done and updates the trigger, Export dropdown shows three formats plus helper note, Spellcheck toggle changes state. Limitation: the harness runs without an authenticated session and uses non-UUID writingId perf-harness-writing, so People/Preview-link network flows return existing 401/400 errors in the harness environment rather than exercising the happy path."
+        },
         {
             "what": "Add inline editor decorations for pending publication review suggestions. New PublicationSuggestionExtension uses a ProseMirror plugin with DecorationSet to underline pending suggestion original_text in terracotta wavy. Panel exposes onSuggestionsChange to editor-shell, which syncs decorations when activePanel === 'publication' and mode === 'rich', clearing on close or markdown mode switch. Only first match per suggestion is decorated. Coexists with find-replace decorations.",
             "phase": "Fase 3",

@@ -103,4 +103,10 @@ describe("remote bootstrap merge policy", () => {
 
     expect(local.sync_status).toBe("deleted")
   })
+
+  it("normalizes legacy finished status into done", () => {
+    const local = mapRemoteWritingToLocal(createRemoteWriting({ status: "finished" as const }))
+
+    expect(local.status).toBe("done")
+  })
 })

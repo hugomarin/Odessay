@@ -108,7 +108,7 @@ Editor TipTap limpio. Pantalla completa. Tipografía bella. Sin distracciones. A
 
 ### `/write/{id}` — Editor (writing existente)
 
-Mismo editor, cargando un writing existente. Solo accesible por el autor. Funciona igual para drafts y finished (ambos editables).
+Mismo editor, cargando un writing existente. Solo accesible por el autor. Funciona igual para `new`, `exploring`, `draft` y `done` (todos editables).
 
 ### `/write?reply_to={id}` — Editor como respuesta
 

@@ -33,7 +33,7 @@ El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `
 3. Auto-save local-first: cada cambio se persiste inmediatamente en la base local (SQLite/IndexedDB). El sync a Supabase ocurre en background con debounce de 1.5s. Writing se crea como `draft` + `private`.
 4. Escribe por párrafos. En pausas naturales (fin de párrafo + ~8-15 seg), la AI editor puede intervenir con una observación al margen.
 5. El autor puede descartar la observación o atenderla. Sigue escribiendo.
-6. Cuando quiere, cambia el estado a `finished` y/o ajusta la visibilidad.
+6. Cuando quiere, mueve el writing entre `new`, `exploring`, `draft` y `done`, y/o ajusta la visibilidad.
 7. Desde el editor, puede asignar el writing a una o más collections.
 
 No hay momento de "publicación" dramático. El writing existe desde el primer auto-save. El autor decide cuándo está listo y quién lo ve como acciones separadas, en el momento que quiera.
@@ -42,7 +42,7 @@ No hay momento de "publicación" dramático. El writing existe desde el primer a
 
 ## 3. Publicar / Compartir
 
-Desde el editor o desde `/desk`, el autor cambia la visibilidad de un writing. La visibilidad se puede cambiar en cualquier dirección, en cualquier momento, independiente del estado (draft o finished).
+Desde el editor o desde `/desk`, el autor cambia la visibilidad de un writing. La visibilidad se puede cambiar en cualquier dirección, en cualquier momento, independiente del estado (`new`, `exploring`, `draft` o `done`).
 
 ### Compartir con personas
 1. El autor selecciona "compartir" en un writing.
@@ -93,7 +93,7 @@ Desde el editor o desde `/desk`, el autor cambia la visibilidad de un writing. L
 3. Un writing puede estar en múltiples collections.
 4. Las collections organizan la vista privada en `/desk`.
 5. El autor puede hacer una collection `public` — aparece en `/{username}` como agrupación visible para visitantes.
-6. Puede filtrar writings por estado (draft/finished) y visibilidad (private/shared/public).
+6. Puede filtrar writings por estado (`new`, `exploring`, `draft`, `done`) y visibilidad (private/shared/public).
 
 ---
 

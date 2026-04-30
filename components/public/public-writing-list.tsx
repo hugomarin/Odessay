@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { getWritingStatusLabel, isOpenWritingStatus, type WritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type PublicCollectionListItem = {
@@ -25,7 +26,7 @@ type PublicWritingListItem = {
   bodyText: string
   updatedAt: string
   visibility: "private" | "shared" | "public"
-  status: "draft" | "finished"
+  status: WritingStatus
   slug: string | null
   version: number
 }
@@ -217,8 +218,10 @@ export function PublicWritingList({ username, isOwner, writings, collections }: 
                           {capitalize(writing.visibility)}
                         </span>
                       ) : null}
-                      {isOwner && viewMode === "all" && writing.status === "draft" ? (
-                        <span className="text-[11px] italic text-ink-4 sm:text-[12px]">Draft</span>
+                      {isOwner && viewMode === "all" && isOpenWritingStatus(writing.status) ? (
+                        <span className="text-[11px] italic text-ink-4 sm:text-[12px]">
+                          {getWritingStatusLabel(writing.status)}
+                        </span>
                       ) : null}
                     </div>
                   </Link>

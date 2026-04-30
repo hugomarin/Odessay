@@ -5,6 +5,7 @@ import { AuthorHeader } from "@/components/public/author-header"
 import { PublicWritingList } from "@/components/public/public-writing-list"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import type { WritingStatus } from "@/lib/writings/status"
 
 type PageProps = {
   params: Promise<{ username: string }>
@@ -16,7 +17,7 @@ type WritingRow = {
   body_text: string
   updated_at: string
   visibility: "private" | "shared" | "public"
-  status: "draft" | "finished"
+  status: WritingStatus
   slug: string | null
   version: number
 }

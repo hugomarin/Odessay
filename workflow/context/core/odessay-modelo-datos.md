@@ -34,15 +34,17 @@ auth.users (Supabase Auth)
 Un writing tiene **estado** y **visibilidad** como dimensiones independientes.
 
 **Estado** (fase para el autor):
-- `draft` — En lo que estoy trabajando.
-- `finished` — Lo que ya terminé. Simbólico: el autor considera el texto completo. No impide edición futura (versionamiento vendrá después).
+- `new` — Writing recién creado, todavía sin dirección clara.
+- `exploring` — Etapa temprana de búsqueda o tanteo.
+- `draft` — Writing ya encaminado y en desarrollo activo.
+- `done` — Lo que ya terminé. Simbólico: el autor considera el texto completo. No impide edición futura (versionamiento vendrá después).
 
 **Visibilidad** (quién puede verlo):
 - `private` — Solo el autor.
 - `shared` — El autor + personas específicas listadas en `writing_shares`.
 - `public` — Abierto. Cualquiera con el link.
 
-Todas las combinaciones son válidas. Un draft puede ser shared (trabajo en progreso que comparto). Un finished puede ser private (terminé pero es para mí).
+Todas las combinaciones son válidas. Un draft puede ser shared (trabajo en progreso que comparto). Un done puede ser private (terminé pero es para mí).
 
 ---
 
@@ -96,7 +98,7 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 | body_json | jsonb | not null, default '{}' | **Fuente de verdad.** Contenido TipTap (ProseMirror JSON). No existe `body_markdown` — el Markdown se genera on-demand desde este campo vía `tiptap-markdown` |
 | body_text | text | not null, default '' | Texto plano derivado de `body_json`. Para búsqueda full-text y contexto AI. Nunca editado directamente |
 | slug | text | nullable, unique por author_id | Generado del título. Usado solo en la URL pública `/{username}/{slug}`. Internamente se opera con `id` |
-| status | text | not null, default 'draft' | `draft`, `finished` |
+| status | text | not null, default 'draft' | `new`, `exploring`, `draft`, `done` |
 | visibility | text | not null, default 'private' | `private`, `shared`, `public` |
 | parent_id | uuid | FK → writings, nullable | El writing al que responde. Null = raíz |
 | correspondence_id | uuid | FK → correspondences, nullable | La correspondencia a la que pertenece. Null si no tiene respuestas aún |
@@ -110,7 +112,7 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 
 **Slug:** Se genera automáticamente del título al publicar (visibility → public o shared). Nullable — los drafts no lo necesitan. El slug es único por autor, no global. Internamente todo opera con `id`; el slug solo existe para URLs públicas.
 
-**Edición:** Tanto `draft` como `finished` son editables. El versionamiento se implementará a futuro para rastrear cambios post-publicación.
+**Edición:** Todos los estados (`new`, `exploring`, `draft`, `done`) son editables. El versionamiento se implementará a futuro para rastrear cambios post-publicación.
 
 **Auto-save (local-first):** No hay botón de guardar. El save ocurre en dos pasos desacoplados:
 1. **Local (inmediato, sin debounce):** TipTap emite `onUpdate` → se escribe `body_json` y `body_text` en la base local (SQLite/IndexedDB). El status bar muestra "Saved" — el texto ya está seguro.
