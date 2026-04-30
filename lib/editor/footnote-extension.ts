@@ -212,8 +212,16 @@ export const FootnoteExtension = Extension.create({
           })
           const nextIndex = maxIndex + 1
 
+          // If text is selected, apply highlight so the reference is always
+          // adjacent to its anchor text (enables clean removal on delete).
+          const { from, to } = editor.state.selection
+          const highlightMarkType = editor.schema.marks.highlight
+          if (from !== to && highlightMarkType) {
+            tr.addMark(from, to, highlightMarkType.create())
+          }
+
           // Insert node at end of current selection (without replacing selected text)
-          const insertPos = editor.state.selection.to
+          const insertPos = to
           const nodeType = editor.schema.nodes.footnoteReference
           if (!nodeType) return false
 
@@ -266,9 +274,11 @@ export const FootnoteExtension = Extension.create({
           // text immediately preceding each ref (the annotated anchor text).
           const highlightMarkType = editor.schema.marks.highlight
           for (const { pos, size } of [...positions].reverse()) {
-            if (highlightMarkType) {
-              const $beforeRef = tr.doc.resolve(pos)
-              const range = getMarkRange($beforeRef, highlightMarkType)
+            if (highlightMarkType && pos > 0) {
+              // Resolve one position inside the text before the ref so
+              // getMarkRange reliably finds the mark even at paragraph boundaries.
+              const $inside = tr.doc.resolve(pos - 1)
+              const range = getMarkRange($inside, highlightMarkType)
               if (range) {
                 tr.removeMark(range.from, range.to, highlightMarkType)
               }
