@@ -227,6 +227,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
   const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
   const [version, setVersion] = useState(0)
+  const [richFootnoteRevision, setRichFootnoteRevision] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
   const [writingSlug, setWritingSlug] = useState<string | null>(null)
   const [writingStatus, setWritingStatus] = useState<WritingStatus>("draft")
@@ -1692,6 +1693,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
 
       editor.commands.addFootnote(note)
+      setRichFootnoteRevision((r) => r + 1)
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
       setActivePanel("notes")
@@ -1703,13 +1705,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
   // In Markdown mode, parse from the raw markdown value.
   const footnotes = useMemo(() => {
     if (mode === "rich") {
-      const contentRevision = version
+      const contentRevision = version || richFootnoteRevision
       void contentRevision
       return editor ? getEditorFootnotes(editor) : []
     }
 
     return getMarkdownFootnotes(markdownValue)
-  }, [editor, markdownValue, mode, version])
+  }, [editor, markdownValue, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
   const displayTitle = useMemo(
@@ -2513,6 +2515,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 onAddFootnote={(text) => {
                   if (mode === "rich" && editor) {
                     editor.commands.addFootnote(text)
+                    setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
                   } else {
@@ -2523,6 +2526,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 onUpdateFootnote={(index, text) => {
                   if (mode === "rich" && editor) {
                     editor.commands.updateFootnote(index, text)
+                    setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
                   } else {
@@ -2533,6 +2537,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 onDeleteFootnote={(index) => {
                   if (mode === "rich" && editor) {
                     editor.commands.deleteFootnote(index)
+                    setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
                   } else {
