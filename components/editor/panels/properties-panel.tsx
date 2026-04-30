@@ -11,7 +11,6 @@ import {
   X,
 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Switch } from "@/components/ui/switch"
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
@@ -60,23 +59,6 @@ const DEFAULT_SHARE_LINK_STATE: ShareLinkState = {
   token: null,
   link: null,
   createdAt: null,
-}
-
-const getReadableDate = (value: string | null) => {
-  if (!value) {
-    return null
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(date)
 }
 
 const copyTextWithFallback = async (value: string) => {
@@ -260,7 +242,6 @@ export function PropertiesPanel({
   const [shareLink, setShareLink] = useState<ShareLinkState>(DEFAULT_SHARE_LINK_STATE)
   const [isLoadingShareLink, setIsLoadingShareLink] = useState(false)
   const [isSavingShareLink, setIsSavingShareLink] = useState(false)
-  const [shareFeedback, setShareFeedback] = useState<string | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
   const [exportFeedback, setExportFeedback] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -271,14 +252,12 @@ export function PropertiesPanel({
   const [exportOpen, setExportOpen] = useState(false)
 
   const shareApiPath = writingId ? `/api/writings/${writingId}/share-test-link` : null
-  const shareLinkCreatedAt = getReadableDate(shareLink.createdAt)
   const spellcheckEnabled = spellcheckPreference !== "off"
 
   const loadShareLink = useCallback(async () => {
     if (!shareApiPath) {
       setShareLink(DEFAULT_SHARE_LINK_STATE)
       setShareError(null)
-      setShareFeedback(null)
       return
     }
 
@@ -313,7 +292,6 @@ export function PropertiesPanel({
 
     setIsSavingShareLink(true)
     setShareError(null)
-    setShareFeedback(null)
 
     try {
       const response = await fetch(shareApiPath, { method: "POST" })
@@ -324,7 +302,6 @@ export function PropertiesPanel({
       }
 
       setShareLink(payload.data)
-      setShareFeedback(payload.data.replacedPrevious ? "Preview link regenerated." : "Preview link generated.")
     } catch (error) {
       setShareError(error instanceof Error ? error.message : "Failed to generate preview link.")
     } finally {
@@ -339,7 +316,6 @@ export function PropertiesPanel({
 
     setIsSavingShareLink(true)
     setShareError(null)
-    setShareFeedback(null)
 
     try {
       const response = await fetch(shareApiPath, { method: "DELETE" })
@@ -350,7 +326,6 @@ export function PropertiesPanel({
       }
 
       setShareLink(DEFAULT_SHARE_LINK_STATE)
-      setShareFeedback(payload.data.revoked ? "Preview link revoked." : "No active preview link to revoke.")
     } catch (error) {
       setShareError(error instanceof Error ? error.message : "Failed to revoke preview link.")
     } finally {
@@ -366,14 +341,12 @@ export function PropertiesPanel({
     const copied = await copyTextWithFallback(shareLink.link)
 
     if (copied) {
-      setShareFeedback("Preview link copied.")
       setShareError(null)
       return
     }
 
     if (typeof window !== "undefined") {
       window.prompt("Copy preview link:", shareLink.link)
-      setShareFeedback("Copy the preview link from the prompt.")
       setShareError(null)
       return
     }
@@ -543,11 +516,7 @@ export function PropertiesPanel({
                 </>
               )}
 
-              {shareLinkCreatedAt && shareLink.active ? (
-                <p className="mt-2 text-[10px] text-ink-4">Generated {shareLinkCreatedAt}</p>
-              ) : null}
               {isLoadingShareLink ? <p className="mt-2 text-[11px] text-ink-4">Loading preview link…</p> : null}
-              {shareFeedback ? <p className="mt-2 text-[11px] text-ink-3">{shareFeedback}</p> : null}
               {shareError ? <p className="mt-2 text-[11px] text-[hsl(0,72%,45%)]">{shareError}</p> : null}
             </div>
           </div>
@@ -599,13 +568,25 @@ export function PropertiesPanel({
           <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
             <div className="flex items-center justify-between gap-3 border-b-[0.5px] border-border px-3 py-[10px]">
               <span className="text-[12px] font-medium text-ink-2">Enable</span>
-              <Switch
-                checked={spellcheckEnabled}
-                onCheckedChange={(checked) => onSpellcheckPreferenceChange(checked ? "system" : "off")}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={spellcheckEnabled}
                 aria-label="Enable spellcheck"
-                className="h-5 w-[34px] bg-[hsl(32_22%_88%)] data-[state=checked]:bg-ink data-[state=unchecked]:bg-[hsl(32_22%_88%)]"
-                thumbClassName="h-4 w-4 bg-bg shadow-none data-[state=checked]:translate-x-[14px] data-[state=unchecked]:translate-x-[2px]"
-              />
+                onClick={() => onSpellcheckPreferenceChange(spellcheckEnabled ? "off" : "system")}
+                className={cn(
+                  "relative inline-flex h-[18px] w-8 shrink-0 items-center rounded-full border border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+                  spellcheckEnabled ? "bg-ink" : "bg-[hsl(32_20%_86%)]",
+                )}
+              >
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "pointer-events-none absolute top-0.5 h-[14px] w-[14px] rounded-full bg-bg transition-transform",
+                    spellcheckEnabled ? "translate-x-[15px]" : "translate-x-[2px]",
+                  )}
+                />
+              </button>
             </div>
             <p className="px-3 pb-[10px] pt-0 text-[11px] leading-[1.5] text-ink-4">
               Language hint: <span className="font-semibold text-ink-3">{spellcheckLanguage}</span>. Safari uses macOS Keyboard settings; Chrome and Edge use browser dictionaries.
