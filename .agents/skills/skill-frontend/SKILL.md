@@ -281,6 +281,133 @@ window.history.replaceState(null, '', `/write/${writingId}`)
 
 ---
 
+## Consistencia transicional — reglas no negociables para UI local-first
+
+En interfaces local-first, el riesgo principal no es "tener mucho estado", sino permitir que una misma transición sea gobernada por varios owners a la vez. Tabs, route, hydration, localDB y sync remoto pueden co-own una transición crítica. Eso deja puntos ciegos en estados intermedios: el sistema puede recuperarse después de un re-render, pero aun así haber pasado por estados inválidos visibles para el usuario.
+
+Estas reglas son criterios de arquitectura, no optimizaciones opcionales.
+
+### Owner único por transición crítica
+
+Cada transición que cambie el estado observable de la UI debe tener un único owner. No puede haber dos mecanismos distintos que decidan, en paralelo o en secuencia desordenada, cuál es el nuevo estado.
+
+```tsx
+// ✗ INCORRECTO — transición co-owned: router y estado local deciden quién controla
+router.push(`/write/${id}`)           // owner 1: navegación
+setActiveWritingId(id)                // owner 2: estado local
+// El orden de resolución depende del event loop y del framework.
+
+// ✓ CORRECTO — un solo owner (estado local), la URL es espejo pasivo
+setActiveWritingId(id)                // owner único
+window.history.replaceState(null, '', `/write/${id}`)  // espejo, sin decisión
+```
+
+**Transiciones críticas en Odessay:**
+- Cambio de pestaña en el editor
+- Creación de un nuevo writing desde "New writing"
+- Cierre de pestaña con persistencia de estado
+- Cambio de panel activo en el editor
+- Hidratación inicial del editor desde ruta
+
+### Una fuente de verdad por dimensión de estado
+
+No mezclar dimensiones de estado en un mismo store ni replicar la misma dimensión en múltiples lugares.
+
+| Dimensión | Fuente de verdad | Qué NO hacer |
+|---|---|---|
+| Identidad del writing activo | `currentWritingIdRef` o estado local del editor | Replicar en URL, Zustand y localDB simultáneamente |
+| Contenido del documento | TipTap internal state | Sincronizar a store global por keystroke |
+| Lista de pestañas abiertas | Estado local del editor-shell | Derivar del historial de navegación |
+| Estado de sync remoto | Zustand sync slice | Leer directamente desde componentes de UI sin selector |
+
+```tsx
+// ✗ INCORRECTO — dos fuentes de verdad para la misma dimensión
+const [writingId, setWritingId] = useState(params.id)   // fuente A
+const currentId = useEditorStore(s => s.writingId)       // fuente B
+
+// ✓ CORRECTO — una sola fuente, los demás consumen de ella
+const currentWritingIdRef = useRef(params.id)            // fuente única
+// Los efectos y handlers leen currentWritingIdRef.current,
+// nunca un snapshot de estado que pueda estar stale.
+```
+
+### Estados intermedios explícitos, no guards inferidos
+
+Si una transición pasa por un estado intermedio observable, ese estado debe estar modelado explícitamente. No usar `if (x && y && !z)` como proxy de un estado intermedio.
+
+```tsx
+// ✗ INCORRECTO — estado intermedio escondido en guards
+if (editor && writingId && !isHydrating) {
+  editor.commands.setContent(content)
+}
+// ¿Qué pasa si isHydrating cambia antes de que setContent termine?
+// ¿Qué pasa si writingId cambia entre el guard y la ejecución?
+
+// ✓ CORRECTO — estado intermedio modelado con semáforo explícito
+const [hydrationPhase, setHydrationPhase] = useState<
+  'idle' | 'loading' | 'ready' | 'error'
+>('idle')
+// La transición es: idle → loading → ready
+// Cada fase tiene un handler único y un cleanup explícito.
+```
+
+### Prohibición de crear identidad en el hot path
+
+Nunca generar un UUID, crear un registro en localDB ni disparar cualquier efecto secundario de persistencia dentro del handler síncrono de `input`, `paste` o `click`.
+
+```tsx
+// ✗ INCORRECTO — identidad creada en el hot path de paste
+function handlePaste(e) {
+  const id = crypto.randomUUID()      // bloquea el hilo principal
+  localDB.writings.save({ id, ... })  // IndexedDB transaction en paste
+  setWritingId(id)
+  // El usuario ve un freeze de 50-200ms en el paste.
+}
+
+// ✓ CORRECTO — identidad creada antes de que el usuario interactúe
+// El efecto de inicialización genera el UUID cuando el componente monta,
+// no cuando llega el evento de input.
+useEffect(() => {
+  if (!currentWritingIdRef.current) {
+    const id = crypto.randomUUID()
+    currentWritingIdRef.current = id
+    localDB.writings.save({ id, body_json: emptyDoc, ... })
+  }
+}, [])
+// El paste solo actualiza el contenido — la identidad ya existe.
+```
+
+### Prohibición de mezclar mecanismos de navegación/estado
+
+No combinar `router.push()`, `window.history.replaceState()`, `setState` local y updates de Zustand para lograr el mismo cambio de vista. Elegir una capa coordinadora única.
+
+```tsx
+// ✗ INCORRECTO — cuatro mecanismos para una sola transición
+router.push(`/write/${id}`)           // navegación
+setActiveWritingId(id)                // estado local
+useWritingStore.getState().setId(id)  // Zustand
+window.history.replaceState(...)      // history manual
+
+// ✓ CORRECTO — capa coordinadora única (editor-shell state)
+// El editor-shell tiene un único handler: handleSelectWorkspaceTab(id)
+// Ese handler actualiza el estado local, y opcionalmente el history.
+// Nada más. Ningún otro componente toca la navegación.
+```
+
+### Validar transiciones: el checklist de cinco puntos
+
+Antes de mergear cualquier PR que toque una transición crítica, verificar:
+
+1. **Inicio:** ¿Quién dispara la transición? ¿Es el único trigger?
+2. **Estado intermedio observable:** ¿Hay un estado entre inicio y final que el usuario pueda ver? ¿Está modelado?
+3. **Estado final:** ¿Cuál es el estado final garantizado? ¿Qué pasa si la transición se interrumpe?
+4. **Interrupciones:** ¿Qué pasa si ocurre un tab switch, rehidratación, sync tardío o cambio de scope en medio de la transición?
+5. **Tests:** ¿El test cubre el estado intermedio, o solo el estado final? Un test que solo verifica "al final está bien" no detecta flicker ni corrupción transitoria.
+
+**Referencia:** `workflow/context/features/odessay-sync.md` — caso de estudio del editor (cambio de pestañas) y reglas de validación de transiciones.
+
+---
+
 ## Nomenclatura semántica de componentes
 
 ### Regla general
