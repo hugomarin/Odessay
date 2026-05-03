@@ -30,7 +30,7 @@
             "phase": "Fase 3",
             "issue": "ODE-126",
             "linear_url": "https://linear.app/z9ne/issue/ODE-126",
-            "commit": null,
+            "commit": "7e5dd67",
             "date": "2026-05-03",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (252 tests). Playwright: write-new-first-paste.e2e.ts (1/1 passed), write-transient-race.e2e.ts (1/1 passed). Performance contract: required — trace captured at artifacts/perf/write-new-trace.json.gz; perf gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/write-new-trace.json.gz with 14 pass, 0 warn, 1 skip, 0 required_failures. Scope: components/editor/editor-shell.tsx, lib/editor/hydration-session.ts, lib/stores/editor-session-store.ts, lib/local-db/index.ts, app/perf/write-new-harness/page.tsx, tests/editor-hydration-session.test.ts, tests/editor-session-store.test.ts, tests/playwright/write-transient-race.e2e.ts, tests/playwright/write-new-first-paste.e2e.ts (new)."
         },
