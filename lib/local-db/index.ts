@@ -141,7 +141,19 @@ export const setLocalDBScope = (scope?: LocalDBScope) => {
   }
 
   currentScope = nextScope;
-  resetDatabaseHandle();
+  dbPromise = null;
+
+  if (databaseInstance) {
+    const oldInstance = databaseInstance;
+    databaseInstance = null;
+    // Defer close so in-flight transactions on the old instance can complete.
+    // IndexedDB transactions auto-commit at the end of the current task;
+    // scheduling close for the next macrotask avoids aborting active work.
+    setTimeout(() => {
+      oldInstance.close();
+    }, 0);
+  }
+
   scopeListeners.forEach((listener) => listener(nextScope));
 };
 

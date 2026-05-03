@@ -108,4 +108,19 @@ describe("editorSessionStore", () => {
       "writing-3",
     ]);
   });
+
+  it("replaces the draft tab when opening a writing with replaceDraft", async () => {
+    await initializeEditorSessionStore();
+    openDraftTab();
+    openWritingTab({
+      writingId: "writing-6",
+      title: "Sixth draft",
+      replaceDraft: true,
+    });
+
+    const session = getEditorSessionState().session;
+    expect(session.active_tab_id).toBe("writing-6");
+    expect(session.tabs.some((tab) => tab.id === EDITOR_DRAFT_TAB_ID)).toBe(false);
+    expect(session.tabs.at(-1)?.writing_id).toBe("writing-6");
+  });
 });

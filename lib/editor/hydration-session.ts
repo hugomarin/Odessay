@@ -25,3 +25,16 @@ export const resolveExternalWritingLoad = (
 
   return createRouteHydrationSessionState(routeWritingId)
 }
+
+export type BlankDraftIdentity = {
+  writingId: string
+  sessionState: EditorHydrationSessionState
+}
+
+export const createBlankDraftIdentity = (): BlankDraftIdentity => {
+  const writingId = crypto.randomUUID()
+  return {
+    writingId,
+    sessionState: createNewWritingSessionState(writingId),
+  }
+}

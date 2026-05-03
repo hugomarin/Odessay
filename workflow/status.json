@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-04-30",
+    "last_updated": "2026-05-03",
     "active_phase": {
         "name": "Fase 2 — Compartir y leer",
         "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
         "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
     },
     "built": [
+        {
+            "what": "Fix blank /write first-paste race so new writings get stable identity before input. Eager identity creation effect in editor-shell generates a writingId, saves an empty local writing, and replaces the draft tab before any user input reaches persistEditorSnapshot. persistEditorSnapshot now reads currentWritingIdRef.current instead of the state closure to eliminate stale-ID races. localDB scope changes defer IndexedDB close via setTimeout so in-flight transactions complete before the handle is reset. Perf harnesses use window.history.replaceState instead of router.replace to avoid auth-gated navigation. Added createBlankDraftIdentity to hydration-session.ts, updated unit tests for hydration session and session store, and added Playwright E2E coverage for the first-paste flow.",
+            "phase": "Fase 3",
+            "issue": "ODE-126",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-126",
+            "commit": "7e5dd67",
+            "date": "2026-05-03",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (252 tests). Playwright: write-new-first-paste.e2e.ts (1/1 passed), write-transient-race.e2e.ts (1/1 passed). Performance contract: required — trace captured at artifacts/perf/write-new-trace.json.gz; perf gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/write-new-trace.json.gz with 14 pass, 0 warn, 1 skip, 0 required_failures. Scope: components/editor/editor-shell.tsx, lib/editor/hydration-session.ts, lib/stores/editor-session-store.ts, lib/local-db/index.ts, app/perf/write-new-harness/page.tsx, tests/editor-hydration-session.test.ts, tests/editor-session-store.test.ts, tests/playwright/write-transient-race.e2e.ts, tests/playwright/write-new-first-paste.e2e.ts (new)."
+        },
         {
             "what": "Restructure the Properties panel to match the approved mockup: remove Publication and Visibility from the rendered UI, replace binary status buttons with a four-state dropdown (new/exploring/draft/done), regroup Sharing into People + Preview link subcards, switch Export to a dropdown, simplify Spellcheck into a single toggle row, and keep Collections/Info aligned to the new order. Extend writing status across local DB + Supabase with a migration from finished -> done, add IndexedDB migration coverage plus shared status helpers, and update downstream labels/queries/tests so open-writing surfaces treat new/exploring/draft as active work while done remains closed.",
             "phase": "Fase 3",
