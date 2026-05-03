@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Define transition-consistency rules for local-first UI in skill-frontend and skill-code-review skills, and extend odessay-sync.md with the editor tab-switch case study. Adds owner-unique rule, single-source-of-truth per dimension, explicit intermediate states, hot-path identity prohibition, and unified navigation/state coordinator. Code-review skill gains checklist and red flags for co-owned transitions, unmodeled intermediates, and tests that only cover final state.",
+            "phase": "Fase 2",
+            "issue": "ODE-127",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-127",
+            "commit": "b2cf2dc",
+            "date": "2026-05-03",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx). Performance contract: not required — documentation and review-criteria change, no runtime interaction path modified. Scope: .agents/skills/skill-frontend/SKILL.md (new consistency section), .agents/skills/skill-code-review/SKILL.md (checklist + red flags), workflow/context/features/odessay-sync.md (extension section with case study)."
+        },
+        {
             "what": "Fix blank /write first-paste race so new writings get stable identity before input. Eager identity creation effect in editor-shell generates a writingId, saves an empty local writing, and replaces the draft tab before any user input reaches persistEditorSnapshot. persistEditorSnapshot now reads currentWritingIdRef.current instead of the state closure to eliminate stale-ID races. localDB scope changes defer IndexedDB close via setTimeout so in-flight transactions complete before the handle is reset. Perf harnesses use window.history.replaceState instead of router.replace to avoid auth-gated navigation. Added createBlankDraftIdentity to hydration-session.ts, updated unit tests for hydration session and session store, and added Playwright E2E coverage for the first-paste flow.",
             "phase": "Fase 3",
             "issue": "ODE-126",

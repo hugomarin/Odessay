@@ -339,6 +339,80 @@ En el Desk, cada fila de actividad mostraba shares y metadata obtenidos mediante
 
 ---
 
+---
+
+## Extensión: consistencia transicional en local-first
+
+El principio local-first — *la base local es la fuente de verdad operativa* — no solo aplica al auto-save, al sync y al render path. También aplica a **cómo se gobiernan las transiciones de estado** dentro de la UI.
+
+En una arquitectura local-first, múltiples subsistemas pueden tener acceso simultáneo a los mismos datos: el editor, las pestañas, la ruta, la base local y el sync remoto. Si cada uno puede iniciar una transición sobre la misma dimensión de estado, aparecen estados intermedios inválidos que el usuario ve antes de que el sistema se recupere.
+
+Este documento extiende el modelo local-first con una regla de consistencia transicional, usando el cambio de pestañas en el editor como caso de estudio.
+
+### El problema: transición co-owned
+
+En el editor de Odessay, cambiar de pestaña implica:
+1. Actualizar el `writingId` activo
+2. Leer el contenido del nuevo writing desde `localDB`
+3. Hidratar TipTap con ese contenido
+4. (Opcional) Actualizar la URL como espejo
+
+Cuando el cambio de pestaña se implementó con `router.push()`, la transición tenía **dos owners**: el router de Next.js (que disparaba RSC fetch, re-render del shell y re-hidratación) y el estado local del editor (que también intentaba cargar el writing). El resultado era un estado intermedio donde el shell mostraba la pestaña nueva mientras TipTap aún tenía el contenido de la pestaña anterior, o viceversa, durante 750–1350ms.
+
+El sistema se recuperaba al final, pero el usuario veía un estado inválido en el medio.
+
+### La regla: owner único + fuente de verdad única + estados intermedios explícitos
+
+Aplicar estas tres reglas a cualquier transición que cruce más de un subsistema:
+
+**1. Owner único por transición crítica**
+
+Solo un componente o capa puede iniciar la transición. Los demás reaccionan, no deciden.
+
+En el editor, el owner es el `editor-shell`: su `handleSelectWorkspaceTab(id)` es el único lugar donde puede iniciarse un cambio de pestaña. Ni el sidebar, ni la URL, ni un sync remoto pueden forzar un cambio de pestaña directamente.
+
+**2. Fuente de verdad única por dimensión**
+
+La dimensión "writing activo" tiene una sola fuente de verdad: `currentWritingIdRef.current` en el editor-shell. La URL refleja ese valor, pero no lo controla. Zustand no almacena `writingId`. Los paneles no derivan el writing activo de sus props.
+
+**3. Estados intermedios explícitos**
+
+Si entre "decidí cambiar de pestaña" y "TipTap muestra el nuevo contenido" hay un lapso observable, ese lapso debe estar modelado:
+
+```
+idle → switching → loading → ready
+```
+
+- `switching`: el usuario hizo clic, el owner validó, se actualizó la fuente de verdad.
+- `loading`: se leyó `localDB`, se prepara el documento para TipTap.
+- `ready`: TipTap tiene el contenido, el foco está en el editor.
+
+Sin estos estados, el sistema depende de guards implícitos (`if (editor && !isHydrating)`) que pueden evaluarse con valores stale si ocurre una interrupción.
+
+### Caso de estudio: validación de transiciones en el editor
+
+Aplicar el checklist de cinco puntos a la transición "cambio de pestaña":
+
+| Punto | Pregunta | Validación en el editor |
+|---|---|---|
+| Inicio | ¿Quién dispara? ¿Es único? | Solo `handleSelectWorkspaceTab`. No hay `router.push()` paralelo. |
+| Estado intermedio observable | ¿Hay un lapso visible entre inicio y fin? | Sí: lectura de localDB + setContent de TipTap. Modelado como `hydrationPhase`. |
+| Estado final garantizado | ¿Cuál es el estado final? ¿Qué pasa si se interrumpe? | Final: `currentWritingIdRef === id` y `editor.getJSON() === contenido de id`. Si se interrumpe, cleanup pone `hydrationPhase = 'idle'`. |
+| Interrupciones | ¿Qué pasa con tab switch, rehidratación, sync tardío, cambio de scope? | `handleSelectWorkspaceTab` cancela cualquier hidratación en curso antes de iniciar la nueva. `localDB` scope changes se defieren con `setTimeout` para no cortar transacciones en vuelo. |
+| Tests | ¿Cubre estado intermedio o solo final? | Tests de `editor-hydration-session.test.ts` cubren `idle → loading → ready`. Tests E2E de `write-transient-race.e2e.ts` simulan interrupción. |
+
+### Reglas para agentes
+
+1. **Nunca permitir co-ownership de una transición crítica.** Si ves `router.push()` + `setState` + `store.setId()` para el mismo cambio, es un bug de arquitectura, no un bug de timing.
+2. **Nunca modelar un estado intermedio con guards inferidos.** `if (x && y && !z)` es un olor a arquitectura. Reemplazar por estados explícitos con nombres.
+3. **Nunca crear identidad en el hot path.** `input`, `paste` y `click` deben ser handlers puros de UI. La persistencia ocurre en efectos de montaje o en callbacks async separados.
+4. **Nunca mezclar mecanismos de navegación para un mismo cambio.** Elegir una capa coordinadora y hacer que todos los demás sean consumidores pasivos.
+5. **Siempre testear el estado intermedio.** Un test que solo hace `expect(finalState).toBe(expected)` no garantiza que no haya habido flicker o corrupción transitoria.
+
+**Referencia:** `.agents/skills/skill-frontend/SKILL.md` — sección "Consistencia transicional" con ejemplos de código y anti-patrones.
+
+---
+
 ## Lo que este doc NO cubre
 
 - Implementación del endpoint `PATCH /api/writings/{id}` → `.agents/skills/skill-backend/SKILL.md`
