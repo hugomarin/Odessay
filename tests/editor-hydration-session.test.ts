@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
@@ -28,6 +29,18 @@ describe("editor hydration session state", () => {
     })
     expect(resolveExternalWritingLoad("writing-1", null)).toEqual({
       activeWritingId: null,
+      hydrationWritingId: null,
+    })
+  })
+
+  it("creates a blank draft identity with a stable UUID and no hydration", () => {
+    const identity = createBlankDraftIdentity()
+
+    expect(identity.writingId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    )
+    expect(identity.sessionState).toEqual({
+      activeWritingId: identity.writingId,
       hydrationWritingId: null,
     })
   })
