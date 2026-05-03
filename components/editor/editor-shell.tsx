@@ -52,6 +52,7 @@ import {
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
 import {
+  createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
   resolveExternalWritingLoad,
@@ -210,6 +211,9 @@ const createWritingId = () => {
   throw new Error("Unable to generate a UUID for the writing.")
 }
 
+const isPerfHarness = () =>
+  typeof window !== "undefined" && window.location.pathname.startsWith("/perf/")
+
 export function EditorShell({ writingId }: EditorShellProps) {
   const router = useRouter()
   const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
@@ -265,6 +269,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const navigatedToDraftRef = useRef(false)
+  const identityEnsuredRef = useRef(false)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -300,7 +305,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const persistEditorSnapshot = useCallback(
     async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
       const nowIso = new Date().toISOString()
-      const nextId = currentWritingId ?? createWritingId()
+      const activeId = currentWritingIdRef.current
+      const nextId = activeId ?? createWritingId()
       const baseCreatedAt = createdAtRef.current ?? nowIso
       const nextVersion = versionRef.current + 1
       const nextBodyText = editorInstance.getText()
@@ -313,7 +319,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             ? titleRef.current.trim() || UNTITLED_WRITING_TITLE
             : nextDerivedTitle
 
-      if (!currentWritingId) {
+      if (!activeId) {
         const nextWritingSession = createNewWritingSessionState(nextId)
         currentWritingIdRef.current = nextWritingSession.activeWritingId
         setCurrentWritingId(nextWritingSession.activeWritingId)
@@ -321,13 +327,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         if (!routeWritingId && !navigatedToDraftRef.current) {
           navigatedToDraftRef.current = true
-          router.replace(`/write/${nextId}`)
+          if (isPerfHarness()) {
+            window.history.replaceState(null, "", `/write/${nextId}`)
+          } else {
+            router.replace(`/write/${nextId}`)
+          }
         }
       }
 
       setSyncStatus("saving")
 
-      const nextLifecycle = !currentWritingId ? "local-only" : lifecycleRef.current
+      const nextLifecycle = !activeId ? "local-only" : lifecycleRef.current
 
       const nextWriting: LocalWriting = {
         id: nextId,
@@ -360,7 +370,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setSyncStatus(typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving")
       }
     },
-    [currentWritingId, routeWritingId, router],
+    [routeWritingId, router],
   )
 
   const runRichModeUpdateSideEffects = useCallback(
@@ -666,20 +676,91 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [routeWritingId, sessionLoaded])
 
   useEffect(() => {
-    if (!sessionLoaded || routeWritingId) {
+    if (!sessionLoaded || routeWritingId || currentWritingIdRef.current) {
       return
     }
 
     if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
       const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
       if (activeTab?.writing_id) {
-        router.replace(`/write/${activeTab.slug ?? activeTab.writing_id}`)
+        if (isPerfHarness()) {
+          window.history.replaceState(null, "", `/write/${activeTab.slug ?? activeTab.writing_id}`)
+        } else {
+          router.replace(`/write/${activeTab.slug ?? activeTab.writing_id}`)
+        }
         return
       }
     }
 
     openDraftTab()
   }, [editorSession.active_tab_id, editorSession.tabs, routeWritingId, router, sessionLoaded])
+
+  // Eagerly create a stable local identity for blank /write so the first
+  // paste/input never races against identity creation. This is the explicit
+  // owner of the blank-draft -> identified-local-writing transition.
+  useEffect(() => {
+    if (!sessionLoaded || routeWritingId || identityEnsuredRef.current || currentWritingIdRef.current) {
+      return
+    }
+
+    // If the session store already has an active non-draft tab, let the
+    // openDraftTab effect above handle redirection.
+    if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
+      return
+    }
+
+    identityEnsuredRef.current = true
+
+    const ensureIdentity = async () => {
+      const { writingId: nextId } = createBlankDraftIdentity()
+      const nowIso = new Date().toISOString()
+      const nextTitle = deriveAutoTitle("", nowIso)
+
+      try {
+        await localDB.writings.save({
+          id: nextId,
+          title: nextTitle,
+          body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
+          body_text: "",
+          status: "draft",
+          visibility: "private",
+          version: 0,
+          sync_status: "synced",
+          lifecycle: "local-only",
+          created_at: nowIso,
+          updated_at: nowIso,
+          local_updated_at: Date.now(),
+        })
+      } catch {
+        // If the save fails (e.g., scope change in progress), fall back to
+        // the identity-on-first-input path in persistEditorSnapshot.
+        identityEnsuredRef.current = false
+        return
+      }
+
+      openWritingTab({
+        writingId: nextId,
+        title: nextTitle,
+        saveState: "saved",
+        hasPendingSync: false,
+        replaceDraft: true,
+      })
+
+      currentWritingIdRef.current = nextId
+      setCurrentWritingId(nextId)
+      setHydrationWritingId(null)
+      createdAtRef.current = nowIso
+      setCreatedAt(nowIso)
+      navigatedToDraftRef.current = true
+      if (isPerfHarness()) {
+        window.history.replaceState(null, "", `/write/${nextId}`)
+      } else {
+        router.replace(`/write/${nextId}`)
+      }
+    }
+
+    void ensureIdentity()
+  }, [sessionLoaded, routeWritingId, router, editorSession.active_tab_id, editorSession.tabs])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -802,7 +883,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
           setMode("rich")
           window.requestAnimationFrame(() => {
             const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-            if (editorViewport) {
+            const applyViewportScroll = () => {
+              if (!editorViewport) {
+                return
+              }
+
               editorViewport.scrollTop = viewState.scrollTop
               editorViewport.scrollLeft = viewState.scrollLeft
             }
@@ -815,10 +900,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
             ) {
               editor
                 .chain()
-                .focus()
+                .focus(undefined, { scrollIntoView: false })
                 .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
                 .run()
             }
+
+            applyViewportScroll()
+            window.requestAnimationFrame(() => {
+              applyViewportScroll()
+            })
           })
         }
       } else {
