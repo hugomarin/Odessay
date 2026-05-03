@@ -89,6 +89,14 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - [ ] Si es `required`, ¿hay trace + gate report + delivery gate con `OPS_PERF_TRACE_PATH`?
 - [ ] Si es `required`, ¿`required_failures` es `0` y no hay métricas requeridas faltantes?
 
+### Consistencia transicional — verificar tercero (si el PR toca transiciones críticas)
+- [ ] ¿Cada transición crítica tiene un único owner? No hay `router.push()` + `setState` simultáneos para el mismo cambio.
+- [ ] ¿Hay una sola fuente de verdad por dimensión de estado? No se replica `writingId` en URL, Zustand y ref al mismo tiempo.
+- [ ] ¿Los estados intermedios observables están modelados explícitamente? No hay lógica escondida en `if (x && y && !z)`.
+- [ ] ¿Ninguna identidad se crea en el hot path de `input`, `paste` o `click`? Los UUIDs y writes a localDB ocurren antes o después, no en el handler síncrono.
+- [ ] ¿Los tests cubren el estado intermedio, no solo el final? Un test que solo asserta "al final está bien" no detecta flicker transitorio.
+- [ ] ¿Se validaron interrupciones? Tab switch, rehidratación, sync tardío o cambio de scope en medio de la transición.
+
 ### Código
 - [ ] TypeScript estricto. Sin `any`. Sin `@ts-ignore`.
 - [ ] Sin `console.log` residuales (solo `console.error` intencionales).
@@ -163,6 +171,11 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - Usar `router.push()` para cambios de estado interno dentro de una vista funcional (tabs, filtros, paneles).
 - Disparar navegación RSC (`?_rsc=`) para datos que ya están en `localDB`.
 - Implementar tabs, filtros, o paneles como rutas navegables cuando son estado de UI.
+- **Transición co-owned:** dos o más mecanismos (router, estado local, Zustand, refs) deciden el resultado de una misma transición crítica.
+- **Estado intermedio no modelado:** la UI pasa por un estado inválido entre inicio y fin que no está representado explícitamente (ej. contenido de tab A mostrándose mientras el título ya es tab B).
+- **Tests que solo cubren estado final:** no hay assertions sobre estados intermedios ni simulación de interrupciones (tab switch durante carga, rehidratación concurrente, sync tardío).
+- **Identidad creada en hot path:** `crypto.randomUUID()`, `localDB.save()`, o cualquier efecto secundario de persistencia dentro del handler síncrono de `input`, `paste` o `click`.
+- **Múltiples fuentes de verdad para una dimensión:** `writingId` vive simultáneamente en params, estado local, Zustand y refs sin un owner claro.
 
 **Referencias para verificación:**
 - `workflow/context/features/odessay-sync.md` — principio de navegación interna, arquitectura local-first, caso de estudio del editor
