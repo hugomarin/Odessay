@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { FileText, Search } from "lucide-react"
+import { FileText, Search, X } from "lucide-react"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogOverlay,
   DialogPortal,
@@ -257,12 +258,13 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
       <DialogPortal>
         <DialogOverlay />
         <DialogContent
+          hideClose
           className={cn(
             "fixed left-1/2 z-50 grid w-full gap-0 rounded-xl border-[0.5px] border-border bg-sb p-0 font-sans shadow-float-lg outline-none",
             "max-w-[560px] top-[100px] -translate-x-1/2 -translate-y-0"
           )}
         >
-          <div className="flex items-center gap-3 px-4 py-3">
+          <div className="relative flex items-center gap-3 px-4 py-3">
             <Search className="h-[18px] w-[18px] shrink-0 text-ink-4" strokeWidth={1.5} />
             <Input
               ref={inputRef}
@@ -271,6 +273,10 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
               placeholder="Search writings…"
               className="h-9 border-0 bg-transparent px-0 text-[15px] text-ink shadow-none placeholder:text-ink-4 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
+            <DialogClose className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[6px] text-ink-4 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-bg">
+              <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
+              <span className="sr-only">Close</span>
+            </DialogClose>
           </div>
 
           <div className="h-px bg-border" />
