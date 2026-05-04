@@ -7,8 +7,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogOverlay,
-  DialogPortal,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useRecentWritings, type RecentWritingItem } from "@/hooks/useRecentWritings"
@@ -183,6 +181,7 @@ type SearchModalProps = {
 export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const router = useRouter()
   const [query, setQuery] = useState("")
+  const [debouncedQuery, setDebouncedQuery] = useState("")
   const [allWritings, setAllWritings] = useState<LocalWriting[] | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -211,6 +210,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   useEffect(() => {
     if (!open) {
       setQuery("")
+      setDebouncedQuery("")
       setAllWritings(null)
       if (debounceRef.current) {
         clearTimeout(debounceRef.current)
@@ -227,16 +227,16 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
     }
 
     debounceRef.current = setTimeout(() => {
-      // Debounce completed; filtering happens in memo below
+      setDebouncedQuery(value.trim())
     }, 150)
   }, [])
 
   const searchResults = useMemo(() => {
-    if (!query.trim() || !allWritings) {
+    if (!debouncedQuery || !allWritings) {
       return []
     }
-    return filterWritings(allWritings, query.trim())
-  }, [query, allWritings])
+    return filterWritings(allWritings, debouncedQuery)
+  }, [debouncedQuery, allWritings])
 
   const handleSelectRecent = useCallback((item: RecentWritingItem) => {
     router.push(`/write/${item.slug ?? item.writingId}`)
@@ -250,49 +250,46 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
 
   const showSkeleton = isLoading && allWritings === null
   const showRecent = !showSkeleton && !query.trim() && recentWritings.length > 0
-  const showResults = !showSkeleton && query.trim() && searchResults.length > 0
-  const showEmpty = !showSkeleton && query.trim() && searchResults.length === 0
+  const showResults = !showSkeleton && debouncedQuery && searchResults.length > 0
+  const showEmpty = !showSkeleton && debouncedQuery && searchResults.length === 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogPortal>
-        <DialogOverlay />
-        <DialogContent
-          hideClose
-          className={cn(
-            "fixed left-1/2 z-50 grid w-full gap-0 rounded-xl border-[0.5px] border-border bg-sb p-0 font-sans shadow-float-lg outline-none",
-            "max-w-[560px] top-[100px] -translate-x-1/2 -translate-y-0"
+      <DialogContent
+        hideClose
+        className={cn(
+          "fixed left-1/2 z-50 grid w-full gap-0 rounded-xl border-[0.5px] border-border bg-sb p-0 font-sans shadow-float-lg outline-none",
+          "max-w-[560px] top-[100px] -translate-x-1/2 -translate-y-0"
+        )}
+      >
+        <div className="relative flex items-center gap-3 px-4 py-3">
+          <Search className="h-[18px] w-[18px] shrink-0 text-ink-4" strokeWidth={1.5} />
+          <Input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => handleQueryChange(e.target.value)}
+            placeholder="Search writings…"
+            className="h-9 border-0 bg-transparent px-0 text-[15px] text-ink shadow-none placeholder:text-ink-4 focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
+          <DialogClose className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[6px] text-ink-4 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-bg">
+            <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+        </div>
+
+        <div className="h-px bg-border" />
+
+        <div className="max-h-[420px] overflow-y-auto px-1 pb-2">
+          {showSkeleton && <SearchSkeleton />}
+          {showRecent && (
+            <RecentSection items={recentWritings} onSelect={handleSelectRecent} />
           )}
-        >
-          <div className="relative flex items-center gap-3 px-4 py-3">
-            <Search className="h-[18px] w-[18px] shrink-0 text-ink-4" strokeWidth={1.5} />
-            <Input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => handleQueryChange(e.target.value)}
-              placeholder="Search writings…"
-              className="h-9 border-0 bg-transparent px-0 text-[15px] text-ink shadow-none placeholder:text-ink-4 focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-            <DialogClose className="absolute right-0 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[6px] text-ink-4 opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-bg">
-              <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
-              <span className="sr-only">Close</span>
-            </DialogClose>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          <div className="max-h-[420px] overflow-y-auto px-1 pb-2">
-            {showSkeleton && <SearchSkeleton />}
-            {showRecent && (
-              <RecentSection items={recentWritings} onSelect={handleSelectRecent} />
-            )}
-            {showResults && (
-              <ResultsSection results={searchResults} onSelect={handleSelectResult} />
-            )}
-            {showEmpty && <EmptyState query={query.trim()} />}
-          </div>
-        </DialogContent>
-      </DialogPortal>
+          {showResults && (
+            <ResultsSection results={searchResults} onSelect={handleSelectResult} />
+          )}
+          {showEmpty && <EmptyState query={debouncedQuery} />}
+        </div>
+      </DialogContent>
     </Dialog>
   )
 }

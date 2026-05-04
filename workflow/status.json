@@ -30,7 +30,7 @@
             "phase": "Fase 3",
             "issue": "ODE-130",
             "linear_url": "https://linear.app/z9ne/issue/ODE-130",
-            "commit": "84f9027",
+            "commit": "7545ed1",
             "date": "2026-05-04",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings), npm test (263 tests). Performance contract: not required — client-side IndexedDB search with 150ms debounce, no network or rendering budget applicable. Scope: components/navigation/search-modal.tsx (new), components/navigation/sidebar.tsx (wire onClick + useState + render modal)."
         },
