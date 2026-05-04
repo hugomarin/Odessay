@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, type CSSProperties } from "react"
+import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutGrid, PanelLeftClose, Plus, Search } from "lucide-react"
+import { SearchModal } from "@/components/navigation/search-modal"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
@@ -103,6 +104,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
 
   const userDisplayName = user.displayName ?? user.email?.split("@")[0] ?? "Writer"
   const userUsername = user.username ?? "profile"
+  const [searchOpen, setSearchOpen] = useState(false)
+
   const handleSidebarToggle = () => {
     toggleSidebarMode()
   }
@@ -228,6 +231,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             <ActionTooltip label="Search" side="right">
               <button
                 type="button"
+                onClick={() => setSearchOpen(true)}
                 className={cn(
                   "mt-2 flex h-8 w-full items-center rounded-md text-[15px] text-ink-2 transition-colors hover:bg-muted hover:text-ink",
                   "gap-2 px-2",
@@ -300,6 +304,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
         </div>
 
         <main className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+
+        <SearchModal open={searchOpen} onOpenChange={setSearchOpen} />
       </div>
     </TooltipProvider>
   )

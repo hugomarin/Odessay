@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-03",
+    "last_updated": "2026-05-04",
     "active_phase": {
         "name": "Fase 2 — Compartir y leer",
         "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
         "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
     },
     "built": [
+        {
+            "what": "Implement global search modal in sidebar. Adds SearchModal component with three states: skeleton (5 pulse rows), recent writings (8 items via useRecentWritings), and search results (top 15 filtered by title/body_text with ~90char snippet around first match). Debounced query (150ms), clear button, autofocus on open (40ms timeout for Radix animation), Escape to close. Clicking a result navigates to /write/[slug ?? id]. Modal operates entirely on localDB (IndexedDB) without server calls.",
+            "phase": "Fase 3",
+            "issue": "ODE-130",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-130",
+            "commit": "617694b",
+            "date": "2026-05-04",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings), npm test (263 tests). Performance contract: not required — client-side IndexedDB search with 150ms debounce, no network or rendering budget applicable. Scope: components/navigation/search-modal.tsx (new), components/navigation/sidebar.tsx (wire onClick + useState + render modal)."
+        },
         {
             "what": "Add Supabase Storage image uploads to TipTap editor with stable asset URLs and shared rendering. Creates writing_assets table with RLS. Adds /api/writings/[id]/images upload route and /api/writing-assets/[assetId] resolution route with visibility-aware access control. Integrates TipTap Image extension, insert-image modal, toolbar button and keyboard shortcut. Supports markdown round-trip. Adds image styles to cross-mode CSS contract. Includes unit tests for markdown roundtrip and access control, plus Playwright E2E for upload flow.",
             "phase": "Fase 3",
