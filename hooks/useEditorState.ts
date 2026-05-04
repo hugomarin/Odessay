@@ -20,6 +20,7 @@ export type TopbarTrackedAction = Extract<
   | "heading2"
   | "heading3"
   | "table"
+  | "image"
 >
 
 type StructureAction = "paragraph" | "heading1" | "heading2" | "heading3"
@@ -40,6 +41,7 @@ const DEFAULT_EDITOR_ACTION_STATE: Readonly<Record<TopbarTrackedAction, boolean>
   heading2: false,
   heading3: false,
   table: false,
+  image: false,
 }
 
 export const resolveStructureState = (editor: Editor): StructureAction | null => {
@@ -136,6 +138,7 @@ export const useEditorActionState = (editor: Editor | null): Readonly<Record<Top
         heading2: selectedStructure === "heading2",
         heading3: selectedStructure === "heading3",
         table: currentEditor.isActive("table"),
+        image: false,
       }
     },
   })

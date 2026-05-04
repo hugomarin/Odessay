@@ -18,6 +18,7 @@ import {
   SlidersHorizontal,
   Strikethrough,
   Table,
+  Image,
 } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { EditorTabs } from "@/components/editor/editor-tabs"
@@ -89,6 +90,7 @@ const FORMAT_ACTIONS: TopbarActionItem[] = [
   { id: "editor-action-blockquote", label: "Quote", action: "blockquote", icon: MessageSquareQuote },
   { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode", icon: Code2 },
   { id: "editor-action-table", label: "Table", action: "table", icon: Table },
+  { id: "editor-action-image", label: "Image", action: "image", icon: Image },
 ]
 
 const STRUCTURE_ACTIONS: StructureActionItem[] = [
@@ -104,7 +106,7 @@ const LIST_MENU_ACTIONS: MenuActionItem[] = [
 ]
 
 const COMPACT_QUICK_ACTIONS: TopbarActionItem[] = FORMAT_ACTIONS.filter(
-  ({ action }) => action === "bold" || action === "italic" || action === "strike" || action === "link",
+  ({ action }) => action === "bold" || action === "italic" || action === "strike" || action === "link" || action === "image",
 )
 
 const COMPACT_LIST_ACTIONS: Array<{
@@ -124,6 +126,7 @@ const COMPACT_LIST_ACTIONS: Array<{
   },
   { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode" },
   { id: "editor-action-table", label: "Table", action: "table" },
+  { id: "editor-action-image", label: "Image", action: "image" },
 ]
 
 const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
@@ -141,6 +144,7 @@ const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
   "heading2",
   "heading3",
   "table",
+  "image",
 ])
 
 const isTopbarTrackedAction = (action: EditorShortcutAction): action is TopbarTrackedAction =>
