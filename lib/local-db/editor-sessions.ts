@@ -31,6 +31,10 @@ const DEFAULT_VIEW_STATE: LocalEditorTabViewState = {
   selectionTo: null,
   markdownSelectionStart: null,
   markdownSelectionEnd: null,
+  windowScrollX: 0,
+  windowScrollY: 0,
+  shellScrollTop: 0,
+  shellScrollLeft: 0,
 };
 
 const normalizeTitle = (title?: string | null) => {

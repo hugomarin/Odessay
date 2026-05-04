@@ -148,6 +148,10 @@ export type LocalEditorTabViewState = {
   selectionTo: number | null;
   markdownSelectionStart: number | null;
   markdownSelectionEnd: number | null;
+  windowScrollX?: number;
+  windowScrollY?: number;
+  shellScrollTop?: number;
+  shellScrollLeft?: number;
 };
 
 export type LocalEditorSessionTab = {
