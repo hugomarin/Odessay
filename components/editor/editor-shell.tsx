@@ -543,6 +543,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const persistCurrentWorkspaceViewState = useCallback(() => {
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+    const shellViewport = document.querySelector<HTMLElement>("main")
 
     saveTabViewState({
       tabId,
@@ -550,6 +551,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
         mode: modeRef.current,
         scrollTop: editorViewport?.scrollTop ?? 0,
         scrollLeft: editorViewport?.scrollLeft ?? 0,
+        windowScrollX: window.scrollX,
+        windowScrollY: window.scrollY,
+        shellScrollTop: shellViewport?.scrollTop ?? 0,
+        shellScrollLeft: shellViewport?.scrollLeft ?? 0,
         selectionFrom: modeRef.current === "rich" && editor ? editor.state.selection.from : null,
         selectionTo: modeRef.current === "rich" && editor ? editor.state.selection.to : null,
         markdownSelectionStart:
@@ -875,6 +880,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 scrollLeft: viewState.scrollLeft,
                 editorScrollTop: viewState.scrollTop,
                 editorScrollLeft: viewState.scrollLeft,
+                shellScrollTop: viewState.shellScrollTop,
+                shellScrollLeft: viewState.shellScrollLeft,
+                windowScrollX: viewState.windowScrollX,
+                windowScrollY: viewState.windowScrollY,
               },
             )
           })
@@ -883,13 +892,27 @@ export function EditorShell({ writingId }: EditorShellProps) {
           setMode("rich")
           window.requestAnimationFrame(() => {
             const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-            const applyViewportScroll = () => {
-              if (!editorViewport) {
-                return
-              }
+            const shellViewport = document.querySelector<HTMLElement>("main")
 
-              editorViewport.scrollTop = viewState.scrollTop
-              editorViewport.scrollLeft = viewState.scrollLeft
+            const applyEditorScroll = () => {
+              if (editorViewport) {
+                editorViewport.scrollTop = viewState.scrollTop
+                editorViewport.scrollLeft = viewState.scrollLeft
+              }
+            }
+
+            const applyShellScroll = () => {
+              if (shellViewport) {
+                shellViewport.scrollTop = viewState.shellScrollTop ?? 0
+                shellViewport.scrollLeft = viewState.shellScrollLeft ?? 0
+              }
+            }
+
+            const applyWindowScroll = () => {
+              window.scrollTo(
+                typeof viewState.windowScrollX === "number" ? viewState.windowScrollX : window.scrollX,
+                typeof viewState.windowScrollY === "number" ? viewState.windowScrollY : window.scrollY,
+              )
             }
 
             if (
@@ -905,9 +928,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 .run()
             }
 
-            applyViewportScroll()
+            applyWindowScroll()
+            applyShellScroll()
+            applyEditorScroll()
+
             window.requestAnimationFrame(() => {
-              applyViewportScroll()
+              applyWindowScroll()
+              applyShellScroll()
+              applyEditorScroll()
             })
           })
         }
