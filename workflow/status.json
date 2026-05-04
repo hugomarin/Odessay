@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Replace visibility badge with writing status pill on Desk activity table and hero. Each row shows a colored status pill (New/Exploring/Draft/Done) derived from the writing status field. Clicking the pill opens a dropdown to change status inline; the change saves immediately to localDB and enqueues sync to Supabase. The desk hero now shows the actual status label for the active draft instead of a generic 'Current draft'. Collections view updated to use status-based pills for consistency.",
+            "phase": "Fase 3",
+            "issue": "ODE-131",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-131",
+            "commit": "92448dd",
+            "date": "2026-05-04",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (263 tests). Performance contract: not required — UI state change + IndexedDB write, no new render paths or network on critical path. Scope: lib/queries/desk-activity.ts (status-based stateLabel/stateTone), components/desk/desk-activity-table.tsx (status pill dropdown + onStatusChange prop), components/desk/desk-hero.tsx (status label for active draft), app/(app)/desk/page.tsx (handleStatusChange with enqueueWritingUpsert), components/collections/collections-view.tsx (align to status-based tones), tests/desk-activity.test.ts (updated expectations)."
+        },
+        {
             "what": "Implement global search modal in sidebar. Adds SearchModal component with three states: skeleton (5 pulse rows), recent writings (8 items via useRecentWritings), and search results (top 15 filtered by title/body_text with ~90char snippet around first match). Debounced query (150ms), clear button, autofocus on open (40ms timeout for Radix animation), Escape to close. Clicking a result navigates to /write/[slug ?? id]. Modal operates entirely on localDB (IndexedDB) without server calls.",
             "phase": "Fase 3",
             "issue": "ODE-130",
