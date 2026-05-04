@@ -8,6 +8,7 @@ import CodeBlock from "@tiptap/extension-code-block"
 import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
 import Highlight from "@tiptap/extension-highlight"
+import Image from "@tiptap/extension-image"
 import History from "@tiptap/extension-history"
 import Italic from "@tiptap/extension-italic"
 import Link from "@tiptap/extension-link"
@@ -41,6 +42,10 @@ export const createEditorExtensions = (): Extensions => [
   Italic.extend({ addKeyboardShortcuts: () => ({}) }),
   Strike.extend({ addKeyboardShortcuts: () => ({}) }),
   Highlight.extend({ addKeyboardShortcuts: () => ({}) }),
+  Image.extend({ addKeyboardShortcuts: () => ({}) }).configure({
+    allowBase64: false,
+    inline: false,
+  }),
   Link.configure({
     openOnClick: false,
     autolink: true,

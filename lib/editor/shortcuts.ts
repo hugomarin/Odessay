@@ -20,6 +20,7 @@ export type EditorShortcutAction =
   | "newWriting"
   | "settings"
   | "table"
+  | "image"
   | "find"
   | "replace"
 
@@ -52,6 +53,7 @@ const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
   newWriting: { mac: "⌘⇧N", windows: "Ctrl+Shift+N" },
   settings: { mac: "⌘,", windows: "Ctrl+," },
   table: { mac: "⌘⇧T", windows: "Ctrl+Shift+T" },
+  image: { mac: "⌘⇧I", windows: "Ctrl+Shift+I" },
   find: { mac: "⌘F", windows: "Ctrl+F" },
   replace: { mac: "⌘H", windows: "Ctrl+H" },
 }
@@ -140,6 +142,10 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
 
   if (matches(event, "t", { shift: true, code: "KeyT" })) {
     return "table"
+  }
+
+  if (matches(event, "i", { shift: true, code: "KeyI" })) {
+    return "image"
   }
 
   if (matches(event, "f", { code: "KeyF" })) {

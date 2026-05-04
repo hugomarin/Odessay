@@ -523,12 +523,23 @@
     max-width: 68ch;
   }
 
+  .odessay-editor-content img,
+  .prose-odessay img {
+    width: 100%;
+    height: auto;
+    border-radius: 4px;
+    display: block;
+    max-width: 68ch;
+    margin-block: 2em;
+  }
+
   .odessay-editor-content figure img,
   .prose-odessay figure img {
     width: 100%;
     height: auto;
     border-radius: 4px;
     display: block;
+    margin-block: 0;
   }
 
   .odessay-editor-content figure figcaption,

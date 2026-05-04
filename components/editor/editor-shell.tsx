@@ -18,6 +18,7 @@ import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
 import { AnnotationBubble } from "@/components/reading/margins/annotation-bubble"
 import { SelectionPopup } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
+import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
@@ -248,6 +249,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [footnoteModalOpen, setFootnoteModalOpen] = useState(false)
   const [tableModalOpen, setTableModalOpen] = useState(false)
+  const [imageModalOpen, setImageModalOpen] = useState(false)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
   const [findQuery, setFindQuery] = useState("")
@@ -1355,6 +1357,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
           case "table":
             setTableModalOpen(true)
             return
+          case "image":
+            setImageModalOpen(true)
+            return
           default:
             return
         }
@@ -1471,6 +1476,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
           return
         case "table":
           setTableModalOpen(true)
+          return
+        case "image":
+          setImageModalOpen(true)
           return
         default:
           return
@@ -1815,6 +1823,57 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }, MARKDOWN_SAVE_DEBOUNCE_MS)
     },
     [mode, editor, markdownValue, persistEditorSnapshot],
+  )
+
+  const handleInsertImage = useCallback(
+    (payload: { src: string; alt: string }) => {
+      if (modeRef.current === "markdown") {
+        const source = markdownValue
+        const textarea = markdownTextareaRef.current
+        const fallbackCursor = source.length
+        const start = markdownSelectionRef.current?.start ?? textarea?.selectionStart ?? fallbackCursor
+        const end = markdownSelectionRef.current?.end ?? textarea?.selectionEnd ?? fallbackCursor
+        const imageMarkdown = `![${payload.alt}](${payload.src})`
+        const nextMarkdown = `${source.slice(0, start)}${imageMarkdown}${source.slice(end)}`
+        const nextSelectionStart = start + imageMarkdown.length
+
+        setMarkdownValue(nextMarkdown)
+        setSyncStatus("saving")
+
+        if (editor) {
+          if (markdownSaveTimeoutRef.current) {
+            window.clearTimeout(markdownSaveTimeoutRef.current)
+          }
+          markdownSaveTimeoutRef.current = window.setTimeout(() => {
+            if (modeRef.current !== "markdown") {
+              markdownSaveTimeoutRef.current = null
+              return
+            }
+            isApplyingContentRef.current = true
+            editor.commands.setContent(materializeMarkdownForRichParser(nextMarkdown))
+            isApplyingContentRef.current = false
+            setBodyText(editor.getText())
+            void persistEditorSnapshot(editor)
+            markdownSaveTimeoutRef.current = null
+          }, MARKDOWN_SAVE_DEBOUNCE_MS)
+        }
+
+        queueMarkdownSelectionRestore(nextSelectionStart, nextSelectionStart)
+        return
+      }
+
+      if (!editor) {
+        return
+      }
+
+      editor
+        .chain()
+        .focus()
+        .setImage({ src: payload.src, alt: payload.alt })
+        .run()
+      void persistEditorSnapshot(editor)
+    },
+    [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
   )
 
   const handleInsertFootnote = useCallback(
@@ -2809,6 +2868,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
       <InsertFootnoteModal open={footnoteModalOpen} onOpenChange={setFootnoteModalOpen} onConfirm={handleInsertFootnote} />
 
       <InsertTableModal open={tableModalOpen} onOpenChange={setTableModalOpen} onConfirm={handleInsertTable} />
+
+      <InsertImageModal
+        open={imageModalOpen}
+        writingId={currentWritingId ?? ""}
+        onOpenChange={setImageModalOpen}
+        onConfirm={handleInsertImage}
+      />
 
       <SelectionPopup
         position={pendingRichSelection?.popupPosition ?? null}
