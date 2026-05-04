@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Clock3, Search } from "lucide-react"
+import { FileText, Search } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -33,8 +33,6 @@ function getSnippet(bodyText: string, query: string): string {
   const end = Math.min(bodyText.length, index + 45)
   let snippet = bodyText.slice(start, end).trimStart()
 
-  // Solo agregar "…" si realmente omitimos texto sustancial (>3 chars)
-  // y el snippet no empieza ya con puntuación
   if (start > 3) {
     snippet = "…" + snippet
   }
@@ -64,13 +62,49 @@ function filterWritings(writings: LocalWriting[], query: string): SearchResult[]
   return results.slice(0, 15)
 }
 
+function getTimeGroupLabel(timestamp: number): string {
+  const now = new Date()
+  const date = new Date(timestamp)
+
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  if (isSameDay(date, now)) return "Today"
+  if (isSameDay(date, yesterday)) return "Yesterday"
+
+  const diffMs = now.getTime() - timestamp
+  const daysDiff = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (daysDiff < 7) return "Earlier this week"
+  if (daysDiff < 30) return "This month"
+
+  return "Older"
+}
+
+function groupByTime(items: RecentWritingItem[]): Map<string, RecentWritingItem[]> {
+  const groups = new Map<string, RecentWritingItem[]>()
+  for (const item of items) {
+    const label = getTimeGroupLabel(item.updatedAt)
+    if (!groups.has(label)) {
+      groups.set(label, [])
+    }
+    groups.get(label)!.push(item)
+  }
+  return groups
+}
+
 function SearchSkeleton() {
   return (
-    <div className="space-y-3 py-2">
+    <div className="space-y-1 py-2">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="flex flex-col gap-2 px-3 py-2">
-          <div className="h-[14px] w-[70%] animate-pulse rounded bg-muted" />
-          <div className="h-[12px] w-[45%] animate-pulse rounded bg-muted" />
+        <div key={i} className="flex items-center gap-3 px-3 py-[8px]">
+          <div className="h-[18px] w-[18px] shrink-0 rounded-full bg-muted animate-pulse" />
+          <div className="h-[14px] w-[60%] animate-pulse rounded bg-muted" />
         </div>
       ))}
     </div>
@@ -78,27 +112,32 @@ function SearchSkeleton() {
 }
 
 function RecentSection({ items, onSelect }: { items: RecentWritingItem[]; onSelect: (item: RecentWritingItem) => void }) {
+  const grouped = useMemo(() => groupByTime(items), [items])
+
   return (
     <div className="py-2">
-      <div className="mb-2 flex items-center gap-2 px-3">
-        <Clock3 className="h-[13px] w-[13px] text-ink-4" strokeWidth={1.5} />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Recent</p>
-      </div>
-      <div className="space-y-1">
-        {items.map((item) => (
-          <button
-            key={item.writingId}
-            type="button"
-            onClick={() => onSelect(item)}
-            className="flex w-full min-w-0 items-center gap-2 rounded-md px-3 py-[8px] text-left transition-colors hover:bg-muted-hover"
-          >
-            <span aria-hidden="true" className="h-[6px] w-[6px] shrink-0 rounded-full bg-border" />
-            <span className="min-w-0 truncate font-sans text-[13px] text-ink-2">
-              {item.title}
-            </span>
-          </button>
-        ))}
-      </div>
+      {Array.from(grouped.entries()).map(([label, groupItems]) => (
+        <div key={label}>
+          <p className="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">
+            {label}
+          </p>
+          <div className="space-y-1">
+            {groupItems.map((item) => (
+              <button
+                key={item.writingId}
+                type="button"
+                onClick={() => onSelect(item)}
+                className="flex w-full min-w-0 items-center gap-3 rounded-md px-3 py-[8px] text-left transition-colors hover:bg-muted-hover"
+              >
+                <FileText className="h-[18px] w-[18px] shrink-0 text-ink-3" strokeWidth={1.5} />
+                <span className="min-w-0 truncate font-sans text-[13px] text-ink-2">
+                  {item.title}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
