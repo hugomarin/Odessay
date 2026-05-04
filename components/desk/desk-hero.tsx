@@ -37,7 +37,7 @@ export function DeskHero({ drafts }: DeskHeroProps) {
               "text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-4",
               draft.isActive && "text-cursor",
             )}>
-              {draft.isActive ? "Current draft" : draft.statusLabel}
+              {draft.statusLabel}
             </p>
             <p className="line-clamp-2 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
             <p className="line-clamp-2 font-lora text-[12px] italic leading-[1.55] text-ink-3">{draft.excerpt}</p>

@@ -106,7 +106,7 @@ describe("buildDeskActivitySummary", () => {
     expect(correspondence.counts.correspondence).toBe(2)
 
     expect(withResponses.total).toBe(1)
-    expect(withResponses.groups[0]?.rows[0]?.stateLabel).toBe("Compartido")
+    expect(withResponses.groups[0]?.rows[0]?.stateLabel).toBe("Done")
   })
 
   it("marks received activity based on author id", () => {
@@ -118,7 +118,7 @@ describe("buildDeskActivitySummary", () => {
 
     expect(summary.total).toBe(1)
     expect(summary.groups[0]?.rows[0]?.title).toBe("Earlier reply")
-    expect(summary.groups[0]?.rows[0]?.stateTone).toBe("private")
+    expect(summary.groups[0]?.rows[0]?.stateTone).toBe("done")
     expect(summary.groups[0]?.rows[0]?.destinationHref).toBeNull()
     expect(summary.counts.received).toBe(1)
   })
@@ -135,7 +135,7 @@ describe("buildDeskActivitySummary", () => {
 
     expect(todayRow?.destinationHref).toBe("/write/today-draft")
     expect(receivedRow?.destinationHref).toBeNull()
-    expect(todayRow?.stateLabel).toBe("Privado")
+    expect(todayRow?.stateLabel).toBe("Draft")
     expect(todayRow?.dateLabel).toBe("")
   })
 
@@ -154,8 +154,7 @@ describe("buildDeskActivitySummary", () => {
 
     const sharedRow = summary.groups.flatMap((group) => group.rows).find((row) => row.title === "Weekly correspondence")
 
-    expect(sharedRow?.stateLabel).toBe("Compartido")
-    expect(sharedRow?.withLabel).toBe("@ana, @luis")
+    expect(sharedRow?.stateLabel).toBe("Done")
     expect(sharedRow?.recipientPreviews[0]?.username).toBe("ana")
   })
 })

@@ -2,11 +2,19 @@
 
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Tags, Trash2 } from "lucide-react"
+import { Check, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import type { CollectionOption } from "@/lib/collections/collections"
-import type { DeskActivityGroup, DeskActivityRow, DeskBadgeTone } from "@/lib/queries/desk-activity"
+import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/queries/desk-activity"
+import type { WritingStatus } from "@/lib/writings/status"
+import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { cn } from "@/lib/utils"
 
@@ -17,15 +25,17 @@ type DeskActivityTableProps = {
   collectionIdsByWritingId: Record<string, string[]>
   onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
   onCreateCollection: (writingId: string, name: string) => Promise<void>
+  onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
 }
 
-const BADGE_STYLES: Record<DeskBadgeTone, string> = {
-  private: "bg-muted text-ink-4",
-  shared: "bg-[hsl(220,40%,92%)] text-[hsl(220,50%,40%)]",
-  public: "bg-[hsl(140,24%,92%)] text-[hsl(140,30%,28%)]",
+const STATUS_PILL_STYLES: Record<DeskStatusTone, string> = {
+  new: "bg-[hsl(220,40%,94%)] text-[hsl(220,45%,42%)]",
+  exploring: "bg-[hsl(35,50%,92%)] text-[hsl(35,50%,32%)]",
+  draft: "bg-muted text-ink-4",
+  done: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
 }
 
 const buildInitials = (value: string) =>
@@ -43,6 +53,7 @@ export function DeskActivityTable({
   collectionIdsByWritingId,
   onToggleCollection,
   onCreateCollection,
+  onStatusChange,
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
@@ -166,14 +177,41 @@ export function DeskActivityTable({
                         </div>
                       </td>
                       <td className="px-4 py-[18px] align-top md:align-middle">
-                        <span
-                          className={cn(
-                            "inline-flex rounded-md px-[10px] py-[5px] text-[12px] font-medium",
-                            BADGE_STYLES[row.stateTone],
-                          )}
-                        >
-                          {row.stateLabel}
-                        </span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={(event) => event.stopPropagation()}
+                              className={cn(
+                                "inline-flex cursor-pointer items-center gap-1 rounded-md px-[10px] py-[5px] text-[12px] font-medium transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+                                STATUS_PILL_STYLES[row.stateTone],
+                              )}
+                            >
+                              {row.stateLabel}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="start"
+                            className="min-w-[140px]"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {WRITING_STATUS_VALUES.map((status) => (
+                              <DropdownMenuItem
+                                key={status}
+                                className="flex cursor-pointer items-center justify-between gap-3 text-[13px]"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  void onStatusChange?.(row.id, status)
+                                }}
+                              >
+                                <span>{getWritingStatusLabel(status)}</span>
+                                {row.stateTone === status ? (
+                                  <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+                                ) : null}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                       <td className="px-4 py-[18px] align-top text-[13px] text-ink-2 md:align-middle">
                         {row.recipientPreviews.length > 0 ? (

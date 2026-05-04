@@ -27,8 +27,10 @@ import {
 } from "@/lib/queries/desk-activity"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
-import { enqueueWritingDelete } from "@/lib/sync/queue"
+import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncWorker } from "@/lib/sync/worker"
+import type { LocalWriting } from "@/lib/local-db/schema"
+
 
 type ApiEnvelope<T> = {
   data: T | null
@@ -366,6 +368,25 @@ export default function DeskPage() {
               const currentIds = getWritingCollectionIds(writingId, writingCollections)
               await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
               getSyncWorker().schedule(0)
+            }}
+            onStatusChange={async (writingId, status) => {
+              const writing = await localDB.writings.get(writingId)
+              if (!writing || writing.sync_status === "deleted") {
+                return
+              }
+              if (writing.status === status) {
+                return
+              }
+
+              const updatedWriting: LocalWriting = {
+                ...writing,
+                status,
+                version: writing.version + 1,
+                updated_at: new Date().toISOString(),
+                local_updated_at: Date.now(),
+              }
+
+              await enqueueWritingUpsert(updatedWriting)
             }}
             onDeleteRequest={async (id) => {
               await enqueueWritingDelete(id)

@@ -29,9 +29,10 @@ import {
   subscribeToLocalDBScopeChanges,
 } from "@/lib/local-db"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
-import type { DeskActivityGroup, DeskBadgeTone } from "@/lib/queries/desk-activity"
+import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { getSyncWorker } from "@/lib/sync/worker"
+import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type CollectionsViewProps = {
@@ -52,16 +53,9 @@ const buildDateLabel = (updatedAt: Date, now: Date) => {
   return new Intl.DateTimeFormat("es-MX", { month: "short", day: "numeric" }).format(updatedAt)
 }
 
-const buildVisibilityState = (visibility: LocalWriting["visibility"]) => {
-  if (visibility === "shared") {
-    return { stateLabel: "Compartido", stateTone: "shared" as DeskBadgeTone }
-  }
-
-  if (visibility === "public") {
-    return { stateLabel: "Público", stateTone: "public" as DeskBadgeTone }
-  }
-
-  return { stateLabel: "Privado", stateTone: "private" as DeskBadgeTone }
+const buildStatusState = (status: LocalWriting["status"]) => {
+  const normalized = normalizeWritingStatus(status)
+  return { stateLabel: getWritingStatusLabel(normalized), stateTone: normalized as DeskStatusTone }
 }
 
 export function CollectionsView({ initialExpandedCollectionId = null }: CollectionsViewProps) {
@@ -151,14 +145,13 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
     for (const item of detailItems) {
       const updatedAt = new Date(item.updatedAt)
-      const visibilityState = buildVisibilityState(item.visibility)
+      const statusState = buildStatusState(item.status)
       const row = {
         id: item.id,
         title: item.title,
         excerpt: item.excerpt,
-        stateLabel: visibilityState.stateLabel,
-        stateTone: visibilityState.stateTone,
-        withLabel: "",
+        stateLabel: statusState.stateLabel,
+        stateTone: statusState.stateTone,
         recipientPreviews: [],
         dateLabel: buildDateLabel(updatedAt, now),
         isNew: false,
