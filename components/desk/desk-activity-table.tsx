@@ -29,6 +29,9 @@ type DeskActivityTableProps = {
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
+  selectedIds?: Set<string>
+  onToggleSelection?: (id: string) => void
+  hasSelection?: boolean
 }
 
 const STATUS_PILL_STYLES: Record<DeskStatusTone, string> = {
@@ -57,6 +60,9 @@ export function DeskActivityTable({
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
+  selectedIds = new Set(),
+  onToggleSelection,
+  hasSelection = false,
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
@@ -104,6 +110,7 @@ export function DeskActivityTable({
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
+                <col className="w-[40px]" />
                 <col className="w-[52%]" />
                 <col className="w-[14%]" />
                 <col className="w-[12%]" />
@@ -123,6 +130,8 @@ export function DeskActivityTable({
                   const selectedCollections = selectedCollectionIds
                     .map((collectionId) => collectionOptionById.get(collectionId))
                     .filter((collection): collection is CollectionOption => Boolean(collection))
+
+                  const isRowSelected = selectedIds.has(row.id)
 
                   return (
                     <tr
@@ -148,6 +157,26 @@ export function DeskActivityTable({
                           : "cursor-default bg-muted/20",
                       )}
                     >
+                      <td
+                        className="px-4 py-[18px] align-top md:align-middle"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onToggleSelection?.(row.id)}
+                          className={cn(
+                            "inline-flex h-4 w-4 items-center justify-center rounded-[4px] border transition-all duration-150",
+                            isRowSelected
+                              ? "border-ink bg-ink text-bg"
+                              : "border-border bg-sb text-transparent hover:border-ink-3",
+                            hasSelection ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                          )}
+                          aria-label={isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
+                          aria-pressed={isRowSelected}
+                        >
+                          <Check className="h-3 w-3" strokeWidth={2.2} />
+                        </button>
+                      </td>
                       <td className="px-9 py-[18px] align-top md:align-middle">
                         <div className="min-w-0">
                           <div

@@ -5,10 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DeskHero } from "@/components/desk/desk-hero"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
 import { useDeskFilters } from "@/hooks/useDeskFilters"
+import { useWritingSelection } from "@/hooks/useWritingSelection"
+import { BulkActionBar } from "@/components/desk/bulk-action-bar"
 import {
   buildCollectionOptions,
   dedupeCollectionIds,
@@ -73,6 +76,7 @@ export default function DeskPage() {
   const [recipientPreviewsByWritingId, setRecipientPreviewsByWritingId] = useState<
     Record<string, RecipientPreview[]>
   >({})
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
@@ -90,6 +94,15 @@ export default function DeskPage() {
     hasActiveFilters,
     activeFilterCount,
   } = useDeskFilters()
+
+  const {
+    selectedIds,
+    toggleSelection,
+    selectAll,
+    deselectAll,
+    hasSelection,
+    selectedCount,
+  } = useWritingSelection()
 
   const updateActiveView = useCallback((nextView: DeskViewMode) => {
     setActiveView(nextView)
@@ -223,7 +236,8 @@ export default function DeskPage() {
 
   useEffect(() => {
     clearFilters()
-  }, [activeView, clearFilters])
+    deselectAll()
+  }, [activeView, clearFilters, deselectAll])
 
   useEffect(() => {
     if (activeView !== "mine") {
@@ -355,6 +369,26 @@ export default function DeskPage() {
     writingCollections,
   ])
 
+  const visibleWritingIds = useMemo(() => {
+    return filteredSummary.groups.flatMap((group) => group.rows.map((row) => row.id))
+  }, [filteredSummary])
+
+  const allVisibleSelected =
+    visibleWritingIds.length > 0 && visibleWritingIds.every((id) => selectedIds.has(id))
+
+  const firstSelectedRow = useMemo(() => {
+    for (const group of filteredSummary.groups) {
+      for (const row of group.rows) {
+        if (selectedIds.has(row.id)) {
+          return row
+        }
+      }
+    }
+    return null
+  }, [filteredSummary, selectedIds])
+
+  const firstSelectedHref = firstSelectedRow?.destinationHref ?? null
+
   const viewCounts = useMemo(
     () => ({
       mine: summary.total,
@@ -408,6 +442,45 @@ export default function DeskPage() {
             />
           </div>
 
+          {hasSelection && (
+            <BulkActionBar
+              selectedCount={selectedCount}
+              visibleCount={visibleWritingIds.length}
+              allVisibleSelected={allVisibleSelected}
+              onSelectAll={() => selectAll(visibleWritingIds)}
+              onDeselectAll={deselectAll}
+              onDelete={() => setIsBulkDeleteOpen(true)}
+              collectionOptions={collectionOptions}
+              onAddToCollection={async (collectionId) => {
+                for (const writingId of Array.from(selectedIds)) {
+                  const currentIds = getWritingCollectionIds(writingId, writingCollections)
+                  if (currentIds.includes(collectionId)) continue
+                  await setLocalWritingCollections(
+                    writingId,
+                    dedupeCollectionIds([...currentIds, collectionId]),
+                  )
+                }
+                getSyncWorker().schedule(0)
+              }}
+              onCreateCollection={async (name) => {
+                const ownerId = getLocalDBScope()
+                const collection = await createLocalCollection({
+                  ownerId: ownerId === "anonymous" ? null : ownerId,
+                  name,
+                })
+                for (const writingId of Array.from(selectedIds)) {
+                  const currentIds = getWritingCollectionIds(writingId, writingCollections)
+                  await setLocalWritingCollections(
+                    writingId,
+                    dedupeCollectionIds([...currentIds, collection.id]),
+                  )
+                }
+                getSyncWorker().schedule(0)
+              }}
+              firstSelectedHref={firstSelectedHref}
+            />
+          )}
+
           {hasActiveFilters && filteredSummary.groups.length === 0 && !isLoading ? (
             <DeskFilterEmptyState onClear={clearFilters} />
           ) : (
@@ -416,6 +489,9 @@ export default function DeskPage() {
               isLoading={isLoading}
               collectionOptions={collectionOptions}
               collectionIdsByWritingId={collectionIdsByWritingId}
+              selectedIds={selectedIds}
+              onToggleSelection={toggleSelection}
+              hasSelection={hasSelection}
               onToggleCollection={async (writingId, collectionId) => {
                 const currentIds = getWritingCollectionIds(writingId, writingCollections)
                 const nextIds = currentIds.includes(collectionId)
@@ -461,6 +537,20 @@ export default function DeskPage() {
               }}
             />
           )}
+
+          <DeleteWritingDialog
+            open={isBulkDeleteOpen}
+            onOpenChange={setIsBulkDeleteOpen}
+            count={selectedCount}
+            onConfirm={async () => {
+              for (const id of Array.from(selectedIds)) {
+                await enqueueWritingDelete(id)
+              }
+              deselectAll()
+              await loadDeskActivity()
+              void loadRecipientPreviewsAsync()
+            }}
+          />
         </>
       ) : (
         <>
