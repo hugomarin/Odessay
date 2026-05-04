@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Implement multi-select and bulk actions on Desk. Each row has a checkbox visible on hover or when any row is selected. Bulk action bar appears between filter bar and list with [N] selected, Select all, Deselect, Delete, Add to collection, and Share. Delete opens a confirmation dialog and performs soft-delete via enqueueWritingDelete for each selected writing. Add to collection reuses CollectionAssignmentMenu to append the chosen collection to all selected writings. Share navigates to the first selected writing (with a dialog when multiple are selected). Changing tabs clears selection.",
+            "phase": "Fase 3",
+            "issue": "ODE-133",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-133",
+            "commit": "7215d32",
+            "date": "2026-05-04",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (269 tests). Performance contract: not required — local Set state, no additional queries or render paths. Scope: hooks/useWritingSelection.ts (new), components/desk/bulk-action-bar.tsx (new), components/desk/desk-activity-table.tsx (checkbox column + onToggleSelection), components/desk/delete-writing-dialog.tsx (count prop for bulk), app/(app)/desk/page.tsx (integration: bulk bar, select-all, tab-clear, bulk delete/add-to-collection/share)."
+        },
+        {
             "what": "Implement filter system on Desk with name search, collections multi-select (including Uncategorized), and status multi-select. Filters operate client-side on localDB data without server calls. Active filter count shown below bar. Empty state with 'No writings match your filters' and Clear filters button. Filters reset automatically when switching between My writings and Shared with me tabs.",
             "phase": "Fase 3",
             "issue": "ODE-132",
