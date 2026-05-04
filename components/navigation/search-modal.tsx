@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Clock3, Search, X } from "lucide-react"
+import { Clock3, Search } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -26,14 +26,16 @@ function getSnippet(bodyText: string, query: string): string {
   const index = lowerBody.indexOf(lowerQuery)
 
   if (index === -1) {
-    return bodyText.slice(0, 90)
+    return bodyText.slice(0, 90).trimStart()
   }
 
   const start = Math.max(0, index - 45)
   const end = Math.min(bodyText.length, index + 45)
-  let snippet = bodyText.slice(start, end)
+  let snippet = bodyText.slice(start, end).trimStart()
 
-  if (start > 0) {
+  // Solo agregar "…" si realmente omitimos texto sustancial (>3 chars)
+  // y el snippet no empieza ya con puntuación
+  if (start > 3) {
     snippet = "…" + snippet
   }
   if (end < bodyText.length) {
@@ -230,19 +232,6 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
               placeholder="Search writings…"
               className="h-9 border-0 bg-transparent px-0 text-[15px] text-ink shadow-none placeholder:text-ink-4 focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-            {query.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("")
-                  inputRef.current?.focus()
-                }}
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-                aria-label="Clear search"
-              >
-                <X className="h-[14px] w-[14px]" strokeWidth={1.5} />
-              </button>
-            )}
           </div>
 
           <div className="h-px bg-border" />
