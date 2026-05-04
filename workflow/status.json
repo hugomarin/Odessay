@@ -30,7 +30,7 @@
             "phase": "Fase 3",
             "issue": "ODE-132",
             "linear_url": "https://linear.app/z9ne/issue/ODE-132",
-            "commit": "9e21db8",
+            "commit": "b671483",
             "date": "2026-05-04",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (274 tests, 11 new for client filtering). Performance contract: not required — client-side in-memory filtering over localDB array, no network or rendering budget applicable. Scope: hooks/useDeskFilters.ts (new), components/desk/filter-bar.tsx (new), lib/queries/desk-activity.ts (applyClientFilters + DeskClientFilter), app/(app)/desk/page.tsx (integrate filter bar + filteredSummary), tests/desk-activity.test.ts (11 new tests for search, status, collection, uncategorized, combined filters, empty state)."
         },
