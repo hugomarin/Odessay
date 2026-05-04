@@ -2423,11 +2423,35 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
-    openDraftTab()
-    currentWritingIdRef.current = null
-    setCurrentWritingId(null)
-    setHydrationWritingId(null)
-    window.history.replaceState(null, "", "/write")
+    const nowIso = new Date().toISOString()
+    const nextWritingId = createWritingId()
+    const nextTitle = deriveAutoTitle("", nowIso)
+
+    await localDB.writings.save({
+      id: nextWritingId,
+      title: nextTitle,
+      body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
+      body_text: "",
+      status: "draft",
+      visibility: "private",
+      version: 0,
+      sync_status: "synced",
+      lifecycle: "local-only",
+      created_at: nowIso,
+      updated_at: nowIso,
+      local_updated_at: Date.now(),
+    })
+
+    openWritingTab({
+      writingId: nextWritingId,
+      title: nextTitle,
+      saveState: "saved",
+      hasPendingSync: false,
+    })
+    currentWritingIdRef.current = nextWritingId
+    setCurrentWritingId(nextWritingId)
+    setHydrationWritingId(nextWritingId)
+    window.history.replaceState(null, "", `/write/${nextWritingId}`)
   }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
 
   const exportFileBaseName = useMemo(

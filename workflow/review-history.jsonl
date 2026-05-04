@@ -22,3 +22,4 @@
 {"ts":"2026-04-29T01:06:48.397Z","issue":"ODE-120","branch":"codex/ODE-120-footnote-hydration-fix","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"claude-sonnet-4-6","commit":"dcb58e1","verdict":"approved"}
 {"ts":"2026-04-29T01:41:05.917Z","issue":"ODE-121","branch":"codex/ode-121-fix-publication-review-auto-reanalysis","score":9.5,"P0":0,"P1":0,"P2":0,"P3":2,"reviewer":"claude-sonnet-4-6","commit":"657d6e4","verdict":"approved"}
 {"ts":"2026-04-29T02:12:03.036Z","issue":"ODE-122","branch":"feat/ODE-122-inline-publication-decorations","score":9.75,"P0":0,"P1":0,"P2":0,"P3":1,"reviewer":"claude-sonnet-4-6","commit":"fd98124","verdict":"approved"}
+{"ts":"2026-05-04T00:45:25.436Z","issue":"ODE-128","score":10,"P0":0,"P1":0,"P2":0,"P3":0,"reviewer":"kimi","verdict":"approved"}

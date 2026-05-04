@@ -64,8 +64,8 @@ test("rich mode preserves visual scroll position across workspace tab switches",
   // Create a new tab (opens a blank draft)
   await page.getByRole("button", { name: "New writing" }).click()
 
-  // Wait for the draft tab to become active
-  await expect(page.getByLabel("Open Untitled writing")).toBeVisible()
+  // Wait for the new writing tab to become active
+  await expect(page.getByLabel(/Open Untitled/)).toBeVisible()
 
   // Switch back to the original tab (the first "Open" button that is not the draft)
   const originalTabButton = page.locator('button[aria-label^="Open"]').first()
