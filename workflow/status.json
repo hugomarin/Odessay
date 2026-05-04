@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Add Supabase Storage image uploads to TipTap editor with stable asset URLs and shared rendering. Creates writing_assets table with RLS. Adds /api/writings/[id]/images upload route and /api/writing-assets/[assetId] resolution route with visibility-aware access control. Integrates TipTap Image extension, insert-image modal, toolbar button and keyboard shortcut. Supports markdown round-trip. Adds image styles to cross-mode CSS contract. Includes unit tests for markdown roundtrip and access control, plus Playwright E2E for upload flow.",
+            "phase": "Fase 3",
+            "issue": "ODE-129",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-129",
+            "commit": "889fbb2",
+            "date": "2026-05-03",
+            "notes": "Performance contract: trace captured at artifacts/perf/editor-image-trace.json.gz; gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-image-trace.json.gz with 14 pass, 0 warn, 1 skip, 0 required_failures. Delivery gate passed with OPS_PERF_TRACE_PATH set. Scope: supabase/migrations/20260503193529_create_writing_assets.sql, app/api/writings/[id]/images/route.ts, app/api/writing-assets/[assetId]/route.ts, components/editor/modals/insert-image-modal.tsx, components/editor/editor-shell.tsx, components/editor/editor-topbar.tsx, hooks/useEditorState.ts, lib/editor/extensions.ts, lib/editor/shortcuts.ts, lib/reading/render-body-html-core.ts, app/globals.css, tests/api/writing-assets-access.test.ts, tests/lib/editor/image-markdown-roundtrip.test.ts, tests/playwright/editor-image-upload.e2e.ts, scripts/capture-editor-image-trace.mjs."
+        },
+        {
             "what": "Preserve visual scroll position when returning to an editor workspace tab. Extends LocalEditorTabViewState with windowScrollX/Y and shellScrollTop/Left fields. Updates persistCurrentWorkspaceViewState to capture all three active scroll containers (window, shell main, editor-writing-area). Updates rich-mode restore to re-apply all scroll containers after selection restore, using double-frame pattern to prevent ProseMirror auto-scroll from overriding viewport. Also fixes missing TooltipProvider in StatusBar that broke perf harness rendering.",
             "phase": "Fase 3",
             "issue": "ODE-128",
