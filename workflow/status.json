@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Preserve visual scroll position when returning to an editor workspace tab. Extends LocalEditorTabViewState with windowScrollX/Y and shellScrollTop/Left fields. Updates persistCurrentWorkspaceViewState to capture all three active scroll containers (window, shell main, editor-writing-area). Updates rich-mode restore to re-apply all scroll containers after selection restore, using double-frame pattern to prevent ProseMirror auto-scroll from overriding viewport. Also fixes missing TooltipProvider in StatusBar that broke perf harness rendering.",
+            "phase": "Fase 3",
+            "issue": "ODE-128",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-128",
+            "commit": "80aa289",
+            "date": "2026-05-03",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (252 tests). Playwright: editor-tab-scroll-restore.e2e.ts (1/1 passed). Performance contract: required — trace captured at artifacts/perf/tab-switch-trace.json.gz; perf gate passed via node scripts/check-performance-gate.mjs --trace artifacts/perf/tab-switch-trace.json.gz with 14 pass, 0 warn, 1 skip, 0 required_failures. Scope: components/editor/editor-shell.tsx, components/editor/status-bar.tsx, lib/local-db/schema.ts, lib/local-db/editor-sessions.ts, tests/playwright/editor-tab-scroll-restore.e2e.ts (new), scripts/capture-tab-switch-trace.mjs (new)."
+        },
+        {
             "what": "Define transition-consistency rules for local-first UI in skill-frontend and skill-code-review skills, and extend odessay-sync.md with the editor tab-switch case study. Adds owner-unique rule, single-source-of-truth per dimension, explicit intermediate states, hot-path identity prohibition, and unified navigation/state coordinator. Code-review skill gains checklist and red flags for co-owned transitions, unmodeled intermediates, and tests that only cover final state.",
             "phase": "Fase 2",
             "issue": "ODE-127",
