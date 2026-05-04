@@ -36,20 +36,41 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       )
     }
 
-    const { data: writing, error: writingError } = await supabase
+    const { data: existingWriting } = await supabase
       .from("writings")
       .select("author_id")
       .eq("id", writingId)
       .single()
 
-    if (writingError || !writing) {
-      return Response.json(
-        { data: null, error: { code: "NOT_FOUND", message: "Writing not found" } },
-        { status: 404 }
-      )
-    }
+    const admin = createAdminClient()
 
-    if (writing.author_id !== user.id) {
+    if (!existingWriting) {
+      // Writing may only exist in localDB (local-first). Create a minimal remote
+      // record so the asset FK succeeds. The sync worker will eventually reconcile
+      // the full document state.
+      const { error: createError } = await admin
+        .from("writings")
+        .insert({
+          id: writingId,
+          author_id: user.id,
+          title: null,
+          body_json: { type: "doc", content: [{ type: "paragraph" }] },
+          body_text: "",
+          status: "draft",
+          visibility: "private",
+          version: 1,
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error("[upload:image] failed to create writing", { userId: user.id, writingId, error: createError.message })
+        return Response.json(
+          { data: null, error: { code: "DB_ERROR", message: "Failed to prepare writing record" } },
+          { status: 500 }
+        )
+      }
+    } else if (existingWriting.author_id !== user.id) {
       return Response.json(
         { data: null, error: { code: "FORBIDDEN", message: "Not the author" } },
         { status: 403 }
@@ -76,8 +97,6 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
     const ext = imageFile.name.split(".").pop()?.toLowerCase() || "bin"
     const assetId = crypto.randomUUID()
     const storagePath = `${user.id}/${writingId}/${assetId}.${ext}`
-
-    const admin = createAdminClient()
 
     const { error: uploadError } = await admin.storage
       .from("writing-assets")
