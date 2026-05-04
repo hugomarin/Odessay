@@ -1,10 +1,10 @@
 import type { LocalWriting } from "@/lib/local-db/schema"
-import { getWritingStatusLabel, isOpenWritingStatus } from "@/lib/writings/status"
+import { getWritingStatusLabel, isOpenWritingStatus, normalizeWritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
-export type DeskBadgeTone = "private" | "shared" | "public"
+export type DeskStatusTone = "new" | "exploring" | "draft" | "done"
 
 export type DeskRecipientPreview = {
   username: string
@@ -27,8 +27,7 @@ export type DeskActivityRow = {
   title: string
   excerpt: string
   stateLabel: string
-  stateTone: DeskBadgeTone
-  withLabel: string
+  stateTone: DeskStatusTone
   recipientPreviews: DeskRecipientPreview[]
   dateLabel: string
   isNew: boolean
@@ -129,50 +128,14 @@ const buildDateLabel = (updatedAt: Date, now: Date) => {
   }).format(updatedAt)
 }
 
-const buildVisibilityLabel = (
-  visibility: LocalWriting["visibility"],
-): Pick<DeskActivityRow, "stateLabel" | "stateTone" | "withLabel"> => {
-  if (visibility === "shared") {
-    return {
-      stateLabel: "Compartido",
-      stateTone: "shared",
-      withLabel: "",
-    }
-  }
-
-  if (visibility === "public") {
-    return {
-      stateLabel: "Público",
-      stateTone: "public",
-      withLabel: "",
-    }
-  }
-
+const buildStatusLabel = (
+  status: LocalWriting["status"],
+): Pick<DeskActivityRow, "stateLabel" | "stateTone"> => {
+  const normalized = normalizeWritingStatus(status)
   return {
-    stateLabel: "Privado",
-    stateTone: "private",
-    withLabel: "",
+    stateLabel: getWritingStatusLabel(normalized),
+    stateTone: normalized,
   }
-}
-
-const formatRecipientLabels = (previews: DeskRecipientPreview[]) => {
-  const handles = [
-    ...new Map(
-      previews
-        .map((preview) => ({
-          username: preview.username.trim(),
-          displayName: preview.displayName?.trim() ?? null,
-        }))
-        .filter((preview) => preview.username.length > 0)
-        .map((preview) => [preview.username, preview] as const),
-    ).values(),
-  ]
-
-  if (handles.length === 0) {
-    return ""
-  }
-
-  return handles.map((preview) => `@${preview.username}`).join(", ")
 }
 
 const buildMetas = (
@@ -242,24 +205,20 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
   ]
 
   for (const writing of writings) {
-    const visibilityState = buildVisibilityLabel(writing.visibility)
-      const row: DeskActivityRow = {
-        id: writing.id,
-        title: writing.title,
-        excerpt: writing.excerpt,
-        stateLabel: visibilityState.stateLabel,
-        stateTone: visibilityState.stateTone,
-      withLabel:
-        writing.visibility === "shared"
-          ? formatRecipientLabels(writing.recipientPreviews)
-          : visibilityState.withLabel,
-        recipientPreviews: writing.recipientPreviews,
-        dateLabel: buildDateLabel(writing.updatedAt, now),
-        isNew: writing.isReceived,
+    const statusState = buildStatusLabel(writing.status)
+    const row: DeskActivityRow = {
+      id: writing.id,
+      title: writing.title,
+      excerpt: writing.excerpt,
+      stateLabel: statusState.stateLabel,
+      stateTone: statusState.stateTone,
+      recipientPreviews: writing.recipientPreviews,
+      dateLabel: buildDateLabel(writing.updatedAt, now),
+      isNew: writing.isReceived,
       destinationHref: writing.isReceived
         ? null
         : buildWritingRouteHref("/write", { id: writing.id, slug: writing.slug }),
-      }
+    }
 
     if (writing.updatedAt.toDateString() === now.toDateString()) {
       groups[0].rows.push(row)
@@ -285,7 +244,7 @@ const buildHeroDrafts = (writings: WritingMeta[], now: Date): DeskHeroDraft[] =>
     slug: draft.slug,
     title: draft.title,
     excerpt: draft.excerpt,
-    statusLabel: index === 0 ? "In progress" : getWritingStatusLabel(draft.status),
+    statusLabel: getWritingStatusLabel(draft.status),
     updatedLabel: buildDateLabel(draft.updatedAt, now),
     wordCount: draft.wordCount,
     isActive: index === 0,
