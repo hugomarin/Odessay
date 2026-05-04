@@ -4,9 +4,11 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Plus } from "lucide-react"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
+import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DeskHero } from "@/components/desk/desk-hero"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
+import { useDeskFilters } from "@/hooks/useDeskFilters"
 import {
   buildCollectionOptions,
   dedupeCollectionIds,
@@ -20,7 +22,7 @@ import {
   subscribeToLocalDBChanges,
   subscribeToLocalDBScopeChanges,
 } from "@/lib/local-db"
-import type { LocalCollection, LocalWritingCollection } from "@/lib/local-db/schema"
+import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import {
   buildDeskActivitySummary,
   type DeskActivitySummary,
@@ -29,7 +31,6 @@ import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncWorker } from "@/lib/sync/worker"
-import type { LocalWriting } from "@/lib/local-db/schema"
 
 
 type ApiEnvelope<T> = {
@@ -67,6 +68,7 @@ export default function DeskPage() {
   const [sharedError, setSharedError] = useState<string | null>(null)
   const [collections, setCollections] = useState<LocalCollection[]>([])
   const [writingCollections, setWritingCollections] = useState<LocalWritingCollection[]>([])
+  const [rawWritings, setRawWritings] = useState<LocalWriting[]>([])
   const [activeView, setActiveView] = useState<DeskViewMode>("mine")
   const [recipientPreviewsByWritingId, setRecipientPreviewsByWritingId] = useState<
     Record<string, RecipientPreview[]>
@@ -76,6 +78,18 @@ export default function DeskPage() {
   const hasLoadedSharedRef = useRef(false)
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
+
+  const {
+    searchQuery,
+    selectedCollectionIds,
+    selectedStatuses,
+    setSearchQuery,
+    toggleCollection,
+    toggleStatus,
+    clearFilters,
+    hasActiveFilters,
+    activeFilterCount,
+  } = useDeskFilters()
 
   const updateActiveView = useCallback((nextView: DeskViewMode) => {
     setActiveView(nextView)
@@ -150,6 +164,7 @@ export default function DeskPage() {
     ])
     const localScope = getLocalDBScope()
 
+    setRawWritings(localWritings)
     setSummary(
       buildDeskActivitySummary(localWritings, {
         filter: "all",
@@ -205,6 +220,10 @@ export default function DeskPage() {
     },
     [],
   )
+
+  useEffect(() => {
+    clearFilters()
+  }, [activeView, clearFilters])
 
   useEffect(() => {
     if (activeView !== "mine") {
@@ -308,6 +327,34 @@ export default function DeskPage() {
     return Object.fromEntries(grouped)
   }, [writingCollections])
 
+  const filteredSummary = useMemo(() => {
+    if (!hasActiveFilters || rawWritings.length === 0) {
+      return summary
+    }
+
+    const localScope = getLocalDBScope()
+    return buildDeskActivitySummary(rawWritings, {
+      filter: "all",
+      userId: localScope === "anonymous" ? null : localScope,
+      recipientPreviewsByWritingId,
+      clientFilter: {
+        searchQuery,
+        selectedCollectionIds,
+        selectedStatuses,
+        assignments: writingCollections,
+      },
+    })
+  }, [
+    hasActiveFilters,
+    rawWritings,
+    summary,
+    recipientPreviewsByWritingId,
+    searchQuery,
+    selectedCollectionIds,
+    selectedStatuses,
+    writingCollections,
+  ])
+
   const viewCounts = useMemo(
     () => ({
       mine: summary.total,
@@ -345,55 +392,75 @@ export default function DeskPage() {
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
           </div>
 
-          <DeskActivityTable
-            groups={summary.groups}
-            isLoading={isLoading}
-            collectionOptions={collectionOptions}
-            collectionIdsByWritingId={collectionIdsByWritingId}
-            onToggleCollection={async (writingId, collectionId) => {
-              const currentIds = getWritingCollectionIds(writingId, writingCollections)
-              const nextIds = currentIds.includes(collectionId)
-                ? currentIds.filter((id) => id !== collectionId)
-                : [...currentIds, collectionId]
+          <div className="border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
+            <DeskFilterBar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              selectedCollectionIds={selectedCollectionIds}
+              onToggleCollection={toggleCollection}
+              selectedStatuses={selectedStatuses}
+              onToggleStatus={toggleStatus}
+              collectionOptions={collectionOptions}
+              activeFilterCount={activeFilterCount}
+              hasActiveFilters={hasActiveFilters}
+              filteredCount={filteredSummary.total}
+              totalCount={summary.total}
+            />
+          </div>
 
-              await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
-              getSyncWorker().schedule(0)
-            }}
-            onCreateCollection={async (writingId, name) => {
-              const ownerId = getLocalDBScope()
-              const collection = await createLocalCollection({
-                ownerId: ownerId === "anonymous" ? null : ownerId,
-                name,
-              })
-              const currentIds = getWritingCollectionIds(writingId, writingCollections)
-              await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
-              getSyncWorker().schedule(0)
-            }}
-            onStatusChange={async (writingId, status) => {
-              const writing = await localDB.writings.get(writingId)
-              if (!writing || writing.sync_status === "deleted") {
-                return
-              }
-              if (writing.status === status) {
-                return
-              }
+          {hasActiveFilters && filteredSummary.groups.length === 0 && !isLoading ? (
+            <DeskFilterEmptyState onClear={clearFilters} />
+          ) : (
+            <DeskActivityTable
+              groups={filteredSummary.groups}
+              isLoading={isLoading}
+              collectionOptions={collectionOptions}
+              collectionIdsByWritingId={collectionIdsByWritingId}
+              onToggleCollection={async (writingId, collectionId) => {
+                const currentIds = getWritingCollectionIds(writingId, writingCollections)
+                const nextIds = currentIds.includes(collectionId)
+                  ? currentIds.filter((id) => id !== collectionId)
+                  : [...currentIds, collectionId]
 
-              const updatedWriting: LocalWriting = {
-                ...writing,
-                status,
-                version: writing.version + 1,
-                updated_at: new Date().toISOString(),
-                local_updated_at: Date.now(),
-              }
+                await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
+                getSyncWorker().schedule(0)
+              }}
+              onCreateCollection={async (writingId, name) => {
+                const ownerId = getLocalDBScope()
+                const collection = await createLocalCollection({
+                  ownerId: ownerId === "anonymous" ? null : ownerId,
+                  name,
+                })
+                const currentIds = getWritingCollectionIds(writingId, writingCollections)
+                await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
+                getSyncWorker().schedule(0)
+              }}
+              onStatusChange={async (writingId, status) => {
+                const writing = await localDB.writings.get(writingId)
+                if (!writing || writing.sync_status === "deleted") {
+                  return
+                }
+                if (writing.status === status) {
+                  return
+                }
 
-              await enqueueWritingUpsert(updatedWriting)
-            }}
-            onDeleteRequest={async (id) => {
-              await enqueueWritingDelete(id)
-              await loadDeskActivity()
-              void loadRecipientPreviewsAsync()
-            }}
-          />
+                const updatedWriting: LocalWriting = {
+                  ...writing,
+                  status,
+                  version: writing.version + 1,
+                  updated_at: new Date().toISOString(),
+                  local_updated_at: Date.now(),
+                }
+
+                await enqueueWritingUpsert(updatedWriting)
+              }}
+              onDeleteRequest={async (id) => {
+                await enqueueWritingDelete(id)
+                await loadDeskActivity()
+                void loadRecipientPreviewsAsync()
+              }}
+            />
+          )}
         </>
       ) : (
         <>
@@ -401,6 +468,7 @@ export default function DeskPage() {
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
           </div>
           <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
+          
         </>
       )}
     </section>

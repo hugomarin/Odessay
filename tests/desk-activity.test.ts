@@ -157,4 +157,99 @@ describe("buildDeskActivitySummary", () => {
     expect(sharedRow?.stateLabel).toBe("Done")
     expect(sharedRow?.recipientPreviews[0]?.username).toBe("ana")
   })
+
+  it("filters by search query on title and body_text", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        searchQuery: "weekly",
+      },
+    })
+
+    expect(summary.total).toBe(1)
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Weekly correspondence")
+  })
+
+  it("filters by status", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        selectedStatuses: ["done"],
+      },
+    })
+
+    expect(summary.total).toBe(2)
+    const titles = summary.groups.flatMap((group) => group.rows).map((row) => row.title)
+    expect(titles).toEqual(["Weekly correspondence", "Earlier reply"])
+  })
+
+  it("filters by collection assignments", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        selectedCollectionIds: ["coll-1"],
+        assignments: [
+          { id: "a1", writing_id: "draft-today", collection_id: "coll-1", added_at: "2026-03-19T00:00:00.000Z", local_updated_at: 1 },
+        ],
+      },
+    })
+
+    expect(summary.total).toBe(1)
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Today draft")
+  })
+
+  it("filters by uncategorized collection", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        selectedCollectionIds: ["uncategorized"],
+        assignments: [
+          { id: "a1", writing_id: "draft-today", collection_id: "coll-1", added_at: "2026-03-19T00:00:00.000Z", local_updated_at: 1 },
+        ],
+      },
+    })
+
+    expect(summary.total).toBe(2)
+    const titles = summary.groups.flatMap((group) => group.rows).map((row) => row.title)
+    expect(titles).toContain("Weekly correspondence")
+    expect(titles).toContain("Earlier reply")
+  })
+
+  it("filters by multiple criteria combined", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        searchQuery: "reply",
+        selectedStatuses: ["done"],
+      },
+    })
+
+    expect(summary.total).toBe(1)
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Earlier reply")
+  })
+
+  it("returns empty groups when no writings match filters", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        searchQuery: "nonexistent",
+      },
+    })
+
+    expect(summary.total).toBe(0)
+    expect(summary.groups).toEqual([])
+    expect(summary.heroDrafts.length).toBeGreaterThan(0)
+  })
 })

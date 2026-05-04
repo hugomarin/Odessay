@@ -1,6 +1,7 @@
-import type { LocalWriting } from "@/lib/local-db/schema"
+import type { LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import { getWritingStatusLabel, isOpenWritingStatus, normalizeWritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
@@ -46,11 +47,19 @@ export type DeskActivitySummary = {
   total: number
 }
 
+export type DeskClientFilter = {
+  searchQuery?: string
+  selectedCollectionIds?: string[]
+  selectedStatuses?: string[]
+  assignments?: LocalWritingCollection[]
+}
+
 type BuildDeskActivityOptions = {
   filter: DeskActivityFilter
   userId?: string | null
   now?: Date
   recipientPreviewsByWritingId?: Record<string, DeskRecipientPreview[]>
+  clientFilter?: DeskClientFilter
 }
 
 type WritingMeta = {
@@ -58,6 +67,7 @@ type WritingMeta = {
   slug: string | null
   title: string
   excerpt: string
+  bodyText: string
   updatedAt: Date
   wordCount: number
   isCorrespondence: boolean
@@ -164,6 +174,7 @@ const buildMetas = (
         slug: writing.slug ?? null,
         title: buildTitle(writing.title),
         excerpt: buildExcerpt(writing.body_text),
+        bodyText: writing.body_text,
         updatedAt,
         wordCount: buildWordCount(writing.body_text),
         isCorrespondence: Boolean(
@@ -195,6 +206,69 @@ const applyFilter = (writings: WritingMeta[], filter: DeskActivityFilter) => {
   }
 
   return writings.filter((writing) => writing.isReceived)
+}
+
+const normalizeQuery = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+
+const applyClientFilters = (writings: WritingMeta[], clientFilter: DeskClientFilter): WritingMeta[] => {
+  const { searchQuery, selectedCollectionIds, selectedStatuses, assignments } = clientFilter
+
+  if (!searchQuery && !selectedCollectionIds?.length && !selectedStatuses?.length) {
+    return writings
+  }
+
+  const normalizedSearch = searchQuery ? normalizeQuery(searchQuery) : null
+
+  const assignmentsByWritingId = new Map<string, string[]>()
+  if (assignments && assignments.length > 0) {
+    for (const assignment of assignments) {
+      const current = assignmentsByWritingId.get(assignment.writing_id) ?? []
+      current.push(assignment.collection_id)
+      assignmentsByWritingId.set(assignment.writing_id, current)
+    }
+  }
+
+  const selectedCollectionSet = new Set(selectedCollectionIds ?? [])
+  const hasUncategorized = selectedCollectionSet.has(UNCATEGORIZED_COLLECTION_ID)
+  const selectedRealCollections = new Set(
+    (selectedCollectionIds ?? []).filter((id) => id !== UNCATEGORIZED_COLLECTION_ID),
+  )
+
+  return writings.filter((writing) => {
+    if (normalizedSearch) {
+      const inTitle = normalizeQuery(writing.title).includes(normalizedSearch)
+      const inBody = normalizeQuery(writing.bodyText).includes(normalizedSearch)
+      if (!inTitle && !inBody) {
+        return false
+      }
+    }
+
+    if (selectedStatuses && selectedStatuses.length > 0) {
+      const normalized = normalizeWritingStatus(writing.status)
+      if (!selectedStatuses.includes(normalized)) {
+        return false
+      }
+    }
+
+    if (selectedCollectionSet.size > 0) {
+      const writingCollectionIds = assignmentsByWritingId.get(writing.id) ?? []
+
+      const hasRealCollection = selectedRealCollections.size > 0 &&
+        writingCollectionIds.some((id) => selectedRealCollections.has(id))
+
+      const isUncategorized = hasUncategorized && writingCollectionIds.length === 0
+
+      if (!hasRealCollection && !isUncategorized) {
+        return false
+      }
+    }
+
+    return true
+  })
 }
 
 const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] => {
@@ -264,7 +338,11 @@ export const buildDeskActivitySummary = (
 ): DeskActivitySummary => {
   const now = options.now ?? new Date()
   const allWritings = buildMetas(writings, options.userId, options.recipientPreviewsByWritingId)
-  const filtered = applyFilter(allWritings, options.filter)
+  let filtered = applyFilter(allWritings, options.filter)
+
+  if (options.clientFilter) {
+    filtered = applyClientFilters(filtered, options.clientFilter)
+  }
 
   return {
     heroDrafts: buildHeroDrafts(allWritings, now),

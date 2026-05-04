@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Implement filter system on Desk with name search, collections multi-select (including Uncategorized), and status multi-select. Filters operate client-side on localDB data without server calls. Active filter count shown below bar. Empty state with 'No writings match your filters' and Clear filters button. Filters reset automatically when switching between My writings and Shared with me tabs.",
+            "phase": "Fase 3",
+            "issue": "ODE-132",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-132",
+            "commit": "9e21db8",
+            "date": "2026-05-04",
+            "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (274 tests, 11 new for client filtering). Performance contract: not required — client-side in-memory filtering over localDB array, no network or rendering budget applicable. Scope: hooks/useDeskFilters.ts (new), components/desk/filter-bar.tsx (new), lib/queries/desk-activity.ts (applyClientFilters + DeskClientFilter), app/(app)/desk/page.tsx (integrate filter bar + filteredSummary), tests/desk-activity.test.ts (11 new tests for search, status, collection, uncategorized, combined filters, empty state)."
+        },
+        {
             "what": "Replace visibility badge with writing status pill on Desk activity table and hero. Each row shows a colored status pill (New/Exploring/Draft/Done) derived from the writing status field. Clicking the pill opens a dropdown to change status inline; the change saves immediately to localDB and enqueues sync to Supabase. The desk hero now shows the actual status label for the active draft instead of a generic 'Current draft'. Collections view updated to use status-based pills for consistency.",
             "phase": "Fase 3",
             "issue": "ODE-131",
