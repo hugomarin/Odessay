@@ -37,7 +37,7 @@ export function ForgotPasswordForm() {
     startTransition(async () => {
       const supabase = createClient()
       const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-        redirectTo: getResetPasswordRedirectUrl(window.location.origin),
+        redirectTo: `${window.location.origin.replace(/\/$/, "")}/auth/verify`,
       })
 
       if (error) {
