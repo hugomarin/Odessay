@@ -3,26 +3,31 @@
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
     "last_updated": "2026-05-12",
     "active_phase": {
-        "name": "Fase 2 — Compartir y leer",
-        "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
+        "name": "Fase 3 — Organizar y publicar",
+        "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
         "roadmap_ref": "workflow/define/roadmap.md"
     },
     "phase_plan": {
-        "phase": "Fase 2 — Compartir y leer",
+        "phase": "Fase 3 — Organizar y publicar",
         "source_of_truth": "workflow/define/roadmap.md",
-        "definition_of_done": "workflow/define/dod-fase-2.md",
-        "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
+        "definition_of_done": "workflow/define/dod-fase-3.md",
+        "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
         "linear_issues": [
-            "ODE-61",
-            "ODE-62",
-            "ODE-63",
-            "ODE-64",
-            "ODE-65",
-            "ODE-66",
-            "ODE-67",
-            "ODE-68"
+            "ODE-103",
+            "ODE-104",
+            "ODE-106",
+            "ODE-107",
+            "ODE-134",
+            "ODE-135",
+            "ODE-136",
+            "ODE-137",
+            "ODE-138",
+            "ODE-139",
+            "ODE-140",
+            "ODE-141",
+            "ODE-153"
         ],
-        "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
+        "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 Claude API agent en wf-run, ODE-107 evaluar headless auth Codex/Claude, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips, ODE-153 align account email change con flujo nativo Supabase."
     },
     "built": [
         {
