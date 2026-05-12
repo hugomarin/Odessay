@@ -78,6 +78,12 @@
     },
 
     {
+      "path": "workflow/context/features/odessay-auth-email.md",
+      "type": "feature",
+      "description": "Feature de emails de autenticación: Supabase Auth maneja tokens, links, expiración, sesiones y templates; Resend solo actúa como SMTP provider en auth.odessay.com; Namecheap aloja los DNS requeridos."
+    },
+
+    {
       "path": "workflow/agents.md",
       "type": "ops",
       "description": "Fuente de verdad para todos los LLMs (Claude, Codex, Gemini). Puerta mínima del sistema: identidad del proyecto, qué recursos están disponibles y la regla de mantenimiento de docs.json. CLAUDE.md y AGENTS.md en la raíz son stubs que apuntan aquí."
@@ -91,6 +97,11 @@
       "path": "workflow/status.json",
       "type": "ops",
       "description": "Estado del codebase: fase activa con links a Linear y roadmap, y build log con commits y fechas. Puente entre GitHub, Linear y el roadmap."
+    },
+    {
+      "path": "workflow/docs.json",
+      "type": "ops",
+      "description": "Inventario canónico de documentos del proyecto. Mantiene rutas, tipos y descripciones para que agentes ubiquen contexto sin cargar carpetas completas."
     },
     {
       "path": "workflow/decisions.json",
@@ -108,6 +119,16 @@
       "description": "Gate de cierre de Fase 1 — Escribir: checklist de editor core, sidebar, persistencia local-first y criterios técnicos mínimos que deben estar cumplidos para considerar la fase terminada."
     },
     {
+      "path": "workflow/define/dod-fase-2.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 2 — Compartir y leer: checklist de desk, visibilidad shared/public, sharing, reading view, márgenes, espacio público, exportación, mobile y calidad técnica."
+    },
+    {
+      "path": "workflow/define/dod-fase-3.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 3 — Organizar y publicar: checklist de workspace multi-documento, recientes, find/replace, métricas, AI de publicación, preview, collections, export, auth/email y páginas públicas."
+    },
+    {
       "path": "workflow/define/debrief.md",
       "type": "ops",
       "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
@@ -116,6 +137,16 @@
       "path": "workflow/perf-budgets.json",
       "type": "ops",
       "description": "Contrato de performance del editor con baseline versionado y umbrales pass/warn/fail por métrica (EventDispatch, EventTiming, latencia de interacción y long tasks) para gates automáticos."
+    },
+    {
+      "path": "workflow/perf-budgets-reading.json",
+      "type": "ops",
+      "description": "Contrato de performance para reading view: budgets de keydown/click/latencia/long tasks, con input y paste marcados como no aplicables para superficies de lectura."
+    },
+    {
+      "path": "workflow/perf-budgets-collections.json",
+      "type": "ops",
+      "description": "Contrato de performance para Collections: budgets de navegación, clicks, latencia y long tasks, con métricas de input/paste desactivadas por no aplicar a la vista."
     },
     {
       "path": "workflow/perf/editor-baseline.md",
@@ -145,6 +176,11 @@
       "description": "Companion de skill-design: valores exactos de padding, tamaños, colores y comportamiento por vista (Desk, Collections, Correspondences, Reading, Editor, Sidebar) + checklists de validación. No usar sin skill-design/SKILL.md."
     },
     {
+      "path": ".agents/skills/skill-design/tipografia.md",
+      "type": "skill",
+      "description": "Contrato tipográfico canónico de Odessay para editor y lectura: escala, line-height, ritmo vertical, headings, tablas, blockquote, listas y CSS compartido por odessay-editor-content/prose-odessay."
+    },
+    {
       "path": ".agents/skills/skill-frontend/SKILL.md",
       "type": "skill",
       "description": "Estándares de implementación frontend: estructura de archivos Next.js 15, naming BEM, cuándo usar Server vs Client components, integración con TipTap, estado con Zustand y TanStack Query, performance y accesibilidad."
@@ -168,6 +204,36 @@
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
       "description": "Checklist pre-PR: typecheck, lint, tests hermético, calidad de código, seguridad y performance. Define el estándar mínimo que debe cumplir cualquier entrega antes de abrir un PR."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/claude-enhancements.md",
+      "type": "skill",
+      "description": "Capa opcional de code review para agentes con subagentes: dispatch de especialistas por scope, prompts, merge de findings y aplicación de confidence gates."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/scoring.md",
+      "type": "skill",
+      "description": "Guía de scoring para code review: fórmula de PR Quality Score, umbrales de decisión, ajustes especiales, calibración de confidence y formato obligatorio de findings."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/specialists/data-migration.md",
+      "type": "skill",
+      "description": "Checklist especializado de code review para migraciones: transacciones, rollback, schema drift, RLS, policies, datos existentes, índices y output JSON estricto."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/specialists/performance.md",
+      "type": "skill",
+      "description": "Checklist especializado de performance review: critical path del editor, sync, queries, frontend, lazy loading, N+1, budgets y output JSON estricto."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/specialists/security.md",
+      "type": "skill",
+      "description": "Checklist especializado de security review: OWASP, auth, access control, secrets, injection, LLM security, Supabase/RLS y output JSON estricto."
+    },
+    {
+      "path": ".agents/skills/skill-code-review/specialists/testing.md",
+      "type": "skill",
+      "description": "Checklist especializado de testing review: happy paths, error paths, edge cases, calidad de tests, anti-patterns y output JSON estricto."
     },
     {
       "path": ".agents/skills/skill-ux-testing/SKILL.md",

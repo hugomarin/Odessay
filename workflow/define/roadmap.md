@@ -187,14 +187,14 @@ Dependencias: Implement authentication (Fase 0).
 Página de ajustes de perfil para usuario autenticado: cambio de email (con reconfirmación vía Supabase), cambio de contraseña, actualización de username y display name. Validación en cliente con Zod. Feedback visual de éxito/error. Accesible desde el sidebar.
 Dependencias: Implement authentication (Fase 0), Build global sidebar shell (3 estados).
 
-**Integrate Resend for transactional email** `[backend, infra]`
-Integrar Resend como proveedor de correo transaccional para recuperación de contraseña y notificaciones de writing compartido. En staging, usar configuración segura para no enviar a destinatarios reales.
-Dependencias: Implement password recovery flow, Implement writing_shares.
-Referencia: `.agents/skills/skill-backend/SKILL.md` (sección: Resend).
+**Configure Supabase Auth custom SMTP on auth.odessay.com** `[backend, infra]`
+Configurar Supabase Auth con custom SMTP usando Resend como proveedor de envío. Supabase Auth mantiene tokens, links, expiración, sesiones y templates de autenticación. Resend solo entrega el correo. Dominio de envío: `auth.odessay.com`; From canónico: `Odessay <no-reply@auth.odessay.com>`.
+Dependencias: Implement authentication (Fase 0). Este setup desbloquea validación completa de recuperación de contraseña en producción.
+Referencia: `workflow/context/features/odessay-auth-email.md`.
 
-**Design transactional email templates** `[frontend, infra]`
-Templates de email con identidad visual de Odessay: confirmación de cuenta post-signup, recuperación de contraseña y notificación de writing recibido por share. Tipografía y tono coherentes con `workflow/context/core/odessay-fundacional.md`. Implementados vía Resend.
-Dependencias: Integrate Resend for transactional email.
+**Define Supabase Auth email templates and transactional copy** `[frontend, infra]`
+Templates de autenticación en Supabase Auth: confirmación de cuenta, recuperación de contraseña, cambio de email y reautenticación si aplica. Deben ser sobrios, con un solo CTA y sin marketing. Los emails no-auth (invitaciones, writing recibido) se documentan aparte.
+Dependencias: Configure Supabase Auth custom SMTP on auth.odessay.com.
 
 **Build public pages — landing, manifesto, about, terms, privacy** `[frontend]`
 Páginas públicas sin autenticación. Landing como filtro: quien lo lee y siente algo, entra. Manifiesto completo. Tono y diseño coherentes con `workflow/context/core/odessay-fundacional.md`. Acceso a login y signup.
@@ -371,8 +371,8 @@ Página de llegada para invitados sin autenticación. Muestra el writing-invitac
 Dependencias: Implement invitations.
 
 **Extend transactional email templates for invitations** `[frontend, backend, infra]`
-Añadir variante de email de invitación epistolar usando Resend y plantillas transaccionales existentes. El canal por link sigue siendo principal; email funciona como canal complementario.
-Dependencias: Build /invite/{token}, Design transactional email templates.
+Añadir variante de email de invitación epistolar usando el canal de emails no-auth de Odessay. El canal por link sigue siendo principal; email funciona como canal complementario. No usar Supabase Auth templates para invitaciones de producto.
+Dependencias: Build /invite/{token}, Configure Supabase Auth custom SMTP on auth.odessay.com si el proveedor de envío no-auth comparte cuenta/proveedor.
 
 **Implement i18n — English and Spanish** `[frontend, infra]`
 next-intl configurado. Inglés como idioma default. Español como segundo idioma prioritario. Todas las cadenas de UI traducidas en ambos idiomas. URLs en inglés.

@@ -44,7 +44,7 @@ Nunca mezclar Geist Sans y Lora en el mismo elemento.
 | Supabase | Base de datos remota, Auth, Realtime, Storage | PostgreSQL. RLS en todas las tablas. Realtime para notificaciones. **Es la capa remota, no la operativa.** |
 | SQLite | Base de datos local | Persistencia local para desktop (Tauri/Electron). IndexedDB como fallback en web. |
 | Claude API (Anthropic) | Agente editor residente | Nunca genera texto. Solo observaciones. Siempre server-side. |
-| Resend | Email transaccional | Notificaciones de writings recibidos, invitaciones epistolares. |
+| Resend | SMTP / email transaccional | SMTP provider para Supabase Auth en `auth.odessay.com`; app-side solo para emails no-auth como invitaciones o notificaciones de writings. |
 | Vercel | Hosting web | Deploy desde `main`. Branch previews para PRs. |
 
 ### Arquitectura local-first
@@ -83,6 +83,9 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 - Supabase Auth con **email + contraseña**.
 - Middleware de Next.js protege rutas privadas. Redirect a `/login` sin sesión.
 - Trigger `on_auth_user_created` crea el profile automáticamente.
+- Emails de autenticación enviados por Supabase Auth vía custom SMTP. Resend solo actúa como proveedor SMTP.
+- Dominio de auth: `auth.odessay.com`. From canónico: `Odessay <no-reply@auth.odessay.com>`.
+- Ver `workflow/context/features/odessay-auth-email.md`.
 
 ---
 
@@ -95,7 +98,7 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 | Vercel | Branch previews automáticos por PR. |
 | Supabase | Proyecto separado. Schema idéntico a producción. Seed data para testing. |
 | Claude API | Haiku para testing si se necesita volumen. Sonnet para staging real. |
-| Resend | Dominio de testing. Emails no llegan a destinatarios reales. |
+| Resend / Supabase Auth SMTP | Custom SMTP configurado en staging. Emails de auth salen desde `auth.odessay.com`; staging debe tener validación controlada para no enviar accidentalmente a destinatarios reales. |
 
 ### Producción
 
@@ -104,7 +107,7 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 | Vercel | Dominio odessay.com. Branch `main`. |
 | Supabase | Proyecto separado. Backups automáticos. RLS estricto. |
 | Claude API | Sonnet. Rate limiting por usuario. |
-| Resend | Dominio odessay.com verificado. |
+| Resend / Supabase Auth SMTP | `auth.odessay.com` verificado y conectado como custom SMTP de Supabase Auth. |
 
 **Regla crítica:** Los agentes nunca operan contra producción. Todo en staging. Deploy a producción por merge a `main` con preview verificado.
 
@@ -128,6 +131,7 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 # Server-side only
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
+# Solo para emails no-auth enviados desde la app. Auth email usa Supabase Dashboard SMTP.
 RESEND_API_KEY=
 
 # Client-side (NEXT_PUBLIC_)

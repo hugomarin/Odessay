@@ -167,9 +167,11 @@ Página sencilla de una sola columna. Sin tabs ni secciones colapsables — todo
 
 **Cuenta**
 - `email` — Email actual visible (read-only). Botón "Cambiar email" que abre confirmación y envía link de verificación al nuevo email.
-- Contraseña — No se muestra el valor actual. Botón "Cambiar contraseña" que envía email de reset (flujo estándar de Supabase Auth).
+- Contraseña — No se muestra el valor actual. Botón "Cambiar contraseña" que usa el flujo estándar de Supabase Auth.
 
 **Guardar:** Botón primario al final de cada grupo. Los cambios de perfil se guardan juntos. Email y contraseña tienen su propio flujo de confirmación.
+
+Los emails de cuenta los envia Supabase Auth mediante custom SMTP (`auth.odessay.com`). Odessay no genera tokens propios ni envia emails de autenticacion directamente desde Resend.
 
 **Sin preferencias de la aplicación en esta fase.** Si se agregan en el futuro, se añaden como un tercer grupo.
 

@@ -17,7 +17,7 @@ Lee `odessay-fundacional.md` primero. Este documento prevalece sobre versiones a
 | Base de datos remota | Supabase (PostgreSQL + Auth + Realtime) | Persistencia cloud, auth, sync |
 | Base de datos local | SQLite (via Tauri/Electron en desktop) | Persistencia local, offline-first |
 | AI | Claude API (Anthropic) | Editor residente |
-| Email | Resend | Notificaciones, invitaciones |
+| Email | Supabase Auth SMTP + Resend | Supabase Auth envia emails de autenticacion via Resend SMTP en `auth.odessay.com`; Resend app-side queda para notificaciones/invitaciones no-auth |
 | Hosting | Vercel | Deploy web, dominio odessay.com |
 
 Ver `odessay-stack.md` para detalle completo.

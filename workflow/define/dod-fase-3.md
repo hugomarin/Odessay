@@ -86,16 +86,18 @@ Referencias:
 
 ## 9) Flujos de cuenta
 
-- **Recuperación de contraseña:** flujo completo funcional — solicitud → email → ruta `/auth/reset-password` → redirect a /desk. Email enviado por Resend.
+- **Recuperación de contraseña:** flujo completo funcional — solicitud → email → ruta `/auth/reset-password` → redirect a /desk. Token, expiración y sesión manejados por Supabase Auth; email enviado por Supabase Auth vía custom SMTP.
 - **Ajustes de perfil:** el autor puede cambiar email (con reconfirmación), contraseña, username y display name desde Settings. Validación con Zod. Feedback de éxito/error inmediato.
 - Ambos flujos son accesibles sin bugs en staging y producción.
 
 ## 10) Email transaccional
 
-- Resend configurado en producción (no solo staging).
-- Templates funcionales para: confirmación de cuenta post-signup, recuperación de contraseña, notificación de writing recibido por share.
-- Los emails tienen identidad visual coherente con Odessay: tipografía, tono y estructura.
+- Supabase Auth custom SMTP configurado en producción (no solo staging) con Resend como proveedor SMTP.
+- Dominio de auth verificado: `auth.odessay.com`.
+- Templates funcionales en Supabase Auth para: confirmación de cuenta post-signup, recuperación de contraseña, cambio de email y reautenticación si aplica.
+- Los emails de auth tienen tono coherente con Odessay: sobrios, claros, un CTA, sin marketing.
 - En staging, los emails van a direcciones de prueba configuradas — nunca a destinatarios reales.
+- Los emails no-auth (invitaciones, writing recibido) se tratan separado de Supabase Auth.
 
 ## 11) Páginas públicas
 
