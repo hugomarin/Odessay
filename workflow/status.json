@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-04",
+    "last_updated": "2026-05-12",
     "active_phase": {
         "name": "Fase 2 — Compartir y leer",
         "linear_project": "https://linear.app/z9ne/project/fase-2-compartir-y-leer-38333f237768",
@@ -25,6 +25,15 @@
         "notes": "PLAN completo. DoD co-creado el 2026-03-30. Issues creados el 2026-03-31. Alcance: ODE-61 visibilidad shared/public (critical-path), ODE-62 soft delete desde desk, ODE-63 writing_shares, ODE-64 reading view, ODE-65 márgenes, ODE-66 espacio público /{username}, ODE-67 export (.md/.pdf/.docx) desde editor, ODE-68 mobile. ODE-67 (export) puede ejecutarse en paralelo — solo depende de ODE-23 (Done). ODE-67 (export) requiere Handoff: decidir librería PDF antes de implementar."
     },
     "built": [
+        {
+            "what": "Align auth email delivery boundary with Supabase Auth custom SMTP. Email-change requests now use the native Supabase Auth updateUser email change flow with emailRedirectTo, removing app-owned Admin generateLink + Resend sending for auth mail. RESEND_API_KEY is no longer required by env checks for auth flows, and auth email docs now specify dashboard-managed SMTP, redirect URL expectations, template redirect handling, and the no app-side Resend rule for confirmation/recovery/email-change mail.",
+            "phase": "Fase 3",
+            "issue": "ODE-102",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-102/configure-supabase-auth-custom-smtp-on-authodessaycom",
+            "commit": "6d4b5c8",
+            "date": "2026-05-12",
+            "notes": "Validation: node --version -> v24.14.0; node scripts/check-env.mjs .env.example --template passed; node scripts/check-status-drift.mjs warn-only reported pre-existing missing status entries ODE-123 and ODE-124; ./node_modules/.bin/tsc --noEmit passed. Lint and full Vitest were attempted but blocked by local native binding code-signature errors in node_modules for @next/swc-darwin-arm64 and @rolldown/binding-darwin-arm64. Performance contract: not required — infrastructure/auth boundary plus one API route delegation change; no editor or rendering path touched."
+        },
         {
             "what": "Implement multi-select and bulk actions on Desk. Each row has a checkbox visible on hover or when any row is selected. Bulk action bar appears between filter bar and list with [N] selected, Select all, Deselect, Delete, Add to collection, and Share. Delete opens a confirmation dialog and performs soft-delete via enqueueWritingDelete for each selected writing. Add to collection reuses CollectionAssignmentMenu to append the chosen collection to all selected writings. Share navigates to the first selected writing (with a dialog when multiple are selected). Changing tabs clears selection.",
             "phase": "Fase 3",
