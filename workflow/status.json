@@ -26,6 +26,15 @@
     },
     "built": [
         {
+            "what": "Implement Supabase Auth password recovery flow. Login now links to /forgot-password; recovery requests call resetPasswordForEmail with a /reset-password redirect; reset-password establishes the Supabase recovery session from PKCE code or hash tokens and updates the password with updateUser({ password }). Invalid or expired links show a retry path and no Odessay-owned reset token storage or validation endpoint was added.",
+            "phase": "Fase 3",
+            "issue": "ODE-100",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-100/implement-supabase-auth-password-recovery-flow",
+            "commit": "6de8851",
+            "date": "2026-05-12",
+            "notes": "Validation in green: npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (273 tests). Performance contract: not required — transactional auth flow. Manual local smoke: /forgot-password renders generic recovery form; /reset-password without recovery session shows invalid/expired state with retry path. Staging email delivery remains dependent on ODE-102 Supabase custom SMTP configuration."
+        },
+        {
             "what": "Align auth email delivery boundary with Supabase Auth custom SMTP. Email-change requests now use the native Supabase Auth updateUser email change flow with emailRedirectTo, removing app-owned Admin generateLink + Resend sending for auth mail. RESEND_API_KEY is no longer required by env checks for auth flows, and auth email docs now specify dashboard-managed SMTP, redirect URL expectations, template redirect handling, and the no app-side Resend rule for confirmation/recovery/email-change mail.",
             "phase": "Fase 3",
             "issue": "ODE-102",

@@ -13,7 +13,7 @@ const EDITOR_SPELLCHECK_STORAGE_KEY = "odessay-editor-spellcheck"
 const normalizeLanguageTag = (value: string) => value.trim().toLowerCase().replace(/_/g, "-")
 
 export const resolveSpellcheckLanguage = (languageCandidates?: readonly string[]) => {
-  const candidates = languageCandidates?.length
+  const candidates = languageCandidates !== undefined
     ? languageCandidates
     : typeof navigator !== "undefined"
       ? navigator.languages.length

@@ -14,8 +14,6 @@ import {
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
 
-const supportHref = "mailto:hello@odessay.com?subject=Password%20reset"
-
 export function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -105,7 +103,7 @@ export function LoginForm() {
             <label className="text-[13px] font-medium text-ink-2" htmlFor="login-password">
               Password
             </label>
-            <Link className="text-[12px] text-ink-4 transition-colors hover:text-ink-2" href={supportHref}>
+            <Link className="text-[12px] text-ink-4 transition-colors hover:text-ink-2" href="/forgot-password">
               Forgot your password?
             </Link>
           </div>
