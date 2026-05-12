@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
-import { sendEmailChangeNotification } from "@/lib/email/send-email-change-notification"
-import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { updateEmailSchema } from "@/lib/validation/account-schemas"
 
@@ -11,7 +9,6 @@ const jsonError = (status: number, code: string, message: string) =>
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
-    const admin = createAdminClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -43,37 +40,18 @@ export async function POST(request: Request) {
     }
 
     const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/settings/account`
-    const [{ data: currentLink, error: currentLinkError }, { data: newLink, error: newLinkError }] =
-      await Promise.all([
-        admin.auth.admin.generateLink({
-          type: "email_change_current",
-          email: user.email,
-          newEmail: payload.email,
-          options: { redirectTo },
-        }),
-        admin.auth.admin.generateLink({
-          type: "email_change_new",
-          email: user.email,
-          newEmail: payload.email,
-          options: { redirectTo },
-        }),
-      ])
+    const { error: updateError } = await supabase.auth.updateUser(
+      { email: payload.email },
+      { emailRedirectTo: redirectTo },
+    )
 
-    if (currentLinkError || newLinkError) {
-      const authError = currentLinkError ?? newLinkError
+    if (updateError) {
       return jsonError(
         400,
         "EMAIL_CHANGE_FAILED",
-        authError?.message ?? "Could not start email change.",
+        updateError.message ?? "Could not start email change.",
       )
     }
-
-    await sendEmailChangeNotification({
-      currentEmail: user.email,
-      newEmail: payload.email,
-      currentEmailActionLink: currentLink.properties.action_link,
-      newEmailActionLink: newLink.properties.action_link,
-    })
 
     return NextResponse.json({
       data: {

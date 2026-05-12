@@ -18,7 +18,6 @@ const requiredKeys = [
   "NEXT_PUBLIC_SUPABASE_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
   "ANTHROPIC_API_KEY",
-  "RESEND_API_KEY",
 ];
 
 function parseEnvFile(filePath) {

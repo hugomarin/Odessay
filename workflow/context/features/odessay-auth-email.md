@@ -54,6 +54,8 @@ No usar `@odessay.com` para emails automaticos de autenticacion. El dominio raiz
 
 ## Configuracion requerida
 
+La configuracion de entrega vive fuera del runtime de Next.js. Ningun secreto SMTP de auth debe estar en `.env.local`; Supabase guarda esas credenciales en su Dashboard.
+
 ### Resend
 
 1. Agregar dominio `auth.odessay.com`.
@@ -89,6 +91,15 @@ Odessay <no-reply@auth.odessay.com>
 6. Configurar Site URL de produccion.
 7. Agregar Redirect URLs para produccion, staging, localhost y previews aprobadas.
 
+URLs esperadas:
+
+- Site URL: URL canonica de produccion de Odessay.
+- Redirect URLs exactas para produccion y staging.
+- `http://localhost:3000/**` para desarrollo local.
+- Preview URLs aprobadas usando wildcard solo en previews, no como sustituto del path exacto de produccion.
+
+Cuando un flujo de Supabase use `redirectTo` o `emailRedirectTo`, los templates deben resolver el destino con `{{ .RedirectTo }}` o con `{{ .ConfirmationURL }}` segun el template, no con links hardcodeados al dominio de Supabase.
+
 ---
 
 ## Flujos
@@ -109,11 +120,11 @@ Regla: no crear tokens propios ni endpoints propios de validacion de reset.
 ### Cambio de email
 
 1. El usuario solicita cambiar email desde Settings.
-2. Odessay usa el flujo nativo de Supabase Auth.
+2. Odessay llama `supabase.auth.updateUser({ email }, { emailRedirectTo })`.
 3. Secure email change permanece habilitado.
 4. Supabase Auth envia confirmaciones al email viejo y al nuevo mediante `auth.odessay.com`.
 
-Regla: Odessay no debe generar links con Supabase Admin para enviarlos directamente por Resend salvo que una decision futura apruebe Supabase Auth Hooks.
+Regla: Odessay no debe generar links con Supabase Admin ni enviar emails de cambio de email directamente por Resend salvo que una decision futura apruebe Supabase Auth Hooks.
 
 ---
 
@@ -146,6 +157,10 @@ Las credenciales SMTP de Resend para auth se configuran en Supabase Dashboard, n
 
 `RESEND_API_KEY` solo aplica si Odessay envia emails no-auth desde codigo, por ejemplo invitaciones o notificaciones de producto. No debe ser requerida para signup, recuperacion de contrasena o cambio de email.
 
+`RESEND_FROM_EMAIL` sigue la misma regla: solo aplica a email de producto no-auth. El remitente de auth se controla desde Supabase Auth SMTP Settings.
+
+El check de entorno del repo no debe bloquear desarrollo local por falta de `RESEND_API_KEY`, porque la entrega auth depende del Dashboard de Supabase.
+
 ---
 
 ## Validacion
@@ -159,3 +174,4 @@ Antes de cerrar el setup:
 5. Password reset completa y entra a `/desk`.
 6. Secure email change envia emails desde `auth.odessay.com`.
 7. Staging no envia accidentalmente emails reales sin control.
+8. No hay llamadas app-side a Resend para confirmacion, recuperacion o cambio de email.
