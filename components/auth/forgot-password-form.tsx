@@ -10,7 +10,7 @@ import {
   validateForgotPasswordValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
-import { createClient } from "@/lib/supabase/client"
+import { createAuthClient } from "@/lib/supabase/client-auth"
 
 const successMessage =
   "If an Odessay account exists for that email, Supabase will send a recovery link."
@@ -35,7 +35,7 @@ export function ForgotPasswordForm() {
     }
 
     startTransition(async () => {
-      const supabase = createClient()
+      const supabase = createAuthClient()
       const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
         redirectTo: `${window.location.origin.replace(/\/$/, "")}/auth/verify`,
       })
