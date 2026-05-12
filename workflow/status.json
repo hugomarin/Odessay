@@ -35,6 +35,15 @@
             "notes": "Validation in green: npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (273 tests). Performance contract: not required — transactional auth flow. Manual local smoke: /forgot-password renders generic recovery form; /reset-password without recovery session shows invalid/expired state with retry path. Staging email delivery remains dependent on ODE-102 Supabase custom SMTP configuration."
         },
         {
+            "what": "Align auth email delivery boundary with Supabase Auth custom SMTP. Email-change requests now use the native Supabase Auth updateUser email change flow with emailRedirectTo, removing app-owned Admin generateLink + Resend sending for auth mail. RESEND_API_KEY is no longer required by env checks for auth flows, and auth email docs now specify dashboard-managed SMTP, redirect URL expectations, template redirect handling, and the no app-side Resend rule for confirmation/recovery/email-change mail.",
+            "phase": "Fase 3",
+            "issue": "ODE-102",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-102/configure-supabase-auth-custom-smtp-on-authodessaycom",
+            "commit": "6d4b5c8",
+            "date": "2026-05-12",
+            "notes": "Validation: node --version -> v24.14.0; node scripts/check-env.mjs .env.example --template passed; node scripts/check-status-drift.mjs warn-only reported pre-existing missing status entries ODE-123 and ODE-124; ./node_modules/.bin/tsc --noEmit passed. Lint and full Vitest were attempted but blocked by local native binding code-signature errors in node_modules for @next/swc-darwin-arm64 and @rolldown/binding-darwin-arm64. Performance contract: not required — infrastructure/auth boundary plus one API route delegation change; no editor or rendering path touched."
+        },
+        {
             "what": "Implement multi-select and bulk actions on Desk. Each row has a checkbox visible on hover or when any row is selected. Bulk action bar appears between filter bar and list with [N] selected, Select all, Deselect, Delete, Add to collection, and Share. Delete opens a confirmation dialog and performs soft-delete via enqueueWritingDelete for each selected writing. Add to collection reuses CollectionAssignmentMenu to append the chosen collection to all selected writings. Share navigates to the first selected writing (with a dialog when multiple are selected). Changing tabs clears selection.",
             "phase": "Fase 3",
             "issue": "ODE-133",
