@@ -235,8 +235,8 @@ Regla para estados vacíos: nunca fríos. El vacío es la primera experiencia de
 Odessay no es un editor de texto. Estos tres momentos determinan si se siente especial o como otra app de escritura.
 
 - **Primera carta (Fase 1):** placeholder del título "Sin título" en Lora italic `ink-4`. Placeholder del cuerpo: "Comienza a escribir…" en Lora italic `ink-4` — sin instrucciones superpuestas, sin onboarding. El sidebar arranca en mini (52px). La primera letra hace desaparecer ambos placeholders al mismo tiempo. El cursor terracota parpadea en el título hasta que el usuario escribe.
-- **Primera respuesta recibida (Fase 4):** no hay badge numérico — hay un cambio de estado en el hilo: "Tu turno" en terracota, sin parpadeo, sin animación agresiva. Al abrir el hilo, la respuesta aparece debajo del writing propio con la línea conectora visible. El botón "Escribir respuesta" en terracota es el único CTA prominente — nada compite con él.
-- **Primera invitación enviada (Fase 5):** confirmación mínima: toast "Link copiado. Envíalo como quieras." — sin celebración exagerada, sin confetti, sin modal. El link está en el portapapeles. El autor ya sabe lo que hacer.
+- **Primera respuesta recibida (Fase 5):** no hay badge numérico — hay un cambio de estado en el hilo: "Tu turno" en terracota, sin parpadeo, sin animación agresiva. Al abrir el hilo, la respuesta aparece debajo del writing propio con la línea conectora visible. El botón "Escribir respuesta" en terracota es el único CTA prominente — nada compite con él.
+- **Primera invitación enviada (Fase 6):** confirmación mínima: toast "Link copiado. Envíalo como quieras." — sin celebración exagerada, sin confetti, sin modal. El link está en el portapapeles. El autor ya sabe lo que hacer.
 
 **Contrato de accesibilidad**
 
@@ -269,7 +269,60 @@ Touch targets (reading view y espacio público en mobile, Fase 2):
 
 ---
 
-## Fase 4 — Corresponder
+## Fase 4 — Writing Harness / Editorial Intelligence Layer
+
+Al terminar esta fase: Odessay deja de ser solo un editor con AI y se convierte en una capa de criterio editorial para escritura asistida por AI. El usuario puede pedir un diagnóstico por capas sobre intención, voz, retórica, estructura argumental, lógica informal, capa epistémica, emoción y audiencia antes de aceptar reescrituras. La promesa de fase es: escribir con AI sin perder voz, intención ni criterio.
+
+---
+
+**Document product thesis and MVP scope for Writing Harness** `[product, ai-editor]` `[critical-path]`
+Convertir la iniciativa "Odessay - Writing Harness / Editorial Intelligence Layer" en un spec operativo: problema, ICP, casos de uso, criterios de éxito, alcance MVP y no-alcance explícito. La fase no debe construir un detector de AI ni un "humanizer"; debe evaluar si un texto tiene voz, intención, estructura y pensamiento propio.
+Dependencias: Working App usable para pruebas con design partners.
+Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
+
+**Define editorial layer taxonomy and scoring contract** `[product, ai-editor]` `[critical-path]`
+Definir las capas del harness como contrato de producto y datos: intención, voz, retórica, estructura argumentativa, lógica informal, capa epistémica, emoción y audiencia. Cada capa debe tener heurísticas, señales observables, tipos de hallazgo, severidad y formato de salida. El contrato debe priorizar diagnóstico accionable sobre calificación superficial.
+Dependencias: Document product thesis and MVP scope for Writing Harness.
+Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
+
+**Implement /api/ai/editorial-diagnosis — layered writing analysis** `[backend, ai-editor]` `[critical-path]`
+API route server-side que recibe el writing, contexto declarado del autor y configuración de análisis. Invoca el modelo con el harness editorial y devuelve diagnóstico estructurado por capas: intención probable, hallazgos prioritarios, evidencia textual, explicación breve y recomendación accionable. No reescribe por default.
+Dependencias: Define editorial layer taxonomy and scoring contract, Implement auto-save, Configure Supabase projects.
+Referencia: `.agents/skills/skill-backend/SKILL.md`, `workflow/context/features/odessay-ai-editor.md`.
+
+**Build editorial diagnosis panel in editor** `[frontend, ai-editor]` `[critical-path]`
+Panel lateral o surface integrada donde el autor ve el diagnóstico por capas. Debe mostrar un resumen prioritario, navegación por capa y evidencia anclada al texto. La experiencia se siente como tener un editor inteligente al lado, no como un corrector automático ni como una calificación moralizante.
+Dependencias: Implement /api/ai/editorial-diagnosis — layered writing analysis.
+Referencia: `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-frontend/SKILL.md`.
+
+**Anchor diagnosis findings to text ranges** `[frontend, ai-editor]`
+Renderizar hallazgos del harness como referencias navegables dentro del editor: frase fuerte subdesarrollada, tono genérico, cambio de audiencia, premisa oculta, recurso retórico débil, etc. El anclaje debe ser estable ante ediciones razonables y no interferir con escritura, selección, formato ni undo/redo.
+Dependencias: Build editorial diagnosis panel in editor.
+Referencia: `workflow/context/features/odessay-editor.md`.
+
+**Implement author intent and audience context controls** `[frontend, backend, ai-editor]`
+Permitir que el autor declare tipo de pieza, intención, audiencia, nivel de riesgo, tono deseado y restricciones. El harness debe usar este contexto para evitar feedback genérico. Sin intención explícita, Odessay puede inferirla, pero debe mostrar la inferencia como editable.
+Dependencias: Build editorial diagnosis panel in editor.
+Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
+
+**Implement selective recommendations and rewrite-after-diagnosis flow** `[frontend, backend, ai-editor]`
+Después del diagnóstico, ofrecer recomendaciones concretas y reescrituras opcionales por hallazgo o bloque. La reescritura nunca ocurre antes del diagnóstico ni sin aceptación del autor. Debe preservar intención, voz y criterio, no solo "hacer sonar mejor" el texto.
+Dependencias: Anchor diagnosis findings to text ranges, Implement author intent and audience context controls.
+Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
+
+**Build public Writing Slop / Voice Analyzer prototype** `[frontend, backend, ai-editor]`
+Herramienta pública de adquisición: el usuario pega un texto y recibe un diagnóstico rápido de voz, intención, genericidad, recursos retóricos, ideas fuertes subdesarrolladas y coherencia argumental. No promete detectar si se usó AI. Promesa: no detectamos si usaste AI; mostramos si tu texto tiene voz, intención y criterio.
+Dependencias: Implement /api/ai/editorial-diagnosis — layered writing analysis, Build public pages.
+Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
+
+**Validate Writing Harness with design partners** `[product, frontend, ai-editor]`
+Probar el harness con textos reales de design partners. Validar si el diagnóstico ayuda a decidir qué mejorar, si preserva voz, si evita moralizar el uso de AI y si sus recomendaciones se sienten accionables. Ajustar taxonomía y prompt con evidencia.
+Dependencias: Build editorial diagnosis panel in editor, Build public Writing Slop / Voice Analyzer prototype.
+Referencia: `.agents/skills/skill-ux-testing/SKILL.md`.
+
+---
+
+## Fase 5 — Corresponder
 
 Al terminar esta fase: dos o más personas pueden sostener una conversación epistolar completa en Odessay. El flujo queda cerrado de punta a punta: iniciar respuesta desde lectura, persistir la relación entre writings, navegar el hilo completo y saber claramente si te toca responder.
 
@@ -302,7 +355,7 @@ Referencia: `.agents/skills/skill-ux-testing/SKILL.md`, `workflow/context/featur
 
 ---
 
-## Fase 5 — Invitar y distribuir
+## Fase 6 — Invitar y distribuir
 
 Al terminar esta fase: el producto puede crecer y distribuirse. Un autor puede traer a alguien nuevo a Odessay, la primera experiencia de esa persona es leer la carta que le escribieron y el contenido público está optimizado para descubrimiento y difusión.
 
@@ -332,38 +385,6 @@ Dependencias: Build public author space, Build public pages.
 **Seed data — staging completo** `[infra, database]`
 Seed data completo para staging: correspondencias con múltiples participantes y árbol de respuestas, collections con writings clasificados y sin clasificar, márgenes de ejemplo, invitaciones en diferentes estados. Sin esto, los agentes no pueden testear flujos complejos de forma autónoma.
 Dependencias: Implement collections, Implement margins, Build /correspondences — thread view, Implement invitations.
-
----
-
-## Fase 6 — AI Editor
-
-Al terminar esta fase: el agente editor está activo en el editor. Observa en silencio, interviene en pausas naturales, puede ser invocado directamente, y el autor puede declarar contexto para adaptar las observaciones.
-
----
-
-**Implement /api/ai/observe — automatic observations** `[backend, ai-editor]`
-API route server-side. Recibe body del writing e instrucciones de contexto del autor. Invoca Claude API con el system prompt de `workflow/context/features/odessay-ai-editor.md`. Parsea la respuesta: si es SILENCIO, no envía nada al cliente. Guarda en ai_observations. Se invoca con debounce tras pausa de escritura (~8-15 segundos). Solo si el agente está activo.
-Dependencias: Implement auto-save, Configure Supabase projects.
-Referencia: `workflow/context/features/odessay-ai-editor.md`, `.agents/skills/skill-backend/SKILL.md` (sección: Claude API).
-
-**Render AI observations as margin notes in editor** `[frontend, ai-editor]`
-Extensión TipTap custom (AIObservationExtension) para renderizar observaciones al margen del párrafo relevante. Sutiles visualmente. Descartables con gesto mínimo. No interrumpen el flujo de escritura.
-Dependencias: Implement /api/ai/observe.
-Referencia: `workflow/context/features/odessay-ai-editor.md` (sección: Interfaz visual).
-
-**Implement /api/ai/discuss — direct invocation and discussion** `[backend, ai-editor]`
-API route para invocación directa del agente. Recibe body del writing + pregunta o instrucción del autor + historial de conversación en sesión. El historial se mantiene en memoria durante la escritura — no se persiste en v1.
-Dependencias: Implement /api/ai/observe.
-Referencia: `workflow/context/features/odessay-ai-editor.md` (sección: Modos de interacción).
-
-**Build AI discussion panel in editor** `[frontend, ai-editor]`
-Panel de diálogo (280px) junto al editor. Se abre cuando el autor invoca al agente. Conversación enfocada en el texto. Se cierra cuando no se necesita.
-Dependencias: Implement /api/ai/discuss.
-
-**Implement author context instructions for AI agent** `[frontend, backend, ai-editor]`
-El autor puede declarar contexto al agente: tipo de escritura, propósito, indicaciones específicas. Controles para encender y apagar el agente.
-Dependencias: Build AI discussion panel.
-Referencia: `workflow/context/features/odessay-ai-editor.md` (sección: Control del autor).
 
 ---
 

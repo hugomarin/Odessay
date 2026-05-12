@@ -72,6 +72,9 @@ Prioridades: `next-sprint` / `backlog` / `won't-do`
 
 - IMP-2026-04-04-11 | deuda-tecnica | ODE-79 patch tolerates missing remote row when identifier is UUID-like. Works, but reveals there is no explicit readiness contract between local and server state: the editor has no clear signal of when a writing exists remotely, leading to accumulated defensive guards (ODE-79 + ODE-82). Direction: define an explicit lifecycle for new writings — local-only → syncing → server-confirmed — and have hydration and navigation logic observe it directly instead of inferring from route state. | backlog | ODE-92
 
+- IMP-2026-05-12-01 | bug | Export PDF/DOCX produces weak document styling and DOCX tables are not rendered as tables; table content degrades into pipe/list-like text instead of a formatted grid. Improve exported document styles for headings, body, spacing, code/inline marks, and especially table rendering with visible rows, columns, headers, padding, and borders. | next-sprint | ODE-134
+  - **Visuals**: `/Users/hugomarin/Desktop/Screenshot 2026-05-12 at 9.16.35 a.m..png`, `/Users/hugomarin/Desktop/Screenshot 2026-05-12 at 9.16.49 a.m..png`
+
 ---
 
 ## Fase 3 — Corresponder
@@ -84,6 +87,21 @@ Prioridades: `next-sprint` / `backlog` / `won't-do`
 
 - IMP-2026-04-24-02 | ux-friction | Fix correcto al parpadeo de título durante cambio de tabs (objetivo original de ODE-113, no logrado): la causa raíz es que `publishTabState` se dispara con `displayTitle` derivado del `bodyText`/`createdAt` de la escritura anterior mientras `currentWritingId` ya avanzó a la nueva. Fix mínimo: no publicar `title` en `publishTabState` mientras `hydrationWritingId !== null` (hidratación en curso), o usar el estado `title` raw en lugar de `displayTitle` (el raw solo cambia tras completar la hidratación). | next-sprint | ODE-114
 
+- IMP-2026-05-12-02 | mejora | Desk writing list needs a stronger management surface: refine filters/table layout, expose useful text previews, support grouping/selection workflows, and make status changes possible directly from the list so the author does not need to open a writing just to move it from Draft to Exploring. | next-sprint | ODE-135
+
+- IMP-2026-05-12-03 | mejora | Writing titles are not directly editable from the current workflow. Add title editing from the editor tab/title surface and from the Desk list, plus AI title suggestions after enough content exists and on demand when editing a title. | next-sprint | ODE-136
+
+- IMP-2026-05-12-04 | ux-friction | Editor toolbar needs a structure and shortcut pass: group related tools, reduce clutter, and re-audit shortcuts against the shortcut table so commands do not conflict with browser/system shortcuts and remain discoverable. | next-sprint | ODE-137
+  - **Visuals**: `/Users/hugomarin/Desktop/Screenshot 2026-05-12 at 9.16.35 a.m..png`
+
+- IMP-2026-05-12-05 | mejora | Import `.md` and `.txt` documents as new writings. Import should create a new writing instead of inserting into the current document, preserve basic Markdown structure, and land in a stable saved/syncable state. | next-sprint | ODE-138
+
+- IMP-2026-05-12-06 | bug | Closing the last editor tab leaves an inconsistent state: the tab closes but the previous writing content can remain visible. The empty editor state should not show stale text; it should either show a clear empty message/action or create/open a valid new writing. | next-sprint | ODE-139
+  - **Visuals**: `/Users/hugomarin/Desktop/Screenshot 2026-05-12 at 9.11.21 a.m..png`
+
+- IMP-2026-05-12-07 | bug | Creating a new writing and leaving it empty can leave the editor in a limbo state with `Saving...` / `Writing not found`. Define the empty-new-writing lifecycle so a newly created blank writing is either intentionally local-only/unsaved or persisted with a clear server-confirmed state, without false not-found errors. | next-sprint | ODE-140
+  - **Visuals**: `/Users/hugomarin/Desktop/Screenshot 2026-05-12 at 9.11.21 a.m..png`
+
 ---
 
 ## Fase 4 — Organizar
@@ -91,6 +109,8 @@ Prioridades: `next-sprint` / `backlog` / `won't-do`
 - IMP-2026-04-23-02 | ux-friction | Collections navigation and interaction model redesign: current implementation has multiple creation entry points with inconsistent behavior, sidebar nesting that conflicts with the label/tag mental model, full document text shown inside collection cards, double-action on sidebar click (opens panel AND navigates), and a broken "Create" button. Design decision: collections are labels (a writing can belong to many), not folders. Direction validated in HTML prototype: Option B — single Collections entry point in sidebar leading to a dedicated /collections page. | next-sprint | ODE-111
   - **Reference**: `/tmp/odessay-collections-v2.html`
   - **Origin**: product design session 2026-04-23
+
+- IMP-2026-05-12-08 | ux-friction | Collection chips in the editor Properties panel are visually disconnected from the Add to collections control: existing chips appear on the left while the add action sits on the right. Align assigned collection chips with the add control on the right and add an explicit `X` remove action per chip. | next-sprint | ODE-141
 
 ---
 
@@ -102,7 +122,9 @@ _(sin entradas aún)_
 
 ## Fase 6 — AI Editor
 
-_(sin entradas aún)_
+- IMP-2026-05-12-09 | mejora | AI writing corrections are working but too limited to behave like a reliable autocorrect/editor. Improve the correction prompt, constrain scope, improve language detection, preserve memory/context of prior corrections, and make correction generation stream instead of waiting for a full response. | next-sprint | ODE-142
+
+- IMP-2026-05-12-10 | mejora | AI correction decorations should be interactive suggestions. Show clear text-level decorations for proposed corrections and let the author accept or reject each correction instead of applying opaque changes. | next-sprint | ODE-143
 
 ---
 
