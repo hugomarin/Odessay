@@ -1,18 +1,21 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 
 export default function AuthVerifyPage() {
   const searchParams = useSearchParams()
   const code = searchParams.get("code")
 
+  const [confirmationUrl, setConfirmationUrl] = useState<string | null>(null)
   const [autoRedirected, setAutoRedirected] = useState(false)
 
-  const confirmationUrl = useMemo(() => {
+  useEffect(() => {
     const hash = window.location.hash.replace(/^#/, "")
-    return hash || null
+    if (hash) {
+      setConfirmationUrl(hash)
+    }
   }, [])
 
   useEffect(() => {
