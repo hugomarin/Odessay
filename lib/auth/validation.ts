@@ -7,6 +7,15 @@ export type LoginValues = {
   password: string
 }
 
+export type ForgotPasswordValues = {
+  email: string
+}
+
+export type ResetPasswordValues = {
+  password: string
+  confirmPassword: string
+}
+
 export type SignupValues = {
   displayName: string
   username: string
@@ -15,7 +24,7 @@ export type SignupValues = {
 }
 
 export type AuthFieldErrors = Partial<
-  Record<"displayName" | "username" | "email" | "password" | "form", string>
+  Record<"displayName" | "username" | "email" | "password" | "confirmPassword" | "form", string>
 >
 
 export const normalizeEmail = (value: string) => value.trim().toLowerCase()
@@ -57,6 +66,36 @@ export const validateLoginValues = (values: LoginValues): AuthFieldErrors => {
 
   if (values.password.trim().length < 8) {
     errors.password = "Password must be at least 8 characters."
+  }
+
+  return errors
+}
+
+export const validateForgotPasswordValues = (
+  values: ForgotPasswordValues,
+): AuthFieldErrors => {
+  const errors: AuthFieldErrors = {}
+
+  if (!EMAIL_PATTERN.test(normalizeEmail(values.email))) {
+    errors.email = "Enter a valid email address."
+  }
+
+  return errors
+}
+
+export const validateResetPasswordValues = (
+  values: ResetPasswordValues,
+): AuthFieldErrors => {
+  const errors: AuthFieldErrors = {}
+
+  if (values.password.trim().length < 8) {
+    errors.password = "Password must be at least 8 characters."
+  }
+
+  if (!values.confirmPassword.trim()) {
+    errors.confirmPassword = "Confirm your new password."
+  } else if (values.password !== values.confirmPassword) {
+    errors.confirmPassword = "Passwords do not match."
   }
 
   return errors
@@ -109,3 +148,6 @@ export const toFriendlyAuthError = (message: string) => {
 
   return "Something went wrong. Please try again."
 }
+
+export const getResetPasswordRedirectUrl = (origin: string) =>
+  `${origin.replace(/\/$/, "")}/reset-password`
