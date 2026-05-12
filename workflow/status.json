@@ -75,7 +75,7 @@
             "phase": "Fase 3",
             "issue": "ODE-130",
             "linear_url": "https://linear.app/z9ne/issue/ODE-130",
-            "commit": "7545ed1",
+            "commit": "17e0efa",
             "date": "2026-05-04",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new warnings), npm test (263 tests). Performance contract: not required — client-side IndexedDB search with 150ms debounce, no network or rendering budget applicable. Scope: components/navigation/search-modal.tsx (new), components/navigation/sidebar.tsx (wire onClick + useState + render modal)."
         },
@@ -125,6 +125,24 @@
             "notes": "Validation in green: ./node_modules/.bin/tsc --noEmit, ./node_modules/.bin/next lint (0 new warnings; 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), ./node_modules/.bin/vitest run (35 files, 213 tests). Performance contract: not required — UI/schema refactor on existing panel, no new critical-path rendering or fetch work. Presentation contract: not required — editor chrome only, no cross-mode rich-text rendering contract changed. Browser verification completed on /perf/editor-harness with Playwright MCP: Properties panel opens from topbar, Status dropdown exposes New/Exploring/Draft/Done and updates the trigger, Export dropdown shows three formats plus helper note, Spellcheck toggle changes state. Limitation: the harness runs without an authenticated session and uses non-UUID writingId perf-harness-writing, so People/Preview-link network flows return existing 401/400 errors in the harness environment rather than exercising the happy path."
         },
         {
+            "what": "Refine Desk restructure mockup so it serves as the implementation reference for the real /desk work: single primary New writing action in the topbar (no duplicate in hero), system-styled topbar button, Shared with me table using the same row composition as My writings, sidebar iconography validated against the intended navigation set (Desk uses the lamp-desk reference), stronger hero gradient/new-card treatment retained per review, and clearer status language separating In progress vs Draft.",
+            "phase": "Fase 3",
+            "issue": "ODE-124",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-124/refine-desk-restructure-mockup-for-topbar-hero-shared-table-and",
+            "commit": "e4bc947",
+            "date": "2026-04-29",
+            "notes": "Static HTML mockup refinement under workflow/context/reference/improvements/desk-restructure-mockup.html. Performance contract: not required — no runtime UI, editor interactions, or rendering hot paths affected. Validation: visual review of HTML structure confirming topbar/hero/sidebar/shared-table direction agreed with review."
+        },
+        {
+            "what": "Fix tab title and content corruption when switching between editor tabs. Two guards added to the publishTabState effect in EditorShell: (1) skip when currentWritingId is null, so the blank draft tab opened by + no longer inherits the previous document's displayTitle; (2) pass routeWritingId only when it equals currentWritingId, so the stale routeWritingId left frozen by history.replaceState tab switches no longer overwrites the wrong tab. Together these stop all tab titles from converging to the most recently loaded document.",
+            "phase": "Fase 3",
+            "issue": "ODE-123",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-123/fix-tab-titles-overwritten-and-content-not-switching-when-switching",
+            "commit": "3264e6c",
+            "date": "2026-04-29",
+            "notes": "Bug fix in components/editor/editor-shell.tsx publishTabState effect. Performance contract: not required — editor state guard only, no new critical-path work. Validation: behavior verified via tab switching flow (blank draft tab opens with Untitled writing instead of inheriting previous title; tab titles remain distinct after multiple switches)."
+        },
+        {
             "what": "Add inline editor decorations for pending publication review suggestions. New PublicationSuggestionExtension uses a ProseMirror plugin with DecorationSet to underline pending suggestion original_text in terracotta wavy. Panel exposes onSuggestionsChange to editor-shell, which syncs decorations when activePanel === 'publication' and mode === 'rich', clearing on close or markdown mode switch. Only first match per suggestion is decorated. Coexists with find-replace decorations.",
             "phase": "Fase 3",
             "issue": "ODE-122",
@@ -156,7 +174,7 @@
             "phase": "Fase 3",
             "issue": "ODE-119",
             "linear_url": "https://linear.app/z9ne/issue/ODE-119",
-            "commit": "165a332",
+            "commit": "35d5c09",
             "date": "2026-04-28",
             "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (0 new errors, 6 pre-existing warnings), npm test (249/249). Performance contract: required — trace captured at artifacts/perf/editor-trace-ode119.json.gz; perf gate passed via node scripts/check-performance-gate.mjs with 14 pass, 0 warn, 1 skip, 0 required_failures. Scope: handleSelectWorkspaceTab, handleCloseWorkspaceTab, handleCreateWorkspaceTab in components/editor/editor-shell.tsx."
         },
