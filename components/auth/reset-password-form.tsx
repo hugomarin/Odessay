@@ -10,7 +10,7 @@ import {
   validateResetPasswordValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
-import { createAuthClient } from "@/lib/supabase/client-auth"
+import { createClient } from "@/lib/supabase/client"
 
 type RecoveryState =
   | { status: "checking"; message: string }
@@ -43,7 +43,7 @@ export function ResetPasswordForm() {
 
   useEffect(() => {
     let active = true
-    const supabase = createAuthClient()
+    const supabase = createClient()
 
     const establishRecoverySession = async () => {
       if (queryError) {
@@ -154,7 +154,7 @@ export function ResetPasswordForm() {
     }
 
     startTransition(async () => {
-      const supabase = createAuthClient()
+      const supabase = createClient()
       const { error } = await supabase.auth.updateUser({ password })
 
       if (error) {
