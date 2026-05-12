@@ -69,6 +69,7 @@ export function ResetPasswordForm() {
         }
 
         if (error) {
+          console.error("[reset-password] exchangeCodeForSession failed:", error.message, error)
           setRecoveryState({ status: "invalid", message: recoveryErrorMessage })
           return
         }
