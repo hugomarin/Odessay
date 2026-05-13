@@ -58,7 +58,7 @@ export function BulkActionBar({
         id="desk-bulk-action-bar"
         data-section="desk-bulk-action-bar"
         data-testid="desk-bulk-action-bar"
-        className="flex items-center justify-between gap-4 border-b-[0.5px] border-border bg-muted/30 px-5 py-2.5 sm:px-9"
+        className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center justify-between gap-4 rounded-[10px] border-[0.5px] border-border bg-sb px-4 py-2.5 shadow-float-md"
       >
         <div className="flex items-center gap-3">
           <span className="text-[13px] font-medium text-ink">

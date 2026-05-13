@@ -80,7 +80,7 @@ export function DeskFilterBar({
       data-testid="desk-filter-bar"
       className="DeskFilterBar"
     >
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-[320px]">
           <Search className="absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-ink-4" strokeWidth={1.5} />
           <Input

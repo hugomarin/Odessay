@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Pencil, Tags, Trash2 } from "lucide-react"
+import { Check, Eye, Pencil, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -27,6 +27,7 @@ type DeskActivityTableProps = {
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
   onRenameWriting?: (writingId: string) => void
+  onPreviewWriting?: (writingId: string) => void
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
@@ -59,6 +60,7 @@ export function DeskActivityTable({
   onCreateCollection,
   onStatusChange,
   onRenameWriting,
+  onPreviewWriting,
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
@@ -203,6 +205,20 @@ export function DeskActivityTable({
                                   aria-label={`Rename ${row.title}`}
                                 >
                                   <Pencil className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                                </button>
+                              ) : null}
+                              {onPreviewWriting ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    onPreviewWriting(row.id)
+                                  }}
+                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                  aria-label={`Preview ${row.title}`}
+                                >
+                                  <Eye className="h-[12px] w-[12px]" strokeWidth={1.5} />
                                 </button>
                               ) : null}
                             </div>

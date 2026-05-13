@@ -9,6 +9,7 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DeskHero } from "@/components/desk/desk-hero"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import { useDeskFilters } from "@/hooks/useDeskFilters"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
@@ -85,6 +86,7 @@ export default function DeskPage() {
   >({})
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
@@ -381,6 +383,10 @@ export default function DeskPage() {
     return filteredSummary.groups.flatMap((group) => group.rows.map((row) => row.id))
   }, [filteredSummary])
 
+  const previewRows = useMemo(() => {
+    return filteredSummary.groups.flatMap((group) => group.rows)
+  }, [filteredSummary])
+
   const allVisibleSelected =
     visibleWritingIds.length > 0 && visibleWritingIds.every((id) => selectedIds.has(id))
 
@@ -405,6 +411,12 @@ export default function DeskPage() {
     [sharedItems.length, summary.total],
   )
 
+  useEffect(() => {
+    if (previewIndex !== null && previewIndex >= previewRows.length) {
+      setPreviewIndex(null)
+    }
+  }, [previewIndex, previewRows.length])
+
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await localDB.writings.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
@@ -416,6 +428,63 @@ export default function DeskPage() {
       title: writing.title?.trim() || "Untitled writing",
       bodyText: writing.body_text,
     })
+  }, [])
+
+  const openWritingPreview = useCallback(
+    (writingId: string) => {
+      const nextIndex = previewRows.findIndex((row) => row.id === writingId)
+      if (nextIndex >= 0) {
+        setPreviewIndex(nextIndex)
+      }
+    },
+    [previewRows],
+  )
+
+  const toggleWritingCollection = useCallback(
+    async (writingId: string, collectionId: string) => {
+      const currentIds = getWritingCollectionIds(writingId, writingCollections)
+      const nextIds = currentIds.includes(collectionId)
+        ? currentIds.filter((id) => id !== collectionId)
+        : [...currentIds, collectionId]
+
+      await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
+      getSyncWorker().schedule(0)
+    },
+    [writingCollections],
+  )
+
+  const createWritingCollection = useCallback(
+    async (writingId: string, name: string) => {
+      const ownerId = getLocalDBScope()
+      const collection = await createLocalCollection({
+        ownerId: ownerId === "anonymous" ? null : ownerId,
+        name,
+      })
+      const currentIds = getWritingCollectionIds(writingId, writingCollections)
+      await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
+      getSyncWorker().schedule(0)
+    },
+    [writingCollections],
+  )
+
+  const changeWritingStatus = useCallback(async (writingId: string, status: LocalWriting["status"]) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+    if (writing.status === status) {
+      return
+    }
+
+    const updatedWriting: LocalWriting = {
+      ...writing,
+      status,
+      version: writing.version + 1,
+      updated_at: new Date().toISOString(),
+      local_updated_at: Date.now(),
+    }
+
+    await enqueueWritingUpsert(updatedWriting)
   }, [])
 
   const saveWritingTitle = useCallback(
@@ -472,24 +541,23 @@ export default function DeskPage() {
         <>
           <DeskHero drafts={summary.heroDrafts} />
 
-          <div className="border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
-          </div>
-
-          <div className="border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
-            <DeskFilterBar
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              selectedCollectionIds={selectedCollectionIds}
-              onToggleCollection={toggleCollection}
-              selectedStatuses={selectedStatuses}
-              onToggleStatus={toggleStatus}
-              collectionOptions={collectionOptions}
-              activeFilterCount={activeFilterCount}
-              hasActiveFilters={hasActiveFilters}
-              filteredCount={filteredSummary.total}
-              totalCount={summary.total}
-            />
+            <div className="min-w-[280px] flex-1">
+              <DeskFilterBar
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                selectedCollectionIds={selectedCollectionIds}
+                onToggleCollection={toggleCollection}
+                selectedStatuses={selectedStatuses}
+                onToggleStatus={toggleStatus}
+                collectionOptions={collectionOptions}
+                activeFilterCount={activeFilterCount}
+                hasActiveFilters={hasActiveFilters}
+                filteredCount={filteredSummary.total}
+                totalCount={summary.total}
+              />
+            </div>
           </div>
 
           {hasSelection && (
@@ -542,45 +610,11 @@ export default function DeskPage() {
               selectedIds={selectedIds}
               onToggleSelection={toggleSelection}
               hasSelection={hasSelection}
-              onToggleCollection={async (writingId, collectionId) => {
-                const currentIds = getWritingCollectionIds(writingId, writingCollections)
-                const nextIds = currentIds.includes(collectionId)
-                  ? currentIds.filter((id) => id !== collectionId)
-                  : [...currentIds, collectionId]
-
-                await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
-                getSyncWorker().schedule(0)
-              }}
-              onCreateCollection={async (writingId, name) => {
-                const ownerId = getLocalDBScope()
-                const collection = await createLocalCollection({
-                  ownerId: ownerId === "anonymous" ? null : ownerId,
-                  name,
-                })
-                const currentIds = getWritingCollectionIds(writingId, writingCollections)
-                await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
-                getSyncWorker().schedule(0)
-              }}
-              onStatusChange={async (writingId, status) => {
-                const writing = await localDB.writings.get(writingId)
-                if (!writing || writing.sync_status === "deleted") {
-                  return
-                }
-                if (writing.status === status) {
-                  return
-                }
-
-                const updatedWriting: LocalWriting = {
-                  ...writing,
-                  status,
-                  version: writing.version + 1,
-                  updated_at: new Date().toISOString(),
-                  local_updated_at: Date.now(),
-                }
-
-                await enqueueWritingUpsert(updatedWriting)
-              }}
+              onToggleCollection={toggleWritingCollection}
+              onCreateCollection={createWritingCollection}
+              onStatusChange={changeWritingStatus}
               onRenameWriting={openRenameWriting}
+              onPreviewWriting={openWritingPreview}
               onDeleteRequest={async (id) => {
                 await enqueueWritingDelete(id)
                 await loadDeskActivity()
@@ -616,6 +650,23 @@ export default function DeskPage() {
               void saveWritingTitle(nextTitle)
               setRenameTarget(null)
             }}
+          />
+
+          <WritingPreviewModal
+            open={previewIndex !== null}
+            rows={previewRows}
+            currentIndex={previewIndex}
+            collectionOptions={collectionOptions}
+            collectionIdsByWritingId={collectionIdsByWritingId}
+            onOpenChange={(open) => {
+              if (!open) {
+                setPreviewIndex(null)
+              }
+            }}
+            onIndexChange={setPreviewIndex}
+            onToggleCollection={toggleWritingCollection}
+            onCreateCollection={createWritingCollection}
+            onStatusChange={changeWritingStatus}
           />
         </>
       ) : (
