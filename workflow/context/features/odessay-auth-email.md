@@ -244,8 +244,11 @@ Padding inner: 0 40px en el contenido
    padding:     24px 40px
    font-size:   11px, color #8C837E
    text-align:  center
-   contenido:   (c) 2026 Odessay · direccion fisica (requisito anti-spam)
-               + link "Gestionar notificaciones" (stub)
+   contenido:   (c) {ano} Odessay · link "Gestionar notificaciones" (stub)
+
+Nota: NO incluir direccion fisica. Los emails de Odessay son transaccionales
+(signup, recovery, email change, reauth) y estan exentos del requisito CAN-SPAM
+de address-physical, que solo aplica a comunicaciones comerciales/marketing.
 
 ---
 
@@ -295,8 +298,7 @@ Padding inner: 0 40px en el contenido
           <!-- Footer -->
           <tr>
             <td style="border-top:1px solid #E8E7E4;padding:24px 40px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#8C837E;text-align:center;line-height:1.6;">
-              &copy; 2026 Odessay &middot; 123 Example St, San Francisco, CA 94102<br>
-              <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
+              &copy; 2026 Odessay &middot; <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
             </td>
           </tr>
         </table>
@@ -361,8 +363,7 @@ Padding inner: 0 40px en el contenido
           <!-- Footer -->
           <tr>
             <td style="border-top:1px solid #E8E7E4;padding:24px 40px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#8C837E;text-align:center;line-height:1.6;">
-              &copy; 2026 Odessay &middot; 123 Example St, San Francisco, CA 94102<br>
-              <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
+              &copy; 2026 Odessay &middot; <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
             </td>
           </tr>
         </table>
@@ -427,8 +428,7 @@ Padding inner: 0 40px en el contenido
           <!-- Footer -->
           <tr>
             <td style="border-top:1px solid #E8E7E4;padding:24px 40px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#8C837E;text-align:center;line-height:1.6;">
-              &copy; 2026 Odessay &middot; 123 Example St, San Francisco, CA 94102<br>
-              <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
+              &copy; 2026 Odessay &middot; <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
             </td>
           </tr>
         </table>
@@ -488,8 +488,7 @@ Padding inner: 0 40px en el contenido
           <!-- Footer -->
           <tr>
             <td style="border-top:1px solid #E8E7E4;padding:24px 40px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#8C837E;text-align:center;line-height:1.6;">
-              &copy; 2026 Odessay &middot; 123 Example St, San Francisco, CA 94102<br>
-              <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
+              &copy; 2026 Odessay &middot; <a href="https://odessay.com/settings/notifications" style="color:#8C837E;text-decoration:underline;">Gestionar notificaciones</a>
             </td>
           </tr>
         </table>
@@ -536,7 +535,7 @@ El route handler `app/(auth)/auth/confirm/route.ts` es el punto de entrada para 
 2. **Sin marketing.** No mencionar features, product roadmap, o promesas de valor.
 3. **Sin links extra.** Solo el CTA principal y el footer legal con link al dominio raiz.
 4. **Tono claro, sobrio y directo.** Frases cortas. No usar exclamaciones excesivas.
-5. **Identidad consistente.** Header wordmark "Odessay" en Lora 20px. Footer con (c) ano, direccion fisica stub y link de gestion.
+5. **Identidad consistente.** Header wordmark "Odessay" en Lora 20px. Footer con (c) ano y link "Gestionar notificaciones". No incluir direccion fisica (auth emails son transaccionales, exentos del requisito CAN-SPAM de address-physical).
 6. **URLs dinamicas.** Usar `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=<literal>`. Nunca hardcodear URLs de Supabase.
 7. **Tiempo de expiracion explicito.** Mencionar cuanto dura el link (24h para signup/email-change, 1h para password reset/reauthentication).
 8. **Instruccion de ignore seguro.** Siempre incluir "If you didn't request this, you can safely ignore this email."
@@ -557,7 +556,7 @@ Checklist antes de activar cada template en produccion:
 | 6 | **Reply-to valido.** Configurar reply-to a una direccion monitorizada o dejarlo vacio para que Supabase maneje bounces. | |
 | 7 | **Preview text controlado.** El primer parrafo visible del HTML determina el preview text en Gmail/Outlook. Asegurar que no sea codigo ni variables crudas. | |
 | 8 | **Alt text en CTA.** Aunque el CTA es texto plano dentro de un `<a>`, el texto del boton debe ser descriptivo sin depender de estilos. | |
-| 9 | **Direccion fisica presente.** El footer incluye una direccion fisica (requisito CAN-SPAM / anti-spam). | |
+| 9 | **Sin direccion fisica.** Los auth emails son transaccionales y estan exentos del requisito CAN-SPAM de address-physical (que aplica solo a marketing). Footer queda con (c) ano + link de gestion, nada mas. | |
 | 10 | **Opcion de gestionar notificaciones.** El footer incluye un stub de link para gestionar preferencias. | |
 
 **Subjects auditados:**

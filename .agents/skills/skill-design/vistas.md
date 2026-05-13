@@ -677,8 +677,12 @@ Padding inner: 0 40px en el contenido
    padding:     24px 40px
    font-size:   11px, color #8C837E
    text-align:  center
-   contenido:   © {año} Odessay · dirección física (requisito anti-spam)
-               + link "Gestionar notificaciones" (stub)
+   contenido:   © {año} Odessay · link "Gestionar notificaciones" (stub)
+
+   Nota: NO incluir dirección física. Los emails de Odessay son
+   transaccionales (signup, recovery, email change, reauth) y están
+   exentos del requisito CAN-SPAM de address-physical, que aplica
+   solo a comunicaciones comerciales/marketing.
 ```
 
 **Tokens HSL → HEX (para usar en emails)**

@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
     | "magiclink"
     | "signup"
     | null
-  const next = searchParams.get("next") ?? "/"
+  const rawNext = searchParams.get("next") ?? "/"
+  const safeNext = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/"
 
   if (!token_hash || !type) {
     return NextResponse.redirect(
@@ -33,5 +34,5 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  return NextResponse.redirect(new URL(next, request.url))
+  return NextResponse.redirect(new URL(safeNext, request.url))
 }
