@@ -119,8 +119,12 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 - Si existe PR: continuar con la secuencia normal.
 
 **Secuencia — si aprobado:**
-1. Verificar gate: `npm run ops:delivery:gate` en verde (y con `OPS_PERF_TRACE_PATH` cuando el contrato es requerido).
-2. Validar `Performance Contract` contra evidencia objetiva:
+1. Verificar gate:
+   - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` cuando el contrato es requerido).
+   - CI `Traceability Gates` en SUCCESS.
+   - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
+   - **Excepción perf:** cuando el brief declara `Performance Contract: not required` con justificación válida, los fallos del perf gate por métricas no requeridas o por hardware de CI no bloquean aprobación; en ese caso el perf gate actúa como informativo. Lo que sí debe estar verde sin excepción es traceability, Vercel preview y typecheck/lint.
+2. Validar `Performance Contract` contra evidencia objetiva (solo si es required):
    - existe trace reproducible;
    - `node scripts/check-performance-gate.mjs --trace <trace>` no reporta `required_failures`;
    - la evidencia está adjunta en PR/issue.
@@ -141,10 +145,30 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
    - no existe justificación explícita cuando el brief marcó `Performance Contract: not required`.
    - falta evidencia de paridad cross-mode cuando `Presentation Contract` es requerido.
+   - existe un **security finding** aplicable al diff sin parche aplicado: open redirect, XSS via `dangerouslySetInnerHTML` sin sanitizar, SSRF en URLs construidas con input externo, secrets en logs/cliente, validación faltante en boundary (route handler, API public, webhook).
+   - Vercel preview deploy en FAILURE — no se aprueba un PR que rompe el build/deploy, aunque el delivery gate local pase.
 3. Mover issue a `In Progress`.
 4. No cerrar ni eliminar el PR — mantener rama activa.
 
 **Restricción:** no agregar alcance nuevo en REVIEW. Solo correcciones derivadas del review.
+
+**Política de security findings:** un hallazgo de seguridad — por más leve o no-explotable-trivialmente que parezca — se trata como bloqueante desde el primer review, independientemente del dominio (auth, API pública, ingestión de archivos, queries SQL, secrets, validación de input). No usar frases como "conviene cerrar" o "antes del re-review" en el primer comentario: usar "bloquea aprobación" e incluir el patch sugerido inline.
+
+Categorías que activan esta política, no exhaustivas:
+- redirects/router accediendo a input sin validar (open redirect);
+- inyección — SQL en queries raw, comandos en `exec`, HTML en `dangerouslySetInnerHTML`, XSS reflejado en query params;
+- SSRF — fetch a URLs construidas con input externo sin allowlist;
+- IDOR — acceso a recursos por ID sin verificar ownership;
+- CSRF en routes que mutan estado sin token o sin SameSite;
+- path traversal en file serving o uploads;
+- mass assignment / overposting en endpoints de update;
+- secrets en logs, en cliente, o en commits;
+- validación faltante en boundary (route handler, API pública, webhook, server action);
+- desactivación silenciosa de checks (`@ts-ignore` sobre código de seguridad, `eslint-disable` sobre rules de security, `--no-verify` en hooks).
+
+Excepción: si el finding ya existía en `main` antes del PR y es claramente fuera de scope, abrir issue de seguridad separado y referenciarlo; pero seguir bloqueando si el PR amplía la superficie afectada o si el código tocado por el PR queda al lado del finding (no se cierra un PR que pasa por encima de un hueco visible).
+
+El razonamiento detrás de la política: cuando se marca un finding como "no bloqueante para probar", el costo de cerrar el round de review desaparece, pero el finding se queda en la rama y suele postergarse hasta que vuelve como hard reject en el siguiente review — el costo total crece, no baja. Es más barato pedirlo en el primer review.
 
 ---
 
