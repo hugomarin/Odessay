@@ -10,7 +10,7 @@ import {
   validateResetPasswordValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
-import { createClient } from "@/lib/supabase/client"
+import { createAuthClient } from "@/lib/supabase/client-auth"
 
 type RecoveryState =
   | { status: "checking"; message: string }
@@ -43,7 +43,7 @@ export function ResetPasswordForm() {
 
   useEffect(() => {
     let active = true
-    const supabase = createClient()
+    const supabase = createAuthClient()
 
     const establishRecoverySession = async () => {
       if (queryError) {
@@ -62,6 +62,11 @@ export function ResetPasswordForm() {
       const code = searchParams.get("code")
 
       if (code) {
+        console.log("[debug] before exchangeCodeForSession:")
+        console.log("[debug] document.cookie:", document.cookie)
+        console.log("[debug] localStorage keys:", Object.keys(localStorage))
+        console.log("[debug] localStorage 'sb-...-auth-token-code-verifier':", localStorage.getItem("sb-vkdvprzxyccgmhifwmfz-auth-token-code-verifier"))
+
         const { error } = await supabase.auth.exchangeCodeForSession(code)
 
         if (!active) {
@@ -154,7 +159,7 @@ export function ResetPasswordForm() {
     }
 
     startTransition(async () => {
-      const supabase = createClient()
+      const supabase = createAuthClient()
       const { error } = await supabase.auth.updateUser({ password })
 
       if (error) {
