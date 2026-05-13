@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-12",
+    "last_updated": "2026-05-13",
     "active_phase": {
         "name": "Fase 3 — Organizar y publicar",
         "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
@@ -24,12 +24,20 @@
             "ODE-138",
             "ODE-139",
             "ODE-140",
-            "ODE-141",
-            "ODE-153"
+            "ODE-141"
         ],
-        "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 Claude API agent en wf-run, ODE-107 evaluar headless auth Codex/Claude, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips, ODE-153 align account email change con flujo nativo Supabase."
+        "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 Claude API agent en wf-run, ODE-107 evaluar headless auth Codex/Claude, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
     },
     "built": [
+        {
+            "what": "Align account email change with Supabase Auth native email flow. The native Supabase Auth updateUser email change flow was already adopted in ODE-102; this issue completes the alignment by adding comprehensive test coverage for all error states (unauthorized, unconfirmed email, pending email change, same email, invalid input) and fixing the redirect URL expectation in tests to match the /auth/confirm?next=/settings/account route. No app-owned auth email sending path remains.",
+            "phase": "Fase 3",
+            "issue": "ODE-153",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-153/align-account-email-change-with-supabase-auth-native-email-flow",
+            "commit": "0b80007",
+            "date": "2026-05-13",
+            "notes": "Validation in green: npm run typecheck (pre-existing TipTap type issues only), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (280 tests, 7 for update-email route covering success, unauthorized, unconfirmed email, pending change, same email, invalid input, and Supabase auth failure). Performance contract: not required — transactional auth flow. Presentation contract: not required — no UI changes."
+        },
         {
             "what": "Define Supabase Auth email templates and transactional copy. Updated odessay-auth-email.md with complete HTML template copy for Confirm signup, Reset password, Change email address, and Reauthentication (optional). Each template follows the auth copy rules: single CTA, no marketing, no extra links, dynamic Supabase variables only ({{ .ConfirmationURL }}, {{ .RedirectTo }}, {{ .Email }}), explicit expiration language, and safe-ignore instruction. Documented template configuration location in Supabase Dashboard (Authentication -> Emails -> Templates), variable reference table, and universal copy rules.",
             "phase": "Fase 3",
