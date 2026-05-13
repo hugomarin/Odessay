@@ -10,7 +10,7 @@ import {
   validateForgotPasswordValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
-import { createAuthClient } from "@/lib/supabase/client-auth"
+import { createClient } from "@/lib/supabase/client"
 
 const successMessage =
   "If an Odessay account exists for that email, Supabase will send a recovery link."
@@ -35,15 +35,10 @@ export function ForgotPasswordForm() {
     }
 
     startTransition(async () => {
-      const supabase = createAuthClient()
+      const supabase = createClient()
       const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-        redirectTo: `${window.location.origin.replace(/\/$/, "")}/auth/verify`,
+        redirectTo: getResetPasswordRedirectUrl(window.location.origin),
       })
-
-      console.log("[debug] after resetPasswordForEmail:")
-      console.log("[debug] document.cookie:", document.cookie)
-      console.log("[debug] localStorage keys:", Object.keys(localStorage))
-      console.log("[debug] localStorage 'sb-...-auth-token-code-verifier':", localStorage.getItem("sb-vkdvprzxyccgmhifwmfz-auth-token-code-verifier"))
 
       if (error) {
         setErrors({ form: sendErrorMessage })
