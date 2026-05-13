@@ -463,7 +463,6 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       <RenameWritingModal
         open={renameWritingTarget !== null}
         title={renameWritingTarget?.title ?? "Untitled writing"}
-        writingId={renameWritingTarget?.id ?? null}
         bodyText={renameWritingTarget?.bodyText ?? ""}
         onOpenChange={(open) => {
           if (!open) {

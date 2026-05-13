@@ -12,11 +12,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { hasEnoughTitleSuggestionContent } from "@/lib/ai/title-suggestions"
 
 type RenameWritingModalProps = {
   open: boolean
   title: string
-  writingId?: string | null
   bodyText?: string
   onOpenChange: (open: boolean) => void
   onConfirm: (title: string) => void
@@ -27,13 +27,9 @@ type TitleSuggestionEnvelope = {
   error: { code: string; message: string } | null
 }
 
-const hasEnoughTitleSuggestionContent = (bodyText: string) =>
-  bodyText.trim().split(/\s+/).filter(Boolean).length >= 12
-
 export function RenameWritingModal({
   open,
   title,
-  writingId = null,
   bodyText = "",
   onOpenChange,
   onConfirm,
@@ -68,7 +64,6 @@ export function RenameWritingModal({
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          writingId,
           currentTitle: nextTitle,
           bodyText,
         }),

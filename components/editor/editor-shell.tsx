@@ -142,6 +142,11 @@ type PersistSnapshotOverrides = {
   visibility?: WritingVisibility
 }
 
+type RenameWritingSnapshot = {
+  title: string
+  bodyText: string
+}
+
 const NotesPanel = lazy(() =>
   import("@/components/editor/panels/notes-panel").then((module) => ({ default: module.NotesPanel })),
 )
@@ -246,6 +251,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [publicationSuggestions, setPublicationSuggestions] = useState<PublicationSuggestion[]>([])
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
+  const [renameModalSnapshot, setRenameModalSnapshot] = useState<RenameWritingSnapshot | null>(null)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [footnoteModalOpen, setFootnoteModalOpen] = useState(false)
   const [tableModalOpen, setTableModalOpen] = useState(false)
@@ -2441,9 +2447,32 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
+      setRenameModalSnapshot({
+        title: titleRef.current.trim() || UNTITLED_WRITING_TITLE,
+        bodyText: editor?.getText() ?? "",
+      })
       setRenameModalOpen(true)
     },
-    [editorSession.active_tab_id],
+    [editor, editorSession.active_tab_id],
+  )
+
+  const handleRenameModalOpenChange = useCallback((open: boolean) => {
+    setRenameModalOpen(open)
+    if (!open) {
+      setRenameModalSnapshot(null)
+    }
+  }, [])
+
+  const handleRenameWritingConfirm = useCallback(
+    (nextTitle: string) => {
+      setTitle(nextTitle)
+      setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
+
+      if (editor) {
+        void persistEditorSnapshot(editor, { title: nextTitle })
+      }
+    },
+    [editor, persistEditorSnapshot],
   )
 
   const handleCreateWorkspaceTab = useCallback(async () => {
@@ -2856,21 +2885,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
         <MobileWriteNotice />
       </div>
 
-      <RenameWritingModal
-        open={renameModalOpen}
-        title={displayTitle}
-        writingId={currentWritingId}
-        bodyText={bodyText}
-        onOpenChange={setRenameModalOpen}
-        onConfirm={(nextTitle) => {
-          setTitle(nextTitle)
-          setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
-
-          if (editor) {
-            void persistEditorSnapshot(editor, { title: nextTitle })
-          }
-        }}
-      />
+      {renameModalOpen || renameModalSnapshot ? (
+        <RenameWritingModal
+          open={renameModalOpen}
+          title={renameModalSnapshot?.title ?? UNTITLED_WRITING_TITLE}
+          bodyText={renameModalSnapshot?.bodyText ?? ""}
+          onOpenChange={handleRenameModalOpenChange}
+          onConfirm={handleRenameWritingConfirm}
+        />
+      ) : null}
 
       <InsertLinkModal
         open={linkModalOpen}

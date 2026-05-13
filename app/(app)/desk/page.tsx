@@ -606,7 +606,6 @@ export default function DeskPage() {
           <RenameWritingModal
             open={renameTarget !== null}
             title={renameTarget?.title ?? "Untitled writing"}
-            writingId={renameTarget?.id ?? null}
             bodyText={renameTarget?.bodyText ?? ""}
             onOpenChange={(open) => {
               if (!open) {

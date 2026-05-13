@@ -13,9 +13,8 @@ import {
 import { createClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
-  writingId: z.string().trim().min(1).optional(),
   currentTitle: z.string().trim().max(160).default("Untitled writing"),
-  bodyText: z.string().default(""),
+  bodyText: z.string().max(50000).default(""),
 });
 
 const jsonError = (status: number, code: string, message: string) =>
