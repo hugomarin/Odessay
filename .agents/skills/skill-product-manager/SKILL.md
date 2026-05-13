@@ -104,6 +104,26 @@ Si no tiene dependencias, escribir: None.
 
 Formato: [ID-DEL-ISSUE] Título del issue del que depende.
 
+## Consumers *(si el issue cambia un contrato del que otros issues dependen)*
+
+Listar los issues consumidores del contrato que este issue toca, y para cada uno la asunción específica afectada. Omitir esta sección solo si el issue no cambia ningún contrato visible para otros features.
+
+Formato:
+- [ID-DEL-CONSUMER] Título — asunción concreta que este issue invalida o modifica.
+
+El análisis de consumidores no es solo enumerativo: el agente que escribe el brief debe verificar si el cambio rompe asunciones del consumer y, si lo rompe, declarar explícitamente si se genera un sub-issue de migración o si el fix entra en el alcance de este mismo issue.
+
+Tipos de contrato cuya modificación obliga a hacer este análisis:
+- Esquema de base de datos (columnas renombradas, tipos cambiados, RLS modificadas).
+- Forma de un payload de API o de un evento.
+- Estructura de un objeto persistido en cliente (localStorage, IndexedDB, cookies).
+- Convención de URLs/rutas (paths, query params, redirect URLs).
+- Props públicas de un componente compartido.
+- Variables de entorno cuyo nombre o significado cambia.
+- Nombres de claves en archivos de config compartidos (`workflow/perf-budgets.json`, `workflow/status.json`, etc.).
+
+Un brief que cambia un contrato sin listar consumidores produce regresiones latentes: el feature consumidor sigue funcionando localmente con su asunción vieja hasta que un caso edge lo expone, típicamente lejos del autor del cambio. Cuando dudes si algo es "un contrato", asume que sí lo es y enumera consumidores.
+
 ## Files affected
 Archivos que este issue va a crear o modificar. El agente verifica antes de empezar
 que ningún PR abierto toca los mismos archivos — si hay solapamiento, espera.
@@ -118,6 +138,7 @@ Formato — siempre texto plano, nunca Markdown links:
 3. Los docs de spec (`workflow/core/`, `workflow/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
 5. `workflow/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `workflow/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
+6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
 
 Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/status.json`.
 
@@ -194,6 +215,19 @@ Usar siempre paths completos desde la raíz del repo.
 - Cualquier issue de base de datos → `.agents/skills/skill-database/SKILL.md` + `workflow/core/odessay-modelo-datos.md`
 - Issues que tocan un feature con doc propio → el doc de `workflow/features/` correspondiente
 - Issues que tocan tabs, filtros, o navegación interna del editor → `workflow/context/features/odessay-sync.md` + `workflow/context/core/odessay-arquitectura.md`
+- Issues con templates visuales reutilizables (emails, PDFs, public pages) → la sección correspondiente de `.agents/skills/skill-design/vistas.md` con el spec canónico citado por anchor (no genérico).
+
+**External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
+
+Las refs internas del repo no bastan cuando el issue se integra con un proveedor (Supabase, Stripe, Resend, Anthropic, Vercel, GitHub, etc.) o sigue un patrón documentado fuera del repo. La regla general: si BUILD necesitaría buscar en Google para implementar correctamente, ese link debe estar en `Reference docs`.
+
+Categorías de referencia que típicamente caen acá:
+- **APIs y SDKs de terceros** — link al endpoint canónico del feature usado, no al landing page genérico. Si hay variantes (server-side vs client-side, SSR vs SPA, App Router vs Pages Router), citar la variante que aplica al stack del repo.
+- **Protocolos y standards públicos** — OAuth2, OIDC, JWT, PKCE, OTP, CORS, CSP, RFC específicas. Incluir tanto el RFC como cualquier guía de implementación que el proveedor publique.
+- **Convenciones del framework** — patrones de Next.js App Router, React Server Components, Tailwind config, Vercel env handling cuando el issue depende de ellos.
+- **Limitaciones documentadas** — quotas, rate limits, plan tiers, feature gates del proveedor que afectan el diseño.
+
+El criterio operativo es simple: BUILD debe poder implementar sin tener que inferir nombres de variables, formas de payload, ni elegir entre patrones equivalentes. Si el brief no cita el link canónico, BUILD invariablemente inventa un patrón aproximado o usa uno obsoleto. Ese costo aparece como rounds extra de REVIEW, no como falla obvia en BUILD.
 
 ## Delivery
 
