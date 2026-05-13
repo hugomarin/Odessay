@@ -34,7 +34,7 @@
             "phase": "Fase 3",
             "issue": "ODE-153",
             "linear_url": "https://linear.app/z9ne/issue/ODE-153/align-account-email-change-with-supabase-auth-native-email-flow",
-            "commit": "0b80007",
+            "commit": "24b9c3c",
             "date": "2026-05-13",
             "notes": "Validation in green: npm run typecheck (pre-existing TipTap type issues only), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), npm test (280 tests, 7 for update-email route covering success, unauthorized, unconfirmed email, pending change, same email, invalid input, and Supabase auth failure). Performance contract: not required — transactional auth flow. Presentation contract: not required — no UI changes."
         },
