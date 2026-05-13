@@ -487,13 +487,9 @@ export default function DeskPage() {
     await enqueueWritingUpsert(updatedWriting)
   }, [])
 
-  const saveWritingTitle = useCallback(
-    async (nextTitle: string) => {
-      if (!renameTarget) {
-        return
-      }
-
-      const writing = await localDB.writings.get(renameTarget.id)
+  const saveWritingTitleById = useCallback(
+    async (writingId: string, nextTitle: string) => {
+      const writing = await localDB.writings.get(writingId)
       if (!writing || writing.sync_status === "deleted") {
         return
       }
@@ -513,7 +509,18 @@ export default function DeskPage() {
       await loadDeskActivity()
       void loadRecipientPreviewsAsync()
     },
-    [loadDeskActivity, loadRecipientPreviewsAsync, renameTarget],
+    [loadDeskActivity, loadRecipientPreviewsAsync],
+  )
+
+  const saveWritingTitle = useCallback(
+    async (nextTitle: string) => {
+      if (!renameTarget) {
+        return
+      }
+
+      await saveWritingTitleById(renameTarget.id, nextTitle)
+    },
+    [renameTarget, saveWritingTitleById],
   )
 
   return (
@@ -568,6 +575,11 @@ export default function DeskPage() {
               onSelectAll={() => selectAll(visibleWritingIds)}
               onDeselectAll={deselectAll}
               onDelete={() => setIsBulkDeleteOpen(true)}
+              onStatusChange={async (status) => {
+                for (const writingId of Array.from(selectedIds)) {
+                  await changeWritingStatus(writingId, status)
+                }
+              }}
               collectionOptions={collectionOptions}
               onAddToCollection={async (collectionId) => {
                 for (const writingId of Array.from(selectedIds)) {
@@ -667,6 +679,7 @@ export default function DeskPage() {
             onToggleCollection={toggleWritingCollection}
             onCreateCollection={createWritingCollection}
             onStatusChange={changeWritingStatus}
+            onTitleChange={saveWritingTitleById}
           />
         </>
       ) : (

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Eye, Pencil, Tags, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Eye, Pencil, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -114,7 +114,7 @@ export function DeskActivityTable({
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[40px]" />
+                <col className="w-[68px]" />
                 <col className="w-[52%]" />
                 <col className="w-[14%]" />
                 <col className="w-[12%]" />
@@ -162,7 +162,7 @@ export function DeskActivityTable({
                       )}
                     >
                       <td
-                        className="px-4 py-[18px] align-top md:align-middle"
+                        className="py-[18px] pl-9 pr-0 align-top md:align-middle"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button
@@ -246,11 +246,13 @@ export function DeskActivityTable({
                               type="button"
                               onClick={(event) => event.stopPropagation()}
                               className={cn(
-                                "inline-flex cursor-pointer items-center gap-1 rounded-md px-[10px] py-[5px] text-[12px] font-medium transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+                                "inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
                                 STATUS_PILL_STYLES[row.stateTone],
                               )}
                             >
+                              <span className="h-[13px] w-[13px] rounded-full border-[1.5px] border-current opacity-70" />
                               {row.stateLabel}
+                              <ChevronDown className="h-3 w-3 text-ink-4" strokeWidth={1.5} />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
@@ -309,9 +311,24 @@ export function DeskActivityTable({
                       </td>
                       <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
                         <div
-                          className="flex items-center justify-end gap-2 opacity-0 transition-opacity duration-150 ease-out group-hover:opacity-100"
+                          className="flex items-center justify-end gap-2"
                           onClick={(event) => event.stopPropagation()}
                         >
+                          {selectedCollections.length > 0 ? (
+                            <div className="flex min-w-0 max-w-[180px] items-center justify-end gap-1">
+                              {selectedCollections.slice(0, 2).map((collection) => (
+                                <span
+                                  key={collection.id}
+                                  className="inline-flex max-w-[84px] items-center rounded-[8px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-2 py-1 text-[11px] font-medium text-[hsl(28_22%_22%)]"
+                                >
+                                  <span className="truncate">{collection.name}</span>
+                                </span>
+                              ))}
+                              {selectedCollections.length > 2 ? (
+                                <span className="shrink-0 text-[11px] text-ink-4">+{selectedCollections.length - 2}</span>
+                              ) : null}
+                            </div>
+                          ) : null}
                           {isNavigable ? (
                             <CollectionAssignmentMenu
                               collections={collectionOptions}

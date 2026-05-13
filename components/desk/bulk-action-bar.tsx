@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { FolderPlus, Share2, Trash2 } from "lucide-react"
+import { ChevronDown, FolderPlus, Share2, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Button } from "@/components/ui/button"
 import {
@@ -13,7 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CollectionOption } from "@/lib/collections/collections"
+import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { cn } from "@/lib/utils"
 
 type BulkActionBarProps = {
   selectedCount: number
@@ -22,6 +25,7 @@ type BulkActionBarProps = {
   onSelectAll: () => void
   onDeselectAll: () => void
   onDelete: () => void
+  onStatusChange: (status: WritingStatus) => Promise<void> | void
   collectionOptions: CollectionOption[]
   onAddToCollection: (collectionId: string) => Promise<void> | void
   onCreateCollection: (name: string) => Promise<void> | void
@@ -35,6 +39,7 @@ export function BulkActionBar({
   onSelectAll,
   onDeselectAll,
   onDelete,
+  onStatusChange,
   collectionOptions,
   onAddToCollection,
   onCreateCollection,
@@ -42,6 +47,7 @@ export function BulkActionBar({
 }: BulkActionBarProps) {
   const router = useRouter()
   const [shareOpen, setShareOpen] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
 
   const handleShare = () => {
     if (!firstSelectedHref) return
@@ -85,6 +91,41 @@ export function BulkActionBar({
         </div>
 
         <div className="flex items-center gap-2">
+          <Popover open={statusOpen} onOpenChange={setStatusOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-sb px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted",
+                  statusOpen && "border-ink-3",
+                )}
+              >
+                <WritingStatusIcon />
+                Change status
+                <ChevronDown
+                  className={cn("h-3 w-3 text-ink-4 transition-transform", statusOpen && "rotate-180")}
+                  strokeWidth={1.5}
+                />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[180px] p-[5px]">
+              {WRITING_STATUS_VALUES.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => {
+                    void onStatusChange(status)
+                    setStatusOpen(false)
+                  }}
+                  className="flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                >
+                  <WritingStatusIcon />
+                  <span>{getWritingStatusLabel(status)}</span>
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+
           <CollectionAssignmentMenu
             collections={collectionOptions}
             selectedIds={[]}
@@ -156,5 +197,20 @@ export function BulkActionBar({
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function WritingStatusIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-[13px] w-[13px] text-ink-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+    >
+      <circle cx="12" cy="12" r="10" />
+    </svg>
   )
 }

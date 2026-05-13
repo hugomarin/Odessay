@@ -23,6 +23,8 @@ const buildTitle = (value: string | null | undefined) => {
 export function useWritingPreviewCache() {
   const cache = useRef<Map<string, CachedWritingPreview>>(new Map())
 
+  const getCachedPreview = useCallback((id: string) => cache.current.get(id) ?? null, [])
+
   const fetchPreview = useCallback(async (id: string): Promise<CachedWritingPreview | null> => {
     const cached = cache.current.get(id)
     if (cached) {
@@ -68,5 +70,14 @@ export function useWritingPreviewCache() {
     cache.current.clear()
   }, [])
 
-  return { fetchPreview, prefetchPreview, retainOnly, clear }
+  const updatePreviewTitle = useCallback((id: string, title: string) => {
+    const cached = cache.current.get(id)
+    if (!cached) {
+      return
+    }
+
+    cache.current.set(id, { ...cached, title: buildTitle(title) })
+  }, [])
+
+  return { fetchPreview, getCachedPreview, prefetchPreview, retainOnly, clear, updatePreviewTitle }
 }
