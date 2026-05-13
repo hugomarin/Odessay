@@ -1123,7 +1123,7 @@
             "phase": "Fase 3",
             "issue": "ODE-136",
             "linear_url": "https://linear.app/z9ne/issue/ODE-136/add-writing-title-editing-and-ai-title-suggestions",
-            "commit": "23cb92c",
+            "commit": "01db5ca",
             "date": "2026-05-13",
             "notes": "Se reutiliza un modal compartido para renombrar writings desde el tab del editor, Desk y Collections; el modal permite edición manual y sugerencia AI explícitamente aceptada por el usuario. El proveedor AI compartido queda configurado contra Fireworks y se añade endpoint/pruebas para sugerencia de título."
         }
