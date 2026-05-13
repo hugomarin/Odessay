@@ -132,10 +132,12 @@ export function SignupForm() {
 
     startTransition(async () => {
       const supabase = createClient()
+      const origin = window.location.origin
       const { data, error } = await supabase.auth.signUp({
         email: normalizeEmail(email),
         password,
         options: {
+          emailRedirectTo: `${origin}/auth/confirm?next=/desk`,
           data: {
             display_name: displayName.trim(),
             username: normalizeUsername(username),

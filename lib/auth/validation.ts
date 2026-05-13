@@ -150,4 +150,4 @@ export const toFriendlyAuthError = (message: string) => {
 }
 
 export const getResetPasswordRedirectUrl = (origin: string) =>
-  `${origin.replace(/\/$/, "")}/reset-password`
+  `${origin.replace(/\/$/, "")}/auth/confirm?next=/reset-password`

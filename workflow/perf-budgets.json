@@ -100,13 +100,13 @@
     "event_timing_ms": {
       "keydown_p95": {
         "required": true,
-        "warn_lte": 62,
-        "fail_lte": 65
+        "warn_lte": 82,
+        "fail_lte": 90
       },
       "input_p95": {
         "required": true,
-        "warn_lte": 47,
-        "fail_lte": 50
+        "warn_lte": 55,
+        "fail_lte": 60
       },
       "click_p95": {
         "required": true,

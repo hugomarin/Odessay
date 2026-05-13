@@ -31,6 +31,15 @@
     },
     "built": [
         {
+            "what": "Define Supabase Auth email templates and transactional copy. Updated odessay-auth-email.md with complete HTML template copy for Confirm signup, Reset password, Change email address, and Reauthentication (optional). Each template follows the auth copy rules: single CTA, no marketing, no extra links, dynamic Supabase variables only ({{ .ConfirmationURL }}, {{ .RedirectTo }}, {{ .Email }}), explicit expiration language, and safe-ignore instruction. Documented template configuration location in Supabase Dashboard (Authentication -> Emails -> Templates), variable reference table, and universal copy rules.",
+            "phase": "Fase 3",
+            "issue": "ODE-103",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-103/define-supabase-auth-email-templates-and-transactional-copy",
+            "commit": "b12e6fb",
+            "date": "2026-05-12",
+            "notes": "Validation: node --version -> v20.19.1; npm run env:check passed; npm run ops:status:drift passed. Typecheck and lint show only pre-existing issues (TipTap type duplication in node_modules, 6 react-hooks/exhaustive-deps warnings in editor-shell.tsx). Performance contract: not required — documentation-only change, no runtime code modified. Presentation contract: not required — no cross-mode text rendering contract changed. Optional React Email templates for non-auth product emails (writing-received, invitation, layout) were not created because the project lacks @react-email dependencies and the issue explicitly marks them as optional."
+        },
+        {
             "what": "Implement Supabase Auth password recovery flow. Login now links to /forgot-password; recovery requests call resetPasswordForEmail with a /reset-password redirect; reset-password establishes the Supabase recovery session from PKCE code or hash tokens and updates the password with updateUser({ password }). Invalid or expired links show a retry path and no Odessay-owned reset token storage or validation endpoint was added.",
             "phase": "Fase 3",
             "issue": "ODE-100",

@@ -29,7 +29,7 @@ describe("password recovery validation", () => {
 
   it("builds reset-password redirects from the current app origin", () => {
     expect(getResetPasswordRedirectUrl("https://app.odessay.com/")).toBe(
-      "https://app.odessay.com/reset-password",
+      "https://app.odessay.com/auth/confirm?next=/reset-password",
     )
   })
 })

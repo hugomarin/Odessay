@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { type FormEvent, useEffect, useMemo, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
+import { type FormEvent, useEffect, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -20,13 +20,9 @@ type RecoveryState =
 
 const recoveryErrorMessage =
   "This recovery link is invalid or expired. Request a new link to reset your password."
-const recoverySessionStorageKey = "odessay-password-recovery-session"
-
-const getHashParams = () => new URLSearchParams(window.location.hash.replace(/^#/, ""))
 
 export function ResetPasswordForm() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [errors, setErrors] = useState<AuthFieldErrors>({})
@@ -36,87 +32,16 @@ export function ResetPasswordForm() {
   })
   const [isPending, startTransition] = useTransition()
 
-  const queryError = useMemo(
-    () => searchParams.get("error_description") ?? searchParams.get("error"),
-    [searchParams],
-  )
-
   useEffect(() => {
     let active = true
     const supabase = createClient()
 
-    const establishRecoverySession = async () => {
-      if (queryError) {
-        setRecoveryState({ status: "invalid", message: recoveryErrorMessage })
-        return
-      }
-
-      const hashParams = getHashParams()
-      const hashError = hashParams.get("error_description") ?? hashParams.get("error")
-
-      if (hashError) {
-        setRecoveryState({ status: "invalid", message: recoveryErrorMessage })
-        return
-      }
-
-      const code = searchParams.get("code")
-
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-        if (!active) {
-          return
-        }
-
-        if (error) {
-          setRecoveryState({ status: "invalid", message: recoveryErrorMessage })
-          return
-        }
-
-        window.history.replaceState(null, "", "/reset-password")
-        window.sessionStorage.setItem(recoverySessionStorageKey, "1")
-        setRecoveryState({ status: "ready", message: null })
-        return
-      }
-
-      const accessToken = hashParams.get("access_token")
-      const refreshToken = hashParams.get("refresh_token")
-
-      if (accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        })
-
-        if (!active) {
-          return
-        }
-
-        if (error) {
-          setRecoveryState({ status: "invalid", message: recoveryErrorMessage })
-          return
-        }
-
-        window.history.replaceState(null, "", "/reset-password")
-        window.sessionStorage.setItem(recoverySessionStorageKey, "1")
-        setRecoveryState({ status: "ready", message: null })
-        return
-      }
-
-      const hasRecoverySession = window.sessionStorage.getItem(recoverySessionStorageKey) === "1"
-
-      if (!hasRecoverySession) {
-        setRecoveryState({ status: "invalid", message: recoveryErrorMessage })
-        return
-      }
-
+    const checkSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession()
 
-      if (!active) {
-        return
-      }
+      if (!active) return
 
       setRecoveryState(
         session
@@ -125,22 +50,12 @@ export function ResetPasswordForm() {
       )
     }
 
-    void establishRecoverySession()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY" && active) {
-        window.sessionStorage.setItem(recoverySessionStorageKey, "1")
-        setRecoveryState({ status: "ready", message: null })
-      }
-    })
+    void checkSession()
 
     return () => {
       active = false
-      subscription.unsubscribe()
     }
-  }, [queryError, searchParams])
+  }, [])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -168,7 +83,6 @@ export function ResetPasswordForm() {
         status: "updated",
         message: "Your password was updated. Continue to your desk.",
       })
-      window.sessionStorage.removeItem(recoverySessionStorageKey)
       router.refresh()
     })
   }
