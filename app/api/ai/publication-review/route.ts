@@ -105,7 +105,7 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
     },
     body: JSON.stringify({
       model: config.model,
-      max_completion_tokens: config.maxCompletionTokens,
+      max_tokens: config.maxTokens,
       temperature: config.temperature,
       top_p: config.topP,
       messages: [

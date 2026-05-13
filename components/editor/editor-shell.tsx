@@ -2435,6 +2435,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
   )
 
+  const handleRenameWorkspaceTab = useCallback(
+    (tabId: string) => {
+      if (tabId !== editorSession.active_tab_id) {
+        return
+      }
+
+      setRenameModalOpen(true)
+    },
+    [editorSession.active_tab_id],
+  )
+
   const handleCreateWorkspaceTab = useCallback(async () => {
     if (editorSession.tabs.length >= 10) {
       const confirmed = window.confirm("You already have many tabs open. Open another writing anyway?")
@@ -2661,6 +2672,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
+            onRenameTab={handleRenameWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onTogglePanel={(panel) => {
@@ -2847,6 +2859,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
       <RenameWritingModal
         open={renameModalOpen}
         title={displayTitle}
+        writingId={currentWritingId}
+        bodyText={bodyText}
         onOpenChange={setRenameModalOpen}
         onConfirm={(nextTitle) => {
           setTitle(nextTitle)

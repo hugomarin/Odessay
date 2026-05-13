@@ -55,6 +55,7 @@ type EditorTopbarProps = {
   activeTabId: string | null
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
+  onRenameTab: (tabId: string) => void
   onNewTab: () => void
   onToggleFocusMode: () => void
   onTogglePanel: (panel: "notes" | "properties" | "publication") => void
@@ -191,6 +192,7 @@ export function EditorTopbar({
   activeTabId,
   onSelectTab,
   onCloseTab,
+  onRenameTab,
   onNewTab,
   onToggleFocusMode,
   onTogglePanel,
@@ -336,6 +338,7 @@ export function EditorTopbar({
             activeTabId={activeTabId}
             onSelectTab={onSelectTab}
             onCloseTab={onCloseTab}
+            onRenameTab={onRenameTab}
             onNewTab={onNewTab}
           />
         </div>
