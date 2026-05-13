@@ -34,7 +34,7 @@
             "phase": "Fase 3",
             "issue": "ODE-135",
             "linear_url": "https://linear.app/z9ne/issue/ODE-135/polish-desk-writing-list-with-previews-grouping-filters-and-inline",
-            "commit": "7e206e8",
+            "commit": "60f38e4",
             "date": "2026-05-13",
             "notes": "Validation in green: npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (290 tests). Performance contract: required by issue for Desk interactions; no Desk-specific budgets exist in workflow/perf-budgets.json, so evidence is functional plus architectural: preview content is fetched on demand from IndexedDB by id, prefetch window is capped to current ±2, and cache clears on modal close. Presentation contract: required for new read-only writing surface; modal reuses renderWritingBodyHtml and WritingContentFrame, preserving the shared prose-odessay/odessay-rich-content contract."
         },
