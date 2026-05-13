@@ -140,12 +140,14 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
     case "table": {
       const rows = block.rows
       if (!rows.length) return []
-      const columnCount = rows[0].length || 1
-      const cellWidthPct = Math.floor(100 / columnCount)
+      const columnCount = Math.max(...rows.map((row) => row.length), 1)
+      const columnWidthTwips = Math.floor(S.PAGE_CONTENT_WIDTH_TWIPS / columnCount)
+      const columnWidths = Array.from({ length: columnCount }, () => columnWidthTwips)
 
       const table = new Table({
-        layout: TableLayoutType.AUTOFIT,
-        width: { size: 100, type: WidthType.PERCENTAGE },
+        layout: TableLayoutType.FIXED,
+        width: { size: S.PAGE_CONTENT_WIDTH_TWIPS, type: WidthType.DXA },
+        columnWidths,
         rows: rows.map((row, rowIndex) => {
           const isHeader = rowIndex === 0
           return new TableRow({
@@ -165,10 +167,10 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
                   }),
                 ],
                 margins: {
-                  top: Math.round(S.TABLE_CELL_PADDING_PX * 15),
-                  bottom: Math.round(S.TABLE_CELL_PADDING_PX * 15),
-                  left: Math.round(S.TABLE_CELL_PADDING_PX * 15),
-                  right: Math.round(S.TABLE_CELL_PADDING_PX * 15),
+                  top: S.TABLE_CELL_PADDING_TWIPS,
+                  bottom: S.TABLE_CELL_PADDING_TWIPS,
+                  left: S.TABLE_CELL_PADDING_TWIPS,
+                  right: S.TABLE_CELL_PADDING_TWIPS,
                 },
                 shading: isHeader
                   ? {
@@ -182,6 +184,7 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
                   left: { style: BorderStyle.SINGLE, size: 4, color: S.TABLE_BORDER_COLOR.replace("#", "") },
                   right: { style: BorderStyle.SINGLE, size: 4, color: S.TABLE_BORDER_COLOR.replace("#", "") },
                 },
+                width: { size: columnWidthTwips, type: WidthType.DXA },
                 verticalAlign: VerticalAlign.CENTER,
               })
             }),

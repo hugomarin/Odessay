@@ -9,6 +9,8 @@ export const PAGE_MARGIN_HORIZONTAL_PX = 60
 export const PAGE_MARGIN_VERTICAL_PX = 72
 export const PAGE_MARGIN_HORIZONTAL_TWIPS = 1440 // ~1 inch
 export const PAGE_MARGIN_VERTICAL_TWIPS = 1440   // ~1 inch
+export const PAGE_WIDTH_LETTER_TWIPS = 12240
+export const PAGE_CONTENT_WIDTH_TWIPS = PAGE_WIDTH_LETTER_TWIPS - PAGE_MARGIN_HORIZONTAL_TWIPS * 2
 
 // ── Typography — body ──
 export const FONT_FAMILY_BODY = "Geist Sans"
@@ -90,6 +92,7 @@ export const LINK_COLOR = "#6a4d2f"
 export const TABLE_BORDER_COLOR = "#d8cec0"
 export const TABLE_HEADER_BACKGROUND = "#f8f3ea"
 export const TABLE_CELL_PADDING_PX = 6
+export const TABLE_CELL_PADDING_TWIPS = Math.round(TABLE_CELL_PADDING_PX * 15)
 
 // ── Conversion helpers ──
 

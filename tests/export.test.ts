@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { JSONContent } from "@tiptap/core"
 import { Table } from "docx"
+import JSZip from "jszip"
 import { buildWritingMarkdown, buildWritingExportDocument, getExportFileBaseName, sanitizeFileName } from "@/lib/export/writing-export"
 import * as styles from "@/lib/export/styles"
 import { blockToElements, renderWritingToDocxBuffer } from "@/lib/export/to-docx"
@@ -133,7 +134,38 @@ describe("DOCX exporter", () => {
     expect(result[0]).toBeInstanceOf(Table)
   })
 
-  it("blockToElements produces a Table with the expected number of rows", () => {
+  it("uses page-width column sizes for table blocks", async () => {
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [
+        {
+          type: "table",
+          content: [
+            {
+              type: "tableRow",
+              content: [
+                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "A" }] }] },
+                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "B" }] }] },
+                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "C" }] }] },
+                { type: "tableCell", content: [{ type: "paragraph", content: [{ type: "text", text: "D" }] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    const buffer = await renderWritingToDocxBuffer({ title: "Table Export", document })
+    const zip = await JSZip.loadAsync(buffer)
+    const xml = await zip.file("word/document.xml")?.async("string")
+
+    expect(xml).toContain(`w:tblW w:type="dxa" w:w="${styles.PAGE_CONTENT_WIDTH_TWIPS}"`)
+    expect(xml).toContain(`w:tblLayout w:type="fixed"`)
+    expect(xml).toContain(`w:gridCol w:w="${Math.floor(styles.PAGE_CONTENT_WIDTH_TWIPS / 4)}"`)
+    expect(xml).toContain(`w:tcW w:type="dxa" w:w="${Math.floor(styles.PAGE_CONTENT_WIDTH_TWIPS / 4)}"`)
+    expect(xml).toContain(`w:tcMar><w:top w:type="dxa" w:w="${styles.TABLE_CELL_PADDING_TWIPS}"`)
+  })
+
+  it("blockToElements produces a Table wrapper plus trailing spacer", () => {
     const result = blockToElements({ type: "table", rows: [["A", "B"], ["C", "D"]] })
     expect(result).toHaveLength(2)
     expect(result[0]).toBeInstanceOf(Table)
@@ -170,4 +202,3 @@ describe("DOCX exporter", () => {
     expect(buffer.length).toBeGreaterThan(1000)
   })
 })
-
