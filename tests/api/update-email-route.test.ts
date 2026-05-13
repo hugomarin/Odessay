@@ -44,8 +44,141 @@ describe("POST /api/user/update-email", () => {
     expect(body).toEqual({ data: { email: "new@example.com" }, error: null })
     expect(supabaseMock.updateUser).toHaveBeenCalledWith(
       { email: "new@example.com" },
-      { emailRedirectTo: "https://app.odessay.com/settings/account" },
+      { emailRedirectTo: "https://app.odessay.com/auth/confirm?next=/settings/account" },
     )
+  })
+
+  it("returns 401 when there is no active session", async () => {
+    supabaseMock.getUser.mockResolvedValue({
+      data: { user: null },
+    })
+
+    const response = await POST(
+      new Request("https://app.odessay.com/api/user/update-email", {
+        method: "POST",
+        body: JSON.stringify({ email: "new@example.com" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(401)
+    expect(body.error).toEqual({
+      code: "UNAUTHORIZED",
+      message: "No active session.",
+    })
+    expect(supabaseMock.updateUser).not.toHaveBeenCalled()
+  })
+
+  it("returns 409 when current email is not confirmed", async () => {
+    supabaseMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "current@example.com",
+          email_confirmed_at: null,
+          new_email: null,
+          email_change_sent_at: null,
+        },
+      },
+    })
+
+    const response = await POST(
+      new Request("https://app.odessay.com/api/user/update-email", {
+        method: "POST",
+        body: JSON.stringify({ email: "new@example.com" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toEqual({
+      code: "EMAIL_NOT_CONFIRMED",
+      message: "Confirm your current email before requesting another change.",
+    })
+    expect(supabaseMock.updateUser).not.toHaveBeenCalled()
+  })
+
+  it("returns 409 when an email change is already pending", async () => {
+    supabaseMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "current@example.com",
+          email_confirmed_at: "2026-05-12T00:00:00.000Z",
+          new_email: "pending@example.com",
+          email_change_sent_at: "2026-05-12T00:00:00.000Z",
+        },
+      },
+    })
+
+    const response = await POST(
+      new Request("https://app.odessay.com/api/user/update-email", {
+        method: "POST",
+        body: JSON.stringify({ email: "new@example.com" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(409)
+    expect(body.error).toEqual({
+      code: "EMAIL_CHANGE_PENDING",
+      message: "You already have a pending email change. Confirm or revoke it from your inbox first.",
+    })
+    expect(supabaseMock.updateUser).not.toHaveBeenCalled()
+  })
+
+  it("returns 400 when the new email matches the current email", async () => {
+    supabaseMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "current@example.com",
+          email_confirmed_at: "2026-05-12T00:00:00.000Z",
+          new_email: null,
+          email_change_sent_at: null,
+        },
+      },
+    })
+
+    const response = await POST(
+      new Request("https://app.odessay.com/api/user/update-email", {
+        method: "POST",
+        body: JSON.stringify({ email: "current@example.com" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toEqual({
+      code: "NO_CHANGES",
+      message: "Use a different email address.",
+    })
+    expect(supabaseMock.updateUser).not.toHaveBeenCalled()
+  })
+
+  it("returns 400 for invalid email input", async () => {
+    supabaseMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "current@example.com",
+          email_confirmed_at: "2026-05-12T00:00:00.000Z",
+          new_email: null,
+          email_change_sent_at: null,
+        },
+      },
+    })
+
+    const response = await POST(
+      new Request("https://app.odessay.com/api/user/update-email", {
+        method: "POST",
+        body: JSON.stringify({ email: "not-an-email" }),
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body.error).toEqual({
+      code: "INVALID_INPUT",
+      message: expect.any(String),
+    })
+    expect(supabaseMock.updateUser).not.toHaveBeenCalled()
   })
 
   it("returns the Supabase Auth error without sending app-owned auth email", async () => {
