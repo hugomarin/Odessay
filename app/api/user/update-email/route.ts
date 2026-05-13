@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       return jsonError(400, "NO_CHANGES", "Use a different email address.")
     }
 
-    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/settings/account`
+    const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/confirm?next=/settings/account`
     const { error: updateError } = await supabase.auth.updateUser(
       { email: payload.email },
       { emailRedirectTo: redirectTo },
