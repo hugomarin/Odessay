@@ -1,6 +1,6 @@
 "use client"
 
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
 
@@ -9,10 +9,11 @@ type EditorTabItemProps = {
   active: boolean;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
+  onRename: (tabId: string) => void;
   widthStyle?: string;
 };
 
-export function EditorTabItem({ tab, active, onSelect, onClose, widthStyle }: EditorTabItemProps) {
+export function EditorTabItem({ tab, active, onSelect, onClose, onRename, widthStyle }: EditorTabItemProps) {
   return (
     <div
       style={widthStyle ? { width: widthStyle } : undefined}
@@ -34,6 +35,18 @@ export function EditorTabItem({ tab, active, onSelect, onClose, widthStyle }: Ed
         <span className={cn("block min-w-0 flex-1 truncate text-[14px] font-normal leading-none tracking-[-0.01em]", active ? "text-ink" : "text-inherit")}>
           {tab.title}
         </span>
+        {active ? (
+          <button
+            type="button"
+            onClick={() => {
+              onRename(tab.id);
+            }}
+            className="pointer-events-auto inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-[background-color,color] duration-100 ease-out hover:bg-muted hover:text-ink"
+            aria-label={`Rename ${tab.title}`}
+          >
+            <Pencil className="h-3.5 w-3.5" strokeWidth={1.4} />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => {

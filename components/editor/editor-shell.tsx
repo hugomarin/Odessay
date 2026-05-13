@@ -142,6 +142,11 @@ type PersistSnapshotOverrides = {
   visibility?: WritingVisibility
 }
 
+type RenameWritingSnapshot = {
+  title: string
+  bodyText: string
+}
+
 const NotesPanel = lazy(() =>
   import("@/components/editor/panels/notes-panel").then((module) => ({ default: module.NotesPanel })),
 )
@@ -246,6 +251,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [publicationSuggestions, setPublicationSuggestions] = useState<PublicationSuggestion[]>([])
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
+  const [renameModalSnapshot, setRenameModalSnapshot] = useState<RenameWritingSnapshot | null>(null)
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [footnoteModalOpen, setFootnoteModalOpen] = useState(false)
   const [tableModalOpen, setTableModalOpen] = useState(false)
@@ -2435,6 +2441,40 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
   )
 
+  const handleRenameWorkspaceTab = useCallback(
+    (tabId: string) => {
+      if (tabId !== editorSession.active_tab_id) {
+        return
+      }
+
+      setRenameModalSnapshot({
+        title: titleRef.current.trim() || UNTITLED_WRITING_TITLE,
+        bodyText: editor?.getText() ?? "",
+      })
+      setRenameModalOpen(true)
+    },
+    [editor, editorSession.active_tab_id],
+  )
+
+  const handleRenameModalOpenChange = useCallback((open: boolean) => {
+    setRenameModalOpen(open)
+    if (!open) {
+      setRenameModalSnapshot(null)
+    }
+  }, [])
+
+  const handleRenameWritingConfirm = useCallback(
+    (nextTitle: string) => {
+      setTitle(nextTitle)
+      setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
+
+      if (editor) {
+        void persistEditorSnapshot(editor, { title: nextTitle })
+      }
+    },
+    [editor, persistEditorSnapshot],
+  )
+
   const handleCreateWorkspaceTab = useCallback(async () => {
     if (editorSession.tabs.length >= 10) {
       const confirmed = window.confirm("You already have many tabs open. Open another writing anyway?")
@@ -2661,6 +2701,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
+            onRenameTab={handleRenameWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onTogglePanel={(panel) => {
@@ -2844,19 +2885,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
         <MobileWriteNotice />
       </div>
 
-      <RenameWritingModal
-        open={renameModalOpen}
-        title={displayTitle}
-        onOpenChange={setRenameModalOpen}
-        onConfirm={(nextTitle) => {
-          setTitle(nextTitle)
-          setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
-
-          if (editor) {
-            void persistEditorSnapshot(editor, { title: nextTitle })
-          }
-        }}
-      />
+      {renameModalOpen || renameModalSnapshot ? (
+        <RenameWritingModal
+          open={renameModalOpen}
+          title={renameModalSnapshot?.title ?? UNTITLED_WRITING_TITLE}
+          bodyText={renameModalSnapshot?.bodyText ?? ""}
+          onOpenChange={handleRenameModalOpenChange}
+          onConfirm={handleRenameWritingConfirm}
+        />
+      ) : null}
 
       <InsertLinkModal
         open={linkModalOpen}

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, Tags, Trash2 } from "lucide-react"
+import { Check, Pencil, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -26,6 +26,7 @@ type DeskActivityTableProps = {
   onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
+  onRenameWriting?: (writingId: string) => void
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
@@ -57,6 +58,7 @@ export function DeskActivityTable({
   onToggleCollection,
   onCreateCollection,
   onStatusChange,
+  onRenameWriting,
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
@@ -185,9 +187,25 @@ export function DeskActivityTable({
                               maskImage: "linear-gradient(90deg, #000 86%, transparent)",
                             }}
                           >
-                            <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
-                              {row.title}
-                            </p>
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                                {row.title}
+                              </p>
+                              {onRenameWriting ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    onRenameWriting(row.id)
+                                  }}
+                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                  aria-label={`Rename ${row.title}`}
+                                >
+                                  <Pencil className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                                </button>
+                              ) : null}
+                            </div>
                             <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
                           </div>
                           {selectedCollections.length > 0 ? (

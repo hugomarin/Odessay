@@ -11,10 +11,11 @@ type EditorTabsProps = {
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
+  onRenameTab: (tabId: string) => void;
   onNewTab: () => void;
 };
 
-export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTab }: EditorTabsProps) {
+export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenameTab, onNewTab }: EditorTabsProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [availableWidth, setAvailableWidth] = useState(0);
 
@@ -68,6 +69,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onNewTa
               active={tab.id === activeTabId}
               onSelect={onSelectTab}
               onClose={onCloseTab}
+              onRename={onRenameTab}
               widthStyle={tabWidth}
             />
           ))}

@@ -9,6 +9,7 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DeskHero } from "@/components/desk/desk-hero"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
+import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import { useDeskFilters } from "@/hooks/useDeskFilters"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
@@ -46,6 +47,12 @@ type RecipientPreview = {
   displayName: string
 }
 
+type RenameTarget = {
+  id: string
+  title: string
+  bodyText: string
+}
+
 const EMPTY_SUMMARY: DeskActivitySummary = {
   heroDrafts: [],
   groups: [],
@@ -77,6 +84,7 @@ export default function DeskPage() {
     Record<string, RecipientPreview[]>
   >({})
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
@@ -397,6 +405,48 @@ export default function DeskPage() {
     [sharedItems.length, summary.total],
   )
 
+  const openRenameWriting = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+
+    setRenameTarget({
+      id: writing.id,
+      title: writing.title?.trim() || "Untitled writing",
+      bodyText: writing.body_text,
+    })
+  }, [])
+
+  const saveWritingTitle = useCallback(
+    async (nextTitle: string) => {
+      if (!renameTarget) {
+        return
+      }
+
+      const writing = await localDB.writings.get(renameTarget.id)
+      if (!writing || writing.sync_status === "deleted") {
+        return
+      }
+
+      const trimmedTitle = nextTitle.trim() || "Untitled writing"
+      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+        return
+      }
+
+      await enqueueWritingUpsert({
+        ...writing,
+        title: trimmedTitle,
+        version: writing.version + 1,
+        updated_at: new Date().toISOString(),
+        local_updated_at: Date.now(),
+      })
+      await loadDeskActivity()
+      void loadRecipientPreviewsAsync()
+    },
+    [loadDeskActivity, loadRecipientPreviewsAsync, renameTarget],
+  )
+
   return (
     <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
       <div
@@ -530,6 +580,7 @@ export default function DeskPage() {
 
                 await enqueueWritingUpsert(updatedWriting)
               }}
+              onRenameWriting={openRenameWriting}
               onDeleteRequest={async (id) => {
                 await enqueueWritingDelete(id)
                 await loadDeskActivity()
@@ -549,6 +600,21 @@ export default function DeskPage() {
               deselectAll()
               await loadDeskActivity()
               void loadRecipientPreviewsAsync()
+            }}
+          />
+
+          <RenameWritingModal
+            open={renameTarget !== null}
+            title={renameTarget?.title ?? "Untitled writing"}
+            bodyText={renameTarget?.bodyText ?? ""}
+            onOpenChange={(open) => {
+              if (!open) {
+                setRenameTarget(null)
+              }
+            }}
+            onConfirm={(nextTitle) => {
+              void saveWritingTitle(nextTitle)
+              setRenameTarget(null)
             }}
           />
         </>

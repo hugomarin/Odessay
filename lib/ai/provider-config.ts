@@ -1,29 +1,29 @@
 /**
- * Cerebras GLM 4.7 provider configuration.
+ * Fireworks AI provider configuration.
  *
  * Required environment variable:
- *   CEREBRAS_API_KEY  - Your Cerebras API key
+ *   FIREWORKS_API_KEY  - Your Fireworks API key
  */
 
-const BASE_URL = "https://api.cerebras.ai/v1";
-const MODEL = "llama3.1-8b";
-const MAX_COMPLETION_TOKENS = 1000;
+const BASE_URL = "https://api.fireworks.ai/inference/v1";
+const MODEL = "accounts/fireworks/models/llama-v3p1-8b-instruct";
+const MAX_TOKENS = 1000;
 const TEMPERATURE = 1.0;
 const TOP_P = 0.95;
 
 export function getAIProviderConfig() {
-  const apiKey = process.env.CEREBRAS_API_KEY ?? process.env.AI_API_KEY ?? "";
+  const apiKey = process.env.FIREWORKS_API_KEY ?? process.env.AI_API_KEY ?? "";
 
   if (!apiKey) {
-    throw new Error("Missing CEREBRAS_API_KEY (or AI_API_KEY) environment variable.");
+    throw new Error("Missing FIREWORKS_API_KEY (or AI_API_KEY) environment variable.");
   }
 
   return {
     baseUrl: BASE_URL,
     apiKey,
-    model: MODEL,
+    model: process.env.FIREWORKS_MODEL ?? MODEL,
     chatCompletionsUrl: `${BASE_URL}/chat/completions`,
-    maxCompletionTokens: MAX_COMPLETION_TOKENS,
+    maxTokens: MAX_TOKENS,
     temperature: TEMPERATURE,
     topP: TOP_P,
   };

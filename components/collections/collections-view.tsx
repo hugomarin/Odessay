@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Pencil, Plus, Trash2 } from "lucide-react"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
+import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   buildCollectionDetailItems,
   buildCollectionOptions,
@@ -31,12 +32,19 @@ import {
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
+import { enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncWorker } from "@/lib/sync/worker"
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type CollectionsViewProps = {
   initialExpandedCollectionId?: string | null
+}
+
+type RenameTarget = {
+  id: string
+  title: string
+  bodyText: string
 }
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000
@@ -65,6 +73,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   const [assignments, setAssignments] = useState<LocalWritingCollection[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
+  const [renameWritingTarget, setRenameWritingTarget] = useState<RenameTarget | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
 
@@ -206,6 +215,47 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       getSyncWorker().schedule(0)
     },
     [assignments, createCollection],
+  )
+
+  const openRenameWriting = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+
+    setRenameWritingTarget({
+      id: writing.id,
+      title: writing.title?.trim() || "Untitled writing",
+      bodyText: writing.body_text,
+    })
+  }, [])
+
+  const saveWritingTitle = useCallback(
+    async (nextTitle: string) => {
+      if (!renameWritingTarget) {
+        return
+      }
+
+      const writing = await localDB.writings.get(renameWritingTarget.id)
+      if (!writing || writing.sync_status === "deleted") {
+        return
+      }
+
+      const trimmedTitle = nextTitle.trim() || "Untitled writing"
+      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+        return
+      }
+
+      await enqueueWritingUpsert({
+        ...writing,
+        title: trimmedTitle,
+        version: writing.version + 1,
+        updated_at: new Date().toISOString(),
+        local_updated_at: Date.now(),
+      })
+      await loadLocalState()
+    },
+    [loadLocalState, renameWritingTarget],
   )
 
   if (!initialExpandedCollectionId) {
@@ -358,6 +408,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onCreateCollection={async (writingId, name) => {
                   await createCollectionAndAssign(writingId, name)
                 }}
+                onRenameWriting={openRenameWriting}
                 showDeleteAction={false}
                 renderExtraActions={
                   isUncategorizedView
@@ -408,6 +459,21 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           }}
         />
       ) : null}
+
+      <RenameWritingModal
+        open={renameWritingTarget !== null}
+        title={renameWritingTarget?.title ?? "Untitled writing"}
+        bodyText={renameWritingTarget?.bodyText ?? ""}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRenameWritingTarget(null)
+          }
+        }}
+        onConfirm={(nextTitle) => {
+          void saveWritingTitle(nextTitle)
+          setRenameWritingTarget(null)
+        }}
+      />
     </section>
   )
 }
