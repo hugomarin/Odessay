@@ -1,7 +1,9 @@
 import path from "node:path"
+import React from "react"
 import type { ReactNode } from "react"
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer"
 import type { WritingExportBlock, WritingExportDocument, WritingExportInline } from "./writing-export"
+import * as S from "./styles"
 
 type RenderPdfParams = {
   title: string
@@ -9,11 +11,11 @@ type RenderPdfParams = {
   document: WritingExportDocument
 }
 
-const FONT_ROOT = path.resolve(process.cwd(), "public/fonts/geist-sans")
-const GEIST_SANS_REGULAR = path.join(FONT_ROOT, "Geist-Regular.woff2")
-const GEIST_SANS_ITALIC = path.join(FONT_ROOT, "Geist-Italic[wght].woff2")
-const GEIST_SANS_BOLD = path.join(FONT_ROOT, "Geist-Bold.woff2")
-const GEIST_SANS_BOLD_ITALIC = path.join(FONT_ROOT, "Geist-BoldItalic.woff2")
+const FONT_ROOT = path.resolve(process.cwd(), "node_modules/geist/dist/fonts/geist-sans")
+const GEIST_SANS_REGULAR = path.join(FONT_ROOT, "Geist-Regular.ttf")
+const GEIST_SANS_ITALIC = path.join(FONT_ROOT, "Geist-Italic.ttf")
+const GEIST_SANS_BOLD = path.join(FONT_ROOT, "Geist-Bold.ttf")
+const GEIST_SANS_BOLD_ITALIC = path.join(FONT_ROOT, "Geist-BoldItalic.ttf")
 
 let fontsRegistered = false
 
@@ -23,24 +25,24 @@ const registerFonts = () => {
   }
 
   Font.register({
-    family: "Geist Sans",
+    family: S.FONT_FAMILY_BODY,
     src: GEIST_SANS_REGULAR,
   })
 
   Font.register({
-    family: "Geist Sans",
+    family: S.FONT_FAMILY_BODY,
     src: GEIST_SANS_ITALIC,
     fontStyle: "italic",
   })
 
   Font.register({
-    family: "Geist Sans",
+    family: S.FONT_FAMILY_BODY,
     src: GEIST_SANS_BOLD,
     fontWeight: 700,
   })
 
   Font.register({
-    family: "Geist Sans",
+    family: S.FONT_FAMILY_BODY,
     src: GEIST_SANS_BOLD_ITALIC,
     fontStyle: "italic",
     fontWeight: 700,
@@ -52,86 +54,86 @@ const registerFonts = () => {
 const createStyles = (bodyFontFamily: string) =>
   StyleSheet.create({
     page: {
-      paddingHorizontal: 60,
-      paddingVertical: 72,
+      paddingHorizontal: S.PAGE_MARGIN_HORIZONTAL_PX,
+      paddingVertical: S.PAGE_MARGIN_VERTICAL_PX,
       fontFamily: bodyFontFamily,
-      fontSize: 17,
-      lineHeight: 1.85,
-      color: "#161310",
-      backgroundColor: "#f8f3ea",
+      fontSize: S.FONT_SIZE_BODY_PDF,
+      lineHeight: S.LINE_HEIGHT,
+      color: S.TEXT_COLOR,
+      backgroundColor: S.PAGE_BACKGROUND_COLOR,
     },
     title: {
-      fontFamily: "Times-Roman",
-      fontSize: 26,
+      fontFamily: S.FONT_FAMILY_HEADING,
+      fontSize: S.FONT_SIZE_TITLE_PT,
       lineHeight: 1.2,
-      marginBottom: 24,
-      color: "#161310",
+      marginBottom: S.TITLE_MARGIN_BOTTOM_PT,
+      color: S.TEXT_COLOR,
     },
     paragraph: {
-      marginBottom: 14,
+      marginBottom: S.PARAGRAPH_MARGIN_BOTTOM_PT,
     },
     heading1: {
-      fontFamily: "Times-Bold",
-      fontSize: 22,
+      fontFamily: S.FONT_FAMILY_HEADING_BOLD,
+      fontSize: S.FONT_SIZE_H1_PT,
       lineHeight: 1.25,
-      marginBottom: 14,
-      marginTop: 8,
+      marginBottom: S.HEADING_MARGIN_BOTTOM_H1_PT,
+      marginTop: S.HEADING_MARGIN_TOP_PT,
     },
     heading2: {
-      fontFamily: "Times-Bold",
-      fontSize: 19,
+      fontFamily: S.FONT_FAMILY_HEADING_BOLD,
+      fontSize: S.FONT_SIZE_H2_PT,
       lineHeight: 1.25,
-      marginBottom: 12,
-      marginTop: 8,
+      marginBottom: S.HEADING_MARGIN_BOTTOM_H2_PT,
+      marginTop: S.HEADING_MARGIN_TOP_PT,
     },
     heading3: {
-      fontFamily: "Times-Bold",
-      fontSize: 17,
+      fontFamily: S.FONT_FAMILY_HEADING_BOLD,
+      fontSize: S.FONT_SIZE_H3_PT,
       lineHeight: 1.25,
-      marginBottom: 10,
-      marginTop: 6,
+      marginBottom: S.HEADING_MARGIN_BOTTOM_H3_PT,
+      marginTop: S.HEADING_MARGIN_TOP_PT,
     },
     blockquote: {
-      marginBottom: 14,
-      paddingLeft: 14,
-      borderLeftWidth: 2,
-      borderLeftColor: "#675d51",
+      marginBottom: S.PARAGRAPH_MARGIN_BOTTOM_PT,
+      paddingLeft: S.BLOCKQUOTE_PADDING_LEFT_PX,
+      borderLeftWidth: S.BLOCKQUOTE_BORDER_WIDTH_PX,
+      borderLeftColor: S.BLOCKQUOTE_BORDER_COLOR,
     },
     blockquoteText: {
       fontFamily: bodyFontFamily,
       fontStyle: "italic",
-      color: "#2f2a25",
+      color: S.BLOCKQUOTE_TEXT_COLOR,
     },
     listItem: {
-      marginBottom: 8,
+      marginBottom: S.LIST_ITEM_MARGIN_BOTTOM_PT,
     },
     codeBlock: {
-      fontFamily: "Courier",
-      fontSize: 13,
-      lineHeight: 1.5,
-      backgroundColor: "#eee5d6",
-      padding: 10,
-      borderRadius: 6,
-      marginBottom: 14,
+      fontFamily: S.FONT_FAMILY_CODE,
+      fontSize: S.CODE_BLOCK_FONT_SIZE_PT,
+      lineHeight: S.CODE_BLOCK_LINE_HEIGHT,
+      backgroundColor: S.CODE_BLOCK_BACKGROUND,
+      padding: S.CODE_BLOCK_PADDING_PX,
+      borderRadius: S.CODE_BLOCK_BORDER_RADIUS_PX,
+      marginBottom: S.CODE_BLOCK_MARGIN_BOTTOM_PT,
     },
     separator: {
-      marginVertical: 16,
+      marginVertical: S.SEPARATOR_MARGIN_VERTICAL_PT,
       borderBottomWidth: 1,
-      borderBottomColor: "#d8cec0",
+      borderBottomColor: S.SEPARATOR_COLOR,
     },
     footnoteHeading: {
-      marginTop: 28,
-      marginBottom: 12,
-      fontFamily: "Times-Bold",
-      fontSize: 16,
+      marginTop: S.FOOTNOTE_HEADING_MARGIN_TOP_PT,
+      marginBottom: S.FOOTNOTE_HEADING_MARGIN_BOTTOM_PT,
+      fontFamily: S.FONT_FAMILY_HEADING_BOLD,
+      fontSize: S.FOOTNOTE_HEADING_FONT_SIZE_PT,
     },
     footnote: {
-      marginBottom: 8,
-      fontSize: 12.5,
-      lineHeight: 1.6,
+      marginBottom: S.FOOTNOTE_MARGIN_BOTTOM_PT,
+      fontSize: S.FOOTNOTE_FONT_SIZE_PT,
+      lineHeight: S.FOOTNOTE_LINE_HEIGHT,
     },
     footnoteIndex: {
-      fontFamily: "Times-Bold",
+      fontFamily: S.FONT_FAMILY_HEADING_BOLD,
     },
     bold: {
       fontFamily: bodyFontFamily,
@@ -145,19 +147,54 @@ const createStyles = (bodyFontFamily: string) =>
       textDecorationLine: "line-through",
     },
     code: {
-      fontFamily: "Courier",
-      fontSize: 15,
+      fontFamily: S.FONT_FAMILY_CODE,
+      fontSize: S.CODE_INLINE_FONT_SIZE_PT,
     },
     highlight: {
-      backgroundColor: "#f6e39c",
+      backgroundColor: S.HIGHLIGHT_COLOR,
     },
     link: {
-      color: "#6a4d2f",
+      color: S.LINK_COLOR,
       textDecorationLine: "underline",
+    },
+    table: {
+      marginBottom: S.PARAGRAPH_MARGIN_BOTTOM_PT,
+      borderWidth: 1,
+      borderColor: S.TABLE_BORDER_COLOR,
+    },
+    tableRow: {
+      flexDirection: "row",
+      borderBottomWidth: 1,
+      borderBottomColor: S.TABLE_BORDER_COLOR,
+    },
+    tableRowLast: {
+      flexDirection: "row",
+    },
+    tableCell: {
+      flex: 1,
+      padding: S.TABLE_CELL_PADDING_PX,
+      borderRightWidth: 1,
+      borderRightColor: S.TABLE_BORDER_COLOR,
+    },
+    tableCellLast: {
+      flex: 1,
+      padding: S.TABLE_CELL_PADDING_PX,
+    },
+    tableHeaderCell: {
+      flex: 1,
+      padding: S.TABLE_CELL_PADDING_PX,
+      borderRightWidth: 1,
+      borderRightColor: S.TABLE_BORDER_COLOR,
+      backgroundColor: S.TABLE_HEADER_BACKGROUND,
+    },
+    tableHeaderCellLast: {
+      flex: 1,
+      padding: S.TABLE_CELL_PADDING_PX,
+      backgroundColor: S.TABLE_HEADER_BACKGROUND,
     },
   })
 
-const styles = createStyles("Geist Sans")
+const styles = createStyles(S.FONT_FAMILY_BODY)
 const fallbackStyles = createStyles("Helvetica")
 
 const renderInlineRuns = (runs: WritingExportInline[], keyPrefix: string, currentStyles = styles): ReactNode[] =>
@@ -223,12 +260,37 @@ const renderBlock = (block: WritingExportBlock, index: number, currentStyles = s
       )
     case "separator":
       return <View key={`separator-${index}`} style={currentStyles.separator} />
-    case "table":
-      return block.rows.map((row, rowIndex) => (
-        <Text key={`table-${index}-${rowIndex}`} style={currentStyles.paragraph}>
-          {row.map((cell) => cell.trim()).join(" | ")}
-        </Text>
-      ))
+    case "table": {
+      const rows = block.rows
+      if (!rows.length) return null
+      return (
+        <View key={`table-${index}`} style={currentStyles.table}>
+          {rows.map((row, rowIndex) => {
+            const isLastRow = rowIndex === rows.length - 1
+            const isHeader = rowIndex === 0
+            const rowStyle = isLastRow ? currentStyles.tableRowLast : currentStyles.tableRow
+            return (
+              <View key={`table-${index}-${rowIndex}`} style={rowStyle}>
+                {row.map((cell, cellIndex) => {
+                  const isLastCell = cellIndex === row.length - 1
+                  let cellStyle
+                  if (isHeader) {
+                    cellStyle = isLastCell ? currentStyles.tableHeaderCellLast : currentStyles.tableHeaderCell
+                  } else {
+                    cellStyle = isLastCell ? currentStyles.tableCellLast : currentStyles.tableCell
+                  }
+                  return (
+                    <Text key={`table-${index}-${rowIndex}-${cellIndex}`} style={cellStyle}>
+                      {cell.trim()}
+                    </Text>
+                  )
+                })}
+              </View>
+            )
+          })}
+        </View>
+      )
+    }
     default:
       return null
   }
