@@ -3,13 +3,23 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  buildPublicationReviewSystemPrompt,
-  buildPublicationReviewUserPrompt,
-  publicationReviewResponseSchema,
-} from "@/lib/ai/publication-prompts";
+  buildCorrectionBlocks,
+  buildMechanicalCorrectionsPrompt,
+  normalizeCanonicalCorrections,
+  type CanonicalCorrectionsResponse,
+  type CorrectionBlock,
+} from "@/lib/ai/corrections";
+import { filterCorrectionsByMemory } from "@/lib/ai/correction-memory";
+import { adaptCanonicalCorrectionsToPublicationReview } from "@/lib/ai/corrections-contract-adapter";
+import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
-import type { PublicationChecklistItem, PublicationSuggestion } from "@/lib/local-db/schema";
 import { createClient } from "@/lib/supabase/server";
+
+const memoryEntrySchema = z.object({
+  fingerprint: z.string().trim().min(1),
+  decision: z.enum(["accepted", "rejected"]),
+  decidedAt: z.string().trim().min(1),
+});
 
 const requestSchema = z.object({
   writingId: z.string().trim().min(1).optional(),
@@ -17,6 +27,10 @@ const requestSchema = z.object({
   markdown: z.string().trim().min(1),
   bodyText: z.string().default(""),
   sourceHash: z.string().trim().min(1),
+  stream: z.boolean().optional().default(false),
+  correctionMemory: z.object({
+    entries: z.array(memoryEntrySchema).default([]),
+  }).optional(),
 });
 
 const jsonError = (status: number, code: string, message: string) =>
@@ -48,32 +62,10 @@ const extractJsonPayload = (value: string) => {
   return value.slice(firstBrace, lastBrace + 1);
 };
 
-const toSuggestions = (
-  kind: PublicationSuggestion["kind"],
-  items: Array<z.infer<typeof publicationReviewResponseSchema>["spelling"][number]>,
-): PublicationSuggestion[] =>
-  items.map((item, index) => ({
-    id: `${kind}-${index + 1}`,
-    kind,
-    title: item.title,
-    reason: item.reason,
-    original_text: item.originalText,
-    replacement_text: item.replacementText,
-    context_before: null,
-    context_after: null,
-    status: "pending",
-  }));
-
-const toChecklistItems = (
-  items: Array<z.infer<typeof publicationReviewResponseSchema>["checklist"][number]>,
-): PublicationChecklistItem[] =>
-  items.map((item, index) => ({
-    id: `checklist-${index + 1}`,
-    label: item.label,
-    detail: item.detail,
-    target_text: item.targetText ?? null,
-    status: "pending",
-  }));
+const parseModelJson = (text: string) => {
+  const jsonText = extractJsonPayload(text);
+  return JSON.parse(jsonText);
+};
 
 async function getCurrentUserId() {
   const supabase = await createClient();
@@ -84,40 +76,7 @@ async function getCurrentUserId() {
   return { userId: user?.id ?? null };
 }
 
-const parseModelJson = (text: string) => {
-  const jsonText = extractJsonPayload(text);
-  return JSON.parse(jsonText);
-};
-
-type PublicationReviewRaw = {
-  summary: string | null;
-  suggestions: PublicationSuggestion[];
-  checklist: PublicationChecklistItem[];
-};
-
-const toPublicationReviewRaw = (parsedJson: unknown): PublicationReviewRaw => {
-  const parsed = publicationReviewResponseSchema.parse(parsedJson);
-
-  const validSuggestion = (s: { title: string; reason: string; originalText: string; replacementText: string }) =>
-    s.title.trim().length > 0 &&
-    s.reason.trim().length > 0 &&
-    s.originalText.trim().length > 0 &&
-    s.replacementText.trim().length > 0;
-
-  const validChecklist = (c: { label: string; detail: string }) =>
-    c.label.trim().length > 0 && c.detail.trim().length > 0;
-
-  return {
-    summary: parsed.summary || null,
-    suggestions: [
-      ...toSuggestions("spelling", parsed.spelling.filter(validSuggestion)),
-      ...toSuggestions("rewriting", parsed.rewriting.filter(validSuggestion)),
-    ],
-    checklist: toChecklistItems(parsed.checklist.filter(validChecklist)),
-  };
-};
-
-async function callPublicationModel({
+async function callCorrectionsModel({
   config,
   promptText,
   strictJson,
@@ -136,15 +95,14 @@ async function callPublicationModel({
     body: JSON.stringify({
       model: config.model,
       max_tokens: config.maxTokens,
-      // Keep temperature low to reduce malformed JSON output.
-      temperature: strictJson ? 0 : 0.2,
+      temperature: strictJson ? 0 : 0.1,
       top_p: config.topP,
       messages: [
         {
           role: "system",
           content: strictJson
-            ? `${buildPublicationReviewSystemPrompt()} Return strictly valid JSON only: no markdown, no prose, no trailing commas.`
-            : buildPublicationReviewSystemPrompt(),
+            ? "Return strictly valid JSON only: no markdown, no prose, no trailing commas."
+            : "Return only valid JSON for conservative mechanical corrections.",
         },
         {
           role: "user",
@@ -156,7 +114,7 @@ async function callPublicationModel({
 
   if (!response.ok) {
     const errorPayload = await response.text();
-    console.log(`[pub-review] error body=${errorPayload.slice(0, 500)}`);
+    console.info(`[corrections] error body=${errorPayload.slice(0, 500)}`);
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
   }
 
@@ -172,48 +130,60 @@ async function callPublicationModel({
   return text;
 }
 
-async function requestPublicationReview(requestBody: z.infer<typeof requestSchema>) {
+const applyMemory = (
+  canonical: CanonicalCorrectionsResponse,
+  correctionMemory: z.infer<typeof requestSchema>["correctionMemory"],
+): CanonicalCorrectionsResponse => ({
+  ...canonical,
+  corrections: filterCorrectionsByMemory(canonical.corrections, correctionMemory),
+});
+
+async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
+  const sourceText = requestBody.bodyText.trim() || requestBody.markdown;
+  const blocks = buildCorrectionBlocks(sourceText);
+  const fallbackLanguage = detectCorrectionLanguage(sourceText);
+  const promptText = buildMechanicalCorrectionsPrompt(blocks);
 
-  const promptText = buildPublicationReviewUserPrompt({
-    title: requestBody.title,
-    markdown: requestBody.markdown,
-    bodyText: requestBody.bodyText,
-  });
+  console.info(
+    `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
+  );
 
-  console.log(`[pub-review] start provider=${config.baseUrl} model=${config.model} promptChars=${promptText.length}`);
-
-  const firstText = await callPublicationModel({ config, promptText, strictJson: false });
+  const firstText = await callCorrectionsModel({ config, promptText, strictJson: false });
   const t1 = Date.now();
-  console.log(`[pub-review] first response latencyMs=${t1 - t0}`);
+  console.info(`[corrections] first response latencyMs=${t1 - t0}`);
 
   try {
     const parsedJson = parseModelJson(firstText);
-    const parsed = toPublicationReviewRaw(parsedJson);
+    const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage);
     const t2 = Date.now();
-    console.log(`[pub-review] first parse ok totalLatencyMs=${t2 - t0}`);
-    return { model: config.model, ...parsed };
-  } catch (parseErr) {
+    console.info(`[corrections] first parse ok totalLatencyMs=${t2 - t0}`);
+    return {
+      model: config.model,
+      blocks,
+      canonical: applyMemory(canonical, requestBody.correctionMemory),
+    };
+  } catch {
     const firstJsonText = extractJsonPayload(firstText);
-    console.log(`[pub-review] first parse failed. textLength=${firstJsonText.length}`);
-    console.log(`[pub-review] first parse raw (first 800): ${firstJsonText.slice(0, 800)}`);
-    console.log(`[pub-review] first parse raw (last 800): ${firstJsonText.slice(-800)}`);
-    console.log(`[pub-review] retrying with strict JSON mode`);
+    console.info(`[corrections] first parse failed. textLength=${firstJsonText.length}`);
+    console.info(`[corrections] retrying with strict JSON mode`);
 
-    const retryText = await callPublicationModel({ config, promptText, strictJson: true });
+    const retryText = await callCorrectionsModel({ config, promptText, strictJson: true });
     const retryJsonText = extractJsonPayload(retryText);
 
     try {
       const parsedJson = parseModelJson(retryText);
-      const parsed = toPublicationReviewRaw(parsedJson);
+      const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage);
       const t2 = Date.now();
-      console.log(`[pub-review] retry parse ok totalLatencyMs=${t2 - t0}`);
-      return { model: config.model, ...parsed };
+      console.info(`[corrections] retry parse ok totalLatencyMs=${t2 - t0}`);
+      return {
+        model: config.model,
+        blocks,
+        canonical: applyMemory(canonical, requestBody.correctionMemory),
+      };
     } catch (retryErr) {
-      console.log(`[pub-review] retry parse failed. textLength=${retryJsonText.length}`);
-      console.log(`[pub-review] retry parse raw (first 800): ${retryJsonText.slice(0, 800)}`);
-      console.log(`[pub-review] retry parse raw (last 800): ${retryJsonText.slice(-800)}`);
+      console.info(`[corrections] retry parse failed. textLength=${retryJsonText.length}`);
       throw new Error(
         `AI returned invalid JSON: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
       );
@@ -221,13 +191,119 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
   }
 }
 
+const createJsonResponsePayload = ({
+  requestBody,
+  model,
+  canonical,
+}: {
+  requestBody: z.infer<typeof requestSchema>;
+  model: string;
+  canonical: CanonicalCorrectionsResponse;
+}) => {
+  const legacy = adaptCanonicalCorrectionsToPublicationReview(canonical);
+
+  return {
+    sourceHash: requestBody.sourceHash,
+    sourceMarkdown: requestBody.markdown,
+    model,
+    language: canonical.language,
+    corrections: canonical.corrections,
+    uncertain: canonical.uncertain,
+    suggestions: legacy.suggestions,
+    checklist: legacy.checklist,
+    summary: legacy.summary,
+    fallbackUsed: false,
+  };
+};
+
+const encodeNdjson = (value: unknown) => `${JSON.stringify(value)}\n`;
+
+const streamCorrectionsResponse = ({
+  requestBody,
+  model,
+  blocks,
+  canonical,
+}: {
+  requestBody: z.infer<typeof requestSchema>;
+  model: string;
+  blocks: CorrectionBlock[];
+  canonical: CanonicalCorrectionsResponse;
+}) => {
+  const encoder = new TextEncoder();
+  const legacy = adaptCanonicalCorrectionsToPublicationReview(canonical);
+  const blockHashById = new Map(blocks.map((block) => [block.id, block.hash]));
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          encodeNdjson({
+            type: "meta",
+            sourceHash: requestBody.sourceHash,
+            sourceMarkdown: requestBody.markdown,
+            model,
+            language: canonical.language,
+            summary: canonical.summary,
+          }),
+        ),
+      );
+
+      legacy.suggestions.forEach((suggestion, index) => {
+        controller.enqueue(
+          encoder.encode(
+            encodeNdjson({
+              type: "suggestion",
+              sourceHash: requestBody.sourceHash,
+              blockId: suggestion.block_id,
+              blockHash: suggestion.block_id ? blockHashById.get(suggestion.block_id) ?? null : null,
+              suggestion,
+              index,
+            }),
+          ),
+        );
+      });
+
+      legacy.checklist.forEach((item, index) => {
+        controller.enqueue(
+          encoder.encode(
+            encodeNdjson({
+              type: "uncertain",
+              sourceHash: requestBody.sourceHash,
+              item,
+              index,
+            }),
+          ),
+        );
+      });
+
+      controller.enqueue(
+        encoder.encode(
+          encodeNdjson({
+            type: "done",
+            data: createJsonResponsePayload({ requestBody, model, canonical }),
+          }),
+        ),
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+};
+
 export async function POST(request: Request) {
   const tStart = Date.now();
-  console.log(`[pub-review] POST start`);
+  console.info(`[corrections] POST start`);
 
   const { userId } = await getCurrentUserId();
   const tAuth = Date.now();
-  console.log(`[pub-review] auth done authMs=${tAuth - tStart}`);
+  console.info(`[corrections] auth done authMs=${tAuth - tStart}`);
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
@@ -248,21 +324,26 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await requestPublicationReview(parsedRequest.data);
+    const result = await requestCorrections(parsedRequest.data);
     const tEnd = Date.now();
-    console.log(`[pub-review] success totalRouteMs=${tEnd - tStart}`);
+    console.info(`[corrections] success totalRouteMs=${tEnd - tStart}`);
+
+    if (parsedRequest.data.stream) {
+      return streamCorrectionsResponse({
+        requestBody: parsedRequest.data,
+        model: result.model,
+        blocks: result.blocks,
+        canonical: result.canonical,
+      });
+    }
 
     return NextResponse.json(
       {
-        data: {
-          sourceHash: parsedRequest.data.sourceHash,
-          sourceMarkdown: parsedRequest.data.markdown,
+        data: createJsonResponsePayload({
+          requestBody: parsedRequest.data,
           model: result.model,
-          suggestions: result.suggestions,
-          checklist: result.checklist,
-          summary: result.summary,
-          fallbackUsed: false,
-        },
+          canonical: result.canonical,
+        }),
         error: null,
       },
       { status: 200 },
@@ -270,7 +351,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const tEnd = Date.now();
     const message = error instanceof Error ? error.message : "Publication review request failed.";
-    console.log(`[pub-review] error totalRouteMs=${tEnd - tStart} message=${message}`);
+    console.info(`[corrections] error totalRouteMs=${tEnd - tStart} message=${message}`);
 
     return jsonError(502, "AI_REVIEW_FAILED", message);
   }

@@ -193,6 +193,9 @@ export type PublicationSuggestion = {
   replacement_text: string;
   context_before?: string | null;
   context_after?: string | null;
+  block_id?: string | null;
+  source_hash?: string | null;
+  correction_fingerprint?: string | null;
   status: PublicationSuggestionStatus;
 };
 

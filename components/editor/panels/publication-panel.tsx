@@ -37,10 +37,97 @@ type PublicationReviewApiResponse = {
   sourceHash: string;
   sourceMarkdown: string;
   model: string;
+  language?: "es" | "en" | "mixed" | "unknown";
   suggestions: PublicationSuggestion[];
   checklist: PublicationChecklistItem[];
   summary?: string | null;
   fallbackUsed: boolean;
+};
+
+type CorrectionMemoryEntry = {
+  fingerprint: string;
+  decision: "accepted" | "rejected";
+  decidedAt: string;
+};
+
+type StreamEvent =
+  | {
+      type: "meta";
+      sourceHash: string;
+      sourceMarkdown: string;
+      model: string;
+      language: "es" | "en" | "mixed" | "unknown";
+      summary: string;
+    }
+  | {
+      type: "suggestion";
+      sourceHash: string;
+      blockId: string | null;
+      blockHash: string | null;
+      suggestion: PublicationSuggestion;
+      index: number;
+    }
+  | {
+      type: "uncertain";
+      sourceHash: string;
+      item: PublicationChecklistItem;
+      index: number;
+    }
+  | {
+      type: "done";
+      data: PublicationReviewApiResponse;
+    };
+
+const CORRECTION_MEMORY_STORAGE_KEY = "odessay-correction-memory";
+
+const hashCorrectionBlockClient = (text: string) => {
+  let hash = 2166136261;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return `blk-${(hash >>> 0).toString(16)}`;
+};
+
+const buildClientCorrectionBlockHashes = (text: string) => {
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+  const sourceBlocks = blocks.length > 0 ? blocks : [text.trim()].filter(Boolean);
+
+  return new Map(sourceBlocks.map((block, index) => [`block-${index + 1}`, hashCorrectionBlockClient(block)]));
+};
+
+const readCorrectionMemory = (): CorrectionMemoryEntry[] => {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const value = window.localStorage.getItem(CORRECTION_MEMORY_STORAGE_KEY);
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const rememberCorrectionDecision = (fingerprint: string | null | undefined, decision: "accepted" | "rejected") => {
+  if (!fingerprint || typeof window === "undefined") {
+    return;
+  }
+
+  const entries = readCorrectionMemory().filter((entry) => entry.fingerprint !== fingerprint);
+  entries.push({
+    fingerprint,
+    decision,
+    decidedAt: new Date().toISOString(),
+  });
+
+  window.localStorage.setItem(CORRECTION_MEMORY_STORAGE_KEY, JSON.stringify(entries.slice(-200)));
 };
 
 export function PublicationPanel({
@@ -59,7 +146,13 @@ export function PublicationPanel({
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
   const requestInFlightRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentHashRef = useRef(currentHash);
   const reviewRef = useRef<LocalPublicationReview | null>(null);
+
+  useEffect(() => {
+    currentHashRef.current = currentHash;
+  }, [currentHash]);
 
   const persistReview = useCallback(async (nextReview: LocalPublicationReview) => {
     await localDB.publicationReviews.save(nextReview);
@@ -69,54 +162,161 @@ export function PublicationPanel({
 
   const runAnalysis = useCallback(
     async (mode: "auto" | "manual") => {
-      if (!writingId || requestInFlightRef.current) {
+      if (!writingId) {
         return;
       }
 
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
       requestInFlightRef.current = true;
       setIsLoading(true);
       setError(null);
 
       try {
+        const requestSourceHash = currentHash;
+        const nowIso = new Date().toISOString();
+        const blockHashById = buildClientCorrectionBlockHashes(bodyText.trim() || markdown);
+        const streamingReview: LocalPublicationReview = {
+          id: createPublicationReviewId(writingId, requestSourceHash),
+          writing_id: writingId,
+          source_hash: requestSourceHash,
+          source_markdown: markdown,
+          title,
+          model: "",
+          suggestions: [],
+          checklist: [],
+          summary: null,
+          created_at: nowIso,
+          updated_at: nowIso,
+          lookup_key: createPublicationReviewLookupKey(writingId, requestSourceHash),
+          last_error: null,
+        };
+
         const response = await fetch("/api/ai/publication-review", {
           method: "POST",
           headers: {
             "content-type": "application/json",
+            "accept": "application/x-ndjson",
           },
+          signal: abortController.signal,
           body: JSON.stringify({
             writingId,
             title,
             markdown,
             bodyText,
-            sourceHash: currentHash,
+            sourceHash: requestSourceHash,
+            stream: true,
+            correctionMemory: {
+              entries: readCorrectionMemory(),
+            },
           }),
         });
 
-        const payload = (await response.json()) as ApiEnvelope<PublicationReviewApiResponse>;
-
-        if (!response.ok || !payload.data) {
+        if (!response.ok) {
+          const payload = (await response.json()) as ApiEnvelope<PublicationReviewApiResponse>;
           throw new Error(payload.error?.message ?? "Publication review failed.");
         }
 
-        const nowIso = new Date().toISOString();
-        const nextReview: LocalPublicationReview = {
-          id: createPublicationReviewId(writingId, payload.data.sourceHash),
-          writing_id: writingId,
-          source_hash: payload.data.sourceHash,
-          source_markdown: payload.data.sourceMarkdown,
-          title,
-          model: payload.data.model,
-          suggestions: payload.data.suggestions,
-          checklist: payload.data.checklist,
-          summary: payload.data.summary ?? null,
-          created_at: nowIso,
-          updated_at: nowIso,
-          lookup_key: createPublicationReviewLookupKey(writingId, payload.data.sourceHash),
-          last_error: null,
+        if (!response.body) {
+          throw new Error("Publication review stream failed.");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let nextReview = streamingReview;
+
+        const commitReview = async (candidate: LocalPublicationReview) => {
+          if (currentHashRef.current !== requestSourceHash || abortController.signal.aborted) {
+            return;
+          }
+
+          nextReview = {
+            ...candidate,
+            updated_at: new Date().toISOString(),
+          };
+          await persistReview(nextReview);
         };
 
-        await persistReview(nextReview);
+        const handleStreamEvent = async (event: StreamEvent) => {
+          if (event.type !== "done" && event.sourceHash !== requestSourceHash) {
+            return;
+          }
+
+          if (event.type === "meta") {
+            await commitReview({
+              ...nextReview,
+              model: event.model,
+              summary: event.summary || null,
+            });
+            return;
+          }
+
+          if (event.type === "suggestion") {
+            const currentBlockHash = event.blockId ? blockHashById.get(event.blockId) ?? null : null;
+
+            if (event.blockHash && currentBlockHash !== event.blockHash) {
+              return;
+            }
+
+            await commitReview({
+              ...nextReview,
+              suggestions: [...nextReview.suggestions, event.suggestion],
+            });
+            return;
+          }
+
+          if (event.type === "uncertain") {
+            await commitReview({
+              ...nextReview,
+              checklist: [...nextReview.checklist, event.item],
+            });
+            return;
+          }
+
+          if (event.type === "done") {
+            if (event.data.sourceHash !== requestSourceHash) {
+              return;
+            }
+
+            await commitReview({
+              ...nextReview,
+              model: event.data.model,
+              suggestions: event.data.suggestions,
+              checklist: event.data.checklist,
+              summary: event.data.summary ?? null,
+            });
+          }
+        };
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.trim()) {
+              continue;
+            }
+
+            await handleStreamEvent(JSON.parse(line) as StreamEvent);
+          }
+
+          if (done) {
+            break;
+          }
+        }
+
+        if (buffer.trim()) {
+          await handleStreamEvent(JSON.parse(buffer) as StreamEvent);
+        }
       } catch (nextError) {
+        if (nextError instanceof DOMException && nextError.name === "AbortError") {
+          return;
+        }
+
         const message = nextError instanceof Error ? nextError.message : "Publication review failed.";
         setError(message);
 
@@ -128,8 +328,11 @@ export function PublicationPanel({
           });
         }
       } finally {
-        requestInFlightRef.current = false;
-        setIsLoading(false);
+        if (abortControllerRef.current === abortController) {
+          requestInFlightRef.current = false;
+          abortControllerRef.current = null;
+          setIsLoading(false);
+        }
       }
     },
     [bodyText, currentHash, markdown, persistReview, title, writingId],
@@ -159,18 +362,12 @@ export function PublicationPanel({
         return;
       }
 
-      // Si ya hay un review en pantalla, mostrarlo como stale — el usuario está aplicando sugerencias.
-      // No descartar, no re-analizar automáticamente.
-      if (reviewRef.current !== null) {
-        return;
-      }
-
-      setReview(null);
       setError(null);
 
+      const boundaryDelay = /(?:[.!?。！？]\s*|\n{2,})$/.test(markdown) ? 350 : 1400;
       debounceRef.current = window.setTimeout(() => {
         void runAnalysis("auto");
-      }, 2000);
+      }, boundaryDelay);
     };
 
     void loadCachedReview();
@@ -183,7 +380,13 @@ export function PublicationPanel({
         debounceRef.current = null;
       }
     };
-  }, [currentHash, runAnalysis, writingId]);
+  }, [currentHash, markdown, runAnalysis, writingId]);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   const hasPendingSuggestions = review?.suggestions.some((suggestion) => suggestion.status === "pending") ?? false;
   const isStale = review ? review.source_hash !== currentHash : false;
@@ -226,6 +429,7 @@ export function PublicationPanel({
       }
 
       onApplyMarkdown(result.markdown);
+      rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted");
       await updateReview((current) => ({
         ...current,
         suggestions: updateSuggestionStatuses(current.suggestions, [suggestion.id], "accepted"),
@@ -237,13 +441,15 @@ export function PublicationPanel({
 
   const handleRejectSuggestion = useCallback(
     async (suggestionId: string) => {
+      const suggestion = review?.suggestions.find((item) => item.id === suggestionId);
+      rememberCorrectionDecision(suggestion?.correction_fingerprint, "rejected");
       await updateReview((current) => ({
         ...current,
         suggestions: updateSuggestionStatuses(current.suggestions, [suggestionId], "rejected"),
         updated_at: new Date().toISOString(),
       }));
     },
-    [updateReview],
+    [review?.suggestions, updateReview],
   );
 
   const handleApplyAll = useCallback(async () => {
@@ -258,6 +464,9 @@ export function PublicationPanel({
     }
 
     onApplyMarkdown(result.markdown);
+    review.suggestions
+      .filter((suggestion) => result.appliedIds.includes(suggestion.id))
+      .forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted"));
     await updateReview((current) => ({
       ...current,
       suggestions: updateSuggestionStatuses(current.suggestions, result.appliedIds, "accepted"),
