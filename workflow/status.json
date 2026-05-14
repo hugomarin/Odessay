@@ -30,6 +30,15 @@
     },
     "built": [
         {
+            "what": "Refine the editor toolbar grouping for ODE-137 review feedback. Desktop toolbar keeps core inline formatting as direct actions, moves structure into a Text menu with Normal, H1/H2/H3, Blockquote, and Code, moves Image/Table/Link into an Insert menu, and updates the list trigger so active unordered lists read as Dot List/• List and ordered lists read as # List. Toolbar icons use the stronger topbar stroke for better contrast, and code block active state is now tracked by useEditorActionState.",
+            "phase": "Fase 3",
+            "issue": "ODE-137",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-137/rework-editor-toolbar-grouping-and-shortcut-map",
+            "commit": "0f4451b",
+            "date": "2026-05-14",
+            "notes": "Validation in green before delivery handoff: npm run typecheck; npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx); npm test (53 files, 290 tests). Performance contract: required by issue for editor toolbar interaction path; this pass is a toolbar surface regrouping only and preserves existing command handlers/selection capture paths while reducing visible direct controls."
+        },
+        {
             "what": "Polish Desk writing management with read-only previews, single-line view/filter controls, and floating bulk actions. Added a local modal preview flow that loads the current writing from localDB by primary key, renders body_json/body_text through the shared reading renderer, prefetches a small ±2 navigation window, evicts content outside the window, and clears cache on close. Desk rows keep only excerpt metadata and expose an eye action for preview without opening the editor. The modal supports ArrowLeft/ArrowRight navigation, read-only text rendering, status changes, and collection assignment from the sidebar.",
             "phase": "Fase 3",
             "issue": "ODE-135",
