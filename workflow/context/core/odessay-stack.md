@@ -43,7 +43,7 @@ Nunca mezclar Geist Sans y Lora en el mismo elemento.
 |-----------|-----|-------|
 | Supabase | Base de datos remota, Auth, Realtime, Storage | PostgreSQL. RLS en todas las tablas. Realtime para notificaciones. **Es la capa remota, no la operativa.** |
 | SQLite | Base de datos local | Persistencia local para desktop (Tauri/Electron). IndexedDB como fallback en web. |
-| Claude API (Anthropic) | Agente editor residente | Nunca genera texto. Solo observaciones. Siempre server-side. |
+| AI Provider API (configurable) | Agente editor residente + writing assist | Siempre server-side. Proveedor/modelo se resuelven por configuración (env), sin hardcode de modelo en rutas de negocio. |
 | Resend | SMTP / email transaccional | SMTP provider para Supabase Auth en `auth.odessay.com`; app-side solo para emails no-auth como invitaciones o notificaciones de writings. |
 | Vercel | Hosting web | Deploy desde `main`. Branch previews para PRs. |
 
@@ -97,7 +97,7 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 |---------|---------|
 | Vercel | Branch previews automáticos por PR. |
 | Supabase | Proyecto separado. Schema idéntico a producción. Seed data para testing. |
-| Claude API | Haiku para testing si se necesita volumen. Sonnet para staging real. |
+| AI Provider API | Modelo configurable por entorno. Cambios de modelo se hacen vía env, no cambiando código. |
 | Resend / Supabase Auth SMTP | Custom SMTP configurado en staging. Emails de auth salen desde `auth.odessay.com`; staging debe tener validación controlada para no enviar accidentalmente a destinatarios reales. |
 
 ### Producción
@@ -106,7 +106,7 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 |---------|---------|
 | Vercel | Dominio odessay.com. Branch `main`. |
 | Supabase | Proyecto separado. Backups automáticos. RLS estricto. |
-| Claude API | Sonnet. Rate limiting por usuario. |
+| AI Provider API | Modelo configurable + rate limiting por usuario. |
 | Resend / Supabase Auth SMTP | `auth.odessay.com` verificado y conectado como custom SMTP de Supabase Auth. |
 
 **Regla crítica:** Los agentes nunca operan contra producción. Todo en staging. Deploy a producción por merge a `main` con preview verificado.
@@ -131,6 +131,8 @@ La webapp está diseñada para ser empaquetada como desktop app sin reescritura 
 # Server-side only
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
+FIREWORKS_API_KEY=
+FIREWORKS_MODEL=
 # Solo para emails no-auth enviados desde la app. Auth email usa Supabase Dashboard SMTP.
 RESEND_API_KEY=
 

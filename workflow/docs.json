@@ -13,7 +13,7 @@
     {
       "path": "workflow/context/core/odessay-arquitectura.md",
       "type": "core",
-      "description": "Stack completo (Next.js 15, React 19, TipTap, Supabase, SQLite, Claude API), los tres modos de uso con sus interfaces, navegación de tres columnas, rutas principales y decisiones arquitectónicas tomadas."
+      "description": "Stack completo (Next.js 15, React 19, TipTap, Supabase, SQLite, AI provider server-side configurable), los tres modos de uso con sus interfaces, navegación de tres columnas, rutas principales y decisiones arquitectónicas tomadas."
     },
     {
       "path": "workflow/context/core/odessay-stack.md",
@@ -42,9 +42,19 @@
       "description": "Comportamiento técnico y de UX del editor TipTap: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas."
     },
     {
+      "path": "workflow/context/features/odessay-prosemirror-tiptap.md",
+      "type": "feature",
+      "description": "Backbone técnico de ProseMirror/TipTap: extensiones activas, implementación custom (footnotes, decorations), contrato de round-trip Markdown y guardrails para evitar regresiones."
+    },
+    {
       "path": "workflow/context/features/odessay-ai-editor.md",
       "type": "feature",
-      "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles, regla de SILENCIO y arquitectura de prompts con Claude API."
+      "description": "El AI editor residente: qué es (editor literario con criterio propio, no generador de texto), cuándo habla, qué observa, tipos de respuesta posibles y regla de SILENCIO."
+    },
+    {
+      "path": "workflow/context/features/odessay-ai-writing-assist.md",
+      "type": "feature",
+      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas en streaming (trigger, guardrails, memoria de reject/manual-fix, stale handling por block hash) y sugerencia de título con invocación explícita."
     },
     {
       "path": "workflow/context/features/odessay-margenes.md",
@@ -86,7 +96,7 @@
     {
       "path": "workflow/agents.md",
       "type": "ops",
-      "description": "Fuente de verdad para todos los LLMs (Claude, Codex, Gemini). Puerta mínima del sistema: identidad del proyecto, qué recursos están disponibles y la regla de mantenimiento de docs.json. CLAUDE.md y AGENTS.md en la raíz son stubs que apuntan aquí."
+      "description": "Fuente de verdad para todos los LLMs usados en Odessay. Puerta mínima del sistema: identidad del proyecto, qué recursos están disponibles y la regla de mantenimiento de docs.json. CLAUDE.md y AGENTS.md en la raíz son stubs que apuntan aquí."
     },
     {
       "path": "workflow/workflow.md",
@@ -132,6 +142,11 @@
       "path": "workflow/define/debrief.md",
       "type": "ops",
       "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
+    },
+    {
+      "path": "workflow/define/context-hygiene-prompt.md",
+      "type": "ops",
+      "description": "Prompt acotado para auditorías de context rot entre skills y workflow, con foco en AI writing assist, ProseMirror/decorations y consistencia de referencias."
     },
     {
       "path": "workflow/perf-budgets.json",
@@ -188,7 +203,7 @@
     {
       "path": ".agents/skills/skill-backend/SKILL.md",
       "type": "skill",
-      "description": "Estándares de implementación backend: API routes, Supabase (auth, DB, realtime), capa local-first, integración con Claude API y Resend, manejo de errores y observabilidad con Sentry."
+      "description": "Estándares de implementación backend: API routes, Supabase (auth, DB, realtime), capa local-first, integración con provider AI server-side configurable y Resend, manejo de errores y observabilidad con Sentry."
     },
     {
       "path": ".agents/skills/skill-database/SKILL.md",

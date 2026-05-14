@@ -125,7 +125,9 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - [ ] Si toca tipografía: ¿paridad entre `.odessay-editor-content` y `.prose-odessay` sin divergencias?
 - [ ] ¿Se preserva overflow de tablas grandes (`tableWrapper`, `width:max-content`, scroll horizontal interno)?
 - [ ] ¿ShadCN customizado para la marca, no con defaults?
-- [ ] ¿El AI editor nunca genera texto?
+- [ ] ¿El PR respeta el contrato AI por scope?
+  - AI editor residente (`observe/discuss`): no genera texto autoral, SILENCIO válido.
+  - AI writing assist (`corrections/title`): salida estructurada de sugerencias, sin auto-aplicación.
 - [ ] ¿Los bordes son `0.5px`? ¿Los iconos tienen `strokeWidth={1.5}`?
 
 ### Base de datos
@@ -157,7 +159,7 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - API keys expuestas al cliente.
 - No hay RLS en tablas nuevas.
 - No hay test para flujo crítico nuevo.
-- El AI editor genera texto en algún caso.
+- Se viola el contrato AI por scope (editor residente vs writing assist).
 - Se agregó UI que el issue no pedía.
 - Se cambió tipografía en una sola superficie sin espejo en la otra.
 - Se alteró el contrato tipográfico sin actualizar/verificar `.agents/skills/skill-design/tipografia.md`.
@@ -176,10 +178,23 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - **Tests que solo cubren estado final:** no hay assertions sobre estados intermedios ni simulación de interrupciones (tab switch durante carga, rehidratación concurrente, sync tardío).
 - **Identidad creada en hot path:** `crypto.randomUUID()`, `localDB.save()`, o cualquier efecto secundario de persistencia dentro del handler síncrono de `input`, `paste` o `click`.
 - **Múltiples fuentes de verdad para una dimensión:** `writingId` vive simultáneamente en params, estado local, Zustand y refs sin un owner claro.
+- El PR toca AI corrections/title suggestions/ProseMirror y no actualiza o no valida los documentos de referencia correspondientes (`odessay-ai-writing-assist.md`, `odessay-prosemirror-tiptap.md`) cuando cambió el contrato real.
 
 **Referencias para verificación:**
 - `workflow/context/features/odessay-sync.md` — principio de navegación interna, arquitectura local-first, caso de estudio del editor
 - `workflow/context/core/odessay-arquitectura.md` — decisión de arquitectura sobre navegación interna vs navegación de página
+- `workflow/context/features/odessay-ai-writing-assist.md` — contrato operativo de AI corrections + title suggestion
+- `workflow/context/features/odessay-prosemirror-tiptap.md` — extensiones activas, backbone Markdown y guardrails de decorations/round-trip
+
+## Documentación mínima por scope (obligatoria en review)
+
+Si el PR toca alguno de estos scopes, el revisor debe verificar coherencia con docs:
+- AI corrections / streaming / accept-reject memory:
+  - validar contra `workflow/context/features/odessay-ai-writing-assist.md`.
+- TipTap / ProseMirror extensions / decorations / parser-serializer:
+  - validar contra `workflow/context/features/odessay-prosemirror-tiptap.md`.
+- Si el código final contradice el doc y el doc no fue actualizado:
+  - rechazo por desalineación de contrato (no merge).
 
 ---
 
@@ -271,6 +286,39 @@ El score del veredicto debe coincidir exactamente con este cálculo. Si no se mu
 - Findings investigados y descartados como falso positivo → NO contar en el score.
 
 El score no reemplaza el juicio humano, pero da una medida objetiva de calidad que puede trackearse entre PRs.
+
+## Resultado obligatorio del review (3 capas)
+
+Todo review debe cerrar con:
+
+1. `GateResult`: `PASS` o `FAIL` (contratos y checks operativos).
+2. `QualityScore`: cálculo P0-P3 sobre calidad del diff.
+3. `ProcessInsights`: aprendizaje del ciclo BUILD→REVIEW.
+
+Formato mínimo:
+
+```
+GateResult: PASS|FAIL
+QualityScore: X.Y/10
+ProcessInsights:
+- FirstReviewFailures: [...]
+- ResolvedInLaterRounds: [...]
+- ContextGaps: [...]
+- BuildInstructionChurn: [...]
+- Recommendations: [...]
+```
+
+Si `GateResult=FAIL`, el veredicto es rechazo aunque `QualityScore` sea alto.
+
+## Señales de contexto insuficiente (obligatorio reportar)
+
+Marcar `context_risk=true` cuando ocurra al menos uno:
+- Se pidieron instrucciones adicionales para definir alcance/contrato.
+- El brief era ambiguo en schema, endpoint, dependencia o evidencia requerida.
+- La documentación de referencia estaba incompleta o desactualizada.
+- El criterio de aceptación cambió durante BUILD.
+
+Cuando `context_risk=true`, el review debe incluir recomendaciones específicas de mejora de contexto (issue brief, docs o skills).
 
 ---
 

@@ -18,7 +18,7 @@ La base de datos es la fuente de verdad de Odessay. El schema en `odessay-modelo
 
 ## Schema de referencia
 
-Antes de cualquier operación, lee `/workflow/core/odessay-modelo-datos.md`. Las entidades principales son:
+Antes de cualquier operación, lee `workflow/context/core/odessay-modelo-datos.md`. Las entidades principales son:
 
 - `profiles` — Extiende auth.users. Username, display_name, bio.
 - `writings` — La unidad fundamental. Body en JSON (TipTap) + texto plano. Estado (draft/finished) y visibilidad (private/shared/public) como dimensiones independientes.

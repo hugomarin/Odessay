@@ -10,6 +10,17 @@ Lee `skill-design.md` antes de implementar cualquier componente con UI.
 Lee `.agents/skills/skill-design/vistas.md` antes de implementar cualquier vista. Contiene los valores exactos de padding, tipografía, colores y comportamiento de cada componente en cada vista (Desk, Collections, Correspondences, Reading, Editor), más el checklist de validación para verificar que tu implementación coincide con la referencia visual.
 Si el issue toca presentación textual (`.odessay-editor-content`/`.prose-odessay`), leer también `.agents/skills/skill-design/tipografia.md` como fuente de verdad del contrato tipográfico.
 
+## Carga de documentos obligatoria por scope (editor)
+
+Antes de implementar en editor, cargar:
+- `workflow/context/features/odessay-editor.md` (siempre)
+- `workflow/context/features/odessay-prosemirror-tiptap.md` (si toca TipTap/ProseMirror/extensions/decorations/markdown round-trip)
+- `workflow/context/features/odessay-ai-writing-assist.md` (si toca AI corrections, streaming, inline accept/reject o title suggestion)
+- `workflow/context/features/odessay-sync.md` (si toca triggers, debounce, navegación interna o estado transicional)
+
+Regla:
+- Si el cambio altera el contrato real de estos docs, actualizar el documento correspondiente y registrar la relación en el PR/issue. No dejar implementación desacoplada de spec.
+
 ---
 
 ## Principio rector
@@ -57,6 +68,13 @@ Reglas de implementación:
 - Wrappers técnicos distintos (`tableWrapper`, wrappers de renderer) son válidos solo si mapean al mismo contrato visual.
 - Evitar parches locales por vista; si cambias una regla de presentación textual, sincroniza todas las superficies del contrato en el mismo PR.
 - Toda decisión tipográfica (escala, pesos, color de body/strong, ritmo vertical) debe alinearse a `.agents/skills/skill-design/tipografia.md`.
+
+## ProseMirror/Decorations guardrails (obligatorio cuando aplica)
+
+- No introducir cambios en decorations sin declarar identidad estable de sugerencia/corrección.
+- En streaming, descartar chunks stale por identidad/hash de bloque.
+- Evitar lógica final basada solo en "primer match de string" para correcciones AI en producción.
+- Cualquier cambio parser/serializer debe validar round-trip Markdown ↔ JSON del subset soportado.
 
 ---
 
