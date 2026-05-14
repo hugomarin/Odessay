@@ -145,7 +145,6 @@ const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
   "bulletList",
   "orderedList",
   "inlineCode",
-  "codeBlock",
   "paragraph",
   "heading1",
   "heading2",
@@ -357,9 +356,7 @@ export function EditorTopbar({
         ? "H3"
         : actionState.blockquote
           ? "Quote"
-          : actionState.codeBlock
-            ? "Code"
-            : "Text"
+          : "Text"
   const listMenuLabel = actionState.orderedList ? "# List" : actionState.bulletList ? "• List" : "List"
 
   return (
@@ -439,8 +436,7 @@ export function EditorTopbar({
                     aria-label="Text"
                     className={cn(
                       TOPBAR_MENU_TRIGGER_CLASS,
-                      (actionState.heading1 || actionState.heading2 || actionState.heading3 || actionState.blockquote || actionState.codeBlock) &&
-                        TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS,
+                      (actionState.heading1 || actionState.heading2 || actionState.heading3 || actionState.blockquote) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS,
                     )}
                   >
                     <span>{textMenuLabel}</span>
