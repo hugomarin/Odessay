@@ -399,19 +399,6 @@ export default function DeskPage() {
   const allVisibleSelected =
     visibleWritingIds.length > 0 && visibleWritingIds.every((id) => selectedIds.has(id))
 
-  const firstSelectedRow = useMemo(() => {
-    for (const group of filteredSummary.groups) {
-      for (const row of group.rows) {
-        if (selectedIds.has(row.id)) {
-          return row
-        }
-      }
-    }
-    return null
-  }, [filteredSummary, selectedIds])
-
-  const firstSelectedHref = firstSelectedRow?.destinationHref ?? null
-
   const viewCounts = useMemo(
     () => ({
       mine: summary.total,
@@ -615,7 +602,6 @@ export default function DeskPage() {
                 }
                 getSyncWorker().schedule(0)
               }}
-              firstSelectedHref={firstSelectedHref}
             />
           )}
 

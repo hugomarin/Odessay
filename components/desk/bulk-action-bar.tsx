@@ -1,18 +1,8 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ChevronDown, FolderPlus, Share2, Trash2 } from "lucide-react"
+import { ChevronDown, FolderPlus, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
@@ -30,7 +20,6 @@ type BulkActionBarProps = {
   collectionOptions: CollectionOption[]
   onAddToCollection: (collectionId: string) => Promise<void> | void
   onCreateCollection: (name: string) => Promise<void> | void
-  firstSelectedHref: string | null
 }
 
 export function BulkActionBar({
@@ -44,29 +33,16 @@ export function BulkActionBar({
   collectionOptions,
   onAddToCollection,
   onCreateCollection,
-  firstSelectedHref,
 }: BulkActionBarProps) {
-  const router = useRouter()
-  const [shareOpen, setShareOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
 
-  const handleShare = () => {
-    if (!firstSelectedHref) return
-    if (selectedCount > 1) {
-      setShareOpen(true)
-    } else {
-      router.push(firstSelectedHref)
-    }
-  }
-
   return (
-    <>
-      <div
-        id="desk-bulk-action-bar"
-        data-section="desk-bulk-action-bar"
-        data-testid="desk-bulk-action-bar"
-        className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center justify-between gap-4 rounded-[10px] border-[0.5px] border-ink bg-ink px-4 py-2.5 text-bg shadow-float-md"
-      >
+    <div
+      id="desk-bulk-action-bar"
+      data-section="desk-bulk-action-bar"
+      data-testid="desk-bulk-action-bar"
+      className="fixed bottom-5 left-1/2 z-40 flex min-w-[720px] -translate-x-1/2 items-center justify-between gap-8 rounded-[10px] border-[0.5px] border-ink bg-ink px-6 py-3 text-bg shadow-float-md"
+    >
         <div className="flex items-center gap-3">
           <span className="text-[13px] font-medium text-bg">
             {selectedCount} selected
@@ -102,7 +78,7 @@ export function BulkActionBar({
                 )}
               >
                 <WritingStatusIcon status="draft" className="h-[13px] w-[13px] text-bg/70" />
-                Change status
+                Status
                 <ChevronDown
                   className={cn("h-3 w-3 text-bg/60 transition-transform", statusOpen && "rotate-180")}
                   strokeWidth={1.5}
@@ -141,19 +117,10 @@ export function BulkActionBar({
                 className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10"
               >
                 <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
-                Add to collection
+                Collections
               </button>
             }
           />
-
-          <button
-            type="button"
-            onClick={handleShare}
-            className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10"
-          >
-            <Share2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Share
-          </button>
 
           <button
             type="button"
@@ -165,38 +132,5 @@ export function BulkActionBar({
           </button>
         </div>
       </div>
-
-      <Dialog open={shareOpen} onOpenChange={setShareOpen}>
-        <DialogContent className="max-w-[420px]">
-          <DialogHeader>
-            <DialogTitle>Share writings</DialogTitle>
-            <DialogDescription>
-              Sharing {selectedCount} writings. Creating individual share links
-              for each.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setShareOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                if (firstSelectedHref) {
-                  router.push(firstSelectedHref)
-                }
-                setShareOpen(false)
-              }}
-            >
-              Continue with first
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   )
 }
