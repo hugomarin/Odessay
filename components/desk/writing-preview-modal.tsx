@@ -53,6 +53,9 @@ export function WritingPreviewModal({
   const [titleDraft, setTitleDraft] = useState("")
   const [statusOpen, setStatusOpen] = useState(false)
   const loadIdRef = useRef(0)
+  const titleDraftRef = useRef("")
+  const titleEditingRef = useRef(false)
+  const titleWritingIdRef = useRef<string | null>(null)
 
   const row = currentIndex === null ? null : rows[currentIndex] ?? null
   const canGoPrevious = currentIndex !== null && currentIndex > 0
@@ -86,13 +89,15 @@ export function WritingPreviewModal({
   )
 
   const commitTitle = useCallback(async () => {
-    if (!row || !preview || !onTitleChange) {
+    if (!row || !onTitleChange) {
       return
     }
 
     const nextTitle = titleDraft.trim() || "Untitled writing"
-    if (nextTitle === preview.title) {
-      setTitleDraft(preview.title)
+    const currentTitle = preview?.title ?? row.title
+    if (nextTitle === currentTitle) {
+      setTitleDraft(currentTitle)
+      titleDraftRef.current = currentTitle
       return
     }
 
@@ -100,7 +105,8 @@ export function WritingPreviewModal({
     updatePreviewTitle(row.id, nextTitle)
     setPreview((current) => (current && current.id === row.id ? { ...current, title: nextTitle } : current))
     setTitleDraft(nextTitle)
-  }, [onTitleChange, preview, row, titleDraft, updatePreviewTitle])
+    titleDraftRef.current = nextTitle
+  }, [onTitleChange, preview?.title, row, titleDraft, updatePreviewTitle])
 
   useEffect(() => {
     if (!open || !row || currentIndex === null) {
@@ -110,13 +116,25 @@ export function WritingPreviewModal({
     let cancelled = false
     const loadId = loadIdRef.current + 1
     loadIdRef.current = loadId
+    const isNewWriting = titleWritingIdRef.current !== row.id
+    if (isNewWriting) {
+      titleWritingIdRef.current = row.id
+      titleEditingRef.current = false
+    }
+
     const cachedPreview = getCachedPreview(row.id)
     if (cachedPreview) {
       setPreview(cachedPreview)
-      setTitleDraft(cachedPreview.title)
+      if (isNewWriting || !titleEditingRef.current) {
+        setTitleDraft(cachedPreview.title)
+        titleDraftRef.current = cachedPreview.title
+      }
       setIsLoading(false)
     } else {
-      setTitleDraft(row.title)
+      if (isNewWriting || !titleEditingRef.current) {
+        setTitleDraft(row.title)
+        titleDraftRef.current = row.title
+      }
       setIsLoading(true)
     }
 
@@ -126,7 +144,11 @@ export function WritingPreviewModal({
       }
 
       setPreview(nextPreview)
-      setTitleDraft(nextPreview?.title ?? "")
+      if (!titleEditingRef.current) {
+        const nextTitle = nextPreview?.title ?? row.title
+        setTitleDraft(nextTitle)
+        titleDraftRef.current = nextTitle
+      }
       setIsLoading(false)
     })
 
@@ -220,8 +242,19 @@ export function WritingPreviewModal({
               <div className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-8 py-7">
                 <input
                   value={titleDraft}
-                  onChange={(event) => setTitleDraft(event.target.value)}
-                  onBlur={() => void commitTitle()}
+                  onFocus={() => {
+                    titleEditingRef.current = true
+                  }}
+                  onChange={(event) => {
+                    const nextValue = event.target.value
+                    setTitleDraft(nextValue)
+                    titleDraftRef.current = nextValue
+                    titleEditingRef.current = true
+                  }}
+                  onBlur={() => {
+                    titleEditingRef.current = false
+                    void commitTitle()
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault()
