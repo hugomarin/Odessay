@@ -15,6 +15,7 @@ import { useWritingPreviewCache, type CachedWritingPreview } from "@/hooks/useWr
 import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
 import { cn } from "@/lib/utils"
 
 type WritingPreviewModalProps = {
@@ -276,7 +277,7 @@ export function WritingPreviewModal({
                         <div>
                           <PropertiesDropdownTrigger
                             open={statusOpen}
-                            icon={<WritingStatusIcon />}
+                            icon={<WritingStatusIcon status={row.stateTone} />}
                             label={row.stateLabel}
                           />
                         </div>
@@ -286,7 +287,7 @@ export function WritingPreviewModal({
                           <PropertiesPopoverItem
                             key={status}
                             selected={row.stateTone === status}
-                            icon={<WritingStatusIcon />}
+                            icon={<WritingStatusIcon status={status} />}
                             label={getWritingStatusLabel(status)}
                             onSelect={() => {
                               void onStatusChange?.(row.id, status)
@@ -349,21 +350,6 @@ export function WritingPreviewModal({
         </div>
       </DialogContent>
     </Dialog>
-  )
-}
-
-function WritingStatusIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-[13px] w-[13px]"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="12" cy="12" r="10" />
-    </svg>
   )
 }
 

@@ -16,6 +16,7 @@ import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/q
 import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
+import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
 import { cn } from "@/lib/utils"
 
 type DeskActivityTableProps = {
@@ -114,12 +115,12 @@ export function DeskActivityTable({
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[68px]" />
-                <col className="w-[52%]" />
-                <col className="w-[14%]" />
-                <col className="w-[12%]" />
-                <col className="w-[8%]" />
-                <col className="w-[14%]" />
+                <col className="w-[56px]" />
+                <col />
+                <col className="w-[150px]" />
+                <col className="w-[250px]" />
+                <col className="w-[84px]" />
+                <col className="w-[48px]" />
               </colgroup>
               <tbody>
                 {group.rows.map((row) => {
@@ -181,7 +182,7 @@ export function DeskActivityTable({
                           <Check className="h-3 w-3" strokeWidth={2.2} />
                         </button>
                       </td>
-                      <td className="px-9 py-[18px] align-top md:align-middle">
+                      <td className="py-[18px] pl-3 pr-6 align-top md:align-middle">
                         <div className="min-w-0">
                           <div
                             style={{
@@ -224,19 +225,6 @@ export function DeskActivityTable({
                             </div>
                             <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
                           </div>
-                          {selectedCollections.length > 0 ? (
-                            <div className="flex flex-wrap gap-[7px] pt-3">
-                              {selectedCollections.map((collection) => (
-                                <span
-                                  key={collection.id}
-                                  className="inline-flex min-h-[24px] items-center gap-[6px] rounded-[9px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-[9px] text-[11px] font-medium tracking-[0.01em] text-[hsl(28_22%_22%)]"
-                                >
-                                  <Tags className="h-[11px] w-[11px] text-[hsl(28_18%_34%)]" strokeWidth={1.5} />
-                                  {collection.name}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
                         </div>
                       </td>
                       <td className="px-4 py-[18px] align-top md:align-middle">
@@ -250,7 +238,7 @@ export function DeskActivityTable({
                                 STATUS_PILL_STYLES[row.stateTone],
                               )}
                             >
-                              <span className="h-[13px] w-[13px] rounded-full border-[1.5px] border-current opacity-70" />
+                              <WritingStatusIcon status={row.stateTone} />
                               {row.stateLabel}
                               <ChevronDown className="h-3 w-3 text-ink-4" strokeWidth={1.5} />
                             </button>
@@ -279,37 +267,6 @@ export function DeskActivityTable({
                         </DropdownMenu>
                       </td>
                       <td className="px-4 py-[18px] align-top text-[13px] text-ink-2 md:align-middle">
-                        {row.recipientPreviews.length > 0 ? (
-                          <div className="flex min-w-0 items-center gap-2">
-                            <div className="-space-x-1 shrink-0">
-                              {row.recipientPreviews.slice(0, 2).map((recipient) => {
-                                const initialsSource = recipient.displayName ?? recipient.username
-
-                                return (
-                                  <Avatar
-                                    key={recipient.username}
-                                    className="inline-flex h-5 w-5 border-[0.5px] border-border align-middle"
-                                  >
-                                    <AvatarFallback className="bg-ink-2 text-[9px] text-bg">
-                                      {buildInitials(initialsSource)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                )
-                              })}
-                            </div>
-                            <span className="min-w-0 truncate text-[13px] text-ink-2">
-                              @{row.recipientPreviews[0]?.username}
-                            </span>
-                            {row.recipientPreviews.length > 1 ? (
-                              <span className="shrink-0 text-[12px] text-ink-4">+{row.recipientPreviews.length - 1}</span>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-6 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
-                        <span className="whitespace-nowrap">{row.dateLabel}</span>
-                      </td>
-                      <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
                         <div
                           className="flex items-center justify-end gap-2"
                           onClick={(event) => event.stopPropagation()}
@@ -350,6 +307,36 @@ export function DeskActivityTable({
                             />
                           ) : null}
                           {renderExtraActions ? renderExtraActions(row) : null}
+                          {row.recipientPreviews.length > 0 ? (
+                            <div className="flex min-w-0 items-center gap-2">
+                              <div className="-space-x-1 shrink-0">
+                                {row.recipientPreviews.slice(0, 2).map((recipient) => {
+                                  const initialsSource = recipient.displayName ?? recipient.username
+
+                                  return (
+                                    <Avatar
+                                      key={recipient.username}
+                                      className="inline-flex h-5 w-5 border-[0.5px] border-border align-middle"
+                                    >
+                                      <AvatarFallback className="bg-ink-2 text-[9px] text-bg">
+                                        {buildInitials(initialsSource)}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  )
+                                })}
+                              </div>
+                              <span className="min-w-0 truncate text-[13px] text-ink-2">
+                                @{row.recipientPreviews[0]?.username}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
+                        <span className="whitespace-nowrap">{row.dateLabel}</span>
+                      </td>
+                      <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
+                        <div onClick={(event) => event.stopPropagation()}>
                           {showDeleteAction ? (
                             <button
                               type="button"

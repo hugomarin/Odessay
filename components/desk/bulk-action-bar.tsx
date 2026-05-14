@@ -16,6 +16,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
 import { cn } from "@/lib/utils"
 
 type BulkActionBarProps = {
@@ -64,17 +65,17 @@ export function BulkActionBar({
         id="desk-bulk-action-bar"
         data-section="desk-bulk-action-bar"
         data-testid="desk-bulk-action-bar"
-        className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center justify-between gap-4 rounded-[10px] border-[0.5px] border-border bg-sb px-4 py-2.5 shadow-float-md"
+        className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center justify-between gap-4 rounded-[10px] border-[0.5px] border-ink bg-ink px-4 py-2.5 text-bg shadow-float-md"
       >
         <div className="flex items-center gap-3">
-          <span className="text-[13px] font-medium text-ink">
+          <span className="text-[13px] font-medium text-bg">
             {selectedCount} selected
           </span>
           {!allVisibleSelected && visibleCount > 0 ? (
             <button
               type="button"
               onClick={onSelectAll}
-              className="text-[12px] text-ink-4 underline-offset-2 hover:text-ink-2 hover:underline"
+              className="text-[12px] text-bg/55 underline-offset-2 hover:text-bg hover:underline"
             >
               Select all
             </button>
@@ -83,7 +84,7 @@ export function BulkActionBar({
             <button
               type="button"
               onClick={onDeselectAll}
-              className="text-[12px] text-ink-4 underline-offset-2 hover:text-ink-2 hover:underline"
+              className="text-[12px] text-bg/55 underline-offset-2 hover:text-bg hover:underline"
             >
               Deselect
             </button>
@@ -96,14 +97,14 @@ export function BulkActionBar({
               <button
                 type="button"
                 className={cn(
-                  "inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-sb px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted",
-                  statusOpen && "border-ink-3",
+                  "inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10",
+                  statusOpen && "border-bg/35 bg-bg/10",
                 )}
               >
-                <WritingStatusIcon />
+                <WritingStatusIcon status="draft" className="h-[13px] w-[13px] text-bg/70" />
                 Change status
                 <ChevronDown
-                  className={cn("h-3 w-3 text-ink-4 transition-transform", statusOpen && "rotate-180")}
+                  className={cn("h-3 w-3 text-bg/60 transition-transform", statusOpen && "rotate-180")}
                   strokeWidth={1.5}
                 />
               </button>
@@ -119,7 +120,7 @@ export function BulkActionBar({
                   }}
                   className="flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted"
                 >
-                  <WritingStatusIcon />
+                  <WritingStatusIcon status={status} />
                   <span>{getWritingStatusLabel(status)}</span>
                 </button>
               ))}
@@ -137,7 +138,7 @@ export function BulkActionBar({
             trigger={
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-sb px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
+                className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10"
               >
                 <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
                 Add to collection
@@ -148,7 +149,7 @@ export function BulkActionBar({
           <button
             type="button"
             onClick={handleShare}
-            className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-sb px-3 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
+            className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10"
           >
             <Share2 className="h-3.5 w-3.5" strokeWidth={1.5} />
             Share
@@ -157,7 +158,7 @@ export function BulkActionBar({
           <button
             type="button"
             onClick={onDelete}
-            className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-sb px-3 text-[12px] font-medium text-[hsl(0,72%,45%)] transition-colors hover:bg-[hsl(0,72%,96%)]"
+            className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-[hsl(0,72%,58%)]/40 bg-[hsl(0,72%,45%)]/15 px-3 text-[12px] font-medium text-[hsl(0,80%,78%)] transition-colors hover:bg-[hsl(0,72%,45%)]/25"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
             Delete
@@ -197,20 +198,5 @@ export function BulkActionBar({
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-function WritingStatusIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-[13px] w-[13px] text-ink-4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="12" cy="12" r="10" />
-    </svg>
   )
 }

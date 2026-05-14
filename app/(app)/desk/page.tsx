@@ -86,7 +86,7 @@ export default function DeskPage() {
   >({})
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null)
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
@@ -387,6 +387,15 @@ export default function DeskPage() {
     return filteredSummary.groups.flatMap((group) => group.rows)
   }, [filteredSummary])
 
+  const previewIndex = useMemo(() => {
+    if (!previewWritingId) {
+      return null
+    }
+
+    const nextIndex = previewRows.findIndex((row) => row.id === previewWritingId)
+    return nextIndex >= 0 ? nextIndex : null
+  }, [previewRows, previewWritingId])
+
   const allVisibleSelected =
     visibleWritingIds.length > 0 && visibleWritingIds.every((id) => selectedIds.has(id))
 
@@ -412,10 +421,10 @@ export default function DeskPage() {
   )
 
   useEffect(() => {
-    if (previewIndex !== null && previewIndex >= previewRows.length) {
-      setPreviewIndex(null)
+    if (previewWritingId && previewIndex === null) {
+      setPreviewWritingId(null)
     }
-  }, [previewIndex, previewRows.length])
+  }, [previewIndex, previewWritingId])
 
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await localDB.writings.get(writingId)
@@ -432,9 +441,8 @@ export default function DeskPage() {
 
   const openWritingPreview = useCallback(
     (writingId: string) => {
-      const nextIndex = previewRows.findIndex((row) => row.id === writingId)
-      if (nextIndex >= 0) {
-        setPreviewIndex(nextIndex)
+      if (previewRows.some((row) => row.id === writingId)) {
+        setPreviewWritingId(writingId)
       }
     },
     [previewRows],
@@ -665,17 +673,22 @@ export default function DeskPage() {
           />
 
           <WritingPreviewModal
-            open={previewIndex !== null}
+            open={previewWritingId !== null && previewIndex !== null}
             rows={previewRows}
             currentIndex={previewIndex}
             collectionOptions={collectionOptions}
             collectionIdsByWritingId={collectionIdsByWritingId}
             onOpenChange={(open) => {
               if (!open) {
-                setPreviewIndex(null)
+                setPreviewWritingId(null)
               }
             }}
-            onIndexChange={setPreviewIndex}
+            onIndexChange={(index) => {
+              const nextRow = previewRows[index]
+              if (nextRow) {
+                setPreviewWritingId(nextRow.id)
+              }
+            }}
             onToggleCollection={toggleWritingCollection}
             onCreateCollection={createWritingCollection}
             onStatusChange={changeWritingStatus}
