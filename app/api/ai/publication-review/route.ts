@@ -84,6 +84,94 @@ async function getCurrentUserId() {
   return { userId: user?.id ?? null };
 }
 
+const parseModelJson = (text: string) => {
+  const jsonText = extractJsonPayload(text);
+  return JSON.parse(jsonText);
+};
+
+type PublicationReviewRaw = {
+  summary: string | null;
+  suggestions: PublicationSuggestion[];
+  checklist: PublicationChecklistItem[];
+};
+
+const toPublicationReviewRaw = (parsedJson: unknown): PublicationReviewRaw => {
+  const parsed = publicationReviewResponseSchema.parse(parsedJson);
+
+  const validSuggestion = (s: { title: string; reason: string; originalText: string; replacementText: string }) =>
+    s.title.trim().length > 0 &&
+    s.reason.trim().length > 0 &&
+    s.originalText.trim().length > 0 &&
+    s.replacementText.trim().length > 0;
+
+  const validChecklist = (c: { label: string; detail: string }) =>
+    c.label.trim().length > 0 && c.detail.trim().length > 0;
+
+  return {
+    summary: parsed.summary || null,
+    suggestions: [
+      ...toSuggestions("spelling", parsed.spelling.filter(validSuggestion)),
+      ...toSuggestions("rewriting", parsed.rewriting.filter(validSuggestion)),
+    ],
+    checklist: toChecklistItems(parsed.checklist.filter(validChecklist)),
+  };
+};
+
+async function callPublicationModel({
+  config,
+  promptText,
+  strictJson,
+}: {
+  config: ReturnType<typeof getAIProviderConfig>;
+  promptText: string;
+  strictJson: boolean;
+}) {
+  const response = await fetch(config.chatCompletionsUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${config.apiKey}`,
+      "user-agent": "Odessay/1.0",
+    },
+    body: JSON.stringify({
+      model: config.model,
+      max_tokens: config.maxTokens,
+      // Keep temperature low to reduce malformed JSON output.
+      temperature: strictJson ? 0 : 0.2,
+      top_p: config.topP,
+      messages: [
+        {
+          role: "system",
+          content: strictJson
+            ? `${buildPublicationReviewSystemPrompt()} Return strictly valid JSON only: no markdown, no prose, no trailing commas.`
+            : buildPublicationReviewSystemPrompt(),
+        },
+        {
+          role: "user",
+          content: promptText,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorPayload = await response.text();
+    console.log(`[pub-review] error body=${errorPayload.slice(0, 500)}`);
+    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
+  }
+
+  const payload = await response.json() as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+
+  const text = payload.choices?.[0]?.message?.content ?? "";
+  if (!text) {
+    throw new Error("AI returned an empty response.");
+  }
+
+  return text;
+}
+
 async function requestPublicationReview(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
@@ -96,86 +184,41 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
 
   console.log(`[pub-review] start provider=${config.baseUrl} model=${config.model} promptChars=${promptText.length}`);
 
-  const response = await fetch(config.chatCompletionsUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "Odessay/1.0",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: config.maxTokens,
-      temperature: config.temperature,
-      top_p: config.topP,
-      messages: [
-        {
-          role: "system",
-          content: buildPublicationReviewSystemPrompt(),
-        },
-        {
-          role: "user",
-          content: promptText,
-        },
-      ],
-    }),
-  });
-
+  const firstText = await callPublicationModel({ config, promptText, strictJson: false });
   const t1 = Date.now();
-  console.log(`[pub-review] response status=${response.status} latencyMs=${t1 - t0}`);
-
-  if (!response.ok) {
-    const errorPayload = await response.text();
-    console.log(`[pub-review] error body=${errorPayload.slice(0, 500)}`);
-    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
-  }
-
-  const payload = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const t2 = Date.now();
-  console.log(`[pub-review] json parsed parseLatencyMs=${t2 - t1}`);
-
-  const text = payload.choices?.[0]?.message?.content ?? "";
-
-  if (!text) {
-    throw new Error("AI returned an empty response.");
-  }
-
-  const jsonText = extractJsonPayload(text);
-  let parsedJson: unknown;
+  console.log(`[pub-review] first response latencyMs=${t1 - t0}`);
 
   try {
-    parsedJson = JSON.parse(jsonText);
+    const parsedJson = parseModelJson(firstText);
+    const parsed = toPublicationReviewRaw(parsedJson);
+    const t2 = Date.now();
+    console.log(`[pub-review] first parse ok totalLatencyMs=${t2 - t0}`);
+    return { model: config.model, ...parsed };
   } catch (parseErr) {
-    console.log(`[pub-review] JSON parse failed. Raw text length=${jsonText.length}`);
-    console.log(`[pub-review] JSON raw text (first 800 chars): ${jsonText.slice(0, 800)}`);
-    console.log(`[pub-review] JSON raw text (last 800 chars): ${jsonText.slice(-800)}`);
-    throw new Error(`AI returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
+    const firstJsonText = extractJsonPayload(firstText);
+    console.log(`[pub-review] first parse failed. textLength=${firstJsonText.length}`);
+    console.log(`[pub-review] first parse raw (first 800): ${firstJsonText.slice(0, 800)}`);
+    console.log(`[pub-review] first parse raw (last 800): ${firstJsonText.slice(-800)}`);
+    console.log(`[pub-review] retrying with strict JSON mode`);
+
+    const retryText = await callPublicationModel({ config, promptText, strictJson: true });
+    const retryJsonText = extractJsonPayload(retryText);
+
+    try {
+      const parsedJson = parseModelJson(retryText);
+      const parsed = toPublicationReviewRaw(parsedJson);
+      const t2 = Date.now();
+      console.log(`[pub-review] retry parse ok totalLatencyMs=${t2 - t0}`);
+      return { model: config.model, ...parsed };
+    } catch (retryErr) {
+      console.log(`[pub-review] retry parse failed. textLength=${retryJsonText.length}`);
+      console.log(`[pub-review] retry parse raw (first 800): ${retryJsonText.slice(0, 800)}`);
+      console.log(`[pub-review] retry parse raw (last 800): ${retryJsonText.slice(-800)}`);
+      throw new Error(
+        `AI returned invalid JSON: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+      );
+    }
   }
-
-  const parsed = publicationReviewResponseSchema.parse(parsedJson);
-  const t3 = Date.now();
-  console.log(`[pub-review] schema validated totalLatencyMs=${t3 - t0}`);
-
-  const validSuggestion = (s: { title: string; reason: string; originalText: string; replacementText: string }) =>
-    s.title.trim().length > 0 &&
-    s.reason.trim().length > 0 &&
-    s.originalText.trim().length > 0 &&
-    s.replacementText.trim().length > 0;
-
-  const validChecklist = (c: { label: string; detail: string }) =>
-    c.label.trim().length > 0 && c.detail.trim().length > 0;
-
-  return {
-    model: config.model,
-    summary: parsed.summary || null,
-    suggestions: [
-      ...toSuggestions("spelling", parsed.spelling.filter(validSuggestion)),
-      ...toSuggestions("rewriting", parsed.rewriting.filter(validSuggestion)),
-    ],
-    checklist: toChecklistItems(parsed.checklist.filter(validChecklist)),
-  };
 }
 
 export async function POST(request: Request) {
