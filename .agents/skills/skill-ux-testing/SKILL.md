@@ -124,7 +124,7 @@ test('user can write and auto-save a writing', async ({ page }) => {
 - Verificar que "SILENCIO" no renderiza nada.
 - Verificar que el agente nunca genera texto en la respuesta.
 - Verificar que descartar una observación funciona.
-- Usar mock de Claude API en tests para no consumir créditos.
+- Usar mock del provider AI en tests para no consumir créditos.
 
 ## Mobile
 

@@ -7,7 +7,7 @@ description: Workflow de Product Manager para Odessay en Linear: definición de 
 
 Este skill tiene dos funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega.
 
-El alcance específico del proyecto — fases e issues macro — vive en `workflow/odessay-roadmap.md`. Lee ese documento antes de crear issues.
+El alcance específico del proyecto — fases e issues macro — vive en `workflow/define/roadmap.md`. Lee ese documento antes de crear issues.
 
 Usa Linear MCP para crear y gestionar todo directamente.
 
@@ -135,10 +135,10 @@ Formato — siempre texto plano, nunca Markdown links:
 **Reglas:**
 1. Texto plano siempre. Nunca `[archivo.md](<http://archivo.md>)` ni ninguna sintaxis de link — los nombres de archivo no son URLs.
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
-3. Los docs de spec (`workflow/core/`, `workflow/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
+3. Los docs de spec (`workflow/context/core/`, `workflow/context/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
 5. `workflow/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `workflow/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
-6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
+6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/context/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
 
 Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/status.json`.
 
@@ -202,20 +202,27 @@ Approval rule: `required_failures = 0` y métricas requeridas presentes.
 Documentos del proyecto que el agente debe leer antes de implementar.
 Usar siempre paths completos desde la raíz del repo.
 
-- workflow/core/odessay-modelo-datos.md (sección: writings)
+- workflow/context/core/odessay-modelo-datos.md (sección: writings)
 - .agents/skills/skill-database/SKILL.md
 - .agents/skills/skill-backend/SKILL.md
 
 **Qué incluir según el tipo de issue:**
 - Cualquier issue con UI → `.agents/skills/skill-design/SKILL.md` + `.agents/skills/skill-design/vistas.md`
-- Cualquier issue con páginas nuevas (`/login`, `/signup`, `/desk`, etc.) → `workflow/core/odessay-paginas.md`
-- Cualquier issue con flujos de usuario → `workflow/core/odessay-flujos.md` (sección relevante)
+- Cualquier issue con páginas nuevas (`/login`, `/signup`, `/desk`, etc.) → `workflow/context/core/odessay-paginas.md`
+- Cualquier issue con flujos de usuario → `workflow/context/core/odessay-flujos.md` (sección relevante)
 - Cualquier issue de frontend → `.agents/skills/skill-frontend/SKILL.md`
 - Cualquier issue de backend/API → `.agents/skills/skill-backend/SKILL.md`
-- Cualquier issue de base de datos → `.agents/skills/skill-database/SKILL.md` + `workflow/core/odessay-modelo-datos.md`
-- Issues que tocan un feature con doc propio → el doc de `workflow/features/` correspondiente
+- Cualquier issue de base de datos → `.agents/skills/skill-database/SKILL.md` + `workflow/context/core/odessay-modelo-datos.md`
+- Issues que tocan un feature con doc propio → el doc de `workflow/context/features/` correspondiente
 - Issues que tocan tabs, filtros, o navegación interna del editor → `workflow/context/features/odessay-sync.md` + `workflow/context/core/odessay-arquitectura.md`
 - Issues con templates visuales reutilizables (emails, PDFs, public pages) → la sección correspondiente de `.agents/skills/skill-design/vistas.md` con el spec canónico citado por anchor (no genérico).
+- Issues que tocan AI de corrección ortográfica, streaming de sugerencias o memoria de accept/reject → `workflow/context/features/odessay-ai-writing-assist.md` (obligatorio).
+- Issues que tocan extensiones de TipTap/ProseMirror, decorations, serializer/parser o round-trip Markdown ↔ JSON → `workflow/context/features/odessay-prosemirror-tiptap.md` (obligatorio).
+
+**Regla de conexión de documentos (obligatoria):**
+- Si el issue cambia comportamiento de una feature documentada, el brief debe citar explícitamente ese documento en `Reference docs`.
+- Si no existe documento de feature para el cambio, el PM debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
+- No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
 
 **External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
 
@@ -383,7 +390,7 @@ La descripción del issue sigue la estructura definida en §Estructura de un iss
 
 ### Al iniciar el proyecto
 
-1. Lee `workflow/odessay-roadmap.md` para entender fases y el mapa de issues.
+1. Lee `workflow/define/roadmap.md` para entender fases y el mapa de issues.
 2. Crea los labels en Linear exactamente como están definidos en este documento.
 3. Crea los estados en Linear: Todo, In Progress, In Review, Done. (Ready es opcional como pre-cola).
 4. Crea **un proyecto por fase** en Linear, con el nombre exacto de la fase (`Fase 0 — Cimientos`, `Fase 1 — Escribir`, etc.) y descripción de exit criteria específica a esa fase.
@@ -426,7 +433,7 @@ Un commit directo en `main` es un error operativo. Si ocurre, corrígelo antes d
 
 Un archivo en Files affected escrito como link Markdown rompe la legibilidad. `[CLAUDE.md](<http://CLAUDE.md>)` no es un path — es un artefacto de parseo. Los nombres de archivo van siempre como texto plano.
 
-Un spec doc en Files affected invierte la causalidad. Si `workflow/features/odessay-sync.md` aparece como `(modifica)`, significa que el issue está reescribiendo el spec en lugar de implementarlo. El spec existe antes que el issue. La implementación lee el spec — no al revés.
+Un spec doc en Files affected invierte la causalidad. Si `workflow/context/features/odessay-sync.md` aparece como `(modifica)`, significa que el issue está reescribiendo el spec en lugar de implementarlo. El spec existe antes que el issue. La implementación lee el spec — no al revés.
 
 Un skill en Files affected es ruido. `.agents/skills/skill-design/SKILL.md (referencia)` en Files affected confunde a quien lee el issue: ese archivo no se toca, se consulta. Va en Reference docs.
 

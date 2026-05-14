@@ -89,8 +89,23 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 9. Mover issue a `In Review` en Linear **solo tras confirmar que el PR existe** (`gh pr view` devuelve estado `OPEN`).
 10. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
     - Si `Presentation Contract` es `required`, incluir evidencia de paridad cross-mode (`write`, `preview`, `shared`, `public`).
+11. En el comentario de BUILD incluir sección obligatoria `Context Report`:
+    - `Context Gaps Detected`: yes/no
+    - `Missing or Ambiguous Context`: lista concreta
+    - `Additional Instructions Requested`: lista concreta
+    - `Decisions Made During Build`: lista concreta
+    - `Recommended Context Fixes`: docs/briefs/skills a actualizar
 
-**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido + evidencia de paridad cross-mode cuando `Presentation Contract` es requerido.
+**Cómo evaluar `Context Report` (rúbrica mínima):**
+- `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
+- `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
+- `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
+- `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
+- `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
+
+**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido + evidencia de paridad cross-mode cuando `Presentation Contract` es requerido + comentario de BUILD en Linear con `Context Report` completo.
+
+**Regla bloqueante:** si falta `Context Report` o está incompleto, el issue no puede pasar a `In Review`.
 
 ---
 
@@ -130,6 +145,10 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - la evidencia está adjunta en PR/issue.
 3. Revisar diff contra el brief (scope, calidad, seguridad, performance).
 4. Dejar comentario en Linear: resultado de revisión.
+   - El comentario de REVIEW debe separar explícitamente:
+     - `GateResult` (PASS/FAIL de contratos/checks),
+     - `QualityScore` (calidad técnica del diff),
+     - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones).
 5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 6. Volver a `main`: `git switch main`.
 7. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
@@ -140,6 +159,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 
 **Secuencia — si rechazado:**
 1. Dejar comentario en Linear con hallazgos específicos que bloquean aprobación.
+   - Incluso en rechazo, reportar `QualityScore` y `ProcessInsights` por separado para no perder aprendizaje del ciclo.
 2. Rechazar automáticamente si se cumple cualquiera de estas condiciones:
    - falta evidencia de performance cuando el contrato es requerido;
    - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
@@ -271,6 +291,38 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 **Gate de salida:** entradas en `workflow/define/debrief.md` + issues aprobados creados en Linear.
 
 **Restricción:** no modificar el scope ni reabrir el issue original. No cambiar código en esta etapa.
+
+---
+
+## `/wf-health` — CONTEXT HYGIENE
+
+**Objetivo:** ejecutar un chequeo de salud documental para reducir context rot entre `workflow/` y `.agents/skills/`, especialmente en flujos AI del editor.
+
+**Resolución:**
+- Se ejecuta sin argumentos: `/wf-health`.
+
+**Contexto a cargar:**
+1. `workflow/define/context-hygiene-prompt.md` (fuente de verdad del ejercicio).
+2. `workflow/docs.json`.
+3. `workflow/agents.md`.
+4. `workflow/decisions.json`.
+5. `workflow/status.json`.
+6. Documentos/skills que el prompt indique explícitamente como foco.
+
+**No cargar por defecto:** todo `workflow/context/` completo. Solo los documentos mencionados por el prompt o detectados como afectados.
+
+**Secuencia:**
+1. Leer `workflow/define/context-hygiene-prompt.md`.
+2. Auditar consistencia de rutas, naming y contratos entre skills y workflow.
+3. Detectar referencias legacy, rutas rotas y desalineaciones de contrato.
+4. Corregir documentación afectada con cambios mínimos y trazables.
+5. Si se crea/mueve/elimina documentos, actualizar `workflow/docs.json`.
+6. Validar integridad de JSON (`docs.json`, `decisions.json`, `status.json`).
+7. Entregar resumen: archivos cambiados, inconsistencias resueltas y riesgos abiertos.
+
+**Gate de salida:** inconsistencias críticas corregidas + `workflow/docs.json` sincronizado + validación de JSON en verde.
+
+**Restricción:** `/wf-health` corrige contexto y documentación; no implementa funcionalidades de producto.
 
 ---
 

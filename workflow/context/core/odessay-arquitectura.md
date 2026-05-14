@@ -16,7 +16,7 @@ Lee `odessay-fundacional.md` primero. Este documento prevalece sobre versiones a
 | Editor | TipTap (headless, sobre ProseMirror) | Motor de escritura |
 | Base de datos remota | Supabase (PostgreSQL + Auth + Realtime) | Persistencia cloud, auth, sync |
 | Base de datos local | SQLite (via Tauri/Electron en desktop) | Persistencia local, offline-first |
-| AI | Claude API (Anthropic) | Editor residente |
+| AI | Provider configurable (server-side) | Editor residente + writing assist |
 | Email | Supabase Auth SMTP + Resend | Supabase Auth envia emails de autenticacion via Resend SMTP en `auth.odessay.com`; Resend app-side queda para notificaciones/invitaciones no-auth |
 | Hosting | Vercel | Deploy web, dominio odessay.com |
 

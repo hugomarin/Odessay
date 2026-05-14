@@ -1,6 +1,6 @@
 # Odessay — Instrucciones para Agentes
 
-Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digital construido con Next.js 15, TipTap, Supabase y Claude API.
+Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digital construido con Next.js 15, TipTap, Supabase y un provider AI server-side configurable.
 
 ## Lo que tienes disponible
 

@@ -8,6 +8,20 @@
 
 El backend de Odessay es invisible para el usuario. Debe ser rápido, seguro y silencioso. El usuario nunca debería notar que existe.
 
+## Contexto documental obligatorio por tipo de trabajo
+
+Antes de implementar, cargar docs según scope:
+- API de AI corrections/title suggestions:
+  - `workflow/context/features/odessay-ai-writing-assist.md`
+- Cambios en proveedor/modelo/env vars AI:
+  - `workflow/context/core/odessay-stack.md`
+- Cambios que afectan serializer/parser/backbone del editor:
+  - `workflow/context/features/odessay-prosemirror-tiptap.md`
+
+Regla:
+- No hardcodear modelo en rutas de negocio.
+- Resolver proveedor/modelo por env y mantener contrato de error explícito de configuración.
+
 ---
 
 ## API Routes
@@ -163,16 +177,17 @@ Solo usar `createAdminClient()` en API routes server-side cuando se necesita byp
 - El trigger `on_auth_user_created` crea el profile automáticamente.
 - Sesión disponible en Server Components vía `createServerClient`.
 
-## Claude API (AI Editor)
+## AI Provider API (AI Editor / Writing Assist)
 
-- Todas las llamadas a Claude son server-side. Nunca expongas el API key al cliente.
+- Todas las llamadas AI son server-side. Nunca expongas keys al cliente.
 - Dos endpoints:
   - `/api/ai/observe` — Observaciones automáticas en pausas de escritura. Recibe body del writing + instrucciones de contexto.
   - `/api/ai/discuss` — Invocación directa y discusión. Recibe body + pregunta/instrucción del autor + historial de la conversación en sesión.
 - El system prompt base está en `odessay-ai-editor.md`. No lo modifiques sin revisar ese documento.
-- Siempre incluye la instrucción de que el agente nunca genera texto.
-- Parsea la respuesta: si es "SILENCIO", no envíes nada al cliente.
-- Modelo: Claude Sonnet para producción. Haiku para testing si se necesita volumen.
+- Para endpoints del **AI editor residente** (`/api/ai/observe`, `/api/ai/discuss`): incluir instrucción de no generar texto y parsear `SILENCIO` como no-op.
+- Para endpoints de **AI writing assist** (corrections/title suggestions): seguir el contrato específico en `workflow/context/features/odessay-ai-writing-assist.md` (sí hay suggestions/replacements estructurados, nunca auto-aplicación).
+- Modelo/proveedor: configurables por entorno (env). No asumir modelo fijo en código.
+- Para flujo de corrections y title suggestion, seguir contrato en `workflow/context/features/odessay-ai-writing-assist.md`.
 
 ## Resend (Email)
 
@@ -187,7 +202,7 @@ El auto-save es local-first. Secuencia invariable: guardar en base local (inmedi
 
 El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins silencioso** — no se bloquean escrituras, no hay UI de resolución. El campo `version` se incrementa como auditoría, no como control de concurrencia.
 
-**Spec completa de sync:** `workflow/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
+**Spec completa de sync:** `workflow/context/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
 
 ## Observabilidad
 
@@ -218,6 +233,8 @@ console.error('Error:', error)
 # Server-side only
 SUPABASE_SERVICE_ROLE_KEY=
 ANTHROPIC_API_KEY=
+FIREWORKS_API_KEY=
+FIREWORKS_MODEL=
 RESEND_API_KEY=
 
 # Client-side (NEXT_PUBLIC_)
@@ -240,6 +257,6 @@ Este checklist cubre lo específico de backend durante la implementación. Antes
 - [ ] ¿No hay API keys expuestas al cliente?
 - [ ] ¿RLS cubre el acceso a datos?
 - [ ] ¿Errores manejados con mensajes amables?
-- [ ] ¿El AI editor nunca genera texto en el response?
+- [ ] ¿Cada endpoint AI respeta su contrato por scope (AI editor residente vs AI writing assist)?
 - [ ] ¿Variables de entorno correctas para el ambiente (staging/prod)?
 - [ ] ¿El auto-save guarda local primero, sync remoto en background?

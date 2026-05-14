@@ -26,7 +26,9 @@ Checklist especializado para revisar seguridad. Aplicar contra el diff.
 
 ## AI / LLM Security (específico de Odessay)
 
-- [ ] ¿El AI editor nunca genera texto en la respuesta? (debe ser observación/silencio)
+- [ ] ¿Se respeta contrato AI por scope?
+  - AI editor residente (`observe/discuss`): observación/silencio, sin texto autoral generado.
+  - AI writing assist (`corrections/title`): respuesta estructurada de sugerencias, nunca auto-aplicación.
 - [ ] ¿Las respuestas de Claude se renderizan como texto plano, nunca como HTML?
 - [ ] ¿Hay rate limiting en endpoints de AI?
 - [ ] ¿Los system prompts no interpolan user input directamente?

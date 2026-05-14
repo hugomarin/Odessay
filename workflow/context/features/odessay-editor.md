@@ -1,7 +1,7 @@
 # ODESSAY — Editor
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `odessay-fundacional.md` para la visión, `odessay-stack.md` para el stack, `odessay-ai-editor.md` para el agente AI, y `skill-design.md` para el sistema visual.
+Lee `odessay-fundacional.md` para la visión, `odessay-stack.md` para el stack, `odessay-ai-editor.md` para el agente AI residente, `odessay-ai-writing-assist.md` para corrector/sugerencia de título, `odessay-prosemirror-tiptap.md` para el backbone técnico del editor, y `skill-design.md` para el sistema visual.
 
 Este documento define el comportamiento técnico y de UX del editor de Odessay. Es el componente más crítico del producto — donde ocurre todo.
 

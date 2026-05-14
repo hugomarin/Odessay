@@ -148,7 +148,7 @@ Este system prompt es la dirección base. Se complementa con las instrucciones d
 - **Invocación/Discusión:** Respuesta más extensa según lo que el autor pidió. Se renderiza en el panel de diálogo.
 
 ### Modelo
-Claude API (Anthropic). Modelo Sonnet para balance costo/calidad. Server-side vía API routes de Next.js.
+Provider AI server-side configurable. El AI residente debe resolver proveedor/modelo por configuración de entorno (sin IDs hardcodeados en rutas). Server-side vía API routes de Next.js.
 
 ---
 
