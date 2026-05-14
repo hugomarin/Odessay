@@ -12,6 +12,7 @@ export type TopbarTrackedAction = Extract<
   | "highlight"
   | "link"
   | "blockquote"
+  | "codeBlock"
   | "bulletList"
   | "orderedList"
   | "inlineCode"
@@ -33,6 +34,7 @@ const DEFAULT_EDITOR_ACTION_STATE: Readonly<Record<TopbarTrackedAction, boolean>
   highlight: false,
   link: false,
   blockquote: false,
+  codeBlock: false,
   bulletList: false,
   orderedList: false,
   inlineCode: false,
@@ -113,6 +115,29 @@ export const resolveStructureState = (editor: Editor): StructureAction | null =>
   return null
 }
 
+export const resolveEditorActionState = (editor: Editor): Readonly<Record<TopbarTrackedAction, boolean>> => {
+  const selectedStructure = resolveStructureState(editor)
+
+  return {
+    bold: editor.isActive("bold"),
+    italic: editor.isActive("italic"),
+    strike: editor.isActive("strike"),
+    highlight: editor.isActive("highlight"),
+    link: editor.isActive("link"),
+    blockquote: editor.isActive("blockquote"),
+    codeBlock: editor.isActive("codeBlock"),
+    bulletList: editor.isActive("bulletList"),
+    orderedList: editor.isActive("orderedList"),
+    inlineCode: editor.isActive("code"),
+    paragraph: selectedStructure === "paragraph",
+    heading1: selectedStructure === "heading1",
+    heading2: selectedStructure === "heading2",
+    heading3: selectedStructure === "heading3",
+    table: editor.isActive("table"),
+    image: false,
+  }
+}
+
 export const useEditorActionState = (editor: Editor | null): Readonly<Record<TopbarTrackedAction, boolean>> => {
   const actionState = useEditorState({
     editor,
@@ -121,25 +146,7 @@ export const useEditorActionState = (editor: Editor | null): Readonly<Record<Top
         return DEFAULT_EDITOR_ACTION_STATE
       }
 
-      const selectedStructure = resolveStructureState(currentEditor)
-
-      return {
-        bold: currentEditor.isActive("bold"),
-        italic: currentEditor.isActive("italic"),
-        strike: currentEditor.isActive("strike"),
-        highlight: currentEditor.isActive("highlight"),
-        link: currentEditor.isActive("link"),
-        blockquote: currentEditor.isActive("blockquote"),
-        bulletList: currentEditor.isActive("bulletList"),
-        orderedList: currentEditor.isActive("orderedList"),
-        inlineCode: currentEditor.isActive("code"),
-        paragraph: selectedStructure === "paragraph",
-        heading1: selectedStructure === "heading1",
-        heading2: selectedStructure === "heading2",
-        heading3: selectedStructure === "heading3",
-        table: currentEditor.isActive("table"),
-        image: false,
-      }
+      return resolveEditorActionState(currentEditor)
     },
   })
 

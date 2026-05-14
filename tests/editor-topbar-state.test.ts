@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { Editor } from "@tiptap/react"
-import { resolveStructureState } from "@/hooks/useEditorState"
+import { resolveEditorActionState, resolveStructureState } from "@/hooks/useEditorState"
 
 type MockNode = {
   isTextblock: boolean
@@ -10,7 +10,26 @@ type MockNode = {
 
 type EditorMockOptions = {
   empty: boolean
-  active?: Partial<Record<"heading1" | "heading2" | "heading3" | "paragraph", boolean>>
+  active?: Partial<
+    Record<
+      | "bold"
+      | "italic"
+      | "strike"
+      | "highlight"
+      | "link"
+      | "blockquote"
+      | "codeBlock"
+      | "bulletList"
+      | "orderedList"
+      | "inlineCode"
+      | "heading1"
+      | "heading2"
+      | "heading3"
+      | "paragraph"
+      | "table",
+      boolean
+    >
+  >
   nodes?: MockNode[]
 }
 
@@ -27,6 +46,18 @@ const createEditorMock = ({ empty, active = {}, nodes = [] }: EditorMockOptions)
       },
     },
     isActive: (name: string, attrs?: Record<string, unknown>) => {
+      if (name === "bold") return Boolean(active.bold)
+      if (name === "italic") return Boolean(active.italic)
+      if (name === "strike") return Boolean(active.strike)
+      if (name === "highlight") return Boolean(active.highlight)
+      if (name === "link") return Boolean(active.link)
+      if (name === "blockquote") return Boolean(active.blockquote)
+      if (name === "codeBlock") return Boolean(active.codeBlock)
+      if (name === "bulletList") return Boolean(active.bulletList)
+      if (name === "orderedList") return Boolean(active.orderedList)
+      if (name === "code") return Boolean(active.inlineCode)
+      if (name === "table") return Boolean(active.table)
+
       if (name === "paragraph") {
         return Boolean(active.paragraph)
       }
@@ -97,3 +128,19 @@ describe("resolveStructureState", () => {
   })
 })
 
+describe("resolveEditorActionState", () => {
+  it("tracks codeBlock independently from inline code", () => {
+    const actionState = resolveEditorActionState(
+      createEditorMock({
+        empty: true,
+        active: {
+          codeBlock: true,
+          inlineCode: false,
+        },
+      }),
+    )
+
+    expect(actionState.codeBlock).toBe(true)
+    expect(actionState.inlineCode).toBe(false)
+  })
+})

@@ -99,7 +99,7 @@ const TEXT_MENU_ACTIONS: StructureActionItem[] = [
 ]
 
 const LIST_MENU_ACTIONS: MenuActionItem[] = [
-  { id: "editor-action-bullet-list", label: "Dot List", action: "bulletList", icon: List },
+  { id: "editor-action-bullet-list", label: "• List", action: "bulletList", icon: List },
   { id: "editor-action-ordered-list", label: "# List", action: "orderedList", icon: ListOrdered },
 ]
 
@@ -142,6 +142,7 @@ const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
   "highlight",
   "link",
   "blockquote",
+  "codeBlock",
   "bulletList",
   "orderedList",
   "inlineCode",
@@ -356,7 +357,9 @@ export function EditorTopbar({
         ? "H3"
         : actionState.blockquote
           ? "Quote"
-          : "Text"
+          : actionState.codeBlock
+            ? "Code"
+            : "Text"
   const listMenuLabel = actionState.orderedList ? "# List" : actionState.bulletList ? "• List" : "List"
 
   return (
@@ -436,7 +439,8 @@ export function EditorTopbar({
                     aria-label="Text"
                     className={cn(
                       TOPBAR_MENU_TRIGGER_CLASS,
-                      (actionState.heading1 || actionState.heading2 || actionState.heading3 || actionState.blockquote) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS,
+                      (actionState.heading1 || actionState.heading2 || actionState.heading3 || actionState.blockquote || actionState.codeBlock) &&
+                        TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS,
                     )}
                   >
                     <span>{textMenuLabel}</span>
