@@ -30,6 +30,15 @@
     },
     "built": [
         {
+            "what": "Polish Desk writing management with read-only previews, single-line view/filter controls, and floating bulk actions. Added a local modal preview flow that loads the current writing from localDB by primary key, renders body_json/body_text through the shared reading renderer, prefetches a small ±2 navigation window, evicts content outside the window, and clears cache on close. Desk rows keep only excerpt metadata and expose an eye action for preview without opening the editor. The modal supports ArrowLeft/ArrowRight navigation, read-only text rendering, status changes, and collection assignment from the sidebar.",
+            "phase": "Fase 3",
+            "issue": "ODE-135",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-135/polish-desk-writing-list-with-previews-grouping-filters-and-inline",
+            "commit": "60f38e4",
+            "date": "2026-05-13",
+            "notes": "Validation in green: npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (290 tests). Performance contract: required by issue for Desk interactions; no Desk-specific budgets exist in workflow/perf-budgets.json, so evidence is functional plus architectural: preview content is fetched on demand from IndexedDB by id, prefetch window is capped to current ±2, and cache clears on modal close. Presentation contract: required for new read-only writing surface; modal reuses renderWritingBodyHtml and WritingContentFrame, preserving the shared prose-odessay/odessay-rich-content contract."
+        },
+        {
             "what": "Fix PDF and DOCX export styling and table rendering. Created lib/export/styles.ts as single source of truth for shared export styles (DRY). Refactored to-pdf.tsx and to-docx.ts to consume shared constants: white page background, unified typography (Geist Sans body, Times-Roman headings, Courier code), consistent colors, spacing, and margins. PDF now renders tables as structured flexbox rows/cells with visible borders and header background. DOCX now renders tables as real docx Table/TableRow/TableCell with borders, header shading, proportional column widths, and cell margins. Added exporter-level regression tests for DOCX table output and shared styles contract. Generated manual export evidence (PDF + DOCX with table).",
             "phase": "Fase 3",
             "issue": "ODE-134",
