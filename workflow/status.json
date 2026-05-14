@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-13",
+    "last_updated": "2026-05-14",
     "active_phase": {
         "name": "Fase 3 — Organizar y publicar",
         "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
@@ -29,6 +29,15 @@
         "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 Claude API agent en wf-run, ODE-107 evaluar headless auth Codex/Claude, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
     },
     "built": [
+        {
+            "what": "Refine the editor toolbar grouping for ODE-137 review feedback. Desktop toolbar keeps core inline formatting as direct actions, moves structure into a Text menu with Normal, H1/H2/H3, Blockquote, and Code, moves Image/Table/Link into an Insert menu, and updates the list trigger so active unordered lists read as Dot List/• List and ordered lists read as # List. Toolbar icons use the stronger topbar stroke for better contrast while preserving the existing editor action state hot path.",
+            "phase": "Fase 3",
+            "issue": "ODE-137",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-137/rework-editor-toolbar-grouping-and-shortcut-map",
+            "commit": "0f4451b",
+            "date": "2026-05-14",
+            "notes": "Validation in green before delivery handoff: npm run typecheck; npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx); npm test (53 files, 290 tests). Performance contract: required by issue for editor toolbar interaction path; this pass is a toolbar surface regrouping only, preserves existing command handlers/selection capture paths, and avoids adding new editor-state tracking on the keystroke path."
+        },
         {
             "what": "Polish Desk writing management with read-only previews, single-line view/filter controls, and floating bulk actions. Added a local modal preview flow that loads the current writing from localDB by primary key, renders body_json/body_text through the shared reading renderer, prefetches a small ±2 navigation window, evicts content outside the window, and clears cache on close. Desk rows keep only excerpt metadata and expose an eye action for preview without opening the editor. The modal supports ArrowLeft/ArrowRight navigation, read-only text rendering, status changes, and collection assignment from the sidebar.",
             "phase": "Fase 3",
