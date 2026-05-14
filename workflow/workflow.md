@@ -95,6 +95,9 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
     - `Additional Instructions Requested`: lista concreta
     - `Decisions Made During Build`: lista concreta
     - `Recommended Context Fixes`: docs/briefs/skills a actualizar
+12. Registrar evento en `workflow/review-history.jsonl` (append-only) con tipo `build_submitted`:
+    - `issue`, `branch`, `pr_url`, `commit`, `ts`, `author`, `notes` (resumen corto).
+    - Una línea JSON por evento, sin reescribir historial previo.
 
 **Cómo evaluar `Context Report` (rúbrica mínima):**
 - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
@@ -105,7 +108,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido + evidencia de paridad cross-mode cuando `Presentation Contract` es requerido + comentario de BUILD en Linear con `Context Report` completo.
 
-**Regla bloqueante:** si falta `Context Report` o está incompleto, el issue no puede pasar a `In Review`.
+**Regla bloqueante:** si falta `Context Report`, si está incompleto, o si no se agregó entrada `build_submitted` en `workflow/review-history.jsonl`, el issue no puede pasar a `In Review`.
 
 ---
 
@@ -149,6 +152,9 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
      - `GateResult` (PASS/FAIL de contratos/checks),
      - `QualityScore` (calidad técnica del diff),
      - `ProcessInsights` (fallos del primer review, correcciones posteriores, gaps de contexto y recomendaciones).
+   - Agregar evento en `workflow/review-history.jsonl` (append-only) con tipo:
+     - `review_rejected` o `review_approved`,
+     - incluyendo `issue`, `pr_url`, `branch`, `commit`, `score`, `gate_result`, `ts`, `reviewer`, `notes`.
 5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 6. Volver a `main`: `git switch main`.
 7. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
@@ -160,6 +166,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 **Secuencia — si rechazado:**
 1. Dejar comentario en Linear con hallazgos específicos que bloquean aprobación.
    - Incluso en rechazo, reportar `QualityScore` y `ProcessInsights` por separado para no perder aprendizaje del ciclo.
+   - Registrar `review_rejected` en `workflow/review-history.jsonl` (append-only) antes de mover estado.
 2. Rechazar automáticamente si se cumple cualquiera de estas condiciones:
    - falta evidencia de performance cuando el contrato es requerido;
    - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
@@ -171,6 +178,11 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 4. No cerrar ni eliminar el PR — mantener rama activa.
 
 **Restricción:** no agregar alcance nuevo en REVIEW. Solo correcciones derivadas del review.
+
+**Regla anti-conflicto para `workflow/review-history.jsonl`:**
+- Es un log append-only; nunca editar ni borrar líneas previas.
+- En conflictos de merge/rebase, conservar ambas entradas y mantener orden temporal por append.
+- Si dos agentes escriben al mismo tiempo, resolver conservando todas las líneas válidas JSON.
 
 **Política de security findings:** un hallazgo de seguridad — por más leve o no-explotable-trivialmente que parezca — se trata como bloqueante desde el primer review, independientemente del dominio (auth, API pública, ingestión de archivos, queries SQL, secrets, validación de input). No usar frases como "conviene cerrar" o "antes del re-review" en el primer comentario: usar "bloquea aprobación" e incluir el patch sugerido inline.
 

@@ -72,6 +72,12 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 
 ## Checklist de calidad
 
+### Trazabilidad histórica (obligatoria)
+- [ ] ¿Se agregó evento append-only en `workflow/review-history.jsonl` para esta ronda?
+- [ ] ¿El evento usa tipo correcto (`build_submitted`, `review_rejected`, `review_approved`)?
+- [ ] ¿Incluye `issue`, `branch`, `pr_url`, `commit`, `ts`, `notes` (y en review: `score`, `gate_result`)?
+- [ ] ¿No se editaron ni borraron entradas previas del archivo?
+
 ### Tests — verificar primero
 - [ ] `npm test` pasa sin errores y sin dependencias externas (sin Supabase real, sin red).
 - [ ] Los nuevos tests usan mocks para Supabase y fixtures para datos. No conectan a staging.
