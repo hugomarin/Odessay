@@ -12,7 +12,6 @@ import {
   Link,
   List,
   ListOrdered,
-  MessageSquareQuote,
   Minimize2,
   Sparkles,
   SlidersHorizontal,
@@ -80,35 +79,41 @@ type MenuActionItem = {
   id: string
   label: string
   action: EditorShortcutAction
-  icon: ComponentType<{ className?: string; strokeWidth?: number }>
+  icon?: ComponentType<{ className?: string; strokeWidth?: number }>
 }
 
 const FORMAT_ACTIONS: TopbarActionItem[] = [
   { id: "editor-action-bold", label: "Bold", action: "bold", icon: Bold },
   { id: "editor-action-italic", label: "Italic", action: "italic", icon: Italic },
   { id: "editor-action-strike", label: "Strike", action: "strike", icon: Strikethrough },
-  { id: "editor-action-link", label: "Link", action: "link", icon: Link },
-  { id: "editor-action-blockquote", label: "Quote", action: "blockquote", icon: MessageSquareQuote },
   { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode", icon: Code2 },
-  { id: "editor-action-table", label: "Table", action: "table", icon: Table },
-  { id: "editor-action-image", label: "Image", action: "image", icon: Image },
 ]
 
-const STRUCTURE_ACTIONS: StructureActionItem[] = [
-  { id: "editor-action-paragraph", label: "Paragraph", action: "paragraph", text: "¶" },
+const TEXT_MENU_ACTIONS: StructureActionItem[] = [
+  { id: "editor-action-paragraph", label: "Normal", action: "paragraph", text: "Aa" },
   { id: "editor-action-heading-1", label: "Heading 1", action: "heading1", text: "H1" },
   { id: "editor-action-heading-2", label: "Heading 2", action: "heading2", text: "H2" },
   { id: "editor-action-heading-3", label: "Heading 3", action: "heading3", text: "H3" },
+  { id: "editor-action-blockquote", label: "Blockquote", action: "blockquote", text: ">" },
+  { id: "editor-action-code-block", label: "Code", action: "codeBlock", text: "</>" },
 ]
 
 const LIST_MENU_ACTIONS: MenuActionItem[] = [
-  { id: "editor-action-bullet-list", label: "Bulleted list", action: "bulletList", icon: List },
-  { id: "editor-action-ordered-list", label: "Numbered list", action: "orderedList", icon: ListOrdered },
+  { id: "editor-action-bullet-list", label: "Dot List", action: "bulletList", icon: List },
+  { id: "editor-action-ordered-list", label: "# List", action: "orderedList", icon: ListOrdered },
 ]
 
-const COMPACT_QUICK_ACTIONS: TopbarActionItem[] = FORMAT_ACTIONS.filter(
-  ({ action }) => action === "bold" || action === "italic" || action === "strike" || action === "link" || action === "image",
-)
+const INSERT_MENU_ACTIONS: MenuActionItem[] = [
+  { id: "editor-action-image", label: "Image", action: "image", icon: Image },
+  { id: "editor-action-table", label: "Table", action: "table", icon: Table },
+  { id: "editor-action-link", label: "Link", action: "link", icon: Link },
+]
+
+const COMPACT_QUICK_ACTIONS: TopbarActionItem[] = [
+  ...FORMAT_ACTIONS,
+  { id: "editor-action-link", label: "Link", action: "link", icon: Link },
+  { id: "editor-action-image", label: "Image", action: "image", icon: Image },
+]
 
 const COMPACT_LIST_ACTIONS: Array<{
   id: string
@@ -116,8 +121,7 @@ const COMPACT_LIST_ACTIONS: Array<{
   action: EditorShortcutAction
   text?: string
 }> = [
-  ...STRUCTURE_ACTIONS,
-  { id: "editor-action-blockquote", label: "Block quote", action: "blockquote", text: ">" },
+  ...TEXT_MENU_ACTIONS,
   { id: "editor-action-bullet-list", label: "Bulleted list", action: "bulletList", text: "-" },
   {
     id: "editor-action-ordered-list",
@@ -126,6 +130,7 @@ const COMPACT_LIST_ACTIONS: Array<{
     text: "1.",
   },
   { id: "editor-action-inline-code", label: "Inline code", action: "inlineCode" },
+  { id: "editor-action-link", label: "Link", action: "link" },
   { id: "editor-action-table", label: "Table", action: "table" },
   { id: "editor-action-image", label: "Image", action: "image" },
 ]
@@ -140,6 +145,7 @@ const TOPBAR_TRACKED_ACTIONS: ReadonlySet<TopbarTrackedAction> = new Set([
   "bulletList",
   "orderedList",
   "inlineCode",
+  "codeBlock",
   "paragraph",
   "heading1",
   "heading2",
@@ -295,13 +301,13 @@ export function EditorTopbar({
     )
   })
 
-  const headingMenuItems = STRUCTURE_ACTIONS.map((actionItem) => {
+  const textMenuItems = TEXT_MENU_ACTIONS.map((actionItem) => {
     const active = isActionActive(actionState, actionItem.action)
     const shortcut = getEditorShortcutLabel(actionItem.action)
 
     return (
       <DropdownMenuItem
-        key={`${actionItem.id}-desktop-heading`}
+        key={`${actionItem.id}-desktop-text`}
         onSelect={() =>
           runCompactTopbarAction(onRunAction, actionItem.action, {
             richSelection: consumeRichSelection(),
@@ -321,8 +327,40 @@ export function EditorTopbar({
     )
   })
 
-  const headingMenuLabel = actionState.heading1 ? "H1" : actionState.heading2 ? "H2" : actionState.heading3 ? "H3" : "H"
-  const listMenuLabel = actionState.orderedList ? "1." : actionState.bulletList ? "•" : "List"
+  const insertMenuItems = INSERT_MENU_ACTIONS.map((actionItem) => {
+    const Icon = actionItem.icon
+    const active = isActionActive(actionState, actionItem.action)
+    const shortcut = getEditorShortcutLabel(actionItem.action)
+
+    return (
+      <DropdownMenuItem
+        key={`${actionItem.id}-desktop-insert`}
+        onSelect={() =>
+          runCompactTopbarAction(onRunAction, actionItem.action, {
+            richSelection: consumeRichSelection(),
+          })
+        }
+        className={cn("h-9 rounded-[8px] px-2.5 text-[13px]", active ? "bg-muted text-ink" : "text-ink-2")}
+      >
+        {Icon ? <Icon className="mr-2 h-[14px] w-[14px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} /> : null}
+        <span className="truncate">{actionItem.label}</span>
+        {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
+      </DropdownMenuItem>
+    )
+  })
+
+  const textMenuLabel = actionState.heading1
+    ? "H1"
+    : actionState.heading2
+      ? "H2"
+      : actionState.heading3
+        ? "H3"
+        : actionState.blockquote
+          ? "Quote"
+          : actionState.codeBlock
+            ? "Code"
+            : "Text"
+  const listMenuLabel = actionState.orderedList ? "# List" : actionState.bulletList ? "• List" : "List"
 
   return (
     <TooltipProvider delayDuration={120}>
@@ -361,7 +399,7 @@ export function EditorTopbar({
                     className={cn(TOPBAR_MENU_TRIGGER_CLASS, (actionState.bulletList || actionState.orderedList) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS)}
                   >
                     <span>{listMenuLabel}</span>
-                    <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+                    <ChevronDown className="h-3 w-3" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
                   </button>
                 </DropdownMenuTrigger>
               </ActionTooltip>
@@ -381,7 +419,7 @@ export function EditorTopbar({
                       }
                       className={cn("h-9 rounded-[8px] px-2.5 text-[13px]", active ? "bg-muted text-ink" : "text-ink-2")}
                     >
-                      <Icon className="mr-2 h-[14px] w-[14px]" strokeWidth={1.5} />
+                      {Icon ? <Icon className="mr-2 h-[14px] w-[14px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} /> : null}
                       <span className="truncate">{actionItem.label}</span>
                       {shortcut ? <DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut> : null}
                     </DropdownMenuItem>
@@ -391,23 +429,48 @@ export function EditorTopbar({
             </DropdownMenu>
 
             <DropdownMenu>
-              <ActionTooltip label="Headings" side="bottom">
+              <ActionTooltip label="Text" side="bottom">
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     onMouseDown={(event) => {
                       captureSelectionAndKeepFocus(event)
                     }}
-                    aria-label="Headings"
-                    className={cn(TOPBAR_MENU_TRIGGER_CLASS, (actionState.heading1 || actionState.heading2 || actionState.heading3) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS)}
+                    aria-label="Text"
+                    className={cn(
+                      TOPBAR_MENU_TRIGGER_CLASS,
+                      (actionState.heading1 || actionState.heading2 || actionState.heading3 || actionState.blockquote || actionState.codeBlock) &&
+                        TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS,
+                    )}
                   >
-                    <span>{headingMenuLabel}</span>
-                    <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+                    <span>{textMenuLabel}</span>
+                    <ChevronDown className="h-3 w-3" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
                   </button>
                 </DropdownMenuTrigger>
               </ActionTooltip>
               <DropdownMenuContent align="center" side="bottom" sideOffset={8} className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md">
-                {headingMenuItems}
+                {textMenuItems}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <ActionTooltip label="Insert" side="bottom">
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onMouseDown={(event) => {
+                      captureSelectionAndKeepFocus(event)
+                    }}
+                    aria-label="Insert"
+                    className={cn(TOPBAR_MENU_TRIGGER_CLASS, (actionState.link || actionState.table) && TOPBAR_STRUCTURE_BUTTON_ACTIVE_CLASS)}
+                  >
+                    <span>Insert</span>
+                    <ChevronDown className="h-3 w-3" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+                  </button>
+                </DropdownMenuTrigger>
+              </ActionTooltip>
+              <DropdownMenuContent align="center" side="bottom" sideOffset={8} className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md">
+                {insertMenuItems}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

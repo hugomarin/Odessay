@@ -15,6 +15,7 @@ export type TopbarTrackedAction = Extract<
   | "bulletList"
   | "orderedList"
   | "inlineCode"
+  | "codeBlock"
   | "paragraph"
   | "heading1"
   | "heading2"
@@ -36,6 +37,7 @@ const DEFAULT_EDITOR_ACTION_STATE: Readonly<Record<TopbarTrackedAction, boolean>
   bulletList: false,
   orderedList: false,
   inlineCode: false,
+  codeBlock: false,
   paragraph: false,
   heading1: false,
   heading2: false,
@@ -133,6 +135,7 @@ export const useEditorActionState = (editor: Editor | null): Readonly<Record<Top
         bulletList: currentEditor.isActive("bulletList"),
         orderedList: currentEditor.isActive("orderedList"),
         inlineCode: currentEditor.isActive("code"),
+        codeBlock: currentEditor.isActive("codeBlock"),
         paragraph: selectedStructure === "paragraph",
         heading1: selectedStructure === "heading1",
         heading2: selectedStructure === "heading2",
