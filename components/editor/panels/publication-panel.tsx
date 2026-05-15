@@ -12,6 +12,7 @@ import {
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine";
 import { createPublicationReviewLookupKey } from "@/lib/local-db";
+import type { MechanicalCorrectionsContract } from "@/lib/ai/corrections-contract-adapter";
 import { cn } from "@/lib/utils";
 
 type PublicationPanelProps = {
@@ -38,6 +39,8 @@ type PublicationReviewApiResponse = {
   sourceMarkdown: string;
   model: string;
   language?: "es" | "en" | "mixed" | "unknown";
+  contractVersion?: "mechanical-corrections-v1";
+  canonicalReview?: MechanicalCorrectionsContract;
   suggestions: PublicationSuggestion[];
   checklist: PublicationChecklistItem[];
   summary?: string | null;

@@ -10,7 +10,7 @@ import {
   type CorrectionBlock,
 } from "@/lib/ai/corrections";
 import { filterCorrectionsByMemory } from "@/lib/ai/correction-memory";
-import { adaptCanonicalCorrectionsToPublicationReview } from "@/lib/ai/corrections-contract-adapter";
+import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter";
 import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
 import { createClient } from "@/lib/supabase/server";
@@ -167,7 +167,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   } catch {
     const firstJsonText = extractJsonPayload(firstText);
     console.info(`[corrections] first parse failed. textLength=${firstJsonText.length}`);
-    console.info(`[corrections] retrying with strict JSON mode`);
+    console.info("[corrections] retrying with strict JSON mode");
 
     const retryText = await callCorrectionsModel({ config, promptText, strictJson: true });
     const retryJsonText = extractJsonPayload(retryText);
@@ -200,18 +200,20 @@ const createJsonResponsePayload = ({
   model: string;
   canonical: CanonicalCorrectionsResponse;
 }) => {
-  const legacy = adaptCanonicalCorrectionsToPublicationReview(canonical);
+  const adapted = adaptCorrectionsContract(canonical);
 
   return {
     sourceHash: requestBody.sourceHash,
     sourceMarkdown: requestBody.markdown,
     model,
-    language: canonical.language,
-    corrections: canonical.corrections,
-    uncertain: canonical.uncertain,
-    suggestions: legacy.suggestions,
-    checklist: legacy.checklist,
-    summary: legacy.summary,
+    contractVersion: "mechanical-corrections-v1" as const,
+    canonicalReview: adapted.canonical,
+    language: adapted.canonical.language,
+    corrections: adapted.canonical.corrections,
+    uncertain: adapted.canonical.uncertain,
+    suggestions: adapted.legacy.suggestions,
+    checklist: adapted.legacy.checklist,
+    summary: adapted.legacy.summary,
     fallbackUsed: false,
   };
 };
@@ -230,7 +232,7 @@ const streamCorrectionsResponse = ({
   canonical: CanonicalCorrectionsResponse;
 }) => {
   const encoder = new TextEncoder();
-  const legacy = adaptCanonicalCorrectionsToPublicationReview(canonical);
+  const payload = createJsonResponsePayload({ requestBody, model, canonical });
   const blockHashById = new Map(blocks.map((block) => [block.id, block.hash]));
 
   const stream = new ReadableStream<Uint8Array>({
@@ -242,13 +244,13 @@ const streamCorrectionsResponse = ({
             sourceHash: requestBody.sourceHash,
             sourceMarkdown: requestBody.markdown,
             model,
-            language: canonical.language,
-            summary: canonical.summary,
+            language: payload.language,
+            summary: payload.summary,
           }),
         ),
       );
 
-      legacy.suggestions.forEach((suggestion, index) => {
+      payload.suggestions.forEach((suggestion, index) => {
         controller.enqueue(
           encoder.encode(
             encodeNdjson({
@@ -263,7 +265,7 @@ const streamCorrectionsResponse = ({
         );
       });
 
-      legacy.checklist.forEach((item, index) => {
+      payload.checklist.forEach((item, index) => {
         controller.enqueue(
           encoder.encode(
             encodeNdjson({
@@ -280,7 +282,7 @@ const streamCorrectionsResponse = ({
         encoder.encode(
           encodeNdjson({
             type: "done",
-            data: createJsonResponsePayload({ requestBody, model, canonical }),
+            data: payload,
           }),
         ),
       );
@@ -299,7 +301,7 @@ const streamCorrectionsResponse = ({
 
 export async function POST(request: Request) {
   const tStart = Date.now();
-  console.info(`[corrections] POST start`);
+  console.info("[corrections] POST start");
 
   const { userId } = await getCurrentUserId();
   const tAuth = Date.now();

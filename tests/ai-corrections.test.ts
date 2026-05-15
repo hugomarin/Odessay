@@ -110,7 +110,7 @@ describe("AI corrections", () => {
       {
         kind: "spelling",
         block_id: "block-1",
-        title: "Duplication",
+        title: "Remove duplicate",
         original_text: "the the",
         replacement_text: "the",
         status: "pending",
