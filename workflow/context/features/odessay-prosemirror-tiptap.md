@@ -112,9 +112,13 @@ Estado actual:
 - Recibe lista de sugerencias por `setMeta`.
 - Recalcula decorations buscando texto (`original_text`) en el doc.
 - No usa todavía mapping incremental robusto por `tr.mapping`.
+- ODE-143 agregó mini-bubbles inline, pero la QA real mostró que no deben estar siempre desplegadas. El estado esperado es: texto subrayado/decorado por defecto; bubble/popover solo al click/focus de la decoración.
+- Las decorations no deben depender de que el panel lateral `Ready to publish` esté abierto. Cerrar el panel puede ocultar la lista de sugerencias, pero si el modo de corrección sigue activo, los marks inline deben permanecer visibles.
+- Aceptar/rechazar desde bubble o panel debe actualizar solo esa sugerencia y preservar el resto. No debe recrear ids visibles ni reanalizar automáticamente.
+- Cada suggestion necesita key estable por `correction_fingerprint`/`blockId`/rango. Evitar ids derivados solo de índice (`spelling-1`) porque React puede renderizar listas duplicadas y producir warnings de keys repetidas.
 
 Implicación:
-- Funciona para casos básicos, pero es frágil con texto repetido y streaming concurrido.
+- Funciona para casos básicos, pero es frágil con texto repetido, streaming concurrido, cierre del panel y acciones Accept/Reject si no se separan estado de decorations y estado de panel.
 
 ---
 
@@ -160,6 +164,9 @@ Normalizaciones actuales:
 - Correcciones en streaming deben usar identidad estable (`correctionId`) + `blockId/hash`.
 - Chunks stale deben descartarse.
 - Avoid match-by-first-occurrence como mecanismo final en producción para AI corrections.
+- UI default: decoration visible, controls ocultos. Mostrar controls solo en click/focus/hover intencional y cerrar al aceptar, rechazar, Escape o blur seguro.
+- Las decorations deben poder existir en el editor aunque el panel lateral esté cerrado, siempre que el usuario no haya desactivado el modo de corrección.
+- Los widgets inline no deben cambiar el layout de párrafos largos de forma permanente ni romper typing/selection/undo.
 
 ## D. Persistencia
 

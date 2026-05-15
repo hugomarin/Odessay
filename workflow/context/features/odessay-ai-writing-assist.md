@@ -67,6 +67,17 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 - El editor no debe bloquearse mientras llegan chunks.
 - Chunks stale se descartan de forma determinista.
 
+### Lecciones de QA ODE-143 (2026-05-15)
+
+La prueba manual con textos reales detectó que el flujo sigue siendo frágil cuando se usa como autocorrector:
+
+- En textos largos (>300 palabras) el proveedor puede truncar JSON o devolver prose aunque exista retry. El endpoint debe usar structured outputs (`json_schema`) y un presupuesto de tokens suficiente para el peor caso esperado; el error visible al usuario no debe ser `AI did not return valid correction JSON after retry`.
+- Fireworks `response_format: json_schema` debe ser el default para correcciones. `json_object` no es suficiente para garantizar la forma. `prediction` no aplica a este endpoint salvo que se rediseñe como edición de texto completo, porque la salida actual es una lista nueva de hallazgos.
+- El streaming real del proveedor puede no emitir chunks útiles de `delta.content`. El UI puede mantener NDJSON propio, pero el backend debe tolerar un flujo provider non-stream estructurado y emitir eventos internos una vez validado el contrato.
+- El análisis debe operar por bloques o ventanas con límites explícitos. Evitar pedir una respuesta global no acotada para textos largos.
+- Aceptar o rechazar una corrección no debe disparar reanálisis automático. Solo debe mutar el texto/review local, marcar la sugerencia resuelta y esperar acción explícita de Reanalyze o cambio material posterior.
+- Las sugerencias duplicadas deben tener identidad estable. No usar ids por índice visible como `spelling-1` si puede haber más de una lista/categoría/render concurrente.
+
 ### Estado por bloque (memoria operativa)
 
 Para cada bloque:
@@ -135,6 +146,12 @@ No deformar prompt canónico para simular contrato viejo.
   - blockId/sourceHash
   - descarte de chunk stale
   - parse/retry de JSON
+- E2E/manual QA obligatorio con:
+  - texto corto con 3-5 typos;
+  - texto largo de al menos 300 palabras;
+  - correcciones repetidas en el mismo texto;
+  - aceptar una corrección sin reanálisis automático;
+  - cerrar el panel lateral conservando decorations visibles cuando el modo de corrección siga activo.
 
 ---
 

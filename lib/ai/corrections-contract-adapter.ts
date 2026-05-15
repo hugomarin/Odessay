@@ -171,6 +171,7 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
         replacement_text: correction.replacementText,
         context_before: null,
         context_after: null,
+        occurrence: null,
         block_id: correction.blockId,
         correction_fingerprint: createCorrectionFingerprint(correction),
         status: "pending",

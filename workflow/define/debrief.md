@@ -126,6 +126,8 @@ _(sin entradas aún)_
 
 - IMP-2026-05-12-10 | mejora | AI correction decorations should be interactive suggestions. Show clear text-level decorations for proposed corrections and let the author accept or reject each correction instead of applying opaque changes. | next-sprint | ODE-143
 
+- IMP-2026-05-15-01 | bug/mejora | QA real de ODE-143 muestra que la integración de corrections no está estable para uso de escritura: textos largos (>300 palabras) pueden truncar JSON o fallar con `AI did not return valid correction JSON after retry`; mini-bubbles aparecen siempre desplegadas en vez de abrir solo al click; cerrar `Ready to publish` borra decorations; Accept/Reject dispara reanálisis; y hay warnings de React por keys duplicadas (`spelling-1`). Dirección: estabilizar provider structured outputs/token budget/bounded block analysis, separar estado de panel vs decorations, colapsar controls por defecto, impedir reanálisis automático al aceptar/rechazar, y usar identidades estables de corrección. | next-sprint | ODE-155
+
 ---
 
 ## Fase 7 — Desktop

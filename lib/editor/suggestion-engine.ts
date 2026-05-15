@@ -69,6 +69,7 @@ const findContextAwareMatch = (
   originalText: string,
   contextBefore?: string | null,
   contextAfter?: string | null,
+  occurrence?: number | null,
 ) => {
   const normalizedOriginal = normalizeSearchValue(originalText);
 
@@ -96,6 +97,10 @@ const findContextAwareMatch = (
 
   if (matches.length === 1) {
     return matches[0];
+  }
+
+  if (typeof occurrence === "number" && occurrence >= 0 && occurrence < matches.length) {
+    return matches[occurrence];
   }
 
   const beforePattern = buildLooseContextPattern(contextBefore ?? "");
@@ -143,6 +148,7 @@ export const findSuggestionMatch = (source: string, suggestion: PublicationSugge
     suggestion.original_text,
     suggestion.context_before,
     suggestion.context_after,
+    suggestion.occurrence,
   );
 
 export const applySuggestionToMarkdown = (
@@ -216,7 +222,7 @@ export const markChecklistDone = (checklist: PublicationChecklistItem[], checkli
       : item,
   );
 
-export const deriveSuggestionContexts = (source: string, originalText: string) => {
+export const deriveSuggestionContexts = (source: string, originalText: string, preferredStartIndex?: number | null) => {
   const normalizedOriginal = normalizeSearchValue(originalText);
 
   if (!normalizedOriginal) {
@@ -227,9 +233,12 @@ export const deriveSuggestionContexts = (source: string, originalText: string) =
     };
   }
 
-  const firstIndex = source.indexOf(normalizedOriginal);
+  const firstIndex =
+    typeof preferredStartIndex === "number" && preferredStartIndex >= 0
+      ? preferredStartIndex
+      : source.indexOf(normalizedOriginal);
 
-  if (firstIndex === -1) {
+  if (firstIndex === -1 || source.slice(firstIndex, firstIndex + normalizedOriginal.length) !== normalizedOriginal) {
     return {
       context_before: null,
       context_after: null,

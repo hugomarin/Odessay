@@ -8,6 +8,7 @@ import {
   applyAllPublicationSuggestions,
   applySuggestionToMarkdown,
   createPublicationReviewId,
+  deriveSuggestionContexts,
   hashPublicationSource,
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine";
@@ -55,6 +56,11 @@ type CorrectionMemoryEntry = {
 
 type StreamEvent =
   | {
+      type: "status";
+      sourceHash: string;
+      status: "started";
+    }
+  | {
       type: "meta";
       sourceHash: string;
       sourceMarkdown: string;
@@ -79,6 +85,12 @@ type StreamEvent =
   | {
       type: "done";
       data: PublicationReviewApiResponse;
+    }
+  | {
+      type: "error";
+      sourceHash: string;
+      code: string;
+      message: string;
     };
 
 const CORRECTION_MEMORY_STORAGE_KEY = "odessay-correction-memory";
@@ -95,13 +107,45 @@ const hashCorrectionBlockClient = (text: string) => {
 };
 
 const buildClientCorrectionBlockHashes = (text: string) => {
+  return new Map(buildClientCorrectionBlocks(text).map((block) => [block.id, block.hash]));
+};
+
+const buildClientCorrectionBlocks = (text: string) => {
   const blocks = text
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
   const sourceBlocks = blocks.length > 0 ? blocks : [text.trim()].filter(Boolean);
+  let cursor = 0;
 
-  return new Map(sourceBlocks.map((block, index) => [`block-${index + 1}`, hashCorrectionBlockClient(block)]));
+  return sourceBlocks.map((block, index) => {
+    const start = text.indexOf(block, cursor);
+    cursor = start === -1 ? cursor : start + block.length;
+
+    return {
+      id: `block-${index + 1}`,
+      text: block,
+      hash: hashCorrectionBlockClient(block),
+      start: start === -1 ? null : start,
+    };
+  });
+};
+
+const addSuggestionRangeContext = (
+  sourceText: string,
+  suggestion: PublicationSuggestion,
+  blockId?: string | null,
+): PublicationSuggestion => {
+  const blocks = buildClientCorrectionBlocks(sourceText);
+  const block = blockId ? blocks.find((item) => item.id === blockId) : null;
+  const localIndex = block ? block.text.indexOf(suggestion.original_text.trim()) : -1;
+  const preferredStartIndex = block && block.start !== null && localIndex >= 0 ? block.start + localIndex : null;
+
+  return {
+    ...suggestion,
+    ...deriveSuggestionContexts(sourceText, suggestion.original_text, preferredStartIndex),
+    block_id: blockId ?? suggestion.block_id ?? null,
+  };
 };
 
 const readCorrectionMemory = (): CorrectionMemoryEntry[] => {
@@ -247,6 +291,14 @@ export function PublicationPanel({
             return;
           }
 
+          if (event.type === "status") {
+            return;
+          }
+
+          if (event.type === "error") {
+            throw new Error(event.message);
+          }
+
           if (event.type === "meta") {
             await commitReview({
               ...nextReview,
@@ -265,7 +317,10 @@ export function PublicationPanel({
 
             await commitReview({
               ...nextReview,
-              suggestions: [...nextReview.suggestions, event.suggestion],
+              suggestions: [
+                ...nextReview.suggestions,
+                addSuggestionRangeContext(bodyText.trim() || markdown, event.suggestion, event.blockId),
+              ],
             });
             return;
           }
@@ -286,7 +341,9 @@ export function PublicationPanel({
             await commitReview({
               ...nextReview,
               model: event.data.model,
-              suggestions: event.data.suggestions,
+              suggestions: event.data.suggestions.map((suggestion) =>
+                addSuggestionRangeContext(bodyText.trim() || markdown, suggestion, suggestion.block_id),
+              ),
               checklist: event.data.checklist,
               summary: event.data.summary ?? null,
             });
@@ -397,8 +454,8 @@ export function PublicationPanel({
   const rewritingSuggestions = review?.suggestions.filter((suggestion) => suggestion.kind === "rewriting") ?? [];
 
   useEffect(() => {
-    onSuggestionsChange?.(review?.suggestions ?? [])
-  }, [review, onSuggestionsChange])
+    onSuggestionsChange?.(review && review.source_hash === currentHash ? review.suggestions : [])
+  }, [currentHash, review, onSuggestionsChange])
 
   useEffect(() => {
     return () => {
@@ -454,6 +511,36 @@ export function PublicationPanel({
     },
     [review?.suggestions, updateReview],
   );
+
+  useEffect(() => {
+    const handleInlineSuggestionAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ action?: string; suggestionId?: string }>).detail
+      const suggestionId = detail?.suggestionId
+
+      if (!suggestionId) {
+        return
+      }
+
+      if (detail.action === "accept") {
+        const suggestion = reviewRef.current?.suggestions.find((item) => item.id === suggestionId)
+
+        if (suggestion) {
+          void handleApplySuggestion(suggestion)
+        }
+        return
+      }
+
+      if (detail.action === "reject") {
+        void handleRejectSuggestion(suggestionId)
+      }
+    }
+
+    window.addEventListener("odessay:publication-suggestion-action", handleInlineSuggestionAction)
+
+    return () => {
+      window.removeEventListener("odessay:publication-suggestion-action", handleInlineSuggestionAction)
+    }
+  }, [handleApplySuggestion, handleRejectSuggestion])
 
   const handleApplyAll = useCallback(async () => {
     if (!review) {
