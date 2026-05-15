@@ -268,7 +268,10 @@ async function callCorrectionsModelStreaming({
   }
 
   if (!fullText.trim()) {
-    throw new Error("AI returned an empty response.");
+    console.info("[corrections] provider stream ended without content; falling back to non-stream strict JSON");
+    const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: true });
+    onText(fallbackText);
+    return fallbackText;
   }
 
   return fullText;

@@ -125,4 +125,44 @@ describe("POST /api/ai/publication-review", () => {
       code: "AI_REVIEW_FAILED",
     })
   })
+
+  it("falls back to strict non-stream JSON when the provider stream has no content chunks", async () => {
+    const providerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(streamFromLines(["data: [DONE]"]), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content:
+                    '{"summary":"One correction.","language":"es","corrections":[{"blockId":"block-1","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      )
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({ stream: true }))
+    const text = await response.text()
+    const events = text
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+
+    expect(providerFetch).toHaveBeenCalledTimes(2)
+    expect(events.some((event) => event.type === "suggestion" && event.suggestion.replacement_text === "prueba")).toBe(
+      true,
+    )
+    expect(events.at(-1)?.type).toBe("done")
+  })
 })
