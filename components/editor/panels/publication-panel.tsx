@@ -697,7 +697,9 @@ function SuggestionList({ suggestions, emptyLabel, onAccept, onReject }: Suggest
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[12px] font-medium text-ink">{suggestion.title}</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{suggestion.reason}</p>
+              {suggestion.reason && (
+                <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{suggestion.reason}</p>
+              )}
             </div>
             <SuggestionStatusBadge status={suggestion.status} />
           </div>

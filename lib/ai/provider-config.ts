@@ -7,7 +7,9 @@
  */
 
 const BASE_URL = "https://api.fireworks.ai/inference/v1";
-const MAX_TOKENS = 1000;
+// 1000 is too low for any structured JSON response on real content — truncates mid-object.
+// Override with FIREWORKS_MAX_TOKENS if needed; minimum safe floor is 4096 for corrections.
+const MAX_TOKENS = Number(process.env.FIREWORKS_MAX_TOKENS ?? 4096);
 const TEMPERATURE = 1.0;
 const TOP_P = 0.95;
 

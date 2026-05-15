@@ -106,7 +106,6 @@ describe("AI corrections contract adapter", () => {
           confidence: "medium",
           originalText: "recieve",
           replacementText: "receive",
-          reason: "Typo.",
         },
       ],
       uncertain: [

@@ -177,6 +177,47 @@ Solo usar `createAdminClient()` en API routes server-side cuando se necesita byp
 - El trigger `on_auth_user_created` crea el profile automáticamente.
 - Sesión disponible en Server Components vía `createServerClient`.
 
+## AI Provider Integration — Reglas obligatorias antes de implementar
+
+### Paso 0: leer la documentación del proveedor
+
+**Antes de implementar cualquier feature que use un proveedor AI** (Fireworks, Anthropic, OpenAI u otro), leer la documentación oficial del proveedor para el modo de salida que se va a usar:
+
+- `json_schema` / structured outputs: ¿es compatible con streaming? ¿con el modelo configurado? ¿qué pasa si el proveedor rechaza el schema?
+- `json_object`: ¿garantiza forma o solo un objeto válido? ¿puede devolver prose pese al mode?
+- `stream: true` + structured output: ¿el proveedor emite `delta.content` o solo el objeto final? ¿está documentado el comportamiento de chunks vacíos?
+- Límites del modelo: ¿cuál es el context window? ¿cuál es el máximo de output tokens permitido?
+
+**No asumir que Fireworks se comporta como OpenAI** — el mismo parámetro puede tener comportamiento diferente entre proveedores y modelos.
+
+### Presupuesto de tokens (obligatorio para endpoints de salida estructurada)
+
+Antes de fijar `max_tokens` en cualquier llamada que devuelva JSON estructurado:
+
+1. Estimar el peor caso de output: texto largo (≥300 palabras) × correcciones densas × schema con todos los campos llenos.
+2. Calcular cuántos tokens ocupa ese JSON serializado (regla práctica: ~1 token ≈ 4 caracteres de ASCII/UTF-8 común).
+3. Fijar `max_tokens` con margen razonable sobre ese peor caso. **El mínimo para cualquier respuesta de correcciones es 4096.** Si el texto puede crecer más, escalar proporcionalmente.
+4. Si el provider-config tiene un `maxTokens` global bajo, usar `Math.max(config.maxTokens, ENDPOINT_MIN_TOKENS)` en la ruta específica — o corregir el default en `provider-config.ts`.
+
+**Síntoma de presupuesto insuficiente:** JSON truncado a mitad del objeto → el parser siempre falla → retry loop → latencia alta → perf gate falla en CI. El origen real es el token budget, no el retry path.
+
+### Prueba con proveedor real antes de BUILD submission
+
+Los tests unitarios y mocks validan code paths. No validan el comportamiento del proveedor.
+
+**Para issues que tocan rutas AI:** hacer QA manual con el proveedor real configurado en `.env.local` con textos de distintos tamaños (texto corto, texto ≥300 palabras) antes de abrir el PR. Si el proveedor devuelve prose en lugar de JSON, o streams vacíos, eso debe estar resuelto en el diff — no descubierto en review.
+
+### Streaming sobre contrato de objeto JSON completo
+
+Si el provider devuelve un único objeto JSON (no NDJSON ni tool-call events), **no asumir streaming real de items**. El objeto JSON parcial es inválido hasta que llega el `}` final. La arquitectura correcta:
+
+1. Llamar al proveedor con structured output no-stream.
+2. Parsear y validar una vez que llega la respuesta completa.
+3. Emitir NDJSON propio desde la app al cliente a partir del JSON validado.
+4. Introducir streaming real del proveedor solo si el contrato del modelo emite items incrementales (tool-call stream, function-call stream).
+
+---
+
 ## AI Provider API (AI Editor / Writing Assist)
 
 - Todas las llamadas AI son server-side. Nunca expongas keys al cliente.
@@ -258,5 +299,8 @@ Este checklist cubre lo específico de backend durante la implementación. Antes
 - [ ] ¿RLS cubre el acceso a datos?
 - [ ] ¿Errores manejados con mensajes amables?
 - [ ] ¿Cada endpoint AI respeta su contrato por scope (AI editor residente vs AI writing assist)?
+- [ ] Si el issue toca rutas AI: ¿se leyó la documentación del proveedor para el modo de salida usado?
+- [ ] ¿`max_tokens` cubre el peor caso de output (mínimo 4096 para correcciones estructuradas)?
+- [ ] ¿Se hizo QA manual con el proveedor real con texto corto y texto ≥300 palabras?
 - [ ] ¿Variables de entorno correctas para el ambiente (staging/prod)?
 - [ ] ¿El auto-save guarda local primero, sync remoto en background?

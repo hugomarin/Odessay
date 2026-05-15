@@ -100,7 +100,6 @@ const mechanicalCorrectionsResponseFormat = {
               confidence: { type: "string" },
               originalText: { type: "string" },
               replacementText: { type: "string" },
-              reason: { type: "string" },
             },
             required: [
               "blockId",
@@ -109,7 +108,6 @@ const mechanicalCorrectionsResponseFormat = {
               "confidence",
               "originalText",
               "replacementText",
-              "reason",
             ],
           },
         },

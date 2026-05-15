@@ -89,7 +89,6 @@ describe("AI corrections", () => {
             confidence: "high",
             originalText: "the the",
             replacementText: "the",
-            reason: "Duplicated word.",
           },
         ],
         uncertain: [
