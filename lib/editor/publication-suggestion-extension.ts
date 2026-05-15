@@ -2,11 +2,21 @@ import { Extension } from "@tiptap/core"
 import type { Editor as TiptapEditor } from "@tiptap/core"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
-import { Decoration, DecorationSet } from "@tiptap/pm/view"
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
 import { resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
 
-export const publicationSuggestionPluginKey = new PluginKey<PublicationSuggestion[]>("odessay-publication-suggestions")
+type PublicationSuggestionPluginState = {
+  suggestions: PublicationSuggestion[]
+  activeSuggestionId: string | null
+}
+
+type PublicationSuggestionMeta =
+  | PublicationSuggestion[]
+  | { clear: true }
+  | { activeSuggestionId: string | null }
+
+export const publicationSuggestionPluginKey = new PluginKey<PublicationSuggestionPluginState>("odessay-publication-suggestions")
 
 const dispatchSuggestionAction = (
   target: HTMLElement,
@@ -54,8 +64,8 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   return widget
 }
 
-const buildPublicationDecorations = (doc: ProseMirrorNode, suggestions: PublicationSuggestion[]): DecorationSet => {
-  const resolvedSuggestions = resolveCorrectionDecorationRanges(doc, suggestions)
+const buildPublicationDecorations = (doc: ProseMirrorNode, pluginState: PublicationSuggestionPluginState): DecorationSet => {
+  const resolvedSuggestions = resolveCorrectionDecorationRanges(doc, pluginState.suggestions)
   const decorations: Decoration[] = []
 
   for (const { suggestion, from, to } of resolvedSuggestions) {
@@ -65,11 +75,16 @@ const buildPublicationDecorations = (doc: ProseMirrorNode, suggestions: Publicat
         "data-suggestion-id": suggestion.id,
         "data-replacement": suggestion.replacement_text,
       }),
-      Decoration.widget(to, () => createSuggestionWidget(suggestion), {
-        key: `publication-suggestion-widget-${suggestion.id}`,
-        side: 1,
-      }),
     )
+
+    if (pluginState.activeSuggestionId === suggestion.id) {
+      decorations.push(
+        Decoration.widget(to, () => createSuggestionWidget(suggestion), {
+          key: `publication-suggestion-widget-${suggestion.id}`,
+          side: 1,
+        }),
+      )
+    }
   }
 
   if (decorations.length === 0) {
@@ -98,24 +113,54 @@ export const clearPublicationSuggestions = (
   editor.view.dispatch(transaction)
 }
 
+const setActivePublicationSuggestion = (
+  view: EditorView,
+  activeSuggestionId: string | null,
+) => {
+  const transaction = view.state.tr
+  transaction.setMeta(publicationSuggestionPluginKey, { activeSuggestionId })
+  transaction.setMeta("addToHistory", false)
+  view.dispatch(transaction)
+}
+
 export const PublicationSuggestionExtension = Extension.create({
   name: "publicationSuggestions",
 
   addProseMirrorPlugins() {
     return [
-      new Plugin<PublicationSuggestion[]>({
+      new Plugin<PublicationSuggestionPluginState>({
         key: publicationSuggestionPluginKey,
         state: {
-          init: () => [],
+          init: () => ({
+            suggestions: [],
+            activeSuggestionId: null,
+          }),
           apply: (transaction, pluginState) => {
-            const meta = transaction.getMeta(publicationSuggestionPluginKey)
+            const meta = transaction.getMeta(publicationSuggestionPluginKey) as PublicationSuggestionMeta | undefined
 
-            if (meta?.clear) {
-              return []
+            if (!Array.isArray(meta) && meta && "clear" in meta) {
+              return {
+                suggestions: [],
+                activeSuggestionId: null,
+              }
             }
 
             if (Array.isArray(meta)) {
-              return meta
+              const nextIds = new Set(meta.map((suggestion) => suggestion.id))
+
+              return {
+                suggestions: meta,
+                activeSuggestionId: pluginState.activeSuggestionId && nextIds.has(pluginState.activeSuggestionId)
+                  ? pluginState.activeSuggestionId
+                  : null,
+              }
+            }
+
+            if (meta && "activeSuggestionId" in meta) {
+              return {
+                ...pluginState,
+                activeSuggestionId: meta.activeSuggestionId,
+              }
             }
 
             return pluginState
@@ -133,30 +178,59 @@ export const PublicationSuggestionExtension = Extension.create({
 
               return false
             },
-            click(_view, event) {
+            keydown(view, event) {
+              if (event.key !== "Escape") {
+                return false
+              }
+
+              const pluginState = publicationSuggestionPluginKey.getState(view.state)
+
+              if (!pluginState?.activeSuggestionId) {
+                return false
+              }
+
+              setActivePublicationSuggestion(view, null)
+              return false
+            },
+            click(view, event) {
               const target = event.target as HTMLElement | null
               const actionButton = target?.closest<HTMLButtonElement>(".pub-suggestion-bubble-action")
 
-              if (!actionButton) {
+              if (actionButton) {
+                const action = actionButton.dataset.action
+                const suggestionId = actionButton.dataset.suggestionId
+
+                if ((action !== "accept" && action !== "reject") || !suggestionId) {
+                  return false
+                }
+
+                event.preventDefault()
+                dispatchSuggestionAction(actionButton, action, suggestionId)
+                setActivePublicationSuggestion(view, null)
+                return true
+              }
+
+              const decoratedRange = target?.closest<HTMLElement>("[data-suggestion-id]")
+              const suggestionId = decoratedRange?.dataset.suggestionId
+
+              if (suggestionId) {
+                setActivePublicationSuggestion(view, suggestionId)
                 return false
               }
 
-              const action = actionButton.dataset.action
-              const suggestionId = actionButton.dataset.suggestionId
+              const pluginState = publicationSuggestionPluginKey.getState(view.state)
 
-              if ((action !== "accept" && action !== "reject") || !suggestionId) {
-                return false
+              if (pluginState?.activeSuggestionId) {
+                setActivePublicationSuggestion(view, null)
               }
 
-              event.preventDefault()
-              dispatchSuggestionAction(actionButton, action, suggestionId)
-              return true
+              return false
             },
           },
           decorations(state) {
             const pluginState = publicationSuggestionPluginKey.getState(state)
 
-            if (!pluginState || pluginState.length === 0) {
+            if (!pluginState || pluginState.suggestions.length === 0) {
               return null
             }
 

@@ -15,6 +15,7 @@ import {
 import { createPublicationReviewLookupKey } from "@/lib/local-db";
 import type { MechanicalCorrectionsContract } from "@/lib/ai/corrections-contract-adapter";
 import { cn } from "@/lib/utils";
+import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client";
 
 type PublicationPanelProps = {
   writingId: string | null;
@@ -46,12 +47,6 @@ type PublicationReviewApiResponse = {
   checklist: PublicationChecklistItem[];
   summary?: string | null;
   fallbackUsed: boolean;
-};
-
-type CorrectionMemoryEntry = {
-  fingerprint: string;
-  decision: "accepted" | "rejected";
-  decidedAt: string;
 };
 
 type StreamEvent =
@@ -92,8 +87,6 @@ type StreamEvent =
       code: string;
       message: string;
     };
-
-const CORRECTION_MEMORY_STORAGE_KEY = "odessay-correction-memory";
 
 const hashCorrectionBlockClient = (text: string) => {
   let hash = 2166136261;
@@ -146,35 +139,6 @@ const addSuggestionRangeContext = (
     ...deriveSuggestionContexts(sourceText, suggestion.original_text, preferredStartIndex),
     block_id: blockId ?? suggestion.block_id ?? null,
   };
-};
-
-const readCorrectionMemory = (): CorrectionMemoryEntry[] => {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const value = window.localStorage.getItem(CORRECTION_MEMORY_STORAGE_KEY);
-    const parsed = value ? JSON.parse(value) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const rememberCorrectionDecision = (fingerprint: string | null | undefined, decision: "accepted" | "rejected") => {
-  if (!fingerprint || typeof window === "undefined") {
-    return;
-  }
-
-  const entries = readCorrectionMemory().filter((entry) => entry.fingerprint !== fingerprint);
-  entries.push({
-    fingerprint,
-    decision,
-    decidedAt: new Date().toISOString(),
-  });
-
-  window.localStorage.setItem(CORRECTION_MEMORY_STORAGE_KEY, JSON.stringify(entries.slice(-200)));
 };
 
 export function PublicationPanel({

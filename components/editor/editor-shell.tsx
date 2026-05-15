@@ -53,6 +53,18 @@ import {
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
 import {
+  acknowledgeCorrectionDirtyBlocks,
+  getCurrentCorrectionBlock,
+  type CorrectionTriggerBlock,
+} from "@/lib/editor/correction-trigger-plugin"
+import {
+  applySuggestionToMarkdown,
+  deriveSuggestionContexts,
+  hashPublicationSource,
+  updateSuggestionStatuses,
+} from "@/lib/editor/suggestion-engine"
+import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
+import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
@@ -145,6 +157,16 @@ type PersistSnapshotOverrides = {
 type RenameWritingSnapshot = {
   title: string
   bodyText: string
+}
+
+type CorrectionToastState = {
+  phase: "running" | "complete"
+  completed: number
+  total: number
+}
+
+type AutomaticCorrectionApiResponse = {
+  suggestions: PublicationSuggestion[]
 }
 
 const NotesPanel = lazy(() =>
@@ -249,6 +271,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
   const [isPublicationModeEnabled, setIsPublicationModeEnabled] = useState(false)
   const [publicationSuggestions, setPublicationSuggestions] = useState<PublicationSuggestion[]>([])
+  const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
+  const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [renameModalSnapshot, setRenameModalSnapshot] = useState<RenameWritingSnapshot | null>(null)
@@ -300,6 +324,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
     windowScrollY?: number
   } | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
+  const currentDocumentMarkdownRef = useRef("")
+  const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
+  const correctionQueueRef = useRef<CorrectionTriggerBlock[]>([])
+  const correctionProcessingRef = useRef(false)
+  const correctionQueueTotalRef = useRef(0)
+  const correctionQueueCompletedRef = useRef(0)
+  const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
+  const correctionToastDismissRef = useRef<number | null>(null)
+  const suppressCorrectionAnalysisUntilRef = useRef(0)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -616,20 +649,23 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [mode])
 
   useEffect(() => {
-    if (!editor || activePanel !== "publication" || mode !== "rich") {
+    if (!editor) {
       return
     }
 
-    setEditorPublicationSuggestions(editor, publicationSuggestions)
-  }, [editor, activePanel, mode, publicationSuggestions])
-
-  useEffect(() => {
-    if (!editor || activePanel === "publication" || mode !== "rich") {
+    if (mode !== "rich") {
+      clearPublicationSuggestions(editor)
       return
     }
 
-    clearPublicationSuggestions(editor)
-  }, [editor, activePanel, mode])
+    const suggestionsById = new Map<string, PublicationSuggestion>()
+
+    for (const suggestion of [...automaticCorrectionSuggestions, ...publicationSuggestions]) {
+      suggestionsById.set(suggestion.id, suggestion)
+    }
+
+    setEditorPublicationSuggestions(editor, [...suggestionsById.values()])
+  }, [editor, mode, automaticCorrectionSuggestions, publicationSuggestions])
 
   useEffect(() => {
     titleRef.current = title
@@ -999,6 +1035,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [currentWritingId, routeWritingId, router])
 
   useEffect(() => {
+    const correctionTimers = correctionTimersRef.current
+
     return () => {
       if (markdownSaveTimeoutRef.current) {
         window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -1012,10 +1050,20 @@ export function EditorShell({ writingId }: EditorShellProps) {
         window.cancelAnimationFrame(markdownSelectionRafRef.current)
       }
 
+      for (const { timer } of correctionTimers.values()) {
+        window.clearTimeout(timer)
+      }
+
+      if (correctionToastDismissRef.current !== null) {
+        window.clearTimeout(correctionToastDismissRef.current)
+      }
+
       richUpdateRafRef.current = null
       richUpdateEditorRef.current = null
       markdownSelectionRafRef.current = null
       pendingMarkdownSelectionRef.current = null
+      correctionTimers.clear()
+      correctionQueueRef.current = []
       persistCurrentWorkspaceViewState()
     }
   }, [persistCurrentWorkspaceViewState])
@@ -1937,6 +1985,286 @@ export function EditorShell({ writingId }: EditorShellProps) {
       getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
     )
   }, [editor, markdownValue, mode, version])
+
+  useEffect(() => {
+    currentDocumentMarkdownRef.current = currentDocumentMarkdown
+  }, [currentDocumentMarkdown])
+
+  useEffect(() => {
+    automaticCorrectionSuggestionsRef.current = automaticCorrectionSuggestions
+  }, [automaticCorrectionSuggestions])
+
+  const normalizeAutomaticSuggestion = useCallback(
+    (block: CorrectionTriggerBlock, suggestion: PublicationSuggestion): PublicationSuggestion => {
+      const sourceMarkdown = currentDocumentMarkdownRef.current
+      const occurrence = suggestion.occurrence ?? 0
+      const fingerprint =
+        suggestion.correction_fingerprint ??
+        [block.id, suggestion.kind, suggestion.original_text, suggestion.replacement_text].join("|")
+      const id = [
+        "auto-correction",
+        block.hash,
+        hashPublicationSource(`${fingerprint}:${occurrence}`),
+      ].join(":")
+
+      return {
+        ...suggestion,
+        ...deriveSuggestionContexts(sourceMarkdown, suggestion.original_text),
+        id,
+        block_id: block.id,
+        source_hash: block.hash,
+        correction_fingerprint: fingerprint,
+        occurrence,
+        status: "pending",
+      }
+    },
+    [],
+  )
+
+  const finishCorrectionQueueIfIdle = useCallback(() => {
+    if (correctionQueueRef.current.length > 0 || correctionProcessingRef.current) {
+      return
+    }
+
+    setCorrectionToast({
+      phase: "complete",
+      completed: correctionQueueCompletedRef.current,
+      total: correctionQueueTotalRef.current,
+    })
+
+    if (correctionToastDismissRef.current !== null) {
+      window.clearTimeout(correctionToastDismissRef.current)
+    }
+
+    correctionToastDismissRef.current = window.setTimeout(() => {
+      setCorrectionToast(null)
+      correctionToastDismissRef.current = null
+      correctionQueueTotalRef.current = 0
+      correctionQueueCompletedRef.current = 0
+    }, 2000)
+  }, [])
+
+  const processCorrectionQueue = useCallback(async () => {
+    if (correctionProcessingRef.current || !editor) {
+      return
+    }
+
+    if (isPerfHarness()) {
+      correctionQueueRef.current = []
+      correctionQueueTotalRef.current = 0
+      correctionQueueCompletedRef.current = 0
+      setCorrectionToast(null)
+      return
+    }
+
+    correctionProcessingRef.current = true
+
+    while (correctionQueueRef.current.length > 0) {
+      const block = correctionQueueRef.current.shift()
+
+      if (!block) {
+        continue
+      }
+
+      const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+
+      if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
+        correctionQueueCompletedRef.current += 1
+        continue
+      }
+
+      setCorrectionToast({
+        phase: "running",
+        completed: correctionQueueCompletedRef.current,
+        total: correctionQueueTotalRef.current,
+      })
+
+      try {
+        const response = await fetch("/api/ai/publication-review", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            writingId: currentWritingIdRef.current ?? undefined,
+            title: titleRef.current,
+            markdown: block.text,
+            bodyText: block.text,
+            sourceHash: block.hash,
+            stream: false,
+            correctionBlock: {
+              id: block.id,
+              text: block.text,
+              hash: block.hash,
+            },
+            correctionMemory: {
+              entries: readCorrectionMemory(),
+            },
+          }),
+        })
+
+        if (!response.ok) {
+          console.info(`[corrections] block analysis skipped status=${response.status}`)
+          correctionQueueCompletedRef.current += 1
+          continue
+        }
+
+        const payload = (await response.json()) as {
+          data: AutomaticCorrectionApiResponse | null
+          error: { code: string; message: string } | null
+        }
+        const suggestions = payload.data?.suggestions ?? []
+        const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+
+        if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
+          correctionQueueCompletedRef.current += 1
+          continue
+        }
+
+        setAutomaticCorrectionSuggestions((current) => [
+          ...current.filter((suggestion) => suggestion.block_id !== block.id),
+          ...suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion)),
+        ])
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "block correction failed"
+        console.info(`[corrections] block analysis skipped message=${message}`)
+      } finally {
+        correctionQueueCompletedRef.current += 1
+        setCorrectionToast({
+          phase: "running",
+          completed: correctionQueueCompletedRef.current,
+          total: correctionQueueTotalRef.current,
+        })
+      }
+    }
+
+    correctionProcessingRef.current = false
+    finishCorrectionQueueIfIdle()
+  }, [editor, finishCorrectionQueueIfIdle, normalizeAutomaticSuggestion])
+
+  const enqueueCorrectionBlock = useCallback(
+    (block: CorrectionTriggerBlock) => {
+      const currentIds = new Set(correctionQueueRef.current.map((item) => item.id))
+
+      if (!currentIds.has(block.id)) {
+        correctionQueueRef.current.push(block)
+        correctionQueueTotalRef.current += 1
+      }
+
+      setCorrectionToast({
+        phase: "running",
+        completed: correctionQueueCompletedRef.current,
+        total: correctionQueueTotalRef.current,
+      })
+
+      void processCorrectionQueue()
+    },
+    [processCorrectionQueue],
+  )
+
+  useEffect(() => {
+    if (!editor) {
+      return
+    }
+
+    const handleDirtyBlocks = (event: Event) => {
+      const blocks = ((event as CustomEvent<{ blocks?: CorrectionTriggerBlock[] }>).detail?.blocks ?? [])
+
+      acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
+
+      if (Date.now() < suppressCorrectionAnalysisUntilRef.current || modeRef.current !== "rich") {
+        return
+      }
+
+      for (const block of blocks) {
+        if (block.wordCount < 8) {
+          setAutomaticCorrectionSuggestions((current) =>
+            current.filter((suggestion) => suggestion.block_id !== block.id),
+          )
+          continue
+        }
+
+        for (const [key, timerState] of correctionTimersRef.current) {
+          if (timerState.pos === block.pos) {
+            window.clearTimeout(timerState.timer)
+            correctionTimersRef.current.delete(key)
+          }
+        }
+
+        setAutomaticCorrectionSuggestions((current) =>
+          current.filter((suggestion) => suggestion.block_id !== block.id),
+        )
+
+        const timer = window.setTimeout(() => {
+          correctionTimersRef.current.delete(block.id)
+          const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+
+          if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
+            return
+          }
+
+          enqueueCorrectionBlock(currentBlock)
+        }, 2000)
+
+        correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
+      }
+    }
+
+    editor.view.dom.addEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
+
+    return () => {
+      editor.view.dom.removeEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
+    }
+  }, [editor, enqueueCorrectionBlock])
+
+  useEffect(() => {
+    const handleAutomaticInlineAction = (event: Event) => {
+      const detail = (event as CustomEvent<{ action?: string; suggestionId?: string }>).detail
+      const suggestionId = detail?.suggestionId
+
+      if (!suggestionId) {
+        return
+      }
+
+      const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
+
+      if (!suggestion) {
+        return
+      }
+
+      if (detail.action === "accept") {
+        const result = applySuggestionToMarkdown(currentDocumentMarkdownRef.current, suggestion)
+
+        if (result.applied) {
+          suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
+          applyMarkdownFromPanel(result.markdown)
+          rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
+          setAutomaticCorrectionSuggestions((current) =>
+            updateSuggestionStatuses(current, [suggestion.id], "accepted"),
+          )
+          return
+        }
+
+        setAutomaticCorrectionSuggestions((current) =>
+          updateSuggestionStatuses(current, [suggestion.id], "conflict"),
+        )
+        return
+      }
+
+      if (detail.action === "reject") {
+        rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
+        setAutomaticCorrectionSuggestions((current) =>
+          updateSuggestionStatuses(current, [suggestion.id], "rejected"),
+        )
+      }
+    }
+
+    window.addEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
+
+    return () => {
+      window.removeEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
+    }
+  }, [applyMarkdownFromPanel])
   const markdownFindMatches = useMemo(
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
@@ -2880,6 +3208,20 @@ export function EditorShell({ writingId }: EditorShellProps) {
           </Suspense>
         ) : null}
       </div>
+
+      {correctionToast ? (
+        <div
+          className="fixed bottom-12 right-6 z-50 rounded-[8px] border-[0.5px] border-border bg-sb px-3 py-2 text-[11px] text-ink-3 shadow-float-md"
+          role="status"
+          aria-live="polite"
+        >
+          {correctionToast.phase === "complete"
+            ? "✓ Revisión completada"
+            : correctionToast.completed === 0
+              ? "Revisando documento..."
+              : `${correctionToast.completed} de ${correctionToast.total} bloques revisados`}
+        </div>
+      ) : null}
 
       <div className="md:hidden">
         <MobileWriteNotice />

@@ -106,6 +106,48 @@ describe("POST /api/ai/publication-review", () => {
     expect(events.at(-1)?.type).toBe("done")
   })
 
+  it("uses the explicit 768 token budget for block-level correction calls", async () => {
+    const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.max_tokens).toBe(768)
+      expect(body.messages[1].content).toContain("[correction-block:blk-test:12]")
+      expect(body.messages[1].content).not.toContain("[block-1]")
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:blk-test:12","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba"}],"uncertain":[]}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({
+      markdown: "Esta es una prueva con suficientes palabras para analizar.",
+      bodyText: "Esta es una prueva con suficientes palabras para analizar.",
+      sourceHash: "blk-test",
+      correctionBlock: {
+        id: "correction-block:blk-test:12",
+        text: "Esta es una prueva con suficientes palabras para analizar.",
+        hash: "blk-test",
+      },
+    }))
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.data.suggestions[0]).toMatchObject({
+      block_id: "correction-block:blk-test:12",
+      replacement_text: "prueba",
+    })
+  })
+
   it("returns a stream error event instead of an opaque failed HTTP stream when provider JSON is invalid", async () => {
     vi.stubGlobal(
       "fetch",

@@ -41,7 +41,6 @@ describe("AI corrections contract adapter", () => {
     expect(adapted.legacy.summary).toBe("Two mechanical corrections found.");
     expect(adapted.legacy.suggestions).toMatchObject([
       {
-        id: "spelling-1",
         kind: "spelling",
         title: "Fix accent",
         original_text: "cancion",
@@ -49,7 +48,6 @@ describe("AI corrections contract adapter", () => {
         status: "pending",
       },
       {
-        id: "rewriting-1",
         kind: "rewriting",
         title: "Repair phrase",
         original_text: "the sentence are",
@@ -57,6 +55,8 @@ describe("AI corrections contract adapter", () => {
         status: "pending",
       },
     ]);
+    expect(adapted.legacy.suggestions[0]?.id).toMatch(/^correction:block-a:/);
+    expect(adapted.legacy.suggestions[1]?.id).toMatch(/^correction:block-b:/);
     expect(adapted.legacy.checklist).toEqual([
       {
         id: "uncertain-1",
@@ -146,5 +146,38 @@ describe("AI corrections contract adapter", () => {
 
     expect(adapted.legacy.suggestions).toEqual([]);
     expect(adapted.legacy.checklist).toEqual([]);
+  });
+
+  it("creates stable non-index ids for repeated canonical corrections", () => {
+    const adapted = adaptCorrectionsContract({
+      summary: "Two repeated fixes.",
+      language: "en",
+      corrections: [
+        {
+          blockId: "block-a",
+          type: "duplication",
+          severity: "medium",
+          confidence: "high",
+          originalText: "the the",
+          replacementText: "the",
+        },
+        {
+          blockId: "block-a",
+          type: "duplication",
+          severity: "medium",
+          confidence: "high",
+          originalText: "the the",
+          replacementText: "the",
+        },
+      ],
+      uncertain: [],
+    });
+
+    expect(adapted.legacy.suggestions.map((suggestion) => suggestion.id)).toEqual([
+      expect.stringMatching(/^correction:block-a:/),
+      expect.stringMatching(/^correction:block-a:/),
+    ]);
+    expect(adapted.legacy.suggestions[0]?.id).not.toBe(adapted.legacy.suggestions[1]?.id);
+    expect(adapted.legacy.suggestions.map((suggestion) => suggestion.occurrence)).toEqual([0, 1]);
   });
 });
