@@ -26,7 +26,6 @@ export const canonicalCorrectionSchema = z.object({
   confidence: z.enum(["high", "medium"]),
   originalText: z.string().trim().min(1),
   replacementText: z.string().trim().min(1),
-  reason: z.string().trim().min(1),
 });
 
 export const uncertainCorrectionSchema = z.object({
@@ -160,8 +159,7 @@ Return only valid JSON with this exact shape:
       "severity": "low" | "medium" | "high",
       "confidence": "high" | "medium",
       "originalText": string,
-      "replacementText": string,
-      "reason": string
+      "replacementText": string
     }
   ],
   "uncertain": [

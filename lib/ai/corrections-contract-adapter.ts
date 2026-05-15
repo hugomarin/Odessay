@@ -24,7 +24,6 @@ const mechanicalCorrectionSchema = z.object({
   confidence: z.enum(["high", "medium"]).catch("medium"),
   originalText: z.string().trim().min(1).catch(""),
   replacementText: z.string().trim().min(1).catch(""),
-  reason: z.string().trim().min(1).catch(""),
 });
 
 const uncertainCorrectionSchema = z.object({
@@ -155,8 +154,7 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
     .filter(
       (correction) =>
         correction.originalText.trim().length > 0 &&
-        correction.replacementText.trim().length > 0 &&
-        correction.reason.trim().length > 0,
+        correction.replacementText.trim().length > 0,
     )
     .map((correction) => {
       const kind = toSuggestionKind(correction.type);
@@ -166,7 +164,7 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
         id: `${kind}-${suggestionCounts[kind]}`,
         kind,
         title: correctionTitle(correction),
-        reason: correction.reason,
+        reason: "",
         original_text: correction.originalText,
         replacement_text: correction.replacementText,
         context_before: null,
@@ -203,8 +201,7 @@ const legacyToCanonical = (legacy: LegacyPublicationReviewContract): MechanicalC
     .filter(
       (item) =>
         item.originalText.trim().length > 0 &&
-        item.replacementText.trim().length > 0 &&
-        item.reason.trim().length > 0,
+        item.replacementText.trim().length > 0,
     )
     .map((item) => ({
       blockId: "legacy-publication-review",

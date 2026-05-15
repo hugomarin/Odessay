@@ -40,10 +40,37 @@ No reemplaza `odessay-ai-editor.md` (editor residente de observaciones). Esta sp
 Variables mínimas para flujo Fireworks:
 - `FIREWORKS_API_KEY`
 - `FIREWORKS_MODEL`
+- `FIREWORKS_MAX_TOKENS` (opcional — override del presupuesto; default 4096 en `provider-config.ts`)
 
 Política:
 - Cambios de modelo son operativos (env), no cambios de código.
 - Los docs y briefs deben tratar el modelo como variable temporal, no como constante funcional.
+
+### Presupuesto de tokens — regla crítica
+
+**El output del modelo no es el texto completo del bloque — son solo los fragmentos a corregir.** Un párrafo de 500 palabras con 10 errores devuelve ~10 palabras de `originalText` y ~10 de `replacementText`. El costo real de output no escala con el tamaño del texto; escala con la densidad de correcciones.
+
+**Lo que sí domina el costo: la estructura JSON.** Cada corrección tiene 7 campos (`blockId`, `type`, `severity`, `confidence`, `originalText`, `replacementText`, `reason`). Los nombres de campo solos suman ~35 tokens de overhead por corrección, antes de contar el contenido. El campo `reason` es el más variable — el modelo tiende a escribir frases largas si no se le acota. El prompt debe instruir reasons de 1-5 palabras.
+
+Cálculo de referencia para llamadas por bloque (ODE-155 y posteriores):
+- 5 correcciones × ~50 tokens/corrección (estructura + contenido + reason corto) = ~250 tokens
+- 10 correcciones = ~500 tokens
+- 15 correcciones (bloque muy denso) = ~750 tokens
+- **Budget recomendado por bloque: 768 tokens.** Cubre hasta ~15 correcciones con reasons acotados.
+
+Para el endpoint de documento completo (flujo legacy / no-streaming): usar `Math.max(config.maxTokens, 4096)` como piso.
+
+**Síntoma de presupuesto insuficiente:** JSON truncado → parse falla → retry → latencia alta → perf gate falla. El fix real es el token budget, no el retry path.
+
+### Documentación del proveedor — consulta obligatoria
+
+Antes de implementar cualquier cambio en el modo de salida del proveedor (structured output, streaming, tool use), verificar en la documentación oficial de Fireworks:
+
+- ¿El modo `json_schema` es compatible con `stream: true` para este modelo?
+- ¿El proveedor puede devolver prose aunque se pida JSON mode? (Fireworks puede.)
+- ¿Los chunks de streaming incluyen `delta.content` o solo el objeto final?
+
+Registrar en el `Context Report` del BUILD qué docs se leyeron y qué comportamiento se verificó.
 
 ---
 

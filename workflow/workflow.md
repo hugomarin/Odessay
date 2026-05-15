@@ -106,6 +106,13 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 - `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
 - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
 
+**Gate adicional — issues que tocan rutas AI (obligatorio):**
+Si el issue modifica o crea una ruta en `app/api/ai/` o toca `lib/ai/`:
+1. Leer la documentación del proveedor para el modo de salida que se va a usar (`json_schema`, streaming, etc.) **antes de implementar**. Documentar en el `Context Report` qué docs se leyeron.
+2. Verificar que `max_tokens` cubre el peor caso de output (ver regla de presupuesto en `skill-backend/SKILL.md §AI Provider Integration`).
+3. Realizar QA manual con el proveedor real (no mock) con texto corto y texto ≥300 palabras antes de abrir el PR.
+4. Si hay discrepancia entre comportamiento local y CI (p.ej. latencia de perf gate), investigar si el token budget es el origen antes de asumir hardware de CI.
+
 **Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido + evidencia de paridad cross-mode cuando `Presentation Contract` es requerido + comentario de BUILD en Linear con `Context Report` completo.
 
 **Regla bloqueante:** si falta `Context Report`, si está incompleto, o si no se agregó entrada `build_submitted` en `workflow/review-history.jsonl`, el issue no puede pasar a `In Review`.
