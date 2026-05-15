@@ -87,6 +87,17 @@ const isCanonicalContract = (value: unknown) => {
 const toSuggestionKind = (type: z.infer<typeof mechanicalCorrectionTypeSchema>): PublicationSuggestionKind =>
   type === "basic_redaction" ? "rewriting" : "spelling";
 
+const hashCorrectionIdPart = (value: string) => {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return (hash >>> 0).toString(16);
+};
+
 const correctionTitle = (correction: z.infer<typeof mechanicalCorrectionSchema>) => {
   switch (correction.type) {
     case "accent":
@@ -145,10 +156,7 @@ const toChecklistItems = (items: LegacyPublicationReviewContract["checklist"]): 
     }));
 
 const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPublicationReviewShape => {
-  const suggestionCounts: Record<PublicationSuggestionKind, number> = {
-    spelling: 0,
-    rewriting: 0,
-  };
+  const suggestionCounts = new Map<string, number>();
 
   const suggestions = canonical.corrections
     .filter(
@@ -158,10 +166,19 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
     )
     .map((correction) => {
       const kind = toSuggestionKind(correction.type);
-      suggestionCounts[kind] += 1;
+      const correctionFingerprint = createCorrectionFingerprint(correction);
+      const occurrence = suggestionCounts.get(correctionFingerprint) ?? 0;
+      suggestionCounts.set(correctionFingerprint, occurrence + 1);
+      const id = [
+        "correction",
+        correction.blockId,
+        hashCorrectionIdPart(correction.originalText),
+        hashCorrectionIdPart(correction.replacementText),
+        occurrence,
+      ].join(":");
 
       return {
-        id: `${kind}-${suggestionCounts[kind]}`,
+        id,
         kind,
         title: correctionTitle(correction),
         reason: "",
@@ -169,9 +186,9 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
         replacement_text: correction.replacementText,
         context_before: null,
         context_after: null,
-        occurrence: null,
+        occurrence,
         block_id: correction.blockId,
-        correction_fingerprint: createCorrectionFingerprint(correction),
+        correction_fingerprint: correctionFingerprint,
         status: "pending",
       } satisfies PublicationSuggestion;
     });

@@ -30,6 +30,15 @@
     },
     "built": [
         {
+            "what": "Implement automatic block-level AI correction engine. Added a dedicated ProseMirror dirty-tracking extension that detects changed text-bearing blocks, debounces each block for 2 seconds, queues block analysis sequentially, clears stale block decorations on edit, and keeps correction decorations active independently of the publication panel. The AI route now accepts explicit block-level correction calls with max_tokens 768, while document-level calls keep the 4096 floor. Inline correction bubbles are collapsed by default and open one at a time on click, with stable correction IDs and shared client-side correction memory for accept/reject decisions.",
+            "phase": "Fase 4",
+            "issue": "ODE-155",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-155/implement-automatic-block-level-ai-correction-engine",
+            "commit": "6e7c9cc",
+            "date": "2026-05-15",
+            "notes": "Validation in green: node --version (v20.19.1), npm run env:check, npm run ops:status:drift, npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (58 files, 312 tests), npx vitest run tests/correction-trigger-plugin.test.ts tests/ai-corrections-contract-adapter.test.ts tests/ai-correction-decorations.test.ts tests/api/publication-review-route.test.ts. Performance contract required and passed: artifacts/perf/editor-ode-155-after.json.gz, artifacts/perf/editor-ode-155-after-report.json, artifacts/perf/editor-ode-155-after-metrics.json; gate reported event_timing_ms.keydown_p95=32.40ms and 14 pass, 0 warn, 1 optional skip. Provider QA with real Fireworks config from .env.local passed for short and >=300-word text using structured json_schema and max_tokens 768; both returned finish_reason=stop and valid JSON. Presentation contract not required by brief; visual harness loaded at /perf/editor-harness, while /write requires authenticated session in this local browser."
+        },
+        {
             "what": "Make AI correction decorations interactive in the editor. Pending mechanical corrections now resolve to stable ProseMirror ranges, render with compact inline mini-bubbles, and expose per-correction Accept/Reject actions without using the right-side panel as the primary flow. Corrections carry block/context/occurrence metadata for repeated text stability, stale-source suggestions are cleared from the editor decoration layer, and the publication panel listens to inline actions while preserving rejection memory.",
             "phase": "Fase 4",
             "issue": "ODE-143",

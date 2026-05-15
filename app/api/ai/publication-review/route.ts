@@ -28,12 +28,18 @@ const requestSchema = z.object({
   bodyText: z.string().default(""),
   sourceHash: z.string().trim().min(1),
   stream: z.boolean().optional().default(false),
+  correctionBlock: z.object({
+    id: z.string().trim().min(1),
+    text: z.string().trim().min(1),
+    hash: z.string().trim().min(1),
+  }).optional(),
   correctionMemory: z.object({
     entries: z.array(memoryEntrySchema).default([]),
   }).optional(),
 });
 
 const CORRECTIONS_MAX_TOKENS = 4096;
+const BLOCK_CORRECTIONS_MAX_TOKENS = 768;
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json(
@@ -132,8 +138,34 @@ const mechanicalCorrectionsResponseFormat = {
   },
 } as const;
 
-const getCorrectionsMaxTokens = (config: ReturnType<typeof getAIProviderConfig>) =>
-  Math.max(config.maxTokens, CORRECTIONS_MAX_TOKENS);
+const getCorrectionsMaxTokens = (
+  config: ReturnType<typeof getAIProviderConfig>,
+  mode: "document" | "block",
+) => (mode === "block" ? BLOCK_CORRECTIONS_MAX_TOKENS : Math.max(config.maxTokens, CORRECTIONS_MAX_TOKENS));
+
+const resolveCorrectionSource = (requestBody: z.infer<typeof requestSchema>) => {
+  if (requestBody.correctionBlock) {
+    return {
+      sourceText: requestBody.correctionBlock.text,
+      blocks: [
+        {
+          id: requestBody.correctionBlock.id,
+          text: requestBody.correctionBlock.text,
+          hash: requestBody.correctionBlock.hash,
+        },
+      ] satisfies CorrectionBlock[],
+      mode: "block" as const,
+    };
+  }
+
+  const sourceText = requestBody.bodyText.trim() || requestBody.markdown;
+
+  return {
+    sourceText,
+    blocks: buildCorrectionBlocks(sourceText),
+    mode: "document" as const,
+  };
+};
 
 async function getCurrentUserId() {
   const supabase = await createClient();
@@ -149,15 +181,17 @@ async function callCorrectionsModel({
   promptText,
   strictJson,
   structuredOutput = true,
+  mode,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
   strictJson: boolean;
   structuredOutput?: boolean;
+  mode: "document" | "block";
 }) {
   const requestBody = {
     model: config.model,
-    max_tokens: getCorrectionsMaxTokens(config),
+    max_tokens: getCorrectionsMaxTokens(config, mode),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
     ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
@@ -191,7 +225,7 @@ async function callCorrectionsModel({
 
     if (structuredOutput && (response.status === 400 || response.status === 422)) {
       console.info("[corrections] structured output rejected; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false, mode });
     }
 
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
@@ -212,15 +246,17 @@ async function callCorrectionsModel({
 async function callCorrectionsModelStreaming({
   config,
   promptText,
+  mode,
   onText,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
+  mode: "document" | "block";
   onText: (text: string) => void;
 }) {
   const requestBody = {
     model: config.model,
-    max_tokens: getCorrectionsMaxTokens(config),
+    max_tokens: getCorrectionsMaxTokens(config, mode),
     temperature: 0,
     top_p: config.topP,
     stream: true,
@@ -253,7 +289,7 @@ async function callCorrectionsModelStreaming({
 
     if (response.status === 400 || response.status === 422) {
       console.info("[corrections] streaming structured output rejected; falling back to non-stream strict JSON");
-      const text = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
+      const text = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false, mode });
       onText(text);
       return text;
     }
@@ -327,7 +363,7 @@ async function callCorrectionsModelStreaming({
 
   if (!fullText.trim()) {
     console.info("[corrections] provider stream ended without content; falling back to non-stream strict JSON");
-    const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true });
+    const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true, mode });
     onText(fallbackText);
     return fallbackText;
   }
@@ -346,8 +382,7 @@ const applyMemory = (
 async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
-  const sourceText = requestBody.bodyText.trim() || requestBody.markdown;
-  const blocks = buildCorrectionBlocks(sourceText);
+  const { sourceText, blocks, mode } = resolveCorrectionSource(requestBody);
   const fallbackLanguage = detectCorrectionLanguage(sourceText);
   const promptText = buildMechanicalCorrectionsPrompt(blocks);
 
@@ -355,7 +390,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
   );
 
-  const firstText = await callCorrectionsModel({ config, promptText, strictJson: false });
+  const firstText = await callCorrectionsModel({ config, promptText, strictJson: false, mode });
   const t1 = Date.now();
   console.info(`[corrections] first response latencyMs=${t1 - t0}`);
 
@@ -374,7 +409,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     console.info(`[corrections] first parse failed. textLength=${firstJsonText.length}`);
     console.info("[corrections] retrying with strict JSON mode");
 
-    const retryText = await callCorrectionsModel({ config, promptText, strictJson: true });
+    const retryText = await callCorrectionsModel({ config, promptText, strictJson: true, mode });
     const retryJsonText = extractJsonPayload(retryText);
 
     try {
@@ -493,8 +528,7 @@ const streamCorrectionsFromModel = ({
       try {
         const t0 = Date.now();
         const config = getAIProviderConfig();
-        const sourceText = requestBody.bodyText.trim() || requestBody.markdown;
-        const blocks = buildCorrectionBlocks(sourceText);
+        const { sourceText, blocks, mode } = resolveCorrectionSource(requestBody);
         const fallbackLanguage = detectCorrectionLanguage(sourceText);
         const promptText = buildMechanicalCorrectionsPrompt(blocks);
         const emittedCorrections = new Set<string>();
@@ -562,7 +596,7 @@ const streamCorrectionsFromModel = ({
           `[corrections] stream start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
         );
 
-        const streamedText = await callCorrectionsModelStreaming({ config, promptText, onText: emitPartial });
+        const streamedText = await callCorrectionsModelStreaming({ config, promptText, mode, onText: emitPartial });
         let parsedJson: unknown;
 
         try {
@@ -574,7 +608,7 @@ const streamCorrectionsFromModel = ({
             }`,
           );
           try {
-            const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true });
+            const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true, mode });
             emitPartial(fallbackText);
             parsedJson = parseModelJson(fallbackText);
           } catch (fallbackParseErr) {
