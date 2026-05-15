@@ -61,11 +61,20 @@ describe("POST /api/ai/publication-review", () => {
     })
   })
 
-  it("opens NDJSON streaming immediately and asks the provider for strict JSON mode", async () => {
+  it("opens NDJSON streaming immediately and asks the provider for structured JSON output", async () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       expect(body.stream).toBe(true)
-      expect(body.response_format).toEqual({ type: "json_object" })
+      expect(body.max_tokens).toBe(4096)
+      expect(body.response_format).toMatchObject({
+        type: "json_schema",
+        json_schema: {
+          name: "MechanicalCorrectionsResponse",
+          schema: {
+            required: ["summary", "language", "corrections", "uncertain"],
+          },
+        },
+      })
       expect(body.messages[0].content).toContain("The first character of your response must be {")
 
       return new Response(

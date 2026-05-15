@@ -33,6 +33,8 @@ const requestSchema = z.object({
   }).optional(),
 });
 
+const CORRECTIONS_MAX_TOKENS = 4096;
+
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json(
     {
@@ -70,12 +72,70 @@ const parseModelJson = (text: string) => {
 const buildStrictJsonSystemPrompt = () =>
   [
     "You are a JSON API for Odessay mechanical corrections.",
+    "Your response must match the MechanicalCorrectionsResponse JSON schema.",
     "Return exactly one valid JSON object and nothing else.",
     "The first character of your response must be { and the last character must be }.",
     "Do not include markdown fences, explanations, analysis, commentary, or prefaces.",
     "Never start with phrases like 'Let me analyze'.",
     "If there are no corrections, return an empty corrections array.",
   ].join(" ");
+
+const mechanicalCorrectionsResponseFormat = {
+  type: "json_schema",
+  json_schema: {
+    name: "MechanicalCorrectionsResponse",
+    schema: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        language: { type: "string" },
+        corrections: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              blockId: { type: "string" },
+              type: { type: "string" },
+              severity: { type: "string" },
+              confidence: { type: "string" },
+              originalText: { type: "string" },
+              replacementText: { type: "string" },
+              reason: { type: "string" },
+            },
+            required: [
+              "blockId",
+              "type",
+              "severity",
+              "confidence",
+              "originalText",
+              "replacementText",
+              "reason",
+            ],
+          },
+        },
+        uncertain: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              blockId: { type: "string" },
+              text: { type: "string" },
+              reason: { type: "string" },
+              possibleReplacement: {
+                anyOf: [{ type: "string" }, { type: "null" }],
+              },
+            },
+            required: ["blockId", "text", "reason", "possibleReplacement"],
+          },
+        },
+      },
+      required: ["summary", "language", "corrections", "uncertain"],
+    },
+  },
+} as const;
+
+const getCorrectionsMaxTokens = (config: ReturnType<typeof getAIProviderConfig>) =>
+  Math.max(config.maxTokens, CORRECTIONS_MAX_TOKENS);
 
 async function getCurrentUserId() {
   const supabase = await createClient();
@@ -90,19 +150,19 @@ async function callCorrectionsModel({
   config,
   promptText,
   strictJson,
-  jsonMode = true,
+  structuredOutput = true,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
   strictJson: boolean;
-  jsonMode?: boolean;
+  structuredOutput?: boolean;
 }) {
   const requestBody = {
     model: config.model,
-    max_tokens: config.maxTokens,
+    max_tokens: getCorrectionsMaxTokens(config),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
-    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+    ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
     messages: [
       {
         role: "system",
@@ -131,9 +191,9 @@ async function callCorrectionsModel({
     const errorPayload = await response.text();
     console.info(`[corrections] error body=${errorPayload.slice(0, 500)}`);
 
-    if (jsonMode && (response.status === 400 || response.status === 422)) {
-      console.info("[corrections] json mode rejected; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: false });
+    if (structuredOutput && (response.status === 400 || response.status === 422)) {
+      console.info("[corrections] structured output rejected; retrying without response_format");
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
     }
 
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
@@ -162,11 +222,11 @@ async function callCorrectionsModelStreaming({
 }) {
   const requestBody = {
     model: config.model,
-    max_tokens: config.maxTokens,
+    max_tokens: getCorrectionsMaxTokens(config),
     temperature: 0,
     top_p: config.topP,
     stream: true,
-    response_format: { type: "json_object" },
+    response_format: mechanicalCorrectionsResponseFormat,
     messages: [
       {
         role: "system",
@@ -194,8 +254,8 @@ async function callCorrectionsModelStreaming({
     console.info(`[corrections] stream error body=${errorPayload.slice(0, 500)}`);
 
     if (response.status === 400 || response.status === 422) {
-      console.info("[corrections] streaming json mode rejected; falling back to non-stream strict JSON");
-      const text = await callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: false });
+      console.info("[corrections] streaming structured output rejected; falling back to non-stream strict JSON");
+      const text = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
       onText(text);
       return text;
     }
@@ -269,7 +329,7 @@ async function callCorrectionsModelStreaming({
 
   if (!fullText.trim()) {
     console.info("[corrections] provider stream ended without content; falling back to non-stream strict JSON");
-    const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: true });
+    const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true });
     onText(fallbackText);
     return fallbackText;
   }
@@ -516,7 +576,7 @@ const streamCorrectionsFromModel = ({
             }`,
           );
           try {
-            const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: true });
+            const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true });
             emitPartial(fallbackText);
             parsedJson = parseModelJson(fallbackText);
           } catch (fallbackParseErr) {
