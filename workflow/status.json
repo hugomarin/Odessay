@@ -1159,7 +1159,7 @@
             "phase": "Fase 4",
             "issue": "ODE-142",
             "linear_url": "https://linear.app/z9ne/issue/ODE-142/improve-ai-correction-engine-prompt-language-detection-memory-and",
-            "commit": "f7dd605",
+            "commit": "d56cdce",
             "date": "2026-05-14",
             "notes": "Corrections now use the locked conservative mechanical prompt with canonical blockId/language/corrections/uncertain shape, explicit legacy adapter, low-temperature retry-on-parse-failure flow, session rejection memory, NDJSON streaming to the publication panel, stale source/block-hash guards, and tests for prompt scope, language detection, contract shape, technical terms, adapter behavior, and memory filtering."
         }
