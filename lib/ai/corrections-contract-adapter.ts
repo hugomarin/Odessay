@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createCorrectionFingerprint } from "@/lib/ai/correction-memory";
 import type {
   PublicationChecklistItem,
   PublicationSuggestion,
@@ -170,6 +171,8 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
         replacement_text: correction.replacementText,
         context_before: null,
         context_after: null,
+        block_id: correction.blockId,
+        correction_fingerprint: createCorrectionFingerprint(correction),
         status: "pending",
       } satisfies PublicationSuggestion;
     });
@@ -255,3 +258,7 @@ export const adaptCorrectionsContract = (value: unknown): AdaptedCorrectionsCont
     },
   };
 };
+
+export const adaptCanonicalCorrectionsToPublicationReview = (
+  canonical: MechanicalCorrectionsContract,
+): LegacyPublicationReviewShape => adaptCorrectionsContract(canonical).legacy;
