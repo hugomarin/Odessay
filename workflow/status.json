@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-14",
+    "last_updated": "2026-05-15",
     "active_phase": {
         "name": "Fase 3 — Organizar y publicar",
         "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
@@ -29,6 +29,15 @@
         "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
     },
     "built": [
+        {
+            "what": "Make AI correction decorations interactive in the editor. Pending mechanical corrections now resolve to stable ProseMirror ranges, render with compact inline mini-bubbles, and expose per-correction Accept/Reject actions without using the right-side panel as the primary flow. Corrections carry block/context/occurrence metadata for repeated text stability, stale-source suggestions are cleared from the editor decoration layer, and the publication panel listens to inline actions while preserving rejection memory.",
+            "phase": "Fase 4",
+            "issue": "ODE-143",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-143/make-ai-correction-decorations-interactive-with-accept-and-reject",
+            "commit": "b154cb9",
+            "date": "2026-05-15",
+            "notes": "Validation in green: node --version (v20.19.1), npm run env:check, npm run ops:status:drift, npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (56 files, 303 tests), npm run build with ODESSAY_PERF_HARNESS_ENABLED=true. Performance contract required and passed: artifacts/perf/ode-143-editor-trace.json.gz, artifacts/perf/ode-143-editor-report.json, artifacts/perf/ode-143-editor-metrics.json; gate reported 14 pass, 0 warn, 1 optional skip. Manual QA with mocked NDJSON stream on /perf/editor-harness verified inline bubble render, Reject preserves original text, Reanalyze restores pending suggestion, Accept applies prueva -> prueba, and focused editor undo restores original text."
+        },
         {
             "what": "Create a temporary AI corrections contract adapter for the publication-review migration. Added a single explicit adapter module that accepts the new canonical mechanical-corrections shape (summary, language, corrections[], uncertain[] keyed by blockId) and exposes the legacy publication panel shape (suggestions/checklist) while also normalizing legacy publication-review responses into the canonical contract for new consumers. The publication-review API now returns contractVersion and canonicalReview alongside existing legacy fields, and the panel type recognizes the canonical payload without changing current UI behavior.",
             "phase": "Fase 4",
