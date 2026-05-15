@@ -2184,11 +2184,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
           continue
         }
 
-        for (const [key, timerState] of correctionTimersRef.current) {
-          if (timerState.pos === block.pos) {
-            window.clearTimeout(timerState.timer)
-            correctionTimersRef.current.delete(key)
-          }
+        const existingTimer = correctionTimersRef.current.get(block.id)
+
+        if (existingTimer) {
+          window.clearTimeout(existingTimer.timer)
+          correctionTimersRef.current.delete(block.id)
         }
 
         setAutomaticCorrectionSuggestions((current) =>

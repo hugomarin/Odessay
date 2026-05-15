@@ -89,6 +89,26 @@ export const collectCorrectionBlocksInRanges = (
     const from = Math.max(0, Math.min(doc.content.size, range.from))
     const to = Math.max(from, Math.min(doc.content.size, range.to))
 
+    // Fast path: single-character edits (typing) — resolve directly without scanning descendants.
+    if (to - from <= 1) {
+      const resolved = doc.resolve(from)
+      let depth = resolved.depth
+
+      while (depth > 0) {
+        const node = resolved.node(depth)
+
+        if (isAnalysisNode(node)) {
+          const block = toCorrectionBlock(node, resolved.before(depth))
+          byId.set(block.id, block)
+          break
+        }
+
+        depth--
+      }
+
+      continue
+    }
+
     doc.nodesBetween(from, to, (node, pos, parent) => {
       if (EXCLUDED_NODE_TYPES.has(node.type.name)) {
         return false
@@ -153,7 +173,7 @@ const createCorrectionTriggerPlugin = () =>
           .filter((block) => !acknowledged.has(block.id))
           .map((block) => {
             const mapped = transaction.mapping.mapResult(block.pos, 1)
-            return mapped.deleted ? null : { ...block, pos: mapped.pos }
+            return mapped.deleted ? null : { ...block, pos: mapped.pos, id: `correction-block:${block.hash}:${mapped.pos}` }
           })
           .filter((block): block is CorrectionTriggerBlock => block !== null)
 
