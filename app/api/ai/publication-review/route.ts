@@ -331,9 +331,10 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
       };
     } catch (retryErr) {
       console.info(`[corrections] retry parse failed. textLength=${retryJsonText.length}`);
-      throw new Error(
-        `AI returned invalid JSON: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
+      console.info(
+        `[corrections] retry parse error=${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
       );
+      throw new Error("AI did not return valid correction JSON after retry.");
     }
   }
 }
@@ -503,8 +504,31 @@ const streamCorrectionsFromModel = ({
           `[corrections] stream start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
         );
 
-        const fullText = await callCorrectionsModelStreaming({ config, promptText, onText: emitPartial });
-        const parsedJson = parseModelJson(fullText);
+        const streamedText = await callCorrectionsModelStreaming({ config, promptText, onText: emitPartial });
+        let parsedJson: unknown;
+
+        try {
+          parsedJson = parseModelJson(streamedText);
+        } catch (streamParseErr) {
+          console.info(
+            `[corrections] streamed JSON parse failed; falling back to non-stream strict JSON. error=${
+              streamParseErr instanceof Error ? streamParseErr.message : String(streamParseErr)
+            }`,
+          );
+          try {
+            const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: true });
+            emitPartial(fallbackText);
+            parsedJson = parseModelJson(fallbackText);
+          } catch (fallbackParseErr) {
+            console.info(
+              `[corrections] fallback JSON parse failed. error=${
+                fallbackParseErr instanceof Error ? fallbackParseErr.message : String(fallbackParseErr)
+              }`,
+            );
+            throw new Error("AI did not return valid correction JSON after retry.");
+          }
+        }
+
         const canonical = applyMemory(
           normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage),
           requestBody.correctionMemory,
