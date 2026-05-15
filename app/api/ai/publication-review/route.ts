@@ -67,6 +67,16 @@ const parseModelJson = (text: string) => {
   return JSON.parse(jsonText);
 };
 
+const buildStrictJsonSystemPrompt = () =>
+  [
+    "You are a JSON API for Odessay mechanical corrections.",
+    "Return exactly one valid JSON object and nothing else.",
+    "The first character of your response must be { and the last character must be }.",
+    "Do not include markdown fences, explanations, analysis, commentary, or prefaces.",
+    "Never start with phrases like 'Let me analyze'.",
+    "If there are no corrections, return an empty corrections array.",
+  ].join(" ");
+
 async function getCurrentUserId() {
   const supabase = await createClient();
   const {
@@ -80,11 +90,33 @@ async function callCorrectionsModel({
   config,
   promptText,
   strictJson,
+  jsonMode = true,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
   strictJson: boolean;
+  jsonMode?: boolean;
 }) {
+  const requestBody = {
+    model: config.model,
+    max_tokens: config.maxTokens,
+    temperature: strictJson ? 0 : 0.1,
+    top_p: config.topP,
+    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+    messages: [
+      {
+        role: "system",
+        content: strictJson
+          ? buildStrictJsonSystemPrompt()
+          : `${buildStrictJsonSystemPrompt()} Return conservative mechanical corrections only.`,
+      },
+      {
+        role: "user",
+        content: promptText,
+      },
+    ],
+  };
+
   const response = await fetch(config.chatCompletionsUrl, {
     method: "POST",
     headers: {
@@ -92,29 +124,18 @@ async function callCorrectionsModel({
       "authorization": `Bearer ${config.apiKey}`,
       "user-agent": "Odessay/1.0",
     },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: config.maxTokens,
-      temperature: strictJson ? 0 : 0.1,
-      top_p: config.topP,
-      messages: [
-        {
-          role: "system",
-          content: strictJson
-            ? "Return strictly valid JSON only: no markdown, no prose, no trailing commas."
-            : "Return only valid JSON for conservative mechanical corrections.",
-        },
-        {
-          role: "user",
-          content: promptText,
-        },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const errorPayload = await response.text();
     console.info(`[corrections] error body=${errorPayload.slice(0, 500)}`);
+
+    if (jsonMode && (response.status === 400 || response.status === 422)) {
+      console.info("[corrections] json mode rejected; retrying without response_format");
+      return callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: false });
+    }
+
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
   }
 
@@ -128,6 +149,129 @@ async function callCorrectionsModel({
   }
 
   return text;
+}
+
+async function callCorrectionsModelStreaming({
+  config,
+  promptText,
+  onText,
+}: {
+  config: ReturnType<typeof getAIProviderConfig>;
+  promptText: string;
+  onText: (text: string) => void;
+}) {
+  const requestBody = {
+    model: config.model,
+    max_tokens: config.maxTokens,
+    temperature: 0,
+    top_p: config.topP,
+    stream: true,
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: buildStrictJsonSystemPrompt(),
+      },
+      {
+        role: "user",
+        content: promptText,
+      },
+    ],
+  };
+
+  const response = await fetch(config.chatCompletionsUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "authorization": `Bearer ${config.apiKey}`,
+      "user-agent": "Odessay/1.0",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorPayload = await response.text();
+    console.info(`[corrections] stream error body=${errorPayload.slice(0, 500)}`);
+
+    if (response.status === 400 || response.status === 422) {
+      console.info("[corrections] streaming json mode rejected; falling back to non-stream strict JSON");
+      const text = await callCorrectionsModel({ config, promptText, strictJson: true, jsonMode: false });
+      onText(text);
+      return text;
+    }
+
+    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
+  }
+
+  if (!response.body) {
+    throw new Error("AI streaming response did not include a body.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+
+  const consumeLine = (line: string) => {
+    const trimmed = line.trim();
+
+    if (!trimmed || !trimmed.startsWith("data:")) {
+      return;
+    }
+
+    const data = trimmed.slice(5).trim();
+
+    if (!data || data === "[DONE]") {
+      return;
+    }
+
+    try {
+      const event = JSON.parse(data) as {
+        choices?: Array<{
+          delta?: { content?: string };
+          message?: { content?: string };
+          text?: string;
+        }>;
+      };
+      const content =
+        event.choices?.[0]?.delta?.content ??
+        event.choices?.[0]?.message?.content ??
+        event.choices?.[0]?.text ??
+        "";
+
+      if (content) {
+        fullText += content;
+        onText(fullText);
+      }
+    } catch {
+      // Ignore malformed provider stream lines; final JSON validation below is authoritative.
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      consumeLine(line);
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (buffer.trim()) {
+    consumeLine(buffer);
+  }
+
+  if (!fullText.trim()) {
+    throw new Error("AI returned an empty response.");
+  }
+
+  return fullText;
 }
 
 const applyMemory = (
@@ -220,73 +364,198 @@ const createJsonResponsePayload = ({
 
 const encodeNdjson = (value: unknown) => `${JSON.stringify(value)}\n`;
 
-const streamCorrectionsResponse = ({
+const createSuggestionEvents = ({
   requestBody,
-  model,
   blocks,
   canonical,
 }: {
   requestBody: z.infer<typeof requestSchema>;
-  model: string;
   blocks: CorrectionBlock[];
   canonical: CanonicalCorrectionsResponse;
 }) => {
-  const encoder = new TextEncoder();
-  const payload = createJsonResponsePayload({ requestBody, model, canonical });
+  const adapted = adaptCorrectionsContract(canonical);
   const blockHashById = new Map(blocks.map((block) => [block.id, block.hash]));
 
+  return adapted.legacy.suggestions.map((suggestion, index) => ({
+    type: "suggestion" as const,
+    sourceHash: requestBody.sourceHash,
+    blockId: suggestion.block_id,
+    blockHash: suggestion.block_id ? blockHashById.get(suggestion.block_id) ?? null : null,
+    suggestion,
+    index,
+  }));
+};
+
+const createUncertainEvents = ({
+  requestBody,
+  canonical,
+}: {
+  requestBody: z.infer<typeof requestSchema>;
+  canonical: CanonicalCorrectionsResponse;
+}) => {
+  const adapted = adaptCorrectionsContract(canonical);
+
+  return adapted.legacy.checklist.map((item, index) => ({
+    type: "uncertain" as const,
+    sourceHash: requestBody.sourceHash,
+    item,
+    index,
+  }));
+};
+
+const suggestionEventKey = (event: ReturnType<typeof createSuggestionEvents>[number]) =>
+  [
+    event.blockId ?? "",
+    event.suggestion.kind,
+    event.suggestion.original_text,
+    event.suggestion.replacement_text,
+    event.suggestion.reason,
+  ].join("|");
+
+const uncertainEventKey = (event: ReturnType<typeof createUncertainEvents>[number]) =>
+  [event.item.target_text ?? "", event.item.detail].join("|");
+
+const streamCorrectionsFromModel = ({
+  requestBody,
+}: {
+  requestBody: z.infer<typeof requestSchema>;
+}) => {
+  const encoder = new TextEncoder();
+
   const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(
-        encoder.encode(
-          encodeNdjson({
-            type: "meta",
-            sourceHash: requestBody.sourceHash,
-            sourceMarkdown: requestBody.markdown,
-            model,
-            language: payload.language,
-            summary: payload.summary,
-          }),
-        ),
-      );
+    async start(controller) {
+      const enqueue = (value: unknown) => {
+        controller.enqueue(encoder.encode(encodeNdjson(value)));
+      };
 
-      payload.suggestions.forEach((suggestion, index) => {
-        controller.enqueue(
-          encoder.encode(
-            encodeNdjson({
-              type: "suggestion",
-              sourceHash: requestBody.sourceHash,
-              blockId: suggestion.block_id,
-              blockHash: suggestion.block_id ? blockHashById.get(suggestion.block_id) ?? null : null,
-              suggestion,
-              index,
-            }),
-          ),
+      try {
+        const t0 = Date.now();
+        const config = getAIProviderConfig();
+        const sourceText = requestBody.bodyText.trim() || requestBody.markdown;
+        const blocks = buildCorrectionBlocks(sourceText);
+        const fallbackLanguage = detectCorrectionLanguage(sourceText);
+        const promptText = buildMechanicalCorrectionsPrompt(blocks);
+        const emittedCorrections = new Set<string>();
+        const emittedUncertain = new Set<string>();
+
+        enqueue({
+          type: "status",
+          sourceHash: requestBody.sourceHash,
+          status: "started",
+        });
+
+        const emitPartial = (text: string) => {
+          try {
+            const parsedJson = parseModelJson(text);
+            const canonical = applyMemory(
+              normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage),
+              requestBody.correctionMemory,
+            );
+
+            for (const correction of canonical.corrections) {
+              const singleCanonical = {
+                ...canonical,
+                corrections: [correction],
+                uncertain: [],
+              } satisfies CanonicalCorrectionsResponse;
+              const [event] = createSuggestionEvents({ requestBody, blocks, canonical: singleCanonical });
+
+              if (event) {
+                const key = suggestionEventKey(event);
+
+                if (emittedCorrections.has(key)) {
+                  continue;
+                }
+
+                emittedCorrections.add(key);
+                enqueue(event);
+              }
+            }
+
+            for (const uncertain of canonical.uncertain) {
+              const singleCanonical = {
+                ...canonical,
+                corrections: [],
+                uncertain: [uncertain],
+              } satisfies CanonicalCorrectionsResponse;
+              const [event] = createUncertainEvents({ requestBody, canonical: singleCanonical });
+
+              if (event) {
+                const key = uncertainEventKey(event);
+
+                if (emittedUncertain.has(key)) {
+                  continue;
+                }
+
+                emittedUncertain.add(key);
+                enqueue(event);
+              }
+            }
+          } catch {
+            // Partial JSON is expected to be invalid until enough chunks have arrived.
+          }
+        };
+
+        console.info(
+          `[corrections] stream start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
         );
-      });
 
-      payload.checklist.forEach((item, index) => {
-        controller.enqueue(
-          encoder.encode(
-            encodeNdjson({
-              type: "uncertain",
-              sourceHash: requestBody.sourceHash,
-              item,
-              index,
-            }),
-          ),
+        const fullText = await callCorrectionsModelStreaming({ config, promptText, onText: emitPartial });
+        const parsedJson = parseModelJson(fullText);
+        const canonical = applyMemory(
+          normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage),
+          requestBody.correctionMemory,
         );
-      });
+        const payload = createJsonResponsePayload({
+          requestBody,
+          model: config.model,
+          canonical,
+        });
 
-      controller.enqueue(
-        encoder.encode(
-          encodeNdjson({
-            type: "done",
-            data: payload,
-          }),
-        ),
-      );
-      controller.close();
+        enqueue({
+          type: "meta",
+          sourceHash: requestBody.sourceHash,
+          sourceMarkdown: requestBody.markdown,
+          model: config.model,
+          language: payload.language,
+          summary: payload.summary,
+        });
+
+        for (const event of createSuggestionEvents({ requestBody, blocks, canonical })) {
+          const key = suggestionEventKey(event);
+
+          if (!emittedCorrections.has(key)) {
+            emittedCorrections.add(key);
+            enqueue(event);
+          }
+        }
+
+        for (const event of createUncertainEvents({ requestBody, canonical })) {
+          const key = uncertainEventKey(event);
+
+          if (!emittedUncertain.has(key)) {
+            emittedUncertain.add(key);
+            enqueue(event);
+          }
+        }
+
+        enqueue({
+          type: "done",
+          data: payload,
+        });
+        console.info(`[corrections] stream success totalLatencyMs=${Date.now() - t0}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Publication review request failed.";
+        console.info(`[corrections] stream error message=${message}`);
+        enqueue({
+          type: "error",
+          sourceHash: requestBody.sourceHash,
+          code: "AI_REVIEW_FAILED",
+          message,
+        });
+      } finally {
+        controller.close();
+      }
     },
   });
 
@@ -326,18 +595,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (parsedRequest.data.stream) {
+      return streamCorrectionsFromModel({
+        requestBody: parsedRequest.data,
+      });
+    }
+
     const result = await requestCorrections(parsedRequest.data);
     const tEnd = Date.now();
     console.info(`[corrections] success totalRouteMs=${tEnd - tStart}`);
-
-    if (parsedRequest.data.stream) {
-      return streamCorrectionsResponse({
-        requestBody: parsedRequest.data,
-        model: result.model,
-        blocks: result.blocks,
-        canonical: result.canonical,
-      });
-    }
 
     return NextResponse.json(
       {

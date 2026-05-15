@@ -56,6 +56,11 @@ type CorrectionMemoryEntry = {
 
 type StreamEvent =
   | {
+      type: "status";
+      sourceHash: string;
+      status: "started";
+    }
+  | {
       type: "meta";
       sourceHash: string;
       sourceMarkdown: string;
@@ -80,6 +85,12 @@ type StreamEvent =
   | {
       type: "done";
       data: PublicationReviewApiResponse;
+    }
+  | {
+      type: "error";
+      sourceHash: string;
+      code: string;
+      message: string;
     };
 
 const CORRECTION_MEMORY_STORAGE_KEY = "odessay-correction-memory";
@@ -278,6 +289,14 @@ export function PublicationPanel({
         const handleStreamEvent = async (event: StreamEvent) => {
           if (event.type !== "done" && event.sourceHash !== requestSourceHash) {
             return;
+          }
+
+          if (event.type === "status") {
+            return;
+          }
+
+          if (event.type === "error") {
+            throw new Error(event.message);
           }
 
           if (event.type === "meta") {
