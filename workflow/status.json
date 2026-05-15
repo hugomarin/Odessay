@@ -30,6 +30,15 @@
     },
     "built": [
         {
+            "what": "Create a temporary AI corrections contract adapter for the publication-review migration. Added a single explicit adapter module that accepts the new canonical mechanical-corrections shape (summary, language, corrections[], uncertain[] keyed by blockId) and exposes the legacy publication panel shape (suggestions/checklist) while also normalizing legacy publication-review responses into the canonical contract for new consumers. The publication-review API now returns contractVersion and canonicalReview alongside existing legacy fields, and the panel type recognizes the canonical payload without changing current UI behavior.",
+            "phase": "Fase 4",
+            "issue": "ODE-154",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-154/create-temporary-adapter-for-ai-corrections-contract-migration",
+            "commit": "3e9e7fe",
+            "date": "2026-05-14",
+            "notes": "Validation in green: node --version (v20.19.1), npm run env:check, npm run ops:status:drift, npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (54 files, 294 tests), npx vitest run tests/ai-corrections-contract-adapter.test.ts. Performance contract: not required by brief because scope is contract translation only, with no critical rendering-path changes. Presentation contract: not required because no cross-mode textual presentation surface changed. Manual QA by contract-level simulation: adapter tests cover canonical backend output feeding legacy publication panel fields and legacy output feeding canonicalReview for new consumers."
+        },
+        {
             "what": "Refine the editor toolbar grouping for ODE-137 review feedback. Desktop toolbar keeps core inline formatting as direct actions, moves structure into a Text menu with Normal, H1/H2/H3, Blockquote, and Code, moves Image/Table/Link into an Insert menu, and updates the list trigger so active unordered lists read as Dot List/• List and ordered lists read as # List. Toolbar icons use the stronger topbar stroke for better contrast while preserving the existing editor action state hot path.",
             "phase": "Fase 3",
             "issue": "ODE-137",

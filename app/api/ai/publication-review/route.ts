@@ -3,12 +3,14 @@ export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  adaptCorrectionsContract,
+  type AdaptedCorrectionsContract,
+} from "@/lib/ai/corrections-contract-adapter";
+import {
   buildPublicationReviewSystemPrompt,
   buildPublicationReviewUserPrompt,
-  publicationReviewResponseSchema,
 } from "@/lib/ai/publication-prompts";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
-import type { PublicationChecklistItem, PublicationSuggestion } from "@/lib/local-db/schema";
 import { createClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
@@ -48,33 +50,6 @@ const extractJsonPayload = (value: string) => {
   return value.slice(firstBrace, lastBrace + 1);
 };
 
-const toSuggestions = (
-  kind: PublicationSuggestion["kind"],
-  items: Array<z.infer<typeof publicationReviewResponseSchema>["spelling"][number]>,
-): PublicationSuggestion[] =>
-  items.map((item, index) => ({
-    id: `${kind}-${index + 1}`,
-    kind,
-    title: item.title,
-    reason: item.reason,
-    original_text: item.originalText,
-    replacement_text: item.replacementText,
-    context_before: null,
-    context_after: null,
-    status: "pending",
-  }));
-
-const toChecklistItems = (
-  items: Array<z.infer<typeof publicationReviewResponseSchema>["checklist"][number]>,
-): PublicationChecklistItem[] =>
-  items.map((item, index) => ({
-    id: `checklist-${index + 1}`,
-    label: item.label,
-    detail: item.detail,
-    target_text: item.targetText ?? null,
-    status: "pending",
-  }));
-
 async function getCurrentUserId() {
   const supabase = await createClient();
   const {
@@ -87,34 +62,6 @@ async function getCurrentUserId() {
 const parseModelJson = (text: string) => {
   const jsonText = extractJsonPayload(text);
   return JSON.parse(jsonText);
-};
-
-type PublicationReviewRaw = {
-  summary: string | null;
-  suggestions: PublicationSuggestion[];
-  checklist: PublicationChecklistItem[];
-};
-
-const toPublicationReviewRaw = (parsedJson: unknown): PublicationReviewRaw => {
-  const parsed = publicationReviewResponseSchema.parse(parsedJson);
-
-  const validSuggestion = (s: { title: string; reason: string; originalText: string; replacementText: string }) =>
-    s.title.trim().length > 0 &&
-    s.reason.trim().length > 0 &&
-    s.originalText.trim().length > 0 &&
-    s.replacementText.trim().length > 0;
-
-  const validChecklist = (c: { label: string; detail: string }) =>
-    c.label.trim().length > 0 && c.detail.trim().length > 0;
-
-  return {
-    summary: parsed.summary || null,
-    suggestions: [
-      ...toSuggestions("spelling", parsed.spelling.filter(validSuggestion)),
-      ...toSuggestions("rewriting", parsed.rewriting.filter(validSuggestion)),
-    ],
-    checklist: toChecklistItems(parsed.checklist.filter(validChecklist)),
-  };
 };
 
 async function callPublicationModel({
@@ -190,11 +137,11 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
 
   try {
     const parsedJson = parseModelJson(firstText);
-    const parsed = toPublicationReviewRaw(parsedJson);
+    const parsed = adaptCorrectionsContract(parsedJson);
     const t2 = Date.now();
     console.log(`[pub-review] first parse ok totalLatencyMs=${t2 - t0}`);
     return { model: config.model, ...parsed };
-  } catch (parseErr) {
+  } catch {
     const firstJsonText = extractJsonPayload(firstText);
     console.log(`[pub-review] first parse failed. textLength=${firstJsonText.length}`);
     console.log(`[pub-review] first parse raw (first 800): ${firstJsonText.slice(0, 800)}`);
@@ -206,7 +153,7 @@ async function requestPublicationReview(requestBody: z.infer<typeof requestSchem
 
     try {
       const parsedJson = parseModelJson(retryText);
-      const parsed = toPublicationReviewRaw(parsedJson);
+      const parsed = adaptCorrectionsContract(parsedJson);
       const t2 = Date.now();
       console.log(`[pub-review] retry parse ok totalLatencyMs=${t2 - t0}`);
       return { model: config.model, ...parsed };
@@ -248,7 +195,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await requestPublicationReview(parsedRequest.data);
+    const result: AdaptedCorrectionsContract & { model: string } = await requestPublicationReview(parsedRequest.data);
     const tEnd = Date.now();
     console.log(`[pub-review] success totalRouteMs=${tEnd - tStart}`);
 
@@ -258,9 +205,11 @@ export async function POST(request: Request) {
           sourceHash: parsedRequest.data.sourceHash,
           sourceMarkdown: parsedRequest.data.markdown,
           model: result.model,
-          suggestions: result.suggestions,
-          checklist: result.checklist,
-          summary: result.summary,
+          contractVersion: "mechanical-corrections-v1",
+          canonicalReview: result.canonical,
+          suggestions: result.legacy.suggestions,
+          checklist: result.legacy.checklist,
+          summary: result.legacy.summary,
           fallbackUsed: false,
         },
         error: null,
