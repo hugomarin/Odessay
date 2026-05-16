@@ -58,6 +58,7 @@ import {
   type CorrectionTriggerBlock,
 } from "@/lib/editor/correction-trigger-plugin"
 import {
+  applyAllPublicationSuggestions,
   applySuggestionToMarkdown,
   deriveSuggestionContexts,
   hashPublicationSource,
@@ -179,9 +180,9 @@ const PropertiesPanel = lazy(() =>
   })),
 )
 
-const PublicationPanel = lazy(() =>
-  import("@/components/editor/panels/publication-panel").then((module) => ({
-    default: module.PublicationPanel,
+const OrthographyPanel = lazy(() =>
+  import("@/components/editor/panels/orthography-panel").then((module) => ({
+    default: module.OrthographyPanel,
   })),
 )
 
@@ -269,8 +270,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
-  const [isPublicationModeEnabled, setIsPublicationModeEnabled] = useState(false)
-  const [publicationSuggestions, setPublicationSuggestions] = useState<PublicationSuggestion[]>([])
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
 
@@ -660,12 +659,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
     const suggestionsById = new Map<string, PublicationSuggestion>()
 
-    for (const suggestion of [...automaticCorrectionSuggestions, ...publicationSuggestions]) {
+    for (const suggestion of automaticCorrectionSuggestions) {
       suggestionsById.set(suggestion.id, suggestion)
     }
 
     setEditorPublicationSuggestions(editor, [...suggestionsById.values()])
-  }, [editor, mode, automaticCorrectionSuggestions, publicationSuggestions])
+  }, [editor, mode, automaticCorrectionSuggestions])
 
   useEffect(() => {
     titleRef.current = title
@@ -819,9 +818,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
 
     if (isFocusMode) {
-      if (activePanel === "publication") {
-        setIsPublicationModeEnabled(false)
-      }
       setActivePanel(null)
       setIsFindReplaceOpen(false)
     }
@@ -1104,12 +1100,74 @@ export function EditorShell({ writingId }: EditorShellProps) {
   )
 
   const closeActivePanel = useCallback(() => {
-    if (activePanel === "publication") {
-      setIsPublicationModeEnabled(false)
+    setActivePanel(null)
+  }, [])
+
+  const handleAcceptCorrection = useCallback(
+    (suggestion: PublicationSuggestion) => {
+      const result = applySuggestionToMarkdown(currentDocumentMarkdownRef.current, suggestion)
+
+      if (result.applied) {
+        suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
+        applyMarkdownFromPanel(result.markdown)
+        rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
+        setAutomaticCorrectionSuggestions((current) =>
+          updateSuggestionStatuses(current, [suggestion.id], "accepted"),
+        )
+        return
+      }
+
+      setAutomaticCorrectionSuggestions((current) =>
+        updateSuggestionStatuses(current, [suggestion.id], "conflict"),
+      )
+    },
+    [applyMarkdownFromPanel],
+  )
+
+  const handleRejectCorrection = useCallback((suggestionId: string) => {
+    const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
+
+    if (!suggestion) {
+      return
     }
 
-    setActivePanel(null)
-  }, [activePanel])
+    rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
+    setAutomaticCorrectionSuggestions((current) =>
+      updateSuggestionStatuses(current, [suggestionId], "rejected"),
+    )
+  }, [])
+
+  const handleAcceptAllCorrections = useCallback(() => {
+    const result = applyAllPublicationSuggestions(
+      currentDocumentMarkdownRef.current,
+      automaticCorrectionSuggestionsRef.current,
+    )
+
+    if (result.appliedIds.length === 0) {
+      return
+    }
+
+    applyMarkdownFromPanel(result.markdown)
+    automaticCorrectionSuggestionsRef.current
+      .filter((suggestion) => result.appliedIds.includes(suggestion.id))
+      .forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted"))
+    setAutomaticCorrectionSuggestions((current) =>
+      updateSuggestionStatuses(current, result.appliedIds, "accepted"),
+    )
+  }, [applyMarkdownFromPanel])
+
+  const handleRejectAllCorrections = useCallback(() => {
+    const pending = automaticCorrectionSuggestionsRef.current.filter((s) => s.status === "pending")
+
+    pending.forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected"))
+    setAutomaticCorrectionSuggestions((current) =>
+      updateSuggestionStatuses(
+        current,
+        pending.map((s) => s.id),
+        "rejected",
+      ),
+    )
+  }, [])
 
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
     if (!editor || modeRef.current !== "rich") {
@@ -2543,54 +2601,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [activeMatchIndex, matchCount, syncActiveMarkdownMatchSelection, syncActiveRichMatchSelection],
   )
 
-  const jumpToPublicationTarget = useCallback(
-    (targetText: string) => {
-      const normalizedTarget = targetText.trim()
-
-      if (!normalizedTarget) {
-        return
-      }
-
-      if (modeRef.current === "markdown") {
-        const matches = findTextMatches(markdownValue, normalizedTarget, false)
-        const targetMatch = matches[0]
-
-        if (!targetMatch || !markdownTextareaRef.current) {
-          return
-        }
-
-        markdownTextareaRef.current.focus()
-        markdownTextareaRef.current.setSelectionRange(targetMatch.start, targetMatch.end)
-        markdownTextareaRef.current.scrollIntoView({ block: "nearest" })
-        markdownSelectionRef.current = {
-          start: targetMatch.start,
-          end: targetMatch.end,
-          text: markdownTextareaRef.current.value.slice(targetMatch.start, targetMatch.end),
-        }
-        return
-      }
-
-      if (!editor) {
-        return
-      }
-
-      const matches = findDocumentMatches(editor.state.doc, normalizedTarget, false)
-      const targetMatch = matches[0]
-
-      if (!targetMatch) {
-        return
-      }
-
-      const transaction = editor.state.tr
-      transaction.setSelection(TextSelection.create(transaction.doc, targetMatch.from, targetMatch.to))
-      transaction.scrollIntoView()
-      transaction.setMeta("addToHistory", false)
-      editor.view.dispatch(transaction)
-      editor.commands.focus()
-    },
-    [editor, markdownValue],
-  )
-
   const handleReplaceCurrentMatch = useCallback(() => {
     if (!findQuery.trim()) {
       return
@@ -3024,7 +3034,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
-            isPublicationModeEnabled={isPublicationModeEnabled}
+            isPublicationModeEnabled={activePanel === "publication"}
             tabs={editorSession.tabs}
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
@@ -3033,15 +3043,6 @@ export function EditorShell({ writingId }: EditorShellProps) {
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onTogglePanel={(panel) => {
-              if (panel === "publication") {
-                setIsPublicationModeEnabled((currentState) => {
-                  const nextEnabled = !currentState
-                  setActivePanel(nextEnabled ? "publication" : null)
-                  return nextEnabled
-                })
-                return
-              }
-
               setActivePanel((current) => (current === panel ? null : panel))
             }}
             onRunAction={handleRunAction}
@@ -3194,15 +3195,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 }}
               />
             ) : (
-              <PublicationPanel
-                writingId={currentWritingId}
-                title={displayTitle}
+              <OrthographyPanel
+                suggestions={automaticCorrectionSuggestions}
                 markdown={currentDocumentMarkdown}
-                bodyText={bodyText}
-                onApplyMarkdown={applyMarkdownFromPanel}
-                onJumpToText={jumpToPublicationTarget}
+                onAcceptSuggestion={handleAcceptCorrection}
+                onRejectSuggestion={handleRejectCorrection}
+                onAcceptAll={handleAcceptAllCorrections}
+                onRejectAll={handleRejectAllCorrections}
                 onClose={closeActivePanel}
-                onSuggestionsChange={setPublicationSuggestions}
               />
             )}
           </Suspense>
