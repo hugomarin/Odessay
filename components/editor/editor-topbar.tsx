@@ -547,12 +547,12 @@ export function EditorTopbar({
             </button>
           </ActionTooltip>
 
-          <ActionTooltip label="Ready to publish" side="bottom">
+          <ActionTooltip label="Ortografía" side="bottom">
             <button
               type="button"
               onClick={() => onTogglePanel("publication")}
               className={getTopbarIconButtonClass(isPublicationModeEnabled || activePanel === "publication")}
-              aria-label="Ready to publish"
+              aria-label="Ortografía"
               aria-pressed={isPublicationModeEnabled || activePanel === "publication"}
             >
               <Sparkles className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
