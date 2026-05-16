@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-15",
+    "last_updated": "2026-05-16",
     "active_phase": {
         "name": "Fase 3 — Organizar y publicar",
         "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
@@ -29,6 +29,15 @@
         "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
     },
     "built": [
+        {
+            "what": "Redesign correction sidebar as user-activated orthography panel. Replaced the self-contained PublicationPanel (which called /api/ai/publication-review and managed its own review state) with a new OrthographyPanel that is a read-only view of the automaticCorrectionSuggestions produced by the block-level correction engine (ODE-155). The panel shows pending spelling corrections in document order with individual Accept/Reject actions, plus Accept all and Reject all bulk actions. Closing the panel no longer clears decorations. The topbar button label changed from 'Ready to publish' to 'Ortografía'. Removed publicationSuggestions state and its decoration feed, simplified isPublicationModeEnabled to derive from activePanel, and removed the now-unused jumpToPublicationTarget handler.",
+            "phase": "Fase 4",
+            "issue": "ODE-156",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-156/redesign-correction-sidebar-as-user-activated-orthography-panel",
+            "commit": "4c642be",
+            "date": "2026-05-16",
+            "notes": "Validation in green: node --version (v20.19.1), npm run env:check, npm run ops:status:drift, npm run typecheck, npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx; 1 new unused-var warning in orthography-panel.tsx fixed), npm test (58 files, 312 tests). Performance contract: not required by brief — panel is not on the typing path. Presentation contract: not required by brief — panel contains transient correction state, not canonical writing content."
+        },
         {
             "what": "Implement automatic block-level AI correction engine. Added a dedicated ProseMirror dirty-tracking extension that detects changed text-bearing blocks, debounces each block for 2 seconds, queues block analysis sequentially, clears stale block decorations on edit, and keeps correction decorations active independently of the publication panel. The AI route now accepts explicit block-level correction calls with max_tokens 768, while document-level calls keep the 4096 floor. Inline correction bubbles are collapsed by default and open one at a time on click, with stable correction IDs and shared client-side correction memory for accept/reject decisions.",
             "phase": "Fase 4",
