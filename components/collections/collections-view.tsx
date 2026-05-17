@@ -29,6 +29,7 @@ import {
   subscribeToLocalDBChanges,
   subscribeToLocalDBScopeChanges,
 } from "@/lib/local-db"
+import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activity"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
@@ -106,13 +107,18 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     void bootstrap()
     getSyncWorker().schedule(0)
 
-    const unsubscribeChanges = subscribeToLocalDBChanges(() => void loadLocalState())
+    const debounced = debounce(() => void loadLocalState(), 100, {
+      leading: false,
+      trailing: true,
+    })
+    const unsubscribeChanges = subscribeToLocalDBChanges(debounced)
     const unsubscribeScope = subscribeToLocalDBScopeChanges(() => void bootstrap())
 
     return () => {
       cancelled = true
       unsubscribeChanges()
       unsubscribeScope()
+      debounced.cancel()
     }
   }, [loadLocalState])
 

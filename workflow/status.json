@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Debounce reactive subscribers to localDB changes in Desk and Collections. Added `lib/utils/debounce.ts` with leading/trailing support. Wrapped `subscribeToLocalDBChanges` callbacks in DeskPage and CollectionsView with 100ms trailing debounce to coalesce bulk write bursts into a single refetch. Test demonstrates 30 rapid localDB changes produce exactly 1 fetch call to `/api/writings/shares?ids=...`.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-158",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-158/debounce-reactive-subscribers-to-localdb-changes",
+      "commit": "86316ae61a2cde083d68ceecd1c099b0bb1841a3",
+      "date": "2026-05-17",
+      "notes": "Validation: node --version (v20.19.1), npm run typecheck (clean on changed files), tests pass (5 new + 21 related desk/collections tests). Performance contract: reactive fan-out required — test verifies 30 writes → 1 refetch via fake timers; waterfall required — debounce eliminates duplicate requests to /api/writings/shares during bootstrap. Chose trailing-only at 100ms because it satisfies exact coalescence (1 refetch per burst) while keeping isolated-write latency below perceptual threshold (~100ms)."
+    },
+    {
       "what": "Reshape GET /api/writings as list class without body payload. Removed body_json and body_text from the select clause. Introduced RemoteWritingListRecord and RemoteWritingDetailRecord types. Updated mapRemoteWritingToLocal to preserve existing local body when remote lacks body fields (list response). Updated SyncWorker to pass existing local writing to mapRemoteWritingToLocal. Added integration tests for list response shape and body preservation.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-159",
