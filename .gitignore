@@ -46,3 +46,10 @@ artifacts/perf/
 
 # Deus runner
 .deus/
+
+# Local scripts and evidence artifacts
+.playwright-mcp/
+artifacts/*.docx
+artifacts/*.pdf
+scripts/generate-export-evidence.ts
+scripts/test-pdf-server.mjs
