@@ -34,7 +34,7 @@
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-159",
       "linear_url": "https://linear.app/z9ne/issue/ODE-159/reshape-apiwritings-as-list-class-without-body-payload",
-      "commit": "4ac0049b056ae93d86fff869c5beaba4ef502671",
+      "commit": "605de3753cf6447739a20fe4883e9c47bf21b3b9",
       "date": "2026-05-17",
       "notes": "Validation: npm run typecheck (0 new errors), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings). Tests pass: 13 new + 38 related = 51 tests. Performance contract: payload weight required — simulated 200 metadata-only writings = ~71.6 KB uncompressed / ~18 KB gzip estimate for 30-char titles (was ~3.3 MB with bodies, ~46x reduction). Time to interactive required — Desk bootstrap payload reduced by ~98%. Review findings addressed: separated RemoteWritingListRecord/RemoteWritingDetailRecord types, SyncWorker now passes existing local writing to mapRemoteWritingToLocal, added hydrateLocalWritingsFromRemote integration test with fake-indexeddb, fixed status.json formatting and commit hash, normalized review-history.jsonl entry."
     },
