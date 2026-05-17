@@ -3,6 +3,7 @@ import type { LocalWriting } from "@/lib/local-db/schema"
 import {
   mapRemoteWritingToLocal,
   shouldApplyRemoteWriting,
+  type RemoteWritingListRecord,
   type RemoteWritingRecord,
 } from "@/lib/sync/remote-bootstrap"
 
@@ -28,8 +29,8 @@ const createLocalWriting = (overrides: Partial<LocalWriting> = {}): LocalWriting
 })
 
 const createRemoteWriting = (
-  overrides: Partial<RemoteWritingRecord> = {},
-): RemoteWritingRecord => ({
+  overrides: Partial<RemoteWritingListRecord> & Partial<Pick<RemoteWritingRecord, "body_json" | "body_text">> = {},
+): RemoteWritingListRecord => ({
   id: "writing-1",
   author_id: "user-1",
   title: "Remote title",
@@ -77,7 +78,7 @@ describe("remote bootstrap — list shape (no body fields)", () => {
     })
     const local = mapRemoteWritingToLocal(remote, existing)
 
-    expect(local.body_json).toEqual(remote.body_json)
+    expect(local.body_json).toEqual((remote as RemoteWritingRecord).body_json)
     expect(local.body_text).toBe("New text")
   })
 

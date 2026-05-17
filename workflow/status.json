@@ -30,13 +30,13 @@
   },
   "built": [
     {
-      "what": "Reshape GET /api/writings as list class without body payload. Removed body_json and body_text from the select clause. Updated RemoteWritingRecord to make body fields optional. Updated mapRemoteWritingToLocal to preserve existing local body when remote lacks body fields (list response). Added tests for list response shape and shouldApplyRemoteWriting body preservation.",
+      "what": "Reshape GET /api/writings as list class without body payload. Removed body_json and body_text from the select clause. Introduced RemoteWritingListRecord and RemoteWritingDetailRecord types. Updated mapRemoteWritingToLocal to preserve existing local body when remote lacks body fields (list response). Updated SyncWorker to pass existing local writing to mapRemoteWritingToLocal. Added integration tests for list response shape and body preservation.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-159",
       "linear_url": "https://linear.app/z9ne/issue/ODE-159/reshape-apiwritings-as-list-class-without-body-payload",
-      "commit": "272f39beae0cd7567b641cff61ed480506bd89f2",
+      "commit": "4ac0049b056ae93d86fff869c5beaba4ef502671",
       "date": "2026-05-17",
-      "notes": "Validation in green: npm run typecheck (0 errors), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx), tests for affected files pass (38 tests). Performance contract: payload weight required — simulated 200 metadata-only writings = ~78KB uncompressed (was ~3.3MB with bodies). Time to interactive required — Desk bootstrap payload reduced by ~98%."
+      "notes": "Validation: npm run typecheck (0 new errors), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings). Tests pass: 13 new + 38 related = 51 tests. Performance contract: payload weight required — simulated 200 metadata-only writings = ~71.6 KB uncompressed / ~18 KB gzip estimate for 30-char titles (was ~3.3 MB with bodies, ~46x reduction). Time to interactive required — Desk bootstrap payload reduced by ~98%. Review findings addressed: separated RemoteWritingListRecord/RemoteWritingDetailRecord types, SyncWorker now passes existing local writing to mapRemoteWritingToLocal, added hydrateLocalWritingsFromRemote integration test with fake-indexeddb, fixed status.json formatting and commit hash, normalized review-history.jsonl entry."
     },
     {
       "what": "Redesign correction sidebar as user-activated orthography panel. Replaced the self-contained PublicationPanel (which called /api/ai/publication-review and managed its own review state) with a new OrthographyPanel that is a read-only view of the automaticCorrectionSuggestions produced by the block-level correction engine (ODE-155). The panel shows pending spelling corrections in document order with individual Accept/Reject actions, plus Accept all and Reject all bulk actions. Closing the panel no longer clears decorations. The topbar button label changed from 'Ready to publish' to 'Ortografía'. Removed publicationSuggestions state and its decoration feed, simplified isPublicationModeEnabled to derive from activePanel, and removed the now-unused jumpToPublicationTarget handler.",
