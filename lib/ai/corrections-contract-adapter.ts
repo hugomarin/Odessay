@@ -20,8 +20,8 @@ const mechanicalCorrectionTypeSchema = z.enum([
 const mechanicalCorrectionSchema = z.object({
   blockId: z.string().trim().min(1).catch("unknown-block"),
   type: mechanicalCorrectionTypeSchema.catch("spelling"),
-  severity: z.enum(["low", "medium", "high"]).catch("low"),
-  confidence: z.enum(["high", "medium"]).catch("medium"),
+  severity: z.enum(["low", "medium", "high"]).optional().default("low"),
+  confidence: z.enum(["high", "medium"]).optional().default("medium"),
   originalText: z.string().trim().min(1).catch(""),
   replacementText: z.string().trim().min(1).catch(""),
 });

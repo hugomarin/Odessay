@@ -1,4 +1,5 @@
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -93,7 +94,6 @@ const mechanicalCorrectionsResponseFormat = {
     schema: {
       type: "object",
       properties: {
-        summary: { type: "string" },
         language: { type: "string" },
         corrections: {
           type: "array",
@@ -102,38 +102,14 @@ const mechanicalCorrectionsResponseFormat = {
             properties: {
               blockId: { type: "string" },
               type: { type: "string" },
-              severity: { type: "string" },
-              confidence: { type: "string" },
               originalText: { type: "string" },
               replacementText: { type: "string" },
             },
-            required: [
-              "blockId",
-              "type",
-              "severity",
-              "confidence",
-              "originalText",
-              "replacementText",
-            ],
-          },
-        },
-        uncertain: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              blockId: { type: "string" },
-              text: { type: "string" },
-              reason: { type: "string" },
-              possibleReplacement: {
-                anyOf: [{ type: "string" }, { type: "null" }],
-              },
-            },
-            required: ["blockId", "text", "reason", "possibleReplacement"],
+            required: ["blockId", "type", "originalText", "replacementText"],
           },
         },
       },
-      required: ["summary", "language", "corrections", "uncertain"],
+      required: ["language", "corrections"],
     },
   },
 } as const;
@@ -182,12 +158,14 @@ async function callCorrectionsModel({
   strictJson,
   structuredOutput = true,
   mode,
+  _retries = 0,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
   strictJson: boolean;
   structuredOutput?: boolean;
   mode: "document" | "block";
+  _retries?: number;
 }) {
   const requestBody = {
     model: config.model,
@@ -223,6 +201,13 @@ async function callCorrectionsModel({
     const errorPayload = await response.text();
     console.info(`[corrections] error body=${errorPayload.slice(0, 500)}`);
 
+    if (response.status === 429 && _retries < 3) {
+      const retryAfterMs = Number(response.headers.get("retry-after") ?? 0) * 1000 || 3000 * (_retries + 1);
+      console.info(`[corrections] rate limited; retrying after ${retryAfterMs}ms (attempt ${_retries + 1})`);
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      return callCorrectionsModel({ config, promptText, strictJson, structuredOutput, mode, _retries: _retries + 1 });
+    }
+
     if (structuredOutput && (response.status === 400 || response.status === 422)) {
       console.info("[corrections] structured output rejected; retrying without response_format");
       return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false, mode });
@@ -232,11 +217,15 @@ async function callCorrectionsModel({
   }
 
   const payload = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
   };
 
   const text = payload.choices?.[0]?.message?.content ?? "";
   if (!text) {
+    if (structuredOutput) {
+      console.info("[corrections] model returned empty content with structured output; retrying without response_format");
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false, mode });
+    }
     throw new Error("AI returned an empty response.");
   }
 
