@@ -36,10 +36,13 @@ const dispatchSuggestionAction = (
 }
 
 const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
-  const widget = document.createElement("span")
-  widget.className = "pub-suggestion-bubble"
-  widget.dataset.suggestionId = suggestion.id
-  widget.contentEditable = "false"
+  const anchor = document.createElement("span")
+  anchor.className = "pub-suggestion-bubble-anchor"
+  anchor.contentEditable = "false"
+
+  const bubble = document.createElement("span")
+  bubble.className = "pub-suggestion-bubble"
+  bubble.dataset.suggestionId = suggestion.id
 
   const label = document.createElement("span")
   label.className = "pub-suggestion-bubble-label"
@@ -48,20 +51,23 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   const accept = document.createElement("button")
   accept.type = "button"
   accept.className = "pub-suggestion-bubble-action pub-suggestion-bubble-accept"
-  accept.textContent = "Accept"
+  accept.setAttribute("aria-label", "Aceptar")
+  accept.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
   accept.dataset.action = "accept"
   accept.dataset.suggestionId = suggestion.id
 
   const reject = document.createElement("button")
   reject.type = "button"
   reject.className = "pub-suggestion-bubble-action"
-  reject.textContent = "Reject"
+  reject.setAttribute("aria-label", "Rechazar")
+  reject.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
   reject.dataset.action = "reject"
   reject.dataset.suggestionId = suggestion.id
 
-  widget.append(label, accept, reject)
+  bubble.append(label, accept, reject)
+  anchor.append(bubble)
 
-  return widget
+  return anchor
 }
 
 const buildPublicationDecorations = (doc: ProseMirrorNode, pluginState: PublicationSuggestionPluginState): DecorationSet => {

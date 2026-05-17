@@ -15,17 +15,6 @@ type OrthographyPanelProps = {
   onClose: () => void;
 };
 
-const kindLabel = (kind: PublicationSuggestion["kind"]): string => {
-  switch (kind) {
-    case "spelling":
-      return "Ortografía";
-    case "rewriting":
-      return "Redacción";
-    default:
-      return "Corrección";
-  }
-};
-
 export function OrthographyPanel({
   suggestions,
   markdown,
@@ -77,92 +66,70 @@ export function OrthographyPanel({
         </button>
       </div>
 
-      <div className="space-y-4 p-4">
-        {hasPending ? (
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] text-ink-3">
-              {pendingSuggestions.length} corrección{pendingSuggestions.length === 1 ? "" : "es"} pendiente
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => onAcceptAll()}
-                className="text-[11px] font-medium text-cursor transition-opacity hover:opacity-80"
-              >
-                Aceptar todos
-              </button>
-              <span className="text-[11px] text-ink-4">·</span>
-              <button
-                type="button"
-                onClick={() => onRejectAll()}
-                className="text-[11px] font-medium text-ink-3 transition-opacity hover:opacity-80"
-              >
-                Rechazar todos
-              </button>
-            </div>
-          </div>
-        ) : null}
+      {hasPending ? (
+        <div className="flex items-center justify-end gap-3 border-b-[0.5px] border-border px-4 py-2">
+          <button
+            type="button"
+            onClick={() => onAcceptAll()}
+            className="text-[11px] text-ink-3 transition-colors hover:text-ink"
+          >
+            Aceptar todos
+          </button>
+          <span className="text-[11px] text-ink-4">·</span>
+          <button
+            type="button"
+            onClick={() => onRejectAll()}
+            className="text-[11px] text-ink-3 transition-colors hover:text-ink"
+          >
+            Rechazar todos
+          </button>
+        </div>
+      ) : null}
 
+      <div className="p-2">
         {pendingSuggestions.length === 0 ? (
-          <p className="rounded-[12px] border-[0.5px] border-dashed border-border px-3 py-4 text-[11px] text-ink-4">
+          <p className="px-2 py-3 text-[11px] text-ink-4">
             No hay correcciones pendientes.
           </p>
         ) : (
-          <div className="space-y-3">
+          <ul className="space-y-px">
             {pendingSuggestions.map((suggestion) => (
-              <article
+              <li
                 key={suggestion.id}
-                className="rounded-[12px] border-[0.5px] border-border bg-bg p-3"
+                className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[12px] font-medium text-ink">{suggestion.title}</p>
-                      <span className="shrink-0 rounded-full bg-[hsl(22,55%,92%)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.07em] text-cursor">
-                        {kindLabel(suggestion.kind)}
-                      </span>
-                    </div>
-                    {suggestion.reason ? (
-                      <p className="mt-1 text-[11px] leading-relaxed text-ink-3">{suggestion.reason}</p>
-                    ) : null}
-                  </div>
+                <div className="flex min-w-0 flex-1 items-baseline gap-1.5 text-[12px] leading-tight">
+                  <span className="truncate text-ink-4 line-through decoration-ink-4 decoration-[0.5px]">
+                    {suggestion.original_text}
+                  </span>
+                  <span aria-hidden className="shrink-0 text-ink-4">→</span>
+                  <span className="truncate text-ink">
+                    {suggestion.replacement_text}
+                  </span>
                 </div>
-
-                <div className="mt-3 space-y-2 rounded-md border-[0.5px] border-border bg-sb p-2.5">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.07em] text-ink-4">Original</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-ink-3 line-through decoration-[1.2px]">
-                      {suggestion.original_text}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-[0.07em] text-ink-4">Sugerencia</p>
-                    <p className="mt-1 rounded-sm bg-[hsl(22,55%,94%)] px-1.5 py-1 text-[12px] leading-relaxed text-ink">
-                      {suggestion.replacement_text}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex gap-2">
+                <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
                   <button
                     type="button"
                     onClick={() => onAcceptSuggestion(suggestion)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md border-[0.5px] border-ink bg-ink px-3 text-[11px] font-medium text-bg transition-opacity hover:opacity-90"
+                    aria-label="Aceptar"
+                    title="Aceptar"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
                   >
                     <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    Aceptar
                   </button>
                   <button
                     type="button"
                     onClick={() => onRejectSuggestion(suggestion.id)}
-                    className="inline-flex h-8 items-center rounded-md border-[0.5px] border-border bg-bg px-3 text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+                    aria-label="Rechazar"
+                    title="Rechazar"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
                   >
-                    Rechazar
+                    <X className="h-3.5 w-3.5" strokeWidth={1.5} />
                   </button>
                 </div>
-              </article>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </aside>

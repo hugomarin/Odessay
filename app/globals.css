@@ -717,62 +717,94 @@
   text-underline-offset: 3px;
 }
 
+.pub-suggestion-bubble-anchor {
+  position: relative;
+  display: inline-block;
+  width: 0;
+  height: 0;
+  vertical-align: baseline;
+}
+
 .pub-suggestion-bubble {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: min(420px, 100%);
-  margin: 0 4px;
-  padding: 3px 4px 3px 8px;
-  border: 0.5px solid hsl(var(--border));
-  border-radius: 8px;
-  background: hsl(var(--sb));
-  color: hsl(var(--ink-3));
+  gap: 2px;
+  max-width: min(280px, 90vw);
+  padding: 3px 3px 3px 8px;
+  border-radius: 6px;
+  background: hsl(var(--ink));
+  color: hsl(var(--bg));
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   font-size: 11px;
   line-height: 1.2;
-  vertical-align: baseline;
-  box-shadow: 0 2px 12px 0 hsla(25, 18%, 12%, 0.06), 0 1px 3px 0 hsla(25, 18%, 12%, 0.04);
+  box-shadow: 0 6px 16px hsla(25, 18%, 12%, 0.18), 0 2px 4px hsla(25, 18%, 12%, 0.12);
   user-select: none;
   white-space: nowrap;
+  z-index: 50;
+  animation: pub-suggestion-bubble-in 120ms ease-out;
+}
+
+.pub-suggestion-bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 4px solid transparent;
+  border-top-color: hsl(var(--ink));
+}
+
+@keyframes pub-suggestion-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .pub-suggestion-bubble-label {
   min-width: 0;
   max-width: 160px;
   overflow: hidden;
-  color: hsl(var(--ink-2));
+  color: hsl(var(--bg));
   text-overflow: ellipsis;
+  font-weight: 500;
+  padding-right: 4px;
 }
 
 .pub-suggestion-bubble-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
-  color: hsl(var(--ink-4));
+  color: hsl(var(--bg));
+  opacity: 0.65;
   cursor: pointer;
-  font-family: inherit;
-  font-size: 10px;
-  font-weight: 500;
-  padding: 0 6px;
+  padding: 0;
+  transition: opacity 120ms ease, background-color 120ms ease;
 }
 
 .pub-suggestion-bubble-action:hover {
-  background: hsl(var(--muted));
-  color: hsl(var(--ink));
+  background: hsla(0, 0%, 100%, 0.12);
+  opacity: 1;
 }
 
 .pub-suggestion-bubble-accept {
-  background: hsl(var(--ink));
-  color: hsl(var(--bg));
+  opacity: 0.85;
 }
 
 .pub-suggestion-bubble-accept:hover {
-  background: hsl(var(--ink));
-  color: hsl(var(--bg));
-  opacity: 0.9;
+  background: hsla(0, 0%, 100%, 0.18);
+  opacity: 1;
 }
