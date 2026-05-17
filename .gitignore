@@ -43,3 +43,6 @@ playwright-report/
 test-results/
 artifacts/perf/
 .gstack/
+
+# Deus runner
+.deus/
