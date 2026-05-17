@@ -7,12 +7,10 @@ type ApiEnvelope<T> = {
   error: { code: string; message: string } | null
 }
 
-export type RemoteWritingRecord = {
+export type RemoteWritingListRecord = {
   id: string
   author_id: string
   title: string | null
-  body_json: Record<string, unknown> | null
-  body_text: string | null
   slug: string | null
   status: WritingStatus | "finished" | null
   visibility: WritingVisibility | null
@@ -23,6 +21,17 @@ export type RemoteWritingRecord = {
   deleted_at: string | null
   created_at: string
   updated_at: string
+}
+
+export type RemoteWritingRecord = RemoteWritingListRecord & {
+  body_json: Record<string, unknown> | null
+  body_text: string | null
+}
+
+function hasBodyFields(
+  record: RemoteWritingListRecord,
+): record is RemoteWritingRecord {
+  return "body_json" in record && (record as RemoteWritingRecord).body_json !== undefined
 }
 
 const EMPTY_BODY_JSON: Record<string, unknown> = {
@@ -55,7 +64,7 @@ const normalizeBodyJson = (value: Record<string, unknown> | null): Record<string
 
 export const shouldApplyRemoteWriting = (
   localWriting: LocalWriting | null,
-  remoteWriting: RemoteWritingRecord,
+  remoteWriting: RemoteWritingListRecord,
 ) => {
   if (!localWriting) {
     return true
@@ -79,15 +88,23 @@ export const shouldApplyRemoteWriting = (
   return parseTimestamp(remoteWriting.updated_at) >= parseTimestamp(localWriting.updated_at)
 }
 
-export const mapRemoteWritingToLocal = (remoteWriting: RemoteWritingRecord): LocalWriting => {
+export const mapRemoteWritingToLocal = (
+  remoteWriting: RemoteWritingListRecord,
+  existingLocalWriting?: LocalWriting | null,
+): LocalWriting => {
   const updatedAtMs = parseTimestamp(remoteWriting.updated_at)
+  const hasBody = hasBodyFields(remoteWriting)
 
   return {
     id: remoteWriting.id,
     author_id: remoteWriting.author_id,
     title: remoteWriting.title ?? null,
-    body_json: normalizeBodyJson(remoteWriting.body_json),
-    body_text: remoteWriting.body_text ?? "",
+    body_json: hasBody
+      ? normalizeBodyJson(remoteWriting.body_json)
+      : (existingLocalWriting?.body_json ?? EMPTY_BODY_JSON),
+    body_text: hasBody
+      ? (remoteWriting.body_text ?? "")
+      : (existingLocalWriting?.body_text ?? ""),
     slug: remoteWriting.slug ?? null,
     status: normalizeWritingStatus(remoteWriting.status),
     visibility: normalizeVisibility(remoteWriting.visibility),
@@ -113,14 +130,14 @@ const parseEnvelope = async <T>(response: Response): Promise<T> => {
   return envelope.data
 }
 
-const mergeRemoteWriting = async (remoteWriting: RemoteWritingRecord) => {
+const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
   const localWriting = await localDB.writings.get(remoteWriting.id)
 
   if (!shouldApplyRemoteWriting(localWriting, remoteWriting)) {
     return false
   }
 
-  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting))
+  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting))
   return true
 }
 
@@ -129,7 +146,7 @@ export const hydrateLocalWritingsFromRemote = async () => {
     method: "GET",
     cache: "no-store",
   })
-  const remoteWritings = await parseEnvelope<RemoteWritingRecord[]>(response)
+  const remoteWritings = await parseEnvelope<RemoteWritingListRecord[]>(response)
 
   let appliedCount = 0
 
