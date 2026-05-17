@@ -11,8 +11,8 @@ export type RemoteWritingRecord = {
   id: string
   author_id: string
   title: string | null
-  body_json: Record<string, unknown> | null
-  body_text: string | null
+  body_json?: Record<string, unknown> | null
+  body_text?: string | null
   slug: string | null
   status: WritingStatus | "finished" | null
   visibility: WritingVisibility | null
@@ -79,15 +79,25 @@ export const shouldApplyRemoteWriting = (
   return parseTimestamp(remoteWriting.updated_at) >= parseTimestamp(localWriting.updated_at)
 }
 
-export const mapRemoteWritingToLocal = (remoteWriting: RemoteWritingRecord): LocalWriting => {
+export const mapRemoteWritingToLocal = (
+  remoteWriting: RemoteWritingRecord,
+  existingLocalWriting?: LocalWriting | null,
+): LocalWriting => {
   const updatedAtMs = parseTimestamp(remoteWriting.updated_at)
+
+  const hasBodyJson = remoteWriting.body_json !== undefined
+  const hasBodyText = remoteWriting.body_text !== undefined
 
   return {
     id: remoteWriting.id,
     author_id: remoteWriting.author_id,
     title: remoteWriting.title ?? null,
-    body_json: normalizeBodyJson(remoteWriting.body_json),
-    body_text: remoteWriting.body_text ?? "",
+    body_json: hasBodyJson
+      ? normalizeBodyJson(remoteWriting.body_json ?? null)
+      : (existingLocalWriting?.body_json ?? EMPTY_BODY_JSON),
+    body_text: hasBodyText
+      ? (remoteWriting.body_text ?? "")
+      : (existingLocalWriting?.body_text ?? ""),
     slug: remoteWriting.slug ?? null,
     status: normalizeWritingStatus(remoteWriting.status),
     visibility: normalizeVisibility(remoteWriting.visibility),
@@ -120,7 +130,7 @@ const mergeRemoteWriting = async (remoteWriting: RemoteWritingRecord) => {
     return false
   }
 
-  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting))
+  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting))
   return true
 }
 
