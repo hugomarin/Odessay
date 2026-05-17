@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Upload } from "lucide-react"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
@@ -36,6 +36,7 @@ import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncWorker } from "@/lib/sync/worker"
+import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 
 
 type ApiEnvelope<T> = {
@@ -87,6 +88,7 @@ export default function DeskPage() {
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
   const [previewWritingId, setPreviewWritingId] = useState<string | null>(null)
+  const [isImportOpen, setIsImportOpen] = useState(false)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
@@ -530,13 +532,23 @@ export default function DeskPage() {
           <p className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Desk</p>
           <p className="truncate text-[13px] text-ink-4">Writing activity, shared drafts, and collection context.</p>
         </div>
-        <Link
-          href="/write"
-          className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
-        >
-          <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
-          New writing
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsImportOpen(true)}
+            className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+          >
+            <Upload className="h-[14px] w-[14px]" strokeWidth={1.5} />
+            Import
+          </button>
+          <Link
+            href="/write"
+            className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+          >
+            <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
+            New writing
+          </Link>
+        </div>
       </div>
 
       {activeView === "mine" ? (
@@ -690,6 +702,7 @@ export default function DeskPage() {
           
         </>
       )}
+      <ImportWritingDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
     </section>
   )
 }

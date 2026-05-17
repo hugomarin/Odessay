@@ -109,6 +109,20 @@ Patrón recomendado:
 
 Estas reglas no son optimizaciones opcionales. Son criterios de corrección del producto.
 
+### La velocidad de Odessay es multidimensional
+
+El frontend defiende cinco dimensiones de velocidad. El editor protege la primera; el resto del árbol React protege las otras cuatro. Si una sola está en rojo, el producto se siente lento aunque las demás estén perfectas. Esta es la versión frontend del contrato fundacional en `workflow/context/core/odessay-stack.md`.
+
+| Dimensión | Cómo se defiende en frontend |
+|---|---|
+| **Latencia de interacción** | El editor es una isla. Keystroke < 16 ms, sin re-render del shell. Ver `El editor es una isla`. |
+| **Tiempo a interactivo** | Cada ruta renderiza desde `localDB` antes de esperar red. El primer paint útil llega < 1 s en editor, < 1.5 s en Desk/Collections/Reading. |
+| **Peso transferido** | El cliente nunca pide más de lo que va a mostrar. Si un componente solo necesita títulos, su query no trae `body_json`. |
+| **Forma del waterfall** | Las cargas iniciales se deduplican entre llamadores. Un mismo fetch caro se comparte (in-flight promise / TanStack Query) en lugar de repetirse por componente. |
+| **Fan-out reactivo** | Los suscriptores a `localDB`/stores hacen debounce si la operación que los dispara puede ser bulk (hidratación, import, sync). |
+
+Todo PR que toque vistas, hidratación, suscriptores a stores o fetches de bootstrap declara su impacto en estas cinco dimensiones en el `Performance Contract`. No basta con "el editor sigue rápido": hay que mostrar que el waterfall, el peso y el fan-out no empeoraron.
+
 ### El editor es una isla
 
 El editor TipTap debe estar aislado del resto del árbol de React. Ningún keystroke debe provocar re-renders en el sidebar, paneles de AI, historial, settings, o cualquier otra capa de la UI.
@@ -200,19 +214,67 @@ const EditorPanelProperties = lazy(() => import('./EditorPanelProperties'))
 const CollectionsOrganizePanel = lazy(() => import('./CollectionsOrganizePanel'))
 ```
 
+### Hidratación responsable — el read path también es velocidad
+
+El principio local-first nos da velocidad en el write path: el usuario escribe y el editor responde sin esperar a Supabase. Pero la velocidad del read path en bootstrap es responsabilidad explícita del frontend, no algo que el "local-first" garantice por sí solo.
+
+Tres afirmaciones operativas:
+
+**Una sola hidratación remota por sesión, no una por consumidor.**
+Si dos o más componentes necesitan los mismos datos al montar, la llamada remota se hace una vez y se comparte. TanStack Query lo resuelve nativamente; cuando no aplica, usar una promise in-flight compartida o un singleton.
+
+```ts
+// ✓ Correcto — la hidratación es un singleton; cualquier componente que la pida
+//   y haya una llamada en curso recibe la misma promise.
+let inFlight: Promise<void> | null = null
+export const hydrateWritings = () => {
+  if (inFlight) return inFlight
+  inFlight = doHydrate().finally(() => { inFlight = null })
+  return inFlight
+}
+
+// ✗ Incorrecto — cada mount-time effect dispara su propia hidratación.
+//   En StrictMode (dev) se duplica; en producción cuesta lo mismo cada vez
+//   que aparece un consumidor nuevo.
+useEffect(() => { void doHydrate() }, [])
+```
+
+**El cliente pide la forma del dato que va a mostrar, no más.**
+Una vista de lista pide la lista resumida; una vista de detalle pide el detalle. Si el endpoint actual devuelve más de lo necesario, el remedio es ampliar el contrato del endpoint (ver `skill-backend/SKILL.md §Peso de respuesta`), no aceptarlo como dado.
+
+**Los suscriptores reactivos hacen debounce cuando la fuente puede ser bulk.**
+`subscribeToLocalDBChanges`, store listeners, `onSnapshot` y similares se montan asumiendo que la operación que los dispara puede ser una hidratación de N filas. Coalescer múltiples eventos en uno (debounce 50–150 ms) es la postura por defecto, no una optimización.
+
+```ts
+// ✓ Correcto — un burst de 30 writes emite UNA refetch
+const debouncedRefetch = useMemo(
+  () => debounce(loadRecipientPreviewsAsync, 100),
+  [loadRecipientPreviewsAsync],
+)
+useEffect(() => subscribeToLocalDBChanges(debouncedRefetch), [debouncedRefetch])
+
+// ✗ Incorrecto — N writes = N refetches del mismo endpoint
+useEffect(() => subscribeToLocalDBChanges(loadRecipientPreviewsAsync), [loadRecipientPreviewsAsync])
+```
+
 ### Perceived performance — métricas que importan
 
-No optimizar solo para benchmarks. Optimizar para lo que el usuario siente:
+No optimizar solo para benchmarks. Optimizar para lo que el usuario siente. Estas métricas cubren las cinco dimensiones del contrato, no solo el editor:
 
-| Métrica | Objetivo |
-|---|---|
-| Tiempo hasta editable | < 1 segundo |
-| Latencia de keystroke | < 16ms (60fps) |
-| Auto-save (local) | Invisible — nunca bloquea |
-| Apertura de panel secundario | < 200ms |
-| Respuesta de AI visible | Streaming, primeros tokens < 800ms |
+| Métrica | Objetivo | Dimensión |
+|---|---|---|
+| Latencia de keystroke en editor | < 16 ms (60 fps) | Latencia de interacción |
+| Tiempo hasta editable (editor) | < 1 s | Tiempo a interactivo |
+| Tiempo hasta vista útil (Desk/Collections/Reading) | < 1.5 s desde click hasta poder operar | Tiempo a interactivo |
+| Apertura de panel secundario | < 200 ms | Latencia de interacción |
+| Respuesta de AI visible | Streaming, primeros tokens < 800 ms | Latencia de interacción |
+| Auto-save (local) | Invisible — nunca bloquea | Latencia de interacción |
+| Payload XHR acumulado en primer render | ≤ 200 kB en los primeros 3 s | Peso transferido |
+| Fetch/XHR distintos en bootstrap de una vista | ≤ 6 en los primeros 3 s | Forma del waterfall |
+| Requests duplicados (misma URL + params) | 0 en los primeros 5 s | Forma del waterfall |
+| Eventos de cambio emitidos por una operación bulk en `localDB` | 1 (no N) | Fan-out reactivo |
 
-Medir desde el inicio. No al final.
+Medir desde el inicio. No al final. Cuando una vista se siente lenta, abrir DevTools Network y leer estas filas antes de tocar código — el cuello rara vez es donde se intuye.
 
 ```tsx
 // Medir tiempo hasta editable en desarrollo

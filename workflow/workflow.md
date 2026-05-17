@@ -60,7 +60,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
 2. Los skills técnicos que corresponden al área del issue (frontend, backend, database, design — consultar `workflow/docs.json`).
-3. Si el brief declara `Performance Contract` requerido: `workflow/perf-budgets.json` + `workflow/perf/editor-baseline.md`.
+3. `workflow/context/core/odessay-stack.md §Velocidad multidimensional` — siempre. El contrato de velocidad es transversal a todo issue, no opcional. Si el brief marca alguna dimensión como `required` (latencia, tiempo a interactivo, peso, waterfall, fan-out), cargar además `workflow/perf-budgets.json` + `workflow/perf/editor-baseline.md` para la dimensión de latencia.
 4. Si el issue toca presentación de texto: `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-ux-testing/SKILL.md`.
 
 **No cargar por defecto:** documentos core, fundacional, flujos, páginas. Esa información debe estar sintetizada en el brief. Si falta algo crítico, es un error del brief — corregir en PLAN antes de continuar.
@@ -75,9 +75,15 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 3. Verificar la rama actual. Si es `main`, crear y cambiar primero a una rama de feat con convención `codex/{issue-id}-{descripcion}` o `feat/{issue-id}-{descripcion}` antes de editar o commitear.
 4. No hacer commits directos en `main`. Todos los commits del issue deben quedar en la rama de trabajo.
 5. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
-6. Si `Performance Contract` es `required`, generar evidencia reproducible:
-    - Capturar trace: `node scripts/capture-editor-trace.mjs --output artifacts/perf/editor-trace.json.gz`.
-    - Evaluar budgets: `node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace.json.gz`.
+6. Generar evidencia por cada dimensión del `Performance Contract` marcada como `required` (ver `.agents/skills/skill-product-manager/SKILL.md §Performance Contract` y `.agents/skills/skill-ux-testing/SKILL.md §Protocolo de performance UX — multidimensional`):
+    - **Latencia de interacción** → trace + gate:
+      - `node scripts/capture-editor-trace.mjs --output artifacts/perf/editor-trace.json.gz`
+      - `node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace.json.gz`
+    - **Tiempo a interactivo** → snapshot navegacional (DevTools / Playwright) con timing visible dentro de presupuesto.
+    - **Peso transferido** → snapshot del Network panel con tamaño ungzip por endpoint y total bootstrap.
+    - **Forma del waterfall** → snapshot con conteo de requests distintos (≤ 6 en 3 s) y duplicados (0 en 5 s).
+    - **Fan-out reactivo** → test que demuestra coalescencia (un burst de N writes ⇒ una sola refetch).
+    - Marcar `not required` solo con justificación dimensión por dimensión. El silencio no es justificación válida.
 7. Correr gate de entrega:
     - Con contrato requerido: `OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate`.
     - Sin contrato requerido: `npm run ops:delivery:gate`.
