@@ -339,17 +339,24 @@ setAutomaticCorrectionSuggestions(current =>
 );
 ```
 
-Las sugerencias mantenidas se marcan con `status: "pending-stale"` (nuevo estado opcional) para indicar que serán reemplazadas cuando llegue la nueva respuesta. Visualmente se muestran con opacidad reducida o un indicador sutil.
+Las sugerencias mantenidas se marcan con `status: "pending-stale"` (nuevo estado) para indicar que serán reemplazadas cuando llegue la nueva respuesta.
+
+**Comportamiento UX de `pending-stale`:**
+- Se muestran con opacidad reducida (ej. `opacity: 0.5`) para indicar que están en revisión.
+- **No son aceptables**: el botón de aplicar la corrección se deshabilita mientras `status === "pending-stale"`. Esto evita aplicar una sugerencia obsoleta sobre texto que ya cambió.
+- Al llegar la nueva respuesta del modelo, las stale se reemplazan por las nuevas (o desaparecen si el modelo no genera sugerencia para ese bloque).
 
 ### Archivos a modificar
 - `components/editor/editor-shell.tsx` — lógica de dirty blocks
-- `lib/local-db/schema.ts` — opcional: agregar `"pending-stale"` a `PublicationSuggestionStatus`
-- `app/globals.css` — estilo opcional para sugerencias stale
+- `lib/local-db/schema.ts` — agregar `"pending-stale"` a `PublicationSuggestionStatus` (no opcional: el panel lo necesita para deshabilitar acciones)
+- `components/editor/panels/orthography-panel.tsx` (o `corrections-panel.tsx` tras Mejora 7) — deshabilitar acciones cuando `status === "pending-stale"`
+- `app/globals.css` — estilo para sugerencias stale
 
 ### Criterio de aceptación
-- [ ] Al editar una palabra en un párrafo con 3 sugerencias, las 3 siguen visibles.
+- [ ] Al editar una palabra en un párrafo con 3 sugerencias, las 3 siguen visibles con opacidad reducida.
+- [ ] Mientras están stale, el botón de aceptar/aplicar está deshabilitado.
 - [ ] Si el edit borra exactamente el texto de una sugerencia, esa desaparece.
-- [ ] Cuando llega la nueva respuesta del modelo, las sugerencias stale se reemplazan.
+- [ ] Cuando llega la nueva respuesta del modelo, las sugerencias stale se reemplazan y vuelven a ser interactivas.
 
 ---
 
@@ -412,19 +419,27 @@ Eliminar código muerto que confunde la lectura y los tests.
 
 **Frontend**
 
-- Eliminar `components/editor/panels/publication-panel.tsx` (o mover a `deprecated/` si se prefiere preservar).
-- Eliminar referencias a `publicationReviews` de `lib/local-db` si no se usan en otro lado.
+- Eliminar `components/editor/panels/publication-panel.tsx` (eliminación directa: no hay usuarios en producción, no requiere fase de deprecación).
+- Eliminar la store `publicationReviews` de IndexedDB con bump de `db.version` y limpieza en `onupgradeneeded`.
+- Eliminar tests asociados (`tests/local-db.test.ts`, `tests/sync-worker.test.ts` — secciones de `publicationReviews`).
+
+**Supabase**
+
+No requiere migración: la store `publicationReviews` solo existía en IndexedDB, no hay tabla `publication_reviews` en Supabase. Confirmado al inspeccionar `supabase/migrations/`.
 
 ### Archivos a modificar
 - `app/api/ai/publication-review/route.ts`
 - `lib/ai/corrections.ts`
 - `components/editor/panels/publication-panel.tsx` — eliminar
-- `lib/local-db/schema.ts` + `index.ts` — opcional: eliminar store `publicationReviews`
+- `lib/local-db/schema.ts` + `index.ts` — eliminar store `publicationReviews`
+- `tests/local-db.test.ts`, `tests/sync-worker.test.ts` — eliminar casos de `publicationReviews`
 
 ### Criterio de aceptación
 - [ ] No queda rama `document` en el endpoint.
 - [ ] No queda `PublicationPanel` en el árbol de componentes.
+- [ ] La store `publicationReviews` no aparece al inspeccionar IndexedDB en DevTools.
 - [ ] `npm run typecheck` pasa sin errores.
+- [ ] `npm test` pasa sin tests de `publicationReviews`.
 - [ ] Tests del endpoint solo cubren modo `block`.
 
 ---
@@ -465,13 +480,14 @@ Opcional: agrupar por tipo (`spelling`, `grammar`, `punctuation`) con secciones 
 
 | Orden | Mejora | Bloqueada por | Impacto visual |
 |-------|--------|---------------|----------------|
-| 1 | **Limpiar legacy** (6) | Ninguna | Bajo — limpieza pura |
-| 2 | **Persistencia** (1) | Ninguna | Alto — no más reprocesamiento |
-| 3 | **Batching** (2) | Persistencia (para no perder métricas) | Alto — menos espera |
-| 4 | **Eliminar umbral 8 palabras** (3) | Batching (para no explotar llamadas) | Medio — más correcciones |
-| 5 | **Smart invalidation** (4) | Ninguna | Medio — menos parpadeo |
-| 6 | **Métricas** (5) | Persistencia (para tener dónde guardar) | Bajo — invisible al usuario |
-| 7 | **Panel sin filtro** (7) | Ninguna | Medio — más completo |
+| 1 | **Observabilidad mínima** (0) | Ninguna | Nulo — base para validar el resto |
+| 2 | **Limpiar legacy** (6) | Ninguna | Bajo — limpieza pura |
+| 3 | **Persistencia Supabase + IDB** (1) | Observabilidad (para verificar hidratación) | Alto — no más reprocesamiento, cross-device |
+| 4 | **Batching** (2) | Persistencia (para no perder métricas) | Alto — menos espera |
+| 5 | **Eliminar umbral 8 palabras** (3) | Batching (para no explotar llamadas) | Medio — más correcciones |
+| 6 | **Smart invalidation** (4) | Ninguna | Medio — menos parpadeo |
+| 7 | **Métricas** (5) | Persistencia (para tener dónde guardar) | Bajo — invisible al usuario |
+| 8 | **Panel sin filtro** (7) | Ninguna | Medio — más completo |
 
 ---
 
