@@ -34,7 +34,7 @@
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-140",
       "linear_url": "https://linear.app/z9ne/issue/ODE-140/fix-blank-new-writing-lifecycle-to-avoid-saving-and-writing-not-found",
-      "commit": "2a3046b",
+      "commit": "055a9c4",
       "date": "2026-05-18",
       "notes": "Validation: node --version (v20.19.1), npm run env:check (passed), npm run ops:status:drift (WARN only: pre-existing ODE-502 missing in status.json), npm run typecheck (clean), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test -- tests/editor-save-state.test.ts (4 passed). Performance contract: required — change affects new-writing creation/hydration path without adding extra fetches or reactive fan-out; local-only drafts now expose accurate state immediately and keep remote-only actions gated until first sync. Presentation contract: not required (no cross-mode rich-text rendering contract touched)."
     },
