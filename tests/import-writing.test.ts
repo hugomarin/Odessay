@@ -43,7 +43,7 @@ const V_PARA = "paragraph"
 const V_MY_TITLE = "My Title"
 const V_MY_GREAT = "My Great Essay"
 const V_MY_DOC_TITLE = "my document"
-const V_MY_DRAFT_TITLE = "my draft"
+const V_MY_DRAFT_TITLE = "Just some plain text without heading."
 const V_TOO_LARGE = "too large"
 const V_FIRST_PARA_TEXT = "First paragraph."
 const V_SECOND_PARA_TEXT = "Second paragraph."
@@ -53,7 +53,6 @@ const EMPTY_PARA_DOC = { type: V_DOC, content: [{ type: V_PARA }] }
 
 const makeFile = (name: string, content: string): File =>
   new File([content], name, { type: V_PLAIN_MIME })
-
 
 describe(PLAIN_SUITE, () => {
   it(T1, async () => {
