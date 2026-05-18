@@ -26,9 +26,18 @@
       "ODE-140",
       "ODE-141"
     ],
-    "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-138 import .md/.txt, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
+    "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
   },
   "built": [
+    {
+      "what": "Import .md and .txt files as new writings from Desk. Added ImportWritingDialog with drag-and-drop and file picker, supporting .md via TipTap markdown parsing (preserving headings, paragraphs, lists, blockquotes, code, links, tables) and .txt via double-newline paragraph splitting. Title is derived from H1 for markdown, first meaningful line for text, or sanitized file name as fallback. Each import creates a new LocalWriting with local-only lifecycle, enqueues sync, and navigates to /write/[id]. Unsupported file types produce a clear error without creating partial writings.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-138",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-138/import-md-and-txt-files-as-new-writings",
+      "commit": "11855036d9dcb7b0b59cc2e4aaa6ff928f7d7582",
+      "date": "2026-05-17",
+      "notes": "Validation: node --version (v20.19.1), npm run typecheck (clean), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx, no new warnings), npm test (356 passed, 2 pre-existing failures in publication-review-route unrelated to this change). New test file tests/import-writing.test.ts adds 9 tests for markdown and text parsing, title derivation, size limits, and empty file handling. Scope: components/desk/import-writing-dialog.tsx (new), lib/import/markdown.ts (new), lib/import/text.ts (new), app/(app)/desk/page.tsx (integration), tests/import-writing.test.ts (new). Performance contract: required — parsing is offloaded via async file reading; large files capped at 5MB with clear error. Manual QA pending for .md, .txt, and unsupported file types."
+    },
     {
       "what": "Lazy-hydrate writing body on demand when entering the editor. After ODE-159 stopped returning bodies in GET /api/writings, the editor needs to fetch the body of the writing it is about to open. Added a `needsBodyHydration` predicate that classifies the local entry (absent, list-only metadata, local-only draft, pending/failed sync, or body present) and made `hydrateLocalWritingFromRemote` claim its in-flight slot synchronously so concurrent entry-path effects share a single GET. The editor-shell hydration effect now triggers on empty bodies as well as missing entries, mounts immediately and surfaces a subtle skeleton inside the document area after 200ms. Hydration failures are logged without blocking navigation.",
       "phase": "Fase 3 — Organizar y publicar",
