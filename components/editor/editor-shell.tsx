@@ -89,7 +89,7 @@ import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/
 import type { LocalWriting, PublicationSuggestion, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
-import { hydrateLocalWritingFromRemote } from "@/lib/sync/remote-bootstrap"
+import { hydrateLocalWritingFromRemote, needsBodyHydration } from "@/lib/sync/remote-bootstrap"
 import {
   closeTab,
   focusTab,
@@ -267,6 +267,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [writingVisibility, setWritingVisibility] = useState<WritingVisibility>("private")
   const [lifecycle, setLifecycle] = useState<WritingLifecycle>("local-only")
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
+  const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
@@ -850,11 +851,25 @@ export function EditorShell({ writingId }: EditorShellProps) {
     const hydrateEditor = async () => {
       let localWriting = await localDB.writings.get(targetWritingId)
 
-      if (!localWriting) {
+      if (needsBodyHydration(localWriting)) {
+        // Editor shell mounts immediately; if the remote fetch takes longer than
+        // 200 ms, surface a subtle skeleton in the document area without
+        // blocking the surrounding UI.
+        const skeletonTimer = setTimeout(() => {
+          if (!cancelled) {
+            setIsBodyHydrating(true)
+          }
+        }, 200)
+
         try {
           await hydrateLocalWritingFromRemote(targetWritingId)
-        } catch {
-          // The writing might not exist remotely yet; keep local fallback behavior.
+        } catch (error) {
+          console.error(`[editor] lazy body hydration failed for ${targetWritingId}`, error)
+        } finally {
+          clearTimeout(skeletonTimer)
+          if (!cancelled) {
+            setIsBodyHydrating(false)
+          }
         }
 
         if (cancelled) {
@@ -3051,6 +3066,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
+            {isBodyHydrating ? (
+              <div
+                aria-hidden="true"
+                data-testid="editor-body-skeleton"
+                className="pointer-events-none absolute inset-x-0 top-0 z-10 mx-auto mt-12 max-w-prose animate-pulse space-y-3 px-6"
+              >
+                <div className="h-3 w-3/4 rounded bg-foreground/5" />
+                <div className="h-3 w-11/12 rounded bg-foreground/5" />
+                <div className="h-3 w-2/3 rounded bg-foreground/5" />
+              </div>
+            ) : null}
             <WritingEditorContent
               editor={editor}
               mode={mode}

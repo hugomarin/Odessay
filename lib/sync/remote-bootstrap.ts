@@ -160,12 +160,60 @@ export const hydrateLocalWritingsFromRemote = async () => {
   return appliedCount
 }
 
-export const hydrateLocalWritingFromRemote = async (writingId: string) => {
-  const response = await fetch(`/api/writings/${writingId}`, {
-    method: "GET",
-    cache: "no-store",
+const hasLocalBody = (local: LocalWriting): boolean => {
+  if (local.body_text !== "") {
+    return true
+  }
+
+  const content = (local.body_json as { content?: unknown[] } | null | undefined)?.content
+  return Array.isArray(content) && content.length > 0
+}
+
+export const needsBodyHydration = (local: LocalWriting | null | undefined): boolean => {
+  if (!local) {
+    return true
+  }
+
+  if (local.lifecycle === "local-only") {
+    return false
+  }
+
+  if (local.sync_status !== "synced") {
+    return false
+  }
+
+  return !hasLocalBody(local)
+}
+
+const inFlightBodyHydrations = new Map<string, Promise<boolean>>()
+
+export const hydrateLocalWritingFromRemote = (writingId: string): Promise<boolean> => {
+  // The inFlight slot is claimed synchronously so concurrent callers that share
+  // the same writingId observe the same pending promise. Without this, two
+  // entry-path effects firing in the same tick (StrictMode double-mount,
+  // race between Desk row click and tab focus, etc.) would both pass the
+  // `needsBodyHydration` check before either had a chance to register.
+  const existing = inFlightBodyHydrations.get(writingId)
+  if (existing) {
+    return existing
+  }
+
+  const promise = (async () => {
+    const local = await localDB.writings.get(writingId)
+    if (!needsBodyHydration(local)) {
+      return false
+    }
+
+    const response = await fetch(`/api/writings/${writingId}`, {
+      method: "GET",
+      cache: "no-store",
+    })
+    const remoteWriting = await parseEnvelope<RemoteWritingRecord>(response)
+    return mergeRemoteWriting(remoteWriting)
+  })().finally(() => {
+    inFlightBodyHydrations.delete(writingId)
   })
-  const remoteWriting = await parseEnvelope<RemoteWritingRecord>(response)
-  const applied = await mergeRemoteWriting(remoteWriting)
-  return applied
+
+  inFlightBodyHydrations.set(writingId, promise)
+  return promise
 }
