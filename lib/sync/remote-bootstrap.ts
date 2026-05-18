@@ -141,23 +141,36 @@ const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
   return true
 }
 
-export const hydrateLocalWritingsFromRemote = async () => {
-  const response = await fetch("/api/writings", {
-    method: "GET",
-    cache: "no-store",
-  })
-  const remoteWritings = await parseEnvelope<RemoteWritingListRecord[]>(response)
+let inFlightWritingsHydration: Promise<number> | null = null
 
-  let appliedCount = 0
-
-  for (const remoteWriting of remoteWritings) {
-    const applied = await mergeRemoteWriting(remoteWriting)
-    if (applied) {
-      appliedCount += 1
-    }
+export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
+  if (inFlightWritingsHydration) {
+    return inFlightWritingsHydration
   }
 
-  return appliedCount
+  const promise = (async () => {
+    const response = await fetch("/api/writings", {
+      method: "GET",
+      cache: "no-store",
+    })
+    const remoteWritings = await parseEnvelope<RemoteWritingListRecord[]>(response)
+
+    let appliedCount = 0
+
+    for (const remoteWriting of remoteWritings) {
+      const applied = await mergeRemoteWriting(remoteWriting)
+      if (applied) {
+        appliedCount += 1
+      }
+    }
+
+    return appliedCount
+  })().finally(() => {
+    inFlightWritingsHydration = null
+  })
+
+  inFlightWritingsHydration = promise
+  return promise
 }
 
 const hasLocalBody = (local: LocalWriting): boolean => {
