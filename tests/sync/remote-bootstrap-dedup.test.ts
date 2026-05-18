@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { localDB, setLocalDBScope } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
@@ -29,6 +29,10 @@ beforeEach(() => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ;(globalThis as any).window = globalThis
   setLocalDBScope(`test-dedup-${crypto.randomUUID()}`)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
@@ -85,7 +89,6 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
     expect(r3).toBe(1)
     expect(r4).toBe(1)
 
-    vi.unstubAllGlobals()
   })
 
   it("propagates errors to all concurrent callers", async () => {
@@ -110,7 +113,6 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
     await expect(Promise.all([p1, p2, p3, p4])).rejects.toThrow("Network failure")
     expect(fetchCount).toBe(1)
 
-    vi.unstubAllGlobals()
   })
 
   it("releases the in-flight promise so a subsequent call triggers a new fetch", async () => {
@@ -155,6 +157,5 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
     await hydrateLocalWritingsFromRemote()
     expect(fetchCount).toBe(2)
 
-    vi.unstubAllGlobals()
   })
 })

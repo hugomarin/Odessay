@@ -1222,7 +1222,7 @@
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-157",
       "linear_url": "https://linear.app/z9ne/issue/ODE-157/dedupe-concurrent-hydration-of-writings-and-collections-with-in-flight",
-      "commit": "39a17cfff5c4d761b255d96fed91b7f6c045bdf9",
+      "commit": "39a17cf",
       "date": "2026-05-17",
       "notes": "Validation: node v20.19.1, npm run env:check (passed), npm run ops:status:drift (WARN mode, pre-existing ODE-502 only), npm run typecheck (clean), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings), npm test (352 passed, 3 pre-existing failures unrelated). New tests: tests/sync/remote-bootstrap-dedup.test.ts (3 tests) and tests/collections/remote-bootstrap-dedup.test.ts (3 tests) verify 4 concurrent calls produce 1 fetch, errors propagate to all callers, and the in-flight slot is released after settlement. Performance contract: waterfall shape required — unit tests prove 0 duplicate requests; time-to-interactive required — dedup reduces Desk bootstrap by avoiding 2-3 duplicate loads. No editor perf trace required (issue does not touch hot path)."
     }
