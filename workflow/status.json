@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-05-17",
+  "last_updated": "2026-05-18",
   "active_phase": {
     "name": "Fase 3 — Organizar y publicar",
     "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
@@ -29,6 +29,15 @@
     "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
   },
   "built": [
+    {
+      "what": "Fix empty state after closing the last editor tab. Closing the last tab used to leave stale writing content visible in the editor canvas. The hydration effect now clears TipTap content and resets all metadata (title, version, slug, lifecycle, sync status) when currentWritingId becomes null. Added EditorEmptyState component (font-lora italic, single 'New writing' CTA) rendered in place of WritingEditorContent when sessionLoaded && tabs.length === 0. Status bar, word count, and side panels are suppressed in this state. Four regression tests added in tests/editor-tabs.test.ts covering closeTab on the last tab.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-139",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-139/fix-empty-state-after-closing-the-last-editor-tab",
+      "commit": "ad8fcb2",
+      "date": "2026-05-18",
+      "notes": "Validation: node --version (v20.19.1), npm run typecheck (clean), npm run lint (same 6 pre-existing warnings, no new), npm test (360 passed, same 2 pre-existing failures in ai-corrections and publication-review-route). Performance contract: required — no new interaction on the write path; tab-close is a user-initiated destruction event that happens outside the keystroke loop. No performance regression expected. Presentation contract: not required (no cross-mode rich-text rendering contract touched)."
+    },
     {
       "what": "Import .md and .txt files as new writings from Desk. Added ImportWritingDialog with drag-and-drop and file picker, supporting .md via TipTap markdown parsing (preserving headings, paragraphs, lists, blockquotes, code, links, tables) and .txt via double-newline paragraph splitting. Title is derived from H1 for markdown, first meaningful line for text, or sanitized file name as fallback. Each import creates a new LocalWriting with local-only lifecycle, enqueues sync, and navigates to /write/[id]. Unsupported file types produce a clear error without creating partial writings.",
       "phase": "Fase 3 — Organizar y publicar",
