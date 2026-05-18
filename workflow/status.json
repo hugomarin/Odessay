@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Stabilize the blank new-writing lifecycle so a fresh `/write` draft stays explicitly local-first until the first remote sync. Local-only drafts now surface `Saved locally` instead of a false remote `Saved`, the eager identity bootstrap resets editor metadata immediately, and properties/sharing/export controls stay disabled until the writing becomes `server-confirmed`. Added Playwright coverage for reload-before-first-sync and properties/export affordances on blank drafts.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-140",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-140/fix-blank-new-writing-lifecycle-to-avoid-saving-and-writing-not-found",
+      "commit": "2a3046b",
+      "date": "2026-05-18",
+      "notes": "Validation: node --version (v20.19.1), npm run env:check (passed), npm run ops:status:drift (WARN only: pre-existing ODE-502 missing in status.json), npm run typecheck (clean), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test -- tests/editor-save-state.test.ts (4 passed). Performance contract: required — change affects new-writing creation/hydration path without adding extra fetches or reactive fan-out; local-only drafts now expose accurate state immediately and keep remote-only actions gated until first sync. Presentation contract: not required (no cross-mode rich-text rendering contract touched)."
+    },
+    {
       "what": "Fix empty state after closing the last editor tab. Closing the last tab used to leave stale writing content visible in the editor canvas. The hydration effect now clears TipTap content and resets all metadata (title, version, slug, lifecycle, sync status) when currentWritingId becomes null. Added EditorEmptyState component (font-lora italic, single 'New writing' CTA) rendered in place of WritingEditorContent when sessionLoaded && tabs.length === 0. Status bar, word count, and side panels are suppressed in this state. Four regression tests added in tests/editor-tabs.test.ts covering closeTab on the last tab.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-139",
