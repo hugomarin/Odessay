@@ -1,3 +1,8 @@
+---
+name: skill-backend
+description: Arquitectura e implementación backend de Odessay (API routes, lógica server-side, integración con Supabase, AI provider, seguridad). Usar cuando implementes o revises rutas API, server actions, queries a base de datos, autenticación o cualquier integración de servicio externo.
+---
+
 # Skill: Backend
 
 **Consulta este skill antes de cualquier trabajo de API routes, lógica server-side, o integración con servicios.**
