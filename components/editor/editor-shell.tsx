@@ -11,6 +11,7 @@ import {
   type EditorSaveState,
 } from "@/components/editor/save-state"
 import { WritingEditorContent } from "@/components/editor/editor-content"
+import { EditorEmptyState } from "@/components/editor/editor-empty-state"
 import { EditorFindReplace } from "@/components/editor/editor-find-replace"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
@@ -833,13 +834,33 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
-    updateDerivedEditorState(editor)
-
     if (!currentWritingId) {
+      // No tab is open — clear stale content so the editor never shows a previous
+      // writing after the last tab is closed.
+      isApplyingContentRef.current = true
+      editor.commands.setContent(EMPTY_EDITOR_JSON)
+      isApplyingContentRef.current = false
+      updateDerivedEditorState(editor)
       setWritingStatus("draft")
       setWritingVisibility("private")
+      setTitle(UNTITLED_WRITING_TITLE)
+      setHasExplicitTitle(false)
+      setBodyText("")
+      setVersion(0)
+      setCreatedAt(null)
+      setWritingSlug(null)
+      setLifecycle("local-only")
+      setSyncStatus("saved")
+      titleRef.current = UNTITLED_WRITING_TITLE
+      hasExplicitTitleRef.current = false
+      versionRef.current = 0
+      createdAtRef.current = null
+      writingSlugRef.current = null
+      lifecycleRef.current = "local-only"
       return
     }
+
+    updateDerivedEditorState(editor)
 
     if (!hydrationWritingId) {
       return
@@ -3066,68 +3087,74 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
-            {isBodyHydrating ? (
-              <div
-                aria-hidden="true"
-                data-testid="editor-body-skeleton"
-                className="pointer-events-none absolute inset-x-0 top-0 z-10 mx-auto mt-12 max-w-prose animate-pulse space-y-3 px-6"
-              >
-                <div className="h-3 w-3/4 rounded bg-foreground/5" />
-                <div className="h-3 w-11/12 rounded bg-foreground/5" />
-                <div className="h-3 w-2/3 rounded bg-foreground/5" />
-              </div>
-            ) : null}
-            <WritingEditorContent
-              editor={editor}
-              mode={mode}
-              markdownValue={markdownValue}
-              onMarkdownChange={handleMarkdownChange}
-              onMarkdownSelectionChange={(selection) => {
-                markdownSelectionRef.current = selection
-                setMarkdownSelectionState(selection)
-              }}
-              markdownTextareaRef={markdownTextareaRef}
-              markdownOverlayHtml={markdownOverlayHtml}
-              topSlot={
-                !isFocusMode && isFindReplaceOpen ? (
-                  <EditorFindReplace
-                    searchValue={findQuery}
-                    replaceValue={replaceValue}
-                    caseSensitive={findCaseSensitive}
-                    matchCount={matchCount}
-                    activeMatchNumber={matchCount > 0 ? activeMatchIndex + 1 : 0}
-                    onSearchChange={setFindQuery}
-                    onReplaceChange={setReplaceValue}
-                    onToggleCaseSensitive={() => setFindCaseSensitive((currentState) => !currentState)}
-                    onNavigatePrevious={() => navigateFindMatches(-1)}
-                    onNavigateNext={() => navigateFindMatches(1)}
-                    onReplaceOne={handleReplaceCurrentMatch}
-                    onReplaceAll={handleReplaceAllMatches}
-                    onClose={() => closeFindReplacePanel()}
-                    searchInputRef={findInputRef}
-                    replaceInputRef={replaceInputRef}
-                  />
-                ) : null
-              }
-            />
+            {sessionLoaded && editorSession.tabs.length === 0 ? (
+              <EditorEmptyState onNewWriting={handleCreateWorkspaceTab} />
+            ) : (
+              <>
+                {isBodyHydrating ? (
+                  <div
+                    aria-hidden="true"
+                    data-testid="editor-body-skeleton"
+                    className="pointer-events-none absolute inset-x-0 top-0 z-10 mx-auto mt-12 max-w-prose animate-pulse space-y-3 px-6"
+                  >
+                    <div className="h-3 w-3/4 rounded bg-foreground/5" />
+                    <div className="h-3 w-11/12 rounded bg-foreground/5" />
+                    <div className="h-3 w-2/3 rounded bg-foreground/5" />
+                  </div>
+                ) : null}
+                <WritingEditorContent
+                  editor={editor}
+                  mode={mode}
+                  markdownValue={markdownValue}
+                  onMarkdownChange={handleMarkdownChange}
+                  onMarkdownSelectionChange={(selection) => {
+                    markdownSelectionRef.current = selection
+                    setMarkdownSelectionState(selection)
+                  }}
+                  markdownTextareaRef={markdownTextareaRef}
+                  markdownOverlayHtml={markdownOverlayHtml}
+                  topSlot={
+                    !isFocusMode && isFindReplaceOpen ? (
+                      <EditorFindReplace
+                        searchValue={findQuery}
+                        replaceValue={replaceValue}
+                        caseSensitive={findCaseSensitive}
+                        matchCount={matchCount}
+                        activeMatchNumber={matchCount > 0 ? activeMatchIndex + 1 : 0}
+                        onSearchChange={setFindQuery}
+                        onReplaceChange={setReplaceValue}
+                        onToggleCaseSensitive={() => setFindCaseSensitive((currentState) => !currentState)}
+                        onNavigatePrevious={() => navigateFindMatches(-1)}
+                        onNavigateNext={() => navigateFindMatches(1)}
+                        onReplaceOne={handleReplaceCurrentMatch}
+                        onReplaceAll={handleReplaceAllMatches}
+                        onClose={() => closeFindReplacePanel()}
+                        searchInputRef={findInputRef}
+                        replaceInputRef={replaceInputRef}
+                      />
+                    ) : null
+                  }
+                />
 
-            {!isFocusMode ? (
-              <EditorStatusBar
-                mode={mode}
-                metrics={textMetrics}
-                selectionMetrics={selectionMetrics}
-                saveState={syncStatus}
-                isNotesPanelOpen={activePanel === "notes"}
-                onToggleMode={handleToggleMode}
-                onToggleNotesPanel={() => {
-                  setActivePanel((current) => (current === "notes" ? null : "notes"))
-                }}
-              />
-            ) : null}
+                {!isFocusMode ? (
+                  <EditorStatusBar
+                    mode={mode}
+                    metrics={textMetrics}
+                    selectionMetrics={selectionMetrics}
+                    saveState={syncStatus}
+                    isNotesPanelOpen={activePanel === "notes"}
+                    onToggleMode={handleToggleMode}
+                    onToggleNotesPanel={() => {
+                      setActivePanel((current) => (current === "notes" ? null : "notes"))
+                    }}
+                  />
+                ) : null}
+              </>
+            )}
           </div>
         </div>
 
-        {!isFocusMode && activePanel ? (
+        {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
               <NotesPanel
