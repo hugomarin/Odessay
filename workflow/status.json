@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Fix empty state after closing the last editor tab. Closing the last tab used to leave stale writing content visible in the editor canvas. The hydration effect now clears TipTap content and resets all metadata (title, version, slug, lifecycle, sync status) when currentWritingId becomes null. Added EditorEmptyState component (font-lora italic, single 'New writing' CTA) rendered in place of WritingEditorContent when sessionLoaded && tabs.length === 0. Status bar, word count, and side panels are suppressed in this state. Four regression tests added in tests/editor-tabs.test.ts covering closeTab on the last tab.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-139",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-139/fix-empty-state-after-closing-the-last-editor-tab",
+      "commit": "ad8fcb2",
+      "date": "2026-05-18",
+      "notes": "Validation: node --version (v20.19.1), npm run typecheck (clean), npm run lint (same 6 pre-existing warnings, no new), npm test (360 passed, same 2 pre-existing failures in ai-corrections and publication-review-route). Performance contract: required — no new interaction on the write path; tab-close is a user-initiated destruction event that happens outside the keystroke loop. No performance regression expected. Presentation contract: not required (no cross-mode rich-text rendering contract touched)."
+    },
+    {
       "what": "Import .md and .txt files as new writings from Desk. Added ImportWritingDialog with drag-and-drop and file picker, supporting .md via TipTap markdown parsing (preserving headings, paragraphs, lists, blockquotes, code, links, tables) and .txt via double-newline paragraph splitting. Title is derived from H1 for markdown, first meaningful line for text, or sanitized file name as fallback. Each import creates a new LocalWriting with local-only lifecycle, enqueues sync, and navigates to /write/[id]. Unsupported file types produce a clear error without creating partial writings.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-138",
