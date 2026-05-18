@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Lazy-hydrate writing body on demand when entering the editor. After ODE-159 stopped returning bodies in GET /api/writings, the editor needs to fetch the body of the writing it is about to open. Added a `needsBodyHydration` predicate that classifies the local entry (absent, list-only metadata, local-only draft, pending/failed sync, or body present) and made `hydrateLocalWritingFromRemote` claim its in-flight slot synchronously so concurrent entry-path effects share a single GET. The editor-shell hydration effect now triggers on empty bodies as well as missing entries, mounts immediately and surfaces a subtle skeleton inside the document area after 200ms. Hydration failures are logged without blocking navigation.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-160",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-160/lazy-hydrate-writing-body-on-demand-when-entering-editor",
+      "commit": "11e9842f21eb8dca2315ec88c9dff04e79d9cdf6",
+      "date": "2026-05-17",
+      "notes": "Validation: node v20.19.1, npm run env:check (passed for .env.local), npm run ops:status:drift (only pre-existing ODE-502 missing in WARN mode), npm run typecheck (clean), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings in editor-shell.tsx, no new warnings), npm test (349 passed, 3 pre-existing failures in ai-corrections/import-writing/publication-review-route unrelated to this change). New test file tests/editor/lazy-body-hydration.test.tsx adds 13 tests covering the four entry paths (URL directa, Desk row click, tab switch, correspondence) plus dedup (same writingId shares one GET, different writingIds run independently, in-flight slot is released on failure to allow retry). Performance contract: time-to-interactive required — hydration is gated behind a 200ms skeleton so the shell renders immediately; payload, waterfall, fan-out and interaction-latency declared not required (body-per-writing within budget, single extra GET inside bootstrap envelope, no subscriber added, editor hot path untouched). Snapshot navegacional evidence is part of the PR description."
+    },
+    {
       "what": "Debounce reactive subscribers to localDB changes in Desk and Collections. Added `lib/utils/debounce.ts` with leading/trailing support. Wrapped `subscribeToLocalDBChanges` callbacks in DeskPage and CollectionsView with 100ms trailing debounce to coalesce bulk write bursts into a single refetch. Test demonstrates 30 rapid localDB changes produce exactly 1 fetch call to `/api/writings/shares?ids=...`.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-158",
