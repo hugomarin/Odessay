@@ -405,6 +405,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
             nextWriting.sync_status,
+            nextWriting.lifecycle,
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
@@ -791,7 +792,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
       openWritingTab({
         writingId: nextId,
         title: nextTitle,
-        saveState: "saved",
+        saveState: "saved-local",
         hasPendingSync: false,
         replaceDraft: true,
       })
@@ -799,8 +800,24 @@ export function EditorShell({ writingId }: EditorShellProps) {
       currentWritingIdRef.current = nextId
       setCurrentWritingId(nextId)
       setHydrationWritingId(null)
+      setTitle(nextTitle)
+      setHasExplicitTitle(false)
+      setBodyText("")
+      setVersion(0)
       createdAtRef.current = nowIso
       setCreatedAt(nowIso)
+      setWritingSlug(null)
+      setWritingStatus("draft")
+      setWritingVisibility("private")
+      setLifecycle("local-only")
+      setSyncStatus("saved-local")
+      titleRef.current = nextTitle
+      hasExplicitTitleRef.current = false
+      versionRef.current = 0
+      writingSlugRef.current = null
+      statusRef.current = "draft"
+      visibilityRef.current = "private"
+      lifecycleRef.current = "local-only"
       navigatedToDraftRef.current = true
       if (isPerfHarness()) {
         window.history.replaceState(null, "", `/write/${nextId}`)
@@ -930,6 +947,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
             localWriting.sync_status,
+            localWriting.lifecycle ?? "local-only",
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
@@ -3197,6 +3215,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             ) : activePanel === "properties" ? (
               <PropertiesPanel
                 writingId={currentWritingId}
+                lifecycle={lifecycle}
                 status={writingStatus}
                 visibility={writingVisibility}
                 metrics={textMetrics}

@@ -11,10 +11,11 @@ describe("editor save state transitions", () => {
   })
 
   it("maps local writing sync status considering connectivity", () => {
-    expect(mapLocalSyncStatusToSaveState("synced", true)).toBe("saved")
-    expect(mapLocalSyncStatusToSaveState("pending", true)).toBe("saving")
-    expect(mapLocalSyncStatusToSaveState("failed", true)).toBe("saving")
-    expect(mapLocalSyncStatusToSaveState("deleted", true)).toBe("saving")
-    expect(mapLocalSyncStatusToSaveState("pending", false)).toBe("saved-local")
+    expect(mapLocalSyncStatusToSaveState("synced", "server-confirmed", true)).toBe("saved")
+    expect(mapLocalSyncStatusToSaveState("synced", "local-only", true)).toBe("saved-local")
+    expect(mapLocalSyncStatusToSaveState("pending", "local-only", true)).toBe("saving")
+    expect(mapLocalSyncStatusToSaveState("failed", "server-confirmed", true)).toBe("saving")
+    expect(mapLocalSyncStatusToSaveState("deleted", "server-confirmed", true)).toBe("saving")
+    expect(mapLocalSyncStatusToSaveState("pending", "local-only", false)).toBe("saved-local")
   })
 })
