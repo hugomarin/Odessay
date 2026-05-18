@@ -70,61 +70,74 @@ const toLocalCollection = (remote: RemoteCollectionRecord): LocalCollection => {
   };
 };
 
-export const hydrateLocalCollectionsFromRemote = async () => {
-  const response = await fetch("/api/collections", {
-    method: "GET",
-    cache: "no-store",
+let inFlightCollectionsHydration: Promise<RemoteCollectionsBootstrap> | null = null;
+
+export const hydrateLocalCollectionsFromRemote = (): Promise<RemoteCollectionsBootstrap> => {
+  if (inFlightCollectionsHydration) {
+    return inFlightCollectionsHydration;
+  }
+
+  const promise = (async () => {
+    const response = await fetch("/api/collections", {
+      method: "GET",
+      cache: "no-store",
+    });
+    const payload = await parseEnvelope<RemoteCollectionsBootstrap>(response);
+
+    for (const collection of payload.collections) {
+      const localCollection = await localDB.collections.get(collection.id);
+      const hasPendingMutation = await localDB.syncQueue.getCurrentForEntity(
+        "collection",
+        collection.id,
+      );
+
+      if (
+        localCollection &&
+        (localCollection.sync_status === "pending" ||
+          localCollection.sync_status === "failed" ||
+          hasPendingMutation ||
+          localCollection.local_updated_at > parseTimestamp(collection.updated_at))
+      ) {
+        continue;
+      }
+
+      await localDB.collections.save(toLocalCollection(collection));
+    }
+
+    const writingIds = Array.from(
+      new Set(payload.writingCollections.map((assignment) => assignment.writing_id)),
+    );
+    const assignmentsByWriting = new Map<string, string[]>();
+
+    for (const writingId of writingIds) {
+      assignmentsByWriting.set(writingId, []);
+    }
+
+    for (const assignment of payload.writingCollections) {
+      assignmentsByWriting.get(assignment.writing_id)?.push(assignment.collection_id);
+    }
+
+    for (const writingId of writingIds) {
+      const pendingMutation = await localDB.syncQueue.getCurrentForEntity(
+        "writing-collections",
+        writingId,
+      );
+
+      if (pendingMutation) {
+        continue;
+      }
+
+      await localDB.writingCollections.replaceForWriting(
+        writingId,
+        assignmentsByWriting.get(writingId) ?? [],
+      );
+    }
+
+    return payload;
+  })().finally(() => {
+    inFlightCollectionsHydration = null;
   });
-  const payload = await parseEnvelope<RemoteCollectionsBootstrap>(response);
 
-  for (const collection of payload.collections) {
-    const localCollection = await localDB.collections.get(collection.id);
-    const hasPendingMutation = await localDB.syncQueue.getCurrentForEntity(
-      "collection",
-      collection.id,
-    );
-
-    if (
-      localCollection &&
-      (localCollection.sync_status === "pending" ||
-        localCollection.sync_status === "failed" ||
-        hasPendingMutation ||
-        localCollection.local_updated_at > parseTimestamp(collection.updated_at))
-    ) {
-      continue;
-    }
-
-    await localDB.collections.save(toLocalCollection(collection));
-  }
-
-  const writingIds = Array.from(
-    new Set(payload.writingCollections.map((assignment) => assignment.writing_id)),
-  );
-  const assignmentsByWriting = new Map<string, string[]>();
-
-  for (const writingId of writingIds) {
-    assignmentsByWriting.set(writingId, []);
-  }
-
-  for (const assignment of payload.writingCollections) {
-    assignmentsByWriting.get(assignment.writing_id)?.push(assignment.collection_id);
-  }
-
-  for (const writingId of writingIds) {
-    const pendingMutation = await localDB.syncQueue.getCurrentForEntity(
-      "writing-collections",
-      writingId,
-    );
-
-    if (pendingMutation) {
-      continue;
-    }
-
-    await localDB.writingCollections.replaceForWriting(
-      writingId,
-      assignmentsByWriting.get(writingId) ?? [],
-    );
-  }
-
-  return payload;
+  inFlightCollectionsHydration = promise;
+  return promise;
 };

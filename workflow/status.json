@@ -1216,6 +1216,15 @@
       "commit": "d56cdce",
       "date": "2026-05-14",
       "notes": "Corrections now use the locked conservative mechanical prompt with canonical blockId/language/corrections/uncertain shape, explicit legacy adapter, low-temperature retry-on-parse-failure flow, session rejection memory, NDJSON streaming to the publication panel, stale source/block-hash guards, and tests for prompt scope, language detection, contract shape, technical terms, adapter behavior, and memory filtering."
+    },
+    {
+      "what": "Dedupe concurrent hydration of writings and collections with in-flight singleton. Added module-level in-flight promises to hydrateLocalWritingsFromRemote and hydrateLocalCollectionsFromRemote so N concurrent callers share one fetch and all receive the same result or error. Promise is released on settlement so subsequent calls trigger fresh fetches.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-157",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-157/dedupe-concurrent-hydration-of-writings-and-collections-with-in-flight",
+      "commit": "39a17cf",
+      "date": "2026-05-17",
+      "notes": "Validation: node v20.19.1, npm run env:check (passed), npm run ops:status:drift (WARN mode, pre-existing ODE-502 only), npm run typecheck (clean), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings), npm test (352 passed, 3 pre-existing failures unrelated). New tests: tests/sync/remote-bootstrap-dedup.test.ts (3 tests) and tests/collections/remote-bootstrap-dedup.test.ts (3 tests) verify 4 concurrent calls produce 1 fetch, errors propagate to all callers, and the in-flight slot is released after settlement. Performance contract: waterfall shape required — unit tests prove 0 duplicate requests; time-to-interactive required — dedup reduces Desk bootstrap by avoiding 2-3 duplicate loads. No editor perf trace required (issue does not touch hot path)."
     }
   ]
 }
