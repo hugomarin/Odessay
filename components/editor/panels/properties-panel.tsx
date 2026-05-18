@@ -13,7 +13,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
-import type { WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import type { WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { cn } from "@/lib/utils"
 import { getWritingStatusLabel } from "@/lib/writings/status"
 import { WritingCollectionsSection } from "./writing-collections-section"
@@ -21,6 +21,7 @@ import { WritingSharesSection } from "./writing-shares-section"
 
 type PropertiesPanelProps = {
   writingId: string | null
+  lifecycle: WritingLifecycle
   status: WritingStatus
   visibility: WritingVisibility
   metrics: TextMetrics
@@ -226,6 +227,7 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 
 export function PropertiesPanel({
   writingId,
+  lifecycle,
   status,
   visibility,
   metrics,
@@ -251,8 +253,13 @@ export function PropertiesPanel({
   const [statusOpen, setStatusOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
 
-  const shareApiPath = writingId ? `/api/writings/${writingId}/share-test-link` : null
+  const hasRemoteWriting = Boolean(writingId) && lifecycle === "server-confirmed"
+  const shareApiPath = hasRemoteWriting ? `/api/writings/${writingId}/share-test-link` : null
   const spellcheckEnabled = spellcheckPreference !== "off"
+  const remoteFeatureMessage =
+    lifecycle === "syncing"
+      ? "Sharing, collections, PDF, and Word unlock once sync finishes."
+      : "Sharing, collections, PDF, and Word become available after the first sync."
 
   const loadShareLink = useCallback(async () => {
     if (!shareApiPath) {
@@ -449,12 +456,12 @@ export function PropertiesPanel({
           </Popover>
         </section>
 
-        {writingId ? <WritingCollectionsSection writingId={writingId} /> : null}
+        {hasRemoteWriting && writingId ? <WritingCollectionsSection writingId={writingId} /> : null}
 
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Sharing</p>
           <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
-            {writingId ? (
+            {hasRemoteWriting && writingId ? (
               <WritingSharesSection
                 writingId={writingId}
                 onSharesStateChange={handleSharesStateChange}
@@ -469,11 +476,17 @@ export function PropertiesPanel({
                 </p>
               </div>
 
+              {!hasRemoteWriting ? (
+                <p className="mb-2 rounded-[6px] border-[0.5px] border-dashed border-[hsl(22_28%_78%)] bg-[hsl(22_40%_97%)] px-[10px] py-2 text-[11px] leading-[1.45] text-ink-4">
+                  {remoteFeatureMessage}
+                </p>
+              ) : null}
+
               {!shareLink.active || !shareLink.link ? (
                 <button
                   type="button"
                   onClick={handleGenerateShareLink}
-                  disabled={!writingId || isLoadingShareLink || isSavingShareLink}
+                  disabled={!hasRemoteWriting || isLoadingShareLink || isSavingShareLink}
                   className="flex h-8 w-full items-center justify-center rounded-[6px] border-[0.5px] border-ink bg-ink px-[10px] text-[11px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Generate link
@@ -545,13 +558,13 @@ export function PropertiesPanel({
                 label={isExportingPdf ? "Exporting PDF..." : "PDF (.pdf)"}
                 icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
                 onSelect={() => void handleExport("pdf")}
-                disabled={!writingId || isExportingPdf}
+                disabled={!hasRemoteWriting || isExportingPdf}
               />
               <PopoverItem
                 label={isExportingDocx ? "Exporting Word..." : "Word (.docx)"}
                 icon={<FileType className="h-[13px] w-[13px]" strokeWidth={1.5} />}
                 onSelect={() => void handleExport("docx")}
-                disabled={!writingId || isExportingDocx}
+                disabled={!hasRemoteWriting || isExportingDocx}
               />
               <div className="my-1 h-px bg-border" />
               <p className="px-[10px] pb-1 pt-1.5 text-[10px] leading-[1.4] text-ink-4">
