@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Add minimal observability to the AI corrections flow. Introduced `lib/observability/corrections-log.ts` with a dev-only `logCorrectionEvent` hook covering queue enqueue/flush, request start/end, placeholder cache hit/miss decisions, and stale suggestion keep/drop events. `editor-shell.tsx` now emits these events along the existing automatic correction queue without changing the production path. `app/api/ai/publication-review/route.ts` now captures provider token usage when available and writes a structured `console.info({ batchId, blockCount, model, latencyMs, promptTokens, completionTokens })` line on successful correction requests. Tests updated to match the current prompt and structured-output contract.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-161",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-161/add-minimal-observability-to-ai-corrections-flow",
+      "commit": "3be7d74",
+      "date": "2026-05-18",
+      "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (WARN only: pre-existing ODE-502 missing in status.json), npm run typecheck (clean), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test (67 files, 362 tests passing). Performance contract: not required — dev-only console.debug in frontend and structured server logging only, no production-path requests or reactive fan-out added. Presentation contract: not required — no cross-surface rendering contract touched. Manual DevTools/server-log evidence still pending for PR body capture."
+    },
+    {
       "what": "Stabilize the blank new-writing lifecycle so a fresh `/write` draft stays explicitly local-first until the first remote sync. Local-only drafts now surface `Saved locally` instead of a false remote `Saved`, the eager identity bootstrap resets editor metadata immediately, and properties/sharing/export controls stay disabled until the writing becomes `server-confirmed`. Added Playwright coverage for reload-before-first-sync and properties/export affordances on blank drafts.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-140",
