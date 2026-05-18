@@ -71,7 +71,7 @@ describe("POST /api/ai/publication-review", () => {
         json_schema: {
           name: "MechanicalCorrectionsResponse",
           schema: {
-            required: ["summary", "language", "corrections", "uncertain"],
+            required: ["language", "corrections"],
           },
         },
       })

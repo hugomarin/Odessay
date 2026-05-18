@@ -42,6 +42,11 @@ const requestSchema = z.object({
 const CORRECTIONS_MAX_TOKENS = 4096;
 const BLOCK_CORRECTIONS_MAX_TOKENS = 768;
 
+type CorrectionsUsage = {
+  promptTokens: number | null;
+  completionTokens: number | null;
+};
+
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json(
     {
@@ -166,7 +171,7 @@ async function callCorrectionsModel({
   structuredOutput?: boolean;
   mode: "document" | "block";
   _retries?: number;
-}) {
+}): Promise<{ text: string; usage: CorrectionsUsage }> {
   const requestBody = {
     model: config.model,
     max_tokens: getCorrectionsMaxTokens(config, mode),
@@ -218,6 +223,10 @@ async function callCorrectionsModel({
 
   const payload = await response.json() as {
     choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+    };
   };
 
   const text = payload.choices?.[0]?.message?.content ?? "";
@@ -229,7 +238,13 @@ async function callCorrectionsModel({
     throw new Error("AI returned an empty response.");
   }
 
-  return text;
+  return {
+    text,
+    usage: {
+      promptTokens: payload.usage?.prompt_tokens ?? null,
+      completionTokens: payload.usage?.completion_tokens ?? null,
+    },
+  };
 }
 
 async function callCorrectionsModelStreaming({
@@ -278,9 +293,15 @@ async function callCorrectionsModelStreaming({
 
     if (response.status === 400 || response.status === 422) {
       console.info("[corrections] streaming structured output rejected; falling back to non-stream strict JSON");
-      const text = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false, mode });
-      onText(text);
-      return text;
+      const fallbackResponse = await callCorrectionsModel({
+        config,
+        promptText,
+        strictJson: true,
+        structuredOutput: false,
+        mode,
+      });
+      onText(fallbackResponse.text);
+      return fallbackResponse.text;
     }
 
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
@@ -352,9 +373,15 @@ async function callCorrectionsModelStreaming({
 
   if (!fullText.trim()) {
     console.info("[corrections] provider stream ended without content; falling back to non-stream strict JSON");
-    const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true, mode });
-    onText(fallbackText);
-    return fallbackText;
+    const fallbackResponse = await callCorrectionsModel({
+      config,
+      promptText,
+      strictJson: true,
+      structuredOutput: true,
+      mode,
+    });
+    onText(fallbackResponse.text);
+    return fallbackResponse.text;
   }
 
   return fullText;
@@ -379,12 +406,12 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
   );
 
-  const firstText = await callCorrectionsModel({ config, promptText, strictJson: false, mode });
+  const firstResponse = await callCorrectionsModel({ config, promptText, strictJson: false, mode });
   const t1 = Date.now();
   console.info(`[corrections] first response latencyMs=${t1 - t0}`);
 
   try {
-    const parsedJson = parseModelJson(firstText);
+    const parsedJson = parseModelJson(firstResponse.text);
     const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage);
     const t2 = Date.now();
     console.info(`[corrections] first parse ok totalLatencyMs=${t2 - t0}`);
@@ -392,17 +419,18 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
       model: config.model,
       blocks,
       canonical: applyMemory(canonical, requestBody.correctionMemory),
+      usage: firstResponse.usage,
     };
   } catch {
-    const firstJsonText = extractJsonPayload(firstText);
+    const firstJsonText = extractJsonPayload(firstResponse.text);
     console.info(`[corrections] first parse failed. textLength=${firstJsonText.length}`);
     console.info("[corrections] retrying with strict JSON mode");
 
-    const retryText = await callCorrectionsModel({ config, promptText, strictJson: true, mode });
-    const retryJsonText = extractJsonPayload(retryText);
+    const retryResponse = await callCorrectionsModel({ config, promptText, strictJson: true, mode });
+    const retryJsonText = extractJsonPayload(retryResponse.text);
 
     try {
-      const parsedJson = parseModelJson(retryText);
+      const parsedJson = parseModelJson(retryResponse.text);
       const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage);
       const t2 = Date.now();
       console.info(`[corrections] retry parse ok totalLatencyMs=${t2 - t0}`);
@@ -410,6 +438,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
         model: config.model,
         blocks,
         canonical: applyMemory(canonical, requestBody.correctionMemory),
+        usage: retryResponse.usage,
       };
     } catch (retryErr) {
       console.info(`[corrections] retry parse failed. textLength=${retryJsonText.length}`);
@@ -501,6 +530,29 @@ const suggestionEventKey = (event: ReturnType<typeof createSuggestionEvents>[num
 const uncertainEventKey = (event: ReturnType<typeof createUncertainEvents>[number]) =>
   [event.item.target_text ?? "", event.item.detail].join("|");
 
+const logRequestMetrics = ({
+  batchId,
+  blockCount,
+  model,
+  latencyMs,
+  usage,
+}: {
+  batchId: string;
+  blockCount: number;
+  model: string;
+  latencyMs: number;
+  usage?: CorrectionsUsage;
+}) => {
+  console.info({
+    batchId,
+    blockCount,
+    model,
+    latencyMs,
+    promptTokens: usage?.promptTokens ?? null,
+    completionTokens: usage?.completionTokens ?? null,
+  });
+};
+
 const streamCorrectionsFromModel = ({
   requestBody,
 }: {
@@ -518,6 +570,7 @@ const streamCorrectionsFromModel = ({
         const t0 = Date.now();
         const config = getAIProviderConfig();
         const { sourceText, blocks, mode } = resolveCorrectionSource(requestBody);
+        const batchId = requestBody.correctionBlock?.id ?? requestBody.sourceHash;
         const fallbackLanguage = detectCorrectionLanguage(sourceText);
         const promptText = buildMechanicalCorrectionsPrompt(blocks);
         const emittedCorrections = new Set<string>();
@@ -597,9 +650,15 @@ const streamCorrectionsFromModel = ({
             }`,
           );
           try {
-            const fallbackText = await callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: true, mode });
-            emitPartial(fallbackText);
-            parsedJson = parseModelJson(fallbackText);
+            const fallbackResponse = await callCorrectionsModel({
+              config,
+              promptText,
+              strictJson: true,
+              structuredOutput: true,
+              mode,
+            });
+            emitPartial(fallbackResponse.text);
+            parsedJson = parseModelJson(fallbackResponse.text);
           } catch (fallbackParseErr) {
             console.info(
               `[corrections] fallback JSON parse failed. error=${
@@ -650,6 +709,12 @@ const streamCorrectionsFromModel = ({
         enqueue({
           type: "done",
           data: payload,
+        });
+        logRequestMetrics({
+          batchId,
+          blockCount: blocks.length,
+          model: config.model,
+          latencyMs: Date.now() - t0,
         });
         console.info(`[corrections] stream success totalLatencyMs=${Date.now() - t0}`);
       } catch (error) {
@@ -711,6 +776,13 @@ export async function POST(request: Request) {
 
     const result = await requestCorrections(parsedRequest.data);
     const tEnd = Date.now();
+    logRequestMetrics({
+      batchId: parsedRequest.data.correctionBlock?.id ?? parsedRequest.data.sourceHash,
+      blockCount: result.blocks.length,
+      model: result.model,
+      latencyMs: tEnd - tStart,
+      usage: result.usage,
+    });
     console.info(`[corrections] success totalRouteMs=${tEnd - tStart}`);
 
     return NextResponse.json(

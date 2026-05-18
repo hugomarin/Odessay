@@ -19,9 +19,9 @@ describe("AI corrections", () => {
     ]);
 
     expect(prompt).toContain("conservative mechanical correction engine");
-    expect(prompt).toContain("This is NOT a style-improvement task.");
-    expect(prompt).toContain("Do not limit the number of corrections.");
-    expect(prompt).toContain("Known terms to preserve unless clearly misspelled");
+    expect(prompt).toContain("Do NOT rewrite, polish, translate, or change the author's voice.");
+    expect(prompt).toContain("Only include high-confidence corrections.");
+    expect(prompt).toContain("Known terms to preserve:");
     expect(prompt).toContain("[block-1]");
     expect(prompt).not.toContain("Max 3");
   });
