@@ -8,6 +8,14 @@
 
 El backend de Odessay es invisible para el usuario. Debe ser rápido, seguro y silencioso. El usuario nunca debería notar que existe.
 
+**Rápido tiene cinco dimensiones, no una.** Ver el contrato fundacional en `workflow/context/core/odessay-stack.md §Velocidad multidimensional`. El backend es responsable directo de tres de ellas:
+
+- **Peso transferido** — cada endpoint devuelve la forma exacta del dato que el cliente va a usar, no la fila completa "por si acaso".
+- **Forma del waterfall** — cada endpoint cabe en un único viaje; rutas de bootstrap permiten que el cliente cargue una vista en ≤ 6 fetches.
+- **Tiempo a interactivo** — endpoints de bootstrap responden en ≤ 200 ms p95; nada de auth + dos joins + paginación implícita en la misma llamada.
+
+Las otras dos dimensiones (latencia de interacción y fan-out reactivo) viven en el frontend, pero el backend las habilita o las rompe con el diseño de sus respuestas.
+
 ## Contexto documental obligatorio por tipo de trabajo
 
 Antes de implementar, cargar docs según scope:
@@ -44,6 +52,35 @@ Toda API route devuelve el mismo envelope. Sin excepciones.
 ```
 
 El campo `message` es para logging — nunca se muestra directamente al usuario. El cliente lee `error.code` para decidir qué mensaje amable mostrar.
+
+### Peso de respuesta — list vs detail
+
+Cada endpoint declara y respeta una clase de respuesta. La clase decide qué campos viajan y qué presupuesto aplica.
+
+| Clase | Qué afirma | Presupuesto | Qué NO devuelve |
+|---|---|---|---|
+| **List** (`GET /api/{recurso}`) | Devuelve resumen suficiente para listar/filtrar/ordenar. | ≤ 50 kB ungzip total. | Columnas grandes: `body_json`, `body_text`, blobs, payloads anidados. |
+| **Detail** (`GET /api/{recurso}/:id`) | Devuelve el recurso completo. | Documentar p95 esperado en la cabecera del archivo de la route. | — |
+| **Summary opcional** (`?include=body`) | Permite a un cliente específico pedir más, sin penalizar al caso general. | Opt-in explícito por query param. | — |
+
+**Afirmación positiva.** Un endpoint de lista es un índice, no un dump. Si una vista necesita el body de N writings al mismo tiempo, ese es síntoma de que la vista está mal modelada, no de que el endpoint deba devolver bodies.
+
+```ts
+// ✓ Correcto — list endpoint devuelve solo lo que el listado necesita
+type WritingListItem = Pick<
+  Writing,
+  "id" | "title" | "slug" | "status" | "visibility"
+    | "parent_id" | "correspondence_id" | "version"
+    | "deleted_at" | "created_at" | "updated_at"
+>
+// El cliente que necesite el body de un writing concreto llama GET /api/writings/:id
+
+// ✗ Incorrecto — list endpoint devuelve el documento entero
+const { data } = await supabase.from("writings").select("*").eq("author_id", user.id)
+// 50 writings × ~70 kB cada uno = 3.5 MB en un solo GET. Se carga 3-4 veces en bootstrap.
+```
+
+**Cómo decidir la clase al crear un endpoint nuevo.** En el comentario de cabecera de la route, escribir una línea: `// class: list | detail | summary(opt-in)`. Si la respuesta excede el presupuesto de su clase, se documenta el motivo o se cambia de clase. No hay clase "lista que también incluye el body".
 
 ### Códigos HTTP
 
@@ -298,6 +335,9 @@ Este checklist cubre lo específico de backend durante la implementación. Antes
 - [ ] ¿No hay API keys expuestas al cliente?
 - [ ] ¿RLS cubre el acceso a datos?
 - [ ] ¿Errores manejados con mensajes amables?
+- [ ] ¿Cada endpoint nuevo declara su clase de respuesta (list / detail / summary opt-in) en la cabecera?
+- [ ] Si es `list`, ¿la respuesta queda ≤ 50 kB ungzip y no incluye `body_json` / `body_text` / blobs?
+- [ ] Si la vista que consume este endpoint puede pedirlo varias veces durante bootstrap, ¿hay paginación / dedup / cache que evite repetir el viaje?
 - [ ] ¿Cada endpoint AI respeta su contrato por scope (AI editor residente vs AI writing assist)?
 - [ ] Si el issue toca rutas AI: ¿se leyó la documentación del proveedor para el modo de salida usado?
 - [ ] ¿`max_tokens` cubre el peor caso de output (mínimo 4096 para correcciones estructuradas)?

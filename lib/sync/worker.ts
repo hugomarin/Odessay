@@ -282,7 +282,8 @@ class SyncWorker {
           );
 
           if (remoteWriting) {
-            await this.localDb.writings.save(mapRemoteWritingToLocal(remoteWriting));
+            const localWriting = await this.localDb.writings.get(remoteWriting.id);
+            await this.localDb.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting));
           }
         }
       } else if (mutation.entity_kind === "collection") {

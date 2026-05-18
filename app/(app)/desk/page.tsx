@@ -27,6 +27,7 @@ import {
   subscribeToLocalDBChanges,
   subscribeToLocalDBScopeChanges,
 } from "@/lib/local-db"
+import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import {
   buildDeskActivitySummary,
@@ -311,12 +312,22 @@ export default function DeskPage() {
   }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {
-    return subscribeToLocalDBChanges(() => {
-      if (activeView === "mine") {
-        void loadDeskActivity()
-        void loadRecipientPreviewsAsync()
-      }
-    })
+    const debounced = debounce(
+      () => {
+        if (activeView === "mine") {
+          void loadDeskActivity()
+          void loadRecipientPreviewsAsync()
+        }
+      },
+      100,
+      { leading: false, trailing: true },
+    )
+
+    const unsubscribe = subscribeToLocalDBChanges(debounced)
+    return () => {
+      unsubscribe()
+      debounced.cancel()
+    }
   }, [activeView, loadDeskActivity, loadRecipientPreviewsAsync])
 
   useEffect(() => {

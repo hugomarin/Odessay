@@ -61,13 +61,7 @@ export const parseMarkdownFile = async (file: File): Promise<ImportResult> => {
 
   const markdown = await file.text()
 
-  const { body_json, body_text } = await new Promise<ReturnType<typeof parseMarkdownWithEditor>>(
-    (resolve) => {
-      setTimeout(() => {
-        resolve(parseMarkdownWithEditor(markdown))
-      }, 0)
-    },
-  )
+  const { body_json, body_text } = parseMarkdownWithEditor(markdown)
 
   const title = extractTitleFromMarkdown(markdown, file.name)
 

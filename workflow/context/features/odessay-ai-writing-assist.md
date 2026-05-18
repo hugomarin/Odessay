@@ -3,6 +3,8 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-editor.md`, `workflow/context/features/odessay-sync.md`, `workflow/context/core/odessay-modelo-datos.md` y `workflow/context/core/odessay-stack.md` antes de implementar.
 
+Última actualización: 2026-05-17.
+
 ---
 
 ## Propósito
@@ -31,6 +33,104 @@ No reemplaza `odessay-ai-editor.md` (editor residente de observaciones). Esta sp
 
 ---
 
+## Principios de construcción
+
+### 1. Persistir para no reprocesar
+
+El trabajo del modelo es caro y lento. Una vez que un bloque fue analizado y su hash no cambió, no debe volver a pasar por la API.
+
+- Las correcciones de cada bloque se almacenan localmente (IndexedDB) indexadas por `(writingId, blockId, blockHash)`.
+- Al cargar un writing, el sistema restaura sugerencias de bloques cuyo hash coincida sin llamar al modelo.
+- Solo los bloques modificados (hash divergente) o nuevos se encolan para corrección.
+- Esto elimina el reprocesamiento completo al recargar la página o cambiar de pestaña.
+
+### 2. Velocidad mediante paralelismo y batching
+
+Un documento de 400 palabras distribuido en ~12 párrafos no debe generar 12 llamadas API secuenciales.
+
+- Los bloques se agrupan en lotes (batch) de hasta N unidades por llamada API.
+- El batching reduce overhead de HTTP, serialización y espera de respuesta.
+- El frontend agrupa bloques dirty adyacentes; el backend recibe un array de `correctionBlocks` y genera un prompt con múltiples bloques etiquetados.
+- El presupuesto de tokens escala proporcionalmente al tamaño del batch: `768 × N` con tope razonable.
+
+### 3. Separar "qué analizar" de "cuándo analizarlo"
+
+El trigger de activación no debe depender de la longitud del texto.
+
+- **Qué:** todo bloque con texto válido (`paragraph`, `heading`, `listItem`, `taskItem`, excluyendo `codeBlock`) es candidato a corrección.
+- **Cuándo:** se controla por debounce de inactividad (2s para escritura normal, 5s para paste masivo).
+- No hay umbral mínimo de palabras. Un párrafo de 3 palabras con un typo mecánico se corrige igual que uno de 30.
+
+### 4. Smart invalidation
+
+Las sugerencias no se destruyen preventivamente.
+
+- Cuando un bloque se edita, el sistema compara el hash nuevo vs el hash de la sugerencia pendiente.
+- Si el texto editado todavía contiene `originalText` de la sugerencia, esta se mantiene visible como "pendiente" hasta que llegue la nueva respuesta del modelo.
+- Solo se invalidan sugerencias cuyo `originalText` ya no existe en el bloque.
+- Esto evita el parpadeo de decoraciones mientras el usuario escribe.
+
+### 5. Observabilidad integrada
+
+Cada corrección lleva métricas para poder optimizar costos y detectar degradación.
+
+- Tokens de prompt y de completion se leen de la respuesta del modelo y se almacenan junto con el bloque.
+- Latencia (tiempo desde request hasta respuesta válida) se registra por bloque.
+- Estas métricas permiten: ajustar presupuestos de tokens, detectar si un proveedor se volvió lento, y estimar costos por usuario/documento.
+
+---
+
+## Arquitectura actual (contexto)
+
+### Sistema puro `block`
+
+El endpoint `/api/ai/publication-review` tiene dos ramas en `resolveCorrectionSource()`:
+
+| Modo | Cómo se activa | Estado |
+|------|----------------|--------|
+| `block` | Frontend envía `correctionBlock: {id, text, hash}` | **Activo — único modo usado** |
+| `document` | Frontend NO envía `correctionBlock` | **Legacy sin consumidor** |
+
+El `PublicationPanel` (modo `document`) fue reemplazado por `OrthographyPanel` en ODE-156. El botón del topbar ahora dice "Ortografía" y abre el panel de correcciones automáticas.
+
+**Decisión:** no expandir el modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el modo `block` existente.
+
+### Flujo de corrección automática
+
+```
+[Usuario escribe] → [ProseMirror plugin detecta dirty blocks] → [Debounce 2s]
+→ [Enviar bloque(s) a /api/ai/publication-review] → [Modelo responde]
+→ [Decoraciones inline + panel Ortografía] → [Usuario acepta/rechaza]
+```
+
+**Componentes activos:**
+- `correction-trigger-plugin.ts` — detecta nodos modificados en transacciones ProseMirror.
+- `publication-suggestion-extension.ts` — pinta decoraciones inline y burbujas de acción.
+- `OrthographyPanel` — lista de sugerencias pendientes (solo lectura de estado).
+- `editor-shell.tsx` — orquesta el flujo completo: recibe dirty blocks, maneja debounce, encola requests, aplica sugerencias.
+
+### Mapeo frontend ↔ backend
+
+El backend no conoce ProseMirror. El contrato usa `blockId` como string opaco:
+
+```ts
+// Frontend envía
+correctionBlock: {
+  id: "correction-block:${hash}:${pos}",  // opaco para el backend
+  text: "...",
+  hash: "blk-..."
+}
+
+// Backend responde
+corrections: [
+  { blockId: "correction-block:${hash}:${pos}", originalText: "...", replacementText: "..." }
+]
+```
+
+El frontend usa `block_id` + `source_hash` para invalidar sugerencias cuando el texto cambia y para calcular el rango de la decoración inline.
+
+---
+
 ## Contrato de proveedor/modelo (obligatorio)
 
 - Nunca hardcodear IDs de modelo en rutas de negocio.
@@ -46,21 +146,20 @@ Política:
 - Cambios de modelo son operativos (env), no cambios de código.
 - Los docs y briefs deben tratar el modelo como variable temporal, no como constante funcional.
 
-### Presupuesto de tokens — regla crítica
+### Presupuesto de tokens
 
-**El output del modelo no es el texto completo del bloque — son solo los fragmentos a corregir.** Un párrafo de 500 palabras con 10 errores devuelve ~10 palabras de `originalText` y ~10 de `replacementText`. El costo real de output no escala con el tamaño del texto; escala con la densidad de correcciones.
+**El output del modelo no es el texto completo del bloque — son solo los fragmentos a corregir.** El costo de output escala con la densidad de errores, no con la longitud del texto.
 
-**Lo que sí domina el costo: la estructura JSON.** Cada corrección tiene 7 campos (`blockId`, `type`, `severity`, `confidence`, `originalText`, `replacementText`, `reason`). Los nombres de campo solos suman ~35 tokens de overhead por corrección, antes de contar el contenido. El campo `reason` es el más variable — el modelo tiende a escribir frases largas si no se le acota. El prompt debe instruir reasons de 1-5 palabras.
+**El overhead de estructura JSON domina.** Cada corrección lleva campos (`blockId`, `type`, `originalText`, `replacementText`). El schema simplificado en ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el array `uncertain`, reduciendo el overhead por corrección.
 
-Cálculo de referencia para llamadas por bloque (ODE-155 y posteriores):
-- 5 correcciones × ~50 tokens/corrección (estructura + contenido + reason corto) = ~250 tokens
-- 10 correcciones = ~500 tokens
-- 15 correcciones (bloque muy denso) = ~750 tokens
-- **Budget recomendado por bloque: 768 tokens.** Cubre hasta ~15 correcciones con reasons acotados.
+Cálculo de referencia para llamadas por bloque (post-ODE-502):
+- 5 correcciones × ~40 tokens = ~200 tokens
+- 10 correcciones = ~400 tokens
+- 15 correcciones = ~600 tokens
+- **Budget por bloque: 768 tokens.**
+- **Budget para batch de 4 bloques: ~3072 tokens.**
 
-Para el endpoint de documento completo (flujo legacy / no-streaming): usar `Math.max(config.maxTokens, 4096)` como piso.
-
-**Síntoma de presupuesto insuficiente:** JSON truncado → parse falla → retry → latencia alta → perf gate falla. El fix real es el token budget, no el retry path.
+**Síntoma de presupuesto insuficiente:** JSON truncado → parse falla → retry → latencia alta. El fix es el token budget, no el retry path.
 
 ### Documentación del proveedor — consulta obligatoria
 
@@ -80,53 +179,16 @@ Registrar en el `Context Report` del BUILD qué docs se leyeron y qué comportam
 
 Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservando voz e intención.
 
-### Trigger esperado
+### Trigger
 
-- **Automático**:
-  - Debounce por inactividad de escritura.
-  - Trigger secundario por cierre de unidad de escritura (párrafo/frase).
-- **Manual**:
-  - Reanalyze puede existir como acción secundaria.
+- **Automático:** debounce por inactividad de escritura (2s). El plugin ProseMirror identifica bloques dirty tras cada transacción.
+- **Manual:** no existe actualmente en la UI. El botón "Reanalyze" del panel legacy fue eliminado.
 
-### Streaming esperado
+### Streaming
 
-- Las correcciones llegan en chunks y aparecen progresivamente como decorations.
-- El editor no debe bloquearse mientras llegan chunks.
-- Chunks stale se descartan de forma determinista.
-
-### Lecciones de QA ODE-143 (2026-05-15)
-
-La prueba manual con textos reales detectó que el flujo sigue siendo frágil cuando se usa como autocorrector:
-
-- En textos largos (>300 palabras) el proveedor puede truncar JSON o devolver prose aunque exista retry. El endpoint debe usar structured outputs (`json_schema`) y un presupuesto de tokens suficiente para el peor caso esperado; el error visible al usuario no debe ser `AI did not return valid correction JSON after retry`.
-- Fireworks `response_format: json_schema` debe ser el default para correcciones. `json_object` no es suficiente para garantizar la forma. `prediction` no aplica a este endpoint salvo que se rediseñe como edición de texto completo, porque la salida actual es una lista nueva de hallazgos.
-- El streaming real del proveedor puede no emitir chunks útiles de `delta.content`. El UI puede mantener NDJSON propio, pero el backend debe tolerar un flujo provider non-stream estructurado y emitir eventos internos una vez validado el contrato.
-- El análisis debe operar por bloques o ventanas con límites explícitos. Evitar pedir una respuesta global no acotada para textos largos.
-- Aceptar o rechazar una corrección no debe disparar reanálisis automático. Solo debe mutar el texto/review local, marcar la sugerencia resuelta y esperar acción explícita de Reanalyze o cambio material posterior.
-- Las sugerencias duplicadas deben tener identidad estable. No usar ids por índice visible como `spelling-1` si puede haber más de una lista/categoría/render concurrente.
-
-### Estado por bloque (memoria operativa)
-
-Para cada bloque:
-- `blockId`
-- `currentHash`
-- `lastSentHash`
-- `lastAckHash`
-- `inflightRequestId`
-
-Reglas:
-- Solo enviar bloques dirty (`currentHash != lastSentHash`).
-- Si cambia un bloque inflight, cancelar/invalidar request anterior.
-- Aplicar chunk solo si `sourceHash == currentHash` del bloque.
-
-### Memoria de decisiones del autor
-
-- **Reject**:
-  - Persistir fingerprint de rechazo por corrección equivalente.
-  - No re-sugerir en snapshot sin cambios materiales.
-- **Edición manual**:
-  - Invalidar/remapear sugerencias pendientes del rango afectado.
-  - No resucitar sugerencias ya resueltas por el autor.
+- Backend emite NDJSON (`application/x-ndjson`).
+- Frontend consume eventos `suggestion` parciales y los acumula en estado.
+- Decoraciones inline se actualizan vía TipTap plugin sin bloquear el editor.
 
 ---
 
@@ -149,18 +211,55 @@ Sugerir un único título útil, corto y coherente con el contenido, bajo invoca
 
 ---
 
-## Contratos de datos (alto nivel)
+## Decisiones arquitectónicas y deuda técnica
 
-### Corrections (canónico)
-- `summary`
-- `language`
-- `corrections[]` por `blockId`
-- `uncertain[]`
+### Modo `document` — legacy sin consumidor
 
-### Transición
+La rama `document` en `resolveCorrectionSource()` y funciones como `buildCorrectionBlocks()` en el backend no tienen consumidor en el frontend. El `PublicationPanel` existe como archivo pero no se renderiza.
 
-Si existe consumidor legacy, usar adapter explícito de transición.
-No deformar prompt canónico para simular contrato viejo.
+**Decisión:** eliminar la rama `document` de la API, simplificar `requestSchema`, limpiar código huérfano. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block`.
+
+### Estado actual vs principios
+
+El sistema actual no cumple aún todos los principios de construcción. Estos son los gaps conocidos:
+
+| Principio | Estado actual | Gap |
+|-----------|--------------|-----|
+| Persistir para no reprocesar | `automaticCorrectionSuggestions` es `useState([])` | Sin persistencia IndexedDB |
+| Velocidad mediante batching | 1 bloque = 1 llamada HTTP secuencial | Sin batching ni paralelismo |
+| Separar qué/cuándo | Umbral de 8 palabras descarta párrafos cortos | Filtro de longitud mezcla concerns |
+| Smart invalidation | Sugerencias se borran inmediatamente al editar | Parpadeo visual |
+| Observabilidad | Solo `console.info` de latencia | Sin métricas de tokens ni storage estructurado |
+
+Estos gaps están documentados como trabajo pendiente. Cada cambio debe avanzar hacia los principios sin romper el flujo existente.
+
+---
+
+## Contratos de datos
+
+### Corrections (canónico — post-ODE-502)
+
+```json
+{
+  "language": "es",
+  "corrections": [
+    {
+      "blockId": "correction-block:abc123:456",
+      "type": "spelling",
+      "originalText": "hhacia",
+      "replacementText": "hacia"
+    }
+  ]
+}
+```
+
+Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el array `uncertain` del contrato mecánico. El adapter (`corrections-contract-adapter.ts`) mantiene compatibilidad hacia atrás.
+
+### Memoria de decisiones
+
+- **Reject:** fingerprint se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+- **Accept:** se aplica al markdown y se marca como `accepted`.
+- **Edición manual:** invalida sugerencias del bloque afectado.
 
 ---
 
@@ -168,24 +267,26 @@ No deformar prompt canónico para simular contrato viejo.
 
 - No regresión en `title suggestions` al cambiar flujo de corrections.
 - No regresión en endpoints AI no relacionados.
-- Logs suficientes para depurar:
-  - requestId
-  - blockId/sourceHash
-  - descarte de chunk stale
-  - parse/retry de JSON
+- Logs suficientes para depurar: blockId/sourceHash, descarte de chunk stale, parse/retry de JSON.
 - E2E/manual QA obligatorio con:
   - texto corto con 3-5 typos;
   - texto largo de al menos 300 palabras;
   - correcciones repetidas en el mismo texto;
   - aceptar una corrección sin reanálisis automático;
-  - cerrar el panel lateral conservando decorations visibles cuando el modo de corrección siga activo.
+  - recargar la página y verificar comportamiento de persistencia (si aplica).
 
 ---
 
 ## Referencias de implementación
 
-- `app/api/ai/publication-review/route.ts`
-- `app/api/ai/title-suggestions/route.ts`
-- `lib/ai/provider-config.ts`
-- `lib/editor/publication-suggestion-extension.ts`
-- `components/editor/panels/publication-panel.tsx`
+### Activos
+- `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block`)
+- `lib/ai/corrections.ts` — schema, prompt builder, normalización
+- `lib/ai/corrections-contract-adapter.ts` — adaptador de contrato legacy
+- `lib/editor/correction-trigger-plugin.ts` — detección de dirty blocks
+- `lib/editor/publication-suggestion-extension.ts` — decoraciones inline
+- `components/editor/panels/orthography-panel.tsx` — panel lateral
+- `components/editor/editor-shell.tsx` — orquestación del flujo
+
+### Legacy / no usados
+- `components/editor/panels/publication-panel.tsx` — panel legacy; no se renderiza

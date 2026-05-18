@@ -22,8 +22,8 @@ export const correctionTypeSchema = z.enum([
 export const canonicalCorrectionSchema = z.object({
   blockId: z.string().trim().min(1),
   type: correctionTypeSchema,
-  severity: z.enum(["low", "medium", "high"]),
-  confidence: z.enum(["high", "medium"]),
+  severity: z.enum(["low", "medium", "high"]).optional().default("low"),
+  confidence: z.enum(["high", "medium"]).optional().default("medium"),
   originalText: z.string().trim().min(1),
   replacementText: z.string().trim().min(1),
 });
@@ -83,111 +83,59 @@ export const normalizeCanonicalCorrections = (
     ? fallbackLanguage ?? detectCorrectionLanguage(blocks.map((block) => block.text).join("\n\n"))
     : response.language;
 
+  const singleBlock = blocks.length === 1 ? blocks[0] : null;
+
   return {
     ...response,
     language,
-    corrections: response.corrections.filter((correction) => {
-      const block = blockById.get(correction.blockId);
-      return Boolean(block && block.text.includes(correction.originalText));
-    }),
-    uncertain: response.uncertain.filter((item) => blockById.has(item.blockId)),
+    corrections: response.corrections
+      .map((correction) => {
+        if (blockById.has(correction.blockId)) return correction;
+        if (singleBlock) return { ...correction, blockId: singleBlock.id };
+        return correction;
+      })
+      .filter((correction) => {
+        const block = blockById.get(correction.blockId);
+        return Boolean(block && block.text.includes(correction.originalText));
+      }),
+    uncertain: response.uncertain
+      .map((item) => {
+        if (blockById.has(item.blockId)) return item;
+        if (singleBlock) return { ...item, blockId: singleBlock.id };
+        return item;
+      })
+      .filter((item) => blockById.has(item.blockId)),
   };
 };
 
 export const buildMechanicalCorrectionsPrompt = (blocks: CorrectionBlock[]) => `
-You are Odessay's conservative mechanical correction engine.
+You are a conservative mechanical correction engine.
 
-Analyze the text block by block. Each block has a blockId.
-Return corrections linked to blockId.
+Detect mechanical errors only: spelling, typos, missing/wrong accents, malformed words, wrong spacing, duplicated words, agreement errors, basic punctuation.
+Do NOT rewrite, polish, translate, or change the author's voice.
+Do NOT flag technical terms, product names, or regional usage.
 
-Your task is to detect mechanical writing issues only:
-- spelling mistakes
-- typos
-- missing or incorrect accents
-- malformed words
-- wrong spacing inside words
-- duplicated words or duplicated phrases
-- gender agreement
-- number agreement
-- article/noun agreement
-- verb agreement
-- basic punctuation
-- basic sentence boundary issues
-- minimally repairing clearly broken phrases
+Known terms to preserve: AI, Linear, React, Next.js, Python, WhatsApp, CLI, markdown, PDF, app, harness, prompt, writing, collection, desk, settings, topbar, toolbar, export, status, preview.
 
-This is NOT a rewriting task.
-This is NOT a style-improvement task.
-This is NOT a translation task.
-
-Core rule:
-Correct mechanical issues with high confidence.
-Do not rewrite the author's voice.
-When uncertain, report uncertainty instead of correcting.
-
-Classification step (internal):
-For each suspicious fragment, classify mentally as:
-1. clear error
-2. product/technical term
-3. uncertain
-
-Only return corrections for clear errors.
-Return uncertain cases separately.
-
-Do NOT:
-- rewrite the author's voice
-- polish prose
-- make the text more formal
-- make the text sound corporate, literary, generic, or AI-generated
-- change the author's intention
-- translate
-- normalize technical/product terms
-- change regional Spanish usage unless objectively incorrect
-- suggest broad style improvements
-- include style-only suggestions
-
-Known terms to preserve unless clearly misspelled:
-AI, Linear, React, Next, Next.js, Python, WhatsApp, CLI, markdown, PDF, Docs, app, App Store, harness, prompt, writing, writings, collection, collections, desk, settings, topbar, toolbar, export, status, preview.
-
-Return only valid JSON with this exact shape:
+Return valid JSON:
 {
-  "summary": string,
   "language": "es" | "en" | "mixed" | "unknown",
   "corrections": [
     {
       "blockId": string,
       "type": "spelling" | "accent" | "grammar" | "agreement" | "punctuation" | "duplication" | "spacing" | "basic_redaction",
-      "severity": "low" | "medium" | "high",
-      "confidence": "high" | "medium",
       "originalText": string,
       "replacementText": string
-    }
-  ],
-  "uncertain": [
-    {
-      "blockId": string,
-      "text": string,
-      "reason": string,
-      "possibleReplacement": string | null
     }
   ]
 }
 
 Rules:
-- Scan every block.
-- Include every clear correction.
-- Do not limit the number of corrections.
-- originalText must appear exactly inside the corresponding block.
-- Use the smallest possible replacement.
-- Prefer replacements of 1-8 words.
-- replacementText must be minimally different and similar in length to originalText.
-- Prefer word-level or short-phrase corrections.
-- Use sentence-level replacement only when the phrase is clearly broken or ungrammatical.
-- Never include low-confidence corrections.
-- If a suggestion improves style but not correctness, discard it.
-- Put ambiguous product/technical terms in "uncertain".
-- Preserve meaning, tone, and terminology.
-- No markdown.
-- No comments outside JSON.
+- originalText must appear exactly in the block.
+- Use the smallest possible replacement (prefer word-level).
+- Only include high-confidence corrections.
+- Skip anything stylistic.
+- No markdown, no comments outside JSON.
 
 Blocks:
 ${blocks.map((block) => `[${block.id}]\n${block.text}`).join("\n\n")}

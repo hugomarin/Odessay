@@ -184,19 +184,45 @@ de forma independiente. No son instrucciones de implementación — son resultad
 3. El endpoint W responde correctamente cuando...
 
 ## Performance Contract
-Obligatorio si el issue toca interacciones de UI, editor, rendering o performance explícita.
-Si no aplica, escribir `Performance Contract: not required` y justificar por qué.
 
-Formato recomendado:
-Required: yes | no
-Scope: [flujo/ruta concreta que se mide]
-Trace scenario: [comando o pasos exactos y reproducibles]
-Budgets: workflow/perf-budgets.json (version activa)
+El contrato de performance no se reduce a la latencia del teclado. La velocidad de Odessay es multidimensional (ver `workflow/context/core/odessay-stack.md §Velocidad multidimensional`) y el brief lo refleja: el PM declara, por dimensión, si el issue la toca y qué evidencia se exige.
+
+**Cinco dimensiones, cada una con criterio explícito:**
+
+| Dimensión | Cuándo aplica al issue | Evidencia mínima |
+|---|---|---|
+| **Latencia de interacción** | Toca editor (`keydown`/`input`/`paste`), click en superficie de escritura, panel que se abre durante escritura, auto-save, sync o AI competiendo por main thread. | Trace + `check-performance-gate` + `ops:delivery:gate` con `OPS_PERF_TRACE_PATH`. Budgets en `workflow/perf-budgets.json`. |
+| **Tiempo a interactivo** | Toca `app/**/page.tsx`, layout, bootstrap de vista, hidratación inicial. | Medición navegacional en DevTools (`performance.timing` o `PerformanceNavigationTiming`) o snapshot Playwright. Editor < 1 s; Desk/Collections/Reading < 1.5 s. |
+| **Peso transferido** | Toca `app/api/**/route.ts` que devuelve listas, schemas Supabase con columnas grandes, o hidratación cliente. | Tamaño ungzip del response medido en DevTools Network. Lista ≤ 50 kB; detalle documenta p95. |
+| **Forma del waterfall** | Toca bootstrap de una vista, hidratación, fetch desde múltiples componentes hacia el mismo endpoint. | Snapshot del Network panel: conteo de requests en los primeros 3 s, conteo de duplicados en los primeros 5 s. ≤ 6 distintos, 0 duplicados. |
+| **Fan-out reactivo** | Toca `lib/local-db/*`, suscriptores a stores, listeners de cambios. | Test que demuestra que una operación bulk emite un único evento de cambio, y que los suscriptores hacen debounce. |
+
+**Formato del Performance Contract en el brief:**
+
+```
+Performance Contract:
+  Interaction latency:   required | not required — {justificación}
+  Time to interactive:   required | not required — {justificación}
+  Payload weight:        required | not required — {justificación}
+  Waterfall shape:       required | not required — {justificación}
+  Reactive fan-out:      required | not required — {justificación}
+
+Scope: [flujo/ruta concreta que se mide para las dimensiones marcadas como required]
 Evidence required in PR:
-- Trace path (ej: artifacts/perf/editor-trace.json.gz)
-- Resultado de `node scripts/check-performance-gate.mjs --trace <trace>`
-- Resultado de `OPS_PERF_TRACE_PATH=<trace> npm run ops:delivery:gate`
-Approval rule: `required_failures = 0` y métricas requeridas presentes.
+  - {por dimensión, cómo se mide y qué artefacto se adjunta}
+
+Approval rule:
+  - Latencia: `required_failures = 0` en check-performance-gate.
+  - Resto: evidencia objetiva del navegador con número dentro de presupuesto.
+```
+
+**Regla de severidad.** No es válido marcar las cinco como `not required` sin justificación dimensión por dimensión. Si el issue toca una `page.tsx`, peso/waterfall/time-to-interactive son `required` por defecto. Si toca una `route.ts` de lista, peso es `required` por defecto. La omisión por inercia es lo que produjo el caso ODE-58/ODE-138 (Desk con 70 s a interactivo); marcar `not required` requiere argumento, no silencio.
+
+**Defaults de activación automática (REVIEW debe verificar):**
+- Diff toca `app/api/**/route.ts` que devuelve lista → peso `required`.
+- Diff toca `app/(app)/**/page.tsx` o `layout.tsx` → tiempo a interactivo + waterfall `required`.
+- Diff toca `lib/sync/*`, `lib/local-db/*` o `lib/collections/*` → fan-out `required`.
+- Diff toca `components/editor/**` o `app/(app)/write/**` → latencia `required`.
 
 ## Reference docs
 Documentos del proyecto que el agente debe leer antes de implementar.

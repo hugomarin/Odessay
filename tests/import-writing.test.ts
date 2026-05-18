@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, expect, it, vi, beforeEach } from "vitest"
+import { describe, expect, it } from "vitest"
 import { parseMarkdownFile } from "@/lib/import/markdown"
 import { parsePlainTextFile } from "@/lib/import/text"
 
@@ -43,7 +43,7 @@ const V_PARA = "paragraph"
 const V_MY_TITLE = "My Title"
 const V_MY_GREAT = "My Great Essay"
 const V_MY_DOC_TITLE = "my document"
-const V_MY_DRAFT_TITLE = "my draft"
+const V_MY_DRAFT_TITLE = "Just some plain text without heading."
 const V_TOO_LARGE = "too large"
 const V_FIRST_PARA_TEXT = "First paragraph."
 const V_SECOND_PARA_TEXT = "Second paragraph."
@@ -54,16 +54,10 @@ const EMPTY_PARA_DOC = { type: V_DOC, content: [{ type: V_PARA }] }
 const makeFile = (name: string, content: string): File =>
   new File([content], name, { type: V_PLAIN_MIME })
 
-beforeEach(() => {
-  vi.useFakeTimers()
-})
-
 describe(PLAIN_SUITE, () => {
   it(T1, async () => {
     const file = makeFile(F_NOTES, C_TWO_PARAS)
-    const promise = parsePlainTextFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parsePlainTextFile(file)
 
     expect(result.body_json.type).toBe(V_DOC)
     expect(result.body_json.content).toHaveLength(2)
@@ -74,25 +68,19 @@ describe(PLAIN_SUITE, () => {
 
   it(T2, async () => {
     const file = makeFile(F_NOTES, C_GREAT_ESSAY)
-    const promise = parsePlainTextFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parsePlainTextFile(file)
     expect(result.title).toBe(V_MY_GREAT)
   })
 
   it(T3, async () => {
     const file = makeFile(F_MY_DOC, C_EMPTY)
-    const promise = parsePlainTextFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parsePlainTextFile(file)
     expect(result.title).toBe(V_MY_DOC_TITLE)
   })
 
   it(T4, async () => {
     const file = makeFile(F_EMPTY, C_EMPTY)
-    const promise = parsePlainTextFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parsePlainTextFile(file)
     expect(result.body_json).toEqual(EMPTY_PARA_DOC)
   })
 
@@ -106,25 +94,19 @@ describe(PLAIN_SUITE, () => {
 describe(MD_SUITE, () => {
   it(T6, async () => {
     const file = makeFile(F_ESSAY, C_MD_WITH_H1)
-    const promise = parseMarkdownFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parseMarkdownFile(file)
     expect(result.title).toBe(V_MY_TITLE)
   })
 
   it(T7, async () => {
     const file = makeFile(F_MY_DRAFT, C_MD_NO_H1)
-    const promise = parseMarkdownFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parseMarkdownFile(file)
     expect(result.title).toBe(V_MY_DRAFT_TITLE)
   })
 
   it(T8, async () => {
     const file = makeFile(F_TEST, C_MD_HEADING)
-    const promise = parseMarkdownFile(file)
-    vi.runAllTimers()
-    const result = await promise
+    const result = await parseMarkdownFile(file)
     expect(result.body_json.type).toBe(V_DOC)
     expect(Array.isArray(result.body_json.content)).toBe(true)
   })
