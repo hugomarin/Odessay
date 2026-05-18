@@ -404,6 +404,13 @@ fs.appendFileSync('workflow/review-history.jsonl', entry);
 
 Si el archivo no existe, crearlo. Este log es la fuente de verdad para tendencias de calidad.
 
+Tras appendear, commitear el entry en `main` y pushear:
+```bash
+git add workflow/review-history.jsonl
+git commit -m "chore(workflow): append review_approved|review_rejected for ODE-XX [ODE-XX]"
+git push origin main
+```
+
 ### Integración con Linear
 
 Usar `scripts/linear-cli.mjs` para sincronizar el estado del review:
@@ -442,6 +449,8 @@ Con REVIEW APROBADO, ejecutar en este orden:
 → Hacer merge del PR: `gh pr merge {número} --merge`.
 → Volver a `main`: `git switch main`.
 → Sincronizar `main`: `git pull --ff-only origin main`.
+→ Commitear `workflow/review-history.jsonl` y pushear:
+  `git add workflow/review-history.jsonl && git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
 → Mover el issue a Done en Linear (`scripts/linear-cli.mjs move`).
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
@@ -457,6 +466,8 @@ Acción requerida: [qué debe corregir el agente implementador]
 El issue vuelve a In Progress hasta que se corrija.
 ```
 → Comentar en Linear con el formato anterior (`scripts/linear-cli.mjs comment`).
+→ Commitear `workflow/review-history.jsonl` en `main` y pushear:
+  `git switch main && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append review_rejected for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main && git switch -`
 → No hacer merge. Mover issue de `In Review` → `In Progress` (`scripts/linear-cli.mjs move`).
 → No modificar el código — el agente revisor no implementa.
 

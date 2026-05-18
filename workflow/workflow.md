@@ -2,9 +2,18 @@
 
 Define qué hace cada comando `/wf-*`, qué contexto carga, qué output produce y qué gate debe pasar antes de continuar.
 
+## Cómo invocar estos comandos
+
+Cada comando `/wf-*` puede usarse de dos formas equivalentes:
+
+- **Slash command** (`/wf-build ODE-XX`): en agentes que soportan comandos personalizados, como Claude Code con `.claude/commands/`.
+- **Instrucción natural** (`wf-build ODE-XX`): sin la barra `/`, en agentes que no soportan slash commands, como Codex u otros. El agente lo interpreta como instrucción en lenguaje natural.
+
+El comportamiento esperado es idéntico en ambas formas. Cuando el orquestador (deus) invoca un agente automáticamente, el prompt ya usa la forma correcta para ese agente — el agente no necesita adaptarse.
+
 ---
 
-## `/wf-define [fase?]` — PLAN
+## `/wf-define [fase?]` o `wf-define [fase?]` — PLAN
 
 **Objetivo:** descomponer una fase del roadmap en issues ejecutables y cargarlos en Linear.
 
@@ -37,21 +46,17 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 11. Crear los issues en Linear con su brief incluido.
 12. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
-**Gate de salida:** todos los issues de la fase creados en Linear con su Issue Brief. Sin brief por issue no hay BUILD.
+**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD.
 
 **Restricción:** no abrir ramas ni escribir código en esta etapa.
 
 ---
 
-## `/wf-build [issue-id?]` — BUILD
+## `/wf-build [issue-id?]` o `wf-build [issue-id?]` — BUILD
 
 **Objetivo:** implementar sobre el brief aprobado.
 
 **Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `In Review` al dejar PR listo.
-
-**Invariante de presentación de texto (obligatorio):**
-- El shell puede variar entre vistas, pero el contrato de presentación del contenido textual debe ser equivalente en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` y cualquier nueva superficie de lectura/escritura.
-- `tables`, `pre/code`, URLs largas y overflow horizontal deben conservar la misma semántica de wrap, contención y scroll interno entre superficies.
 
 **Resolución de issue:**
 - Con argumento (`/wf-build ODE-22`): usar el issue indicado.
@@ -59,73 +64,44 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Contexto a cargar:**
 1. El Issue Brief desde Linear.
-2. Los skills técnicos que corresponden al área del issue (frontend, backend, database, design — consultar `workflow/docs.json`).
-3. `workflow/context/core/odessay-stack.md §Velocidad multidimensional` — siempre. El contrato de velocidad es transversal a todo issue, no opcional. Si el brief marca alguna dimensión como `required` (latencia, tiempo a interactivo, peso, waterfall, fan-out), cargar además `workflow/perf-budgets.json` + `workflow/perf/editor-baseline.md` para la dimensión de latencia.
-4. Si el issue toca presentación de texto: `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-ux-testing/SKILL.md`.
-
-**No cargar por defecto:** documentos core, fundacional, flujos, páginas. Esa información debe estar sintetizada en el brief. Si falta algo crítico, es un error del brief — corregir en PLAN antes de continuar.
+2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar nada adicional por deducción propia.
 
 **Secuencia:**
-1. Verificar que existe el Issue Brief en Linear y resolver su `Performance Contract` (`required`/`not required` con justificación).
-   - Si el issue toca presentación de texto, resolver también su `Presentation Contract` (`required`/`not required` con justificación).
-2. Correr pre-flight:
-   - Base (siempre): `node --version`
-   - Scripts opcionales (si existen en el repo): `npm run env:check --if-present` y `npm run ops:status:drift --if-present`.
-   - Si el issue exige checks obligatorios adicionales, declararlos explícitamente en el Issue Brief para este repo.
-3. Verificar la rama actual. Si es `main`, crear y cambiar primero a una rama de feat con convención `codex/{issue-id}-{descripcion}` o `feat/{issue-id}-{descripcion}` antes de editar o commitear.
-4. No hacer commits directos en `main`. Todos los commits del issue deben quedar en la rama de trabajo.
-5. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
-6. Generar evidencia por cada dimensión del `Performance Contract` marcada como `required` (ver `.agents/skills/skill-product-manager/SKILL.md §Performance Contract` y `.agents/skills/skill-ux-testing/SKILL.md §Protocolo de performance UX — multidimensional`):
-    - **Latencia de interacción** → trace + gate:
-      - `node scripts/capture-editor-trace.mjs --output artifacts/perf/editor-trace.json.gz`
-      - `node scripts/check-performance-gate.mjs --trace artifacts/perf/editor-trace.json.gz`
-    - **Tiempo a interactivo** → snapshot navegacional (DevTools / Playwright) con timing visible dentro de presupuesto.
-    - **Peso transferido** → snapshot del Network panel con tamaño ungzip por endpoint y total bootstrap.
-    - **Forma del waterfall** → snapshot con conteo de requests distintos (≤ 6 en 3 s) y duplicados (0 en 5 s).
-    - **Fan-out reactivo** → test que demuestra coalescencia (un burst de N writes ⇒ una sola refetch).
-    - Marcar `not required` solo con justificación dimensión por dimensión. El silencio no es justificación válida.
-7. Correr gate de entrega:
-    - Con contrato requerido: `OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz npm run ops:delivery:gate`.
-    - Sin contrato requerido: `npm run ops:delivery:gate`.
-8. Abrir PR con evidencia objetiva y verificar que `gh pr create` devuelve una URL válida:
-    - output del gate de entrega;
-    - output de `check-performance-gate` (si aplica);
-    - rutas de artefactos `artifacts/perf/*` (trace, report y metrics) o justificación explícita de por qué no aplica contrato.
-   Si `gh pr create` falla o no devuelve URL, el issue **no puede pasar a `In Review`** — corregir antes de continuar.
-9. Mover issue a `In Review` en Linear **solo tras confirmar que el PR existe** (`gh pr view` devuelve estado `OPEN`).
-10. Dejar comentario en Linear: qué se construyó + link al PR + evidencia.
-    - Si `Presentation Contract` es `required`, incluir evidencia de paridad cross-mode (`write`, `preview`, `shared`, `public`).
-11. En el comentario de BUILD incluir sección obligatoria `Context Report`:
-    - `Context Gaps Detected`: yes/no
-    - `Missing or Ambiguous Context`: lista concreta
-    - `Additional Instructions Requested`: lista concreta
-    - `Decisions Made During Build`: lista concreta
-    - `Recommended Context Fixes`: docs/briefs/skills a actualizar
-12. Registrar evento en `workflow/review-history.jsonl` (append-only) con tipo `build_submitted`:
-    - `issue`, `branch`, `pr_url`, `commit`, `ts`, `author`, `notes` (resumen corto).
-    - Una línea JSON por evento, sin reescribir historial previo.
 
-**Cómo evaluar `Context Report` (rúbrica mínima):**
-- `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
-- `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
-- `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
-- `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
-- `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
+**Setup**
+1. Leer brief. Declarar Performance Contract y Presentation Contract (required/not required + justificación).
+   > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
+2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
+3. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
 
-**Gate adicional — issues que tocan rutas AI (obligatorio):**
-Si el issue modifica o crea una ruta en `app/api/ai/` o toca `lib/ai/`:
-1. Leer la documentación del proveedor para el modo de salida que se va a usar (`json_schema`, streaming, etc.) **antes de implementar**. Documentar en el `Context Report` qué docs se leyeron.
-2. Verificar que `max_tokens` cubre el peor caso de output (ver regla de presupuesto en `skill-backend/SKILL.md §AI Provider Integration`).
-3. Realizar QA manual con el proveedor real (no mock) con texto corto y texto ≥300 palabras antes de abrir el PR.
-4. Si hay discrepancia entre comportamiento local y CI (p.ej. latencia de perf gate), investigar si el token budget es el origen antes de asumir hardware de CI.
+**Ejecución**
+4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
 
-**Gate de salida:** `npm run ops:delivery:gate` en verde + PR abierto con URL confirmada + evidencia de performance completa cuando el contrato es requerido + evidencia de paridad cross-mode cuando `Presentation Contract` es requerido + comentario de BUILD en Linear con `Context Report` completo.
+**Validación**
+5. `npm run typecheck` + `npm run lint` + `npm test`. Si Performance Contract es `required`, generar la evidencia indicada en el brief. Guardar outputs — van en el body del PR.
+6. `npm run ops:delivery:gate` (con `OPS_PERF_TRACE_PATH=...` si Performance Contract es required). Debe terminar en verde.
 
-**Regla bloqueante:** si falta `Context Report`, si está incompleto, o si no se agregó entrada `build_submitted` en `workflow/review-history.jsonl`, el issue no puede pasar a `In Review`.
+**Entrega**
+7. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 5). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
+8. Registrar `build_submitted` en `workflow/review-history.jsonl` (append-only). Commitear y pushear a la rama:
+   ```bash
+   git add workflow/review-history.jsonl
+   git commit -m "chore(workflow): record {ISSUE-ID} build traceability [{ISSUE-ID}]"
+   git push origin {rama}
+   ```
+9. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
+   - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
+   - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
+   - `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
+   - `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
+   - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
+10. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
+
+**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + issue en `In Review` (paso 9). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
 
 ---
 
-## `/wf-review [issue-id?]` — REVIEW
+## `/wf-review [issue-id?]` o `wf-review [issue-id?]` — REVIEW
 
 **Objetivo:** verificar calidad del PR y cerrar la trazabilidad del issue.
 
@@ -171,8 +147,14 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 6. Volver a `main`: `git switch main`.
 7. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
-8. Mover issue a `Done` en Linear.
-9. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
+8. Commitear `workflow/review-history.jsonl` en `main` y pushear:
+   ```bash
+   git add workflow/review-history.jsonl
+   git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]"
+   git push origin main
+   ```
+9. Mover issue a `Done` en Linear.
+10. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
@@ -180,6 +162,14 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 1. Dejar comentario en Linear con hallazgos específicos que bloquean aprobación.
    - Incluso en rechazo, reportar `QualityScore` y `ProcessInsights` por separado para no perder aprendizaje del ciclo.
    - Registrar `review_rejected` en `workflow/review-history.jsonl` (append-only) antes de mover estado.
+   - Commitear el entry en `main` y pushear:
+     ```bash
+     git switch main
+     git add workflow/review-history.jsonl
+     git commit -m "chore(workflow): append review_rejected for {ISSUE-ID} [{ISSUE-ID}]"
+     git push origin main
+     git switch -
+     ```
 2. Rechazar automáticamente si se cumple cualquiera de estas condiciones:
    - falta evidencia de performance cuando el contrato es requerido;
    - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
@@ -217,77 +207,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 ---
 
-## `/wf-run ODE-{ids}` — ORQUESTACIÓN BUILD ↔ REVIEW
-
-**Objetivo:** ejecutar `/wf-build` y `/wf-review` en loop automático sobre uno o varios issues, sin intervención humana entre ciclos.
-
-`/wf-run` no reemplaza a BUILD ni a REVIEW: los compone. La rama la crea `wf-build`, el merge lo hace `wf-review`, los comentarios de evidencia los dejan los agentes invocados. El script sólo orquesta y deja comentarios de orquestación (HANDOFF y resumen final).
-
-**Cuándo usarlo:**
-- Cuando hay 1+ issues con brief listo y se quiere correr la cadena BUILD → REVIEW desatendida.
-- Cuando se quiere reanudar un issue que quedó a medias (re-invocar `/wf-run ODE-XX` continúa sobre la misma rama gracias a la lógica de `wf-build`).
-
-**Cuándo NO usarlo:**
-- Cuando el issue requiere decisión humana antes de ejecutar (usar `/wf-build` directo).
-- Cuando el brief no existe (correr `/wf-define` primero).
-
-**Resolución de issues:**
-- Siempre con argumento posicional. Acepta `ODE-50,51,52` o `ODE-50,ODE-51`. Sin argumento, error.
-- No hay fallback a Linear — el set de issues lo decide el humano explícitamente.
-
-**Instrucción al agente que recibe `/wf-run ODE-{ids}`:**
-1. Verificar que existe `scripts/wf-run.ts` en el repo.
-2. Ejecutar desde la raíz del repo: `npx tsx scripts/wf-run.ts {ids} [--dry-run] [--verbose]`.
-3. Hacer streaming del output al humano en tiempo real.
-4. Si aparece `⏸ HANDOFF REQUERIDO` en el output, reportarlo y pausar.
-5. No modificar código ni tomar decisiones — sólo invocar y reportar.
-
-**Pre-flight (lo hace el script, no el agente):**
-- Comandos de los agentes (`claude`, `codex`) y `gh` en PATH.
-- `LINEAR_API_KEY` en el entorno.
-- Working tree limpio (`git status --porcelain` vacío).
-- `git switch main && git pull --ff-only origin main` exitoso.
-
-Si cualquier check falla: el script sale con exit 1 sin iniciar ningún issue.
-
-**Loop por issue (resumen):**
-1. **BUILD** — invoca `/wf-build {id}` como una etapa aislada. `wf-run` no appendea contexto narrativo ni re-explica el repo.
-2. Verifica de forma determinista el gate de salida de BUILD: rama actual, PR abierto para esa rama y estado del issue en Linear. Si falla, HANDOFF; no se relanza BUILD para cerrar el gate.
-3. **REVIEW** — invoca `/wf-review {id}`. Captura timestamp antes de invocar.
-4. Hace polling a Linear buscando los markers `REVIEW APROBADO` o `REVIEW RECHAZADO` en comentarios creados después del timestamp del paso 3.
-5. **APROBADO** → fin del issue (el merge ya lo hizo `wf-review`).
-6. **RECHAZADO** → HANDOFF. `wf-run` no re-builda automáticamente con contexto heredado del review.
-7. **Timeout** → HANDOFF y siguiente issue.
-
-**Markers obligatorios para el agente de REVIEW:**
-- `REVIEW APROBADO` — en el comentario final cuando aprueba.
-- `REVIEW RECHAZADO` — en el comentario final cuando rechaza.
-
-Sin alguno de estos markers `/wf-run` interpreta el resultado como timeout y emite HANDOFF.
-
-**Transición entre issues:**
-Después de cada issue (aprobado o HANDOFF) y antes de iniciar el siguiente: `git switch main && git pull --ff-only origin main`. Si falla → HANDOFF de etapa `TRANSICIÓN` y se detiene el run completo (un repo desincronizado afecta a todos los siguientes).
-
-**Comentarios en Linear:**
-- Los agentes (`wf-build`, `wf-review`) dejan la evidencia por ciclo. Eso no cambia.
-- El script sólo deja: HANDOFF en el issue afectado y un resumen final en el primer issue de la lista.
-
-**HANDOFF:**
-- En `BUILD` o `REVIEW` el run continúa con el siguiente issue.
-- En `TRANSICIÓN` el run se detiene completo.
-
-**Gate de salida:** todos los issues de la lista terminados — aprobados o en HANDOFF — y resumen posteado en Linear.
-
-**Restricción:** `/wf-run` no toma decisiones de calidad ni de scope, no mueve estados en Linear, no hace merges, no gestiona ramas. Cualquier desviación de los gates de `wf-build` o `wf-review` es responsabilidad de esos comandos.
-
-**Configuración:** `scripts/wf-run-config.yaml` — agentes, modo de invocación, markers y timeouts. Para agentes con suscripción que sólo funcionan de forma consistente en sesión interactiva, usar `mode: interactive_terminal` con `prompt_pattern` explícito. El yaml no debe reescribir el protocolo de BUILD/REVIEW: sólo define cómo abrir cada etapa.
-En la configuración vigente de esta fase, BUILD y REVIEW deben declararse como agentes lógicos distintos (`codex_build`, `codex_review`) y cada etapa corre en un proceso nuevo. El prompt inicial debe ser delgado: equivalente a “ejecuta `/wf-build {id}`” o “ejecuta `/wf-review {id}`”, sin contexto adicional de orquestación.
-
-**Log:** cada run escribe `logs/wf-run/{run-id}/run.log` y artefactos por issue/etapa dentro del mismo directorio. Además se mantiene un append diario en `logs/wf-run-{fecha}.log`. Todo `logs/wf-run/` va ignorado por git.
-
----
-
-## `/wf-debrief [issue-id?]` — POST-ENTREGA
+## `/wf-debrief [issue-id?]` o `wf-debrief [issue-id?]` — POST-ENTREGA
 
 **Objetivo:** capturar observaciones post-entrega y convertir las relevantes en issues de mejora en Linear, sin reabrir ni modificar el issue original.
 
@@ -319,7 +239,7 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 
 ---
 
-## `/wf-health` — CONTEXT HYGIENE
+## `/wf-health` o `wf-health` — CONTEXT HYGIENE
 
 **Objetivo:** ejecutar un chequeo de salud documental para reducir context rot entre `workflow/` y `.agents/skills/`, especialmente en flujos AI del editor.
 
@@ -351,7 +271,7 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 
 ---
 
-## `/wf-update-docs` — MANTENIMIENTO DE DOCS
+## `/wf-update-docs` o `wf-update-docs` — MANTENIMIENTO DE DOCS
 
 **Objetivo:** mantener `workflow/docs.json` sincronizado con el estado real del disco.
 
@@ -373,7 +293,7 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 
 ---
 
-## `/wf-decision` — GESTIÓN DE DECISIONES
+## `/wf-decision` o `wf-decision` — GESTIÓN DE DECISIONES
 
 **Objetivo:** registrar formalmente una decisión técnica o de arquitectura en el historial canónico.
 
