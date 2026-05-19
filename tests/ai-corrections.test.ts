@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildCorrectionBlocks,
   buildMechanicalCorrectionsPrompt,
+  hashCorrectionBlock,
   normalizeCanonicalCorrections,
 } from "../lib/ai/corrections";
 import { createCorrectionFingerprint, filterCorrectionsByMemory } from "../lib/ai/correction-memory";
@@ -33,7 +33,18 @@ describe("AI corrections", () => {
   });
 
   it("normalizes canonical output and drops corrections whose original text is not in the block", () => {
-    const blocks = buildCorrectionBlocks("Esta es una prueva.\n\nReact y Next.js aparecen como términos.");
+    const blocks = [
+      {
+        id: "block-1",
+        hash: hashCorrectionBlock("Esta es una prueva."),
+        text: "Esta es una prueva.",
+      },
+      {
+        id: "block-2",
+        hash: hashCorrectionBlock("React y Next.js aparecen como términos."),
+        text: "React y Next.js aparecen como términos.",
+      },
+    ];
     const canonical = normalizeCanonicalCorrections(
       {
         summary: "One clear correction.",

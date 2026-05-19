@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Remove legacy document mode from publication-review endpoint. Deleted PublicationPanel component, removed publicationReviews IndexedDB store (schema bump), eliminated document branch from route handler and corrections.ts, cleaned up all related tests.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-162",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-162/remove-legacy-document-mode-from-publication-review-endpoint",
+      "commit": "1c548d7",
+      "date": "2026-05-19",
+      "notes": "typecheck PASS, tests 361/361 PASS. Performance contract: not required. Presentation contract: not required."
+    },
+    {
       "what": "Add minimal observability to the AI corrections flow. Introduced `lib/observability/corrections-log.ts` with a dev-only `logCorrectionEvent` hook covering queue enqueue/flush, request start/end, placeholder cache hit/miss decisions, and stale suggestion keep/drop events. `editor-shell.tsx` now emits these events along the existing automatic correction queue without changing the production path. `app/api/ai/publication-review/route.ts` now captures provider token usage when available and writes a structured `console.info({ batchId, blockCount, model, latencyMs, promptTokens, completionTokens })` line on successful correction requests. Tests updated to match the current prompt and structured-output contract.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-161",

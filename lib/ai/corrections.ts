@@ -57,21 +57,6 @@ export const hashCorrectionBlock = (text: string) => {
   return `blk-${(hash >>> 0).toString(16)}`;
 };
 
-export const buildCorrectionBlocks = (text: string): CorrectionBlock[] => {
-  const blocks = text
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter(Boolean);
-
-  const sourceBlocks = blocks.length > 0 ? blocks : [text.trim()].filter(Boolean);
-
-  return sourceBlocks.map((block, index) => ({
-    id: `block-${index + 1}`,
-    text: block,
-    hash: hashCorrectionBlock(block),
-  }));
-};
-
 export const normalizeCanonicalCorrections = (
   parsed: unknown,
   blocks: CorrectionBlock[],
