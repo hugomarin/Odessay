@@ -167,15 +167,14 @@ export const findSuggestionMatch = (source: string, suggestion: PublicationSugge
     suggestion.occurrence,
   );
 
-export const getVisibleOrthographySuggestions = (
+export const getVisibleCorrectionSuggestions = (
   suggestions: PublicationSuggestion[],
   markdown: string,
 ) =>
   suggestions
     .filter(
       (suggestion) =>
-        (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
-        suggestion.kind === "spelling",
+        suggestion.status === "pending" || suggestion.status === "pending-stale",
     )
     .map((suggestion): SortedSuggestion => {
       const match = findSuggestionMatch(markdown, suggestion);

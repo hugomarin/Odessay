@@ -148,6 +148,47 @@ describe("AI corrections contract adapter", () => {
     expect(adapted.legacy.checklist).toEqual([]);
   });
 
+  it("preserves grammar and punctuation kinds in legacy suggestions", () => {
+    const adapted = adaptCorrectionsContract({
+      summary: "Two mechanical corrections found.",
+      language: "es",
+      corrections: [
+        {
+          blockId: "block-a",
+          type: "grammar",
+          severity: "medium",
+          confidence: "high",
+          originalText: "fuimos",
+          replacementText: "íbamos",
+          reason: "Verb agreement.",
+        },
+        {
+          blockId: "block-b",
+          type: "punctuation",
+          severity: "low",
+          confidence: "medium",
+          originalText: "hola mundo",
+          replacementText: "hola, mundo",
+          reason: "Missing comma.",
+        },
+      ],
+      uncertain: [],
+    });
+
+    expect(adapted.legacy.suggestions).toMatchObject([
+      {
+        kind: "grammar",
+        original_text: "fuimos",
+        replacement_text: "íbamos",
+      },
+      {
+        kind: "punctuation",
+        original_text: "hola mundo",
+        replacement_text: "hola, mundo",
+      },
+    ]);
+  });
+
   it("creates stable non-index ids for repeated canonical corrections", () => {
     const adapted = adaptCorrectionsContract({
       summary: "Two repeated fixes.",

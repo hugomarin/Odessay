@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest"
 import {
-  getVisibleOrthographySuggestions,
+  getVisibleCorrectionSuggestions,
   invalidateBlockSuggestions,
   isSuggestionAcceptDisabled,
   replaceBlockSuggestions,
@@ -81,7 +81,7 @@ describe("stale correction invalidation", () => {
       status: "pending",
     })
 
-    const visibleSuggestions = getVisibleOrthographySuggestions(
+    const visibleSuggestions = getVisibleCorrectionSuggestions(
       [pending, stale],
       "Esta prueva sigue en el bloque editado. Luego aparece otrra. Finalmente otra otrra.",
     )
@@ -91,5 +91,29 @@ describe("stale correction invalidation", () => {
     expect(visibleSuggestions.map((suggestion) => suggestion.id)).toEqual(["stale-1", "pending-1"])
     expect(actionableSuggestions.map((suggestion) => suggestion.id)).toEqual(["pending-1"])
     expect(isSuggestionAcceptDisabled(stale)).toBe(true)
+  })
+
+  it("keeps grammar and punctuation suggestions visible in document order", () => {
+    const punctuation = createSuggestion({
+      id: "punctuation-1",
+      kind: "punctuation",
+      original_text: "hola mundo",
+      replacement_text: "hola, mundo",
+      occurrence: 0,
+    })
+    const grammar = createSuggestion({
+      id: "grammar-1",
+      kind: "grammar",
+      original_text: "fuimos",
+      replacement_text: "íbamos",
+      occurrence: 0,
+    })
+
+    const visibleSuggestions = getVisibleCorrectionSuggestions(
+      [grammar, punctuation],
+      "Primero hola mundo. Después fuimos al mercado.",
+    )
+
+    expect(visibleSuggestions.map((suggestion) => suggestion.id)).toEqual(["punctuation-1", "grammar-1"])
   })
 })

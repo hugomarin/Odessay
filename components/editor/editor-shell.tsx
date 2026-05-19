@@ -185,9 +185,9 @@ const PropertiesPanel = lazy(() =>
   })),
 )
 
-const OrthographyPanel = lazy(() =>
-  import("@/components/editor/panels/orthography-panel").then((module) => ({
-    default: module.OrthographyPanel,
+const CorrectionsPanel = lazy(() =>
+  import("@/components/editor/panels/corrections-panel").then((module) => ({
+    default: module.CorrectionsPanel,
   })),
 )
 
@@ -3381,7 +3381,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
                 }}
               />
             ) : (
-              <OrthographyPanel
+              <CorrectionsPanel
                 suggestions={automaticCorrectionSuggestions}
                 markdown={currentDocumentMarkdown}
                 onAcceptSuggestion={handleAcceptCorrection}
