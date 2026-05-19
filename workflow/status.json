@@ -34,9 +34,9 @@
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-163",
       "linear_url": "https://linear.app/z9ne/issue/ODE-163/implement-smart-invalidation-for-stale-correction-suggestions",
-      "commit": "d571bc4",
+      "commit": "55bca97",
       "date": "2026-05-19",
-      "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (WARN only: pre-existing ODE-502 missing in status.json and stale last_updated before this change), npm run typecheck (clean), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test (68 files, 364 tests passing). Performance contract: not required — stale filtering only runs when dirty blocks are marked and does not change bootstrap, payloads, requests, or reactive fan-out. Presentation contract: not required — change is confined to `/write/[id]` editor correction affordances, not cross-surface rich-text rendering."
+      "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (WARN only: pre-existing ODE-502 missing in status.json), npm run typecheck (clean), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test (68 files, 365 tests passing), npm run ops:delivery:gate (passed). Performance contract: not required — stale filtering only runs when dirty blocks are marked and does not change bootstrap, payloads, requests, or reactive fan-out. Presentation contract: not required — change is confined to `/write/[id]` editor correction affordances, not cross-surface rich-text rendering."
     },
     {
       "what": "Remove legacy document mode from publication-review endpoint. Deleted PublicationPanel component, removed publicationReviews IndexedDB store (schema bump), eliminated document branch from route handler and corrections.ts, cleaned up all related tests.",
