@@ -86,6 +86,7 @@ import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
+import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type { LocalWriting, PublicationSuggestion, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
@@ -2133,6 +2134,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
     [],
   )
 
+  const getBlockSuggestions = useCallback(
+    (blockId: string, sourceHash?: string) =>
+      automaticCorrectionSuggestionsRef.current.filter(
+        (suggestion) =>
+          suggestion.block_id === blockId && (sourceHash ? suggestion.source_hash === sourceHash : true),
+      ),
+    [],
+  )
+
   const finishCorrectionQueueIfIdle = useCallback(() => {
     if (correctionQueueRef.current.length > 0 || correctionProcessingRef.current) {
       return
@@ -2170,6 +2180,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     correctionProcessingRef.current = true
+    logCorrectionEvent({
+      type: "queue:flush",
+      batchSize: correctionQueueRef.current.length,
+      blockIds: correctionQueueRef.current.map((queuedBlock) => queuedBlock.id),
+    })
 
     while (correctionQueueRef.current.length > 0) {
       const block = correctionQueueRef.current.shift()
@@ -2192,6 +2207,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
       })
 
       try {
+        const batchId = `${block.id}:${block.hash}`
+        const requestStartedAt = Date.now()
+        logCorrectionEvent({
+          type: "request:start",
+          batchId,
+          blockIds: [block.id],
+        })
+
         const response = await fetch("/api/ai/publication-review", {
           method: "POST",
           headers: {
@@ -2229,14 +2252,53 @@ export function EditorShell({ writingId }: EditorShellProps) {
         const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
         if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
+          for (const suggestion of getBlockSuggestions(block.id, block.hash)) {
+            logCorrectionEvent({
+              type: "stale:drop",
+              blockId: block.id,
+              suggestionId: suggestion.id,
+            })
+          }
+          logCorrectionEvent({
+            type: "request:end",
+            batchId,
+            latencyMs: Date.now() - requestStartedAt,
+            suggestions: 0,
+            missing: [block.id],
+          })
           correctionQueueCompletedRef.current += 1
           continue
         }
 
+        const normalizedSuggestions = suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion))
+
+        for (const suggestion of getBlockSuggestions(block.id)) {
+          logCorrectionEvent({
+            type: "stale:drop",
+            blockId: block.id,
+            suggestionId: suggestion.id,
+          })
+        }
+
+        for (const suggestion of normalizedSuggestions) {
+          logCorrectionEvent({
+            type: "stale:keep",
+            blockId: block.id,
+            suggestionId: suggestion.id,
+          })
+        }
+
         setAutomaticCorrectionSuggestions((current) => [
           ...current.filter((suggestion) => suggestion.block_id !== block.id),
-          ...suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion)),
+          ...normalizedSuggestions,
         ])
+        logCorrectionEvent({
+          type: "request:end",
+          batchId,
+          latencyMs: Date.now() - requestStartedAt,
+          suggestions: normalizedSuggestions.length,
+          missing: [],
+        })
       } catch (error) {
         const message = error instanceof Error ? error.message : "block correction failed"
         console.info(`[corrections] block analysis skipped message=${message}`)
@@ -2252,15 +2314,35 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
     correctionProcessingRef.current = false
     finishCorrectionQueueIfIdle()
-  }, [editor, finishCorrectionQueueIfIdle, normalizeAutomaticSuggestion])
+  }, [editor, finishCorrectionQueueIfIdle, getBlockSuggestions, normalizeAutomaticSuggestion])
 
   const enqueueCorrectionBlock = useCallback(
     (block: CorrectionTriggerBlock) => {
+      const hasMemorySuggestion = getBlockSuggestions(block.id, block.hash).length > 0
+
+      logCorrectionEvent(
+        hasMemorySuggestion
+          ? {
+              type: "cache:hit",
+              blockId: block.id,
+              source: "memory",
+            }
+          : {
+              type: "cache:miss",
+              blockId: block.id,
+            },
+      )
+
       const currentIds = new Set(correctionQueueRef.current.map((item) => item.id))
 
       if (!currentIds.has(block.id)) {
         correctionQueueRef.current.push(block)
         correctionQueueTotalRef.current += 1
+        logCorrectionEvent({
+          type: "queue:enqueue",
+          blockId: block.id,
+          reason: "edit",
+        })
       }
 
       setCorrectionToast({
@@ -2271,7 +2353,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       void processCorrectionQueue()
     },
-    [processCorrectionQueue],
+    [getBlockSuggestions, processCorrectionQueue],
   )
 
   useEffect(() => {
@@ -2290,6 +2372,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       for (const block of blocks) {
         if (block.wordCount < 8) {
+          for (const suggestion of getBlockSuggestions(block.id)) {
+            logCorrectionEvent({
+              type: "stale:drop",
+              blockId: block.id,
+              suggestionId: suggestion.id,
+            })
+          }
           setAutomaticCorrectionSuggestions((current) =>
             current.filter((suggestion) => suggestion.block_id !== block.id),
           )
@@ -2301,6 +2390,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
         if (existingTimer) {
           window.clearTimeout(existingTimer.timer)
           correctionTimersRef.current.delete(block.id)
+        }
+
+        for (const suggestion of getBlockSuggestions(block.id)) {
+          logCorrectionEvent({
+            type: "stale:drop",
+            blockId: block.id,
+            suggestionId: suggestion.id,
+          })
         }
 
         setAutomaticCorrectionSuggestions((current) =>
@@ -2327,7 +2424,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       editor.view.dom.removeEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
     }
-  }, [editor, enqueueCorrectionBlock])
+  }, [editor, enqueueCorrectionBlock, getBlockSuggestions])
 
   useEffect(() => {
     const handleAutomaticInlineAction = (event: Event) => {
