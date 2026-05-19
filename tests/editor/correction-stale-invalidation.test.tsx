@@ -3,7 +3,12 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { invalidateBlockSuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine"
+import {
+  getVisibleOrthographySuggestions,
+  invalidateBlockSuggestions,
+  isSuggestionAcceptDisabled,
+  replaceBlockSuggestions,
+} from "@/lib/editor/suggestion-engine"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
 
 const createSuggestion = (overrides: Partial<PublicationSuggestion> = {}): PublicationSuggestion => ({
@@ -51,6 +56,7 @@ describe("stale correction invalidation", () => {
 
   it("replaces stale suggestions when a new model response arrives", () => {
     const stale = createSuggestion({ id: "stale-1", status: "pending-stale" })
+    const otherBlock = createSuggestion({ id: "other-block", block_id: "block-2" })
     const fresh = createSuggestion({
       id: "fresh-1",
       original_text: "otrra",
@@ -58,12 +64,32 @@ describe("stale correction invalidation", () => {
       source_hash: "hash-2",
     })
 
-    const nextSuggestions = [
-      ...[stale].filter((suggestion) => suggestion.block_id !== "block-1"),
-      fresh,
-    ]
+    const replacement = replaceBlockSuggestions([stale, otherBlock], "block-1", [fresh])
 
-    expect(nextSuggestions).toEqual([fresh])
-    expect(nextSuggestions[0]?.status).toBe("pending")
+    expect(replacement.replacedIds).toEqual([stale.id])
+    expect(replacement.suggestions).toEqual([otherBlock, fresh])
+    expect(replacement.suggestions.find((suggestion) => suggestion.id === fresh.id)?.status).toBe("pending")
+  })
+
+  it("keeps stale suggestions visible in panel order but marks them as non-actionable", () => {
+    const stale = createSuggestion({ id: "stale-1", status: "pending-stale" })
+    const pending = createSuggestion({
+      id: "pending-1",
+      original_text: "otrra",
+      replacement_text: "otra",
+      occurrence: 1,
+      status: "pending",
+    })
+
+    const visibleSuggestions = getVisibleOrthographySuggestions(
+      [pending, stale],
+      "Esta prueva sigue en el bloque editado. Luego aparece otrra. Finalmente otra otrra.",
+    )
+
+    const actionableSuggestions = visibleSuggestions.filter((suggestion) => !isSuggestionAcceptDisabled(suggestion))
+
+    expect(visibleSuggestions.map((suggestion) => suggestion.id)).toEqual(["stale-1", "pending-1"])
+    expect(actionableSuggestions.map((suggestion) => suggestion.id)).toEqual(["pending-1"])
+    expect(isSuggestionAcceptDisabled(stale)).toBe(true)
   })
 })

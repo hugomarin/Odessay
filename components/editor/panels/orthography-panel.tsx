@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Check, X } from "lucide-react";
 import type { PublicationSuggestion } from "@/lib/local-db/schema";
-import { findSuggestionMatch, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
+import { getVisibleOrthographySuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
 
 type OrthographyPanelProps = {
   suggestions: PublicationSuggestion[];
@@ -24,21 +24,10 @@ export function OrthographyPanel({
   onRejectAll,
   onClose,
 }: OrthographyPanelProps) {
-  const visibleSuggestions = useMemo(() => {
-    const pending = suggestions.filter(
-      (suggestion) =>
-        (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
-        suggestion.kind === "spelling",
-    );
-
-    return pending
-      .map((suggestion) => {
-        const match = findSuggestionMatch(markdown, suggestion);
-        return { suggestion, position: match?.start ?? Number.MAX_SAFE_INTEGER };
-      })
-      .sort((left, right) => left.position - right.position)
-      .map(({ suggestion }) => suggestion);
-  }, [suggestions, markdown]);
+  const visibleSuggestions = useMemo(
+    () => getVisibleOrthographySuggestions(suggestions, markdown),
+    [suggestions, markdown],
+  );
 
   const actionableSuggestions = visibleSuggestions.filter((suggestion) => suggestion.status === "pending");
   const hasPending = visibleSuggestions.length > 0;

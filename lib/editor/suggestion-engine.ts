@@ -25,6 +25,16 @@ type StaleInvalidationResult = {
   droppedIds: string[];
 };
 
+type BlockSuggestionReplacementResult = {
+  suggestions: PublicationSuggestion[];
+  replacedIds: string[];
+};
+
+type SortedSuggestion = {
+  suggestion: PublicationSuggestion;
+  position: number;
+};
+
 const normalizeSearchValue = (value: string) =>
   value
     .replace(/\r\n/g, "\n")
@@ -157,6 +167,23 @@ export const findSuggestionMatch = (source: string, suggestion: PublicationSugge
     suggestion.occurrence,
   );
 
+export const getVisibleOrthographySuggestions = (
+  suggestions: PublicationSuggestion[],
+  markdown: string,
+) =>
+  suggestions
+    .filter(
+      (suggestion) =>
+        (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
+        suggestion.kind === "spelling",
+    )
+    .map((suggestion): SortedSuggestion => {
+      const match = findSuggestionMatch(markdown, suggestion);
+      return { suggestion, position: match?.start ?? Number.MAX_SAFE_INTEGER };
+    })
+    .sort((left, right) => left.position - right.position)
+    .map(({ suggestion }) => suggestion);
+
 export const applySuggestionToMarkdown = (
   source: string,
   suggestion: PublicationSuggestion,
@@ -229,6 +256,24 @@ export const invalidateBlockSuggestions = (
     suggestions: nextSuggestions,
     keptIds,
     droppedIds,
+  };
+};
+
+export const replaceBlockSuggestions = (
+  suggestions: PublicationSuggestion[],
+  blockId: string,
+  nextBlockSuggestions: PublicationSuggestion[],
+): BlockSuggestionReplacementResult => {
+  const replacedIds = suggestions
+    .filter((suggestion) => suggestion.block_id === blockId)
+    .map((suggestion) => suggestion.id);
+
+  return {
+    suggestions: [
+      ...suggestions.filter((suggestion) => suggestion.block_id !== blockId),
+      ...nextBlockSuggestions,
+    ],
+    replacedIds,
   };
 };
 
