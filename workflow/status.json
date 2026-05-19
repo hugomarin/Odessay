@@ -30,6 +30,15 @@
   },
   "built": [
     {
+      "what": "Expand the editor correction sidebar to show every pending correction kind instead of only spelling suggestions. The renamed `CorrectionsPanel` now renders `pending` and `pending-stale` suggestions in document order regardless of kind, the topbar entry point now matches the broader scope, and the AI corrections adapter preserves `grammar` and `punctuation` kinds instead of collapsing them into `spelling`.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-164",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-164/show-all-pending-correction-kinds-in-orthography-panel-remove-kind",
+      "commit": "c59a4a7",
+      "date": "2026-05-19",
+      "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (WARN only: pre-existing ODE-502 missing in status.json), npm run typecheck (clean), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test (68 files, 367 tests passing), npm run ops:delivery:gate (passed after adding this built entry). Performance contract: not required — panel rendering consumes existing in-memory state and does not change editor latency, bootstrap, payloads, requests, or reactive fan-out. Presentation contract: not required — scope is confined to the `/write/[id]` correction sidebar, not cross-surface rich-text rendering."
+    },
+    {
       "what": "Implement smart invalidation for stale correction suggestions. Editing a dirty block now preserves only the surviving suggestions whose `original_text` still exists in the block, marks them as `pending-stale`, renders them with reduced opacity, and disables accept actions until the fresh model response replaces them. Inline editor bubbles follow the same disabled state, and regression coverage now verifies stale keep/drop/replace behavior.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-163",
