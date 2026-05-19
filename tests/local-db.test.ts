@@ -7,7 +7,7 @@ import {
   subscribeToLocalDBScopeChanges,
 } from "../lib/local-db";
 import { createEmptyEditorSession } from "../lib/local-db/editor-sessions";
-import type { LocalWriting, SyncMutation } from "../lib/local-db/schema";
+import type { LocalCorrectionBlock, LocalWriting, PublicationSuggestion, SyncMutation } from "../lib/local-db/schema";
 
 const createWriting = (id: string, version: number): LocalWriting => ({
   id,
@@ -45,6 +45,36 @@ const createMutation = (id: string, writingId: string, version: number): SyncMut
   created_at: version,
   attempts: 0,
 });
+
+const createSuggestion = (id: string): PublicationSuggestion => ({
+  id,
+  kind: "spelling",
+  title: "Fix spelling",
+  reason: "",
+  original_text: "prueva",
+  replacement_text: "prueba",
+  block_id: "correction-block:blk-a:12",
+  source_hash: "blk-a",
+  status: "pending",
+})
+
+const createCorrectionBlock = (
+  id: string,
+  writingId: string,
+  createdAt: string,
+): LocalCorrectionBlock => ({
+  id,
+  writingId,
+  blockId: "correction-block:blk-a:12",
+  blockHash: id.split(":").at(-1) ?? id,
+  suggestions: [createSuggestion(`suggestion-${id}`)],
+  model: "test-model",
+  createdAt,
+  latencyMs: 120,
+  promptTokens: 10,
+  completionTokens: 5,
+  syncedAt: null,
+})
 
 beforeEach(() => {
   vi.stubGlobal("window", globalThis);
@@ -116,5 +146,41 @@ describe("localDB", () => {
 
     setLocalDBScope("editor-user-a");
     expect((await localDB.editorSessions.get("workspace"))?.active_tab_id).toBe("writing-a");
+  });
+
+  it("stores, syncs, and evicts correction blocks by writing", async () => {
+    setLocalDBScope("corrections-user");
+
+    await localDB.correctionBlocks.save(
+      createCorrectionBlock(
+        "auto-correction:writing-a:blk-a",
+        "writing-a",
+        "2026-05-19T00:00:00.000Z",
+      ),
+    );
+    await localDB.correctionBlocks.save(
+      createCorrectionBlock(
+        "auto-correction:writing-b:blk-b",
+        "writing-b",
+        "2026-05-20T00:00:00.000Z",
+      ),
+    );
+
+    const writingABlocks = await localDB.correctionBlocks.getByWriting("writing-a");
+    expect(writingABlocks).toHaveLength(1);
+    expect(writingABlocks[0]?.syncedAt).toBeNull();
+
+    await localDB.correctionBlocks.markSynced(
+      "auto-correction:writing-a:blk-a",
+      "2026-05-21T00:00:00.000Z",
+    );
+    expect((await localDB.correctionBlocks.getByWriting("writing-a"))[0]?.syncedAt).toBe(
+      "2026-05-21T00:00:00.000Z",
+    );
+
+    const evictedWritingId = await localDB.correctionBlocks.evictOldestWriting(1);
+    expect(evictedWritingId).toBe("writing-a");
+    expect(await localDB.correctionBlocks.getByWriting("writing-a")).toEqual([]);
+    expect(await localDB.correctionBlocks.getByWriting("writing-b")).toHaveLength(1);
   });
 });

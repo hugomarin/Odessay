@@ -3,6 +3,7 @@ import {
   LOCAL_DB_STORES,
   LOCAL_DB_VERSION,
   type CollectionListFilters,
+  type LocalCorrectionBlock,
   type LocalEditorSession,
   type LocalCollection,
   type LocalDBScope,
@@ -29,6 +30,15 @@ type LocalDB = {
     get: (id: string) => Promise<LocalCollection | null>;
     getAll: (filters?: CollectionListFilters) => Promise<LocalCollection[]>;
     delete: (id: string) => Promise<void>;
+  };
+  correctionBlocks: {
+    save: (block: LocalCorrectionBlock) => Promise<void>;
+    saveMany: (blocks: LocalCorrectionBlock[]) => Promise<void>;
+    getByWriting: (writingId: string) => Promise<LocalCorrectionBlock[]>;
+    delete: (id: string) => Promise<void>;
+    deleteMany: (ids: string[]) => Promise<void>;
+    markSynced: (id: string, syncedAt: string) => Promise<void>;
+    evictOldestWriting: (maxWritings: number) => Promise<string | null>;
   };
   writingCollections: {
     replaceForWriting: (writingId: string, collectionIds: string[]) => Promise<void>;
@@ -245,6 +255,28 @@ const openDatabase = () => {
         database.createObjectStore(LOCAL_DB_STORES.editorSessions, {
           keyPath: "id",
         });
+      }
+
+      if (!database.objectStoreNames.contains(LOCAL_DB_STORES.correctionBlocks)) {
+        const correctionStore = database.createObjectStore(LOCAL_DB_STORES.correctionBlocks, {
+          keyPath: "id",
+        });
+        correctionStore.createIndex("by-writing-id", "writingId", { unique: false });
+        correctionStore.createIndex("by-created-at", "createdAt", { unique: false });
+      } else {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const correctionStore = transaction.objectStore(LOCAL_DB_STORES.correctionBlocks);
+
+          if (!correctionStore.indexNames.contains("by-writing-id")) {
+            correctionStore.createIndex("by-writing-id", "writingId", { unique: false });
+          }
+
+          if (!correctionStore.indexNames.contains("by-created-at")) {
+            correctionStore.createIndex("by-created-at", "createdAt", { unique: false });
+          }
+        }
       }
 
       if (oldVersion < 3 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
@@ -481,6 +513,24 @@ const saveCollection = async (collection: LocalCollection) => {
   emitLocalDBChange();
 };
 
+const saveCorrectionBlock = async (block: LocalCorrectionBlock) => {
+  await withStore(LOCAL_DB_STORES.correctionBlocks, "readwrite", async (store) => {
+    await runRequest(store.put(block));
+  });
+  emitLocalDBChange();
+};
+
+const saveCorrectionBlocks = async (blocks: LocalCorrectionBlock[]) => {
+  if (blocks.length === 0) {
+    return;
+  }
+
+  await withStore(LOCAL_DB_STORES.correctionBlocks, "readwrite", async (store) => {
+    await Promise.all(blocks.map((block) => runRequest(store.put(block))));
+  });
+  emitLocalDBChange();
+};
+
 const saveEditorSession = async (session: LocalEditorSession) => {
   await withStore(LOCAL_DB_STORES.editorSessions, "readwrite", async (store) => {
     await runRequest(store.put(session));
@@ -493,6 +543,95 @@ const getEditorSession = async (id: string) =>
     const session = await runRequest(store.get(id));
     return (session as LocalEditorSession | undefined) ?? null;
   });
+
+const getCorrectionBlocksByWriting = async (writingId: string) =>
+  withStore(LOCAL_DB_STORES.correctionBlocks, "readonly", async (store) => {
+    const blocks = (await runRequest(
+      store.index("by-writing-id").getAll(IDBKeyRange.only(writingId)),
+    )) as LocalCorrectionBlock[];
+
+    return blocks.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  });
+
+const deleteCorrectionBlock = async (id: string) => {
+  await withStore(LOCAL_DB_STORES.correctionBlocks, "readwrite", async (store) => {
+    await runRequest(store.delete(id));
+  });
+  emitLocalDBChange();
+};
+
+const deleteCorrectionBlocks = async (ids: string[]) => {
+  if (ids.length === 0) {
+    return;
+  }
+
+  await withStore(LOCAL_DB_STORES.correctionBlocks, "readwrite", async (store) => {
+    await Promise.all(ids.map((id) => runRequest(store.delete(id))));
+  });
+  emitLocalDBChange();
+};
+
+const markCorrectionBlockSynced = async (id: string, syncedAt: string) => {
+  await withStore(LOCAL_DB_STORES.correctionBlocks, "readwrite", async (store) => {
+    const block = (await runRequest(store.get(id))) as LocalCorrectionBlock | undefined;
+
+    if (!block) {
+      return;
+    }
+
+    await runRequest(
+      store.put({
+        ...block,
+        syncedAt,
+      } satisfies LocalCorrectionBlock),
+    );
+  });
+  emitLocalDBChange();
+};
+
+const evictOldestCorrectionWriting = async (maxWritings: number) => {
+  if (maxWritings < 1) {
+    return null;
+  }
+
+  const blocks = await withStore(LOCAL_DB_STORES.correctionBlocks, "readonly", async (store) =>
+    (await runRequest(store.getAll())) as LocalCorrectionBlock[],
+  );
+  const writingMeta = new Map<string, { oldestCreatedAt: string; blockIds: string[] }>();
+
+  for (const block of blocks) {
+    const existing = writingMeta.get(block.writingId);
+
+    if (!existing) {
+      writingMeta.set(block.writingId, {
+        oldestCreatedAt: block.createdAt,
+        blockIds: [block.id],
+      });
+      continue;
+    }
+
+    existing.oldestCreatedAt =
+      existing.oldestCreatedAt.localeCompare(block.createdAt) <= 0
+        ? existing.oldestCreatedAt
+        : block.createdAt;
+    existing.blockIds.push(block.id);
+  }
+
+  if (writingMeta.size <= maxWritings) {
+    return null;
+  }
+
+  const oldestWriting = [...writingMeta.entries()].sort((left, right) =>
+    left[1].oldestCreatedAt.localeCompare(right[1].oldestCreatedAt),
+  )[0];
+
+  if (!oldestWriting) {
+    return null;
+  }
+
+  await deleteCorrectionBlocks(oldestWriting[1].blockIds);
+  return oldestWriting[0];
+};
 
 const getCollection = async (id: string) =>
   withStore(LOCAL_DB_STORES.collections, "readonly", async (store) => {
@@ -792,6 +931,15 @@ const localDBInstance: LocalDB = {
     get: getCollection,
     getAll: getAllCollections,
     delete: softDeleteCollection,
+  },
+  correctionBlocks: {
+    save: saveCorrectionBlock,
+    saveMany: saveCorrectionBlocks,
+    getByWriting: getCorrectionBlocksByWriting,
+    delete: deleteCorrectionBlock,
+    deleteMany: deleteCorrectionBlocks,
+    markSynced: markCorrectionBlockSynced,
+    evictOldestWriting: evictOldestCorrectionWriting,
   },
   writingCollections: {
     replaceForWriting: replaceWritingCollections,

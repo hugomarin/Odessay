@@ -53,7 +53,9 @@ import {
   clearPublicationSuggestions,
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
+import { createCorrectionSuggestionBatcher } from "@/lib/editor/correction-suggestion-batcher"
 import {
+  collectCorrectionBlocks,
   acknowledgeCorrectionDirtyBlocks,
   getCurrentCorrectionBlock,
   type CorrectionTriggerBlock,
@@ -90,8 +92,22 @@ import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { logCorrectionEvent } from "@/lib/observability/corrections-log"
+import {
+  CORRECTION_BLOCK_CACHE_LIMIT,
+  createCorrectionBlockRecordId,
+  hydrateCorrectionBlocksFromRemote,
+  parseCorrectionBlockPosition,
+  persistCorrectionBlockRemotely,
+} from "@/lib/corrections/persistence"
 import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
-import type { LocalWriting, PublicationSuggestion, WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import type {
+  LocalCorrectionBlock,
+  LocalWriting,
+  PublicationSuggestion,
+  WritingLifecycle,
+  WritingStatus,
+  WritingVisibility,
+} from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { hydrateLocalWritingFromRemote, needsBodyHydration } from "@/lib/sync/remote-bootstrap"
@@ -173,6 +189,9 @@ type CorrectionToastState = {
 
 type AutomaticCorrectionApiResponse = {
   suggestions: PublicationSuggestion[]
+  model: string
+  promptTokens: number | null
+  completionTokens: number | null
 }
 
 const NotesPanel = lazy(() =>
@@ -331,6 +350,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
+  const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
+  const enqueueCorrectionBlockRef = useRef<((block: CorrectionTriggerBlock, reason?: "edit" | "hydrate-miss") => void) | null>(null)
   const correctionQueueRef = useRef<CorrectionTriggerBlock[]>([])
   const correctionProcessingRef = useRef(false)
   const correctionQueueTotalRef = useRef(0)
@@ -343,9 +364,157 @@ export function EditorShell({ writingId }: EditorShellProps) {
     () => buildEditorSpellcheckConfig(spellcheckPreference),
     [spellcheckPreference],
   )
+  const correctionSuggestionBatcher = useMemo(
+    () => createCorrectionSuggestionBatcher(setAutomaticCorrectionSuggestions),
+    [],
+  )
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
     setBodyText(editorInstance.getText())
+  }, [])
+
+  const applyCorrectionSuggestionUpdate = useCallback(
+    (
+      updater: (current: PublicationSuggestion[]) => PublicationSuggestion[],
+      options?: { immediate?: boolean },
+    ) => {
+      if (options?.immediate) {
+        correctionSuggestionBatcher.flush()
+        setAutomaticCorrectionSuggestions(updater)
+        return
+      }
+
+      correctionSuggestionBatcher.enqueue(updater)
+    },
+    [correctionSuggestionBatcher],
+  )
+
+  const setPersistedCorrectionBlocks = useCallback((blocks: LocalCorrectionBlock[]) => {
+    persistedCorrectionBlocksRef.current = new Map(
+      blocks.map((block) => [block.blockHash, block] satisfies [string, LocalCorrectionBlock]),
+    )
+  }, [])
+
+  const flattenPersistedSuggestions = useCallback((blocks: LocalCorrectionBlock[]) => {
+    const suggestionsById = new Map<string, PublicationSuggestion>()
+
+    for (const block of blocks) {
+      for (const suggestion of block.suggestions) {
+        suggestionsById.set(suggestion.id, suggestion)
+      }
+    }
+
+    return [...suggestionsById.values()]
+  }, [])
+
+  const syncPersistedCorrectionBlock = useCallback(async (block: LocalCorrectionBlock) => {
+    persistedCorrectionBlocksRef.current.set(block.blockHash, block)
+    await localDB.correctionBlocks.save(block)
+    await localDB.correctionBlocks.evictOldestWriting(CORRECTION_BLOCK_CACHE_LIMIT)
+  }, [])
+
+  const persistCorrectionBlockWriteThrough = useCallback(
+    async (block: LocalCorrectionBlock, deletedBlockIds: string[] = []) => {
+      await syncPersistedCorrectionBlock(block)
+
+      void persistCorrectionBlockRemotely({
+        writingId: block.writingId,
+        block,
+        deletedBlockIds,
+      })
+        .then(() => {
+          persistedCorrectionBlocksRef.current.set(block.blockHash, {
+            ...block,
+            syncedAt: new Date().toISOString(),
+          })
+        })
+        .catch((error) => {
+          console.info(
+            `[corrections] persist skipped message=${error instanceof Error ? error.message : String(error)}`,
+          )
+        })
+    },
+    [syncPersistedCorrectionBlock],
+  )
+
+  const updatePersistedBlocksFromSuggestions = useCallback(
+    async (nextSuggestions: PublicationSuggestion[], blockHashes: string[]) => {
+      const updatedBlocks = blockHashes
+        .map((blockHash) => {
+          const currentBlock = persistedCorrectionBlocksRef.current.get(blockHash)
+
+          if (!currentBlock) {
+            return null
+          }
+
+          return {
+            ...currentBlock,
+            suggestions: nextSuggestions.filter((suggestion) => suggestion.source_hash === blockHash),
+          } satisfies LocalCorrectionBlock
+        })
+        .filter((block): block is LocalCorrectionBlock => block !== null)
+
+      if (updatedBlocks.length === 0) {
+        return
+      }
+
+      for (const block of updatedBlocks) {
+        await persistCorrectionBlockWriteThrough(block)
+      }
+    },
+    [persistCorrectionBlockWriteThrough],
+  )
+
+  const deletePersistedBlocksForPosition = useCallback(
+    async (writingId: string, block: CorrectionTriggerBlock) => {
+      const staleBlocks = [...persistedCorrectionBlocksRef.current.values()].filter((candidate) => {
+        const candidatePosition = parseCorrectionBlockPosition(candidate.blockId)
+        return candidatePosition === block.pos && candidate.blockHash !== block.hash
+      })
+
+      if (staleBlocks.length === 0) {
+        return
+      }
+
+      staleBlocks.forEach((candidate) => {
+        persistedCorrectionBlocksRef.current.delete(candidate.blockHash)
+      })
+      await localDB.correctionBlocks.deleteMany(staleBlocks.map((candidate) => candidate.id))
+
+      void persistCorrectionBlockRemotely({
+        writingId,
+        deletedBlockIds: staleBlocks.map((candidate) => candidate.id),
+      }).catch((error) => {
+        console.info(
+          `[corrections] stale delete skipped message=${error instanceof Error ? error.message : String(error)}`,
+        )
+      })
+    },
+    [],
+  )
+
+  const flushPendingCorrectionBlocks = useCallback(async (writingId: string) => {
+    const pendingBlocks = (await localDB.correctionBlocks.getByWriting(writingId)).filter(
+      (block) => block.syncedAt === null,
+    )
+
+    for (const block of pendingBlocks) {
+      void persistCorrectionBlockRemotely({
+        writingId,
+        block,
+      })
+        .then(() => {
+          persistedCorrectionBlocksRef.current.set(block.blockHash, {
+            ...block,
+            syncedAt: new Date().toISOString(),
+          })
+        })
+        .catch((error) => {
+          console.info(
+            `[corrections] retry skipped message=${error instanceof Error ? error.message : String(error)}`,
+          )
+        })
+    }
   }, [])
 
   const persistEditorSnapshot = useCallback(
@@ -654,6 +823,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
     modeRef.current = mode
   }, [mode])
 
+  useEffect(() => () => correctionSuggestionBatcher.clear(), [correctionSuggestionBatcher])
+
   useEffect(() => {
     if (!editor) {
       return
@@ -872,6 +1043,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
       setWritingSlug(null)
       setLifecycle("local-only")
       setSyncStatus("saved")
+      setPersistedCorrectionBlocks([])
+      applyCorrectionSuggestionUpdate(() => [], { immediate: true })
       titleRef.current = UNTITLED_WRITING_TITLE
       hasExplicitTitleRef.current = false
       versionRef.current = 0
@@ -892,6 +1065,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
     const hydrateEditor = async () => {
       let localWriting = await localDB.writings.get(targetWritingId)
+      let localCorrectionBlocks = await localDB.correctionBlocks.getByWriting(targetWritingId)
 
       if (needsBodyHydration(localWriting)) {
         // Editor shell mounts immediately; if the remote fetch takes longer than
@@ -921,6 +1095,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
         localWriting = await localDB.writings.get(targetWritingId)
       }
 
+      if (localCorrectionBlocks.length === 0) {
+        try {
+          localCorrectionBlocks = await hydrateCorrectionBlocksFromRemote(targetWritingId)
+        } catch (error) {
+          console.error(`[editor] correction hydration failed for ${targetWritingId}`, error)
+          localCorrectionBlocks = []
+        }
+      } else {
+        void flushPendingCorrectionBlocks(targetWritingId)
+      }
+
       if (cancelled) {
         return
       }
@@ -937,6 +1122,41 @@ export function EditorShell({ writingId }: EditorShellProps) {
           editor.commands.setContent(materializeMarkdownForRichParser(loadedMarkdown))
         }
         isApplyingContentRef.current = false
+        setPersistedCorrectionBlocks(localCorrectionBlocks)
+        applyCorrectionSuggestionUpdate(() => flattenPersistedSuggestions(localCorrectionBlocks), {
+          immediate: true,
+        })
+
+        if (localCorrectionBlocks.length > 0) {
+          suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
+        }
+
+        const cachedBlockHashes = new Set(localCorrectionBlocks.map((block) => block.blockHash))
+        const uncachedBlocks = collectCorrectionBlocks(editor.state.doc).filter(
+          (block) => block.wordCount >= 8 && !cachedBlockHashes.has(block.hash),
+        )
+
+        for (const block of uncachedBlocks) {
+          const existingTimer = correctionTimersRef.current.get(block.id)
+
+          if (existingTimer) {
+            window.clearTimeout(existingTimer.timer)
+            correctionTimersRef.current.delete(block.id)
+          }
+
+          const timer = window.setTimeout(() => {
+            correctionTimersRef.current.delete(block.id)
+            const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+
+            if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
+              return
+            }
+
+            enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
+          }, 2000)
+
+          correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
+        }
 
         const loadedTitle = localWriting.title?.trim() || UNTITLED_WRITING_TITLE
         const loadedHasExplicitTitle = isExplicitWritingTitle(loadedTitle, localWriting.body_text, localWriting.created_at)
@@ -1057,7 +1277,19 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       cancelled = true
     }
-  }, [currentWritingId, editor, editorSession.tabs, hydrationWritingId, queueMarkdownSelectionRestore, routeWritingId, updateDerivedEditorState])
+  }, [
+    applyCorrectionSuggestionUpdate,
+    currentWritingId,
+    editor,
+    editorSession.tabs,
+    flattenPersistedSuggestions,
+    flushPendingCorrectionBlocks,
+    hydrationWritingId,
+    queueMarkdownSelectionRestore,
+    routeWritingId,
+    setPersistedCorrectionBlocks,
+    updateDerivedEditorState,
+  ])
 
   useEffect(() => {
     if (!currentWritingId) {
@@ -1169,17 +1401,25 @@ export function EditorShell({ writingId }: EditorShellProps) {
         suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
         applyMarkdownFromPanel(result.markdown)
         rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
-        setAutomaticCorrectionSuggestions((current) =>
-          updateSuggestionStatuses(current, [suggestion.id], "accepted"),
+        const nextSuggestions = updateSuggestionStatuses(
+          automaticCorrectionSuggestionsRef.current,
+          [suggestion.id],
+          "accepted",
         )
+        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
         return
       }
 
-      setAutomaticCorrectionSuggestions((current) =>
-        updateSuggestionStatuses(current, [suggestion.id], "conflict"),
+      const nextSuggestions = updateSuggestionStatuses(
+        automaticCorrectionSuggestionsRef.current,
+        [suggestion.id],
+        "conflict",
       )
+      applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+      void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
     },
-    [applyMarkdownFromPanel],
+    [applyCorrectionSuggestionUpdate, applyMarkdownFromPanel, updatePersistedBlocksFromSuggestions],
   )
 
   const handleRejectCorrection = useCallback((suggestionId: string) => {
@@ -1190,10 +1430,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
-    setAutomaticCorrectionSuggestions((current) =>
-      updateSuggestionStatuses(current, [suggestionId], "rejected"),
+    const nextSuggestions = updateSuggestionStatuses(
+      automaticCorrectionSuggestionsRef.current,
+      [suggestionId],
+      "rejected",
     )
-  }, [])
+    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+    void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
+  }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
   const handleAcceptAllCorrections = useCallback(() => {
     const result = applyAllPublicationSuggestions(
@@ -1209,23 +1453,40 @@ export function EditorShell({ writingId }: EditorShellProps) {
     automaticCorrectionSuggestionsRef.current
       .filter((suggestion) => result.appliedIds.includes(suggestion.id))
       .forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted"))
-    setAutomaticCorrectionSuggestions((current) =>
-      updateSuggestionStatuses(current, result.appliedIds, "accepted"),
+    const nextSuggestions = updateSuggestionStatuses(
+      automaticCorrectionSuggestionsRef.current,
+      result.appliedIds,
+      "accepted",
     )
-  }, [applyMarkdownFromPanel])
+    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+    void updatePersistedBlocksFromSuggestions(
+      nextSuggestions,
+      [
+        ...new Set(
+          automaticCorrectionSuggestionsRef.current
+            .filter((suggestion) => result.appliedIds.includes(suggestion.id))
+            .map((suggestion) => suggestion.source_hash ?? "")
+            .filter(Boolean),
+        ),
+      ],
+    )
+  }, [applyCorrectionSuggestionUpdate, applyMarkdownFromPanel, updatePersistedBlocksFromSuggestions])
 
   const handleRejectAllCorrections = useCallback(() => {
     const pending = automaticCorrectionSuggestionsRef.current.filter((s) => s.status === "pending")
 
     pending.forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected"))
-    setAutomaticCorrectionSuggestions((current) =>
-      updateSuggestionStatuses(
-        current,
-        pending.map((s) => s.id),
-        "rejected",
-      ),
+    const nextSuggestions = updateSuggestionStatuses(
+      automaticCorrectionSuggestionsRef.current,
+      pending.map((s) => s.id),
+      "rejected",
     )
-  }, [])
+    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+    void updatePersistedBlocksFromSuggestions(
+      nextSuggestions,
+      [...new Set(pending.map((suggestion) => suggestion.source_hash ?? "").filter(Boolean))],
+    )
+  }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
     if (!editor || modeRef.current !== "rich") {
@@ -2274,6 +2535,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
         }
 
         const normalizedSuggestions = suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion))
+        const nextCorrectionBlock: LocalCorrectionBlock | null = currentWritingIdRef.current
+          ? {
+              id: createCorrectionBlockRecordId(currentWritingIdRef.current, block.hash),
+              writingId: currentWritingIdRef.current,
+              blockId: block.id,
+              blockHash: block.hash,
+              suggestions: normalizedSuggestions,
+              model: payload.data?.model ?? "unknown-model",
+              createdAt: new Date().toISOString(),
+              latencyMs: Date.now() - requestStartedAt,
+              promptTokens: payload.data?.promptTokens ?? null,
+              completionTokens: payload.data?.completionTokens ?? null,
+              syncedAt: null,
+            }
+          : null
 
         const replacement = replaceBlockSuggestions(
           automaticCorrectionSuggestionsRef.current,
@@ -2297,9 +2573,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
           })
         }
 
-        setAutomaticCorrectionSuggestions((current) =>
+        applyCorrectionSuggestionUpdate((current) =>
           replaceBlockSuggestions(current, block.id, normalizedSuggestions).suggestions,
         )
+
+        if (nextCorrectionBlock) {
+          await persistCorrectionBlockWriteThrough(nextCorrectionBlock)
+        }
         logCorrectionEvent({
           type: "request:end",
           batchId,
@@ -2322,11 +2602,28 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
     correctionProcessingRef.current = false
     finishCorrectionQueueIfIdle()
-  }, [editor, finishCorrectionQueueIfIdle, getBlockSuggestions, normalizeAutomaticSuggestion])
+  }, [
+    applyCorrectionSuggestionUpdate,
+    editor,
+    finishCorrectionQueueIfIdle,
+    getBlockSuggestions,
+    normalizeAutomaticSuggestion,
+    persistCorrectionBlockWriteThrough,
+  ])
 
   const enqueueCorrectionBlock = useCallback(
-    (block: CorrectionTriggerBlock) => {
+    (block: CorrectionTriggerBlock, reason: "edit" | "hydrate-miss" = "edit") => {
+      const cachedBlock = persistedCorrectionBlocksRef.current.get(block.hash)
       const hasMemorySuggestion = getBlockSuggestions(block.id, block.hash).length > 0
+
+      if (cachedBlock) {
+        logCorrectionEvent({
+          type: "cache:hit",
+          blockId: block.id,
+          source: cachedBlock.syncedAt ? "supabase" : "idb",
+        })
+        return
+      }
 
       logCorrectionEvent(
         hasMemorySuggestion
@@ -2349,7 +2646,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
         logCorrectionEvent({
           type: "queue:enqueue",
           blockId: block.id,
-          reason: "edit",
+          reason,
         })
       }
 
@@ -2363,6 +2660,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
     },
     [getBlockSuggestions, processCorrectionQueue],
   )
+
+  useEffect(() => {
+    enqueueCorrectionBlockRef.current = enqueueCorrectionBlock
+  }, [enqueueCorrectionBlock])
 
   useEffect(() => {
     if (!editor) {
@@ -2379,8 +2680,12 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
 
       for (const block of blocks) {
+        if (currentWritingIdRef.current) {
+          void deletePersistedBlocksForPosition(currentWritingIdRef.current, block)
+        }
+
         const applyStaleInvalidation = () => {
-          setAutomaticCorrectionSuggestions((current) => {
+          applyCorrectionSuggestionUpdate((current) => {
             const invalidation = invalidateBlockSuggestions(current, block)
 
             for (const suggestionId of invalidation.droppedIds) {
@@ -2437,7 +2742,25 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       editor.view.dom.removeEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
     }
-  }, [editor, enqueueCorrectionBlock, getBlockSuggestions])
+  }, [applyCorrectionSuggestionUpdate, deletePersistedBlocksForPosition, editor, enqueueCorrectionBlock, getBlockSuggestions])
+
+  useEffect(() => {
+    const handleOnline = () => {
+      const writingId = currentWritingIdRef.current
+
+      if (!writingId) {
+        return
+      }
+
+      void flushPendingCorrectionBlocks(writingId)
+    }
+
+    window.addEventListener("online", handleOnline)
+
+    return () => {
+      window.removeEventListener("online", handleOnline)
+    }
+  }, [flushPendingCorrectionBlocks])
 
   useEffect(() => {
     const handleAutomaticInlineAction = (event: Event) => {
@@ -2465,23 +2788,35 @@ export function EditorShell({ writingId }: EditorShellProps) {
           suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
           applyMarkdownFromPanel(result.markdown)
           rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
-          setAutomaticCorrectionSuggestions((current) =>
-            updateSuggestionStatuses(current, [suggestion.id], "accepted"),
+          const nextSuggestions = updateSuggestionStatuses(
+            automaticCorrectionSuggestionsRef.current,
+            [suggestion.id],
+            "accepted",
           )
+          applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+          void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
           return
         }
 
-        setAutomaticCorrectionSuggestions((current) =>
-          updateSuggestionStatuses(current, [suggestion.id], "conflict"),
+        const nextSuggestions = updateSuggestionStatuses(
+          automaticCorrectionSuggestionsRef.current,
+          [suggestion.id],
+          "conflict",
         )
+        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
         return
       }
 
       if (detail.action === "reject") {
         rememberCorrectionDecision(suggestion.correction_fingerprint, "rejected")
-        setAutomaticCorrectionSuggestions((current) =>
-          updateSuggestionStatuses(current, [suggestion.id], "rejected"),
+        const nextSuggestions = updateSuggestionStatuses(
+          automaticCorrectionSuggestionsRef.current,
+          [suggestion.id],
+          "rejected",
         )
+        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
       }
     }
 
@@ -2490,7 +2825,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       window.removeEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
     }
-  }, [applyMarkdownFromPanel])
+  }, [applyCorrectionSuggestionUpdate, applyMarkdownFromPanel, updatePersistedBlocksFromSuggestions])
   const markdownFindMatches = useMemo(
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
