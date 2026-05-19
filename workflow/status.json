@@ -1288,6 +1288,15 @@
       "commit": "39a17cf",
       "date": "2026-05-17",
       "notes": "Validation: node v20.19.1, npm run env:check (passed), npm run ops:status:drift (WARN mode, pre-existing ODE-502 only), npm run typecheck (clean), npm run lint (6 pre-existing react-hooks/exhaustive-deps warnings), npm test (352 passed, 3 pre-existing failures unrelated). New tests: tests/sync/remote-bootstrap-dedup.test.ts (3 tests) and tests/collections/remote-bootstrap-dedup.test.ts (3 tests) verify 4 concurrent calls produce 1 fetch, errors propagate to all callers, and the in-flight slot is released after settlement. Performance contract: waterfall shape required — unit tests prove 0 duplicate requests; time-to-interactive required — dedup reduces Desk bootstrap by avoiding 2-3 duplicate loads. No editor perf trace required (issue does not touch hot path)."
+    },
+    {
+      "what": "Simplify the AI corrections contract and related editor/import/docs surfaces. ODE-502 removed unnecessary structured-output fields from the mechanical corrections flow, hardened publication-review resilience, simplified the orthography panel and suggestion bubbles, removed an unnecessary import timeout, and updated the product skills/docs to adopt the multidimensional performance contract.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-502",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-502",
+      "commit": "bff1eb1",
+      "date": "2026-05-17",
+      "notes": "Traceability backfill from merged PR #146. Merge commit: bff1eb13cc4ded335b7d1fd967a98542ea292d19. PR: fix(ai): simplificar correcciones, mejorar resiliencia y contrato de velocidad multidimensional [ODE-502]. Included workstreams: AI correction contract simplification/resilience, orthography panel + inline suggestion UI simplification, import timeout cleanup, and performance-contract documentation/skill updates."
     }
   ]
 }
