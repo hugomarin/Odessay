@@ -63,6 +63,9 @@ import {
   applySuggestionToMarkdown,
   deriveSuggestionContexts,
   hashPublicationSource,
+  invalidateBlockSuggestions,
+  isSuggestionAcceptDisabled,
+  replaceBlockSuggestions,
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
 import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
@@ -2272,11 +2275,17 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
         const normalizedSuggestions = suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion))
 
-        for (const suggestion of getBlockSuggestions(block.id)) {
+        const replacement = replaceBlockSuggestions(
+          automaticCorrectionSuggestionsRef.current,
+          block.id,
+          normalizedSuggestions,
+        )
+
+        for (const suggestionId of replacement.replacedIds) {
           logCorrectionEvent({
             type: "stale:drop",
             blockId: block.id,
-            suggestionId: suggestion.id,
+            suggestionId,
           })
         }
 
@@ -2288,10 +2297,9 @@ export function EditorShell({ writingId }: EditorShellProps) {
           })
         }
 
-        setAutomaticCorrectionSuggestions((current) => [
-          ...current.filter((suggestion) => suggestion.block_id !== block.id),
-          ...normalizedSuggestions,
-        ])
+        setAutomaticCorrectionSuggestions((current) =>
+          replaceBlockSuggestions(current, block.id, normalizedSuggestions).suggestions,
+        )
         logCorrectionEvent({
           type: "request:end",
           batchId,
@@ -2371,17 +2379,32 @@ export function EditorShell({ writingId }: EditorShellProps) {
       }
 
       for (const block of blocks) {
+        const applyStaleInvalidation = () => {
+          setAutomaticCorrectionSuggestions((current) => {
+            const invalidation = invalidateBlockSuggestions(current, block)
+
+            for (const suggestionId of invalidation.droppedIds) {
+              logCorrectionEvent({
+                type: "stale:drop",
+                blockId: block.id,
+                suggestionId,
+              })
+            }
+
+            for (const suggestionId of invalidation.keptIds) {
+              logCorrectionEvent({
+                type: "stale:keep",
+                blockId: block.id,
+                suggestionId,
+              })
+            }
+
+            return invalidation.suggestions
+          })
+        }
+
         if (block.wordCount < 8) {
-          for (const suggestion of getBlockSuggestions(block.id)) {
-            logCorrectionEvent({
-              type: "stale:drop",
-              blockId: block.id,
-              suggestionId: suggestion.id,
-            })
-          }
-          setAutomaticCorrectionSuggestions((current) =>
-            current.filter((suggestion) => suggestion.block_id !== block.id),
-          )
+          applyStaleInvalidation()
           continue
         }
 
@@ -2392,17 +2415,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
           correctionTimersRef.current.delete(block.id)
         }
 
-        for (const suggestion of getBlockSuggestions(block.id)) {
-          logCorrectionEvent({
-            type: "stale:drop",
-            blockId: block.id,
-            suggestionId: suggestion.id,
-          })
-        }
-
-        setAutomaticCorrectionSuggestions((current) =>
-          current.filter((suggestion) => suggestion.block_id !== block.id),
-        )
+        applyStaleInvalidation()
 
         const timer = window.setTimeout(() => {
           correctionTimersRef.current.delete(block.id)
@@ -2438,6 +2451,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
       const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
 
       if (!suggestion) {
+        return
+      }
+
+      if (isSuggestionAcceptDisabled(suggestion) && detail.action === "accept") {
         return
       }
 

@@ -180,7 +180,7 @@ export type LocalEditorSession = {
 };
 
 export type PublicationSuggestionKind = "spelling" | "rewriting";
-export type PublicationSuggestionStatus = "pending" | "accepted" | "rejected" | "conflict";
+export type PublicationSuggestionStatus = "pending" | "pending-stale" | "accepted" | "rejected" | "conflict";
 export type PublicationChecklistStatus = "pending" | "done";
 
 export type PublicationSuggestion = {

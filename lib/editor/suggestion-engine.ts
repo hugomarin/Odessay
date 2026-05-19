@@ -19,6 +19,22 @@ type ApplyAllSuggestionsResult = {
   appliedIds: string[];
 };
 
+type StaleInvalidationResult = {
+  suggestions: PublicationSuggestion[];
+  keptIds: string[];
+  droppedIds: string[];
+};
+
+type BlockSuggestionReplacementResult = {
+  suggestions: PublicationSuggestion[];
+  replacedIds: string[];
+};
+
+type SortedSuggestion = {
+  suggestion: PublicationSuggestion;
+  position: number;
+};
+
 const normalizeSearchValue = (value: string) =>
   value
     .replace(/\r\n/g, "\n")
@@ -151,6 +167,23 @@ export const findSuggestionMatch = (source: string, suggestion: PublicationSugge
     suggestion.occurrence,
   );
 
+export const getVisibleOrthographySuggestions = (
+  suggestions: PublicationSuggestion[],
+  markdown: string,
+) =>
+  suggestions
+    .filter(
+      (suggestion) =>
+        (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
+        suggestion.kind === "spelling",
+    )
+    .map((suggestion): SortedSuggestion => {
+      const match = findSuggestionMatch(markdown, suggestion);
+      return { suggestion, position: match?.start ?? Number.MAX_SAFE_INTEGER };
+    })
+    .sort((left, right) => left.position - right.position)
+    .map(({ suggestion }) => suggestion);
+
 export const applySuggestionToMarkdown = (
   source: string,
   suggestion: PublicationSuggestion,
@@ -194,6 +227,58 @@ export const applyAllPublicationSuggestions = (
 
   return { markdown: nextMarkdown, appliedIds };
 };
+
+export const invalidateBlockSuggestions = (
+  suggestions: PublicationSuggestion[],
+  block: { id: string; text: string },
+): StaleInvalidationResult => {
+  const keptIds: string[] = [];
+  const droppedIds: string[] = [];
+
+  const nextSuggestions = suggestions.flatMap((suggestion) => {
+    if (suggestion.block_id !== block.id) {
+      return [suggestion];
+    }
+
+    if (
+      (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
+      block.text.includes(suggestion.original_text)
+    ) {
+      keptIds.push(suggestion.id);
+      return [{ ...suggestion, status: "pending-stale" as const }];
+    }
+
+    droppedIds.push(suggestion.id);
+    return [];
+  });
+
+  return {
+    suggestions: nextSuggestions,
+    keptIds,
+    droppedIds,
+  };
+};
+
+export const replaceBlockSuggestions = (
+  suggestions: PublicationSuggestion[],
+  blockId: string,
+  nextBlockSuggestions: PublicationSuggestion[],
+): BlockSuggestionReplacementResult => {
+  const replacedIds = suggestions
+    .filter((suggestion) => suggestion.block_id === blockId)
+    .map((suggestion) => suggestion.id);
+
+  return {
+    suggestions: [
+      ...suggestions.filter((suggestion) => suggestion.block_id !== blockId),
+      ...nextBlockSuggestions,
+    ],
+    replacedIds,
+  };
+};
+
+export const isSuggestionAcceptDisabled = (suggestion: PublicationSuggestion) =>
+  suggestion.status === "pending-stale";
 
 export const updateSuggestionStatuses = (
   suggestions: PublicationSuggestion[],
