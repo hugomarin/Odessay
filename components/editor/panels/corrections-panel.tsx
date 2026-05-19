@@ -3,9 +3,9 @@
 import { useMemo } from "react";
 import { Check, X } from "lucide-react";
 import type { PublicationSuggestion } from "@/lib/local-db/schema";
-import { getVisibleOrthographySuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
+import { getVisibleCorrectionSuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
 
-type OrthographyPanelProps = {
+type CorrectionsPanelProps = {
   suggestions: PublicationSuggestion[];
   markdown: string;
   onAcceptSuggestion: (suggestion: PublicationSuggestion) => void;
@@ -15,7 +15,7 @@ type OrthographyPanelProps = {
   onClose: () => void;
 };
 
-export function OrthographyPanel({
+export function CorrectionsPanel({
   suggestions,
   markdown,
   onAcceptSuggestion,
@@ -23,9 +23,9 @@ export function OrthographyPanel({
   onAcceptAll,
   onRejectAll,
   onClose,
-}: OrthographyPanelProps) {
+}: CorrectionsPanelProps) {
   const visibleSuggestions = useMemo(
-    () => getVisibleOrthographySuggestions(suggestions, markdown),
+    () => getVisibleCorrectionSuggestions(suggestions, markdown),
     [suggestions, markdown],
   );
 
@@ -34,14 +34,14 @@ export function OrthographyPanel({
 
   return (
     <aside
-      id="editor-panel-orthography"
-      data-section="editor-panel-orthography"
-      data-testid="editor-panel-orthography"
+      id="editor-panel-corrections"
+      data-section="editor-panel-corrections"
+      data-testid="editor-panel-corrections"
       className="fixed right-0 top-[46px] bottom-8 z-40 w-[312px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
     >
       <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
         <div className="flex items-center gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Ortografía</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Correcciones</p>
           {hasPending ? (
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[hsl(22,55%,92%)] px-1.5 text-[10px] font-medium text-cursor">
               {visibleSuggestions.length}
@@ -52,7 +52,7 @@ export function OrthographyPanel({
           type="button"
           onClick={onClose}
           className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-          aria-label="Close orthography panel"
+          aria-label="Close corrections panel"
         >
           <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
         </button>

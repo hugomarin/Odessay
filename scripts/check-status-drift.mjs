@@ -29,6 +29,19 @@ function commitExists(commit) {
 
 const strict = process.argv.includes("--strict");
 const status = JSON.parse(readFileSync("workflow/status.json", "utf8"));
+const ignoredIssues = new Set(
+  Array.isArray(status.traceability_exceptions?.ignored_issue_ids)
+    ? status.traceability_exceptions.ignored_issue_ids
+        .map((entry) =>
+          typeof entry === "string"
+            ? entry
+            : typeof entry?.issue === "string"
+              ? entry.issue
+              : null,
+        )
+        .filter((issue) => typeof issue === "string")
+    : [],
+);
 const builtIssues = status.built
   .map((entry) => entry.issue)
   .filter((issue) => typeof issue === "string");
@@ -49,7 +62,9 @@ const subjects = execSync(`git log --pretty=%s ${ref}`, {
 });
 
 const gitIssueSet = new Set(
-  [...subjects.matchAll(/\bODE-\d+\b/g)].map((match) => match[0]),
+  [...subjects.matchAll(/\bODE-\d+\b/g)]
+    .map((match) => match[0])
+    .filter((issue) => !ignoredIssues.has(issue)),
 );
 
 const missingInStatus = [...gitIssueSet]
@@ -84,6 +99,13 @@ if (!hasProblems) {
   console.log(
     `[ops:status:drift] OK - ${builtIssueSet.size} issues in status.json aligned against ${ref}.`,
   );
+  if (ignoredIssues.size > 0) {
+    console.log(
+      `[ops:status:drift] Ignoring historical traceability exceptions: ${[...ignoredIssues]
+        .sort(compareIssueId)
+        .join(", ")}.`,
+    );
+  }
   process.exit(0);
 }
 

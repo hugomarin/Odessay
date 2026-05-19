@@ -137,7 +137,7 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`workflow/context/core/`, `workflow/context/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. `workflow/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `workflow/SETUP.md` solo aparece cuando cambian reglas operativas, tools o permisos.
+5. `workflow/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos.
 6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/context/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
 
 Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/status.json`.
@@ -216,7 +216,7 @@ Approval rule:
   - Resto: evidencia objetiva del navegador con número dentro de presupuesto.
 ```
 
-**Regla de severidad.** No es válido marcar las cinco como `not required` sin justificación dimensión por dimensión. Si el issue toca una `page.tsx`, peso/waterfall/time-to-interactive son `required` por defecto. Si toca una `route.ts` de lista, peso es `required` por defecto. La omisión por inercia es lo que produjo el caso ODE-58/ODE-138 (Desk con 70 s a interactivo); marcar `not required` requiere argumento, no silencio.
+**Regla de severidad.** No es válido marcar las cinco como `not required` sin justificación dimensión por dimensión. Pero tampoco es obligatorio expandir las cinco siempre: el default operativo es declarar solo las dimensiones que el diff realmente toca y marcar el resto `not required` con una justificación breve. Si el issue toca una `page.tsx`, peso/waterfall/time-to-interactive son `required` por defecto. Si toca una `route.ts` de lista, peso es `required` por defecto. La omisión por inercia es lo que produjo el caso ODE-58/ODE-138 (Desk con 70 s a interactivo); marcar `not required` requiere argumento, no silencio.
 
 **Defaults de activación automática (REVIEW debe verificar):**
 - Diff toca `app/api/**/route.ts` que devuelve lista → peso `required`.

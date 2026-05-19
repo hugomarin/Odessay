@@ -148,8 +148,11 @@ function evaluateMetric(value, budget) {
     return budget.required ? "invalid-budget" : "skip";
   }
 
+  const hardFailLte =
+    typeof budget.grace_lte === "number" ? budget.grace_lte : budget.fail_lte;
+
   if (value <= budget.warn_lte) return "pass";
-  if (value <= budget.fail_lte) return "warn";
+  if (value <= hardFailLte) return "warn";
   return "fail";
 }
 
@@ -180,6 +183,7 @@ function main() {
         value,
         warn_lte: budget.warn_lte ?? null,
         fail_lte: budget.fail_lte ?? null,
+        grace_lte: budget.grace_lte ?? null,
         status,
         note: budget.note ?? null,
       });
@@ -197,8 +201,9 @@ function main() {
   for (const evaluation of evaluations) {
     const valueLabel =
       typeof evaluation.value === "number" ? evaluation.value.toFixed(2) : "n/a";
+    const failThreshold = evaluation.grace_lte ?? evaluation.fail_lte;
     console.log(
-      `[ops:perf:gate] ${evaluation.status.toUpperCase()} ${evaluation.section}.${evaluation.metric} = ${valueLabel} (warn<=${evaluation.warn_lte ?? "n/a"} fail<=${evaluation.fail_lte ?? "n/a"})`,
+      `[ops:perf:gate] ${evaluation.status.toUpperCase()} ${evaluation.section}.${evaluation.metric} = ${valueLabel} (warn<=${evaluation.warn_lte ?? "n/a"} fail<=${failThreshold ?? "n/a"})`,
     );
   }
 

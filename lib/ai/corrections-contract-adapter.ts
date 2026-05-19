@@ -85,7 +85,13 @@ const isCanonicalContract = (value: unknown) => {
 };
 
 const toSuggestionKind = (type: z.infer<typeof mechanicalCorrectionTypeSchema>): PublicationSuggestionKind =>
-  type === "basic_redaction" ? "rewriting" : "spelling";
+  type === "basic_redaction"
+    ? "rewriting"
+    : type === "grammar"
+      ? "grammar"
+      : type === "punctuation"
+        ? "punctuation"
+        : "spelling";
 
 const hashCorrectionIdPart = (value: string) => {
   let hash = 2166136261;

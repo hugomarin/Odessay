@@ -179,7 +179,7 @@ export type LocalEditorSession = {
   updated_at: number;
 };
 
-export type PublicationSuggestionKind = "spelling" | "rewriting";
+export type PublicationSuggestionKind = "spelling" | "grammar" | "punctuation" | "rewriting";
 export type PublicationSuggestionStatus = "pending" | "pending-stale" | "accepted" | "rejected" | "conflict";
 export type PublicationChecklistStatus = "pending" | "done";
 

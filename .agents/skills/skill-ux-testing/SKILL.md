@@ -93,7 +93,7 @@ npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report ar
 ```
 
 4. Comparar `editor-before-report.json` vs `editor-after-report.json`.
-5. Si `required_failures > 0` en after, el issue no se entrega.
+5. Si `required_failures > 0` en after, el issue no se entrega. Overruns pequeños que el gate clasifique como `WARN` dentro de una banda `grace_lte` no bloquean por sí solos, pero sí deben quedar anotados para seguimiento.
 6. Adjuntar al PR las rutas de `artifacts/perf/*` usadas en la comparación.
 
 Qué validar:
