@@ -13,7 +13,9 @@ export const resolveCorrectionDecorationRanges = (
   doc: ProseMirrorNode,
   suggestions: PublicationSuggestion[],
 ): ResolvedCorrectionDecoration[] => {
-  const pendingSuggestions = suggestions.filter((suggestion) => suggestion.status === "pending")
+  const pendingSuggestions = suggestions.filter(
+    (suggestion) => suggestion.status === "pending" || suggestion.status === "pending-stale",
+  )
 
   if (pendingSuggestions.length === 0) {
     return []

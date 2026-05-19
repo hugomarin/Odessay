@@ -5,6 +5,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
 import { resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
+import { isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine"
 
 type PublicationSuggestionPluginState = {
   suggestions: PublicationSuggestion[]
@@ -36,6 +37,7 @@ const dispatchSuggestionAction = (
 }
 
 const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
+  const isStale = isSuggestionAcceptDisabled(suggestion)
   const anchor = document.createElement("span")
   anchor.className = "pub-suggestion-bubble-anchor"
   anchor.contentEditable = "false"
@@ -43,6 +45,9 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   const bubble = document.createElement("span")
   bubble.className = "pub-suggestion-bubble"
   bubble.dataset.suggestionId = suggestion.id
+  if (isStale) {
+    bubble.classList.add("pub-suggestion-bubble-stale")
+  }
 
   const label = document.createElement("span")
   label.className = "pub-suggestion-bubble-label"
@@ -55,6 +60,10 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   accept.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
   accept.dataset.action = "accept"
   accept.dataset.suggestionId = suggestion.id
+  if (isStale) {
+    accept.disabled = true
+    accept.title = "Recalculando…"
+  }
 
   const reject = document.createElement("button")
   reject.type = "button"
@@ -77,7 +86,7 @@ const buildPublicationDecorations = (doc: ProseMirrorNode, pluginState: Publicat
   for (const { suggestion, from, to } of resolvedSuggestions) {
     decorations.push(
       Decoration.inline(from, to, {
-        class: "pub-suggestion-pending",
+        class: suggestion.status === "pending-stale" ? "pub-suggestion-pending pub-suggestion-stale" : "pub-suggestion-pending",
         "data-suggestion-id": suggestion.id,
         "data-replacement": suggestion.replacement_text,
       }),

@@ -19,6 +19,12 @@ type ApplyAllSuggestionsResult = {
   appliedIds: string[];
 };
 
+type StaleInvalidationResult = {
+  suggestions: PublicationSuggestion[];
+  keptIds: string[];
+  droppedIds: string[];
+};
+
 const normalizeSearchValue = (value: string) =>
   value
     .replace(/\r\n/g, "\n")
@@ -194,6 +200,40 @@ export const applyAllPublicationSuggestions = (
 
   return { markdown: nextMarkdown, appliedIds };
 };
+
+export const invalidateBlockSuggestions = (
+  suggestions: PublicationSuggestion[],
+  block: { id: string; text: string },
+): StaleInvalidationResult => {
+  const keptIds: string[] = [];
+  const droppedIds: string[] = [];
+
+  const nextSuggestions = suggestions.flatMap((suggestion) => {
+    if (suggestion.block_id !== block.id) {
+      return [suggestion];
+    }
+
+    if (
+      (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
+      block.text.includes(suggestion.original_text)
+    ) {
+      keptIds.push(suggestion.id);
+      return [{ ...suggestion, status: "pending-stale" as const }];
+    }
+
+    droppedIds.push(suggestion.id);
+    return [];
+  });
+
+  return {
+    suggestions: nextSuggestions,
+    keptIds,
+    droppedIds,
+  };
+};
+
+export const isSuggestionAcceptDisabled = (suggestion: PublicationSuggestion) =>
+  suggestion.status === "pending-stale";
 
 export const updateSuggestionStatuses = (
   suggestions: PublicationSuggestion[],

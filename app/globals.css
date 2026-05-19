@@ -717,6 +717,10 @@
   text-underline-offset: 3px;
 }
 
+.pub-suggestion-stale {
+  opacity: 0.5;
+}
+
 .pub-suggestion-bubble-anchor {
   position: relative;
   display: inline-block;
@@ -746,6 +750,10 @@
   white-space: nowrap;
   z-index: 50;
   animation: pub-suggestion-bubble-in 120ms ease-out;
+}
+
+.pub-suggestion-bubble-stale {
+  opacity: 0.82;
 }
 
 .pub-suggestion-bubble::after {
@@ -798,6 +806,16 @@
 .pub-suggestion-bubble-action:hover {
   background: hsla(0, 0%, 100%, 0.12);
   opacity: 1;
+}
+
+.pub-suggestion-bubble-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.pub-suggestion-bubble-action:disabled:hover {
+  background: transparent;
+  opacity: 0.4;
 }
 
 .pub-suggestion-bubble-accept {

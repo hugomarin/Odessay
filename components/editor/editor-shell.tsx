@@ -63,6 +63,8 @@ import {
   applySuggestionToMarkdown,
   deriveSuggestionContexts,
   hashPublicationSource,
+  invalidateBlockSuggestions,
+  isSuggestionAcceptDisabled,
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
 import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
@@ -2392,17 +2394,27 @@ export function EditorShell({ writingId }: EditorShellProps) {
           correctionTimersRef.current.delete(block.id)
         }
 
-        for (const suggestion of getBlockSuggestions(block.id)) {
-          logCorrectionEvent({
-            type: "stale:drop",
-            blockId: block.id,
-            suggestionId: suggestion.id,
-          })
-        }
+        setAutomaticCorrectionSuggestions((current) => {
+          const invalidation = invalidateBlockSuggestions(current, block)
 
-        setAutomaticCorrectionSuggestions((current) =>
-          current.filter((suggestion) => suggestion.block_id !== block.id),
-        )
+          for (const suggestionId of invalidation.droppedIds) {
+            logCorrectionEvent({
+              type: "stale:drop",
+              blockId: block.id,
+              suggestionId,
+            })
+          }
+
+          for (const suggestionId of invalidation.keptIds) {
+            logCorrectionEvent({
+              type: "stale:keep",
+              blockId: block.id,
+              suggestionId,
+            })
+          }
+
+          return invalidation.suggestions
+        })
 
         const timer = window.setTimeout(() => {
           correctionTimersRef.current.delete(block.id)
@@ -2438,6 +2450,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
       const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
 
       if (!suggestion) {
+        return
+      }
+
+      if (isSuggestionAcceptDisabled(suggestion) && detail.action === "accept") {
         return
       }
 
