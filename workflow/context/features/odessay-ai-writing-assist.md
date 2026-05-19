@@ -84,16 +84,15 @@ Cada corrección lleva métricas para poder optimizar costos y detectar degradac
 
 ### Sistema puro `block`
 
-El endpoint `/api/ai/publication-review` tiene dos ramas en `resolveCorrectionSource()`:
+El endpoint `/api/ai/publication-review` opera exclusivamente en modo `block`.
 
 | Modo | Cómo se activa | Estado |
 |------|----------------|--------|
-| `block` | Frontend envía `correctionBlock: {id, text, hash}` | **Activo — único modo usado** |
-| `document` | Frontend NO envía `correctionBlock` | **Legacy sin consumidor** |
+| `block` | Frontend envía `correctionBlock: {id, text, hash}` | **Activo — único contrato válido** |
 
-El `PublicationPanel` (modo `document`) fue reemplazado por `OrthographyPanel` en ODE-156. El botón del topbar ahora dice "Ortografía" y abre el panel de correcciones automáticas.
+El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Ortografía" y abre `OrthographyPanel`, que consume el estado de correcciones automáticas por bloque.
 
-**Decisión:** no expandir el modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el modo `block` existente.
+**Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block` existente.
 
 ### Flujo de corrección automática
 
@@ -213,11 +212,11 @@ Sugerir un único título útil, corto y coherente con el contenido, bajo invoca
 
 ## Decisiones arquitectónicas y deuda técnica
 
-### Modo `document` — legacy sin consumidor
+### Modo `document` — eliminado
 
-La rama `document` en `resolveCorrectionSource()` y funciones como `buildCorrectionBlocks()` en el backend no tienen consumidor en el frontend. El `PublicationPanel` existe como archivo pero no se renderiza.
+La API ya no mantiene una rama `document` ni helpers de partición de texto como `buildCorrectionBlocks()`. El contrato válido exige `correctionBlock` en cada request.
 
-**Decisión:** eliminar la rama `document` de la API, simplificar `requestSchema`, limpiar código huérfano. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block`.
+**Decisión:** mantener la API acotada a modo `block`. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block`.
 
 ### Estado actual vs principios
 

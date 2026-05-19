@@ -30,6 +30,11 @@ const createRequest = (body: Record<string, unknown>) =>
       markdown: "Esta es una prueva.",
       bodyText: "Esta es una prueva.",
       sourceHash: "pub-test",
+      correctionBlock: {
+        id: "correction-block:pub-test:1",
+        text: "Esta es una prueva.",
+        hash: "pub-test",
+      },
       ...body,
     }),
   })
@@ -65,7 +70,7 @@ describe("POST /api/ai/publication-review", () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       expect(body.stream).toBe(true)
-      expect(body.max_tokens).toBe(4096)
+      expect(body.max_tokens).toBe(768)
       expect(body.response_format).toMatchObject({
         type: "json_schema",
         json_schema: {
@@ -79,7 +84,7 @@ describe("POST /api/ai/publication-review", () => {
 
       return new Response(
         streamFromLines([
-          'data: {"choices":[{"delta":{"content":"{\\"summary\\":\\"One correction.\\",\\"language\\":\\"es\\",\\"corrections\\":[{\\"blockId\\":\\"block-1\\",\\"type\\":\\"spelling\\",\\"severity\\":\\"medium\\",\\"confidence\\":\\"high\\",\\"originalText\\":\\"prueva\\",\\"replacementText\\":\\"prueba\\",\\"reason\\":\\"Typo.\\"}],\\"uncertain\\":[]}"}}]}',
+          'data: {"choices":[{"delta":{"content":"{\\"summary\\":\\"One correction.\\",\\"language\\":\\"es\\",\\"corrections\\":[{\\"blockId\\":\\"correction-block:pub-test:1\\",\\"type\\":\\"spelling\\",\\"severity\\":\\"medium\\",\\"confidence\\":\\"high\\",\\"originalText\\":\\"prueva\\",\\"replacementText\\":\\"prueba\\",\\"reason\\":\\"Typo.\\"}],\\"uncertain\\":[]}"}}]}',
           "data: [DONE]",
         ]),
         { status: 200, headers: { "content-type": "text/event-stream" } },
@@ -197,7 +202,7 @@ describe("POST /api/ai/publication-review", () => {
               {
                 message: {
                   content:
-                    '{"summary":"One correction.","language":"es","corrections":[{"blockId":"block-1","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
+                    '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:pub-test:1","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
                 },
               },
             ],
@@ -237,7 +242,7 @@ describe("POST /api/ai/publication-review", () => {
               {
                 message: {
                   content:
-                    '{"summary":"One correction.","language":"es","corrections":[{"blockId":"block-1","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
+                    '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:pub-test:1","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
                 },
               },
             ],

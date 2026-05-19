@@ -1,7 +1,7 @@
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 9;
+export const LOCAL_DB_VERSION = 10;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -9,7 +9,6 @@ export const LOCAL_DB_STORES = {
   writingCollections: "writing-collections",
   syncMutations: "sync-mutations",
   editorSessions: "editor-sessions",
-  publicationReviews: "publication-reviews",
 } as const;
 
 export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
@@ -206,20 +205,4 @@ export type PublicationChecklistItem = {
   detail: string;
   target_text?: string | null;
   status: PublicationChecklistStatus;
-};
-
-export type LocalPublicationReview = {
-  id: string;
-  writing_id: string;
-  source_hash: string;
-  source_markdown: string;
-  title?: string | null;
-  model: string;
-  suggestions: PublicationSuggestion[];
-  checklist: PublicationChecklistItem[];
-  summary?: string | null;
-  created_at: string;
-  updated_at: string;
-  lookup_key: string;
-  last_error?: string | null;
 };
