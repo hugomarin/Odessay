@@ -121,7 +121,7 @@ El frontend defiende cinco dimensiones de velocidad. El editor protege la primer
 | **Forma del waterfall** | Las cargas iniciales se deduplican entre llamadores. Un mismo fetch caro se comparte (in-flight promise / TanStack Query) en lugar de repetirse por componente. |
 | **Fan-out reactivo** | Los suscriptores a `localDB`/stores hacen debounce si la operación que los dispara puede ser bulk (hidratación, import, sync). |
 
-Todo PR que toque vistas, hidratación, suscriptores a stores o fetches de bootstrap declara su impacto en estas cinco dimensiones en el `Performance Contract`. No basta con "el editor sigue rápido": hay que mostrar que el waterfall, el peso y el fan-out no empeoraron.
+Todo PR que toque vistas, hidratación, suscriptores a stores o fetches de bootstrap declara su impacto en estas cinco dimensiones en el `Performance Contract`. No hace falta convertir las cinco en evidencia pesada si no aplican; el punto es identificar con precisión cuáles sí cambia el diff y cuáles quedan `not required` con justificación breve. No basta con "el editor sigue rápido": hay que mostrar que el waterfall, el peso y el fan-out no empeoraron cuando el cambio sí los toca.
 
 ### El editor es una isla
 

@@ -69,10 +69,11 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 **Secuencia:**
 
 **Setup**
-1. Leer brief. Declarar Performance Contract y Presentation Contract (required/not required + justificación).
+1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones/superficies que realmente toca el issue. Si una dimensión o superficie no aplica, registrar `not required` con justificación breve en vez de expandir evidencia innecesaria.
    > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
 2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
 3. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
+   - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
 
 **Ejecución**
 4. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
@@ -130,7 +131,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - `npm run ops:delivery:gate` debe terminar en verde (con `OPS_PERF_TRACE_PATH` cuando el contrato es requerido).
    - CI `Traceability Gates` en SUCCESS.
    - Preview deploy (Vercel) en SUCCESS — un PR que toca código y no compila en preview no puede mergearse aunque el delivery gate local pase.
-   - **Excepción perf:** cuando el brief declara `Performance Contract: not required` con justificación válida, los fallos del perf gate por métricas no requeridas o por hardware de CI no bloquean aprobación; en ese caso el perf gate actúa como informativo. Lo que sí debe estar verde sin excepción es traceability, Vercel preview y typecheck/lint.
+   - **Excepción perf:** cuando el brief declara `Performance Contract: not required` con justificación válida, los fallos del perf gate por métricas no requeridas o por hardware de CI no bloquean aprobación; en ese caso el perf gate actúa como informativo. Además, para métricas requeridas con `grace_lte` en `workflow/perf-budgets.json`, un overrun pequeño dentro de la banda de gracia cuenta como `WARN`, no como `FAIL`. Lo que sí debe estar verde sin excepción es traceability, Vercel preview y typecheck/lint.
 2. Validar `Performance Contract` contra evidencia objetiva (solo si es required):
    - existe trace reproducible;
    - `node scripts/check-performance-gate.mjs --trace <trace>` no reporta `required_failures`;

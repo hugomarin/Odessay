@@ -216,7 +216,7 @@ Approval rule:
   - Resto: evidencia objetiva del navegador con número dentro de presupuesto.
 ```
 
-**Regla de severidad.** No es válido marcar las cinco como `not required` sin justificación dimensión por dimensión. Si el issue toca una `page.tsx`, peso/waterfall/time-to-interactive son `required` por defecto. Si toca una `route.ts` de lista, peso es `required` por defecto. La omisión por inercia es lo que produjo el caso ODE-58/ODE-138 (Desk con 70 s a interactivo); marcar `not required` requiere argumento, no silencio.
+**Regla de severidad.** No es válido marcar las cinco como `not required` sin justificación dimensión por dimensión. Pero tampoco es obligatorio expandir las cinco siempre: el default operativo es declarar solo las dimensiones que el diff realmente toca y marcar el resto `not required` con una justificación breve. Si el issue toca una `page.tsx`, peso/waterfall/time-to-interactive son `required` por defecto. Si toca una `route.ts` de lista, peso es `required` por defecto. La omisión por inercia es lo que produjo el caso ODE-58/ODE-138 (Desk con 70 s a interactivo); marcar `not required` requiere argumento, no silencio.
 
 **Defaults de activación automática (REVIEW debe verificar):**
 - Diff toca `app/api/**/route.ts` que devuelve lista → peso `required`.

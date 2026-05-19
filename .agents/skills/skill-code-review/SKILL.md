@@ -357,6 +357,7 @@ Si falla cualquiera de estos puntos → **rechazar**.
 **3. Trazabilidad Linear ↔ GitHub**
 - ¿El issue en Linear tiene un comentario del agente implementador con: link al PR + commit SHA + resultado de validaciones?
 - ¿El PR referencia el issue (ej. `feat(setup): init Next.js baseline [ODE-10]`)?
+- Si `ops:status:drift` ya está resuelto o el identificador figura en `workflow/status.json.traceability_exceptions.ignored_issue_ids`, no repetirlo como finding ni como nota de contexto en el review actual.
 
 Si falta el comentario de trazabilidad → **rechazar**. La conexión Linear ↔ GitHub es obligatoria.
 
