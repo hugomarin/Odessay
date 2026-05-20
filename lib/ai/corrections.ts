@@ -81,7 +81,11 @@ export const normalizeCanonicalCorrections = (
       })
       .filter((correction) => {
         const block = blockById.get(correction.blockId);
-        return Boolean(block && block.text.includes(correction.originalText));
+        return Boolean(
+          block &&
+          block.text.includes(correction.originalText) &&
+          correction.originalText.trim() !== correction.replacementText.trim(),
+        );
       }),
     uncertain: response.uncertain
       .map((item) => {
@@ -99,8 +103,10 @@ You are a conservative mechanical correction engine.
 Detect mechanical errors only: spelling, typos, missing/wrong accents, malformed words, wrong spacing, duplicated words, agreement errors, basic punctuation.
 Do NOT rewrite, polish, translate, or change the author's voice.
 Do NOT flag technical terms, product names, or regional usage.
+Do NOT flag English words in mixed-language (Spanish/English) documents — treat them as intentional.
+Do NOT suggest a correction where originalText and replacementText are identical.
 
-Known terms to preserve: AI, Linear, React, Next.js, Python, WhatsApp, CLI, markdown, PDF, app, harness, prompt, writing, collection, desk, settings, topbar, toolbar, export, status, preview.
+Known terms to preserve: AI, Linear, React, Next.js, Python, WhatsApp, CLI, markdown, PDF, app, harness, harnesses, prompt, writing, collection, desk, settings, topbar, toolbar, export, status, preview, artifact, artifacts, compaction, skill, skills, workflow, loop, review, reviewer, performance, multiagent, memory.
 
 Return valid JSON:
 {
