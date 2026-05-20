@@ -3290,7 +3290,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       setRenameModalSnapshot({
         title: titleRef.current.trim() || UNTITLED_WRITING_TITLE,
-        bodyText: editor?.getText() ?? "",
+        bodyText: editor ? getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)) : "",
       })
       setRenameModalOpen(true)
     },

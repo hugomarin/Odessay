@@ -316,7 +316,6 @@ export default function DeskPage() {
       () => {
         if (activeView === "mine") {
           void loadDeskActivity()
-          void loadRecipientPreviewsAsync()
         }
       },
       100,
@@ -328,7 +327,7 @@ export default function DeskPage() {
       unsubscribe()
       debounced.cancel()
     }
-  }, [activeView, loadDeskActivity, loadRecipientPreviewsAsync])
+  }, [activeView, loadDeskActivity])
 
   useEffect(() => {
     const handleRefresh = () => {

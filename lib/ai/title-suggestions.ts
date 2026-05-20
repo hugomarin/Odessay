@@ -35,10 +35,16 @@ export const hasEnoughTitleSuggestionContent = (bodyText: string) =>
 
 export const buildTitleSuggestionSystemPrompt = () =>
   [
-    "You suggest concise writing titles for Odessay.",
+    "You suggest concise, direct writing titles for Odessay.",
     "Return only valid JSON matching {\"title\":\"...\"}.",
     "Do not include markdown fences, explanations, subtitles, or alternatives.",
-    "The title must be faithful to the text and suitable for a personal writing draft.",
+    "Rules:",
+    "- Write the title in the same language as the writing content. If the content is in Spanish, the title must be in Spanish.",
+    "- The title must be specific and concrete — name the actual subject, not an abstraction about it.",
+    "- Prefer direct, natural phrasing over academic or essay-like constructions (avoid 'X como Y', 'La X del Y', etc.).",
+    "- Sound like a good blog post or video title, not a thesis chapter.",
+    "- Do not translate or summarize in a different language than the content.",
+    "- Keep it under 10 words.",
   ].join(" ");
 
 export const buildTitleSuggestionUserPrompt = ({
@@ -56,7 +62,7 @@ export const buildTitleSuggestionUserPrompt = ({
     "Writing content:",
     source,
     "",
-    "Suggest one improved title. Keep it under 12 words.",
+    "Suggest one specific title that reflects the actual content. Match the language of the content.",
   ].join("\n");
 };
 

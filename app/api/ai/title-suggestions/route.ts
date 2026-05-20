@@ -54,9 +54,10 @@ async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>
     },
     body: JSON.stringify({
       model: config.model,
-      max_tokens: Math.min(config.maxTokens, 120),
+      max_tokens: 256,
       temperature: 0.4,
       top_p: config.topP,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
@@ -72,17 +73,25 @@ async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>
 
   if (!response.ok) {
     const errorPayload = await response.text();
-    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
+    throw new Error(`Fireworks ${response.status} — model=${config.model} — ${errorPayload}`);
   }
 
   const payload = (await response.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
   };
   const content = payload.choices?.[0]?.message?.content ?? "";
-  const parsed = titleSuggestionResponseSchema.safeParse(JSON.parse(extractTitleSuggestionJson(content)));
+  let parsedJson: unknown;
+
+  try {
+    parsedJson = JSON.parse(extractTitleSuggestionJson(content));
+  } catch {
+    throw new Error(`Model returned non-JSON content: ${content.slice(0, 200)}`);
+  }
+
+  const parsed = titleSuggestionResponseSchema.safeParse(parsedJson);
 
   if (!parsed.success) {
-    throw new Error("AI title response did not match the expected schema.");
+    throw new Error(`AI title response did not match schema. Content: ${content.slice(0, 200)}`);
   }
 
   return parsed.data;

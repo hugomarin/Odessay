@@ -176,10 +176,11 @@ export const getVisibleCorrectionSuggestions = (
       (suggestion) =>
         suggestion.status === "pending" || suggestion.status === "pending-stale",
     )
-    .map((suggestion): SortedSuggestion => {
+    .map((suggestion): SortedSuggestion & { matched: boolean } => {
       const match = findSuggestionMatch(markdown, suggestion);
-      return { suggestion, position: match?.start ?? Number.MAX_SAFE_INTEGER };
+      return { suggestion, position: match?.start ?? Number.MAX_SAFE_INTEGER, matched: match !== null };
     })
+    .filter(({ matched }) => matched)
     .sort((left, right) => left.position - right.position)
     .map(({ suggestion }) => suggestion);
 
@@ -227,6 +228,20 @@ export const applyAllPublicationSuggestions = (
   return { markdown: nextMarkdown, appliedIds };
 };
 
+const parseBlockPosition = (blockId: string): number | null => {
+  const raw = blockId.split(":").at(-1);
+  const pos = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(pos) ? pos : null;
+};
+
+const isSameBlock = (suggestionBlockId: string | null | undefined, blockId: string): boolean => {
+  if (!suggestionBlockId) return false;
+  if (suggestionBlockId === blockId) return true;
+  const suggestionPos = parseBlockPosition(suggestionBlockId);
+  const blockPos = parseBlockPosition(blockId);
+  return suggestionPos !== null && blockPos !== null && suggestionPos === blockPos;
+};
+
 export const invalidateBlockSuggestions = (
   suggestions: PublicationSuggestion[],
   block: { id: string; text: string },
@@ -235,7 +250,7 @@ export const invalidateBlockSuggestions = (
   const droppedIds: string[] = [];
 
   const nextSuggestions = suggestions.flatMap((suggestion) => {
-    if (suggestion.block_id !== block.id) {
+    if (!isSameBlock(suggestion.block_id, block.id)) {
       return [suggestion];
     }
 

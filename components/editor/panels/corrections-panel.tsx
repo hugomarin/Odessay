@@ -29,6 +29,21 @@ export function CorrectionsPanel({
     [suggestions, markdown],
   );
 
+  const groupedSuggestions = useMemo(() => {
+    const groups = new Map<string, { suggestion: PublicationSuggestion; ids: string[]; count: number }>();
+    for (const suggestion of visibleSuggestions) {
+      const key = `${suggestion.original_text.trim()}→${suggestion.replacement_text.trim()}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.ids.push(suggestion.id);
+        existing.count += 1;
+      } else {
+        groups.set(key, { suggestion, ids: [suggestion.id], count: 1 });
+      }
+    }
+    return [...groups.values()];
+  }, [visibleSuggestions]);
+
   const actionableSuggestions = visibleSuggestions.filter((suggestion) => suggestion.status === "pending");
   const hasPending = visibleSuggestions.length > 0;
 
@@ -85,7 +100,7 @@ export function CorrectionsPanel({
           </p>
         ) : (
           <ul className="space-y-px">
-            {visibleSuggestions.map((suggestion) => {
+            {groupedSuggestions.map(({ suggestion, ids, count }) => {
               const isStale = isSuggestionAcceptDisabled(suggestion);
 
               return (
@@ -103,11 +118,17 @@ export function CorrectionsPanel({
                     <span className="truncate text-ink">
                       {suggestion.replacement_text}
                     </span>
+                    {count > 1 && (
+                      <span className="shrink-0 text-[10px] text-ink-4">×{count}</span>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
-                      onClick={() => onAcceptSuggestion(suggestion)}
+                      onClick={() => {
+                        for (const id of ids) onRejectSuggestion(id);
+                        onAcceptSuggestion(suggestion);
+                      }}
                       aria-label={isStale ? "Recalculando…" : "Aceptar"}
                       title={isStale ? "Recalculando…" : "Aceptar"}
                       disabled={isStale}
@@ -117,7 +138,7 @@ export function CorrectionsPanel({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onRejectSuggestion(suggestion.id)}
+                      onClick={() => { for (const id of ids) onRejectSuggestion(id); }}
                       aria-label="Rechazar"
                       title="Rechazar"
                       className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
