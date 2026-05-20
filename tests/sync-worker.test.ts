@@ -81,6 +81,15 @@ const createLocalDbMock = () => {
       getAll: vi.fn(async () => []),
       delete: vi.fn(async () => undefined),
     },
+    correctionBlocks: {
+      save: vi.fn(async () => undefined),
+      saveMany: vi.fn(async () => undefined),
+      getByWriting: vi.fn(async () => []),
+      delete: vi.fn(async () => undefined),
+      deleteMany: vi.fn(async () => undefined),
+      markSynced: vi.fn(async () => undefined),
+      evictOldestWriting: vi.fn(async () => null),
+    },
     writingCollections: {
       replaceForWriting: vi.fn(async () => undefined),
       listForWriting: vi.fn(async () => []),

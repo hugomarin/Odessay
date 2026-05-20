@@ -167,6 +167,26 @@ La UI nunca espera a Supabase. El indicador de guardado es mínimo (statusbar, s
 | status | text | not null, default 'active' | `active`, `dismissed`, `addressed` |
 | created_at | timestamptz | default now() | |
 
+### correction_blocks
+
+Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de verdad; IndexedDB actúa como cache local de tránsito.
+
+| Campo | Tipo | Constraints | Nota |
+|-------|------|-------------|------|
+| id | text | PK | `auto-correction:writingId:blockHash` |
+| writing_id | uuid | FK → writings, not null | Writing dueño del bloque corregido |
+| block_id | text | not null | Identificador opaco del bloque en el editor |
+| block_hash | text | not null | Hash del texto del bloque |
+| suggestions | jsonb | not null | Array de sugerencias persistidas para ese bloque |
+| model | text | not null | Modelo que generó la corrección |
+| created_at | timestamptz | default now() | Momento de la corrección persistida |
+| latency_ms | integer | nullable | Latencia de la request al proveedor AI |
+| prompt_tokens | integer | nullable | Tokens de prompt consumidos |
+| completion_tokens | integer | nullable | Tokens de completion consumidos |
+| | | unique (writing_id, block_hash) | Un snapshot persistido por hash dentro del writing |
+
+**Índices:** índice en `writing_id` para hidratación rápida por writing.
+
 ### margins
 
 Highlights y anotaciones que el lector crea al leer writings ajenos. Son escritura en gestación — no comentarios ni feedback.
@@ -230,6 +250,7 @@ El `id` del usuario autenticado (`auth.uid()`) se usa en todas las RLS policies 
 | writing_collections | Hereda visibilidad del writing y collection | Solo owner de la collection | No (borrar y recrear) | Solo owner |
 | writing_shares | Author del writing + shared_with_id | Solo author del writing | Solo author del writing | Solo author del writing |
 | ai_observations | Solo author del writing | Solo vía API (server-side) | Solo status (dismiss/address) | No permitido |
+| correction_blocks | Solo author del writing | Solo author del writing | Solo author del writing | Solo author del writing |
 | margins | reader_id = auth.uid() (propios) + shared=true para el author del writing | Solo autenticados (`reader_id = auth.uid()`) | Solo reader_id (cambiar `note`, `shared`) | Solo reader_id |
 | invitations | Solo inviter | Solo autenticados | Solo status (accept) | No permitido |
 
@@ -244,6 +265,7 @@ El `id` del usuario autenticado (`auth.uid()`) se usa en todas las RLS policies 
 - `writings.visibility` — Filtro por visibilidad
 - `writing_collections.collection_id` — Writings de una collection
 - `writing_shares.shared_with_id` — Writings compartidos conmigo
+- `correction_blocks.writing_id` — Hidratación de correcciones persistidas por writing
 - `invitations.token` — Lookup por token
 - `invitations.email` — Invitaciones pendientes al registrarse
 - `invitations(inviter_id, writing_id, email)` parcial (`status='pending'` + `ux-eval` marker) — Garantiza un único link de preview UX activo por writing

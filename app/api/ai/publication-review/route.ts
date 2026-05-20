@@ -426,10 +426,12 @@ const createJsonResponsePayload = ({
   requestBody,
   model,
   canonical,
+  usage,
 }: {
   requestBody: z.infer<typeof requestSchema>;
   model: string;
   canonical: CanonicalCorrectionsResponse;
+  usage?: CorrectionsUsage;
 }) => {
   const adapted = adaptCorrectionsContract(canonical);
 
@@ -446,6 +448,8 @@ const createJsonResponsePayload = ({
     checklist: adapted.legacy.checklist,
     summary: adapted.legacy.summary,
     fallbackUsed: false,
+    promptTokens: usage?.promptTokens ?? null,
+    completionTokens: usage?.completionTokens ?? null,
   };
 };
 
@@ -769,6 +773,7 @@ export async function POST(request: Request) {
           requestBody: parsedRequest.data,
           model: result.model,
           canonical: result.canonical,
+          usage: result.usage,
         }),
         error: null,
       },

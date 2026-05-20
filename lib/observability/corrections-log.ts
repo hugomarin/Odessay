@@ -1,7 +1,7 @@
 type CorrectionQueueEnqueueEvent = {
   type: "queue:enqueue"
   blockId: string
-  reason: "edit"
+  reason: "edit" | "hydrate-miss"
 }
 
 type CorrectionQueueFlushEvent = {
@@ -27,7 +27,7 @@ type CorrectionRequestEndEvent = {
 type CorrectionCacheHitEvent = {
   type: "cache:hit"
   blockId: string
-  source: "memory"
+  source: "memory" | "idb" | "supabase"
 }
 
 type CorrectionCacheMissEvent = {

@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Persist automatic correction blocks in Supabase with an IndexedDB transit cache and bidirectional sync. Added the `correction_blocks` table with RLS and ownership indices, new `/api/corrections/hydrate` and `/api/corrections/persist` routes, localDB support for cached correction blocks plus LRU eviction, and editor-shell write-through hydration/sync so analyzed blocks restore without re-calling the model. Accepted/rejected/conflict suggestion states now persist across reloads, stale hashes are deleted locally and remotely, unsynced blocks retry on next hydration or when the browser comes back online, and regression coverage now includes the new routes, localDB methods, sync worker typing, and suggestion batching.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-165",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-165/persist-correction-blocks-in-supabase-with-indexeddb-cache-and",
+      "commit": "c7d03c7",
+      "date": "2026-05-19",
+      "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (passed), npm run typecheck (passed), npm run lint (same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx, no new warnings), npm test (71 files, 374 tests), npm run build (passed), npm run ops:perf:capture -- --base-url http://127.0.0.1:3005 --output artifacts/perf/ode-165-editor-trace-prod.json.gz (passed on production build with ODESSAY_PERF_HARNESS_ENABLED=true), npm run ops:perf:gate -- --trace artifacts/perf/ode-165-editor-trace-prod.json.gz --report artifacts/perf/ode-165-editor-report-prod.json --metrics artifacts/perf/ode-165-editor-metrics-prod.json (13 pass, 1 warn, 1 skip), OPS_PERF_TRACE_PATH=artifacts/perf/ode-165-editor-trace-prod.json.gz npm run ops:delivery:gate (passed). Performance contract: required — production trace stayed within gate with a single WARN on keydown dispatch p95 (25.23ms within grace band), input/event-timing budgets passed, and correction-suggestion batching test covers reactive fan-out coalescing. Presentation contract: not required — scope is limited to `/write/[id]` correction persistence and does not alter preview/shared/public rich-text rendering surfaces."
+    },
+    {
       "what": "Expand the editor correction sidebar to show every pending correction kind instead of only spelling suggestions. The renamed `CorrectionsPanel` now renders `pending` and `pending-stale` suggestions in document order regardless of kind, the topbar entry point now matches the broader scope, and the AI corrections adapter preserves `grammar` and `punctuation` kinds instead of collapsing them into `spelling`.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-164",
