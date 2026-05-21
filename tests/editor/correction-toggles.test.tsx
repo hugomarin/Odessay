@@ -12,19 +12,19 @@ describe("CorrectionsPanel toggles", () => {
     const onShowCorrectionsChange = vi.fn()
 
     const html = renderToString(
-      <CorrectionsPanel
-        suggestions={[]}
-        markdown=""
-        correctionsEnabled={true}
-        showCorrections={true}
-        onAcceptSuggestion={() => {}}
-        onRejectSuggestion={() => {}}
-        onAcceptAll={() => {}}
-        onRejectAll={() => {}}
-        onCorrectionsEnabledChange={onCorrectionsEnabledChange}
-        onShowCorrectionsChange={onShowCorrectionsChange}
-        onClose={() => {}}
-      />,
+      React.createElement(CorrectionsPanel, {
+        suggestions: [],
+        markdown: "",
+        correctionsEnabled: true,
+        showCorrections: true,
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        onCorrectionsEnabledChange,
+        onShowCorrectionsChange,
+        onClose: () => {},
+      }),
     )
 
     expect(html).toContain("Correcciones activas")
@@ -33,19 +33,19 @@ describe("CorrectionsPanel toggles", () => {
 
   it("renders with toggles disabled when props are false", () => {
     const html = renderToString(
-      <CorrectionsPanel
-        suggestions={[]}
-        markdown=""
-        correctionsEnabled={false}
-        showCorrections={false}
-        onAcceptSuggestion={() => {}}
-        onRejectSuggestion={() => {}}
-        onAcceptAll={() => {}}
-        onRejectAll={() => {}}
-        onCorrectionsEnabledChange={() => {}}
-        onShowCorrectionsChange={() => {}}
-        onClose={() => {}}
-      />,
+      React.createElement(CorrectionsPanel, {
+        suggestions: [],
+        markdown: "",
+        correctionsEnabled: false,
+        showCorrections: false,
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        onCorrectionsEnabledChange: () => {},
+        onShowCorrectionsChange: () => {},
+        onClose: () => {},
+      }),
     )
 
     expect(html).toContain("Correcciones activas")

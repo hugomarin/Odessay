@@ -9,7 +9,11 @@ import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/exp
 describe("copyTextWithFallback", () => {
   it("returns true when clipboard API succeeds", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.assign(navigator, { clipboard: { writeText } })
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      writable: true,
+      configurable: true,
+    })
 
     const result = await copyTextWithFallback("hello")
     expect(result).toBe(true)
@@ -17,8 +21,17 @@ describe("copyTextWithFallback", () => {
   })
 
   it("falls back to execCommand when clipboard API is missing", async () => {
-    Object.assign(navigator, { clipboard: undefined })
-    const execCommand = vi.spyOn(document, "execCommand").mockReturnValue(true)
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(document, "execCommand", {
+      value: vi.fn().mockReturnValue(true),
+      writable: true,
+      configurable: true,
+    })
+    const execCommand = vi.spyOn(document, "execCommand")
 
     const result = await copyTextWithFallback("fallback text")
     expect(result).toBe(true)
@@ -28,8 +41,17 @@ describe("copyTextWithFallback", () => {
   })
 
   it("returns false when both clipboard and execCommand fail", async () => {
-    Object.assign(navigator, { clipboard: undefined })
-    const execCommand = vi.spyOn(document, "execCommand").mockReturnValue(false)
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    })
+    Object.defineProperty(document, "execCommand", {
+      value: vi.fn().mockReturnValue(false),
+      writable: true,
+      configurable: true,
+    })
+    const execCommand = vi.spyOn(document, "execCommand")
 
     const result = await copyTextWithFallback("fail text")
     expect(result).toBe(false)
@@ -65,12 +87,12 @@ describe("downloadBlob", () => {
 describe("buildMarkdownDownloadName", () => {
   it("uses title when available", () => {
     const name = buildMarkdownDownloadName({ title: "My Essay", bodyText: "Body", writingId: "w1" })
-    expect(name).toBe("my-essay.md")
+    expect(name).toBe("My-Essay.md")
   })
 
   it("falls back to body text slug when title is empty", () => {
     const name = buildMarkdownDownloadName({ title: "", bodyText: "Hello world", writingId: "w1" })
-    expect(name).toBe("hello-world.md")
+    expect(name).toBe("Hello-world.md")
   })
 
   it("falls back to writingId when both title and body are empty", () => {

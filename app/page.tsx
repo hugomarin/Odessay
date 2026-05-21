@@ -41,7 +41,7 @@ export default function Home() {
               </div>
             </div>
 
-            <aside className="rounded-[18px] border border-border/80 bg-card/90 p-6 shadow-[0_18px_50px_rgba(36,30,24,0.08)] backdrop-blur">
+            <aside className="rounded-[18px] border-[0.5px] border-border/80 bg-card/90 p-6 shadow-[0_18px_50px_rgba(36,30,24,0.08)] backdrop-blur">
               <div className="space-y-6">
                 <div className="space-y-2">
                   <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[hsl(var(--ink-4))]">
