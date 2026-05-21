@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } fro
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutGrid, PanelLeftClose, Plus, Search } from "lucide-react"
+import { LayoutGrid, PanelLeftDashed, Plus, Search } from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
@@ -127,7 +127,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
 
       if (action === "newWriting") {
         event.preventDefault()
-        window.location.href = "/write"
+        window.location.href = "/write?new=1"
         return
       }
 
@@ -169,8 +169,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             data-section="sidebar-top"
             data-testid="sidebar-top"
             className={cn(
-              "SidebarTop flex h-[46px] items-center gap-2",
-              isIconOnly ? "justify-between px-2" : "justify-between px-3",
+              "SidebarTop flex h-[46px] items-center",
+              isIconOnly ? "justify-center px-0" : "justify-between gap-2 px-3",
             )}
           >
             <Link
@@ -191,10 +191,13 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               <button
                 type="button"
                 onClick={handleSidebarToggle}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[6px] border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink"
+                className={cn(
+                  "inline-flex items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink",
+                  isIconOnly ? "h-8 w-8" : "h-8 w-8",
+                )}
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <PanelLeftClose className="h-[18px] w-[18px] -translate-x-[3px]" strokeWidth={1.5} />
+                <PanelLeftDashed className="h-[17px] w-[17px] translate-y-px" strokeWidth={1.5} />
               </button>
             </ActionTooltip>
           </div>
@@ -207,11 +210,11 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
           >
             <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
-                href="/write"
+                href="/write?new=1"
                 className={cn(
-                  "flex h-8 items-center rounded-md text-[15px] font-medium transition-colors",
+                  "flex items-center rounded-[8px] text-[15px] font-medium transition-colors",
                   isIconOnly
-                    ? "gap-2 px-2 bg-ink text-bg hover:bg-ink-2"
+                    ? "h-8 w-8 justify-center bg-ink text-bg hover:bg-ink-2"
                     : "gap-2 px-2 text-ink hover:bg-muted",
                 )}
                 aria-label="New writing"
@@ -233,8 +236,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 type="button"
                 onClick={() => setSearchOpen(true)}
                 className={cn(
-                  "mt-2 flex h-8 w-full items-center rounded-md text-[15px] text-ink-2 transition-colors hover:bg-muted hover:text-ink",
-                  "gap-2 px-2",
+                  "mt-2 flex items-center rounded-[8px] text-[15px] text-ink-2 transition-colors hover:bg-muted hover:text-ink",
+                  isIconOnly ? "h-8 w-8 justify-center px-0" : "h-8 w-full gap-2 px-2",
                 )}
                 aria-label="Search"
               >
@@ -275,9 +278,9 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       data-section={item.section}
                       data-testid={item.section}
                       className={cn(
-                        "flex items-center rounded-md px-2 py-[10px] text-[15px] transition-colors",
-                        "gap-2",
+                        "flex items-center rounded-[8px] text-[15px] transition-colors",
                         isActive ? "bg-muted font-medium text-ink" : "text-ink-2 hover:bg-muted-hover hover:text-ink",
+                        isIconOnly ? "h-8 w-8 justify-center px-0 py-0" : "gap-2 px-2 py-[10px]",
                       )}
                       aria-label={item.label}
                     >

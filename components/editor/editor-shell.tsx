@@ -125,6 +125,7 @@ import { setSidebarMode } from "@/lib/stores/ui-shell-store"
 
 type EditorShellProps = {
   writingId?: string
+  forceNewWriting?: boolean
 }
 
 type SelectionSnapshot = {
@@ -267,7 +268,7 @@ const createWritingId = () => {
 const isPerfHarness = () =>
   typeof window !== "undefined" && window.location.pathname.startsWith("/perf/")
 
-export function EditorShell({ writingId }: EditorShellProps) {
+export function EditorShell({ writingId, forceNewWriting = false }: EditorShellProps) {
   const router = useRouter()
   const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
   const routeWritingId = writingId ?? null
@@ -297,6 +298,8 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
+  const [correctionsEnabled, setCorrectionsEnabled] = useState(true)
+  const [showCorrections, setShowCorrections] = useState(true)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [renameModalSnapshot, setRenameModalSnapshot] = useState<RenameWritingSnapshot | null>(null)
@@ -326,6 +329,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
+  const forceNewWritingRequestedRef = useRef(false)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -349,6 +353,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   } | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
+  const correctionsEnabledRef = useRef(true)
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
   const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
   const enqueueCorrectionBlockRef = useRef<((block: CorrectionTriggerBlock, reason?: "edit" | "hydrate-miss") => void) | null>(null)
@@ -830,7 +835,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
-    if (mode !== "rich") {
+    if (mode !== "rich" || !showCorrections) {
       clearPublicationSuggestions(editor)
       return
     }
@@ -842,7 +847,28 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     setEditorPublicationSuggestions(editor, [...suggestionsById.values()])
-  }, [editor, mode, automaticCorrectionSuggestions])
+  }, [editor, mode, automaticCorrectionSuggestions, showCorrections])
+
+  useEffect(() => {
+    correctionsEnabledRef.current = correctionsEnabled
+  }, [correctionsEnabled])
+
+  useEffect(() => {
+    if (correctionsEnabled) {
+      return
+    }
+
+    for (const { timer } of correctionTimersRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+
+    correctionTimersRef.current.clear()
+    correctionQueueRef.current = []
+    correctionQueueTotalRef.current = 0
+    correctionQueueCompletedRef.current = 0
+    correctionProcessingRef.current = false
+    setCorrectionToast(null)
+  }, [correctionsEnabled])
 
   useEffect(() => {
     titleRef.current = title
@@ -902,7 +928,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
   }, [routeWritingId, sessionLoaded])
 
   useEffect(() => {
-    if (!sessionLoaded || routeWritingId || currentWritingIdRef.current) {
+    if (forceNewWriting || !sessionLoaded || routeWritingId || currentWritingIdRef.current) {
       return
     }
 
@@ -919,13 +945,13 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     openDraftTab()
-  }, [editorSession.active_tab_id, editorSession.tabs, routeWritingId, router, sessionLoaded])
+  }, [editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   // Eagerly create a stable local identity for blank /write so the first
   // paste/input never races against identity creation. This is the explicit
   // owner of the blank-draft -> identified-local-writing transition.
   useEffect(() => {
-    if (!sessionLoaded || routeWritingId || identityEnsuredRef.current || currentWritingIdRef.current) {
+    if (forceNewWriting || !sessionLoaded || routeWritingId || identityEnsuredRef.current || currentWritingIdRef.current) {
       return
     }
 
@@ -1002,7 +1028,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
 
     void ensureIdentity()
-  }, [sessionLoaded, routeWritingId, router, editorSession.active_tab_id, editorSession.tabs])
+  }, [editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -1146,6 +1172,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
           const timer = window.setTimeout(() => {
             correctionTimersRef.current.delete(block.id)
+
+            if (!correctionsEnabledRef.current) {
+              return
+            }
+
             const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
             if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
@@ -1521,6 +1552,26 @@ export function EditorShell({ writingId }: EditorShellProps) {
     }
   }, [editor])
 
+  const isRichSelectionInsideTable = useCallback(() => {
+    if (!editor || modeRef.current !== "rich") {
+      return false
+    }
+
+    const { $from, $to } = editor.state.selection
+
+    const hasTableAncestor = (resolvedPos: typeof $from) => {
+      for (let depth = resolvedPos.depth; depth >= 0; depth -= 1) {
+        if (resolvedPos.node(depth).type.name === "table") {
+          return true
+        }
+      }
+
+      return false
+    }
+
+    return hasTableAncestor($from) || hasTableAncestor($to)
+  }, [editor])
+
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
       const runGlobalAction = () => {
@@ -1535,7 +1586,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
             setIsFocusMode((currentState) => !currentState)
             return true
           case "newWriting":
-            router.push("/write")
+            router.push("/write?new=1")
             return true
           case "settings":
             router.push("/settings")
@@ -2029,6 +2080,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
         return
       }
 
+      if (isRichSelectionInsideTable()) {
+        setPendingRichSelection(null)
+        return
+      }
+
       const snapshot = captureRichSelectionSnapshot()
       if (!snapshot) {
         setPendingRichSelection(null)
@@ -2048,7 +2104,7 @@ export function EditorShell({ writingId }: EditorShellProps) {
     return () => {
       editor.off("selectionUpdate", handleSelectionUpdate)
     }
-  }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
+  }, [captureRichSelectionSnapshot, editor, isRichSelectionInsideTable, pendingAnnotation])
 
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {
@@ -2435,6 +2491,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
       return
     }
 
+    if (!correctionsEnabledRef.current) {
+      correctionQueueRef.current = []
+      correctionQueueTotalRef.current = 0
+      correctionQueueCompletedRef.current = 0
+      setCorrectionToast(null)
+      return
+    }
+
     if (isPerfHarness()) {
       correctionQueueRef.current = []
       correctionQueueTotalRef.current = 0
@@ -2512,6 +2576,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
           data: AutomaticCorrectionApiResponse | null
           error: { code: string; message: string } | null
         }
+
+        if (!correctionsEnabledRef.current) {
+          continue
+        }
+
         const suggestions = payload.data?.suggestions ?? []
         const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
@@ -2592,16 +2661,21 @@ export function EditorShell({ writingId }: EditorShellProps) {
         console.info(`[corrections] block analysis skipped message=${message}`)
       } finally {
         correctionQueueCompletedRef.current += 1
-        setCorrectionToast({
-          phase: "running",
-          completed: correctionQueueCompletedRef.current,
-          total: correctionQueueTotalRef.current,
-        })
+
+        if (correctionsEnabledRef.current) {
+          setCorrectionToast({
+            phase: "running",
+            completed: correctionQueueCompletedRef.current,
+            total: correctionQueueTotalRef.current,
+          })
+        }
       }
     }
 
     correctionProcessingRef.current = false
-    finishCorrectionQueueIfIdle()
+    if (correctionsEnabledRef.current) {
+      finishCorrectionQueueIfIdle()
+    }
   }, [
     applyCorrectionSuggestionUpdate,
     editor,
@@ -2613,6 +2687,10 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
   const enqueueCorrectionBlock = useCallback(
     (block: CorrectionTriggerBlock, reason: "edit" | "hydrate-miss" = "edit") => {
+      if (!correctionsEnabledRef.current) {
+        return
+      }
+
       const cachedBlock = persistedCorrectionBlocksRef.current.get(block.hash)
       const hasMemorySuggestion = getBlockSuggestions(block.id, block.hash).length > 0
 
@@ -2675,7 +2753,11 @@ export function EditorShell({ writingId }: EditorShellProps) {
 
       acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
 
-      if (Date.now() < suppressCorrectionAnalysisUntilRef.current || modeRef.current !== "rich") {
+      if (
+        Date.now() < suppressCorrectionAnalysisUntilRef.current ||
+        modeRef.current !== "rich" ||
+        !correctionsEnabledRef.current
+      ) {
         return
       }
 
@@ -3394,6 +3476,15 @@ export function EditorShell({ writingId }: EditorShellProps) {
     window.history.replaceState(null, "", `/write/${nextWritingId}`)
   }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
 
+  useEffect(() => {
+    if (!forceNewWriting || !sessionLoaded || forceNewWritingRequestedRef.current) {
+      return
+    }
+
+    forceNewWritingRequestedRef.current = true
+    void handleCreateWorkspaceTab()
+  }, [forceNewWriting, handleCreateWorkspaceTab, sessionLoaded])
+
   const exportFileBaseName = useMemo(
     () =>
       getExportFileBaseName({
@@ -3719,10 +3810,14 @@ export function EditorShell({ writingId }: EditorShellProps) {
               <CorrectionsPanel
                 suggestions={automaticCorrectionSuggestions}
                 markdown={currentDocumentMarkdown}
+                correctionsEnabled={correctionsEnabled}
+                showCorrections={showCorrections}
                 onAcceptSuggestion={handleAcceptCorrection}
                 onRejectSuggestion={handleRejectCorrection}
                 onAcceptAll={handleAcceptAllCorrections}
                 onRejectAll={handleRejectAllCorrections}
+                onCorrectionsEnabledChange={setCorrectionsEnabled}
+                onShowCorrectionsChange={setShowCorrections}
                 onClose={closeActivePanel}
               />
             )}

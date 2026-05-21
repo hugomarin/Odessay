@@ -17,7 +17,7 @@ const VIEW_TABS: Array<{ value: DeskViewMode; label: string }> = [
 
 export function DeskViewToggle({ activeView, counts, onViewChange }: DeskViewToggleProps) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-[14px] bg-muted p-1 shadow-[inset_0_0_0_0.5px_hsl(var(--border))]">
+    <div className="inline-flex items-center gap-1 rounded-[14px] bg-muted/70 p-1">
       {VIEW_TABS.map((tab) => {
         const isActive = activeView === tab.value
         const count = counts?.[tab.value]
@@ -31,7 +31,7 @@ export function DeskViewToggle({ activeView, counts, onViewChange }: DeskViewTog
             onClick={() => onViewChange(tab.value)}
             className={cn(
               "inline-flex items-center gap-[10px] rounded-[11px] px-4 py-[9px] text-[14px] font-medium transition-colors",
-              isActive ? "bg-bg text-ink shadow-float" : "text-ink-3 hover:text-ink-2",
+              isActive ? "bg-bg text-ink" : "text-ink-3 hover:text-ink-2",
             )}
           >
             {tab.label}

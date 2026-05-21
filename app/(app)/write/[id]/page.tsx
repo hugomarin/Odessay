@@ -59,5 +59,5 @@ export default async function WriteDetailPage({ params }: WriteDetailPageProps) 
     permanentRedirect(routeResolution.href)
   }
 
-  return <EditorShell writingId={routeResolution.writingId} />
+  return <EditorShell key={routeResolution.writingId} writingId={routeResolution.writingId} />
 }

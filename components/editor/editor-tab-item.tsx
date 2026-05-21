@@ -18,7 +18,7 @@ export function EditorTabItem({ tab, active, onSelect, onClose, onRename, widthS
     <div
       style={widthStyle ? { width: widthStyle } : undefined}
       className={cn(
-        "group relative flex h-10 min-w-[72px] max-w-[240px] shrink-0 items-center overflow-hidden rounded-t-[12px] border border-b-0 border-transparent text-left font-sans transition-[background-color,border-color,color] duration-150 ease-out",
+        "group relative flex h-10 min-w-[72px] max-w-[240px] shrink-0 items-center overflow-hidden rounded-t-[4px] border border-b-0 border-transparent text-left font-sans transition-[background-color,border-color,color] duration-150 ease-out",
         active
           ? "translate-y-px border-border/90 bg-bg text-ink"
           : "bg-transparent text-ink-4 hover:bg-muted/80 hover:text-ink-3",
@@ -27,7 +27,7 @@ export function EditorTabItem({ tab, active, onSelect, onClose, onRename, widthS
       <button
         type="button"
         onClick={() => onSelect(tab.id)}
-        className="absolute inset-0 z-0 rounded-t-[12px]"
+        className="absolute inset-0 z-0 rounded-t-[4px]"
         aria-pressed={active}
         aria-label={`Open ${tab.title}`}
       />
