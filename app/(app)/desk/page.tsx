@@ -39,6 +39,8 @@ import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncWorker } from "@/lib/sync/worker"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
+import { downloadBlob } from "@/lib/utils/download"
 
 
 type ApiEnvelope<T> = {
@@ -74,52 +76,7 @@ type SharedApiEnvelope<T> = {
   error: { code: string; message: string } | null
 }
 
-const copyTextWithFallback = async (value: string) => {
-  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value)
-      return true
-    } catch {
-      // Fall through for embedded browser cases.
-    }
-  }
 
-  if (typeof document === "undefined") {
-    return false
-  }
-
-  const textarea = document.createElement("textarea")
-  textarea.value = value
-  textarea.setAttribute("readonly", "")
-  textarea.style.position = "fixed"
-  textarea.style.opacity = "0"
-  textarea.style.pointerEvents = "none"
-  document.body.appendChild(textarea)
-  textarea.focus()
-  textarea.select()
-  textarea.setSelectionRange(0, value.length)
-
-  try {
-    return document.execCommand("copy")
-  } catch {
-    return false
-  } finally {
-    document.body.removeChild(textarea)
-  }
-}
-
-const downloadBlob = (blob: Blob, filename: string) => {
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement("a")
-
-  anchor.href = objectUrl
-  anchor.download = filename
-  anchor.rel = "noreferrer"
-  document.body.appendChild(anchor)
-  anchor.click()
-  anchor.remove()
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
-}
 
 export default function DeskPage() {
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)

@@ -90,6 +90,7 @@ import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
+import { downloadBlob as downloadBlobUtil } from "@/lib/utils/download"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
@@ -1557,19 +1558,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return false
     }
 
-    const { $from, $to } = editor.state.selection
-
-    const hasTableAncestor = (resolvedPos: typeof $from) => {
-      for (let depth = resolvedPos.depth; depth >= 0; depth -= 1) {
-        if (resolvedPos.node(depth).type.name === "table") {
-          return true
-        }
-      }
-
-      return false
-    }
-
-    return hasTableAncestor($from) || hasTableAncestor($to)
+    return editor.isActive("table")
   }, [editor])
 
   const handleRunAction = useCallback(
@@ -3398,8 +3387,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [editor, persistEditorSnapshot],
   )
 
-  const handleCreateWorkspaceTab = useCallback(async () => {
-    if (editorSession.tabs.length >= 10) {
+  const handleCreateWorkspaceTab = useCallback(async (options?: { skipConfirm?: boolean }) => {
+    if (!options?.skipConfirm && editorSession.tabs.length >= 10) {
       const confirmed = window.confirm("You already have many tabs open. Open another writing anyway?")
       if (!confirmed) {
         return
@@ -3412,11 +3401,52 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       !currentWritingId ||
       editorSession.tabs.some((tab) => tab.id === activeDraftTabId && tab.writing_id === null)
 
-    if (isActiveDraft) {
-      const nowIso = new Date().toISOString()
-      const nextWritingId = createWritingId()
-      const nextTitle = deriveAutoTitle("", nowIso)
+    const nowIso = new Date().toISOString()
+    const nextWritingId = createWritingId()
+    const nextTitle = deriveAutoTitle("", nowIso)
 
+    // Claim ownership of the blank-draft -> identified-local-writing transition
+    // synchronously so persistEditorSnapshot never races against it.
+    currentWritingIdRef.current = nextWritingId
+    setCurrentWritingId(nextWritingId)
+    setHydrationWritingId(nextWritingId)
+    window.history.replaceState(null, "", `/write/${nextWritingId}`)
+
+    if (isActiveDraft) {
+      try {
+        await localDB.writings.save({
+          id: nextWritingId,
+          title: nextTitle,
+          body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
+          body_text: "",
+          status: "draft",
+          visibility: "private",
+          version: 0,
+          sync_status: "synced",
+          lifecycle: "local-only",
+          created_at: nowIso,
+          updated_at: nowIso,
+          local_updated_at: Date.now(),
+        })
+      } catch {
+        // If save fails, revert the optimistic claim so persistEditorSnapshot
+        // can fall back to identity-on-first-input.
+        currentWritingIdRef.current = null
+        setCurrentWritingId(null)
+        setHydrationWritingId(null)
+        return
+      }
+
+      openWritingTab({
+        writingId: nextWritingId,
+        title: nextTitle,
+        saveState: "saved",
+        hasPendingSync: false,
+      })
+      return
+    }
+
+    try {
       await localDB.writings.save({
         id: nextWritingId,
         title: nextTitle,
@@ -3431,38 +3461,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         updated_at: nowIso,
         local_updated_at: Date.now(),
       })
-
-      openWritingTab({
-        writingId: nextWritingId,
-        title: nextTitle,
-        saveState: "saved",
-        hasPendingSync: false,
-      })
-      currentWritingIdRef.current = nextWritingId
-      setCurrentWritingId(nextWritingId)
-      setHydrationWritingId(nextWritingId)
-      window.history.replaceState(null, "", `/write/${nextWritingId}`)
+    } catch {
+      currentWritingIdRef.current = null
+      setCurrentWritingId(null)
+      setHydrationWritingId(null)
       return
     }
-
-    const nowIso = new Date().toISOString()
-    const nextWritingId = createWritingId()
-    const nextTitle = deriveAutoTitle("", nowIso)
-
-    await localDB.writings.save({
-      id: nextWritingId,
-      title: nextTitle,
-      body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
-      body_text: "",
-      status: "draft",
-      visibility: "private",
-      version: 0,
-      sync_status: "synced",
-      lifecycle: "local-only",
-      created_at: nowIso,
-      updated_at: nowIso,
-      local_updated_at: Date.now(),
-    })
 
     openWritingTab({
       writingId: nextWritingId,
@@ -3470,10 +3474,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       saveState: "saved",
       hasPendingSync: false,
     })
-    currentWritingIdRef.current = nextWritingId
-    setCurrentWritingId(nextWritingId)
-    setHydrationWritingId(nextWritingId)
-    window.history.replaceState(null, "", `/write/${nextWritingId}`)
   }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
 
   useEffect(() => {
@@ -3482,7 +3482,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     forceNewWritingRequestedRef.current = true
-    void handleCreateWorkspaceTab()
+    void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [forceNewWriting, handleCreateWorkspaceTab, sessionLoaded])
 
   const exportFileBaseName = useMemo(
@@ -3496,16 +3496,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   )
 
   const downloadBlob = useCallback((blob: Blob, filename: string) => {
-    const objectUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement("a")
-
-    anchor.href = objectUrl
-    anchor.download = filename
-    anchor.rel = "noreferrer"
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+    downloadBlobUtil(blob, filename)
   }, [])
 
   const exportMarkdown = useCallback(async () => {
