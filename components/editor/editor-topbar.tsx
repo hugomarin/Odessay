@@ -13,7 +13,7 @@ import {
   List,
   ListOrdered,
   Minimize2,
-  Sparkles,
+  SpellCheck,
   SlidersHorizontal,
   Strikethrough,
   Table,
@@ -555,7 +555,7 @@ export function EditorTopbar({
               aria-label="Correcciones"
               aria-pressed={isPublicationModeEnabled || activePanel === "publication"}
             >
-              <Sparkles className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+              <SpellCheck className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
           </div>

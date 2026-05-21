@@ -412,7 +412,7 @@ export function PropertiesPanel({
       id="editor-panel-properties"
       data-section="editor-panel-properties"
       data-testid="editor-panel-properties"
-      className="EditorPanelProperties fixed right-0 top-[46px] bottom-8 z-40 w-[248px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
+      className="EditorPanelProperties fixed right-0 top-[46px] bottom-8 z-40 w-[312px] min-w-[312px] max-w-[312px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
     >
       <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Properties</p>

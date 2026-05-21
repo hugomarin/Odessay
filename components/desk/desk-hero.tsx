@@ -40,7 +40,9 @@ export function DeskHero({ drafts }: DeskHeroProps) {
               {draft.statusLabel}
             </p>
             <p className="line-clamp-2 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
-            <p className="line-clamp-2 font-lora text-[12px] italic leading-[1.55] text-ink-3">{draft.excerpt}</p>
+            {draft.excerpt ? (
+              <p className="line-clamp-2 text-[12px] leading-[1.55] text-ink-3">{draft.excerpt}</p>
+            ) : null}
             <div className="mt-auto flex items-center justify-between border-t-[0.5px] border-border pt-2 text-[11px] text-ink-4">
               <span>{draft.updatedLabel}</span>
               <span>{draft.wordCount} words</span>
@@ -49,7 +51,7 @@ export function DeskHero({ drafts }: DeskHeroProps) {
         ))}
 
         <Link
-          href="/write"
+          href="/write?new=1"
           id="desk-hero-draft-card-new"
           data-section="desk-hero-draft-card-new"
           data-testid="desk-hero-draft-card-new"

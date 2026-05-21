@@ -38,6 +38,9 @@ import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncWorker } from "@/lib/sync/worker"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
+import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
+import { downloadBlob } from "@/lib/utils/download"
 
 
 type ApiEnvelope<T> = {
@@ -72,6 +75,8 @@ type SharedApiEnvelope<T> = {
   data: T | null
   error: { code: string; message: string } | null
 }
+
+
 
 export default function DeskPage() {
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)
@@ -530,6 +535,45 @@ export default function DeskPage() {
     [renameTarget, saveWritingTitleById],
   )
 
+  const getWritingMarkdownById = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+
+    if (!writing || writing.sync_status === "deleted") {
+      return null
+    }
+
+    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    return {
+      markdown: `${markdown}\n`,
+      filename: buildMarkdownDownloadName({
+        title: writing.title,
+        bodyText: writing.body_text,
+        writingId: writing.id,
+      }),
+    }
+  }, [])
+
+  const copyWritingMarkdown = useCallback(async (writingId: string) => {
+    const payload = await getWritingMarkdownById(writingId)
+
+    if (!payload) {
+      return
+    }
+
+    await copyTextWithFallback(payload.markdown)
+  }, [getWritingMarkdownById])
+
+  const downloadWritingMarkdown = useCallback(async (writingId: string) => {
+    const payload = await getWritingMarkdownById(writingId)
+
+    if (!payload) {
+      return
+    }
+
+    const blob = new Blob([payload.markdown], { type: "text/markdown;charset=utf-8" })
+    downloadBlob(blob, payload.filename)
+  }, [getWritingMarkdownById])
+
   return (
     <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
       <div
@@ -552,7 +596,7 @@ export default function DeskPage() {
             Import
           </button>
           <Link
-            href="/write"
+            href="/write?new=1"
             className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
           >
             <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
@@ -565,7 +609,7 @@ export default function DeskPage() {
         <>
           <DeskHero drafts={summary.heroDrafts} />
 
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-[14px] sm:px-9">
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
             <div className="min-w-[280px] flex-1">
               <DeskFilterBar
@@ -643,6 +687,8 @@ export default function DeskPage() {
               onStatusChange={changeWritingStatus}
               onRenameWriting={openRenameWriting}
               onPreviewWriting={openWritingPreview}
+              onCopyMarkdown={copyWritingMarkdown}
+              onDownloadMarkdown={downloadWritingMarkdown}
               onDeleteRequest={async (id) => {
                 await enqueueWritingDelete(id)
                 await loadDeskActivity()

@@ -107,7 +107,7 @@ const buildWordCount = (bodyText: string) => {
 const buildExcerpt = (bodyText: string) => {
   const normalized = bodyText.replace(/\s+/g, " ").trim()
   if (!normalized) {
-    return "Empty draft"
+    return ""
   }
 
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized

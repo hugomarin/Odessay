@@ -23,6 +23,8 @@ No reemplaza `odessay-ai-editor.md` (editor residente de observaciones). Esta sp
 ### Alcance
 - Detectar errores mecánicos (ortografía, acentos, typos, concordancia básica, puntuación, spacing, duplicaciones).
 - Mostrar correcciones inline por bloque con aceptar/rechazar.
+- Toggle global de activación/desactivación de correcciones automáticas.
+- Toggle de visibilidad de decoraciones inline.
 - Sugerir un título en flujo explícito de renombre.
 
 ### No-alcance
@@ -39,7 +41,7 @@ No reemplaza `odessay-ai-editor.md` (editor residente de observaciones). Esta sp
 
 El trabajo del modelo es caro y lento. Una vez que un bloque fue analizado y su hash no cambió, no debe volver a pasar por la API.
 
-- Las correcciones de cada bloque se almacenan localmente (IndexedDB) indexadas por `(writingId, blockId, blockHash)`.
+- Las correcciones de cada bloque se almacenan localmente (IndexedDB) y remotamente (Supabase) indexadas por `(writingId, blockId, blockHash)`.
 - Al cargar un writing, el sistema restaura sugerencias de bloques cuyo hash coincida sin llamar al modelo.
 - Solo los bloques modificados (hash divergente) o nuevos se encolan para corrección.
 - Esto elimina el reprocesamiento completo al recargar la página o cambiar de pestaña.
@@ -105,8 +107,8 @@ El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Ortograf�
 **Componentes activos:**
 - `correction-trigger-plugin.ts` — detecta nodos modificados en transacciones ProseMirror.
 - `publication-suggestion-extension.ts` — pinta decoraciones inline y burbujas de acción.
-- `OrthographyPanel` — lista de sugerencias pendientes (solo lectura de estado).
-- `editor-shell.tsx` — orquesta el flujo completo: recibe dirty blocks, maneja debounce, encola requests, aplica sugerencias.
+- `CorrectionsPanel` — lista de sugerencias pendientes con toggles de activación/visibilidad.
+- `editor-shell.tsx` — orquesta el flujo completo: recibe dirty blocks, maneja debounce, encola requests, aplica sugerencias, controla toggles.
 
 ### Mapeo frontend ↔ backend
 
@@ -224,11 +226,12 @@ El sistema actual no cumple aún todos los principios de construcción. Estos so
 
 | Principio | Estado actual | Gap |
 |-----------|--------------|-----|
-| Persistir para no reprocesar | `automaticCorrectionSuggestions` es `useState([])` | Sin persistencia IndexedDB |
+| Persistir para no reprocesar | Persistencia IndexedDB + Supabase con write-through | Completado en ODE-165 |
 | Velocidad mediante batching | 1 bloque = 1 llamada HTTP secuencial | Sin batching ni paralelismo |
 | Separar qué/cuándo | Umbral de 8 palabras descarta párrafos cortos | Filtro de longitud mezcla concerns |
-| Smart invalidation | Sugerencias se borran inmediatamente al editar | Parpadeo visual |
-| Observabilidad | Solo `console.info` de latencia | Sin métricas de tokens ni storage estructurado |
+| Smart invalidation | Stale invalidation con keep/drop/replace | Mejorado en ODE-163 |
+| Observabilidad | `logCorrectionEvent` con discriminated union de 8 eventos | Completado en ODE-161 |
+| Control de usuario | Toggles de activación y visibilidad de correcciones | Completado en ODE-167 |
 
 Estos gaps están documentados como trabajo pendiente. Cada cambio debe avanzar hacia los principios sin romper el flujo existente.
 
@@ -284,8 +287,9 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 - `lib/ai/corrections-contract-adapter.ts` — adaptador de contrato legacy
 - `lib/editor/correction-trigger-plugin.ts` — detección de dirty blocks
 - `lib/editor/publication-suggestion-extension.ts` — decoraciones inline
-- `components/editor/panels/orthography-panel.tsx` — panel lateral
+- `components/editor/panels/corrections-panel.tsx` — panel lateral con toggles
 - `components/editor/editor-shell.tsx` — orquestación del flujo
+- `lib/corrections/persistence.ts` — persistencia remota e IndexedDB de correction blocks
 
 ### Legacy / no usados
 - `components/editor/panels/publication-panel.tsx` — panel legacy; no se renderiza

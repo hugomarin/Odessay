@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Eye, Pencil, Tags, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Clipboard, Download, Eye, Pencil, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -29,6 +29,8 @@ type DeskActivityTableProps = {
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
   onRenameWriting?: (writingId: string) => void
   onPreviewWriting?: (writingId: string) => void
+  onCopyMarkdown?: (writingId: string) => void
+  onDownloadMarkdown?: (writingId: string) => void
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
@@ -62,6 +64,8 @@ export function DeskActivityTable({
   onStatusChange,
   onRenameWriting,
   onPreviewWriting,
+  onCopyMarkdown,
+  onDownloadMarkdown,
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
@@ -109,7 +113,7 @@ export function DeskActivityTable({
       >
         {groups.map((group) => (
           <div key={group.label}>
-            <div className="border-b-[0.5px] border-border px-9 py-3">
+            <div className="bg-sb px-9 py-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">{group.label}</p>
             </div>
 
@@ -156,10 +160,10 @@ export function DeskActivityTable({
                         }
                       }}
                       className={cn(
-                        "group border-b-[0.5px] border-border transition-colors",
+                        "group bg-sb transition-colors",
                         isNavigable
-                          ? "cursor-pointer hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                          : "cursor-default bg-muted/20",
+                          ? "cursor-pointer hover:bg-[hsl(var(--sb))] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                          : "cursor-default",
                       )}
                     >
                       <td
@@ -223,7 +227,9 @@ export function DeskActivityTable({
                                 </button>
                               ) : null}
                             </div>
-                            <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                            {row.excerpt ? (
+                              <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p>
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -337,16 +343,38 @@ export function DeskActivityTable({
                       </td>
                       <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
                         <div onClick={(event) => event.stopPropagation()}>
-                          {showDeleteAction ? (
-                            <button
-                              type="button"
-                              aria-label={`Delete writing ${row.title}`}
-                              onClick={() => setPendingDeleteId(row.id)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                            >
-                              <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                            </button>
-                          ) : null}
+                          <div className="flex items-center justify-end gap-1">
+                            {onCopyMarkdown ? (
+                              <button
+                                type="button"
+                                aria-label={`Copy markdown for ${row.title}`}
+                                onClick={() => onCopyMarkdown(row.id)}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                              >
+                                <Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                              </button>
+                            ) : null}
+                            {onDownloadMarkdown ? (
+                              <button
+                                type="button"
+                                aria-label={`Download markdown for ${row.title}`}
+                                onClick={() => onDownloadMarkdown(row.id)}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                              >
+                                <Download className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                              </button>
+                            ) : null}
+                            {showDeleteAction ? (
+                              <button
+                                type="button"
+                                aria-label={`Delete writing ${row.title}`}
+                                onClick={() => setPendingDeleteId(row.id)}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                              >
+                                <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
                     </tr>

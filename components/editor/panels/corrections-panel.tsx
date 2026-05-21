@@ -2,26 +2,35 @@
 
 import { useMemo } from "react";
 import { Check, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { PublicationSuggestion } from "@/lib/local-db/schema";
 import { getVisibleCorrectionSuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
 
 type CorrectionsPanelProps = {
   suggestions: PublicationSuggestion[];
   markdown: string;
+  correctionsEnabled: boolean;
+  showCorrections: boolean;
   onAcceptSuggestion: (suggestion: PublicationSuggestion) => void;
   onRejectSuggestion: (suggestionId: string) => void;
   onAcceptAll: () => void;
   onRejectAll: () => void;
+  onCorrectionsEnabledChange: (enabled: boolean) => void;
+  onShowCorrectionsChange: (show: boolean) => void;
   onClose: () => void;
 };
 
 export function CorrectionsPanel({
   suggestions,
   markdown,
+  correctionsEnabled,
+  showCorrections,
   onAcceptSuggestion,
   onRejectSuggestion,
   onAcceptAll,
   onRejectAll,
+  onCorrectionsEnabledChange,
+  onShowCorrectionsChange,
   onClose,
 }: CorrectionsPanelProps) {
   const visibleSuggestions = useMemo(
@@ -52,7 +61,7 @@ export function CorrectionsPanel({
       id="editor-panel-corrections"
       data-section="editor-panel-corrections"
       data-testid="editor-panel-corrections"
-      className="fixed right-0 top-[46px] bottom-8 z-40 w-[312px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
+      className="fixed right-0 top-[46px] bottom-8 z-40 w-[312px] min-w-[312px] max-w-[312px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
     >
       <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
         <div className="flex items-center gap-2">
@@ -71,6 +80,72 @@ export function CorrectionsPanel({
         >
           <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
         </button>
+      </div>
+
+      <div className="space-y-3 border-b-[0.5px] border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <label
+              htmlFor="corrections-enabled-switch"
+              className="block text-[12px] font-medium text-ink"
+            >
+              Correcciones activas
+            </label>
+            <p className="text-[11px] text-ink-4">Analiza bloques nuevos automáticamente.</p>
+          </div>
+          <button
+            id="corrections-enabled-switch"
+            type="button"
+            role="switch"
+            aria-checked={correctionsEnabled}
+            aria-label="Activar correcciones automáticas"
+            onClick={() => onCorrectionsEnabledChange(!correctionsEnabled)}
+            className={cn(
+              "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+              correctionsEnabled ? "bg-ink" : "bg-border",
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute left-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-transform",
+                correctionsEnabled ? "translate-x-[14px]" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <label
+              htmlFor="corrections-visible-switch"
+              className="block text-[12px] font-medium text-ink"
+            >
+              Mostrar correcciones
+            </label>
+            <p className="text-[11px] text-ink-4">Muestra las marcas inline dentro del documento.</p>
+          </div>
+          <button
+            id="corrections-visible-switch"
+            type="button"
+            role="switch"
+            aria-checked={showCorrections}
+            aria-label="Mostrar correcciones en el documento"
+            onClick={() => onShowCorrectionsChange(!showCorrections)}
+            className={cn(
+              "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+              showCorrections ? "bg-ink" : "bg-border",
+            )}
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute left-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-transform",
+                showCorrections ? "translate-x-[14px]" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
       </div>
 
       {actionableSuggestions.length > 0 ? (

@@ -6,6 +6,12 @@ type ApiEnvelope<T> = {
   error: { code: string; message: string } | null;
 };
 
+type CorrectionPersistenceError = Error & {
+  status?: number;
+  code?: string | null;
+  url?: string;
+};
+
 export type PersistedCorrectionBlockRecord = {
   id: string;
   writing_id: string;
@@ -64,13 +70,34 @@ export const mapLocalCorrectionBlockToPersistedRecord = (
 });
 
 const parseEnvelope = async <T>(response: Response): Promise<T> => {
-  const envelope = (await response.json()) as ApiEnvelope<T>;
+  let envelope: ApiEnvelope<T> | null = null;
 
-  if (!response.ok || envelope.error) {
-    throw new Error(envelope.error?.message ?? `Request failed with status ${response.status}.`);
+  try {
+    envelope = (await response.json()) as ApiEnvelope<T>;
+  } catch {
+    envelope = null;
   }
 
-  return envelope.data;
+  if (!response.ok || envelope?.error) {
+    const rawMessage = envelope?.error?.message?.trim();
+    const message =
+      rawMessage && rawMessage.length > 0
+        ? rawMessage
+        : `Request failed with status ${response.status}.`;
+    const error: CorrectionPersistenceError = new Error(message);
+    error.status = response.status;
+    error.code = envelope?.error?.code ?? null;
+    error.url = response.url;
+    throw error;
+  }
+
+  return envelope?.data as T;
+};
+
+const isIgnorableCorrectionPersistenceError = (error: unknown) => {
+  const status = (error as CorrectionPersistenceError | null | undefined)?.status;
+  const code = (error as CorrectionPersistenceError | null | undefined)?.code;
+  return status === 401 || status === 403 || code === "UNAUTHORIZED" || code === "FORBIDDEN";
 };
 
 const inFlightCorrectionHydrations = new Map<string, Promise<LocalCorrectionBlock[]>>();
@@ -83,17 +110,25 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
   }
 
   const promise = (async () => {
-    const response = await fetch(`/api/corrections/hydrate?writingId=${encodeURIComponent(writingId)}`, {
-      method: "GET",
-      cache: "no-store",
-    });
-    const records = await parseEnvelope<PersistedCorrectionBlockRecord[]>(response);
-    const localBlocks = records.map((record) => mapPersistedCorrectionRecordToLocal(record));
+    try {
+      const response = await fetch(`/api/corrections/hydrate?writingId=${encodeURIComponent(writingId)}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const records = await parseEnvelope<PersistedCorrectionBlockRecord[]>(response);
+      const localBlocks = records.map((record) => mapPersistedCorrectionRecordToLocal(record));
 
-    await localDB.correctionBlocks.saveMany(localBlocks);
-    await localDB.correctionBlocks.evictOldestWriting(CORRECTION_BLOCK_CACHE_LIMIT);
+      await localDB.correctionBlocks.saveMany(localBlocks);
+      await localDB.correctionBlocks.evictOldestWriting(CORRECTION_BLOCK_CACHE_LIMIT);
 
-    return localBlocks;
+      return localBlocks;
+    } catch (error) {
+      if (isIgnorableCorrectionPersistenceError(error)) {
+        return [];
+      }
+
+      throw error;
+    }
   })().finally(() => {
     inFlightCorrectionHydrations.delete(writingId);
   });
@@ -111,23 +146,37 @@ export const persistCorrectionBlockRemotely = async ({
   block?: LocalCorrectionBlock;
   deletedBlockIds?: string[];
 }) => {
-  const payload = await parseEnvelope<{
+  let payload: {
     persistedId: string | null;
     deletedIds: string[];
     syncedAt: string;
-  }>(
-    await fetch("/api/corrections/persist", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        writingId: writingId ?? block?.writingId,
-        block: block ? mapLocalCorrectionBlockToPersistedRecord(block) : undefined,
-        deletedBlockIds,
+  };
+
+  try {
+    payload = await parseEnvelope<{
+      persistedId: string | null;
+      deletedIds: string[];
+      syncedAt: string;
+    }>(
+      await fetch("/api/corrections/persist", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          writingId: writingId ?? block?.writingId,
+          block: block ? mapLocalCorrectionBlockToPersistedRecord(block) : undefined,
+          deletedBlockIds,
+        }),
       }),
-    }),
-  );
+    );
+  } catch (error) {
+    if (isIgnorableCorrectionPersistenceError(error)) {
+      return;
+    }
+
+    throw error;
+  }
 
   if (block && payload.persistedId) {
     await localDB.correctionBlocks.markSynced(payload.persistedId, payload.syncedAt);

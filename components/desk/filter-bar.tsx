@@ -88,7 +88,7 @@ export function DeskFilterBar({
             placeholder="Filter by name..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="h-9 rounded-[8px] border-[0.5px] border-border bg-sb pl-9 pr-8 text-[13px] font-sans text-ink placeholder:text-ink-4"
+            className="h-9 rounded-[8px] border-transparent bg-muted/70 pl-9 pr-8 text-[13px] font-sans text-ink placeholder:text-ink-4 shadow-none"
           />
           {searchQuery.length > 0 && (
             <button
@@ -223,10 +223,10 @@ function FilterChip({
         <button
           type="button"
           className={cn(
-            "inline-flex h-9 items-center gap-2 rounded-[8px] border-[0.5px] px-3 text-[13px] font-medium transition-colors",
+            "inline-flex h-9 items-center gap-2 rounded-[8px] px-3 text-[13px] font-medium transition-colors",
             isActive
-              ? "border-ink bg-ink text-bg hover:opacity-90"
-              : "border-border bg-sb text-ink-2 hover:bg-muted",
+              ? "bg-ink text-bg hover:opacity-90"
+              : "bg-muted/70 text-ink-2 hover:bg-muted",
           )}
         >
           {label}

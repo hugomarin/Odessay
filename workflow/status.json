@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Polish Desk and editor review surfaces across the current writing workflow. Replaced the temporary public home shell with a minimal landing CTA, unified all new-writing entry points through an explicit fresh-draft flow, simplified Desk chrome and row surfaces, added per-row markdown copy/download actions, removed the artificial `Empty draft` fallback, aligned the collapsed sidebar rail and editor tab radius, standardized right-side panel widths, added correction toggles that match the Properties switch pattern, suppressed the generic selection popup inside tables, and hardened correction-block remote sync so unauthorized/forbidden responses soft-fail without breaking the editor runtime.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-167",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-167/polish-desk-list-interactions-and-editor-correction-ergonomics",
+      "commit": "0caa064",
+      "date": "2026-05-21",
+      "notes": "Validation: npm run typecheck (passed), npm run lint (passed with the same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (71 files, 374 tests passing). Browser verification was exercised incrementally during implementation on localhost:3000 for Desk/editor review comments; no new automated Playwright capture was added in this pass. Performance contract: interaction/reactive risk mitigated by table-selection popup suppression and correction persistence soft-fail guards; no new list/API payload growth introduced."
+    },
+    {
       "what": "Persist automatic correction blocks in Supabase with an IndexedDB transit cache and bidirectional sync. Added the `correction_blocks` table with RLS and ownership indices, new `/api/corrections/hydrate` and `/api/corrections/persist` routes, localDB support for cached correction blocks plus LRU eviction, and editor-shell write-through hydration/sync so analyzed blocks restore without re-calling the model. Accepted/rejected/conflict suggestion states now persist across reloads, stale hashes are deleted locally and remotely, unsynced blocks retry on next hydration or when the browser comes back online, and regression coverage now includes the new routes, localDB methods, sync worker typing, and suggestion batching.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-165",

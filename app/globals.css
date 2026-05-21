@@ -498,6 +498,31 @@
     font-size: 1em;
   }
 
+  .odessay-editor-content th p,
+  .odessay-editor-content th ul,
+  .odessay-editor-content th ol,
+  .odessay-editor-content td ul,
+  .odessay-editor-content td ol,
+  .prose-odessay th p,
+  .prose-odessay th ul,
+  .prose-odessay th ol,
+  .prose-odessay td ul,
+  .prose-odessay td ol {
+    margin-block: 0;
+    max-width: none;
+  }
+
+  .odessay-editor-content th:focus-within,
+  .odessay-editor-content td:focus-within {
+    background: hsl(var(--muted) / 0.5);
+  }
+
+  .odessay-editor-content .selectedCell,
+  .odessay-editor-content .selectedCell:focus-within {
+    background: hsl(var(--muted) / 0.72);
+    box-shadow: inset 0 0 0 1px hsl(var(--border));
+  }
+
   .odessay-editor-content th + th,
   .odessay-editor-content td + td,
   .prose-odessay th + th,
