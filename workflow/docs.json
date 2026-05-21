@@ -97,6 +97,11 @@
       "type": "feature",
       "description": "Feature de emails de autenticación: Supabase Auth maneja tokens, links, expiración, sesiones y templates; Resend solo actúa como SMTP provider en auth.odessay.com; Namecheap aloja los DNS requeridos."
     },
+    {
+      "path": "workflow/context/features/odessay-llm-capture-extension.md",
+      "type": "feature",
+      "description": "Captura manual de conversaciones completas desde ChatGPT y Claude hacia Odessay mediante una extensión de navegador. Define alcance, payload Markdown, reutilización desde Narratif, handoff a Odessay, uso de sesión web existente para auth y creación de writings nuevos a partir del contenido capturado."
+    },
 
     {
       "path": "workflow/agents.md",
