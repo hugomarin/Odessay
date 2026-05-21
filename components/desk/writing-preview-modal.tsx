@@ -16,6 +16,7 @@ import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
 type WritingPreviewModalProps = {
@@ -54,6 +55,8 @@ export function WritingPreviewModal({
   const [statusOpen, setStatusOpen] = useState(false)
   const loadIdRef = useRef(0)
   const titleDraftRef = useRef("")
+  const { settings } = useUserSettingsContext()
+  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
   const titleEditingRef = useRef(false)
   const titleWritingIdRef = useRef<string | null>(null)
 
@@ -316,7 +319,7 @@ export function WritingPreviewModal({
                         </div>
                       </PopoverTrigger>
                       <PopoverContent align="start" className="w-[236px] p-[5px]">
-                        {WRITING_STATUS_VALUES.map((status) => (
+                        {enabledStatuses.map((status) => (
                           <PropertiesPopoverItem
                             key={status}
                             selected={row.stateTone === status}

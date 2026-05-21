@@ -8,6 +8,7 @@ type SettingsLayoutProps = Readonly<{
 
 const SETTINGS_NAV_ITEMS = [
   { href: "/settings/account", label: "Account", active: true },
+  { href: "/settings/writing", label: "Writing", active: true },
   { href: "/settings/privacy", label: "Privacy", active: false, dimmed: true },
   { href: "/settings/billing", label: "Billing", active: false, dimmed: true },
 ]

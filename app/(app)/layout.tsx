@@ -1,6 +1,8 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
+import { DesignGridOverlay } from "@/components/dev/design-grid-overlay"
 import { Sidebar } from "@/components/navigation/sidebar"
+import { UserSettingsProvider } from "@/components/settings/user-settings-provider"
 import { parseSidebarModeCookie, SIDEBAR_MODE_COOKIE_KEY } from "@/lib/stores/ui-shell-state"
 import { createClient } from "@/lib/supabase/server"
 
@@ -27,15 +29,18 @@ export default async function AppLayout({ children }: AppLayoutProps) {
     .maybeSingle()
 
   return (
-    <Sidebar
-      initialSidebarMode={initialSidebarMode}
-      user={{
-        email: user.email ?? null,
-        displayName: profile?.display_name ?? null,
-        username: profile?.username ?? null,
-      }}
-    >
-      {children}
-    </Sidebar>
+    <UserSettingsProvider>
+      <Sidebar
+        initialSidebarMode={initialSidebarMode}
+        user={{
+          email: user.email ?? null,
+          displayName: profile?.display_name ?? null,
+          username: profile?.username ?? null,
+        }}
+      >
+        <DesignGridOverlay />
+        {children}
+      </Sidebar>
+    </UserSettingsProvider>
   )
 }
