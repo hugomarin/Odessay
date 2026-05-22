@@ -19,6 +19,7 @@ type AnnotationRef = {
 const INLINE_ANNOTATION_RE =
   /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
+const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c)?(\d+):\s*([^\]]*?)\]/g
 
 const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "collaborative"]
 
@@ -189,11 +190,25 @@ export const removeMarkdownFootnote = (markdown: string, index: number) =>
     ),
   ).trimEnd()
 
-export const extractAiAnnotationsFromMarkdown = (markdown: string) =>
-  getMarkdownFootnotes(markdown)
-    .filter((annotation) => annotation.type === "ai")
-    .map((annotation) => annotationSigil("ai", annotation.index, annotation.text))
-    .join("\n")
+export const extractAiAnnotationsFromMarkdown = (markdown: string): string => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  const results: string[] = []
+
+  AI_ANNOTATION_WITH_CONTEXT_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = AI_ANNOTATION_WITH_CONTEXT_RE.exec(normalized)) !== null) {
+    const typePrefix = match[2]
+    if (typePrefix) continue // skip personal (@p) and collaborative (@c)
+
+    const anchorText = match[1]
+    const index = Number(match[3])
+    const text = match[4].trim()
+    const sigil = annotationSigil("ai", index, text)
+    results.push(anchorText ? `"${anchorText}" ${sigil}` : sigil)
+  }
+
+  return results.join("\n")
+}
 
 export const buildAiAnnotationCopy = (
   markdown: string,
