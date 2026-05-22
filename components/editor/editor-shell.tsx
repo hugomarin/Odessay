@@ -140,6 +140,7 @@ type PendingAnnotationSnapshot = {
   to: number
   text: string
   position: { x: number; y: number }
+  annotationType?: "personal" | "ai" | "collaborative" | "footnote"
 }
 
 type PendingRichSelectionSnapshot = {
@@ -1990,19 +1991,20 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void persistEditorSnapshot(editor)
   }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
 
-  const handleAnnotateSelection = useCallback(() => {
-    if (!pendingRichSelection) {
-      return
-    }
-
-    setPendingAnnotation({
-      from: pendingRichSelection.from,
-      to: pendingRichSelection.to,
-      text: pendingRichSelection.text,
-      position: pendingRichSelection.bubblePosition,
-    })
-    setPendingRichSelection(null)
-  }, [pendingRichSelection])
+  const handleAnnotateSelection = useCallback(
+    (annotationType: "personal" | "ai" | "collaborative" | "footnote" = "footnote") => {
+      if (!pendingRichSelection) return
+      setPendingAnnotation({
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        text: pendingRichSelection.text,
+        position: pendingRichSelection.bubblePosition,
+        annotationType,
+      })
+      setPendingRichSelection(null)
+    },
+    [pendingRichSelection],
+  )
 
   const handleFootnoteSelection = useCallback(() => {
     if (!pendingRichSelection) {
@@ -2024,31 +2026,54 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     setFootnoteModalOpen(true)
   }, [pendingRichSelection])
 
+  const handleEditorSelectType = useCallback(
+    (type: "personal" | "ai" | "collaborative" | "footnote") => {
+      if (type === "personal") {
+        handleMarkSelection()
+        return
+      }
+      if (type === "footnote") {
+        handleFootnoteSelection()
+        return
+      }
+      handleAnnotateSelection(type)
+    },
+    [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
+  )
+
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
-      if (!editor || !pendingAnnotation) {
-        return
-      }
-
+      if (!editor || !pendingAnnotation) return
       const trimmedNote = note.trim()
-      if (!trimmedNote) {
-        return
-      }
+      if (!trimmedNote) return
 
+      const annotationType = pendingAnnotation.annotationType ?? "footnote"
       suppressNextSelectionPopupRef.current = true
-      editor
-        .chain()
-        .focus()
-        .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
-        .setHighlight()
-        .addFootnote(trimmedNote)
-        .setTextSelection(pendingAnnotation.to)
-        .run()
+
+      if (annotationType === "footnote" || annotationType === "personal") {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
+          .setHighlight()
+          .addFootnote(trimmedNote)
+          .setTextSelection(pendingAnnotation.to)
+          .run()
+        setActivePanel("notes")
+      } else {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
+          .setHighlight()
+          .addAnnotation(annotationType, trimmedNote)
+          .setTextSelection(pendingAnnotation.to)
+          .run()
+      }
 
       setPendingAnnotation(null)
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
-      setActivePanel("notes")
     },
     [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
   )
@@ -3864,14 +3889,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       <SelectionPopup
         position={pendingRichSelection?.popupPosition ?? null}
-        onMark={handleMarkSelection}
-        onAnnotate={handleAnnotateSelection}
-        onFootnote={handleFootnoteSelection}
+        onSelectType={handleEditorSelectType}
         onDismiss={dismissSelectionPopup}
       />
 
       <AnnotationBubble
         position={pendingAnnotation?.position ?? null}
+        type={pendingAnnotation?.annotationType ?? "personal"}
         onConfirm={handleConfirmAnnotation}
         onCancel={() => setPendingAnnotation(null)}
       />

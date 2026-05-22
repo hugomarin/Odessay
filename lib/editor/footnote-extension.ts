@@ -300,6 +300,7 @@ declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     footnote: {
       addFootnote: (text: string) => ReturnType
+      addAnnotation: (type: AnnotationType, text: string) => ReturnType
       updateFootnote: (index: number, text: string) => ReturnType
       deleteFootnote: (index: number) => ReturnType
     }
@@ -341,6 +342,41 @@ export const FootnoteExtension = Extension.create({
             id: crypto.randomUUID(),
             type: "footnote",
             index: nextIndex,
+            text: trimmedText,
+          })
+          tr.setSelection(TextSelection.create(tr.doc, insertPos))
+          tr.insert(insertPos, refNode)
+
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      addAnnotation:
+        (type: AnnotationType, text: string) =>
+        ({ editor, tr, dispatch }) => {
+          const trimmedText = text.trim()
+          if (!trimmedText) return false
+
+          let maxIndex = 0
+          editor.state.doc.descendants((node) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type
+            ) {
+              const idx = node.attrs.index as number
+              if (idx > maxIndex) maxIndex = idx
+            }
+          })
+
+          const insertPos = editor.state.selection.to
+          const nodeType =
+            editor.schema.nodes.annotationReference ?? editor.schema.nodes.footnoteReference
+          if (!nodeType) return false
+
+          const refNode = nodeType.create({
+            id: crypto.randomUUID(),
+            type,
+            index: maxIndex + 1,
             text: trimmedText,
           })
           tr.setSelection(TextSelection.create(tr.doc, insertPos))
