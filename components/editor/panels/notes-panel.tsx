@@ -131,7 +131,7 @@ export function NotesPanel({
                 return (
                   <article
                     key={key}
-                    className="group rounded-[8px] px-3 py-2.5 transition-colors hover:bg-bg"
+                    className="group rounded-[8px] px-3 py-2.5 transition-colors hover:bg-muted"
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <button
