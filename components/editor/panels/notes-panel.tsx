@@ -38,6 +38,7 @@ export function NotesPanel({
   onClose,
 }: NotesPanelProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [activeFilter, setActiveFilter] = useState<AnnotationType | "all">("all")
 
   useEffect(() => {
     setDrafts(
@@ -48,11 +49,23 @@ export function NotesPanel({
     )
   }, [annotations])
 
-  const ordered = useMemo(
-    () => annotations.slice().sort((a, b) => a.type.localeCompare(b.type) || a.index - b.index),
+  const presentTypes = useMemo(
+    () => new Set(annotations.map((a) => a.type)),
     [annotations],
   )
+  const ordered = useMemo(() => {
+    const base = annotations.slice().sort((a, b) => a.type.localeCompare(b.type) || a.index - b.index)
+    return activeFilter === "all" ? base : base.filter((a) => a.type === activeFilter)
+  }, [annotations, activeFilter])
   const aiAnnotations = useMemo(() => annotations.filter((a) => a.type === "ai"), [annotations])
+
+  const filterTabs: { id: AnnotationType | "all"; label: string }[] = [
+    { id: "all", label: "Todas" },
+    ...(presentTypes.has("ai") ? [{ id: "ai" as const, label: "AI" }] : []),
+    ...(presentTypes.has("personal") ? [{ id: "personal" as const, label: "Personal" }] : []),
+    ...(presentTypes.has("collaborative") ? [{ id: "collaborative" as const, label: "Collab" }] : []),
+    ...(presentTypes.has("footnote") ? [{ id: "footnote" as const, label: "Footnote" }] : []),
+  ]
 
   async function copyAnnotations() {
     const copy = buildAiAnnotationCopy(currentMarkdown)
@@ -84,6 +97,25 @@ export function NotesPanel({
       </div>
 
       <div className="flex h-[calc(100%-46px)] flex-col">
+        {/* Filter tabs */}
+        {filterTabs.length > 2 && (
+          <div className="flex flex-wrap gap-1 border-b-[0.5px] border-border px-3 py-2">
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveFilter(tab.id)}
+                className={`rounded-full px-2.5 py-1 font-sans text-[11px] transition-colors ${
+                  activeFilter === tab.id
+                    ? "bg-ink text-bg"
+                    : "bg-muted text-ink-3 hover:bg-muted-hover"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Annotation list */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {ordered.length === 0 ? (
