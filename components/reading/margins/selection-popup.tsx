@@ -4,13 +4,14 @@ import { useEffect, useRef } from "react"
 
 type SelectionPopupProps = {
   position: { x: number; y: number } | null
-  onMark: () => void
-  onAnnotate: () => void
+  onSelectType?: (type: "personal" | "ai" | "collaborative" | "footnote") => void
+  onMark?: () => void
+  onAnnotate?: () => void
   onFootnote?: () => void
   onDismiss: () => void
 }
 
-export function SelectionPopup({ position, onMark, onAnnotate, onFootnote, onDismiss }: SelectionPopupProps) {
+export function SelectionPopup({ position, onSelectType, onMark, onAnnotate, onFootnote, onDismiss }: SelectionPopupProps) {
   const ref = useRef<HTMLDivElement>(null)
 
   // Dismiss on click outside
@@ -52,41 +53,52 @@ export function SelectionPopup({ position, onMark, onAnnotate, onFootnote, onDis
           onPointerDown={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            onMark()
+            if (onSelectType) onSelectType("personal")
+            else onMark?.()
           }}
           className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
           aria-label="Mark passage"
         >
-          Mark
+          Personal
         </button>
         <span className="h-4 w-px bg-bg/25" />
         <button
           onPointerDown={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            onAnnotate()
+            if (onSelectType) onSelectType("ai")
+            else onAnnotate?.()
           }}
           className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
           aria-label="Annotate passage"
         >
-          Annotate
+          AI
         </button>
-        {onFootnote ? (
-          <>
-            <span className="h-4 w-px bg-bg/25" />
-            <button
-              onPointerDown={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onFootnote()
-              }}
-              className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
-              aria-label="Add footnote"
-            >
-              Footnote
-            </button>
-          </>
-        ) : null}
+        <span className="h-4 w-px bg-bg/25" />
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (onSelectType) onSelectType("collaborative")
+          }}
+          className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
+          aria-label="Create collaborative annotation"
+        >
+          Collaborative
+        </button>
+        <span className="h-4 w-px bg-bg/25" />
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (onSelectType) onSelectType("footnote")
+            else onFootnote?.()
+          }}
+          className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
+          aria-label="Add footnote"
+        >
+          Footnote
+        </button>
       </div>
 
       <style>{`

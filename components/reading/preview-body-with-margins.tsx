@@ -42,7 +42,7 @@ export function PreviewBodyWithMargins({
     id: m.id,
     anchor_start: m.anchor_start,
     anchor_end: m.anchor_end,
-    note: m.note,
+    note: m.text ?? m.note ?? null,
   }))
 
   return (
