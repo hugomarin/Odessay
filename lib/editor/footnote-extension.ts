@@ -19,8 +19,9 @@ type AnnotationRef = {
 const INLINE_ANNOTATION_RE =
   /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
+const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c)?(\d+):\s*([^\]]*?)\]/g
 
-const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "collaborative"]
+const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal"]
 
 const annotationSigil = (type: AnnotationType, index: number, text: string) => {
   const trimmedText = text.trim()
@@ -30,8 +31,6 @@ const annotationSigil = (type: AnnotationType, index: number, text: string) => {
       return `[@${index}: ${trimmedText}]`
     case "personal":
       return `[@p${index}: ${trimmedText}]`
-    case "collaborative":
-      return `[@c${index}: ${trimmedText}]`
     case "footnote":
     default:
       return `[^${index}: ${trimmedText}]`
@@ -71,7 +70,7 @@ const collectInlineReferences = (markdown: string, definitions: Map<number, stri
 
     if (match[4]) {
       refs.push({
-        type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+        type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
         index: Number(match[4]),
       })
       continue
@@ -131,7 +130,7 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
       }
 
       if (sigilIndex) {
-        const type = sigilPrefix === "p" ? "personal" : sigilPrefix === "c" ? "collaborative" : "ai"
+        const type = sigilPrefix === "p" ? "personal" : sigilPrefix === "c" ? "personal" : "ai"
         const nextIndex = mapping.get(`${type}:${Number(sigilIndex)}`) ?? Number(sigilIndex)
         return annotationSigil(type, nextIndex, String(sigilText ?? ""))
       }
@@ -158,7 +157,7 @@ export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => 
 
     if (match[4]) {
       annotations.push({
-        type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+        type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
         index: Number(match[4]),
         text: match[5].trim(),
       })
@@ -189,11 +188,25 @@ export const removeMarkdownFootnote = (markdown: string, index: number) =>
     ),
   ).trimEnd()
 
-export const extractAiAnnotationsFromMarkdown = (markdown: string) =>
-  getMarkdownFootnotes(markdown)
-    .filter((annotation) => annotation.type === "ai")
-    .map((annotation) => annotationSigil("ai", annotation.index, annotation.text))
-    .join("\n")
+export const extractAiAnnotationsFromMarkdown = (markdown: string): string => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  const results: string[] = []
+
+  AI_ANNOTATION_WITH_CONTEXT_RE.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = AI_ANNOTATION_WITH_CONTEXT_RE.exec(normalized)) !== null) {
+    const typePrefix = match[2]
+    if (typePrefix) continue // skip personal (@p) and legacy collaborative (@c)
+
+    const anchorText = match[1]
+    const index = Number(match[3])
+    const text = match[4].trim()
+    const sigil = annotationSigil("ai", index, text)
+    results.push(anchorText ? `"${anchorText}" ${sigil}` : sigil)
+  }
+
+  return results.join("\n")
+}
 
 export const buildAiAnnotationCopy = (
   markdown: string,
@@ -255,14 +268,17 @@ const collectAnnotationNodes = (
       : null
 
   if (node.content?.length) {
+    let pendingAnchor: string | null = null
     for (const child of node.content) {
       if (child.type === "text" && child.marks?.some((mark) => mark.type === "highlight")) {
-        const anchorText = child.text ?? ""
-        collectAnnotationNodes(child, cursor, result, anchorText)
+        pendingAnchor = (pendingAnchor ?? "") + (child.text ?? "")
+        collectAnnotationNodes(child, cursor, result, pendingAnchor)
         continue
       }
 
-      collectAnnotationNodes(child, cursor, result, nextHighlightAnchor)
+      const isAnnotation = child.type === "annotationReference" || child.type === "footnoteReference"
+      collectAnnotationNodes(child, cursor, result, isAnnotation ? pendingAnchor : nextHighlightAnchor)
+      pendingAnchor = null
     }
   }
 
@@ -281,12 +297,46 @@ export const extractWritingAnnotationNodes = (bodyJson: JSONContent | null | und
   return result
 }
 
+export type StandaloneHighlight = {
+  type: "highlight"
+  anchor_text: string
+}
+
+const collectStandaloneHighlights = (node: JSONContent, result: StandaloneHighlight[]) => {
+  if (node.content?.length) {
+    let pending: string | null = null
+    for (const child of node.content) {
+      if (child.type === "text" && child.marks?.some((m) => m.type === "highlight")) {
+        pending = (pending ?? "") + (child.text ?? "")
+        continue
+      }
+      if (pending) {
+        const isAnnotation = child.type === "annotationReference" || child.type === "footnoteReference"
+        if (!isAnnotation) result.push({ type: "highlight", anchor_text: pending })
+        pending = null
+      }
+      collectStandaloneHighlights(child, result)
+    }
+    if (pending) result.push({ type: "highlight", anchor_text: pending })
+  }
+}
+
+export const extractStandaloneHighlights = (bodyJson: JSONContent | null | undefined): StandaloneHighlight[] => {
+  if (!bodyJson || typeof bodyJson !== "object") return []
+  const result: StandaloneHighlight[] = []
+  collectStandaloneHighlights(bodyJson, result)
+  return result
+}
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     footnote: {
       addFootnote: (text: string) => ReturnType
+      addAnnotation: (type: AnnotationType, text: string) => ReturnType
       updateFootnote: (index: number, text: string) => ReturnType
+      updateAnnotation: (type: AnnotationType, index: number, text: string) => ReturnType
       deleteFootnote: (index: number) => ReturnType
+      deleteAnnotation: (type: AnnotationType, index: number) => ReturnType
     }
   }
 }
@@ -326,6 +376,41 @@ export const FootnoteExtension = Extension.create({
             id: crypto.randomUUID(),
             type: "footnote",
             index: nextIndex,
+            text: trimmedText,
+          })
+          tr.setSelection(TextSelection.create(tr.doc, insertPos))
+          tr.insert(insertPos, refNode)
+
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      addAnnotation:
+        (type: AnnotationType, text: string) =>
+        ({ editor, tr, dispatch }) => {
+          const trimmedText = text.trim()
+          if (!trimmedText) return false
+
+          let maxIndex = 0
+          editor.state.doc.descendants((node) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type
+            ) {
+              const idx = node.attrs.index as number
+              if (idx > maxIndex) maxIndex = idx
+            }
+          })
+
+          const insertPos = editor.state.selection.to
+          const nodeType =
+            editor.schema.nodes.annotationReference ?? editor.schema.nodes.footnoteReference
+          if (!nodeType) return false
+
+          const refNode = nodeType.create({
+            id: crypto.randomUUID(),
+            type,
+            index: maxIndex + 1,
             text: trimmedText,
           })
           tr.setSelection(TextSelection.create(tr.doc, insertPos))
@@ -420,6 +505,78 @@ export const FootnoteExtension = Extension.create({
             }
           }
 
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      updateAnnotation:
+        (type: AnnotationType, index: number, text: string) =>
+        ({ editor, tr, dispatch }) => {
+          const positions: number[] = []
+          editor.state.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type &&
+              (node.attrs.index as number) === index
+            ) {
+              positions.push(pos)
+            }
+          })
+          if (!positions.length) return false
+          for (const pos of positions) {
+            const node = editor.state.doc.nodeAt(pos)
+            if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, text: text.trim() })
+          }
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      deleteAnnotation:
+        (type: AnnotationType, index: number) =>
+        ({ editor, tr, dispatch }) => {
+          const positions: { pos: number; size: number }[] = []
+          editor.state.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type &&
+              (node.attrs.index as number) === index
+            ) {
+              positions.push({ pos, size: node.nodeSize })
+            }
+          })
+          if (!positions.length) return false
+          const highlightMarkType = editor.schema.marks.highlight
+          for (const { pos, size } of [...positions].reverse()) {
+            if (highlightMarkType) {
+              const $beforeRef = tr.doc.resolve(pos)
+              const range = getMarkRange($beforeRef, highlightMarkType)
+              if (range) tr.removeMark(range.from, range.to, highlightMarkType)
+            }
+            tr.delete(pos, pos + size)
+          }
+          // Reindex remaining annotations of the same type
+          const remaining: { pos: number; currentIndex: number }[] = []
+          tr.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type
+            ) {
+              remaining.push({ pos, currentIndex: node.attrs.index as number })
+            }
+          })
+          remaining.sort((a, b) => a.pos - b.pos)
+          const seen = new Map<number, number>()
+          let nextIdx = 1
+          for (const { currentIndex } of remaining) {
+            if (!seen.has(currentIndex)) seen.set(currentIndex, nextIdx++)
+          }
+          for (const { pos, currentIndex } of [...remaining].reverse()) {
+            const newIndex = seen.get(currentIndex) ?? currentIndex
+            if (newIndex !== currentIndex) {
+              const node = tr.doc.nodeAt(pos)
+              if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, index: newIndex })
+            }
+          }
           if (dispatch) dispatch(tr)
           return true
         },

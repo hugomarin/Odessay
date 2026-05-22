@@ -2,7 +2,7 @@ import { Node, mergeAttributes } from "@tiptap/core"
 
 export const FOOTNOTE_REF_EVENT = "footnote:click"
 
-export const ANNOTATION_TYPES = ["footnote", "personal", "ai", "collaborative"] as const
+export const ANNOTATION_TYPES = ["footnote", "personal", "ai"] as const
 
 export type AnnotationType = (typeof ANNOTATION_TYPES)[number]
 
@@ -41,9 +41,8 @@ const decodeAttribute = (value: string) => {
 }
 
 const coerceAnnotationType = (value: string | null | undefined): AnnotationType => {
-  if (value === "personal" || value === "ai" || value === "collaborative" || value === "footnote") {
-    return value
-  }
+  if (value === "personal" || value === "ai" || value === "footnote") return value
+  if (value === "collaborative") return "personal"
   return "footnote"
 }
 
@@ -65,7 +64,7 @@ const parseInlineAnnotation = (
     return {
       fullMatch: match[0],
       legacyFootnote: false,
-      type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+      type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
       index: Number(match[4]),
       text: match[5].trim(),
     }
@@ -200,8 +199,6 @@ const annotationToMarkdown = (type: AnnotationType, index: number, text: string)
       return `[@${index}: ${trimmedText}]`
     case "personal":
       return `[@p${index}: ${trimmedText}]`
-    case "collaborative":
-      return `[@c${index}: ${trimmedText}]`
     case "footnote":
     default:
       return `[^${index}: ${trimmedText}]`

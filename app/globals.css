@@ -407,6 +407,35 @@
     color: inherit;
   }
 
+  /* Type-aware highlight: when a mark immediately precedes an AI/collab annotation ref */
+  .odessay-editor-content mark:has(+ sup.annotation-ref-ai),
+  .prose-odessay mark:has(+ sup.annotation-ref-ai) {
+    background: hsl(248 100% 94%);
+  }
+
+  .odessay-editor-content mark:has(+ sup.annotation-ref-collaborative),
+  .prose-odessay mark:has(+ sup.annotation-ref-collaborative) {
+    background: hsl(35 80% 88%);
+  }
+
+  /* Annotation superscripts: color by type */
+  .odessay-editor-content sup.annotation-ref-ai,
+  .prose-odessay sup.annotation-ref-ai {
+    color: #5B5BD6;
+  }
+
+  .odessay-editor-content sup.annotation-ref-collaborative,
+  .prose-odessay sup.annotation-ref-collaborative {
+    color: #C07B2A;
+  }
+
+  .odessay-editor-content sup.annotation-ref-personal,
+  .prose-odessay sup.annotation-ref-personal,
+  .odessay-editor-content sup.annotation-ref-footnote,
+  .prose-odessay sup.annotation-ref-footnote {
+    color: #999990;
+  }
+
   .odessay-editor-content s,
   .prose-odessay s {
     text-decoration: line-through;

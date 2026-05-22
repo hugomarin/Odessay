@@ -49,8 +49,17 @@ describe("footnote extension helpers", () => {
     const markdown = "==Passage==[@1: simplify][@p1: for later][@c1: share with team][^1: source]"
 
     expect(buildAiAnnotationCopy(markdown)).toEqual({
-      annotationsOnly: "[@1: simplify]",
+      annotationsOnly: '"Passage" [@1: simplify]',
       fullText: "==Passage==[@1: simplify][^1: source]",
+    })
+  })
+
+  it("includes cited text for AI annotations with anchor, omits it when no highlight precedes", () => {
+    const markdown = "Intro[@1: check this] ==Highlighted==[@2: expand][@p2: personal note]"
+
+    expect(buildAiAnnotationCopy(markdown)).toEqual({
+      annotationsOnly: '[@1: check this]\n"Highlighted" [@2: expand]',
+      fullText: "Intro[@1: check this] ==Highlighted==[@2: expand]",
     })
   })
 })

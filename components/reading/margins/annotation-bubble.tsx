@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 
 type AnnotationBubbleProps = {
   position: { x: number; y: number } | null
-  type?: "personal" | "ai" | "collaborative" | "footnote"
+  type?: "personal" | "ai" | "footnote"
   onConfirm: (note: string) => void
   onCancel: () => void
 }
@@ -75,7 +75,7 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
             handleConfirm()
           }
         }}
-        placeholder={type === "footnote" ? "Write your footnote…" : type === "ai" ? "Write your AI instruction…" : "Write your annotation…"}
+        placeholder={type === "footnote" ? "Write your footnote…" : type === "ai" ? "Write your AI instruction…" : "Write your highlight note…"}
         rows={3}
         className="w-full resize-none rounded-[6px] bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 focus:outline-none"
         style={{ border: "none" }}
@@ -87,7 +87,7 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
             <button
               key={chip}
               onClick={() => setNote((current) => (current ? `${current} ${chip}` : chip))}
-              className="rounded-full bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover"
+              className="rounded-[6px] border-[0.5px] border-border bg-bg px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
               type="button"
             >
               {chip}

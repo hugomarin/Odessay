@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { getMarkRange } from "@tiptap/core"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
@@ -25,6 +26,8 @@ import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   appendMarkdownFootnote,
+  extractStandaloneHighlights,
+  extractWritingAnnotationNodes,
   getMarkdownFootnotes,
   removeMarkdownFootnote,
   updateMarkdownFootnote,
@@ -35,7 +38,7 @@ import {
   normalizeMarkdownForRoundTrip,
   toggleMarkdownInlineMarker,
 } from "@/lib/editor/markdown-format"
-import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
+import { FOOTNOTE_REF_EVENT, getEditorAnnotations, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -140,6 +143,7 @@ type PendingAnnotationSnapshot = {
   to: number
   text: string
   position: { x: number; y: number }
+  annotationType?: "personal" | "ai" | "footnote"
 }
 
 type PendingRichSelectionSnapshot = {
@@ -1990,19 +1994,20 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void persistEditorSnapshot(editor)
   }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
 
-  const handleAnnotateSelection = useCallback(() => {
-    if (!pendingRichSelection) {
-      return
-    }
-
-    setPendingAnnotation({
-      from: pendingRichSelection.from,
-      to: pendingRichSelection.to,
-      text: pendingRichSelection.text,
-      position: pendingRichSelection.bubblePosition,
-    })
-    setPendingRichSelection(null)
-  }, [pendingRichSelection])
+  const handleAnnotateSelection = useCallback(
+    (annotationType: "personal" | "ai" | "footnote" = "footnote") => {
+      if (!pendingRichSelection) return
+      setPendingAnnotation({
+        from: pendingRichSelection.from,
+        to: pendingRichSelection.to,
+        text: pendingRichSelection.text,
+        position: pendingRichSelection.bubblePosition,
+        annotationType,
+      })
+      setPendingRichSelection(null)
+    },
+    [pendingRichSelection],
+  )
 
   const handleFootnoteSelection = useCallback(() => {
     if (!pendingRichSelection) {
@@ -2024,31 +2029,54 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     setFootnoteModalOpen(true)
   }, [pendingRichSelection])
 
+  const handleEditorSelectType = useCallback(
+    (type: "personal" | "ai" | "footnote") => {
+      if (type === "personal") {
+        handleMarkSelection()
+        return
+      }
+      if (type === "footnote") {
+        handleFootnoteSelection()
+        return
+      }
+      handleAnnotateSelection(type)
+    },
+    [handleAnnotateSelection, handleFootnoteSelection, handleMarkSelection],
+  )
+
   const handleConfirmAnnotation = useCallback(
     (note: string) => {
-      if (!editor || !pendingAnnotation) {
-        return
-      }
-
+      if (!editor || !pendingAnnotation) return
       const trimmedNote = note.trim()
-      if (!trimmedNote) {
-        return
-      }
+      if (!trimmedNote) return
 
+      const annotationType = pendingAnnotation.annotationType ?? "footnote"
       suppressNextSelectionPopupRef.current = true
-      editor
-        .chain()
-        .focus()
-        .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
-        .setHighlight()
-        .addFootnote(trimmedNote)
-        .setTextSelection(pendingAnnotation.to)
-        .run()
+
+      if (annotationType === "footnote" || annotationType === "personal") {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
+          .setHighlight()
+          .addFootnote(trimmedNote)
+          .setTextSelection(pendingAnnotation.to)
+          .run()
+        setActivePanel("notes")
+      } else {
+        editor
+          .chain()
+          .focus()
+          .setTextSelection({ from: pendingAnnotation.from, to: pendingAnnotation.to })
+          .setHighlight()
+          .addAnnotation(annotationType, trimmedNote)
+          .setTextSelection(pendingAnnotation.to)
+          .run()
+      }
 
       setPendingAnnotation(null)
       updateDerivedEditorState(editor)
       void persistEditorSnapshot(editor)
-      setActivePanel("notes")
     },
     [editor, pendingAnnotation, persistEditorSnapshot, updateDerivedEditorState],
   )
@@ -2380,10 +2408,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (mode === "rich") {
       const contentRevision = version || richFootnoteRevision
       void contentRevision
-      return editor ? getEditorFootnotes(editor) : []
+      if (!editor) return []
+      const json = editor.getJSON()
+      const annotations = extractWritingAnnotationNodes(json)
+      const highlights = extractStandaloneHighlights(json).map((h, i) => ({
+        ...h,
+        index: i + 1,
+        text: "",
+        id: `highlight:${i}`,
+        anchor_start: 0,
+        anchor_end: 0,
+      }))
+      return [...annotations, ...highlights]
     }
 
-    return getMarkdownFootnotes(markdownValue)
+    return getMarkdownFootnotes(markdownValue).filter((f) => f.type === "footnote")
   }, [editor, markdownValue, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
@@ -3707,40 +3746,60 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
               <NotesPanel
-                footnotes={footnotes}
+                annotations={footnotes}
+                currentMarkdown={currentDocumentMarkdown}
                 onClose={closeActivePanel}
-                onAddFootnote={(text) => {
-                  if (mode === "rich" && editor) {
-                    editor.commands.addFootnote(text)
-                    setRichFootnoteRevision((r) => r + 1)
-                    updateDerivedEditorState(editor)
-                    void persistEditorSnapshot(editor)
-                  } else {
-                    const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
-                    applyMarkdownFromPanel(nextMarkdown)
-                  }
+                onNavigate={(type, index) => {
+                  if (!editor) return
+                  editor.state.doc.descendants((node, pos) => {
+                    if (
+                      (node.type.name === "annotationReference" ||
+                        node.type.name === "footnoteReference") &&
+                      (node.attrs.type as string) === type &&
+                      (node.attrs.index as number) === index
+                    ) {
+                      editor.chain().focus().setTextSelection(pos).scrollIntoView().run()
+                      return false
+                    }
+                  })
                 }}
-                onUpdateFootnote={(index, text) => {
+                onUpdateAnnotation={(type, index, text) => {
                   if (mode === "rich" && editor) {
-                    editor.commands.updateFootnote(index, text)
+                    editor.commands.updateAnnotation(type, index, text)
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
-                  } else {
+                  } else if (type === "footnote") {
                     const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
                     applyMarkdownFromPanel(nextMarkdown)
                   }
                 }}
-                onDeleteFootnote={(index) => {
+                onDeleteAnnotation={(type, index) => {
                   if (mode === "rich" && editor) {
-                    editor.commands.deleteFootnote(index)
+                    editor.commands.deleteAnnotation(type, index)
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
-                  } else {
+                  } else if (type === "footnote") {
                     const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
                     applyMarkdownFromPanel(nextMarkdown)
                   }
+                }}
+                onDeleteHighlight={(anchorText) => {
+                  if (!editor || !anchorText) return
+                  const highlightMark = editor.schema.marks.highlight
+                  if (!highlightMark) return
+                  editor.state.doc.descendants((node, pos) => {
+                    if (node.type.name !== "text") return
+                    if (!node.marks.some((m) => m.type.name === "highlight")) return
+                    const $pos = editor.state.doc.resolve(pos)
+                    const range = getMarkRange($pos, highlightMark)
+                    if (!range) return
+                    const text = editor.state.doc.textBetween(range.from, range.to)
+                    if (text === anchorText) {
+                      editor.chain().setTextSelection(range).unsetHighlight().run()
+                    }
+                  })
                 }}
               />
             ) : activePanel === "properties" ? (
@@ -3864,14 +3923,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       <SelectionPopup
         position={pendingRichSelection?.popupPosition ?? null}
-        onMark={handleMarkSelection}
-        onAnnotate={handleAnnotateSelection}
-        onFootnote={handleFootnoteSelection}
+        onSelectType={handleEditorSelectType}
         onDismiss={dismissSelectionPopup}
       />
 
       <AnnotationBubble
         position={pendingAnnotation?.position ?? null}
+        type={pendingAnnotation?.annotationType ?? "personal"}
         onConfirm={handleConfirmAnnotation}
         onCancel={() => setPendingAnnotation(null)}
       />

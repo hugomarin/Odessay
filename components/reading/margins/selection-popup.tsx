@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react"
 
 type SelectionPopupProps = {
   position: { x: number; y: number } | null
-  onSelectType?: (type: "personal" | "ai" | "collaborative" | "footnote") => void
+  onSelectType?: (type: "personal" | "ai" | "footnote") => void
   onMark?: () => void
   onAnnotate?: () => void
   onFootnote?: () => void
@@ -59,7 +59,7 @@ export function SelectionPopup({ position, onSelectType, onMark, onAnnotate, onF
           className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
           aria-label="Mark passage"
         >
-          Personal
+          Highlight
         </button>
         <span className="h-4 w-px bg-bg/25" />
         <button
@@ -73,18 +73,6 @@ export function SelectionPopup({ position, onSelectType, onMark, onAnnotate, onF
           aria-label="Annotate passage"
         >
           AI
-        </button>
-        <span className="h-4 w-px bg-bg/25" />
-        <button
-          onPointerDown={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            if (onSelectType) onSelectType("collaborative")
-          }}
-          className="rounded-[8px] px-3 py-1.5 font-sans text-[12px] font-medium text-bg transition-colors hover:bg-white/10"
-          aria-label="Create collaborative annotation"
-        >
-          Collaborative
         </button>
         <span className="h-4 w-px bg-bg/25" />
         <button

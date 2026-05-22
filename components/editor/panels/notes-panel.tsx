@@ -1,40 +1,87 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Plus, Trash2, X } from "lucide-react"
-import type { MarkdownFootnote } from "@/lib/editor/footnote-extension"
+import { Trash2, X } from "lucide-react"
+import type { MarkdownAnnotation } from "@/lib/editor/footnote-extension"
+import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
+import type { AnnotationType } from "@/lib/editor/footnote-node"
+
+type PanelEntryType = AnnotationType | "highlight"
+
+const TYPE_COLOR: Record<PanelEntryType, string> = {
+  footnote: "#999990",
+  personal: "#999990",
+  ai: "#5B5BD6",
+  highlight: "#E8A020",
+}
+
+const TYPE_LABEL: Record<PanelEntryType, string> = {
+  footnote: "Footnote",
+  personal: "Highlight",
+  ai: "AI",
+  highlight: "Highlight",
+}
+
+type PanelEntry = { type: PanelEntryType; index: number; text: string; anchor_text?: string }
 
 type NotesPanelProps = {
-  footnotes: MarkdownFootnote[]
-  onAddFootnote: (text: string) => void
-  onUpdateFootnote: (index: number, text: string) => void
-  onDeleteFootnote: (index: number) => void
+  annotations: PanelEntry[]
+  currentMarkdown: string
+  onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
+  onDeleteAnnotation: (type: AnnotationType, index: number) => void
+  onDeleteHighlight: (anchorText: string) => void
+  onNavigate: (type: AnnotationType, index: number) => void
   onClose: () => void
 }
 
 export function NotesPanel({
-  footnotes,
-  onAddFootnote,
-  onUpdateFootnote,
-  onDeleteFootnote,
+  annotations,
+  currentMarkdown,
+  onUpdateAnnotation,
+  onDeleteAnnotation,
+  onDeleteHighlight,
+  onNavigate,
   onClose,
 }: NotesPanelProps) {
-  const [nextNote, setNextNote] = useState("")
-  const [drafts, setDrafts] = useState<Record<number, string>>({})
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [activeFilter, setActiveFilter] = useState<PanelEntryType | "all">("all")
 
   useEffect(() => {
     setDrafts(
-      footnotes.reduce<Record<number, string>>((acc, footnote) => {
-        acc[footnote.index] = footnote.text
+      annotations.reduce<Record<string, string>>((acc, a) => {
+        acc[`${a.type}:${a.index}`] = a.text
         return acc
       }, {}),
     )
-  }, [footnotes])
+  }, [annotations])
 
-  const hasNotes = footnotes.length > 0
-  const disabledAdd = nextNote.trim().length === 0
+  const presentTypes = useMemo(
+    () => new Set(annotations.map((a) => a.type)),
+    [annotations],
+  )
+  const ordered = useMemo(() => {
+    const base = annotations.slice().sort((a, b) => a.type.localeCompare(b.type) || a.index - b.index)
+    return activeFilter === "all" ? base : base.filter((a) => a.type === activeFilter)
+  }, [annotations, activeFilter])
+  const aiAnnotations = useMemo(() => annotations.filter((a) => a.type === "ai"), [annotations])
 
-  const orderedFootnotes = useMemo(() => footnotes.slice().sort((a, b) => a.index - b.index), [footnotes])
+  const filterTabs: { id: PanelEntryType | "all"; label: string }[] = [
+    { id: "all", label: "All" },
+    ...(presentTypes.has("ai") ? [{ id: "ai" as const, label: "AI" }] : []),
+    ...(presentTypes.has("personal") ? [{ id: "personal" as const, label: "Personal" }] : []),
+    ...(presentTypes.has("footnote") ? [{ id: "footnote" as const, label: "Footnote" }] : []),
+    ...(presentTypes.has("highlight") ? [{ id: "highlight" as const, label: "Highlight" }] : []),
+  ]
+
+  async function copyAnnotations() {
+    const copy = buildAiAnnotationCopy(currentMarkdown)
+    await navigator.clipboard.writeText(copy.annotationsOnly).catch(() => null)
+  }
+
+  async function copyFullText() {
+    const copy = buildAiAnnotationCopy(currentMarkdown)
+    await navigator.clipboard.writeText(copy.fullText).catch(() => null)
+  }
 
   return (
     <aside
@@ -56,75 +103,133 @@ export function NotesPanel({
       </div>
 
       <div className="flex h-[calc(100%-46px)] flex-col">
-        <div className="space-y-3 border-b-[0.5px] border-border p-4">
-          <p className="text-[12px] text-ink-3">Add a footnote from this panel.</p>
-          <textarea
-            value={nextNote}
-            onChange={(event) => setNextNote(event.target.value)}
-            placeholder="Write the note text..."
-            className="min-h-20 w-full resize-y rounded-md border-[0.5px] border-border bg-bg px-2.5 py-2 text-[13px] text-ink outline-none placeholder:text-ink-4 focus:border-ink"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (disabledAdd) {
-                return
-              }
-
-              onAddFootnote(nextNote)
-              setNextNote("")
-            }}
-            disabled={disabledAdd}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border-[0.5px] border-border bg-bg px-3 text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="h-[13px] w-[13px]" strokeWidth={1.5} />
-            Add note
-          </button>
-        </div>
-
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {!hasNotes ? (
-            <p className="text-[12px] text-ink-4">No footnotes yet.</p>
-          ) : (
-            orderedFootnotes.map((footnote) => (
-              <article
-                key={footnote.index}
-                className="space-y-2 rounded-md border-[0.5px] border-border bg-bg p-3"
+        {/* Filter tabs */}
+        {filterTabs.length > 2 && (
+          <div className="flex flex-wrap gap-1 border-b-[0.5px] border-border px-3 py-2">
+            {filterTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveFilter(tab.id)}
+                className={`rounded-[6px] px-2.5 py-1 font-sans text-[11px] transition-colors ${
+                  activeFilter === tab.id
+                    ? "bg-ink text-bg"
+                    : "bg-muted text-ink-3 hover:bg-muted-hover"
+                }`}
               >
-                <div className="flex items-center justify-between">
-                  <p className="font-lora text-[13px] text-ink">[{footnote.index}]</p>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteFootnote(footnote.index)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-                    aria-label={`Delete note ${footnote.index}`}
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Annotation list */}
+        <div className="flex-1 overflow-y-auto px-3 py-3">
+          {ordered.length === 0 ? (
+            <div className="px-1 py-6 flex flex-col gap-1">
+              <p className="text-[12px] text-ink-3">No hay notas.</p>
+              <p className="text-[11px] text-ink-4">Selecciona texto en el documento para agregar una.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {ordered.map((annotation) => {
+                const key = `${annotation.type}:${annotation.index}`
+                const color = TYPE_COLOR[annotation.type]
+                const label = TYPE_LABEL[annotation.type]
+                const draft = drafts[key] ?? ""
+                const lineCount = Math.max(1, draft.split("\n").length)
+                return (
+                  <article
+                    key={key}
+                    className="group rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2.5 transition-colors hover:bg-muted"
                   >
-                    <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                  </button>
-                </div>
-
-                <textarea
-                  value={drafts[footnote.index] ?? ""}
-                  onChange={(event) => {
-                    const nextValue = event.target.value
-                    setDrafts((current) => ({
-                      ...current,
-                      [footnote.index]: nextValue,
-                    }))
-                  }}
-                  onBlur={() => {
-                    const nextValue = drafts[footnote.index] ?? ""
-
-                    if (nextValue !== footnote.text) {
-                      onUpdateFootnote(footnote.index, nextValue)
-                    }
-                  }}
-                  className="min-h-16 w-full resize-y rounded-md border-[0.5px] border-border bg-sb px-2.5 py-2 text-[13px] text-ink outline-none focus:border-ink"
-                />
-              </article>
-            ))
+                    {annotation.anchor_text && (
+                      <p className="mb-1.5 font-lora italic text-[11px] text-ink-4 leading-relaxed line-clamp-2">
+                        &ldquo;{annotation.anchor_text}&rdquo;
+                      </p>
+                    )}
+                    {annotation.type !== "highlight" && (
+                      <textarea
+                        value={draft}
+                        rows={lineCount}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                        onBlur={() => {
+                          const next = drafts[key] ?? ""
+                          if (next !== annotation.text) {
+                            onUpdateAnnotation(annotation.type as AnnotationType, annotation.index, next)
+                          }
+                        }}
+                        placeholder={
+                          annotation.type === "ai"
+                            ? "AI instruction…"
+                            : "Note text…"
+                        }
+                        className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
+                      />
+                    )}
+                    <div className="flex items-center justify-between mt-1.5">
+                      {annotation.type !== "highlight" ? (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(annotation.type as AnnotationType, annotation.index)}
+                          className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] transition-opacity hover:opacity-70"
+                          style={{ color, backgroundColor: `${color}14` }}
+                          aria-label={`Go to ${label} ${annotation.index} in document`}
+                        >
+                          {label} · {annotation.index}
+                        </button>
+                      ) : (
+                        <span
+                          className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+                          style={{ color, backgroundColor: `${color}14` }}
+                        >
+                          {label}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          annotation.type === "highlight"
+                            ? onDeleteHighlight(annotation.anchor_text ?? "")
+                            : onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)
+                        }
+                        className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
+                        aria-label={`Delete ${label}`}
+                      >
+                        <Trash2 className="h-[11px] w-[11px]" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
           )}
         </div>
+
+        {/* Copiar para AI */}
+        {aiAnnotations.length > 0 && (
+          <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
+            <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
+              Copiar para AI
+            </p>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={copyAnnotations}
+                className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
+              >
+                Anotaciones
+              </button>
+              <button
+                onClick={copyFullText}
+                className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
+              >
+                Texto completo
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   )
