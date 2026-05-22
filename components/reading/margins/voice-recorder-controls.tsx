@@ -3,7 +3,7 @@
 import { ArrowUp, LoaderCircle, Square, X } from "lucide-react"
 import type { VoiceRecorderState } from "@/hooks/useVoiceRecorder"
 
-const WAVEFORM_BAR_COUNT = 24
+const WAVEFORM_BAR_COUNT = 20
 
 export function formatVoiceRecorderDuration(duration: number) {
   const safeDuration = Math.max(0, duration)
@@ -24,6 +24,7 @@ type VoiceRecorderControlsProps = {
   duration: number
   isSubmitting: boolean
   errorMessage?: string | null
+  hideSubmit?: boolean
   onStop: () => void
   onSubmit: () => void
   onDiscard: () => void
@@ -35,6 +36,7 @@ export function VoiceRecorderControls({
   duration,
   isSubmitting,
   errorMessage = null,
+  hideSubmit = false,
   onStop,
   onSubmit,
   onDiscard,
@@ -43,18 +45,18 @@ export function VoiceRecorderControls({
   const canSubmit = state === "stopped" && !isSubmitting
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-end gap-1 rounded-[10px] bg-bg/70 px-2 py-2">
+    <div className="flex flex-col gap-4">
+      <div className="flex items-end justify-center gap-[3px] rounded-[10px] bg-bg/70 px-3 py-3">
         {bars.map((bar, index) => {
-          const height = 8 + Math.round(bar * 28)
+          const height = 6 + Math.round(bar * 26)
           return (
             <span
               key={`${index}-${bar}`}
               aria-hidden="true"
-              className="w-1 flex-1 rounded-full bg-cursor/80 transition-[height,opacity] duration-150"
+              className="w-[3px] shrink-0 rounded-full bg-cursor/80 transition-[height,opacity] duration-150"
               style={{
                 height,
-                opacity: state === "requesting" ? 0.45 : 1,
+                opacity: state === "requesting" ? 0.35 : 1,
               }}
             />
           )
@@ -85,21 +87,30 @@ export function VoiceRecorderControls({
             type="button"
             onClick={onStop}
             disabled={state !== "recording"}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            style={state === "recording" ? { background: "#ef4444", color: "#fff" } : { border: "0.5px solid var(--border)", color: "var(--ink)" }}
             aria-label="Stop recording"
           >
             <Square className="h-3.5 w-3.5 fill-current" strokeWidth={1.5} />
           </button>
 
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!canSubmit}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-ink text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={isSubmitting ? "Transcribing recording" : "Submit recording"}
-          >
-            {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.5} /> : <ArrowUp className="h-4 w-4" strokeWidth={1.5} />}
-          </button>
+          {hideSubmit ? (
+            isSubmitting ? (
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-ink text-bg opacity-90">
+                <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+              </span>
+            ) : null
+          ) : (
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canSubmit}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] bg-ink text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={isSubmitting ? "Transcribing recording" : "Submit recording"}
+            >
+              {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.5} /> : <ArrowUp className="h-4 w-4" strokeWidth={1.5} />}
+            </button>
+          )}
         </div>
       </div>
 

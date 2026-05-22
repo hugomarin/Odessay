@@ -22,8 +22,8 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const { state, start, stop, reset, blob, waveformData, duration, permissionDenied, isSupported } = useVoiceRecorder()
-  const isPersonalNote = type === "personal"
-  const isVoiceMode = isPersonalNote && state !== "idle"
+  const supportsVoice = type === "personal" || type === "ai"
+  const isVoiceMode = supportsVoice && state !== "idle"
 
   // Focus textarea when shown
   useEffect(() => {
@@ -35,6 +35,35 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
   }, [position, reset])
+
+  // For AI type: auto-transcribe when recording stops and load text into textarea
+  useEffect(() => {
+    if (type !== "ai" || state !== "stopped" || !blob) return
+
+    setVoiceError(null)
+    setIsSubmittingVoice(true)
+
+    const formData = new FormData()
+    formData.set("audio", blob, "voice-note.webm")
+
+    fetch("/api/margins/transcribe", { method: "POST", body: formData })
+      .then((res) => res.json())
+      .then((payload: { data: { transcript?: string } | null; error: { message?: string } | null }) => {
+        if (payload.error) throw new Error(payload.error.message ?? "Transcription failed.")
+        const transcript = payload.data?.transcript?.trim() ?? ""
+        if (!transcript) throw new Error("No transcript was returned for this recording.")
+        setNote(transcript)
+        reset()
+        requestAnimationFrame(() => textareaRef.current?.focus())
+      })
+      .catch((err: unknown) => {
+        setVoiceError(err instanceof Error ? err.message : "Transcription failed.")
+      })
+      .finally(() => {
+        setIsSubmittingVoice(false)
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, blob, type])
 
   // Dismiss on Escape, confirm on Enter (without shift)
   useEffect(() => {
@@ -151,6 +180,7 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
           duration={duration}
           isSubmitting={isSubmittingVoice}
           errorMessage={voiceError}
+          hideSubmit={type === "ai"}
           onStop={stop}
           onSubmit={() => {
             void handleVoiceSubmit()
@@ -196,7 +226,7 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
         >
           Cancel
         </button>
-        {isPersonalNote && !isVoiceMode ? (
+        {supportsVoice && !isVoiceMode ? (
           isMicDisabled ? (
             <TooltipProvider delayDuration={120}>
               <Tooltip>
