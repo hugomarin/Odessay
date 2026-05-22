@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-05-21",
+  "last_updated": "2026-05-22",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -37,6 +37,15 @@
     "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
   },
   "built": [
+    {
+      "what": "Rewrite the annotation architecture spec so `body_json` becomes the single source of truth for all annotation types, with `margins` documented as a materialized index. The feature doc now reflects the final unified `annotationReference` node model, inline markdown sigils for AI/personal/collaborative/footnote annotations, corrected semantics for `personal`, and the decided write/export path for annotated texts.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-169",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-169/annotation-type-system-unified-tiptap-nodes-in-body-json-with-margins",
+      "commit": "3675e19",
+      "date": "2026-05-22",
+      "notes": "Documentation-only delivery merged via PR #165. Scope: workflow/context/features/odessay-anotaciones-ai.md rewritten to match the final body_json-first architecture. PR body validation checklist remained manual/documental (`typecheck`/`lint`/`test` not applicable to the doc-only delta itself), and the merge commit on main is 3675e19."
+    },
     {
       "what": "Restore the lost Desk, Settings, and design-grid regressions from the current UI branch state. Settings layout now delegates active nav state to the pathname-driven SettingsNav, Desk preview restores the utility hierarchy with an uppercase Title label and smaller Geist Sans title input, Desk activity columns are rebalanced to reduce title/selection dominance while giving actions more room, markdown download now builds from in-memory local writings synchronously so the row action keeps the browser gesture, and the Start a new note card regains its airier top spacing. The existing localhost-only design-grid guard was preserved.",
       "phase": "Fase 3 — Organizar y publicar",
