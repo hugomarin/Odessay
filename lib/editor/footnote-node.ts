@@ -2,47 +2,118 @@ import { Node, mergeAttributes } from "@tiptap/core"
 
 export const FOOTNOTE_REF_EVENT = "footnote:click"
 
-const FOOTNOTE_REF_RE = /\[\^(\d+)\]/g
+export const ANNOTATION_TYPES = ["footnote", "personal", "ai", "collaborative"] as const
+
+export type AnnotationType = (typeof ANNOTATION_TYPES)[number]
+
+export type AnnotationEntry = {
+  id: string
+  type: AnnotationType
+  index: number
+  text: string
+}
+
+type RawAnnotationMatch = {
+  fullMatch: string
+  legacyFootnote: boolean
+  type: AnnotationType
+  index: number
+  text: string
+}
+
+const INLINE_ANNOTATION_RE =
+  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_LINE_RE = /^\[\^(\d+)\]:\s*(.*)$/
+
+const escapeHtmlAttribute = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+
+const decodeAttribute = (value: string) => {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+const coerceAnnotationType = (value: string | null | undefined): AnnotationType => {
+  if (value === "personal" || value === "ai" || value === "collaborative" || value === "footnote") {
+    return value
+  }
+  return "footnote"
+}
+
+const parseInlineAnnotation = (
+  match: RegExpExecArray,
+  legacyDefinitions: Map<number, string>,
+): RawAnnotationMatch | null => {
+  if (match[1]) {
+    return {
+      fullMatch: match[0],
+      legacyFootnote: false,
+      type: "footnote",
+      index: Number(match[1]),
+      text: match[2].trim(),
+    }
+  }
+
+  if (match[4]) {
+    return {
+      fullMatch: match[0],
+      legacyFootnote: false,
+      type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+      index: Number(match[4]),
+      text: match[5].trim(),
+    }
+  }
+
+  if (match[6]) {
+    const index = Number(match[6])
+    return {
+      fullMatch: match[0],
+      legacyFootnote: true,
+      type: "footnote",
+      index,
+      text: legacyDefinitions.get(index) ?? "",
+    }
+  }
+
+  return null
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function setupMarkdownItRule(md: any) {
-  // Build a map of definitions from the raw markdown before rendering
-  // so we can attach text to each footnote-ref node via a data attribute.
   md.core.ruler.push(
-    "footnote_inline_ref",
+    "annotation_inline_ref",
     (state: {
-      env: Record<string, string>
       tokens: {
         type: string
         content: string
         children: { type: string; content: string }[] | null
       }[]
     }) => {
-      // Pass 1: collect all definitions from inline tokens.
-      // A paragraph may contain multiple definitions separated by \n (one markdown paragraph)
-      // so we iterate over each line rather than matching the whole content at once.
-      const definitions = new Map<string, string>()
+      const legacyDefinitions = new Map<number, string>()
 
       for (const blockToken of state.tokens) {
         if (blockToken.type !== "inline") continue
         for (const line of blockToken.content.split("\n")) {
           const defMatch = FOOTNOTE_DEFINITION_LINE_RE.exec(line.trim())
           if (defMatch) {
-            definitions.set(defMatch[1], defMatch[2].trim())
+            legacyDefinitions.set(Number(defMatch[1]), defMatch[2].trim())
           }
         }
       }
 
-      // Pass 2: process tokens
       const filtered: typeof state.tokens = []
       let i = 0
 
       while (i < state.tokens.length) {
         const token = state.tokens[i]
 
-        // Remove block-level footnote definitions: paragraph_open + inline([^n]: text) + paragraph_close.
-        // Handle both single-definition paragraphs and multi-definition paragraphs (lines joined by \n).
         if (
           token.type === "paragraph_open" &&
           i + 1 < state.tokens.length &&
@@ -50,29 +121,22 @@ function setupMarkdownItRule(md: any) {
           state.tokens[i + 1].content
             .trim()
             .split("\n")
-            .filter((l) => l.trim() !== "")
-            .every((l) => FOOTNOTE_DEFINITION_LINE_RE.test(l.trim()))
+            .filter((line) => line.trim() !== "")
+            .every((line) => FOOTNOTE_DEFINITION_LINE_RE.test(line.trim()))
         ) {
           i += 3
           continue
         }
 
-        if (token.type !== "inline") {
+        if (token.type !== "inline" || !token.children) {
           filtered.push(token)
-          i++
+          i += 1
           continue
         }
 
-        const children = token.children
-        if (!children) {
-          filtered.push(token)
-          i++
-          continue
-        }
+        const nextChildren: typeof token.children = []
 
-        const nextChildren: typeof children = []
-
-        for (const child of children) {
+        for (const child of token.children) {
           if (child.type !== "text") {
             nextChildren.push(child)
             continue
@@ -82,23 +146,33 @@ function setupMarkdownItRule(md: any) {
           let lastIndex = 0
           let match: RegExpExecArray | null
 
-          FOOTNOTE_REF_RE.lastIndex = 0
+          INLINE_ANNOTATION_RE.lastIndex = 0
 
-          while ((match = FOOTNOTE_REF_RE.exec(text)) !== null) {
+          while ((match = INLINE_ANNOTATION_RE.exec(text)) !== null) {
+            const parsed = parseInlineAnnotation(match, legacyDefinitions)
+            if (!parsed) {
+              continue
+            }
+
             if (match.index > lastIndex) {
               nextChildren.push({ type: "text", content: text.slice(lastIndex, match.index) })
             }
 
-            const noteIndex = match[1]
-            const noteText = definitions.get(noteIndex) ?? ""
-            const encodedText = encodeURIComponent(noteText)
+            const annotationId = crypto.randomUUID()
+            const attrs = [
+              `id="${annotationId}"`,
+              `annotation-id="${annotationId}"`,
+              `annotation-type="${parsed.type}"`,
+              `index="${parsed.index}"`,
+              `annotation-text="${escapeHtmlAttribute(encodeURIComponent(parsed.text))}"`,
+            ]
 
             nextChildren.push({
               type: "html_inline",
-              content: `<footnote-ref index="${noteIndex}" note-text="${encodedText}"></footnote-ref>`,
+              content: `<annotation-ref ${attrs.join(" ")}></annotation-ref>`,
             })
 
-            lastIndex = match.index + match[0].length
+            lastIndex = match.index + parsed.fullMatch.length
           }
 
           if (lastIndex === 0) {
@@ -110,7 +184,7 @@ function setupMarkdownItRule(md: any) {
 
         token.children = nextChildren
         filtered.push(token)
-        i++
+        i += 1
       }
 
       state.tokens = filtered
@@ -118,8 +192,24 @@ function setupMarkdownItRule(md: any) {
   )
 }
 
-export const FootnoteReferenceNode = Node.create({
-  name: "footnoteReference",
+const annotationToMarkdown = (type: AnnotationType, index: number, text: string) => {
+  const trimmedText = text.trim()
+
+  switch (type) {
+    case "ai":
+      return `[@${index}: ${trimmedText}]`
+    case "personal":
+      return `[@p${index}: ${trimmedText}]`
+    case "collaborative":
+      return `[@c${index}: ${trimmedText}]`
+    case "footnote":
+    default:
+      return `[^${index}: ${trimmedText}]`
+  }
+}
+
+export const AnnotationReferenceNode = Node.create({
+  name: "annotationReference",
 
   group: "inline",
   inline: true,
@@ -128,34 +218,56 @@ export const FootnoteReferenceNode = Node.create({
 
   addAttributes() {
     return {
+      id: {
+        default: null,
+        parseHTML: (element) =>
+          element.getAttribute("data-annotation-id") ??
+          element.getAttribute("annotation-id") ??
+          element.getAttribute("id") ??
+          crypto.randomUUID(),
+        renderHTML: (attrs) => ({
+          "data-annotation-id": String(attrs.id ?? crypto.randomUUID()),
+        }),
+      },
+      type: {
+        default: "footnote",
+        parseHTML: (element) =>
+          coerceAnnotationType(
+            element.getAttribute("data-annotation-type") ??
+              element.getAttribute("annotation-type") ??
+              element.getAttribute("data-footnote-type"),
+          ),
+        renderHTML: (attrs) => ({
+          "data-annotation-type": coerceAnnotationType(String(attrs.type ?? "footnote")),
+        }),
+      },
       index: {
         default: null,
         parseHTML: (element) => {
           const raw =
+            element.getAttribute("data-annotation-index") ??
             element.getAttribute("data-footnote-index") ??
             element.getAttribute("index")
           const parsed = Number(raw)
           return Number.isNaN(parsed) ? null : parsed
         },
         renderHTML: (attrs) => ({
-          "data-footnote-index": String(attrs.index),
+          "data-annotation-index": String(attrs.index),
         }),
       },
       text: {
         default: "",
         parseHTML: (element) => {
           const encoded =
+            element.getAttribute("data-annotation-text") ??
             element.getAttribute("data-footnote-text") ??
+            element.getAttribute("annotation-text") ??
             element.getAttribute("note-text") ??
             ""
-          try {
-            return decodeURIComponent(encoded)
-          } catch {
-            return encoded
-          }
+          return decodeAttribute(encoded)
         },
         renderHTML: (attrs) => ({
-          "data-footnote-text": encodeURIComponent((attrs.text as string) ?? ""),
+          "data-annotation-text": encodeURIComponent((attrs.text as string) ?? ""),
         }),
       },
     }
@@ -164,20 +276,51 @@ export const FootnoteReferenceNode = Node.create({
   parseHTML() {
     return [
       {
+        tag: "sup[data-annotation-index]",
+        getAttrs: (node) => {
+          const el = node as HTMLElement
+          const raw = el.getAttribute("data-annotation-index")
+          const parsed = Number(raw)
+          if (Number.isNaN(parsed)) return false
+          return {
+            id: el.getAttribute("data-annotation-id") ?? crypto.randomUUID(),
+            type: coerceAnnotationType(el.getAttribute("data-annotation-type")),
+            index: parsed,
+            text: decodeAttribute(el.getAttribute("data-annotation-text") ?? ""),
+          }
+        },
+      },
+      {
         tag: "sup[data-footnote-index]",
         getAttrs: (node) => {
           const el = node as HTMLElement
           const raw = el.getAttribute("data-footnote-index")
           const parsed = Number(raw)
           if (Number.isNaN(parsed)) return false
-          const encoded = el.getAttribute("data-footnote-text") ?? ""
-          let text = ""
-          try {
-            text = decodeURIComponent(encoded)
-          } catch {
-            text = encoded
+          return {
+            id: el.getAttribute("data-annotation-id") ?? crypto.randomUUID(),
+            type: "footnote",
+            index: parsed,
+            text: decodeAttribute(el.getAttribute("data-footnote-text") ?? ""),
           }
-          return { index: parsed, text }
+        },
+      },
+      {
+        tag: "annotation-ref",
+        getAttrs: (node) => {
+          const el = node as HTMLElement
+          const raw = el.getAttribute("index")
+          const parsed = Number(raw)
+          if (Number.isNaN(parsed)) return false
+          return {
+            id:
+              el.getAttribute("annotation-id") ??
+              el.getAttribute("id") ??
+              crypto.randomUUID(),
+            type: coerceAnnotationType(el.getAttribute("annotation-type")),
+            index: parsed,
+            text: decodeAttribute(el.getAttribute("annotation-text") ?? ""),
+          }
         },
       },
       {
@@ -187,46 +330,59 @@ export const FootnoteReferenceNode = Node.create({
           const raw = el.getAttribute("index")
           const parsed = Number(raw)
           if (Number.isNaN(parsed)) return false
-          const encoded = el.getAttribute("note-text") ?? ""
-          let text = ""
-          try {
-            text = decodeURIComponent(encoded)
-          } catch {
-            text = encoded
+          return {
+            id:
+              el.getAttribute("annotation-id") ??
+              el.getAttribute("id") ??
+              crypto.randomUUID(),
+            type: "footnote",
+            index: parsed,
+            text: decodeAttribute(el.getAttribute("note-text") ?? ""),
           }
-          return { index: parsed, text }
         },
       },
     ]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ["sup", mergeAttributes(HTMLAttributes, { class: "footnote-ref" })]
+  renderHTML({ HTMLAttributes, node }) {
+    const type = coerceAnnotationType(String(node.attrs.type ?? "footnote"))
+    return [
+      "sup",
+      mergeAttributes(HTMLAttributes, {
+        class: `annotation-ref annotation-ref-${type}`,
+        "data-annotation-type": type,
+      }),
+    ]
   },
 
   addNodeView() {
     return ({ node, getPos }) => {
       const dom = document.createElement("sup")
-      dom.setAttribute("data-footnote-index", String(node.attrs.index))
+      const type = coerceAnnotationType(String(node.attrs.type ?? "footnote"))
+      dom.setAttribute("data-annotation-id", String(node.attrs.id ?? crypto.randomUUID()))
+      dom.setAttribute("data-annotation-type", type)
+      dom.setAttribute("data-annotation-index", String(node.attrs.index))
       dom.setAttribute(
-        "data-footnote-text",
+        "data-annotation-text",
         encodeURIComponent((node.attrs.text as string) ?? ""),
       )
-      dom.className = "footnote-ref"
+      dom.className = `annotation-ref annotation-ref-${type}`
       dom.textContent = String(node.attrs.index)
       dom.style.cursor = "pointer"
 
-      dom.addEventListener("click", (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        const pos = typeof getPos === "function" ? getPos() : null
-        dom.dispatchEvent(
-          new CustomEvent(FOOTNOTE_REF_EVENT, {
-            bubbles: true,
-            detail: { index: node.attrs.index as number, pos },
-          }),
-        )
-      })
+      if (type === "footnote") {
+        dom.addEventListener("click", (event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          const pos = typeof getPos === "function" ? getPos() : null
+          dom.dispatchEvent(
+            new CustomEvent(FOOTNOTE_REF_EVENT, {
+              bubbles: true,
+              detail: { index: node.attrs.index as number, pos },
+            }),
+          )
+        })
+      }
 
       return { dom }
     }
@@ -238,49 +394,63 @@ export const FootnoteReferenceNode = Node.create({
         parse: {
           setup: setupMarkdownItRule,
         },
-        // Serialize: emit [^n] for the body; definitions are appended by getEditorMarkdownWithFootnotes
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         serialize(state: any, node: any) {
-          state.write(`[^${node.attrs.index}]`)
+          state.write(
+            annotationToMarkdown(
+              coerceAnnotationType(node.attrs.type as string),
+              Number(node.attrs.index),
+              String(node.attrs.text ?? ""),
+            ),
+          )
         },
       },
     }
   },
 })
 
-/**
- * Collect all footnote nodes from the editor and return {index, text}[] ordered by appearance.
- * This replaces getMarkdownFootnotes() for the Rich editor mode.
- */
-export type FootnoteEntry = { index: number; text: string }
+export const FootnoteReferenceNode = AnnotationReferenceNode
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getEditorFootnotes(editor: { state: { doc: { descendants: (fn: any) => void } } }): FootnoteEntry[] {
-  const seen = new Set<number>()
-  const result: FootnoteEntry[] = []
+export function getEditorAnnotations(editor: { state: { doc: { descendants: (fn: any) => void } } }) {
+  const seen = new Set<string>()
+  const result: AnnotationEntry[] = []
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editor.state.doc.descendants((node: any) => {
-    if (node.type.name === "footnoteReference") {
-      const index = node.attrs.index as number
-      if (!seen.has(index)) {
-        seen.add(index)
-        result.push({ index, text: (node.attrs.text as string) ?? "" })
-      }
+    if (node.type.name !== "annotationReference" && node.type.name !== "footnoteReference") {
+      return
     }
+
+    const id = String(node.attrs.id ?? `${node.attrs.type ?? "footnote"}:${node.attrs.index}`)
+    if (seen.has(id)) {
+      return
+    }
+
+    seen.add(id)
+    result.push({
+      id,
+      type: coerceAnnotationType(node.attrs.type as string),
+      index: Number(node.attrs.index ?? 0),
+      text: String(node.attrs.text ?? ""),
+    })
   })
 
   return result.sort((a, b) => a.index - b.index)
 }
 
-/**
- * Returns the full markdown string including footnote definitions reconstructed from nodes.
- * Use this instead of getEditorMarkdown() when you need definitions for persistence.
- */
+export type FootnoteEntry = { type: "footnote"; index: number; text: string }
+
+export function getEditorFootnotes(editor: { state: { doc: { descendants: (fn: (node: unknown) => void) => void } } }): FootnoteEntry[] {
+  return getEditorAnnotations(editor)
+    .filter((annotation) => annotation.type === "footnote")
+    .map(({ index, text }) => ({ type: "footnote", index, text }))
+}
+
 export function getMarkdownWithFootnoteDefinitions(
   baseMarkdown: string,
   footnotes: FootnoteEntry[],
-): string {
+) {
   if (!footnotes.length) return baseMarkdown.trimEnd()
 
   const lines = footnotes.map(({ index, text }) => `[^${index}]: ${text}`.trimEnd())

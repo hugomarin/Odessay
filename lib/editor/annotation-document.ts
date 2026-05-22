@@ -1,0 +1,145 @@
+import { Editor } from "@tiptap/core"
+import type { JSONContent } from "@tiptap/core"
+import { createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
+import { getEditorFootnotes, type AnnotationType, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
+
+type ApplyAnnotationInput = {
+  bodyJson: JSONContent | null | undefined
+  bodyText: string
+  anchorStart: number
+  anchorEnd: number
+  type: AnnotationType
+  text: string
+}
+
+type ApplyAnnotationResult = {
+  bodyJson: JSONContent
+  bodyText: string
+  bodyMarkdown: string
+}
+
+const EMPTY_DOC: JSONContent = { type: "doc", content: [{ type: "paragraph" }] }
+
+const resolveTextOffset = (
+  doc: Editor["state"]["doc"],
+  targetOffset: number,
+  preferAfter: boolean,
+) => {
+  let textOffset = 0
+  let resolvedPos: number | null = null
+
+  doc.descendants((node, pos) => {
+    if (resolvedPos !== null) {
+      return false
+    }
+
+    if (node.isText) {
+      const textLength = node.text?.length ?? 0
+      const nextOffset = textOffset + textLength
+      const boundaryHit = preferAfter ? targetOffset <= nextOffset : targetOffset < nextOffset
+
+      if (boundaryHit) {
+        const localOffset = Math.max(0, Math.min(textLength, targetOffset - textOffset))
+        resolvedPos = pos + localOffset
+        return false
+      }
+
+      textOffset = nextOffset
+      return
+    }
+
+    if (node.type.name === "hardBreak") {
+      const nextOffset = textOffset + 1
+      if (targetOffset <= nextOffset) {
+        resolvedPos = preferAfter ? pos + 1 : pos
+        return false
+      }
+      textOffset = nextOffset
+    }
+  })
+
+  return resolvedPos ?? doc.content.size
+}
+
+export const getBodyMarkdown = (bodyJson: JSONContent | null | undefined): string => {
+  if (!bodyJson) return ""
+  const editor = new Editor({
+    extensions: createEditorExtensions(),
+    content: bodyJson,
+  })
+  try {
+    return getMarkdownWithFootnoteDefinitions(
+      getEditorMarkdown(editor),
+      getEditorFootnotes(editor),
+    )
+  } finally {
+    editor.destroy()
+  }
+}
+
+export const applyAnnotationToBody = ({
+  bodyJson,
+  bodyText,
+  anchorStart,
+  anchorEnd,
+  type,
+  text,
+}: ApplyAnnotationInput): ApplyAnnotationResult => {
+  const editor = new Editor({
+    extensions: createEditorExtensions(),
+    content: bodyJson ?? EMPTY_DOC,
+  })
+
+  try {
+    const doc = editor.state.doc
+    const from = resolveTextOffset(doc, anchorStart, false)
+    const to = resolveTextOffset(doc, anchorEnd, true)
+    if (from >= to) {
+      throw new Error("Invalid annotation range.")
+    }
+
+    const nodeType = editor.schema.nodes.annotationReference ?? editor.schema.nodes.footnoteReference
+    const highlightMark = editor.schema.marks.highlight
+    if (!nodeType || !highlightMark) {
+      throw new Error("Annotation extensions are not available.")
+    }
+
+    let maxTypeIndex = 0
+    editor.state.doc.descendants((node) => {
+      if (
+        (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+        ((node.attrs.type as AnnotationType | undefined) ?? "footnote") === type
+      ) {
+        maxTypeIndex = Math.max(maxTypeIndex, Number(node.attrs.index ?? 0))
+      }
+    })
+
+    const tr = editor.state.tr
+    tr.addMark(from, to, highlightMark.create())
+    tr.insert(
+      to,
+      nodeType.create({
+        id: crypto.randomUUID(),
+        type,
+        index: maxTypeIndex + 1,
+        text: text.trim(),
+      }),
+    )
+    editor.view.dispatch(tr)
+
+    const nextBodyJson = editor.getJSON()
+    const nextBodyText = editor.getText({ blockSeparator: "\n" }) || bodyText
+    const nextMarkdown = getMarkdownWithFootnoteDefinitions(
+      getEditorMarkdown(editor),
+      getEditorFootnotes(editor),
+    )
+
+    return {
+      bodyJson: nextBodyJson,
+      bodyText: nextBodyText,
+      bodyMarkdown: nextMarkdown,
+    }
+  } finally {
+    editor.destroy()
+  }
+}
