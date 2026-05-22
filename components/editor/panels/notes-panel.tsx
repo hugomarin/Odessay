@@ -17,7 +17,7 @@ const TYPE_LABEL: Record<AnnotationType, string> = {
   footnote: "Footnote",
   personal: "Personal",
   ai: "AI",
-  collaborative: "Collaborative",
+  collaborative: "Collab",
 }
 
 type NotesPanelProps = {
@@ -141,7 +141,7 @@ export function NotesPanel({
                         style={{ color, backgroundColor: `${color}14` }}
                         aria-label={`Go to ${label} ${annotation.index} in document`}
                       >
-                        {label} {annotation.index}
+                        {label} · {annotation.index}
                       </button>
                       <button
                         type="button"
