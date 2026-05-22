@@ -299,6 +299,37 @@ export const extractWritingAnnotationNodes = (bodyJson: JSONContent | null | und
   return result
 }
 
+export type StandaloneHighlight = {
+  type: "highlight"
+  anchor_text: string
+}
+
+const collectStandaloneHighlights = (node: JSONContent, result: StandaloneHighlight[]) => {
+  if (node.content?.length) {
+    let pending: string | null = null
+    for (const child of node.content) {
+      if (child.type === "text" && child.marks?.some((m) => m.type === "highlight")) {
+        pending = (pending ?? "") + (child.text ?? "")
+        continue
+      }
+      if (pending) {
+        const isAnnotation = child.type === "annotationReference" || child.type === "footnoteReference"
+        if (!isAnnotation) result.push({ type: "highlight", anchor_text: pending })
+        pending = null
+      }
+      collectStandaloneHighlights(child, result)
+    }
+    if (pending) result.push({ type: "highlight", anchor_text: pending })
+  }
+}
+
+export const extractStandaloneHighlights = (bodyJson: JSONContent | null | undefined): StandaloneHighlight[] => {
+  if (!bodyJson || typeof bodyJson !== "object") return []
+  const result: StandaloneHighlight[] = []
+  collectStandaloneHighlights(bodyJson, result)
+  return result
+}
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     footnote: {

@@ -25,6 +25,7 @@ import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   appendMarkdownFootnote,
+  extractStandaloneHighlights,
   extractWritingAnnotationNodes,
   getMarkdownFootnotes,
   removeMarkdownFootnote,
@@ -2406,7 +2407,18 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (mode === "rich") {
       const contentRevision = version || richFootnoteRevision
       void contentRevision
-      return editor ? extractWritingAnnotationNodes(editor.getJSON()) : []
+      if (!editor) return []
+      const json = editor.getJSON()
+      const annotations = extractWritingAnnotationNodes(json)
+      const highlights = extractStandaloneHighlights(json).map((h, i) => ({
+        ...h,
+        index: i + 1,
+        text: "",
+        id: `highlight:${i}`,
+        anchor_start: 0,
+        anchor_end: 0,
+      }))
+      return [...annotations, ...highlights]
     }
 
     return getMarkdownFootnotes(markdownValue).filter((f) => f.type === "footnote")
