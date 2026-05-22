@@ -1,6 +1,5 @@
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
-import { DesignGridOverlay } from "@/components/dev/design-grid-overlay"
 import { Sidebar } from "@/components/navigation/sidebar"
 import { UserSettingsProvider } from "@/components/settings/user-settings-provider"
 import { parseSidebarModeCookie, SIDEBAR_MODE_COOKIE_KEY } from "@/lib/stores/ui-shell-state"
@@ -38,7 +37,6 @@ export default async function AppLayout({ children }: AppLayoutProps) {
           username: profile?.username ?? null,
         }}
       >
-        <DesignGridOverlay />
         {children}
       </Sidebar>
     </UserSettingsProvider>
