@@ -74,7 +74,6 @@ export function MarginEntry({
               id={`margin-share-${margin.id}`}
               checked={margin.shared}
               onCheckedChange={(checked) => onToggleShare(margin.id, checked)}
-              className="h-4 w-7 data-[state=checked]:bg-cursor"
               aria-label={margin.shared ? "Shared with author" : "Private — toggle to share"}
             />
             <label

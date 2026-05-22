@@ -368,7 +368,7 @@ export function EditorTopbar({
         id="editor-topbar"
         data-section="editor-topbar"
         data-testid="editor-topbar"
-        className="EditorTopbar sticky top-0 z-20 flex h-[46px] items-center border-b-[0.5px] border-border/80 bg-sb/95 backdrop-blur supports-[backdrop-filter]:bg-sb/85"
+        className="EditorTopbar sticky top-0 z-20 flex h-[56px] items-center bg-sb/96 backdrop-blur supports-[backdrop-filter]:bg-sb/90"
       >
         <div className="flex min-w-0 flex-1 items-center">
           <EditorTabs
