@@ -87,7 +87,7 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
             <button
               key={chip}
               onClick={() => setNote((current) => (current ? `${current} ${chip}` : chip))}
-              className="rounded-full bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover"
+              className="rounded-[6px] border-[0.5px] border-border bg-bg px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
               type="button"
             >
               {chip}
