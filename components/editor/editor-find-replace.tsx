@@ -81,7 +81,7 @@ export function EditorFindReplace({
       const topbar = document.querySelector<HTMLElement>('[data-testid="editor-topbar"]')
       const wrapperRect = wrapper.getBoundingClientRect()
       const panelHeight = panel.offsetHeight
-      const fixedTop = (topbar?.getBoundingClientRect().bottom ?? 46) + PANEL_FIXED_GAP
+      const fixedTop = (topbar?.getBoundingClientRect().bottom ?? 56) + PANEL_FIXED_GAP
 
       setFixedLayout((current) => {
         const nextState = {

@@ -55,10 +55,10 @@ export function DeskHero({ drafts }: DeskHeroProps) {
           id="desk-hero-draft-card-new"
           data-section="desk-hero-draft-card-new"
           data-testid="desk-hero-draft-card-new"
-          className="DeskHeroDraftCardNew flex h-[170px] w-[220px] shrink-0 flex-col items-center justify-center gap-2 rounded-lg border-[0.5px] border-dashed border-border bg-white px-4 text-center text-[12px] text-ink-4 transition-colors hover:border-ink-3 hover:bg-muted hover:text-ink-2"
+          className="DeskHeroDraftCardNew flex h-[170px] w-[220px] shrink-0 flex-col items-center rounded-lg border-[0.5px] border-dashed border-border bg-white px-4 pb-[14px] pt-5 text-center text-[12px] text-ink-4 transition-colors hover:border-ink-3 hover:bg-muted hover:text-ink-2"
         >
           <p className="font-lora text-[17px] font-medium text-ink-3">Start a new note</p>
-          <p className="text-[13px] leading-[1.6] text-ink-4">Keep the draft rail airy, with no top terracotta border on the cards.</p>
+          <p className="mt-2 text-[13px] leading-[1.6] text-ink-4">Keep the draft rail airy, with no top terracotta border on the cards.</p>
           <div className="mt-auto flex w-full items-center justify-between border-t-[0.5px] border-border pt-2 text-[12px] text-ink-4">
             <span>Draft space</span>
             <Plus className="h-[13px] w-[13px]" strokeWidth={1.5} />

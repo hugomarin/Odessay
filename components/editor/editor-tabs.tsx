@@ -56,12 +56,12 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenam
   }, [availableWidth, tabs.length]);
 
   return (
-    <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden bg-transparent px-3 pt-[6px]">
+    <div className="flex h-full min-w-0 flex-1 items-end overflow-hidden bg-transparent px-3 pt-[10px]">
       <div
         ref={scrollerRef}
         className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="inline-flex min-w-full items-end gap-1.5 pr-3">
+        <div className="inline-flex min-w-full items-end gap-2 pr-3">
           {tabs.map((tab) => (
             <EditorTabItem
               key={tab.id}
@@ -78,7 +78,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenam
             <button
               type="button"
               onClick={onNewTab}
-              className="inline-flex h-[36px] w-[36px] shrink-0 items-center justify-center self-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
+              className="inline-flex h-[38px] w-[38px] shrink-0 items-center justify-center self-center rounded-[10px] border-[0.5px] border-transparent text-ink-4 transition-[background-color,border-color,color] duration-150 ease-out hover:border-border/80 hover:bg-muted hover:text-ink"
               aria-label="New writing"
             >
               <Plus className="h-[18px] w-[18px]" strokeWidth={1.45} />

@@ -71,6 +71,10 @@ const NAV_ITEMS: NavItem[] = [
 
 const SIDEBAR_WIDTH_EXPANDED = 292
 const SIDEBAR_WIDTH_COLLAPSED = 52
+const SIDEBAR_ITEM_TRANSITION_CLASS =
+  "transition-[width,padding,gap,opacity,background-color,color] duration-[300ms] ease-layout"
+const SIDEBAR_LABEL_TRANSITION_CLASS =
+  "overflow-hidden whitespace-nowrap transition-[width,opacity] duration-[300ms] ease-layout"
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
 const isEditableTarget = (target: EventTarget | null) => {
@@ -169,19 +173,19 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             data-section="sidebar-top"
             data-testid="sidebar-top"
             className={cn(
-              "SidebarTop flex h-[46px] items-center",
-              isIconOnly ? "justify-center px-0" : "justify-between gap-2 px-3",
+              "SidebarTop flex h-[70px] items-center",
+              isIconOnly ? "justify-center px-2" : "justify-between gap-2 px-4",
             )}
           >
             <Link
               href="/desk"
               className={cn(
-                "overflow-hidden transition-[width,opacity] duration-200",
-                isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
+                "overflow-hidden transition-[width,opacity] duration-[300ms] ease-layout",
+                isIconOnly ? "w-0 opacity-0" : "w-[92px] opacity-100",
               )}
               aria-label="Odessay"
             >
-              <Image src="/odessay-logo.svg" alt="Odessay" width={80} height={26} className="h-[26px] w-auto max-w-none" />
+              <Image src="/odessay-logo.svg" alt="Odessay" width={92} height={30} className="h-[30px] w-auto max-w-none" />
             </Link>
 
             <ActionTooltip
@@ -192,12 +196,12 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 type="button"
                 onClick={handleSidebarToggle}
                 className={cn(
-                  "inline-flex items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-3 transition-colors hover:border-border hover:bg-muted hover:text-ink",
-                  isIconOnly ? "h-8 w-8" : "h-8 w-8",
+                  "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-3 transition-[background-color,color,opacity] duration-[300ms] ease-layout hover:border-border hover:bg-muted hover:text-ink",
+                  isIconOnly ? "mx-auto" : "",
                 )}
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <PanelLeftDashed className="h-[17px] w-[17px] translate-y-px" strokeWidth={1.5} />
+                <PanelLeftDashed className="h-[17px] w-[17px]" strokeWidth={1.5} />
               </button>
             </ActionTooltip>
           </div>
@@ -206,23 +210,23 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             id="sidebar-actions"
             data-section="sidebar-actions"
             data-testid="sidebar-actions"
-            className="SidebarActions p-2"
+            className="SidebarActions px-2 pb-3 pt-6"
           >
             <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
                 href="/write?new=1"
                 className={cn(
-                  "flex items-center rounded-[8px] text-[15px] font-medium transition-colors",
+                  `flex h-8 items-center rounded-[8px] text-[15px] font-medium ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
                   isIconOnly
-                    ? "h-8 w-8 justify-center bg-ink text-bg hover:bg-ink-2"
-                    : "gap-2 px-2 text-ink hover:bg-muted",
+                    ? "mx-auto w-8 justify-center bg-ink px-0 text-bg hover:bg-ink-2"
+                    : "w-full gap-2 px-2 text-ink hover:bg-muted",
                 )}
                 aria-label="New writing"
               >
                 <Plus className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                 <span
                   className={cn(
-                    "overflow-hidden transition-[width,opacity] duration-200",
+                    SIDEBAR_LABEL_TRANSITION_CLASS,
                     isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
                   )}
                 >
@@ -236,15 +240,15 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 type="button"
                 onClick={() => setSearchOpen(true)}
                 className={cn(
-                  "mt-2 flex items-center rounded-[8px] text-[15px] text-ink-2 transition-colors hover:bg-muted hover:text-ink",
-                  isIconOnly ? "h-8 w-8 justify-center px-0" : "h-8 w-full gap-2 px-2",
+                  `mt-3 flex h-8 items-center rounded-[8px] text-[15px] text-ink-2 hover:bg-muted hover:text-ink ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
+                  isIconOnly ? "mx-auto w-8 justify-center px-0" : "w-full gap-2 px-2",
                 )}
                 aria-label="Search"
               >
                 <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                 <span
                   className={cn(
-                    "overflow-hidden transition-[width,opacity] duration-200",
+                    SIDEBAR_LABEL_TRANSITION_CLASS,
                     isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
                   )}
                 >
@@ -258,9 +262,9 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             id="sidebar-nav"
             data-section="sidebar-nav"
             data-testid="sidebar-nav"
-            className="SidebarNav flex-1 overflow-y-auto p-2"
+            className="SidebarNav flex-1 overflow-y-auto px-2 pb-2 pt-4"
           >
-            <div className="space-y-1">
+            <div className="space-y-2">
               {NAV_ITEMS.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                 const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
@@ -278,16 +282,16 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       data-section={item.section}
                       data-testid={item.section}
                       className={cn(
-                        "flex items-center rounded-[8px] text-[15px] transition-colors",
+                        `flex h-10 items-center rounded-[8px] text-[15px] ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
                         isActive ? "bg-muted font-medium text-ink" : "text-ink-2 hover:bg-muted-hover hover:text-ink",
-                        isIconOnly ? "h-8 w-8 justify-center px-0 py-0" : "gap-2 px-2 py-[10px]",
+                        isIconOnly ? "mx-auto w-8 justify-center px-0" : "w-full gap-2 px-2",
                       )}
                       aria-label={item.label}
                     >
                       <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
                       <span
                         className={cn(
-                          "overflow-hidden whitespace-nowrap transition-[width,opacity] duration-200",
+                          SIDEBAR_LABEL_TRANSITION_CLASS,
                           isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
                         )}
                       >
