@@ -189,25 +189,29 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 
 ### margins
 
-Highlights y anotaciones que el lector crea al leer writings ajenos. Son escritura en gestación — no comentarios ni feedback.
+Índice materializado de anotaciones embebidas en `writings.body_json`. La fuente de verdad vive en nodos TipTap `annotationReference`; esta tabla existe para listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
 
 | Campo | Tipo | Constraints | Nota |
 |-------|------|-------------|------|
-| id | uuid | PK, default gen_random_uuid() | |
-| reader_id | uuid | FK → profiles, not null | Quien hace el highlight/anotación |
+| id | uuid | PK | Mismo UUID estable que el nodo `annotationReference` en `body_json` |
+| reader_id | uuid | FK → profiles, not null | Usuario que mantiene este índice materializado |
 | writing_id | uuid | FK → writings, not null | Writing anotado |
-| anchor_start | integer | not null | Offset de inicio del highlight en body_text |
-| anchor_end | integer | not null | Offset de fin del highlight en body_text |
-| anchor_text | text | not null | Copia del texto marcado al momento del highlight. Protege contra ediciones del writing |
-| note | text | nullable | Anotación del lector. Null = solo highlight sin nota |
-| shared | boolean | not null, default false | Si el lector eligió compartir este margen con el autor del writing |
-| shared_at | timestamptz | nullable | Cuándo se compartió. Null si aún es privado |
+| anchor_start | integer | not null | Offset de inicio del highlight en el texto renderizado |
+| anchor_end | integer | not null | Offset de fin del highlight en el texto renderizado |
+| anchor_text | text | not null | Copia del pasaje resaltado |
+| type | text | not null, check in (`personal`, `ai`, `collaborative`) | Footnotes no se materializan en `margins` |
+| text | text | not null | Contenido de la anotación |
+| note | text | nullable | Alias legacy mantenido durante la transición; replica `text` |
+| shared | boolean | not null, default false | Si el lector comparte la anotación con el autor |
+| shared_at | timestamptz | nullable | Cuándo se compartió |
+| archived | boolean | not null, default false | Metadata reservada para colaboración futura |
+| resolved | boolean | not null, default false | Metadata reservada para colaboración futura |
 | created_at | timestamptz | default now() | |
 | updated_at | timestamptz | default now() | |
 
-**Inmutabilidad post-compartido:** Los writings compartidos en correspondencia son inmutables una vez enviados, lo que protege los anclajes `anchor_start`/`anchor_end`. `anchor_text` es la copia defensiva.
+**Regla de sincronización:** cada save del writing vuelve a extraer nodos `annotationReference` desde `body_json`, hace upsert por `id` en `margins` y elimina las filas cuyo `id` ya no existe en el documento.
 
-**Privados por defecto:** `shared = false` hasta que el lector decida compartirlos con el autor. Compartir márgenes es un gesto de intimidad intelectual, no una acción automática.
+**Privados por defecto:** `shared = false` hasta que el lector decida compartirlos con el autor. Compartir márgenes sigue siendo un gesto explícito.
 
 ### invitations
 
