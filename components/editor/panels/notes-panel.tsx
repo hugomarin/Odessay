@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Plus, Trash2, X } from "lucide-react"
+import { Trash2, X } from "lucide-react"
 import type { MarkdownAnnotation } from "@/lib/editor/footnote-extension"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
@@ -23,21 +23,20 @@ const TYPE_LABEL: Record<AnnotationType, string> = {
 type NotesPanelProps = {
   annotations: MarkdownAnnotation[]
   currentMarkdown: string
-  onAddFootnote: (text: string) => void
   onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
   onDeleteAnnotation: (type: AnnotationType, index: number) => void
+  onNavigate: (type: AnnotationType, index: number) => void
   onClose: () => void
 }
 
 export function NotesPanel({
   annotations,
   currentMarkdown,
-  onAddFootnote,
   onUpdateAnnotation,
   onDeleteAnnotation,
+  onNavigate,
   onClose,
 }: NotesPanelProps) {
-  const [nextNote, setNextNote] = useState("")
   const [drafts, setDrafts] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -49,7 +48,6 @@ export function NotesPanel({
     )
   }, [annotations])
 
-  const disabledAdd = nextNote.trim().length === 0
   const ordered = useMemo(
     () => annotations.slice().sort((a, b) => a.type.localeCompare(b.type) || a.index - b.index),
     [annotations],
@@ -86,86 +84,68 @@ export function NotesPanel({
       </div>
 
       <div className="flex h-[calc(100%-46px)] flex-col">
-        {/* Add footnote */}
-        <div className="space-y-3 border-b-[0.5px] border-border p-4">
-          <p className="text-[12px] text-ink-3">Add a footnote from this panel.</p>
-          <textarea
-            value={nextNote}
-            onChange={(e) => setNextNote(e.target.value)}
-            placeholder="Write the note text..."
-            className="min-h-20 w-full resize-y rounded-md border-[0.5px] border-border bg-bg px-2.5 py-2 text-[13px] text-ink outline-none placeholder:text-ink-4 focus:border-ink"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              if (disabledAdd) return
-              onAddFootnote(nextNote)
-              setNextNote("")
-            }}
-            disabled={disabledAdd}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border-[0.5px] border-border bg-bg px-3 text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="h-[13px] w-[13px]" strokeWidth={1.5} />
-            Add note
-          </button>
-        </div>
-
         {/* Annotation list */}
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto px-3 py-3">
           {ordered.length === 0 ? (
-            <p className="text-[12px] text-ink-4">No notes yet.</p>
+            <p className="px-1 py-4 text-[12px] text-ink-4">No notes yet.</p>
           ) : (
-            ordered.map((annotation) => {
-              const key = `${annotation.type}:${annotation.index}`
-              const color = TYPE_COLOR[annotation.type]
-              const label = TYPE_LABEL[annotation.type]
-              const draft = drafts[key] ?? ""
-              const lineCount = draft.split("\n").length
-              return (
-                <article
-                  key={key}
-                  className="group rounded-[8px] bg-bg px-3 py-2.5"
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span
-                      className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
-                      style={{ color, backgroundColor: `${color}14` }}
-                    >
-                      {label} {annotation.index}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteAnnotation(annotation.type, annotation.index)}
-                      className="hidden h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 transition-colors hover:bg-muted hover:text-ink group-hover:flex"
-                      aria-label={`Delete ${label} ${annotation.index}`}
-                    >
-                      <Trash2 className="h-[11px] w-[11px]" strokeWidth={1.5} />
-                    </button>
-                  </div>
-                  <textarea
-                    value={draft}
-                    rows={Math.max(1, lineCount)}
-                    onChange={(e) =>
-                      setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
-                    }
-                    onBlur={() => {
-                      const next = drafts[key] ?? ""
-                      if (next !== annotation.text) {
-                        onUpdateAnnotation(annotation.type, annotation.index, next)
+            <div className="flex flex-col gap-0.5">
+              {ordered.map((annotation) => {
+                const key = `${annotation.type}:${annotation.index}`
+                const color = TYPE_COLOR[annotation.type]
+                const label = TYPE_LABEL[annotation.type]
+                const draft = drafts[key] ?? ""
+                const lineCount = Math.max(1, draft.split("\n").length)
+                return (
+                  <article
+                    key={key}
+                    className="group rounded-[8px] px-3 py-2.5 transition-colors hover:bg-bg"
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onNavigate(annotation.type, annotation.index)}
+                        className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] transition-opacity hover:opacity-70"
+                        style={{ color, backgroundColor: `${color}14` }}
+                        aria-label={`Go to ${label} ${annotation.index} in document`}
+                      >
+                        {label} {annotation.index}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteAnnotation(annotation.type, annotation.index)}
+                        className="hidden h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 transition-colors hover:bg-muted hover:text-ink group-hover:flex"
+                        aria-label={`Delete ${label} ${annotation.index}`}
+                      >
+                        <Trash2 className="h-[11px] w-[11px]" strokeWidth={1.5} />
+                      </button>
+                    </div>
+                    <textarea
+                      value={draft}
+                      rows={lineCount}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) =>
+                        setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
                       }
-                    }}
-                    placeholder={
-                      annotation.type === "ai"
-                        ? "AI instruction…"
-                        : annotation.type === "collaborative"
-                          ? "Collaborative note…"
-                          : "Note text…"
-                    }
-                    className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
-                  />
-                </article>
-              )
-            })
+                      onBlur={() => {
+                        const next = drafts[key] ?? ""
+                        if (next !== annotation.text) {
+                          onUpdateAnnotation(annotation.type, annotation.index, next)
+                        }
+                      }}
+                      placeholder={
+                        annotation.type === "ai"
+                          ? "AI instruction…"
+                          : annotation.type === "collaborative"
+                            ? "Collaborative note…"
+                            : "Note text…"
+                      }
+                      className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
+                    />
+                  </article>
+                )
+              })}
+            </div>
           )}
         </div>
 

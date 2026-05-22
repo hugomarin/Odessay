@@ -3735,16 +3735,19 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
                 onClose={closeActivePanel}
-                onAddFootnote={(text) => {
-                  if (mode === "rich" && editor) {
-                    editor.commands.addFootnote(text)
-                    setRichFootnoteRevision((r) => r + 1)
-                    updateDerivedEditorState(editor)
-                    void persistEditorSnapshot(editor)
-                  } else {
-                    const nextMarkdown = appendMarkdownFootnote(markdownValue, text)
-                    applyMarkdownFromPanel(nextMarkdown)
-                  }
+                onNavigate={(type, index) => {
+                  if (!editor) return
+                  editor.state.doc.descendants((node, pos) => {
+                    if (
+                      (node.type.name === "annotationReference" ||
+                        node.type.name === "footnoteReference") &&
+                      (node.attrs.type as string) === type &&
+                      (node.attrs.index as number) === index
+                    ) {
+                      editor.chain().focus().setTextSelection(pos).scrollIntoView().run()
+                      return false
+                    }
+                  })
                 }}
                 onUpdateAnnotation={(type, index, text) => {
                   if (mode === "rich" && editor) {
