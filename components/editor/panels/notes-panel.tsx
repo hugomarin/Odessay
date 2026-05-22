@@ -21,7 +21,7 @@ const TYPE_LABEL: Record<AnnotationType, string> = {
 }
 
 type NotesPanelProps = {
-  annotations: MarkdownAnnotation[]
+  annotations: Array<MarkdownAnnotation & { anchor_text?: string }>
   currentMarkdown: string
   onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
   onDeleteAnnotation: (type: AnnotationType, index: number) => void
@@ -136,6 +136,11 @@ export function NotesPanel({
                     key={key}
                     className="group rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2.5 transition-colors hover:bg-muted"
                   >
+                    {annotation.anchor_text && (
+                      <p className="mb-1.5 font-lora italic text-[11px] text-ink-4 leading-relaxed line-clamp-2">
+                        &ldquo;{annotation.anchor_text}&rdquo;
+                      </p>
+                    )}
                     <textarea
                       value={draft}
                       rows={lineCount}
