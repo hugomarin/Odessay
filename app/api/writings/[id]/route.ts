@@ -131,17 +131,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   if (updatedWriting) {
-    await syncMarginsFromBodyJson(supabase, {
-      bodyJson: parsed.data.body_json,
-      writingId: id,
-      readerId: userId,
-    }).catch((error: { message?: string }) => {
-      console.error("[writings:patch:sync-margins]", {
+    if (parsed.data.body_json != null) {
+      await syncMarginsFromBodyJson(supabase, {
+        bodyJson: parsed.data.body_json,
         writingId: id,
-        userId,
-        error: error.message ?? "Unknown error",
+        readerId: userId,
+      }).catch((error: { message?: string }) => {
+        console.error("[writings:patch:sync-margins]", {
+          writingId: id,
+          userId,
+          error: error.message ?? "Unknown error",
+        })
       })
-    })
+    }
     return NextResponse.json({ data: updatedWriting, error: null }, { status: 200 });
   }
 
@@ -170,17 +172,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         return jsonError(409, "WRITE_CONFLICT", "Writing ID conflict for current user.");
       }
 
-      await syncMarginsFromBodyJson(supabase, {
-        bodyJson: parsed.data.body_json,
-        writingId: id,
-        readerId: userId,
-      }).catch((error: { message?: string }) => {
-        console.error("[writings:patch:sync-margins]", {
+      if (parsed.data.body_json != null) {
+        await syncMarginsFromBodyJson(supabase, {
+          bodyJson: parsed.data.body_json,
           writingId: id,
-          userId,
-          error: error.message ?? "Unknown error",
+          readerId: userId,
+        }).catch((error: { message?: string }) => {
+          console.error("[writings:patch:sync-margins]", {
+            writingId: id,
+            userId,
+            error: error.message ?? "Unknown error",
+          })
         })
-      })
+      }
 
       return NextResponse.json({ data: retriedWriting, error: null }, { status: 200 });
     }
@@ -188,17 +192,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return jsonError(500, "DB_ERROR", insertError.message);
   }
 
-  await syncMarginsFromBodyJson(supabase, {
-    bodyJson: parsed.data.body_json,
-    writingId: id,
-    readerId: userId,
-  }).catch((error: { message?: string }) => {
-    console.error("[writings:patch:sync-margins]", {
+  if (parsed.data.body_json != null) {
+    await syncMarginsFromBodyJson(supabase, {
+      bodyJson: parsed.data.body_json,
       writingId: id,
-      userId,
-      error: error.message ?? "Unknown error",
+      readerId: userId,
+    }).catch((error: { message?: string }) => {
+      console.error("[writings:patch:sync-margins]", {
+        writingId: id,
+        userId,
+        error: error.message ?? "Unknown error",
+      })
     })
-  })
+  }
 
   return NextResponse.json({ data: insertedWriting, error: null }, { status: 200 });
 }
