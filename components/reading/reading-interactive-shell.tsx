@@ -437,12 +437,20 @@ export function ReadingInteractiveShell({
   const annotationBubblePosition = selectionInfo?.bubblePosition ?? null
   const handleCopyAiAnnotations = useCallback(async () => {
     const copy = buildAiAnnotationCopy(bodyMarkdown)
-    await navigator.clipboard.writeText(copy.annotationsOnly)
+    try {
+      await navigator.clipboard.writeText(copy.annotationsOnly)
+    } catch {
+      console.error("[reading:copy-ai-annotations] Clipboard write failed")
+    }
   }, [bodyMarkdown])
 
   const handleCopyAiFullText = useCallback(async () => {
     const copy = buildAiAnnotationCopy(bodyMarkdown)
-    await navigator.clipboard.writeText(copy.fullText)
+    try {
+      await navigator.clipboard.writeText(copy.fullText)
+    } catch {
+      console.error("[reading:copy-ai-full-text] Clipboard write failed")
+    }
   }, [bodyMarkdown])
 
   return (
