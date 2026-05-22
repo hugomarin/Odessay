@@ -270,14 +270,17 @@ const collectAnnotationNodes = (
       : null
 
   if (node.content?.length) {
+    let pendingAnchor: string | null = null
     for (const child of node.content) {
       if (child.type === "text" && child.marks?.some((mark) => mark.type === "highlight")) {
-        const anchorText = child.text ?? ""
-        collectAnnotationNodes(child, cursor, result, anchorText)
+        pendingAnchor = child.text ?? ""
+        collectAnnotationNodes(child, cursor, result, pendingAnchor)
         continue
       }
 
-      collectAnnotationNodes(child, cursor, result, nextHighlightAnchor)
+      const isAnnotation = child.type === "annotationReference" || child.type === "footnoteReference"
+      collectAnnotationNodes(child, cursor, result, isAnnotation ? pendingAnchor : nextHighlightAnchor)
+      if (isAnnotation) pendingAnchor = null
     }
   }
 
