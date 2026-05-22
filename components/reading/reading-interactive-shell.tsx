@@ -184,7 +184,7 @@ export function ReadingInteractiveShell({
 }: ReadingInteractiveShellProps) {
   const [marginPanelOpen, setMarginPanelOpen] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null)
-  const [annotationType, setAnnotationType] = useState<"personal" | "ai" | "collaborative" | "footnote" | null>(null)
+  const [annotationType, setAnnotationType] = useState<"personal" | "ai" | "footnote" | null>(null)
   const [margins, setMargins] = useState<MarginData[]>([])
   const [currentBodyJson, setCurrentBodyJson] = useState<JSONContent | null>(writing.bodyJson)
   const [currentBodyText, setCurrentBodyText] = useState<string>(writing.bodyText)
@@ -369,7 +369,7 @@ export function ReadingInteractiveShell({
 
   // ─── Actions ───────────────────────────────────────────────────────────────
 
-  function handleSelectType(type: "personal" | "ai" | "collaborative" | "footnote") {
+  function handleSelectType(type: "personal" | "ai" | "footnote") {
     if (type === "personal") {
       handleAnnotateConfirm("", "personal")
       return

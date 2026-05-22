@@ -59,17 +59,16 @@ export function MarginsPanel({
   onClose,
 }: MarginsPanelProps) {
   const [focusedId, setFocusedId] = useState<string | null>(null)
-  const [activeFilter, setActiveFilter] = useState<"all" | "personal" | "ai" | "collaborative">("all")
+  const [activeFilter, setActiveFilter] = useState<"all" | "personal" | "ai">("all")
   const isMobile = useIsMobileViewport()
   const sharedCount = margins.filter((m) => m.shared).length
   const aiCount = margins.filter((margin) => margin.type === "ai").length
   const visibleMargins =
     activeFilter === "all" ? margins : margins.filter((margin) => margin.type === activeFilter)
   const filterTabs = [
-    { id: "all", label: "Todas" },
+    { id: "all", label: "All" },
     { id: "personal", label: "Personal" },
     { id: "ai", label: "AI" },
-    { id: "collaborative", label: "Collaborative" },
   ] as const
 
   const renderFilters = () => (

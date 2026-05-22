@@ -143,7 +143,7 @@ type PendingAnnotationSnapshot = {
   to: number
   text: string
   position: { x: number; y: number }
-  annotationType?: "personal" | "ai" | "collaborative" | "footnote"
+  annotationType?: "personal" | "ai" | "footnote"
 }
 
 type PendingRichSelectionSnapshot = {
@@ -1995,7 +1995,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
 
   const handleAnnotateSelection = useCallback(
-    (annotationType: "personal" | "ai" | "collaborative" | "footnote" = "footnote") => {
+    (annotationType: "personal" | "ai" | "footnote" = "footnote") => {
       if (!pendingRichSelection) return
       setPendingAnnotation({
         from: pendingRichSelection.from,
@@ -2030,7 +2030,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [pendingRichSelection])
 
   const handleEditorSelectType = useCallback(
-    (type: "personal" | "ai" | "collaborative" | "footnote") => {
+    (type: "personal" | "ai" | "footnote") => {
       if (type === "personal") {
         handleMarkSelection()
         return

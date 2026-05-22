@@ -12,7 +12,6 @@ const TYPE_COLOR: Record<PanelEntryType, string> = {
   footnote: "#999990",
   personal: "#999990",
   ai: "#5B5BD6",
-  collaborative: "#C07B2A",
   highlight: "#E8A020",
 }
 
@@ -20,7 +19,6 @@ const TYPE_LABEL: Record<PanelEntryType, string> = {
   footnote: "Footnote",
   personal: "Highlight",
   ai: "AI",
-  collaborative: "Collab",
   highlight: "Highlight",
 }
 
@@ -71,7 +69,6 @@ export function NotesPanel({
     { id: "all", label: "All" },
     ...(presentTypes.has("ai") ? [{ id: "ai" as const, label: "AI" }] : []),
     ...(presentTypes.has("personal") ? [{ id: "personal" as const, label: "Personal" }] : []),
-    ...(presentTypes.has("collaborative") ? [{ id: "collaborative" as const, label: "Collab" }] : []),
     ...(presentTypes.has("footnote") ? [{ id: "footnote" as const, label: "Footnote" }] : []),
     ...(presentTypes.has("highlight") ? [{ id: "highlight" as const, label: "Highlight" }] : []),
   ]
@@ -167,9 +164,7 @@ export function NotesPanel({
                         placeholder={
                           annotation.type === "ai"
                             ? "AI instruction…"
-                            : annotation.type === "collaborative"
-                              ? "Collaborative note…"
-                              : "Note text…"
+                            : "Note text…"
                         }
                         className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
                       />

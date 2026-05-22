@@ -9,7 +9,7 @@ export type MarginData = {
   anchor_start: number
   anchor_end: number
   anchor_text: string
-  type: "personal" | "ai" | "collaborative"
+  type: "personal" | "ai"
   text: string
   note?: string | null
   shared: boolean
@@ -61,15 +61,8 @@ export function MarginEntry({
       ? "var(--cursor)"
       : margin.type === "ai"
         ? "#5B5BD6"
-        : margin.type === "collaborative"
-          ? "#C07B2A"
-          : "#999990"
-  const typeLabel =
-    margin.type === "ai"
-      ? "AI"
-      : margin.type === "collaborative"
-        ? "Collaborative"
-        : "Personal"
+        : "#999990"
+  const typeLabel = margin.type === "ai" ? "AI" : "Personal"
 
   return (
     <div

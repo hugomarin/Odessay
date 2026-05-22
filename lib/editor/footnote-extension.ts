@@ -21,7 +21,7 @@ const INLINE_ANNOTATION_RE =
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
 const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c)?(\d+):\s*([^\]]*?)\]/g
 
-const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "collaborative"]
+const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal"]
 
 const annotationSigil = (type: AnnotationType, index: number, text: string) => {
   const trimmedText = text.trim()
@@ -31,8 +31,6 @@ const annotationSigil = (type: AnnotationType, index: number, text: string) => {
       return `[@${index}: ${trimmedText}]`
     case "personal":
       return `[@p${index}: ${trimmedText}]`
-    case "collaborative":
-      return `[@c${index}: ${trimmedText}]`
     case "footnote":
     default:
       return `[^${index}: ${trimmedText}]`
@@ -72,7 +70,7 @@ const collectInlineReferences = (markdown: string, definitions: Map<number, stri
 
     if (match[4]) {
       refs.push({
-        type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+        type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
         index: Number(match[4]),
       })
       continue
@@ -132,7 +130,7 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
       }
 
       if (sigilIndex) {
-        const type = sigilPrefix === "p" ? "personal" : sigilPrefix === "c" ? "collaborative" : "ai"
+        const type = sigilPrefix === "p" ? "personal" : sigilPrefix === "c" ? "personal" : "ai"
         const nextIndex = mapping.get(`${type}:${Number(sigilIndex)}`) ?? Number(sigilIndex)
         return annotationSigil(type, nextIndex, String(sigilText ?? ""))
       }
@@ -159,7 +157,7 @@ export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => 
 
     if (match[4]) {
       annotations.push({
-        type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+        type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
         index: Number(match[4]),
         text: match[5].trim(),
       })
@@ -198,7 +196,7 @@ export const extractAiAnnotationsFromMarkdown = (markdown: string): string => {
   let match: RegExpExecArray | null
   while ((match = AI_ANNOTATION_WITH_CONTEXT_RE.exec(normalized)) !== null) {
     const typePrefix = match[2]
-    if (typePrefix) continue // skip personal (@p) and collaborative (@c)
+    if (typePrefix) continue // skip personal (@p) and legacy collaborative (@c)
 
     const anchorText = match[1]
     const index = Number(match[3])
