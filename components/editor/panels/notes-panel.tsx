@@ -104,7 +104,7 @@ export function NotesPanel({
               <button
                 key={tab.id}
                 onClick={() => setActiveFilter(tab.id)}
-                className={`rounded-full px-2.5 py-1 font-sans text-[11px] transition-colors ${
+                className={`rounded-[6px] px-2.5 py-1 font-sans text-[11px] transition-colors ${
                   activeFilter === tab.id
                     ? "bg-ink text-bg"
                     : "bg-muted text-ink-3 hover:bg-muted-hover"
