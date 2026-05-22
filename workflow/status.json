@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Restore the lost Desk, Settings, and design-grid regressions from the current UI branch state. Settings layout now delegates active nav state to the pathname-driven SettingsNav, Desk preview restores the utility hierarchy with an uppercase Title label and smaller Geist Sans title input, Desk activity columns are rebalanced to reduce title/selection dominance while giving actions more room, markdown download now builds from in-memory local writings synchronously so the row action keeps the browser gesture, and the Start a new note card regains its airier top spacing. The existing localhost-only design-grid guard was preserved.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-170",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-170/restore-lost-desk-settings-and-design-grid-regressions",
+      "commit": "736d193",
+      "date": "2026-05-22",
+      "notes": "Validation: npm run env:check (passed), npm run typecheck (passed), npm run lint (passed with the same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (65 files, 370 tests passing). Browser/local proof on http://localhost:3001 with authenticated session: /settings/account and /settings/writing both render through the shared SettingsNav, the Desk preview dialog now exposes TITLE above the editable title field, and clicking Download markdown from the first Desk row produced ~/Downloads/Untitled-writing.md at 2026-05-22 09:44 -0600. Delivery gate initially blocked until this built entry existed. Design-grid localhost-only behavior was preserved in code; no redesign was made."
+    },
+    {
       "what": "Expand writing statuses from 4 to 7 canonical values (new, exploring, draft, in_review, done, archived, canceled) with a Linear-like icon-first picker and per-user status toggles in Settings. Added DB migrations for expanded status values and a disabled_statuses column on profiles. Created shared WritingStatusPicker component used across Desk, Editor, Collections, and Public surfaces. Added /settings/writing page with switch-based status toggles: disabling an active status shows a confirmation dialog with affected count and bulk-remaps those writings to draft through the local-first pipeline. Added /api/user/settings PATCH endpoint with validation that draft is never disabled. Integrated disabled-status filtering into Desk filters, bulk actions, inline status changes, and editor properties panel.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-168",
