@@ -243,6 +243,7 @@ export function WritingPreviewModal({
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_292px]">
             <main className="min-h-0 overflow-y-auto">
               <div className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-8 py-7">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Title</p>
                 <input
                   value={titleDraft}
                   onFocus={() => {
@@ -264,7 +265,7 @@ export function WritingPreviewModal({
                       event.currentTarget.blur()
                     }
                   }}
-                  className="w-full bg-transparent font-lora text-[30px] font-medium leading-[1.2] text-ink outline-none placeholder:text-ink-4 focus-visible:ring-0"
+                  className="w-full bg-transparent text-[22px] font-medium leading-[1.25] text-ink outline-none placeholder:text-ink-4 focus-visible:ring-0"
                   placeholder="Untitled writing"
                   aria-label="Writing title"
                 />

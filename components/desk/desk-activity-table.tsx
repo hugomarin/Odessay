@@ -125,12 +125,12 @@ export function DeskActivityTable({
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>
-                <col className="w-[56px]" />
+                <col className="w-[42px]" />
                 <col />
-                <col className="w-[150px]" />
-                <col className="w-[250px]" />
-                <col className="w-[84px]" />
-                <col className="w-[48px]" />
+                <col className="w-[154px]" />
+                <col className="w-[196px]" />
+                <col className="w-[108px]" />
+                <col className="w-[96px]" />
               </colgroup>
               <tbody>
                 {group.rows.map((row) => {
@@ -173,7 +173,7 @@ export function DeskActivityTable({
                       )}
                     >
                       <td
-                        className="py-[18px] pl-9 pr-0 align-top md:align-middle"
+                        className="py-[18px] pl-7 pr-0 align-top md:align-middle"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <button
@@ -192,7 +192,7 @@ export function DeskActivityTable({
                           <Check className="h-3 w-3" strokeWidth={2.2} />
                         </button>
                       </td>
-                      <td className="py-[18px] pl-3 pr-6 align-top md:align-middle">
+                      <td className="py-[18px] pl-3 pr-5 align-top md:align-middle">
                         <div className="min-w-0">
                           <div
                             style={{
@@ -281,17 +281,17 @@ export function DeskActivityTable({
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
-                      <td className="px-4 py-[18px] align-top text-[13px] text-ink-2 md:align-middle">
+                      <td className="px-3 py-[18px] align-top text-[13px] text-ink-2 md:align-middle">
                         <div
                           className="flex items-center justify-end gap-2"
                           onClick={(event) => event.stopPropagation()}
                         >
                           {selectedCollections.length > 0 ? (
-                            <div className="flex min-w-0 max-w-[180px] items-center justify-end gap-1">
+                            <div className="flex min-w-0 max-w-[132px] items-center justify-end gap-1">
                               {selectedCollections.slice(0, 2).map((collection) => (
                                 <span
                                   key={collection.id}
-                                  className="inline-flex max-w-[84px] items-center rounded-[8px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-2 py-1 text-[11px] font-medium text-[hsl(28_22%_22%)]"
+                                  className="inline-flex max-w-[60px] items-center rounded-[8px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-2 py-1 text-[11px] font-medium text-[hsl(28_22%_22%)]"
                                 >
                                   <span className="truncate">{collection.name}</span>
                                 </span>
@@ -313,7 +313,7 @@ export function DeskActivityTable({
                                 <button
                                   type="button"
                                   aria-label={`Assign ${row.title} to collections`}
-                                  className="inline-flex h-7 items-center gap-[6px] rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[10px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                  className="inline-flex h-7 shrink-0 items-center gap-[6px] rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[9px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                                 >
                                   <Tags className="h-[11px] w-[11px]" strokeWidth={1.5} />
                                   <span>Add</span>
@@ -350,15 +350,15 @@ export function DeskActivityTable({
                       <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
                         <span className="whitespace-nowrap">{row.dateLabel}</span>
                       </td>
-                      <td className="pl-0 pr-9 py-[18px] align-top text-right md:align-middle">
+                      <td className="py-[18px] pl-0 pr-7 align-top text-right md:align-middle">
                         <div onClick={(event) => event.stopPropagation()}>
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="flex items-center justify-end gap-1.5">
                             {onCopyMarkdown ? (
                               <button
                                 type="button"
                                 aria-label={`Copy markdown for ${row.title}`}
                                 onClick={() => onCopyMarkdown(row.id)}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                               >
                                 <Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />
                               </button>
@@ -368,7 +368,7 @@ export function DeskActivityTable({
                                 type="button"
                                 aria-label={`Download markdown for ${row.title}`}
                                 onClick={() => onDownloadMarkdown(row.id)}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                               >
                                 <Download className="h-[12px] w-[12px]" strokeWidth={1.5} />
                               </button>
@@ -378,7 +378,7 @@ export function DeskActivityTable({
                                 type="button"
                                 aria-label={`Delete writing ${row.title}`}
                                 onClick={() => setPendingDeleteId(row.id)}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                               >
                                 <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
                               </button>
