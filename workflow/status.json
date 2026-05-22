@@ -1332,6 +1332,15 @@
       "commit": "bff1eb1",
       "date": "2026-05-17",
       "notes": "Traceability backfill from merged PR #146. Merge commit: bff1eb13cc4ded335b7d1fd967a98542ea292d19. PR: fix(ai): simplificar correcciones, mejorar resiliencia y contrato de velocidad multidimensional [ODE-502]. Included workstreams: AI correction contract simplification/resilience, orthography panel + inline suggestion UI simplification, import timeout cleanup, and performance-contract documentation/skill updates."
+    },
+    {
+      "what": "Fix AI correction engine bugs (identity-filtered corrections, stale suggestions, panel refresh on manual edit, duplicate grouping, false-positive technical English) and AI title suggestion issues (JSON parse crash, English titles on Spanish content, academic phrasing, getText vs markdown). Also fix Desk shares reloading on every local save.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-166",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-166/correcciones-al-motor-de-correccion-automatica-y-sugerencias-de-titulo",
+      "commit": "01b7495",
+      "date": "2026-05-20",
+      "notes": "Traceability backfill — ODE-166 was merged as PR #159 on 2026-05-20 but was not registered in status.json at the time. Merge commit: 01b749510a7721fc655e7f1b7a06f6cc00effed4. Detected as drift during ODE-168 round 2 review CI run."
     }
   ]
 }
