@@ -1,6 +1,7 @@
 "use client"
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { getMarkRange } from "@tiptap/core"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
@@ -3783,6 +3784,22 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
                     applyMarkdownFromPanel(nextMarkdown)
                   }
+                }}
+                onDeleteHighlight={(anchorText) => {
+                  if (!editor || !anchorText) return
+                  const highlightMark = editor.schema.marks.highlight
+                  if (!highlightMark) return
+                  editor.state.doc.descendants((node, pos) => {
+                    if (node.type.name !== "text") return
+                    if (!node.marks.some((m) => m.type.name === "highlight")) return
+                    const $pos = editor.state.doc.resolve(pos)
+                    const range = getMarkRange($pos, highlightMark)
+                    if (!range) return
+                    const text = editor.state.doc.textBetween(range.from, range.to)
+                    if (text === anchorText) {
+                      editor.chain().setTextSelection(range).unsetHighlight().run()
+                    }
+                  })
                 }}
               />
             ) : activePanel === "properties" ? (

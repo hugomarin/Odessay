@@ -18,7 +18,7 @@ const TYPE_COLOR: Record<PanelEntryType, string> = {
 
 const TYPE_LABEL: Record<PanelEntryType, string> = {
   footnote: "Footnote",
-  personal: "Personal",
+  personal: "Highlight",
   ai: "AI",
   collaborative: "Collab",
   highlight: "Highlight",
@@ -31,6 +31,7 @@ type NotesPanelProps = {
   currentMarkdown: string
   onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
   onDeleteAnnotation: (type: AnnotationType, index: number) => void
+  onDeleteHighlight: (anchorText: string) => void
   onNavigate: (type: AnnotationType, index: number) => void
   onClose: () => void
 }
@@ -40,6 +41,7 @@ export function NotesPanel({
   currentMarkdown,
   onUpdateAnnotation,
   onDeleteAnnotation,
+  onDeleteHighlight,
   onNavigate,
   onClose,
 }: NotesPanelProps) {
@@ -148,51 +150,62 @@ export function NotesPanel({
                         &ldquo;{annotation.anchor_text}&rdquo;
                       </p>
                     )}
-                    {annotation.type === "highlight" ? null : (
-                      <>
-                        <textarea
-                          value={draft}
-                          rows={lineCount}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
+                    {annotation.type !== "highlight" && (
+                      <textarea
+                        value={draft}
+                        rows={lineCount}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) =>
+                          setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
+                        }
+                        onBlur={() => {
+                          const next = drafts[key] ?? ""
+                          if (next !== annotation.text) {
+                            onUpdateAnnotation(annotation.type as AnnotationType, annotation.index, next)
                           }
-                          onBlur={() => {
-                            const next = drafts[key] ?? ""
-                            if (next !== annotation.text) {
-                              onUpdateAnnotation(annotation.type as AnnotationType, annotation.index, next)
-                            }
-                          }}
-                          placeholder={
-                            annotation.type === "ai"
-                              ? "AI instruction…"
-                              : annotation.type === "collaborative"
-                                ? "Collaborative note…"
-                                : "Note text…"
-                          }
-                          className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
-                        />
-                        <div className="flex items-center justify-between mt-1.5">
-                          <button
-                            type="button"
-                            onClick={() => onNavigate(annotation.type as AnnotationType, annotation.index)}
-                            className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] transition-opacity hover:opacity-70"
-                            style={{ color, backgroundColor: `${color}14` }}
-                            aria-label={`Go to ${label} ${annotation.index} in document`}
-                          >
-                            {label} · {annotation.index}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)}
-                            className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
-                            aria-label={`Delete ${label} ${annotation.index}`}
-                          >
-                            <Trash2 className="h-[11px] w-[11px]" strokeWidth={1.5} />
-                          </button>
-                        </div>
-                      </>
+                        }}
+                        placeholder={
+                          annotation.type === "ai"
+                            ? "AI instruction…"
+                            : annotation.type === "collaborative"
+                              ? "Collaborative note…"
+                              : "Note text…"
+                        }
+                        className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
+                      />
                     )}
+                    <div className="flex items-center justify-between mt-1.5">
+                      {annotation.type !== "highlight" ? (
+                        <button
+                          type="button"
+                          onClick={() => onNavigate(annotation.type as AnnotationType, annotation.index)}
+                          className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] transition-opacity hover:opacity-70"
+                          style={{ color, backgroundColor: `${color}14` }}
+                          aria-label={`Go to ${label} ${annotation.index} in document`}
+                        >
+                          {label} · {annotation.index}
+                        </button>
+                      ) : (
+                        <span
+                          className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+                          style={{ color, backgroundColor: `${color}14` }}
+                        >
+                          {label}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          annotation.type === "highlight"
+                            ? onDeleteHighlight(annotation.anchor_text ?? "")
+                            : onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)
+                        }
+                        className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
+                        aria-label={`Delete ${label}`}
+                      >
+                        <Trash2 className="h-[11px] w-[11px]" strokeWidth={1.5} />
+                      </button>
+                    </div>
                   </article>
                 )
               })}
