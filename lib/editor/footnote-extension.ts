@@ -189,9 +189,6 @@ export const removeMarkdownFootnote = (markdown: string, index: number) =>
     ),
   ).trimEnd()
 
-export const stripNonAiAnnotationsFromMarkdown = (markdown: string) =>
-  normalizeMarkdownFootnotes(markdown).replaceAll(/\[\^(?:\d+):\s*[^\]]*?\]|\[@(?:p|c)\d+:\s*[^\]]*?\]/g, "")
-
 export const extractAiAnnotationsFromMarkdown = (markdown: string) =>
   getMarkdownFootnotes(markdown)
     .filter((annotation) => annotation.type === "ai")
