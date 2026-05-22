@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { syncMarginsFromBodyJson } from "@/lib/margins/margins";
 import { normalizeWritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status";
 
 const writingPayloadSchema = z.object({
@@ -130,6 +131,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   if (updatedWriting) {
+    if (parsed.data.body_json != null) {
+      await syncMarginsFromBodyJson(supabase, {
+        bodyJson: parsed.data.body_json,
+        writingId: id,
+        readerId: userId,
+      }).catch((error: { message?: string }) => {
+        console.error("[writings:patch:sync-margins]", {
+          writingId: id,
+          userId,
+          error: error.message ?? "Unknown error",
+        })
+      })
+    }
     return NextResponse.json({ data: updatedWriting, error: null }, { status: 200 });
   }
 
@@ -158,10 +172,38 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         return jsonError(409, "WRITE_CONFLICT", "Writing ID conflict for current user.");
       }
 
+      if (parsed.data.body_json != null) {
+        await syncMarginsFromBodyJson(supabase, {
+          bodyJson: parsed.data.body_json,
+          writingId: id,
+          readerId: userId,
+        }).catch((error: { message?: string }) => {
+          console.error("[writings:patch:sync-margins]", {
+            writingId: id,
+            userId,
+            error: error.message ?? "Unknown error",
+          })
+        })
+      }
+
       return NextResponse.json({ data: retriedWriting, error: null }, { status: 200 });
     }
 
     return jsonError(500, "DB_ERROR", insertError.message);
+  }
+
+  if (parsed.data.body_json != null) {
+    await syncMarginsFromBodyJson(supabase, {
+      bodyJson: parsed.data.body_json,
+      writingId: id,
+      readerId: userId,
+    }).catch((error: { message?: string }) => {
+      console.error("[writings:patch:sync-margins]", {
+        writingId: id,
+        userId,
+        error: error.message ?? "Unknown error",
+      })
+    })
   }
 
   return NextResponse.json({ data: insertedWriting, error: null }, { status: 200 });

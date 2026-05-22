@@ -21,7 +21,7 @@ import { TableRow } from "@tiptap/extension-table-row"
 import Text from "@tiptap/extension-text"
 import { sanitizeWritingBodyJson, sanitizeWritingBodyText } from "@/lib/editor/content-sanitizer"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
-import { FootnoteReferenceNode } from "@/lib/editor/footnote-node"
+import { AnnotationReferenceNode } from "@/lib/editor/footnote-node"
 
 export const WRITING_BODY_EXTENSIONS = [
   Document,
@@ -44,7 +44,7 @@ export const WRITING_BODY_EXTENSIONS = [
   TableRow,
   TableHeader,
   TableCell,
-  FootnoteReferenceNode,
+  AnnotationReferenceNode,
   FootnoteExtension,
 ] satisfies Extensions
 

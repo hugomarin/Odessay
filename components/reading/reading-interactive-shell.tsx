@@ -10,6 +10,8 @@ import { HighlightLayer, type MarginHighlight } from "./margins/highlight-layer"
 import { MarginsPanel } from "./margins/margins-panel"
 import type { SelectionPreviewRect } from "./margins/selection-preview-layer"
 import type { MarginData } from "./margins/margin-entry"
+import { applyAnnotationToBody, getBodyMarkdown } from "@/lib/editor/annotation-document"
+import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import { buildSelectionGeometry } from "@/lib/reading/selection-geometry"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -56,29 +58,47 @@ async function apiFetchMargins(writingId: string): Promise<MarginData[]> {
   return json.data ?? []
 }
 
-async function apiCreateMargin(payload: {
-  writing_id: string
-  anchor_start: number
-  anchor_end: number
-  anchor_text: string
-  note?: string | null
-}): Promise<MarginData> {
-  const res = await fetch("/api/margins", {
-    method: "POST",
+async function apiAnnotateWriting(
+  writingId: string,
+  payload: {
+    body_json: Record<string, unknown>
+    body_text: string
+    body_markdown: string
+  },
+): Promise<{
+  margins: MarginData[]
+  bodyMarkdown: string | null
+  writing: { body_json: JSONContent | null; body_text: string; updated_at: string }
+}> {
+  const res = await fetch(`/api/writings/${writingId}/annotate`, {
+    method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   })
-  const json: { data: MarginData | null; error: { message: string } | null } = await res.json()
-  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Failed to create margin")
+  const json: {
+    data:
+      | {
+          writing: { body_json: JSONContent | null; body_text: string; updated_at: string }
+          margins: MarginData[]
+          body_markdown: string | null
+        }
+      | null
+    error: { message: string } | null
+  } = await res.json()
+  if (!res.ok || json.error) throw new Error(json.error?.message ?? "Failed to annotate writing")
   if (!json.data) throw new Error("No data returned")
-  return json.data
+  return {
+    margins: json.data.margins,
+    bodyMarkdown: json.data.body_markdown,
+    writing: json.data.writing,
+  }
 }
 
 async function apiUpdateMarginNote(id: string, note: string | null): Promise<MarginData> {
   const res = await fetch(`/api/margins/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ note }),
+    body: JSON.stringify({ text: note }),
   })
   const json: { data: MarginData | null; error: { message: string } | null } = await res.json()
   if (!res.ok || json.error) throw new Error(json.error?.message ?? "Failed to update margin")
@@ -164,8 +184,12 @@ export function ReadingInteractiveShell({
 }: ReadingInteractiveShellProps) {
   const [marginPanelOpen, setMarginPanelOpen] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null)
-  const [annotationMode, setAnnotationMode] = useState(false)
+  const [annotationType, setAnnotationType] = useState<"personal" | "ai" | "collaborative" | "footnote" | null>(null)
   const [margins, setMargins] = useState<MarginData[]>([])
+  const [currentBodyJson, setCurrentBodyJson] = useState<JSONContent | null>(writing.bodyJson)
+  const [currentBodyText, setCurrentBodyText] = useState<string>(writing.bodyText)
+  const [currentUpdatedAt, setCurrentUpdatedAt] = useState<string>(writing.updatedAt)
+  const [bodyMarkdown, setBodyMarkdown] = useState<string>(() => getBodyMarkdown(writing.bodyJson) || writing.bodyText)
   const bodyRef = useRef<HTMLDivElement>(null)
   const selectionRangeRef = useRef<Range | null>(null)
 
@@ -176,25 +200,16 @@ export function ReadingInteractiveShell({
     apiFetchMargins(writing.id).then(setMargins).catch(console.error)
   }, [writing.id, isAuthenticated])
 
+  useEffect(() => {
+    setCurrentBodyJson(writing.bodyJson)
+    setCurrentBodyText(writing.bodyText)
+    setCurrentUpdatedAt(writing.updatedAt)
+    setBodyMarkdown(getBodyMarkdown(writing.bodyJson) || writing.bodyText)
+  }, [writing.bodyJson, writing.bodyText, writing.updatedAt])
+
   const alreadyShared = margins.length > 0 && margins.every((m) => m.shared)
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
-
-  function handleCreate(payload: {
-    writing_id: string
-    anchor_start: number
-    anchor_end: number
-    anchor_text: string
-    note?: string | null
-  }) {
-    apiCreateMargin(payload)
-      .then((created) => {
-        setMargins((prev) =>
-          [...prev, created].sort((a, b) => a.anchor_start - b.anchor_start),
-        )
-      })
-      .catch(console.error)
-  }
 
   function handleUpdateNote(id: string, note: string | null) {
     apiUpdateMarginNote(id, note)
@@ -240,7 +255,7 @@ export function ReadingInteractiveShell({
   const dismissSelection = useCallback(() => {
     selectionRangeRef.current = null
     setSelectionInfo(null)
-    setAnnotationMode(false)
+    setAnnotationType(null)
   }, [])
 
   useEffect(() => {
@@ -250,7 +265,7 @@ export function ReadingInteractiveShell({
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed) {
         setSelectionInfo(null)
-        setAnnotationMode(false)
+        setAnnotationType(null)
         return
       }
 
@@ -260,7 +275,7 @@ export function ReadingInteractiveShell({
       const offsets = selectionToOffsets(body, selection)
       if (!offsets || !offsets.text) {
         setSelectionInfo(null)
-        setAnnotationMode(false)
+        setAnnotationType(null)
         return
       }
 
@@ -277,7 +292,7 @@ export function ReadingInteractiveShell({
       if (!geometry) return
       selectionRangeRef.current = range.cloneRange()
 
-      setAnnotationMode(false)
+      setAnnotationType(null)
       setSelectionInfo({
         anchorStart: offsets.start,
         anchorEnd: offsets.end,
@@ -354,35 +369,52 @@ export function ReadingInteractiveShell({
 
   // ─── Actions ───────────────────────────────────────────────────────────────
 
-  function handleMark() {
-    if (!selectionInfo) return
-    handleCreate({
-      writing_id: writing.id,
-      anchor_start: selectionInfo.anchorStart,
-      anchor_end: selectionInfo.anchorEnd,
-      anchor_text: selectionInfo.anchorText,
-      note: null,
-    })
-    window.getSelection()?.removeAllRanges()
-    dismissSelection()
+  function handleSelectType(type: "personal" | "ai" | "collaborative" | "footnote") {
+    if (type === "personal") {
+      handleAnnotateConfirm("", "personal")
+      return
+    }
+    setAnnotationType(type)
   }
 
-  function handleAnnotateOpen() {
-    setAnnotationMode(true)
-  }
-
-  function handleAnnotateConfirm(note: string) {
+  function handleAnnotateConfirm(note: string, selectedType = annotationType) {
     if (!selectionInfo) return
-    handleCreate({
-      writing_id: writing.id,
-      anchor_start: selectionInfo.anchorStart,
-      anchor_end: selectionInfo.anchorEnd,
-      anchor_text: selectionInfo.anchorText,
-      note,
-    })
-    window.getSelection()?.removeAllRanges()
-    dismissSelection()
-    setMarginPanelOpen(true)
+    if (!selectedType) return
+
+    const nextAnnotationText = selectedType === "personal" && note.trim().length === 0 ? "Marked for later" : note
+
+    try {
+      const updated = applyAnnotationToBody({
+        bodyJson: currentBodyJson,
+        bodyText: currentBodyText,
+        anchorStart: selectionInfo.anchorStart,
+        anchorEnd: selectionInfo.anchorEnd,
+        type: selectedType,
+        text: nextAnnotationText,
+      })
+
+      apiAnnotateWriting(writing.id, {
+        body_json: updated.bodyJson as Record<string, unknown>,
+        body_text: updated.bodyText,
+        body_markdown: updated.bodyMarkdown,
+      })
+        .then((response) => {
+          setMargins(response.margins)
+          setCurrentBodyJson(response.writing.body_json)
+          setCurrentBodyText(response.writing.body_text)
+          setCurrentUpdatedAt(response.writing.updated_at)
+          if (response.bodyMarkdown) {
+            setBodyMarkdown(response.bodyMarkdown)
+          }
+        })
+        .catch(console.error)
+
+      window.getSelection()?.removeAllRanges()
+      dismissSelection()
+      setMarginPanelOpen(true)
+    } catch (error) {
+      console.error("[reading:annotate]", error)
+    }
   }
 
   const handleHighlightClick = useCallback((marginId: string) => {
@@ -399,10 +431,27 @@ export function ReadingInteractiveShell({
     id: m.id,
     anchor_start: m.anchor_start,
     anchor_end: m.anchor_end,
-    note: m.note,
+    note: m.text ?? m.note ?? null,
   }))
 
   const annotationBubblePosition = selectionInfo?.bubblePosition ?? null
+  const handleCopyAiAnnotations = useCallback(async () => {
+    const copy = buildAiAnnotationCopy(bodyMarkdown)
+    try {
+      await navigator.clipboard.writeText(copy.annotationsOnly)
+    } catch {
+      console.error("[reading:copy-ai-annotations] Clipboard write failed")
+    }
+  }, [bodyMarkdown])
+
+  const handleCopyAiFullText = useCallback(async () => {
+    const copy = buildAiAnnotationCopy(bodyMarkdown)
+    try {
+      await navigator.clipboard.writeText(copy.fullText)
+    } catch {
+      console.error("[reading:copy-ai-full-text] Clipboard write failed")
+    }
+  }, [bodyMarkdown])
 
   return (
     <section
@@ -438,10 +487,10 @@ export function ReadingInteractiveShell({
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
           <ReadingContent
             title={writing.title}
-            bodyJson={writing.bodyJson}
-            bodyText={writing.bodyText}
+            bodyJson={currentBodyJson}
+            bodyText={currentBodyText}
             author={author}
-            updatedAt={writing.updatedAt}
+            updatedAt={currentUpdatedAt}
             bodyRef={bodyRef}
             selectionPreviewRects={selectionInfo?.selectionRects ?? null}
           />
@@ -462,11 +511,12 @@ export function ReadingInteractiveShell({
             open={marginPanelOpen}
             margins={margins}
             authorName={author?.displayName ?? null}
-            writingId={writing.id}
             onUpdateNote={handleUpdateNote}
             onDelete={handleDelete}
             onShare={handleShare}
             onToggleShare={handleToggleShare}
+            onCopyAiAnnotations={handleCopyAiAnnotations}
+            onCopyAiFullText={handleCopyAiFullText}
             alreadyShared={alreadyShared}
             onClose={() => setMarginPanelOpen(false)}
           />
@@ -474,19 +524,19 @@ export function ReadingInteractiveShell({
       </div>
 
       {/* Selection popup */}
-      {isAuthenticated && !annotationMode && (
+      {isAuthenticated && !annotationType && (
         <SelectionPopup
           position={selectionInfo?.popupPosition ?? null}
-          onMark={handleMark}
-          onAnnotate={handleAnnotateOpen}
+          onSelectType={handleSelectType}
           onDismiss={dismissSelection}
         />
       )}
 
       {/* Annotation bubble */}
-      {isAuthenticated && annotationMode && (
+      {isAuthenticated && annotationType && (
         <AnnotationBubble
           position={annotationBubblePosition}
+          type={annotationType}
           onConfirm={handleAnnotateConfirm}
           onCancel={dismissSelection}
         />

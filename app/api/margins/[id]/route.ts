@@ -23,11 +23,12 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   const parsed = z
     .object({
+      text: z.string().nullable().optional(),
       note: z.string().nullable().optional(),
       shared: z.boolean().optional(),
     })
-    .refine((data) => data.note !== undefined || data.shared !== undefined, {
-      message: "At least one of note or shared must be provided.",
+    .refine((data) => data.note !== undefined || data.text !== undefined || data.shared !== undefined, {
+      message: "At least one of text, note or shared must be provided.",
     })
     .safeParse(body)
 
@@ -35,9 +36,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
   const { id } = await context.params
 
-  const updateData: { note?: string | null; shared?: boolean; shared_at?: string | null } = {}
+  const updateData: { text?: string | null; note?: string | null; shared?: boolean; shared_at?: string | null } = {}
+  if (parsed.data.text !== undefined) {
+    updateData.text = parsed.data.text
+    updateData.note = parsed.data.text
+  }
   if (parsed.data.note !== undefined) {
     updateData.note = parsed.data.note
+    updateData.text = parsed.data.note
   }
   if (parsed.data.shared !== undefined) {
     updateData.shared = parsed.data.shared

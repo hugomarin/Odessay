@@ -14,11 +14,12 @@ type MarginsPanelProps = {
   open: boolean
   margins: MarginData[]
   authorName: string | null
-  writingId: string
   onUpdateNote: (id: string, note: string | null) => void
   onDelete: (id: string) => void
   onShare: () => void
   onToggleShare?: (id: string, shared: boolean) => void
+  onCopyAiAnnotations: () => void
+  onCopyAiFullText: () => void
   alreadyShared: boolean
   onClose: () => void
 }
@@ -52,12 +53,40 @@ export function MarginsPanel({
   onDelete,
   onShare,
   onToggleShare,
+  onCopyAiAnnotations,
+  onCopyAiFullText,
   alreadyShared,
   onClose,
 }: MarginsPanelProps) {
   const [focusedId, setFocusedId] = useState<string | null>(null)
+  const [activeFilter, setActiveFilter] = useState<"all" | "personal" | "ai" | "collaborative">("all")
   const isMobile = useIsMobileViewport()
   const sharedCount = margins.filter((m) => m.shared).length
+  const aiCount = margins.filter((margin) => margin.type === "ai").length
+  const visibleMargins =
+    activeFilter === "all" ? margins : margins.filter((margin) => margin.type === activeFilter)
+  const filterTabs = [
+    { id: "all", label: "Todas" },
+    { id: "personal", label: "Personal" },
+    { id: "ai", label: "AI" },
+    { id: "collaborative", label: "Collaborative" },
+  ] as const
+
+  const renderFilters = () => (
+    <div className="flex flex-wrap gap-1 px-4 py-2">
+      {filterTabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => setActiveFilter(tab.id)}
+          className={`rounded-full px-2.5 py-1 font-sans text-[11px] transition-colors ${
+            activeFilter === tab.id ? "bg-ink text-bg" : "bg-muted text-ink-3 hover:bg-muted-hover"
+          }`}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
 
   if (isMobile) {
     return (
@@ -105,15 +134,16 @@ export function MarginsPanel({
                 Review and annotate passages in this writing.
               </SheetDescription>
             </SheetHeader>
+            {renderFilters()}
 
             <div className="flex-1 overflow-y-auto px-4 py-2">
-              {margins.length === 0 ? (
+              {visibleMargins.length === 0 ? (
                 <p className="px-2 py-6 text-center font-lora italic text-[13px] text-ink-4">
                   Select text to mark or annotate passages.
                 </p>
               ) : (
                 <div className="flex flex-col gap-0.5 pl-[2.5px]">
-                  {margins.map((margin) => (
+                  {visibleMargins.map((margin) => (
                     <MarginEntry
                       key={margin.id}
                       margin={margin}
@@ -131,6 +161,27 @@ export function MarginsPanel({
 
             {margins.length > 0 && authorName ? (
               <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
+                {aiCount > 0 ? (
+                  <div className="mb-3 rounded-[10px] border-[0.5px] border-border bg-sb p-3">
+                    <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
+                      Copiar para AI
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <button
+                        onClick={onCopyAiAnnotations}
+                        className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
+                      >
+                        Anotaciones
+                      </button>
+                      <button
+                        onClick={onCopyAiFullText}
+                        className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
+                      >
+                        Texto completo
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {alreadyShared ? (
                   <p className="text-center font-sans text-[12px] text-ink-4">
                     All margins shared with {authorName}
@@ -189,16 +240,17 @@ export function MarginsPanel({
               <span className="font-sans text-[11px] text-ink-4">Shared ({sharedCount})</span>
             )}
           </div>
+          {renderFilters()}
 
           {/* Entries */}
           <div className="flex-1 overflow-y-auto px-2 py-2">
-            {margins.length === 0 ? (
+            {visibleMargins.length === 0 ? (
               <p className="px-2 py-6 text-center font-lora italic text-[13px] text-ink-4">
                 Select text to mark or annotate passages.
               </p>
             ) : (
               <div className="flex flex-col gap-0.5 pl-[2.5px]">
-                {margins.map((margin) => (
+                {visibleMargins.map((margin) => (
                   <MarginEntry
                     key={margin.id}
                     margin={margin}
@@ -217,6 +269,27 @@ export function MarginsPanel({
           {/* Footer — share */}
           {margins.length > 0 && authorName && (
             <div className="shrink-0 border-t-[0.5px] border-border px-4 py-3">
+              {aiCount > 0 ? (
+                <div className="mb-3 rounded-[10px] border-[0.5px] border-border bg-sb p-3">
+                  <p className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
+                    Copiar para AI
+                  </p>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      onClick={onCopyAiAnnotations}
+                      className="rounded-[8px] bg-muted px-3 py-1.5 font-sans text-[12px] text-ink-2"
+                    >
+                      Anotaciones
+                    </button>
+                    <button
+                      onClick={onCopyAiFullText}
+                      className="rounded-[8px] bg-ink px-3 py-1.5 font-sans text-[12px] text-bg"
+                    >
+                      Texto completo
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {alreadyShared ? (
                 <p className="text-center font-sans text-[12px] text-ink-4">
                   All margins shared with {authorName}

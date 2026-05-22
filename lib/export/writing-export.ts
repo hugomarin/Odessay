@@ -165,18 +165,19 @@ const collectInlineRuns = (nodes: ExportNode[] | undefined, footnotes: WritingEx
       continue
     }
 
-    if (node.type === "footnoteReference") {
+    if (node.type === "annotationReference" || node.type === "footnoteReference") {
       const index = readNumber(node.attrs?.index)
       if (index === null) {
         continue
       }
 
+      const type = readString(node.attrs?.type) ?? "footnote"
       const text = readString(node.attrs?.text) ?? ""
-      if (text) {
+      if (text && type === "footnote") {
         footnotes.push({ index, text })
       }
 
-      runs.push({ text: `[^${index}]`, footnoteRef: index })
+      runs.push({ text: type === "footnote" ? `[^${index}]` : `[@${index}]`, footnoteRef: index })
       continue
     }
 

@@ -9,9 +9,13 @@ export type MarginData = {
   anchor_start: number
   anchor_end: number
   anchor_text: string
-  note: string | null
+  type: "personal" | "ai" | "collaborative"
+  text: string
+  note?: string | null
   shared: boolean
   shared_at: string | null
+  archived?: boolean
+  resolved?: boolean
   created_at: string
 }
 
@@ -34,26 +38,38 @@ export function MarginEntry({
   onDelete,
   onToggleShare,
 }: MarginEntryProps) {
-  const [noteValue, setNoteValue] = useState(margin.note ?? "")
+  const [noteValue, setNoteValue] = useState(margin.text ?? margin.note ?? "")
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Sync external changes
   useEffect(() => {
-    setNoteValue(margin.note ?? "")
-  }, [margin.note])
+    setNoteValue(margin.text ?? margin.note ?? "")
+  }, [margin.text, margin.note])
 
   function handleNoteBlur() {
     onBlur()
     const trimmed = noteValue.trim()
     const newNote = trimmed === "" ? null : trimmed
-    if (newNote !== margin.note) {
+    if (newNote !== (margin.text ?? margin.note ?? null)) {
       onUpdateNote(margin.id, newNote)
     }
   }
 
-  const hasNote = !!(margin.note || noteValue.trim())
-  const borderColor = focused ? "var(--cursor)" : hasNote ? "hsl(35,80%,55%)" : "transparent"
+  const borderColor =
+    focused
+      ? "var(--cursor)"
+      : margin.type === "ai"
+        ? "#5B5BD6"
+        : margin.type === "collaborative"
+          ? "#C07B2A"
+          : "#999990"
+  const typeLabel =
+    margin.type === "ai"
+      ? "AI"
+      : margin.type === "collaborative"
+        ? "Collaborative"
+        : "Personal"
 
   return (
     <div
@@ -65,9 +81,20 @@ export function MarginEntry({
     >
       {/* Header: passage + share toggle */}
       <div className="flex items-start justify-between gap-2">
-        <p className="font-lora italic text-[12px] text-ink-4 leading-relaxed line-clamp-2">
-          &ldquo;{margin.anchor_text}&rdquo;
-        </p>
+        <div className="space-y-1">
+          <span
+            className="inline-flex rounded-full px-2 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+            style={{
+              color: borderColor,
+              backgroundColor: `${borderColor}14`,
+            }}
+          >
+            {typeLabel}
+          </span>
+          <p className="font-lora italic text-[12px] text-ink-4 leading-relaxed line-clamp-2">
+            &ldquo;{margin.anchor_text}&rdquo;
+          </p>
+        </div>
         {onToggleShare && (
           <div className="flex items-center gap-1.5 shrink-0">
             <Switch
@@ -93,7 +120,7 @@ export function MarginEntry({
         onChange={(e) => setNoteValue(e.target.value)}
         onFocus={onFocus}
         onBlur={handleNoteBlur}
-        placeholder="Add a note…"
+        placeholder={margin.type === "ai" ? "Add an AI instruction…" : "Add a note…"}
         rows={noteValue ? undefined : 1}
         className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 focus:outline-none"
         style={{ border: "none", minHeight: 20 }}

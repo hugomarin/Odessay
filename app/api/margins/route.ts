@@ -9,6 +9,8 @@ const createMarginSchema = z.object({
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(1),
   anchor_text: z.string().min(1),
+  type: z.enum(["personal", "ai", "collaborative", "footnote"]).default("personal"),
+  text: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 })
 
@@ -56,7 +58,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from("margins")
-    .select("id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, note, shared, shared_at, created_at, updated_at")
+    .select("id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at")
     .eq("writing_id", writingId)
     .order("anchor_start", { ascending: true })
 
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
   const parsed = createMarginSchema.safeParse(body)
   if (!parsed.success) return jsonError(400, "INVALID_INPUT", parsed.error.message)
 
-  const { writing_id, anchor_start, anchor_end, anchor_text, note } = parsed.data
+  const { writing_id, anchor_start, anchor_end, anchor_text, note, text, type } = parsed.data
 
   const resolvedWritingId = await resolveWritingId(writing_id)
   if (!resolvedWritingId) return jsonError(404, "NOT_FOUND", "Writing not found.")
@@ -104,7 +106,9 @@ export async function POST(request: Request) {
       anchor_start,
       anchor_end,
       anchor_text,
-      note: note ?? null,
+      type: type === "footnote" ? "personal" : type,
+      text: text ?? note ?? "",
+      note: note ?? text ?? null,
       shared: false,
     })
     .select()

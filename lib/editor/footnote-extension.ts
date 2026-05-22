@@ -1,21 +1,55 @@
 import { Extension, getMarkRange } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
+import type { JSONContent } from "@tiptap/core"
+import type { AnnotationType } from "@/lib/editor/footnote-node"
 
-// ---------------------------------------------------------------------------
-// Markdown-only helpers (used when mode === "markdown" or for persistence)
-// ---------------------------------------------------------------------------
+export type MarkdownAnnotation = {
+  type: AnnotationType
+  index: number
+  text: string
+}
 
-const FOOTNOTE_REFERENCE_REGEX = /\[\^(\d+)\]/g
+export type MarkdownFootnote = MarkdownAnnotation
+
+type AnnotationRef = {
+  type: AnnotationType
+  index: number
+}
+
+const INLINE_ANNOTATION_RE =
+  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "collaborative"]
 
-const collectDefinitions = (markdown: string) => {
+const annotationSigil = (type: AnnotationType, index: number, text: string) => {
+  const trimmedText = text.trim()
+
+  switch (type) {
+    case "ai":
+      return `[@${index}: ${trimmedText}]`
+    case "personal":
+      return `[@p${index}: ${trimmedText}]`
+    case "collaborative":
+      return `[@c${index}: ${trimmedText}]`
+    case "footnote":
+    default:
+      return `[^${index}: ${trimmedText}]`
+  }
+}
+
+const stripLegacyFootnoteDefinitions = (markdown: string) =>
+  markdown
+    .split("\n")
+    .filter((line) => !line.match(/^\[\^\d+\]:\s*/))
+    .join("\n")
+    .trimEnd()
+
+const collectLegacyFootnoteDefinitions = (markdown: string) => {
   const definitions = new Map<number, string>()
 
   for (const match of markdown.matchAll(FOOTNOTE_DEFINITION_REGEX)) {
     const index = Number(match[1])
-
     if (!Number.isNaN(index)) {
       definitions.set(index, match[2].trim())
     }
@@ -24,159 +58,228 @@ const collectDefinitions = (markdown: string) => {
   return definitions
 }
 
-const stripDefinitions = (markdown: string) => {
-  const lines = markdown.split("\n")
-  const keptLines: string[] = []
+const collectInlineReferences = (markdown: string, definitions: Map<number, string>) => {
+  const refs: AnnotationRef[] = []
+  let match: RegExpExecArray | null
 
-  for (const line of lines) {
-    if (line.match(/^\[\^\d+\]:\s*/)) {
+  INLINE_ANNOTATION_RE.lastIndex = 0
+  while ((match = INLINE_ANNOTATION_RE.exec(markdown)) !== null) {
+    if (match[1]) {
+      refs.push({ type: "footnote", index: Number(match[1]) })
       continue
     }
 
-    keptLines.push(line)
-  }
-
-  return keptLines.join("\n").trimEnd()
-}
-
-const getReferenceOrder = (markdown: string) => {
-  const orderedUnique: number[] = []
-
-  for (const match of markdown.matchAll(FOOTNOTE_REFERENCE_REGEX)) {
-    const index = Number(match[1])
-
-    if (!Number.isNaN(index) && !orderedUnique.includes(index)) {
-      orderedUnique.push(index)
-    }
-  }
-
-  return orderedUnique
-}
-
-const composeMarkdownWithDefinitions = (body: string, definitions: Map<number, string>) => {
-  const trimmedBody = body.trimEnd()
-  const orderedReferences = getReferenceOrder(trimmedBody)
-
-  if (!orderedReferences.length) {
-    return trimmedBody
-  }
-
-  const definitionLines = orderedReferences.map((reference) =>
-    `[^${reference}]: ${definitions.get(reference) ?? ""}`.trimEnd(),
-  )
-
-  return `${trimmedBody}\n\n${definitionLines.join("\n")}`
-}
-
-export type MarkdownFootnote = {
-  index: number
-  text: string
-}
-
-const remapReferences = (markdown: string, orderedReferences: number[]) => {
-  const mapping = new Map<number, number>()
-
-  for (let index = 0; index < orderedReferences.length; index += 1) {
-    mapping.set(orderedReferences[index], index + 1)
-  }
-
-  let remapped = markdown
-
-  for (const [from, to] of mapping.entries()) {
-    if (from === to) {
+    if (match[4]) {
+      refs.push({
+        type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+        index: Number(match[4]),
+      })
       continue
     }
 
-    remapped = remapped.replaceAll(
-      new RegExp(`\\[\\^${escapeRegExp(String(from))}\\]`, "g"),
-      `[^__tmp_${from}__]`,
-    )
-  }
-
-  for (const [from, to] of mapping.entries()) {
-    if (from === to) {
-      continue
+    if (match[6]) {
+      const legacyIndex = Number(match[6])
+      if (definitions.has(legacyIndex)) {
+        refs.push({ type: "footnote", index: legacyIndex })
+      }
     }
-
-    remapped = remapped.replaceAll(`[^__tmp_${from}__]`, `[^${to}]`)
   }
 
-  return { remapped, mapping }
+  return refs
+}
+
+const uniqueReferenceOrderByType = (refs: AnnotationRef[]) => {
+  const order = new Map<AnnotationType, number[]>()
+  const seen = new Map<AnnotationType, Set<number>>()
+
+  for (const type of annotationTypeOrder) {
+    order.set(type, [])
+    seen.set(type, new Set())
+  }
+
+  for (const ref of refs) {
+    const typeSet = seen.get(ref.type)
+    const typeOrder = order.get(ref.type)
+    if (!typeSet || !typeOrder || typeSet.has(ref.index)) continue
+    typeSet.add(ref.index)
+    typeOrder.push(ref.index)
+  }
+
+  return order
 }
 
 export const normalizeMarkdownFootnotes = (markdown: string) => {
-  const definitions = collectDefinitions(markdown)
-  const body = stripDefinitions(markdown)
-  const orderedReferences = getReferenceOrder(body)
-  const { remapped, mapping } = remapReferences(body, orderedReferences)
+  const definitions = collectLegacyFootnoteDefinitions(markdown)
+  const body = stripLegacyFootnoteDefinitions(markdown)
+  const refs = collectInlineReferences(body, definitions)
+  const orderByType = uniqueReferenceOrderByType(refs)
+  const mapping = new Map<string, number>()
 
-  if (!orderedReferences.length) {
-    return remapped.trimEnd()
+  for (const type of annotationTypeOrder) {
+    const orderedRefs = orderByType.get(type) ?? []
+    orderedRefs.forEach((index, next) => {
+      mapping.set(`${type}:${index}`, next + 1)
+    })
   }
 
-  const remappedDefinitions = new Map<number, string>()
+  const normalized = body.replace(
+    INLINE_ANNOTATION_RE,
+    (_full, inlineFootnoteIndex, inlineFootnoteText, sigilPrefix, sigilIndex, sigilText, legacyIndex) => {
+      if (inlineFootnoteIndex) {
+        const nextIndex = mapping.get(`footnote:${Number(inlineFootnoteIndex)}`) ?? Number(inlineFootnoteIndex)
+        return annotationSigil("footnote", nextIndex, String(inlineFootnoteText ?? ""))
+      }
 
-  for (const originalReference of orderedReferences) {
-    const remappedIndex = mapping.get(originalReference) ?? originalReference
-    const definition = definitions.get(originalReference) ?? ""
-    remappedDefinitions.set(remappedIndex, definition)
-  }
+      if (sigilIndex) {
+        const type = sigilPrefix === "p" ? "personal" : sigilPrefix === "c" ? "collaborative" : "ai"
+        const nextIndex = mapping.get(`${type}:${Number(sigilIndex)}`) ?? Number(sigilIndex)
+        return annotationSigil(type, nextIndex, String(sigilText ?? ""))
+      }
 
-  return composeMarkdownWithDefinitions(remapped, remappedDefinitions)
+      const nextIndex = mapping.get(`footnote:${Number(legacyIndex)}`) ?? Number(legacyIndex)
+      return annotationSigil("footnote", nextIndex, definitions.get(Number(legacyIndex)) ?? "")
+    },
+  )
+
+  return normalized.trimEnd()
 }
 
-export const getMarkdownFootnotes = (markdown: string): MarkdownFootnote[] => {
+export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => {
   const normalized = normalizeMarkdownFootnotes(markdown)
-  const definitions = collectDefinitions(normalized)
-  const orderedReferences = getReferenceOrder(stripDefinitions(normalized))
+  const annotations: MarkdownAnnotation[] = []
+  let match: RegExpExecArray | null
 
-  return orderedReferences.map((index) => ({
-    index,
-    text: definitions.get(index) ?? "",
-  }))
+  INLINE_ANNOTATION_RE.lastIndex = 0
+  while ((match = INLINE_ANNOTATION_RE.exec(normalized)) !== null) {
+    if (match[1]) {
+      annotations.push({ type: "footnote", index: Number(match[1]), text: match[2].trim() })
+      continue
+    }
+
+    if (match[4]) {
+      annotations.push({
+        type: match[3] === "p" ? "personal" : match[3] === "c" ? "collaborative" : "ai",
+        index: Number(match[4]),
+        text: match[5].trim(),
+      })
+    }
+  }
+
+  return annotations
 }
 
 export const appendMarkdownFootnote = (markdown: string, note: string) => {
   const normalized = normalizeMarkdownFootnotes(markdown)
-  const body = stripDefinitions(normalized)
-  const definitions = collectDefinitions(normalized)
-  const nextIndex = getReferenceOrder(body).length + 1
-  const nextBody = `${body}[^${nextIndex}]`
-
-  definitions.set(nextIndex, note.trim())
-
-  return composeMarkdownWithDefinitions(nextBody, definitions)
+  const annotations = getMarkdownFootnotes(normalized).filter((annotation) => annotation.type === "footnote")
+  const nextIndex = annotations.length + 1
+  return `${normalized}${annotationSigil("footnote", nextIndex, note.trim())}`.trimEnd()
 }
 
-export const updateMarkdownFootnote = (markdown: string, index: number, note: string) => {
-  const normalized = normalizeMarkdownFootnotes(markdown)
-  const body = stripDefinitions(normalized)
-  const definitions = collectDefinitions(normalized)
+export const updateMarkdownFootnote = (markdown: string, index: number, note: string) =>
+  normalizeMarkdownFootnotes(markdown).replaceAll(
+    new RegExp(`\\[\\^${index}:\\s*[^\\]]*\\]`, "g"),
+    annotationSigil("footnote", index, note.trim()),
+  )
 
-  if (!definitions.has(index)) {
-    return normalized
+export const removeMarkdownFootnote = (markdown: string, index: number) =>
+  normalizeMarkdownFootnotes(
+    normalizeMarkdownFootnotes(markdown).replaceAll(
+      new RegExp(`\\[\\^${index}:\\s*[^\\]]*\\]`, "g"),
+      "",
+    ),
+  ).trimEnd()
+
+export const extractAiAnnotationsFromMarkdown = (markdown: string) =>
+  getMarkdownFootnotes(markdown)
+    .filter((annotation) => annotation.type === "ai")
+    .map((annotation) => annotationSigil("ai", annotation.index, annotation.text))
+    .join("\n")
+
+export const buildAiAnnotationCopy = (
+  markdown: string,
+): { annotationsOnly: string; fullText: string } => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  return {
+    annotationsOnly: extractAiAnnotationsFromMarkdown(normalized),
+    fullText: normalized.replaceAll(/\[@(?:p|c)\d+:\s*[^\]]*?\]/g, "").trimEnd(),
+  }
+}
+
+export type WritingAnnotationNode = {
+  id: string
+  type: AnnotationType
+  index: number
+  text: string
+  anchor_text: string
+  anchor_start: number
+  anchor_end: number
+}
+
+type TextCursor = {
+  offset: number
+}
+
+const collectAnnotationNodes = (
+  node: JSONContent,
+  cursor: TextCursor,
+  result: WritingAnnotationNode[],
+  activeHighlightAnchor: string | null,
+) => {
+  if (node.type === "text") {
+    cursor.offset += node.text?.length ?? 0
+    return
   }
 
-  definitions.set(index, note.trim())
-  return composeMarkdownWithDefinitions(body, definitions)
-}
-
-export const removeMarkdownFootnote = (markdown: string, index: number) => {
-  const normalized = normalizeMarkdownFootnotes(markdown)
-  const definitions = collectDefinitions(normalized)
-
-  if (!definitions.has(index)) {
-    return normalized
+  if (node.type === "hardBreak") {
+    cursor.offset += 1
+    return
   }
 
-  definitions.delete(index)
-  const bodyWithoutReference = stripDefinitions(normalized).replaceAll(`[^${index}]`, "")
-  return normalizeMarkdownFootnotes(composeMarkdownWithDefinitions(bodyWithoutReference, definitions))
+  if (node.type === "annotationReference" || node.type === "footnoteReference") {
+    const anchorText = activeHighlightAnchor ?? ""
+    result.push({
+      id: String(node.attrs?.id ?? crypto.randomUUID()),
+      type: (node.attrs?.type as AnnotationType) ?? "footnote",
+      index: Number(node.attrs?.index ?? 0),
+      text: String(node.attrs?.text ?? ""),
+      anchor_text: anchorText,
+      anchor_start: anchorText ? cursor.offset - anchorText.length : cursor.offset,
+      anchor_end: cursor.offset,
+    })
+    return
+  }
+
+  const nextHighlightAnchor =
+    node.content && node.content.length
+      ? activeHighlightAnchor
+      : null
+
+  if (node.content?.length) {
+    for (const child of node.content) {
+      if (child.type === "text" && child.marks?.some((mark) => mark.type === "highlight")) {
+        const anchorText = child.text ?? ""
+        collectAnnotationNodes(child, cursor, result, anchorText)
+        continue
+      }
+
+      collectAnnotationNodes(child, cursor, result, nextHighlightAnchor)
+    }
+  }
+
+  if (node.type === "paragraph" || node.type === "heading" || node.type === "blockquote") {
+    cursor.offset += 1
+  }
 }
 
-// ---------------------------------------------------------------------------
-// TipTap command extension
-// ---------------------------------------------------------------------------
+export const extractWritingAnnotationNodes = (bodyJson: JSONContent | null | undefined) => {
+  if (!bodyJson || typeof bodyJson !== "object") {
+    return [] as WritingAnnotationNode[]
+  }
+
+  const result: WritingAnnotationNode[] = []
+  collectAnnotationNodes(bodyJson, { offset: 0 }, result, null)
+  return result
+}
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -202,22 +305,29 @@ export const FootnoteExtension = Extension.create({
             return false
           }
 
-          // Count existing footnote nodes to assign the next index
           let maxIndex = 0
           editor.state.doc.descendants((node) => {
-            if (node.type.name === "footnoteReference") {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === "footnote"
+            ) {
               const idx = node.attrs.index as number
               if (idx > maxIndex) maxIndex = idx
             }
           })
           const nextIndex = maxIndex + 1
 
-          // Insert node at end of current selection (without replacing selected text)
           const insertPos = editor.state.selection.to
-          const nodeType = editor.schema.nodes.footnoteReference
+          const nodeType =
+            editor.schema.nodes.annotationReference ?? editor.schema.nodes.footnoteReference
           if (!nodeType) return false
 
-          const refNode = nodeType.create({ index: nextIndex, text: trimmedText })
+          const refNode = nodeType.create({
+            id: crypto.randomUUID(),
+            type: "footnote",
+            index: nextIndex,
+            text: trimmedText,
+          })
           tr.setSelection(TextSelection.create(tr.doc, insertPos))
           tr.insert(insertPos, refNode)
 
@@ -231,7 +341,11 @@ export const FootnoteExtension = Extension.create({
           const positions: number[] = []
 
           editor.state.doc.descendants((node, pos) => {
-            if (node.type.name === "footnoteReference" && (node.attrs.index as number) === index) {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === "footnote" &&
+              (node.attrs.index as number) === index
+            ) {
               positions.push(pos)
             }
           })
@@ -251,19 +365,20 @@ export const FootnoteExtension = Extension.create({
       deleteFootnote:
         (index: number) =>
         ({ editor, tr, dispatch }) => {
-          // Collect positions in reverse order to avoid offset shifts
           const positions: { pos: number; size: number }[] = []
 
           editor.state.doc.descendants((node, pos) => {
-            if (node.type.name === "footnoteReference" && (node.attrs.index as number) === index) {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === "footnote" &&
+              (node.attrs.index as number) === index
+            ) {
               positions.push({ pos, size: node.nodeSize })
             }
           })
 
           if (!positions.length) return false
 
-          // Delete in reverse order; also remove any highlight mark on the
-          // text immediately preceding each ref (the annotated anchor text).
           const highlightMarkType = editor.schema.marks.highlight
           for (const { pos, size } of [...positions].reverse()) {
             if (highlightMarkType) {
@@ -276,19 +391,17 @@ export const FootnoteExtension = Extension.create({
             tr.delete(pos, pos + size)
           }
 
-          // Re-index remaining nodes so indices are sequential
           const nodePositions: { pos: number; currentIndex: number }[] = []
-          const tempDoc = tr.doc
-          tempDoc.descendants((node, pos) => {
-            if (node.type.name === "footnoteReference") {
+          tr.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === "footnote"
+            ) {
               nodePositions.push({ pos, currentIndex: node.attrs.index as number })
             }
           })
 
-          // Sort by appearance order
           nodePositions.sort((a, b) => a.pos - b.pos)
-
-          // Assign sequential indices
           const seenOriginal = new Map<number, number>()
           let nextIdx = 1
           for (const { currentIndex } of nodePositions) {
@@ -297,7 +410,6 @@ export const FootnoteExtension = Extension.create({
             }
           }
 
-          // Apply new indices
           for (const { pos, currentIndex } of [...nodePositions].reverse()) {
             const newIndex = seenOriginal.get(currentIndex) ?? currentIndex
             if (newIndex !== currentIndex) {

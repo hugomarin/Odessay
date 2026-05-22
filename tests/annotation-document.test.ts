@@ -1,0 +1,187 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { describe, expect, it, vi } from "vitest"
+import { applyAnnotationToBody, getBodyMarkdown } from "@/lib/editor/annotation-document"
+
+describe("annotation-document", () => {
+  // Stable UUIDs for deterministic assertions
+  const uuids = [
+    "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+    "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb",
+    "cccccccc-cccc-4ccc-cccc-cccccccccccc",
+  ]
+  let uuidCounter = 0
+
+  vi.stubGlobal("crypto", {
+    randomUUID: () => {
+      const id = uuids[uuidCounter % uuids.length]
+      uuidCounter++
+      return id
+    },
+  })
+
+  describe("getBodyMarkdown", () => {
+    it("returns empty string for null/undefined body_json", () => {
+      expect(getBodyMarkdown(null)).toBe("")
+      expect(getBodyMarkdown(undefined)).toBe("")
+    })
+
+    it("serializes a simple paragraph to markdown", () => {
+      const bodyJson = {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Hello world" }] }],
+      }
+      expect(getBodyMarkdown(bodyJson)).toBe("Hello world")
+    })
+  })
+
+  describe("applyAnnotationToBody", () => {
+    it("inserts an annotation into a document with text", () => {
+      const bodyJson = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Hello world" }],
+          },
+        ],
+      }
+
+      const result = applyAnnotationToBody({
+        bodyJson,
+        bodyText: "Hello world",
+        anchorStart: 0,
+        anchorEnd: 5,
+        type: "ai",
+        text: "simplify",
+      })
+
+      // bodyText preserves the original plain text (annotation text is not part of body_text)
+      expect(result.bodyText).toBe("Hello world")
+      expect(result.bodyMarkdown).toContain("<mark>Hello</mark>")
+      expect(result.bodyMarkdown).toContain("[@1: simplify]")
+      expect(result.bodyJson.content?.length).toBeGreaterThan(0)
+    })
+
+    it("inserts an annotation at the correct range in existing text", () => {
+      const bodyJson = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "The quick brown fox" }],
+          },
+        ],
+      }
+
+      const result = applyAnnotationToBody({
+        bodyJson,
+        bodyText: "The quick brown fox",
+        anchorStart: 4, // "quick"
+        anchorEnd: 9,
+        type: "personal",
+        text: "important detail",
+      })
+
+      expect(result.bodyMarkdown).toContain("<mark>quick</mark>")
+      expect(result.bodyMarkdown).toContain("[@p1: important detail]")
+    })
+
+    it("increments index sequentially for same-type annotations", () => {
+      const bodyJson = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "First note " },
+              {
+                type: "annotationReference",
+                attrs: { id: "x", type: "ai", index: 1, text: "note" },
+              },
+              { type: "text", text: " second" },
+            ],
+          },
+        ],
+      }
+
+      const result = applyAnnotationToBody({
+        bodyJson,
+        bodyText: "First note second",
+        anchorStart: 11,
+        anchorEnd: 17,
+        type: "ai",
+        text: "second note",
+      })
+
+      expect(result.bodyMarkdown).toContain("[@2: second note]")
+    })
+
+    it("round-trips highlight + annotation through body_json and markdown", () => {
+      const bodyJson = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Passage to annotate" }],
+          },
+        ],
+      }
+
+      const result = applyAnnotationToBody({
+        bodyJson,
+        bodyText: "Passage to annotate",
+        anchorStart: 0,
+        anchorEnd: 7,
+        type: "ai",
+        text: "clarify",
+      })
+
+      // Markdown must contain both the highlight mark and the annotation sigil
+      expect(result.bodyMarkdown).toContain("<mark>Passage</mark>")
+      expect(result.bodyMarkdown).toContain("[@1: clarify]")
+
+      // body_json must contain the annotationReference node
+      const paragraph = result.bodyJson.content?.[0]
+      expect(paragraph?.type).toBe("paragraph")
+      const hasAnnotation = paragraph?.content?.some(
+        (node: { type?: string; attrs?: Record<string, unknown> }) =>
+          node.type === "annotationReference" && node.attrs?.text === "clarify",
+      )
+      expect(hasAnnotation).toBe(true)
+
+      // Re-serializing the resulting body_json produces equivalent markdown
+      const reMarkdown = getBodyMarkdown(result.bodyJson)
+      expect(reMarkdown).toContain("<mark>Passage</mark>")
+      expect(reMarkdown).toContain("[@1: clarify]")
+    })
+
+    it("throws on invalid annotation range", () => {
+      expect(() =>
+        applyAnnotationToBody({
+          bodyJson: null,
+          bodyText: "",
+          anchorStart: 5,
+          anchorEnd: 5,
+          type: "ai",
+          text: "bad range",
+        }),
+      ).toThrow("Invalid annotation range.")
+    })
+
+    it("rejects null body with out-of-bounds range", () => {
+      // An empty doc has no text, so any positive range is invalid
+      expect(() =>
+        applyAnnotationToBody({
+          bodyJson: null,
+          bodyText: "",
+          anchorStart: 0,
+          anchorEnd: 1,
+          type: "ai",
+          text: "test",
+        }),
+      ).toThrow("Invalid annotation range.")
+    })
+  })
+})
