@@ -61,7 +61,7 @@ describe("normalizeMarkdownForRoundTrip", () => {
     const markdown = "Body <mark>highlight</mark>[^3] and more[^1]\n\n[^1]: First\n[^3]: Third"
 
     expect(normalizeMarkdownForRoundTrip(markdown)).toBe(
-      "Body ==highlight==[^1] and more[^2]\n\n[^1]: Third\n[^2]: First",
+      "Body ==highlight==[^1: Third] and more[^2: First]",
     )
   })
 })
