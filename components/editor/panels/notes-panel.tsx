@@ -60,7 +60,7 @@ export function NotesPanel({
   const aiAnnotations = useMemo(() => annotations.filter((a) => a.type === "ai"), [annotations])
 
   const filterTabs: { id: AnnotationType | "all"; label: string }[] = [
-    { id: "all", label: "Todas" },
+    { id: "all", label: "All" },
     ...(presentTypes.has("ai") ? [{ id: "ai" as const, label: "AI" }] : []),
     ...(presentTypes.has("personal") ? [{ id: "personal" as const, label: "Personal" }] : []),
     ...(presentTypes.has("collaborative") ? [{ id: "collaborative" as const, label: "Collab" }] : []),
@@ -134,7 +134,7 @@ export function NotesPanel({
                 return (
                   <article
                     key={key}
-                    className="group rounded-[8px] px-3 py-2.5 transition-colors hover:bg-muted"
+                    className="group rounded-[8px] bg-muted px-3 py-2.5 transition-colors hover:bg-muted-hover"
                   >
                     <textarea
                       value={draft}
