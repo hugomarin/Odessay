@@ -1,11 +1,15 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { Mic } from "lucide-react"
+import { VoiceRecorderControls } from "./voice-recorder-controls"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
 
 type AnnotationBubbleProps = {
   position: { x: number; y: number } | null
   type?: "personal" | "ai" | "footnote"
-  onConfirm: (note: string) => void
+  onConfirm: (note: string) => void | Promise<void>
   onCancel: () => void
 }
 
@@ -13,16 +17,24 @@ const AI_QUICK_CHIPS = ["eliminar", "modificar", "expandir", "valida esto", "sim
 
 export function AnnotationBubble({ position, type = "personal", onConfirm, onCancel }: AnnotationBubbleProps) {
   const [note, setNote] = useState("")
+  const [isSubmittingVoice, setIsSubmittingVoice] = useState(false)
+  const [voiceError, setVoiceError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { state, start, stop, reset, blob, waveformData, duration, permissionDenied, isSupported } = useVoiceRecorder()
+  const isPersonalNote = type === "personal"
+  const isVoiceMode = isPersonalNote && state !== "idle"
 
   // Focus textarea when shown
   useEffect(() => {
     if (position) {
       setNote("")
+      setVoiceError(null)
+      setIsSubmittingVoice(false)
+      reset()
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
-  }, [position])
+  }, [position, reset])
 
   // Dismiss on Escape, confirm on Enter (without shift)
   useEffect(() => {
@@ -40,9 +52,76 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
 
   if (!position) return null
 
-  function handleConfirm() {
+  async function handleConfirm() {
     const trimmed = note.trim()
-    if (trimmed) onConfirm(trimmed)
+    if (type !== "personal" && !trimmed) return
+    await onConfirm(type === "personal" ? trimmed : trimmed)
+  }
+
+  async function handleVoiceSubmit() {
+    if (!blob) return
+
+    setVoiceError(null)
+    setIsSubmittingVoice(true)
+
+    try {
+      const formData = new FormData()
+      formData.set("audio", blob, "voice-note.webm")
+
+      const response = await fetch("/api/margins/transcribe", {
+        method: "POST",
+        body: formData,
+      })
+
+      const payload: {
+        data: { transcript?: string } | null
+        error: { message?: string } | null
+      } = await response.json()
+
+      if (!response.ok || payload.error) {
+        throw new Error(payload.error?.message ?? "Transcription failed.")
+      }
+
+      const transcript = payload.data?.transcript?.trim() ?? ""
+      if (!transcript) {
+        throw new Error("No transcript was returned for this recording.")
+      }
+
+      await onConfirm(transcript)
+      reset()
+    } catch (error) {
+      setVoiceError(error instanceof Error ? error.message : "Transcription failed.")
+    } finally {
+      setIsSubmittingVoice(false)
+    }
+  }
+
+  const isMicDisabled = !isSupported || permissionDenied
+  const micTooltipMessage = !isSupported
+    ? "Voice recording is not supported in this browser."
+    : "Microphone permission denied. Enable it in your browser settings."
+
+  const micButton = (
+    <button
+      type="button"
+      onClick={() => {
+        setVoiceError(null)
+        void start()
+      }}
+      disabled={isMicDisabled}
+      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+      aria-label="Record a voice note"
+    >
+      <Mic className="h-4 w-4" strokeWidth={1.5} />
+    </button>
+  )
+
+  const canSubmitText = type === "personal" || note.trim().length > 0
+
+  function handleDiscardVoice() {
+    setVoiceError(null)
+    setIsSubmittingVoice(false)
+    reset()
   }
 
   return (
@@ -65,22 +144,37 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
         gap: 8,
       }}
     >
-      <textarea
-        ref={textareaRef}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault()
-            handleConfirm()
-          }
-        }}
-        placeholder={type === "footnote" ? "Write your footnote…" : type === "ai" ? "Write your AI instruction…" : "Write your highlight note…"}
-        rows={3}
-        className="w-full resize-none rounded-[6px] bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 focus:outline-none"
-        style={{ border: "none" }}
-        aria-label="Annotation text"
-      />
+      {isVoiceMode ? (
+        <VoiceRecorderControls
+          state={state}
+          waveformData={waveformData}
+          duration={duration}
+          isSubmitting={isSubmittingVoice}
+          errorMessage={voiceError}
+          onStop={stop}
+          onSubmit={() => {
+            void handleVoiceSubmit()
+          }}
+          onDiscard={handleDiscardVoice}
+        />
+      ) : (
+        <textarea
+          ref={textareaRef}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault()
+              void handleConfirm()
+            }
+          }}
+          placeholder={type === "footnote" ? "Write your footnote…" : type === "ai" ? "Write your AI instruction…" : "Write your highlight note…"}
+          rows={3}
+          className="w-full resize-none rounded-[6px] bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 focus:outline-none"
+          style={{ border: "none" }}
+          aria-label="Annotation text"
+        />
+      )}
       {type === "ai" ? (
         <div className="flex flex-wrap gap-1">
           {AI_QUICK_CHIPS.map((chip) => (
@@ -102,9 +196,27 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
         >
           Cancel
         </button>
+        {isPersonalNote && !isVoiceMode ? (
+          isMicDisabled ? (
+            <TooltipProvider delayDuration={120}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">{micButton}</span>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="center">
+                  {micTooltipMessage}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            micButton
+          )
+        ) : null}
         <button
-          onClick={handleConfirm}
-          disabled={!note.trim()}
+          onClick={() => {
+            void handleConfirm()
+          }}
+          disabled={!canSubmitText || isVoiceMode}
           className="rounded-[7px] bg-ink px-3 py-1 font-sans text-[12px] font-medium text-bg transition-opacity hover:opacity-90 disabled:opacity-40"
         >
           {type === "footnote" ? "Add footnote" : "Save"}
