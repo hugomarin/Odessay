@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Build the voice-note annotation flow in Reading margins. Added a client-side useVoiceRecorder hook with the idle/requesting/recording/stopped state machine, 100ms RMS waveform sampling from AnalyserNode, 120-second auto-stop, and in-memory blob retention only. Added VoiceRecorderControls for waveform/timer/stop/submit/discard states, then wired AnnotationBubble to switch between typed notes and voice recording, transcribe recorded audio through POST /api/margins/transcribe, surface inline transcription errors, and disable the mic with a tooltip when microphone permission is denied or unsupported. ReadingInteractiveShell now routes the personal margin path through the bubble so text notes and voice notes share the same submission flow.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-175",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-175/build-usevoicerecorder-hook-and-voicerecordercontrols-in",
+      "commit": "7502caa",
+      "date": "2026-05-22",
+      "notes": "Validation: npm run env:check (passed after copying .env.local from the main worktree), npm run typecheck (passed), npm run lint (passed with the same pre-existing warnings in components/editor/editor-shell.tsx and components/editor/panels/notes-panel.tsx), npm test (68 files, 388 tests passing), npm test -- --run tests/voice-recorder-helpers.test.ts (4 tests passing). Performance contract: not required by brief because the change does not touch page bootstrap, list payloads, local-db fan-out, or the editor keystroke path; the voice flow is opt-in and sequential (transcribe then submit margin). Delivery gate passed once this built entry existed."
+    },
+    {
       "what": "Add a stateless authenticated transcription proxy at POST /api/margins/transcribe. The route accepts multipart/form-data with an `audio` blob, forwards the raw binary to Deepgram's prerecorded listen endpoint using a server-side DEEPGRAM_API_KEY, preserves the blob MIME type for webm/ogg uploads, and returns the normalized `{ data, error }` envelope expected by Odessay. Added focused route tests for unauthorized access, missing audio input, successful transcript extraction, and upstream Deepgram failures. Declared the missing direct TipTap/jszip package dependencies required for this repo's typecheck/test toolchain under pnpm.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-174",
