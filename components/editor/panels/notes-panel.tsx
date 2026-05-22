@@ -124,7 +124,7 @@ export function NotesPanel({
               <p className="text-[11px] text-ink-4">Selecciona texto en el documento para agregar una.</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-0.5">
+            <div className="flex flex-col gap-2">
               {ordered.map((annotation) => {
                 const key = `${annotation.type}:${annotation.index}`
                 const color = TYPE_COLOR[annotation.type]
@@ -134,7 +134,7 @@ export function NotesPanel({
                 return (
                   <article
                     key={key}
-                    className="group rounded-[8px] bg-muted px-3 py-2.5 transition-colors hover:bg-muted-hover"
+                    className="group rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2.5 transition-colors hover:bg-muted"
                   >
                     <textarea
                       value={draft}
