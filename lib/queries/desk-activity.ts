@@ -5,7 +5,7 @@ import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
-export type DeskStatusTone = "new" | "exploring" | "draft" | "done"
+export type DeskStatusTone = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
 
 export type DeskRecipientPreview = {
   username: string

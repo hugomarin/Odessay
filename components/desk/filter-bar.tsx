@@ -8,6 +8,7 @@ import type { CollectionOption } from "@/lib/collections/collections"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import type { WritingStatus } from "@/lib/writings/status"
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
 type DeskFilterBarProps = {
@@ -39,6 +40,8 @@ export function DeskFilterBar({
 }: DeskFilterBarProps) {
   const [collectionsOpen, setCollectionsOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const { settings } = useUserSettingsContext()
+  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
 
   const allCollectionOptions = useMemo(
     () => [
@@ -156,7 +159,7 @@ export function DeskFilterBar({
             onOpenChange={setStatusOpen}
           >
             <div className="space-y-1 px-3 py-2">
-              {WRITING_STATUS_VALUES.map((status) => {
+              {enabledStatuses.map((status) => {
                 const selected = selectedStatuses.includes(status)
                 return (
                   <button

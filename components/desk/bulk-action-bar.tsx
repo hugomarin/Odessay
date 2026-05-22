@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
 type BulkActionBarProps = {
@@ -35,6 +36,8 @@ export function BulkActionBar({
   onCreateCollection,
 }: BulkActionBarProps) {
   const [statusOpen, setStatusOpen] = useState(false)
+  const { settings } = useUserSettingsContext()
+  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
 
   return (
     <div
@@ -86,7 +89,7 @@ export function BulkActionBar({
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[180px] p-[5px]">
-              {WRITING_STATUS_VALUES.map((status) => (
+              {enabledStatuses.map((status) => (
                 <button
                   key={status}
                   type="button"

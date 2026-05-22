@@ -15,7 +15,8 @@ import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { cn } from "@/lib/utils"
-import { getWritingStatusLabel } from "@/lib/writings/status"
+import { WritingStatusPicker } from "@/components/writings/writing-status-picker"
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
 
@@ -53,7 +54,7 @@ type ApiEnvelope<TData> = {
 
 type ExportFormat = "markdown" | "pdf" | "docx"
 
-const STATUS_OPTIONS: WritingStatus[] = ["new", "exploring", "draft", "done"]
+const STATUS_OPTIONS: WritingStatus[] = ["new", "exploring", "draft", "in_review", "done", "archived", "canceled"]
 
 const DEFAULT_SHARE_LINK_STATE: ShareLinkState = {
   active: false,
@@ -94,72 +95,6 @@ const copyTextWithFallback = async (value: string) => {
   } finally {
     document.body.removeChild(textarea)
   }
-}
-
-function WritingStatusIcon({ status, className }: { status: WritingStatus; className?: string }) {
-  if (status === "new") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={cn("h-[13px] w-[13px]", className)}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      >
-        <circle cx="12" cy="12" r="10" strokeDasharray="3.5 2.5" />
-      </svg>
-    )
-  }
-
-  if (status === "exploring") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={cn("h-[13px] w-[13px]", className)}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 8v4l2 2" />
-      </svg>
-    )
-  }
-
-  if (status === "done") {
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className={cn("h-[13px] w-[13px]", className)}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path d="m8 12 3 3 5-5" />
-      </svg>
-    )
-  }
-
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className={cn("h-[13px] w-[13px]", className)}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    >
-      <circle cx="12" cy="12" r="10" />
-    </svg>
-  )
 }
 
 function DropdownTrigger({
@@ -250,8 +185,9 @@ export function PropertiesPanel({
   const [isExportingMarkdown, setIsExportingMarkdown] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingDocx, setIsExportingDocx] = useState(false)
-  const [statusOpen, setStatusOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const { settings } = useUserSettingsContext()
+  const enabledStatuses = STATUS_OPTIONS.filter((s) => !settings.disabledStatuses.includes(s))
 
   const hasRemoteWriting = Boolean(writingId) && lifecycle === "server-confirmed"
   const shareApiPath = hasRemoteWriting ? `/api/writings/${writingId}/share-test-link` : null
@@ -429,31 +365,11 @@ export function PropertiesPanel({
       <div className="space-y-5 p-4">
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Status</p>
-          <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-            <PopoverTrigger asChild>
-              <div>
-                <DropdownTrigger
-                  open={statusOpen}
-                  icon={<WritingStatusIcon status={status} />}
-                  label={getWritingStatusLabel(status)}
-                />
-              </div>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-[216px] p-[5px]">
-              {STATUS_OPTIONS.map((option) => (
-                <PopoverItem
-                  key={option}
-                  selected={option === status}
-                  icon={<WritingStatusIcon status={option} />}
-                  label={getWritingStatusLabel(option)}
-                  onSelect={() => {
-                    onStatusChange(option)
-                    setStatusOpen(false)
-                  }}
-                />
-              ))}
-            </PopoverContent>
-          </Popover>
+          <WritingStatusPicker
+            value={status}
+            onChange={onStatusChange}
+            enabledStatuses={enabledStatuses}
+          />
         </section>
 
         {hasRemoteWriting && writingId ? <WritingCollectionsSection writingId={writingId} /> : null}

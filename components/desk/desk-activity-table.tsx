@@ -17,6 +17,7 @@ import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
 type DeskActivityTableProps = {
@@ -43,7 +44,10 @@ const STATUS_PILL_STYLES: Record<DeskStatusTone, string> = {
   new: "bg-[hsl(220,40%,94%)] text-[hsl(220,45%,42%)]",
   exploring: "bg-[hsl(35,50%,92%)] text-[hsl(35,50%,32%)]",
   draft: "bg-muted text-ink-4",
+  in_review: "bg-[hsl(260,35%,94%)] text-[hsl(260,40%,40%)]",
   done: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
+  archived: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
+  canceled: "bg-[hsl(0,30%,94%)] text-[hsl(0,35%,42%)]",
 }
 
 const buildInitials = (value: string) =>
@@ -75,6 +79,8 @@ export function DeskActivityTable({
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const { settings } = useUserSettingsContext()
+  const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
   const collectionOptionById = new Map(collectionOptions.map((option) => [option.id, option]))
 
   if (isLoading) {
@@ -254,7 +260,7 @@ export function DeskActivityTable({
                             className="min-w-[140px]"
                             onClick={(event) => event.stopPropagation()}
                           >
-                            {WRITING_STATUS_VALUES.map((status) => (
+                            {enabledStatuses.map((status) => (
                               <DropdownMenuItem
                                 key={status}
                                 className="flex cursor-pointer items-center justify-between gap-3 text-[13px]"
@@ -263,7 +269,10 @@ export function DeskActivityTable({
                                   void onStatusChange?.(row.id, status)
                                 }}
                               >
-                                <span>{getWritingStatusLabel(status)}</span>
+                                <span className="flex items-center gap-2">
+                                  <WritingStatusIcon status={status} />
+                                  {getWritingStatusLabel(status)}
+                                </span>
                                 {row.stateTone === status ? (
                                   <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
                                 ) : null}

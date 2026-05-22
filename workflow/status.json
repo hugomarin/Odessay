@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "Antes de mover un issue a In Review: agregar/actualizar una entrada en 'built' con issue, linear_url, commit y fecha. Tras merge confirmado: mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-05-19",
+  "last_updated": "2026-05-21",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -37,6 +37,15 @@
     "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
   },
   "built": [
+    {
+      "what": "Expand writing statuses from 4 to 7 canonical values (new, exploring, draft, in_review, done, archived, canceled) with a Linear-like icon-first picker and per-user status toggles in Settings. Added DB migrations for expanded status values and a disabled_statuses column on profiles. Created shared WritingStatusPicker component used across Desk, Editor, Collections, and Public surfaces. Added /settings/writing page with switch-based status toggles: disabling an active status shows a confirmation dialog with affected count and bulk-remaps those writings to draft through the local-first pipeline. Added /api/user/settings PATCH endpoint with validation that draft is never disabled. Integrated disabled-status filtering into Desk filters, bulk actions, inline status changes, and editor properties panel.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-168",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-168/expand-writing-statuses-with-linear-like-picker-and-per-user-status",
+      "commit": "009a046",
+      "date": "2026-05-21",
+      "notes": "Validation: npm run typecheck (passed), npm run lint (passed with same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (407 tests passing). Performance contract: interaction latency — editor trace captured at artifacts/perf/ode-168-editor-trace.json.gz, gate passed with 14 pass, 0 warn, 1 skip (keydown_p95=12.50ms, input_p95=7.58ms); reactive fan-out — 3 automated tests prove coherent localDB updates and no stale filter state after bulk remap; TTI/waterfall — no new bootstrap paths or duplicate fetches introduced, settings page reuses existing auth + API patterns. Review round 1 rejections addressed: (1) removed DesignGridOverlay dev import from layout.tsx that caused webpack build failure, (2) added Zod .refine() to PATCH /api/user/settings rejecting draft in disabled_statuses, (3) added 14 new tests covering API boundary validation and reactive fan-out behavior."
+    },
     {
       "what": "Polish Desk and editor review surfaces across the current writing workflow. Replaced the temporary public home shell with a minimal landing CTA, unified all new-writing entry points through an explicit fresh-draft flow, simplified Desk chrome and row surfaces, added per-row markdown copy/download actions, removed the artificial `Empty draft` fallback, aligned the collapsed sidebar rail and editor tab radius, standardized right-side panel widths, added correction toggles that match the Properties switch pattern, suppressed the generic selection popup inside tables, and hardened correction-block remote sync so unauthorized/forbidden responses soft-fail without breaking the editor runtime.",
       "phase": "Fase 3 — Organizar y publicar",
@@ -1323,6 +1332,15 @@
       "commit": "bff1eb1",
       "date": "2026-05-17",
       "notes": "Traceability backfill from merged PR #146. Merge commit: bff1eb13cc4ded335b7d1fd967a98542ea292d19. PR: fix(ai): simplificar correcciones, mejorar resiliencia y contrato de velocidad multidimensional [ODE-502]. Included workstreams: AI correction contract simplification/resilience, orthography panel + inline suggestion UI simplification, import timeout cleanup, and performance-contract documentation/skill updates."
+    },
+    {
+      "what": "Fix AI correction engine bugs (identity-filtered corrections, stale suggestions, panel refresh on manual edit, duplicate grouping, false-positive technical English) and AI title suggestion issues (JSON parse crash, English titles on Spanish content, academic phrasing, getText vs markdown). Also fix Desk shares reloading on every local save.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-166",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-166/correcciones-al-motor-de-correccion-automatica-y-sugerencias-de-titulo",
+      "commit": "01b7495",
+      "date": "2026-05-20",
+      "notes": "Traceability backfill — ODE-166 was merged as PR #159 on 2026-05-20 but was not registered in status.json at the time. Merge commit: 01b749510a7721fc655e7f1b7a06f6cc00effed4. Detected as drift during ODE-168 round 2 review CI run."
     }
   ]
 }
