@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Add a stateless authenticated transcription proxy at POST /api/margins/transcribe. The route accepts multipart/form-data with an `audio` blob, forwards the raw binary to Deepgram's prerecorded listen endpoint using a server-side DEEPGRAM_API_KEY, preserves the blob MIME type for webm/ogg uploads, and returns the normalized `{ data, error }` envelope expected by Odessay. Added focused route tests for unauthorized access, missing audio input, successful transcript extraction, and upstream Deepgram failures. Declared the missing direct TipTap/jszip package dependencies required for this repo's typecheck/test toolchain under pnpm.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-174",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-174/implement-post-apimarginstranscribe-with-deepgram",
+      "commit": "f2fb784",
+      "date": "2026-05-22",
+      "notes": "Validation: npm run env:check (passed after copying .env.local from the main worktree), npm run typecheck (passed), npm run lint (passed with the same 6 pre-existing react-hooks/exhaustive-deps warnings in components/editor/editor-shell.tsx), npm test (67 files, 383 tests passing), ./node_modules/.bin/vitest run tests/api/margins-transcribe-route.test.ts (4 tests passing), npm run ops:delivery:gate (passed). Performance contract: not required by brief because this is a server-only proxy route. The route was validated through unit coverage and delivery gates; a manual authenticated request against the live Deepgram upstream was not exercised from this CLI session."
+    },
+    {
       "what": "Rewrite the annotation architecture spec so `body_json` becomes the single source of truth for all annotation types, with `margins` documented as a materialized index. The feature doc now reflects the final unified `annotationReference` node model, inline markdown sigils for AI/personal/collaborative/footnote annotations, corrected semantics for `personal`, and the decided write/export path for annotated texts.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-169",
