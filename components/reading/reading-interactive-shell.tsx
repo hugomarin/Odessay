@@ -370,10 +370,6 @@ export function ReadingInteractiveShell({
   // ─── Actions ───────────────────────────────────────────────────────────────
 
   function handleSelectType(type: "personal" | "ai" | "footnote") {
-    if (type === "personal") {
-      handleAnnotateConfirm("", "personal")
-      return
-    }
     setAnnotationType(type)
   }
 
