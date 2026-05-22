@@ -7,6 +7,13 @@ import { WRITING_STATUS_VALUES } from "@/lib/writings/status"
 
 const settingsPatchSchema = z.object({
   disabled_statuses: z.array(z.enum(WRITING_STATUS_VALUES)).optional(),
+}).refine((data) => {
+  if (data.disabled_statuses === undefined) {
+    return true
+  }
+  return !data.disabled_statuses.includes("draft")
+}, {
+  message: "draft cannot be disabled",
 })
 
 const isMissingDisabledStatusesColumn = (error: PostgrestError | null) => {
