@@ -208,6 +208,22 @@ export type PublicationChecklistItem = {
   status: PublicationChecklistStatus;
 };
 
+export type LocalPublicationReview = {
+  id: string;
+  writing_id: string;
+  source_hash: string;
+  source_markdown: string;
+  title: string;
+  model: string;
+  suggestions: PublicationSuggestion[];
+  checklist: PublicationChecklistItem[];
+  summary: string | null;
+  created_at: string;
+  updated_at: string;
+  lookup_key: string;
+  last_error: string | null;
+};
+
 export type LocalCorrectionBlock = {
   id: string;
   writingId: string;
