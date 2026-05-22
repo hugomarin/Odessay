@@ -25,6 +25,7 @@ import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   appendMarkdownFootnote,
+  extractWritingAnnotationNodes,
   getMarkdownFootnotes,
   removeMarkdownFootnote,
   updateMarkdownFootnote,
@@ -2405,7 +2406,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (mode === "rich") {
       const contentRevision = version || richFootnoteRevision
       void contentRevision
-      return editor ? getEditorAnnotations(editor) : []
+      return editor ? extractWritingAnnotationNodes(editor.getJSON()) : []
     }
 
     return getMarkdownFootnotes(markdownValue).filter((f) => f.type === "footnote")
