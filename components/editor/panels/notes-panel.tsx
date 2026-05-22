@@ -119,33 +119,32 @@ export function NotesPanel({
               const key = `${annotation.type}:${annotation.index}`
               const color = TYPE_COLOR[annotation.type]
               const label = TYPE_LABEL[annotation.type]
+              const draft = drafts[key] ?? ""
+              const lineCount = draft.split("\n").length
               return (
                 <article
                   key={key}
-                  className="space-y-2 rounded-md border-[0.5px] border-border bg-bg p-3"
-                  style={{ borderLeftColor: color, borderLeftWidth: 2 }}
+                  className="group rounded-[8px] bg-bg px-3 py-2.5"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
-                        style={{ color, backgroundColor: `${color}14` }}
-                      >
-                        {label}
-                      </span>
-                      <span className="font-lora text-[13px] text-ink-3">[{annotation.index}]</span>
-                    </div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span
+                      className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+                      style={{ color, backgroundColor: `${color}14` }}
+                    >
+                      {label} {annotation.index}
+                    </span>
                     <button
                       type="button"
                       onClick={() => onDeleteAnnotation(annotation.type, annotation.index)}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                      className="hidden h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 transition-colors hover:bg-muted hover:text-ink group-hover:flex"
                       aria-label={`Delete ${label} ${annotation.index}`}
                     >
-                      <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                      <Trash2 className="h-[11px] w-[11px]" strokeWidth={1.5} />
                     </button>
                   </div>
                   <textarea
-                    value={drafts[key] ?? ""}
+                    value={draft}
+                    rows={Math.max(1, lineCount)}
                     onChange={(e) =>
                       setDrafts((prev) => ({ ...prev, [key]: e.target.value }))
                     }
@@ -162,7 +161,7 @@ export function NotesPanel({
                           ? "Collaborative note…"
                           : "Note text…"
                     }
-                    className="min-h-16 w-full resize-y rounded-md border-[0.5px] border-border bg-sb px-2.5 py-2 text-[13px] text-ink outline-none focus:border-ink"
+                    className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
                   />
                 </article>
               )
