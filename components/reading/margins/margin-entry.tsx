@@ -83,7 +83,7 @@ export function MarginEntry({
       <div className="flex items-start justify-between gap-2">
         <div className="space-y-1">
           <span
-            className="inline-flex rounded-full px-2 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+            className="inline-flex rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
             style={{
               color: borderColor,
               backgroundColor: `${borderColor}14`,

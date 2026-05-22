@@ -128,7 +128,7 @@ export function NotesPanel({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span
-                        className="rounded-full px-2 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+                        className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
                         style={{ color, backgroundColor: `${color}14` }}
                       >
                         {label}
