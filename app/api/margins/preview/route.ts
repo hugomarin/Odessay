@@ -34,7 +34,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await admin
     .from("margins")
-    .select("id, writing_id, anchor_start, anchor_end, anchor_text, note, shared, shared_at, created_at, updated_at")
+    .select("id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at")
     .eq("writing_id", writingId)
     .eq("shared", true)
     .order("anchor_start", { ascending: true })
