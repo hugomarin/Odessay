@@ -35,7 +35,7 @@ import {
   normalizeMarkdownForRoundTrip,
   toggleMarkdownInlineMarker,
 } from "@/lib/editor/markdown-format"
-import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
+import { FOOTNOTE_REF_EVENT, getEditorAnnotations, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -2405,7 +2405,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (mode === "rich") {
       const contentRevision = version || richFootnoteRevision
       void contentRevision
-      return editor ? getEditorFootnotes(editor) : []
+      return editor ? getEditorAnnotations(editor) : []
     }
 
     return getMarkdownFootnotes(markdownValue).filter((f) => f.type === "footnote")
@@ -3732,7 +3732,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
               <NotesPanel
-                footnotes={footnotes}
+                annotations={footnotes}
+                currentMarkdown={currentDocumentMarkdown}
                 onClose={closeActivePanel}
                 onAddFootnote={(text) => {
                   if (mode === "rich" && editor) {
@@ -3745,24 +3746,24 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     applyMarkdownFromPanel(nextMarkdown)
                   }
                 }}
-                onUpdateFootnote={(index, text) => {
+                onUpdateAnnotation={(type, index, text) => {
                   if (mode === "rich" && editor) {
-                    editor.commands.updateFootnote(index, text)
+                    editor.commands.updateAnnotation(type, index, text)
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
-                  } else {
+                  } else if (type === "footnote") {
                     const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
                     applyMarkdownFromPanel(nextMarkdown)
                   }
                 }}
-                onDeleteFootnote={(index) => {
+                onDeleteAnnotation={(type, index) => {
                   if (mode === "rich" && editor) {
-                    editor.commands.deleteFootnote(index)
+                    editor.commands.deleteAnnotation(type, index)
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
-                  } else {
+                  } else if (type === "footnote") {
                     const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
                     applyMarkdownFromPanel(nextMarkdown)
                   }

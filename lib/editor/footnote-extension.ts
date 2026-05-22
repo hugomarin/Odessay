@@ -302,7 +302,9 @@ declare module "@tiptap/core" {
       addFootnote: (text: string) => ReturnType
       addAnnotation: (type: AnnotationType, text: string) => ReturnType
       updateFootnote: (index: number, text: string) => ReturnType
+      updateAnnotation: (type: AnnotationType, index: number, text: string) => ReturnType
       deleteFootnote: (index: number) => ReturnType
+      deleteAnnotation: (type: AnnotationType, index: number) => ReturnType
     }
   }
 }
@@ -471,6 +473,78 @@ export const FootnoteExtension = Extension.create({
             }
           }
 
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      updateAnnotation:
+        (type: AnnotationType, index: number, text: string) =>
+        ({ editor, tr, dispatch }) => {
+          const positions: number[] = []
+          editor.state.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type &&
+              (node.attrs.index as number) === index
+            ) {
+              positions.push(pos)
+            }
+          })
+          if (!positions.length) return false
+          for (const pos of positions) {
+            const node = editor.state.doc.nodeAt(pos)
+            if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, text: text.trim() })
+          }
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      deleteAnnotation:
+        (type: AnnotationType, index: number) =>
+        ({ editor, tr, dispatch }) => {
+          const positions: { pos: number; size: number }[] = []
+          editor.state.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type &&
+              (node.attrs.index as number) === index
+            ) {
+              positions.push({ pos, size: node.nodeSize })
+            }
+          })
+          if (!positions.length) return false
+          const highlightMarkType = editor.schema.marks.highlight
+          for (const { pos, size } of [...positions].reverse()) {
+            if (highlightMarkType) {
+              const $beforeRef = tr.doc.resolve(pos)
+              const range = getMarkRange($beforeRef, highlightMarkType)
+              if (range) tr.removeMark(range.from, range.to, highlightMarkType)
+            }
+            tr.delete(pos, pos + size)
+          }
+          // Reindex remaining annotations of the same type
+          const remaining: { pos: number; currentIndex: number }[] = []
+          tr.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type
+            ) {
+              remaining.push({ pos, currentIndex: node.attrs.index as number })
+            }
+          })
+          remaining.sort((a, b) => a.pos - b.pos)
+          const seen = new Map<number, number>()
+          let nextIdx = 1
+          for (const { currentIndex } of remaining) {
+            if (!seen.has(currentIndex)) seen.set(currentIndex, nextIdx++)
+          }
+          for (const { pos, currentIndex } of [...remaining].reverse()) {
+            const newIndex = seen.get(currentIndex) ?? currentIndex
+            if (newIndex !== currentIndex) {
+              const node = tr.doc.nodeAt(pos)
+              if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, index: newIndex })
+            }
+          }
           if (dispatch) dispatch(tr)
           return true
         },
