@@ -356,6 +356,9 @@ export default function DeskPage() {
     }
   }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadSharedWritings])
   const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
+  const writingById = useMemo(() => {
+    return new Map(rawWritings.map((writing) => [writing.id, writing]))
+  }, [rawWritings])
   const collectionIdsByWritingId = useMemo(() => {
     const grouped = new Map<string, string[]>()
 
@@ -535,9 +538,8 @@ export default function DeskPage() {
     [renameTarget, saveWritingTitleById],
   )
 
-  const getWritingMarkdownById = useCallback(async (writingId: string) => {
-    const writing = await localDB.writings.get(writingId)
-
+  const getWritingMarkdownPayload = useCallback((writingId: string) => {
+    const writing = writingById.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return null
     }
@@ -551,20 +553,20 @@ export default function DeskPage() {
         writingId: writing.id,
       }),
     }
-  }, [])
+  }, [writingById])
 
   const copyWritingMarkdown = useCallback(async (writingId: string) => {
-    const payload = await getWritingMarkdownById(writingId)
+    const payload = getWritingMarkdownPayload(writingId)
 
     if (!payload) {
       return
     }
 
     await copyTextWithFallback(payload.markdown)
-  }, [getWritingMarkdownById])
+  }, [getWritingMarkdownPayload])
 
-  const downloadWritingMarkdown = useCallback(async (writingId: string) => {
-    const payload = await getWritingMarkdownById(writingId)
+  const downloadWritingMarkdown = useCallback((writingId: string) => {
+    const payload = getWritingMarkdownPayload(writingId)
 
     if (!payload) {
       return
@@ -572,7 +574,7 @@ export default function DeskPage() {
 
     const blob = new Blob([payload.markdown], { type: "text/markdown;charset=utf-8" })
     downloadBlob(blob, payload.filename)
-  }, [getWritingMarkdownById])
+  }, [getWritingMarkdownPayload])
 
   return (
     <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
