@@ -60,7 +60,7 @@
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-177",
       "linear_url": "https://linear.app/z9ne/issue/ODE-177/bold-text-inside-highlights-renders-with-double-color-layer",
-      "commit": "ae73170",
+      "commit": "e467912",
       "date": "2026-05-24",
       "notes": "Validation: npm run ops:status:drift (passed), npm run typecheck (passed), npm run lint (passed with the same pre-existing warnings in components/editor/editor-shell.tsx and components/editor/panels/notes-panel.tsx), npm test -- --run tests/highlight-layer.test.ts tests/markdown-format.test.ts (11 tests passing), npm test (69 files, 390 tests passing). Performance contract: not required because the change is limited to the reading/preview highlight overlay and does not touch editor input, bootstrap payloads, localDB fan-out, or sync flow."
     },
