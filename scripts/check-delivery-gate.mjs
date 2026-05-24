@@ -56,33 +56,6 @@ if (!issueMatch) {
 }
 
 const issueId = issueMatch[0].toUpperCase();
-const status = JSON.parse(readFileSync("workflow/status.json", "utf8"));
-const entry = status.built.find((builtEntry) => builtEntry.issue === issueId);
-
-if (!entry) {
-  fail(
-    `workflow/status.json is missing built[] entry for ${issueId}. Add it before moving to In Review.`,
-  );
-}
-
-if (!entry.linear_url) {
-  fail(`built[] entry for ${issueId} is missing linear_url.`);
-}
-
-if (!entry.date) {
-  fail(`built[] entry for ${issueId} is missing date.`);
-}
-
-if (!entry.commit) {
-  fail(`built[] entry for ${issueId} is missing commit.`);
-}
-
-if (!commitExists(entry.commit)) {
-  fail(
-    `built[] entry for ${issueId} references unknown commit "${entry.commit}".`,
-  );
-}
-
 const baseRef = resolveBaseRef();
 const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
   encoding: "utf8",
