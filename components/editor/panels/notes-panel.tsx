@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Trash2, X } from "lucide-react"
-import type { MarkdownAnnotation } from "@/lib/editor/footnote-extension"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 
