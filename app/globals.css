@@ -653,6 +653,10 @@
   .prose-odessay .hl:hover { background: hsl(45 90% 76%); }
   .prose-odessay .hl.active { background: hsl(45 90% 74%); }
   .prose-odessay .hl.annotated { border-bottom: 1.5px solid hsl(35 80% 55%); }
+  .prose-odessay .hl.scroll-target {
+    background: hsl(35 92% 72%);
+    box-shadow: 0 0 0 4px hsl(35 92% 72% / 0.2);
+  }
 
   /* AI margins */
   .prose-odessay .hl-ai {

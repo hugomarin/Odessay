@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Trash2 } from "lucide-react"
+import { ArrowUpRight, Trash2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 
 export type MarginData = {
@@ -27,6 +27,7 @@ type MarginEntryProps = {
   onUpdateNote: (id: string, note: string | null) => void
   onDelete: (id: string) => void
   onToggleShare?: (id: string, shared: boolean) => void
+  onScrollToText?: (anchorStart: number) => void
 }
 
 const COLLAPSED_LINE_COUNT = 3
@@ -40,6 +41,7 @@ export function MarginEntry({
   onUpdateNote,
   onDelete,
   onToggleShare,
+  onScrollToText,
 }: MarginEntryProps) {
   const [noteValue, setNoteValue] = useState(margin.text ?? margin.note ?? "")
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -123,20 +125,35 @@ export function MarginEntry({
             &ldquo;{margin.anchor_text}&rdquo;
           </p>
         </div>
-        {onToggleShare && (
+        {(onScrollToText || onToggleShare) && (
           <div className="flex items-center gap-1.5 shrink-0">
-            <Switch
-              id={`margin-share-${margin.id}`}
-              checked={margin.shared}
-              onCheckedChange={(checked) => onToggleShare(margin.id, checked)}
-              aria-label={margin.shared ? "Shared with author" : "Private — toggle to share"}
-            />
-            <label
-              htmlFor={`margin-share-${margin.id}`}
-              className="sr-only"
-            >
-              {margin.shared ? "Shared with author" : "Private"}
-            </label>
+            {onScrollToText ? (
+              <button
+                type="button"
+                onClick={() => onScrollToText(margin.anchor_start)}
+                className="flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                aria-label="Scroll to annotated text"
+                title="Scroll to annotated text"
+              >
+                <ArrowUpRight strokeWidth={1.5} className="h-[13px] w-[13px]" />
+              </button>
+            ) : null}
+            {onToggleShare ? (
+              <>
+                <Switch
+                  id={`margin-share-${margin.id}`}
+                  checked={margin.shared}
+                  onCheckedChange={(checked) => onToggleShare(margin.id, checked)}
+                  aria-label={margin.shared ? "Shared with author" : "Private — toggle to share"}
+                />
+                <label
+                  htmlFor={`margin-share-${margin.id}`}
+                  className="sr-only"
+                >
+                  {margin.shared ? "Shared with author" : "Private"}
+                </label>
+              </>
+            ) : null}
           </div>
         )}
       </div>

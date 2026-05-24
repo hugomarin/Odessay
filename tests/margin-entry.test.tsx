@@ -40,6 +40,7 @@ function renderEntry(margin: MarginData) {
         onBlur={vi.fn()}
         onUpdateNote={vi.fn()}
         onDelete={vi.fn()}
+        onScrollToText={vi.fn()}
       />,
     )
   })
@@ -109,5 +110,33 @@ describe("MarginEntry", () => {
 
     expect(toggle).toBeNull()
     expect(textarea?.style.height).toBe("40px")
+  })
+
+  it("triggers the text anchor callback from the entry action", () => {
+    const onScrollToText = vi.fn()
+    root = createRoot(container)
+
+    act(() => {
+      root?.render(
+        <MarginEntry
+          margin={baseMargin({ anchor_start: 42 })}
+          focused={false}
+          onFocus={vi.fn()}
+          onBlur={vi.fn()}
+          onUpdateNote={vi.fn()}
+          onDelete={vi.fn()}
+          onScrollToText={onScrollToText}
+        />,
+      )
+    })
+
+    const anchorButton = container.querySelector('button[aria-label="Scroll to annotated text"]')
+    expect(anchorButton).not.toBeNull()
+
+    act(() => {
+      anchorButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onScrollToText).toHaveBeenCalledWith(42)
   })
 })

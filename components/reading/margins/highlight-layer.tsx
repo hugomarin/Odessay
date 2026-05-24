@@ -20,7 +20,7 @@ type HighlightLayerProps = {
  * Maps a plain-text character offset to a {node, offset} position within a DOM subtree.
  * Walks all Text nodes in document order, counting characters.
  */
-function findTextPosition(
+export function findTextPosition(
   root: Element,
   targetOffset: number,
 ): { node: Text; offset: number } | null {
