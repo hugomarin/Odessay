@@ -157,6 +157,52 @@ describe("annotation-document", () => {
       expect(reMarkdown).toContain("[@1: clarify]")
     })
 
+    it("replaces an existing annotation reference when the same text is re-annotated", () => {
+      const bodyJson = {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              {
+                type: "text",
+                text: "Hello",
+                marks: [{ type: "highlight" }],
+              },
+              {
+                type: "annotationReference",
+                attrs: { id: "existing", type: "personal", index: 1, text: "keep an eye on this" },
+              },
+              { type: "text", text: " world" },
+            ],
+          },
+        ],
+      }
+
+      const result = applyAnnotationToBody({
+        bodyJson,
+        bodyText: "Hello world",
+        anchorStart: 0,
+        anchorEnd: 5,
+        type: "ai",
+        text: "simplify this",
+      })
+
+      const paragraph = result.bodyJson.content?.[0]
+      const annotationNodes =
+        paragraph?.content?.filter(
+          (node: { type?: string }) => node.type === "annotationReference",
+        ) ?? []
+
+      expect(annotationNodes).toHaveLength(1)
+      expect(annotationNodes[0]).toMatchObject({
+        attrs: { type: "ai", index: 1, text: "simplify this" },
+      })
+      expect(result.bodyMarkdown).toContain("<mark>Hello</mark>")
+      expect(result.bodyMarkdown).toContain("[@1: simplify this]")
+      expect(result.bodyMarkdown).not.toContain("keep an eye on this")
+    })
+
     it("throws on invalid annotation range", () => {
       expect(() =>
         applyAnnotationToBody({

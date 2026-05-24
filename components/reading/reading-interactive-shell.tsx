@@ -262,7 +262,12 @@ export function ReadingInteractiveShell({
   useEffect(() => {
     if (!isAuthenticated) return
 
-    function handleMouseUp() {
+    function handleMouseUp(event: MouseEvent) {
+      const eventTarget = event.target
+      if (eventTarget instanceof Element && eventTarget.closest(".SelectionPopup, .AnnotationBubble")) {
+        return
+      }
+
       const selection = window.getSelection()
       if (!selection || selection.isCollapsed) {
         setSelectionInfo(null)
