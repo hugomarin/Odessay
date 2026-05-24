@@ -674,6 +674,14 @@
   .prose-odessay .hl-personal.active { background: hsl(220 10% 82%); }
   .prose-odessay .hl-personal.annotated { border-bottom: 1.5px solid #999990; }
 
+  /* Highlight margins */
+  .prose-odessay .hl-highlight {
+    background: hsl(39 85% 88%);
+  }
+  .prose-odessay .hl-highlight:hover { background: hsl(39 85% 82%); }
+  .prose-odessay .hl-highlight.active { background: hsl(39 85% 78%); }
+  .prose-odessay .hl-highlight.annotated { border-bottom: 1.5px solid #E8A020; }
+
   body.od-editor-focus-mode #sidebar,
   body.od-editor-focus-mode #sidebar-list-panel {
     opacity: 0;

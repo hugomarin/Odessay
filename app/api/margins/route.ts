@@ -9,7 +9,7 @@ const createMarginSchema = z.object({
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(1),
   anchor_text: z.string().min(1),
-  type: z.enum(["personal", "ai", "collaborative", "footnote"]).default("personal"),
+  type: z.enum(["personal", "ai", "collaborative", "footnote", "highlight"]).default("personal"),
   text: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 })

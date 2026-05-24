@@ -17,15 +17,15 @@ type AnnotationRef = {
 }
 
 const INLINE_ANNOTATION_RE =
-  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
+  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c|h)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
-const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c)?(\d+):\s*([^\]]*?)\]/g
+const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c|h)?(\d+):\s*([^\]]*?)\]/g
 const AI_ANNOTATIONS_ONLY_PREFIX =
   "El siguiente bloque contiene anotaciones del usuario sobre su documento. Cada anotacion usa el formato `[@N: contenido]`. Si una anotacion va precedida por una cita entre comillas, esa cita indica el pasaje del documento al que se refiere. Las anotaciones no forman parte del documento original; tratalas como instrucciones u observaciones del autor."
 const AI_FULL_TEXT_PREFIX =
   "El siguiente texto fue producido por el usuario. Encontraras anotaciones del usuario marcadas con `[@N: contenido]`, donde N es el numero de la anotacion y contenido es el comentario del usuario sobre ese pasaje especifico. Estas anotaciones no forman parte del documento original; tenlas en cuenta al procesar el documento."
 
-const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal"]
+const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "highlight"]
 
 const annotationSigil = (type: AnnotationType, index: number, text: string) => {
   const trimmedText = text.trim()
@@ -35,6 +35,8 @@ const annotationSigil = (type: AnnotationType, index: number, text: string) => {
       return `[@${index}: ${trimmedText}]`
     case "personal":
       return `[@p${index}: ${trimmedText}]`
+    case "highlight":
+      return `[@h${index}: ${trimmedText}]`
     case "footnote":
     default:
       return `[^${index}: ${trimmedText}]`
@@ -134,7 +136,12 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
       }
 
       if (sigilIndex) {
-        const type = sigilPrefix === "p" ? "personal" : sigilPrefix === "c" ? "personal" : "ai"
+        const type =
+          sigilPrefix === "p" || sigilPrefix === "c"
+            ? "personal"
+            : sigilPrefix === "h"
+              ? "highlight"
+              : "ai"
         const nextIndex = mapping.get(`${type}:${Number(sigilIndex)}`) ?? Number(sigilIndex)
         return annotationSigil(type, nextIndex, String(sigilText ?? ""))
       }
@@ -160,8 +167,11 @@ export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => 
     }
 
     if (match[4]) {
+      const prefix = match[3]
+      const resolvedType =
+        prefix === "p" || prefix === "c" ? "personal" : prefix === "h" ? "highlight" : "ai"
       annotations.push({
-        type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
+        type: resolvedType,
         index: Number(match[4]),
         text: match[5].trim(),
       })
@@ -217,7 +227,7 @@ export const buildAiAnnotationCopy = (
 ): { annotationsOnly: string; fullText: string } => {
   const normalized = normalizeMarkdownFootnotes(markdown)
   const annotationsOnly = extractAiAnnotationsFromMarkdown(normalized)
-  const fullText = normalized.replaceAll(/\[@(?:p|c)\d+:\s*[^\]]*?\]/g, "").trimEnd()
+  const fullText = normalized.replaceAll(/\[@(?:p|c|h)\d+:\s*[^\]]*?\]/g, "").trimEnd()
 
   return {
     annotationsOnly: `${AI_ANNOTATIONS_ONLY_PREFIX}\n\n${annotationsOnly}`,
@@ -342,6 +352,7 @@ declare module "@tiptap/core" {
       addAnnotation: (type: AnnotationType, text: string) => ReturnType
       updateFootnote: (index: number, text: string) => ReturnType
       updateAnnotation: (type: AnnotationType, index: number, text: string) => ReturnType
+      updateAnnotationType: (type: AnnotationType, index: number, newType: AnnotationType, newText?: string) => ReturnType
       deleteFootnote: (index: number) => ReturnType
       deleteAnnotation: (type: AnnotationType, index: number) => ReturnType
     }
@@ -396,7 +407,7 @@ export const FootnoteExtension = Extension.create({
         (type: AnnotationType, text: string) =>
         ({ editor, tr, dispatch }) => {
           const trimmedText = text.trim()
-          if (!trimmedText) return false
+          if (!trimmedText && type !== "highlight") return false
 
           let maxIndex = 0
           editor.state.doc.descendants((node) => {
@@ -533,6 +544,52 @@ export const FootnoteExtension = Extension.create({
           for (const pos of positions) {
             const node = editor.state.doc.nodeAt(pos)
             if (node) tr.setNodeMarkup(pos, undefined, { ...node.attrs, text: text.trim() })
+          }
+          if (dispatch) dispatch(tr)
+          return true
+        },
+
+      updateAnnotationType:
+        (type: AnnotationType, index: number, newType: AnnotationType, newText?: string) =>
+        ({ editor, tr, dispatch }) => {
+          const positions: number[] = []
+          editor.state.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === type &&
+              (node.attrs.index as number) === index
+            ) {
+              positions.push(pos)
+            }
+          })
+          if (!positions.length) return false
+          for (const pos of positions) {
+            const node = editor.state.doc.nodeAt(pos)
+            if (node) {
+              const nextText = newText !== undefined ? newText.trim() : (node.attrs.text as string) ?? ""
+              tr.setNodeMarkup(pos, undefined, { ...node.attrs, type: newType, text: nextText })
+            }
+          }
+          // Reindex all nodes of newType to ensure unique sequential indices
+          const reindexTargets: { pos: number; currentIndex: number }[] = []
+          tr.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === newType
+            ) {
+              reindexTargets.push({ pos, currentIndex: node.attrs.index as number })
+            }
+          })
+          reindexTargets.sort((a, b) => a.pos - b.pos)
+          for (let i = 0; i < reindexTargets.length; i++) {
+            const newIndex = i + 1
+            const { pos, currentIndex } = reindexTargets[i]
+            if (newIndex !== currentIndex) {
+              const node = tr.doc.nodeAt(pos)
+              if (node) {
+                tr.setNodeMarkup(pos, undefined, { ...node.attrs, index: newIndex })
+              }
+            }
           }
           if (dispatch) dispatch(tr)
           return true

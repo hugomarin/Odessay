@@ -2,7 +2,7 @@ import { Node, mergeAttributes } from "@tiptap/core"
 
 export const FOOTNOTE_REF_EVENT = "footnote:click"
 
-export const ANNOTATION_TYPES = ["footnote", "personal", "ai"] as const
+export const ANNOTATION_TYPES = ["footnote", "personal", "ai", "highlight"] as const
 
 export type AnnotationType = (typeof ANNOTATION_TYPES)[number]
 
@@ -22,7 +22,7 @@ type RawAnnotationMatch = {
 }
 
 const INLINE_ANNOTATION_RE =
-  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
+  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c|h)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_LINE_RE = /^\[\^(\d+)\]:\s*(.*)$/
 
 const escapeHtmlAttribute = (value: string) =>
@@ -41,7 +41,7 @@ const decodeAttribute = (value: string) => {
 }
 
 const coerceAnnotationType = (value: string | null | undefined): AnnotationType => {
-  if (value === "personal" || value === "ai" || value === "footnote") return value
+  if (value === "personal" || value === "ai" || value === "footnote" || value === "highlight") return value
   if (value === "collaborative") return "personal"
   return "footnote"
 }
@@ -61,10 +61,13 @@ const parseInlineAnnotation = (
   }
 
   if (match[4]) {
+    const prefix = match[3]
+    const resolvedType: AnnotationType =
+      prefix === "p" || prefix === "c" ? "personal" : prefix === "h" ? "highlight" : "ai"
     return {
       fullMatch: match[0],
       legacyFootnote: false,
-      type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
+      type: resolvedType,
       index: Number(match[4]),
       text: match[5].trim(),
     }
@@ -199,6 +202,8 @@ const annotationToMarkdown = (type: AnnotationType, index: number, text: string)
       return `[@${index}: ${trimmedText}]`
     case "personal":
       return `[@p${index}: ${trimmedText}]`
+    case "highlight":
+      return `[@h${index}: ${trimmedText}]`
     case "footnote":
     default:
       return `[^${index}: ${trimmedText}]`
