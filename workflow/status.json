@@ -38,6 +38,15 @@
     },
     "built": [
         {
+            "what": "Fix duplicate AI annotation margin refs. applyAnnotationToBody deletes existing annotationReference nodes in the re-annotated range before inserting the new one, recomputing offsets from character anchors on the post-deletion doc. handleMouseUp guards against annotationType reset when event comes from SelectionPopup/AnnotationBubble.",
+            "phase": "Fase 3 — Organizar y publicar",
+            "issue": "ODE-179",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-179/invoking-ai-annotation-creates-an-unwanted-parallel-highlight-marker",
+            "commit": "a986a7c",
+            "date": "2026-05-24",
+            "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), 398 tests PASS, delivery gate PASS. Perf CI keydown_p95=90.45ms — exception applied (Performance Contract: not required). Vercel PASS. Files changed: lib/editor/annotation-document.ts, components/reading/reading-interactive-shell.tsx, tests/annotation-document.test.ts."
+        },
+        {
             "what": "Fix AI annotation color inconsistency in reading margin. Differentiate AI and personal margin highlight colors so all AI annotations use the consistent design-system color.",
             "phase": "Fase 3 — Organizar y publicar",
             "issue": "ODE-176",
