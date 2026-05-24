@@ -61,7 +61,27 @@ function collectTextNodes(root: Element): Array<{ node: Text; start: number; end
   return nodes
 }
 
-function applyHighlight(root: Element, margin: MarginHighlight): boolean {
+function decorateExistingMark(mark: HTMLElement, margin: MarginHighlight) {
+  mark.classList.add("hl")
+  if (margin.note) {
+    mark.classList.add("annotated")
+  } else {
+    mark.classList.remove("annotated")
+  }
+  mark.dataset.id = margin.id
+}
+
+function maybeDecorateExistingMark(root: Element, node: Text, margin: MarginHighlight): boolean {
+  const mark = node.parentElement?.closest("mark")
+  if (!mark || !root.contains(mark)) {
+    return false
+  }
+
+  decorateExistingMark(mark, margin)
+  return true
+}
+
+export function applyHighlight(root: Element, margin: MarginHighlight): boolean {
   const startPos = findTextPosition(root, margin.anchor_start)
   const endPos = findTextPosition(root, margin.anchor_end)
   if (!startPos || !endPos) return false
@@ -80,6 +100,11 @@ function applyHighlight(root: Element, margin: MarginHighlight): boolean {
     const localEnd = overlapEnd - start
 
     try {
+      if (maybeDecorateExistingMark(root, node, margin)) {
+        wrapped = true
+        continue
+      }
+
       const range = document.createRange()
       range.setStart(node, localStart)
       range.setEnd(node, localEnd)

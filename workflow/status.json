@@ -56,6 +56,15 @@
       "notes": "Validation: npm run env:check --if-present (failed because this worktree does not have .env.local), npm run ops:status:drift --if-present (passed), npm run typecheck (passed), npm run lint (passed with pre-existing warnings in components/editor/editor-shell.tsx), npm test -- --run tests/footnote-extension.test.ts (6 tests passing), npm test (68 files, 388 tests passing). Performance contract: not required because the change only rewrites clipboard payload strings and does not touch editor interaction, rendering, autosave, sync, or network hot paths. Presentation contract: not required because no `/write`, `/preview`, `/shared`, or public reading surface changed visually."
     },
     {
+      "what": "Fix reading/preview margin overlays so they reuse existing `<mark>` elements rendered from `body_json` instead of nesting a second highlight wrapper inside them. This removes the double color layer when a highlighted passage contains bold text and preserves the fallback wrapper path for plain-text ranges that do not already have a rendered mark.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-177",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-177/bold-text-inside-highlights-renders-with-double-color-layer",
+      "commit": "ae73170",
+      "date": "2026-05-24",
+      "notes": "Validation: npm run ops:status:drift (passed), npm run typecheck (passed), npm run lint (passed with the same pre-existing warnings in components/editor/editor-shell.tsx and components/editor/panels/notes-panel.tsx), npm test -- --run tests/highlight-layer.test.ts tests/markdown-format.test.ts (11 tests passing), npm test (69 files, 390 tests passing). Performance contract: not required because the change is limited to the reading/preview highlight overlay and does not touch editor input, bootstrap payloads, localDB fan-out, or sync flow."
+    },
+    {
       "what": "Build the voice-note annotation flow in Reading margins. Added a client-side useVoiceRecorder hook with the idle/requesting/recording/stopped state machine, 100ms RMS waveform sampling from AnalyserNode, 120-second auto-stop, and in-memory blob retention only. Added VoiceRecorderControls for waveform/timer/stop/submit/discard states, then wired AnnotationBubble to switch between typed notes and voice recording, transcribe recorded audio through POST /api/margins/transcribe, surface inline transcription errors, and disable the mic with a tooltip when microphone permission is denied or unsupported. ReadingInteractiveShell now routes the personal margin path through the bubble so text notes and voice notes share the same submission flow.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-175",
