@@ -84,21 +84,17 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Entrega**
 7. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 5). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
-8. Registrar `build_submitted` en `workflow/review-history.jsonl` (append-only). Commitear y pushear a la rama:
-   ```bash
-   git add workflow/review-history.jsonl
-   git commit -m "chore(workflow): record {ISSUE-ID} build traceability [{ISSUE-ID}]"
-   git push origin {rama}
-   ```
-9. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
+8. Confirmar PR en OPEN: `gh pr view {número} --json state`. Mover issue a `In Review` en Linear. Dejar comentario con Context Report completo:
    - `Context Gaps Detected = yes` si faltó o fue ambiguo al menos uno de: alcance, contrato de datos, evidencia requerida, dependencias, referencias documentales.
    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
    - `Additional Instructions Requested`: listar las instrucciones extra pedidas al humano durante BUILD.
    - `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
    - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
-10. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
+9. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
 
-**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + issue en `In Review` (paso 9). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
+**Restricción de workflow en BUILD:** la rama de feature **no toca** `workflow/review-history.jsonl` ni `workflow/status.json`. Ambos archivos se actualizan únicamente en `main` post-merge durante REVIEW. Esto elimina conflictos de merge cuando múltiples worktrees corren en paralelo.
+
+**Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + issue en `In Review` (paso 8). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
 
 ---
 
@@ -148,14 +144,20 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 6. Volver a `main`: `git switch main`.
 7. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
-8. Commitear `workflow/review-history.jsonl` en `main` y pushear:
+8. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Commitear y pushear:
    ```bash
    git add workflow/review-history.jsonl
-   git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]"
+   git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]"
    git push origin main
    ```
-9. Mover issue a `Done` en Linear.
-10. Una vez en `Done`, agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada.
+   > El evento `build_submitted` se aplaza a REVIEW para evitar que la rama de feature toque archivos de workflow, eliminando conflictos de merge en worktrees paralelos.
+9. Agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada. Commitear y pushear:
+   ```bash
+   git add workflow/status.json
+   git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]"
+   git push origin main
+   ```
+10. Mover issue a `Done` en Linear.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 

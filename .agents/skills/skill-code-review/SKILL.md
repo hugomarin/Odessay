@@ -74,9 +74,10 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 
 ### Trazabilidad histórica (obligatoria)
 - [ ] ¿Se agregó evento append-only en `workflow/review-history.jsonl` para esta ronda?
-- [ ] ¿El evento usa tipo correcto (`build_submitted`, `review_rejected`, `review_approved`)?
+- [ ] ¿El evento usa tipo correcto (`review_rejected`, `review_approved`)? En aprobación, ¿se incluyó también el evento `build_submitted` aplazado desde BUILD?
 - [ ] ¿Incluye `issue`, `branch`, `pr_url`, `commit`, `ts`, `notes` (y en review: `score`, `gate_result`)?
 - [ ] ¿No se editaron ni borraron entradas previas del archivo?
+- [ ] ¿El commit de workflow files fue en `main` post-merge (nunca en la rama de feature)?
 
 ### Tests — verificar primero
 - [ ] `npm test` pasa sin errores y sin dependencias externas (sin Supabase real, sin red).
@@ -405,10 +406,20 @@ fs.appendFileSync('workflow/review-history.jsonl', entry);
 
 Si el archivo no existe, crearlo. Este log es la fuente de verdad para tendencias de calidad.
 
-Tras appendear, commitear el entry en `main` y pushear:
+**Regla de workflow:** las ramas de feature **no tocan** `workflow/review-history.jsonl` ni `workflow/status.json`. Ambos archivos se actualizan únicamente en `main` post-merge.
+
+Tras aprobar y mergear, appendear **ambos** eventos (`build_submitted` + `review_approved`) y commitear en `main`:
 ```bash
 git add workflow/review-history.jsonl
-git commit -m "chore(workflow): append review_approved|review_rejected for ODE-XX [ODE-XX]"
+git commit -m "chore(workflow): append build_submitted + review_approved for ODE-XX [ODE-XX]"
+git push origin main
+```
+
+Tras rechazar, appendear solo `review_rejected` y commitear en `main`:
+```bash
+git switch main
+git add workflow/review-history.jsonl
+git commit -m "chore(workflow): append review_rejected for ODE-XX [ODE-XX]"
 git push origin main
 ```
 
@@ -450,8 +461,10 @@ Con REVIEW APROBADO, ejecutar en este orden:
 → Hacer merge del PR: `gh pr merge {número} --merge`.
 → Volver a `main`: `git switch main`.
 → Sincronizar `main`: `git pull --ff-only origin main`.
-→ Commitear `workflow/review-history.jsonl` y pushear:
-  `git add workflow/review-history.jsonl && git commit -m "chore(workflow): append review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
+→ Appendear `build_submitted` + `review_approved` a `workflow/review-history.jsonl` y commitear:
+  `git add workflow/review-history.jsonl && git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
+→ Actualizar `workflow/status.json` (`built[]`) y commitear:
+  `git add workflow/status.json && git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]" && git push origin main`
 → Mover el issue a Done en Linear (`scripts/linear-cli.mjs move`).
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.

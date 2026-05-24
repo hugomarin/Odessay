@@ -288,7 +288,9 @@ Listo para merge.
 
 ### Trazabilidad GitHub ↔ Linear ↔ status.json
 
-Antes de mover un issue a `In Review`, el agente debe actualizar `workflow/status.json` con una entrada en `built[]` para ese issue (issue, linear_url, commit, date, notes).
+Las ramas de feature **no tocan** `workflow/status.json` ni `workflow/review-history.jsonl`. Ambos archivos se actualizan únicamente en `main` post-merge durante REVIEW.
+
+Durante BUILD, el agente solo abre el PR con body completo y mueve el issue a `In Review`. La entrada en `built[]` de `workflow/status.json` se agrega después del merge, en la etapa REVIEW, junto con el evento `build_submitted` en `workflow/review-history.jsonl`.
 
 Luego corre:
 ```bash
