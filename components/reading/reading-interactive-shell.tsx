@@ -6,7 +6,7 @@ import { ReadingTopbar } from "./reading-topbar"
 import { ReadingContent } from "./reading-content"
 import { SelectionPopup } from "./margins/selection-popup"
 import { AnnotationBubble } from "./margins/annotation-bubble"
-import { HighlightLayer, type MarginHighlight } from "./margins/highlight-layer"
+import { HighlightLayer, findTextPosition, type MarginHighlight } from "./margins/highlight-layer"
 import { MarginsPanel } from "./margins/margins-panel"
 import type { SelectionPreviewRect } from "./margins/selection-preview-layer"
 import type { MarginData } from "./margins/margin-entry"
@@ -192,6 +192,7 @@ export function ReadingInteractiveShell({
   const [bodyMarkdown, setBodyMarkdown] = useState<string>(() => getBodyMarkdown(writing.bodyJson) || writing.bodyText)
   const bodyRef = useRef<HTMLDivElement>(null)
   const selectionRangeRef = useRef<Range | null>(null)
+  const scrollHighlightTimeoutRef = useRef<number | null>(null)
 
   // ─── Fetch margins ─────────────────────────────────────────────────────────
 
@@ -421,6 +422,36 @@ export function ReadingInteractiveShell({
     }, 350)
   }, [])
 
+  const handleScrollToText = useCallback((anchorStart: number) => {
+    const root = bodyRef.current
+    if (!root) return
+
+    const position = findTextPosition(root, anchorStart)
+    const targetNode = position?.node.parentElement
+    if (!targetNode) return
+
+    if (scrollHighlightTimeoutRef.current !== null) {
+      window.clearTimeout(scrollHighlightTimeoutRef.current)
+    }
+
+    root.querySelectorAll(".hl.scroll-target").forEach((element) => {
+      element.classList.remove("scroll-target")
+    })
+
+    const targetHighlight = targetNode.closest(".hl[data-id]")
+    const targetElement = targetHighlight instanceof HTMLElement ? targetHighlight : targetNode
+
+    if (!(targetElement instanceof HTMLElement)) return
+
+    targetElement.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+    targetElement.classList.add("scroll-target")
+
+    scrollHighlightTimeoutRef.current = window.setTimeout(() => {
+      targetElement.classList.remove("scroll-target")
+      scrollHighlightTimeoutRef.current = null
+    }, 1800)
+  }, [])
+
   // ─── Derived data ──────────────────────────────────────────────────────────
 
   const highlightMargins: MarginHighlight[] = margins.map((m) => ({
@@ -448,6 +479,14 @@ export function ReadingInteractiveShell({
       console.error("[reading:copy-ai-full-text] Clipboard write failed")
     }
   }, [bodyMarkdown])
+
+  useEffect(() => {
+    return () => {
+      if (scrollHighlightTimeoutRef.current !== null) {
+        window.clearTimeout(scrollHighlightTimeoutRef.current)
+      }
+    }
+  }, [])
 
   return (
     <section
@@ -511,6 +550,7 @@ export function ReadingInteractiveShell({
             onDelete={handleDelete}
             onShare={handleShare}
             onToggleShare={handleToggleShare}
+            onScrollToText={handleScrollToText}
             onCopyAiAnnotations={handleCopyAiAnnotations}
             onCopyAiFullText={handleCopyAiFullText}
             alreadyShared={alreadyShared}

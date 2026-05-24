@@ -18,6 +18,7 @@ type MarginsPanelProps = {
   onDelete: (id: string) => void
   onShare: () => void
   onToggleShare?: (id: string, shared: boolean) => void
+  onScrollToText?: (anchorStart: number) => void
   onCopyAiAnnotations: () => void
   onCopyAiFullText: () => void
   alreadyShared: boolean
@@ -53,6 +54,7 @@ export function MarginsPanel({
   onDelete,
   onShare,
   onToggleShare,
+  onScrollToText,
   onCopyAiAnnotations,
   onCopyAiFullText,
   alreadyShared,
@@ -152,6 +154,7 @@ export function MarginsPanel({
                       onUpdateNote={onUpdateNote}
                       onDelete={onDelete}
                       onToggleShare={onToggleShare}
+                      onScrollToText={onScrollToText}
                     />
                   ))}
                 </div>
@@ -259,6 +262,7 @@ export function MarginsPanel({
                     onUpdateNote={onUpdateNote}
                     onDelete={onDelete}
                     onToggleShare={onToggleShare}
+                    onScrollToText={onScrollToText}
                   />
                 ))}
               </div>
