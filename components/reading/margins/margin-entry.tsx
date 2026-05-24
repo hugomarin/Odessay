@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Trash2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 
@@ -29,6 +29,9 @@ type MarginEntryProps = {
   onToggleShare?: (id: string, shared: boolean) => void
 }
 
+const COLLAPSED_LINE_COUNT = 3
+const FALLBACK_LINE_HEIGHT = 20
+
 export function MarginEntry({
   margin,
   focused,
@@ -40,12 +43,39 @@ export function MarginEntry({
 }: MarginEntryProps) {
   const [noteValue, setNoteValue] = useState(margin.text ?? margin.note ?? "")
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [collapsedHeight, setCollapsedHeight] = useState(FALLBACK_LINE_HEIGHT)
+  const [contentHeight, setContentHeight] = useState(FALLBACK_LINE_HEIGHT)
+  const [isOverflowing, setIsOverflowing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const effectiveExpanded = focused || isExpanded
 
   // Sync external changes
   useEffect(() => {
     setNoteValue(margin.text ?? margin.note ?? "")
   }, [margin.text, margin.note])
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    textarea.style.height = "0px"
+    const measuredScrollHeight = Math.max(textarea.scrollHeight, FALLBACK_LINE_HEIGHT)
+    const computedStyles = window.getComputedStyle(textarea)
+    const lineHeight = Number.parseFloat(computedStyles.lineHeight) || FALLBACK_LINE_HEIGHT
+    const nextCollapsedHeight = Math.round(lineHeight * COLLAPSED_LINE_COUNT)
+    textarea.style.height = ""
+
+    setContentHeight(measuredScrollHeight)
+    setCollapsedHeight(nextCollapsedHeight)
+    setIsOverflowing(measuredScrollHeight > nextCollapsedHeight + 1)
+  }, [noteValue])
+
+  useEffect(() => {
+    if (!isOverflowing && isExpanded) {
+      setIsExpanded(false)
+    }
+  }, [isExpanded, isOverflowing])
 
   function handleNoteBlur() {
     onBlur()
@@ -63,6 +93,11 @@ export function MarginEntry({
         ? "#5B5BD6"
         : "#999990"
   const typeLabel = margin.type === "ai" ? "AI" : "Personal"
+  const visibleHeight = noteValue.trim().length === 0
+    ? FALLBACK_LINE_HEIGHT
+    : effectiveExpanded
+      ? contentHeight
+      : Math.min(contentHeight, collapsedHeight)
 
   return (
     <div
@@ -108,17 +143,30 @@ export function MarginEntry({
 
       {/* Note textarea */}
       <textarea
+        id={`margin-note-${margin.id}`}
         ref={textareaRef}
         value={noteValue}
         onChange={(e) => setNoteValue(e.target.value)}
         onFocus={onFocus}
         onBlur={handleNoteBlur}
         placeholder={margin.type === "ai" ? "Add an AI instruction…" : "Add a note…"}
-        rows={noteValue ? undefined : 1}
-        className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 focus:outline-none"
-        style={{ border: "none", minHeight: 20 }}
+        rows={1}
+        className="w-full resize-none overflow-hidden bg-transparent font-sans text-[13px] leading-[1.65] text-ink-2 placeholder:text-ink-4 focus:outline-none"
+        style={{ border: "none", minHeight: FALLBACK_LINE_HEIGHT, height: visibleHeight }}
         aria-label="Margin annotation"
       />
+
+      {isOverflowing && !focused ? (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((current) => !current)}
+          className="w-fit font-sans text-[11px] font-medium text-ink-3 transition-colors hover:text-ink"
+          aria-expanded={isExpanded}
+          aria-controls={`margin-note-${margin.id}`}
+        >
+          {isExpanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
 
       {/* Delete action */}
       {showDeleteConfirm ? (
