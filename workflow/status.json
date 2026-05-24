@@ -7,6 +7,10 @@
             {
                 "issue": "ODE-502",
                 "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
+            },
+            {
+                "issue": "ODE-181",
+                "reason": "Active REVIEW cycle. The review_rejected commit (540f8ca) on main references ODE-181, triggering drift before the built[] entry exists. Remove this exception after REVIEW_APPROVED and built[] entry is appended."
             }
         ]
     },
