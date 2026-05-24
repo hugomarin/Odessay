@@ -38,9 +38,9 @@ type NotesPanelProps = {
   onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
   onUpdateAnnotationType?: (type: AnnotationType, index: number, newType: AnnotationType) => void
   onDeleteAnnotation: (type: AnnotationType, index: number) => void
-  onDeleteHighlight: (anchorText: string) => void
-  onUpdateHighlight?: (anchorText: string, text: string) => void
-  onConvertHighlightToAi?: (anchorText: string, text: string) => void
+  onDeleteHighlight: (anchorText: string, anchorStart?: number, anchorEnd?: number) => void
+  onUpdateHighlight?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
+  onConvertHighlightToAi?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
   onNavigate: (type: AnnotationType, index: number) => void
   onClose: () => void
 }
@@ -271,7 +271,7 @@ export function NotesPanel({
                   const next = drafts[key] ?? ""
                   if (next === annotation.text) return
                   if (isStandalone && onUpdateHighlight) {
-                    onUpdateHighlight(annotation.anchor_text ?? "", next)
+                    onUpdateHighlight(annotation.anchor_text ?? "", next, annotation.anchor_start, annotation.anchor_end)
                   } else if (isHighlight) {
                     onUpdateAnnotation("highlight", annotation.index, next)
                   } else {
@@ -283,7 +283,7 @@ export function NotesPanel({
                   setDrafts((prev) => ({ ...prev, [key]: transcript }))
                   setRecordingKey(null)
                   if (isStandalone && onUpdateHighlight) {
-                    onUpdateHighlight(annotation.anchor_text ?? "", transcript)
+                    onUpdateHighlight(annotation.anchor_text ?? "", transcript, annotation.anchor_start, annotation.anchor_end)
                   } else if (isHighlight) {
                     onUpdateAnnotation("highlight", annotation.index, transcript)
                   } else {
@@ -293,7 +293,7 @@ export function NotesPanel({
 
                 const handleConvertToAi = () => {
                   if (isStandalone && onConvertHighlightToAi) {
-                    onConvertHighlightToAi(annotation.anchor_text ?? "", draft)
+                    onConvertHighlightToAi(annotation.anchor_text ?? "", draft, annotation.anchor_start, annotation.anchor_end)
                   } else if (isHighlight && onUpdateAnnotationType) {
                     onUpdateAnnotationType("highlight", annotation.index, "ai")
                   }
@@ -382,7 +382,7 @@ export function NotesPanel({
                           type="button"
                           onClick={() =>
                             isHighlight
-                              ? onDeleteHighlight(annotation.anchor_text ?? "")
+                              ? onDeleteHighlight(annotation.anchor_text ?? "", annotation.anchor_start, annotation.anchor_end)
                               : onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)
                           }
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"

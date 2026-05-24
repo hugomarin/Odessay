@@ -570,6 +570,27 @@ export const FootnoteExtension = Extension.create({
               tr.setNodeMarkup(pos, undefined, { ...node.attrs, type: newType, text: nextText })
             }
           }
+          // Reindex all nodes of newType to ensure unique sequential indices
+          const reindexTargets: { pos: number; currentIndex: number }[] = []
+          tr.doc.descendants((node, pos) => {
+            if (
+              (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+              (node.attrs.type as AnnotationType | undefined) === newType
+            ) {
+              reindexTargets.push({ pos, currentIndex: node.attrs.index as number })
+            }
+          })
+          reindexTargets.sort((a, b) => a.pos - b.pos)
+          for (let i = 0; i < reindexTargets.length; i++) {
+            const newIndex = i + 1
+            const { pos, currentIndex } = reindexTargets[i]
+            if (newIndex !== currentIndex) {
+              const node = tr.doc.nodeAt(pos)
+              if (node) {
+                tr.setNodeMarkup(pos, undefined, { ...node.attrs, index: newIndex })
+              }
+            }
+          }
           if (dispatch) dispatch(tr)
           return true
         },

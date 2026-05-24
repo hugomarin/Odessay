@@ -30,7 +30,8 @@ describe("highlight annotation", () => {
       const editor = createTestEditor("Hello world")
       editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("highlight", "my note").run()
 
-      const markdown = editor.storage.markdown.getMarkdown()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const markdown = (editor.storage as any).markdown?.getMarkdown() ?? ""
       expect(markdown).toContain("[@h1: my note]")
       editor.destroy()
     })
@@ -39,7 +40,8 @@ describe("highlight annotation", () => {
       const editor = createTestEditor("Hello world")
       editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("highlight", "").run()
 
-      const markdown = editor.storage.markdown.getMarkdown()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const markdown = (editor.storage as any).markdown?.getMarkdown() ?? ""
       expect(markdown).toContain("[@h1: ]")
       editor.destroy()
     })
@@ -142,6 +144,28 @@ describe("highlight annotation", () => {
       editor.destroy()
     })
 
+    it("updateAnnotationType reindexes to avoid duplicate indices when converting to an existing type", () => {
+      const editor = createTestEditor("First second")
+      editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("ai", "AI note").run()
+      editor.chain().setTextSelection({ from: 7, to: 13 }).setHighlight().addAnnotation("highlight", "highlight note").run()
+
+      const before = extractWritingAnnotationNodes(editor.getJSON())
+      expect(before).toHaveLength(2)
+      expect(before[0]).toMatchObject({ type: "ai", index: 1 })
+      expect(before[1]).toMatchObject({ type: "highlight", index: 1 })
+
+      editor.commands.updateAnnotationType("highlight", 1, "ai")
+
+      const after = extractWritingAnnotationNodes(editor.getJSON())
+      expect(after).toHaveLength(2)
+      const indices = after.map((a) => a.index)
+      expect(new Set(indices).size).toBe(2)
+      expect(indices).toContain(1)
+      expect(indices).toContain(2)
+      expect(after.every((a) => a.type === "ai")).toBe(true)
+      editor.destroy()
+    })
+
     it("extractWritingAnnotationNodes finds highlight annotations", () => {
       const editor = createTestEditor("Hello world")
       editor.chain().setTextSelection({ from: 2, to: 7 }).setHighlight().addAnnotation("highlight", "note").run()
@@ -198,12 +222,17 @@ describe("highlight annotation", () => {
       const html = `<sup data-annotation-id="test-id" data-annotation-type="highlight" data-annotation-index="1" data-annotation-text="note"></sup>`
       const doc = new DOMParser().parseFromString(html, "text/html")
       const element = doc.querySelector("sup")!
-      const attrs = AnnotationReferenceNode.config.addAttributes!()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const attrs = (AnnotationReferenceNode.config as any).addAttributes()
       const parsed = {
-        id: attrs.id.parseHTML!(element),
-        type: attrs.type.parseHTML!(element),
-        index: attrs.index.parseHTML!(element),
-        text: attrs.text.parseHTML!(element),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        id: (attrs.id.parseHTML as any)(element),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        type: (attrs.type.parseHTML as any)(element),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        index: (attrs.index.parseHTML as any)(element),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        text: (attrs.text.parseHTML as any)(element),
       }
       expect(parsed).toEqual({
         id: "test-id",
