@@ -61,6 +61,25 @@ const resolveTextOffset = (
   return resolvedPos ?? doc.content.size
 }
 
+const isAnnotationReferenceNode = (nodeName: string) =>
+  nodeName === "annotationReference" || nodeName === "footnoteReference"
+
+const findAnnotationReferencesInRange = (
+  doc: Editor["state"]["doc"],
+  from: number,
+  to: number,
+) => {
+  const positions: { pos: number; size: number }[] = []
+
+  doc.descendants((node, pos) => {
+    if (isAnnotationReferenceNode(node.type.name) && pos >= from && pos <= to + 1) {
+      positions.push({ pos, size: node.nodeSize })
+    }
+  })
+
+  return positions
+}
+
 export const getBodyMarkdown = (bodyJson: JSONContent | null | undefined): string => {
   if (!bodyJson) return ""
   const editor = new Editor({
@@ -107,7 +126,7 @@ export const applyAnnotationToBody = ({
     let maxTypeIndex = 0
     editor.state.doc.descendants((node) => {
       if (
-        (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
+        isAnnotationReferenceNode(node.type.name) &&
         ((node.attrs.type as AnnotationType | undefined) ?? "footnote") === type
       ) {
         maxTypeIndex = Math.max(maxTypeIndex, Number(node.attrs.index ?? 0))
@@ -115,9 +134,17 @@ export const applyAnnotationToBody = ({
     })
 
     const tr = editor.state.tr
-    tr.addMark(from, to, highlightMark.create())
+    const existingReferences = findAnnotationReferencesInRange(editor.state.doc, from, to)
+    for (const { pos, size } of [...existingReferences].reverse()) {
+      tr.delete(pos, pos + size)
+    }
+
+    const nextFrom = resolveTextOffset(tr.doc, anchorStart, false)
+    const nextTo = resolveTextOffset(tr.doc, anchorEnd, true)
+
+    tr.addMark(nextFrom, nextTo, highlightMark.create())
     tr.insert(
-      to,
+      nextTo,
       nodeType.create({
         id: crypto.randomUUID(),
         type,
