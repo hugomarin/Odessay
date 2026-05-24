@@ -38,6 +38,15 @@
     },
     "built": [
         {
+            "what": "Fix AI annotation color inconsistency in reading margin. Differentiate AI and personal margin highlight colors so all AI annotations use the consistent design-system color.",
+            "phase": "Fase 3 — Organizar y publicar",
+            "issue": "ODE-176",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-176/ai-annotations-show-inconsistent-colors-within-the-same-document",
+            "commit": "7acb7f2",
+            "date": "2026-05-24",
+            "notes": "Retroactively added to status.json — REVIEW step 9 was missed when ODE-176 merged (PR #174). Merge commit 7acb7f2. Performance contract: not required — color-only CSS/class change, no hot paths touched. All validation passed (typecheck, lint, tests)."
+        },
+        {
             "what": "Move workflow file writes from feature branches to post-merge main. Eliminates merge conflicts on workflow/review-history.jsonl and workflow/status.json when multiple worktrees run in parallel.",
             "phase": "Fase 3 — Organizar y publicar",
             "issue": "ODE-184",
