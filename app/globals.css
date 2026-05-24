@@ -654,6 +654,22 @@
   .prose-odessay .hl.active { background: hsl(45 90% 74%); }
   .prose-odessay .hl.annotated { border-bottom: 1.5px solid hsl(35 80% 55%); }
 
+  /* AI margins */
+  .prose-odessay .hl-ai {
+    background: hsl(248 100% 94%);
+  }
+  .prose-odessay .hl-ai:hover { background: hsl(248 100% 90%); }
+  .prose-odessay .hl-ai.active { background: hsl(248 100% 88%); }
+  .prose-odessay .hl-ai.annotated { border-bottom: 1.5px solid #5B5BD6; }
+
+  /* Personal margins */
+  .prose-odessay .hl-personal {
+    background: hsl(220 10% 90%);
+  }
+  .prose-odessay .hl-personal:hover { background: hsl(220 10% 84%); }
+  .prose-odessay .hl-personal.active { background: hsl(220 10% 82%); }
+  .prose-odessay .hl-personal.annotated { border-bottom: 1.5px solid #999990; }
+
   body.od-editor-focus-mode #sidebar,
   body.od-editor-focus-mode #sidebar-list-panel {
     opacity: 0;
