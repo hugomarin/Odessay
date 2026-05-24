@@ -38,7 +38,7 @@ import {
   normalizeMarkdownForRoundTrip,
   toggleMarkdownInlineMarker,
 } from "@/lib/editor/markdown-format"
-import { FOOTNOTE_REF_EVENT, getEditorAnnotations, getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
+import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions, type AnnotationType } from "@/lib/editor/footnote-node"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -1986,6 +1986,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       .focus()
       .setTextSelection({ from: pendingRichSelection.from, to: pendingRichSelection.to })
       .setHighlight()
+      .addAnnotation("highlight", "")
       .setTextSelection(pendingRichSelection.to)
       .run()
 
@@ -1993,6 +1994,36 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     updateDerivedEditorState(editor)
     void persistEditorSnapshot(editor)
   }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
+
+  const convertStandaloneHighlight = useCallback(
+    (anchorText: string, type: AnnotationType, text: string) => {
+      if (!editor || !anchorText) return
+      const highlightMark = editor.schema.marks.highlight
+      if (!highlightMark) return
+
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name !== "text") return
+        if (!node.marks.some((m) => m.type.name === "highlight")) return
+        const $pos = editor.state.doc.resolve(pos)
+        const range = getMarkRange($pos, highlightMark)
+        if (!range) return
+        const highlightedText = editor.state.doc.textBetween(range.from, range.to)
+        if (highlightedText === anchorText) {
+          editor
+            .chain()
+            .focus()
+            .setTextSelection({ from: range.from, to: range.to })
+            .unsetHighlight()
+            .setHighlight()
+            .addAnnotation(type, text)
+            .setTextSelection(range.to)
+            .run()
+          return false
+        }
+      })
+    },
+    [editor],
+  )
 
   const handleAnnotateSelection = useCallback(
     (annotationType: "personal" | "ai" | "footnote" = "footnote") => {
@@ -3774,6 +3805,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     applyMarkdownFromPanel(nextMarkdown)
                   }
                 }}
+                onUpdateAnnotationType={(type, index, newType) => {
+                  if (mode === "rich" && editor) {
+                    editor.commands.updateAnnotationType(type, index, newType)
+                    setRichFootnoteRevision((r) => r + 1)
+                    updateDerivedEditorState(editor)
+                    void persistEditorSnapshot(editor)
+                  }
+                }}
                 onDeleteAnnotation={(type, index) => {
                   if (mode === "rich" && editor) {
                     editor.commands.deleteAnnotation(type, index)
@@ -3784,6 +3823,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
                     applyMarkdownFromPanel(nextMarkdown)
                   }
+                }}
+                onUpdateHighlight={(anchorText, text) => {
+                  if (!editor || !anchorText) return
+                  convertStandaloneHighlight(anchorText, "highlight", text)
+                  setRichFootnoteRevision((r) => r + 1)
+                  updateDerivedEditorState(editor)
+                  void persistEditorSnapshot(editor)
+                }}
+                onConvertHighlightToAi={(anchorText, text) => {
+                  if (!editor || !anchorText) return
+                  const aiText = text.trim() || anchorText
+                  convertStandaloneHighlight(anchorText, "ai", aiText)
+                  setRichFootnoteRevision((r) => r + 1)
+                  updateDerivedEditorState(editor)
+                  void persistEditorSnapshot(editor)
                 }}
                 onDeleteHighlight={(anchorText) => {
                   if (!editor || !anchorText) return

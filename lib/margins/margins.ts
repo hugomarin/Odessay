@@ -16,7 +16,7 @@ export const createMarginSchema = z.object({
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(1),
   anchor_text: z.string().min(1),
-  type: z.enum(["personal", "ai", "footnote"]).default("personal"),
+  type: z.enum(["personal", "ai", "footnote", "highlight"]).default("personal"),
   text: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 })
@@ -45,7 +45,7 @@ export const marginRecordSchema = z.object({
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(0),
   anchor_text: z.string(),
-  type: z.enum(["personal", "ai", "collaborative"]),
+  type: z.enum(["personal", "ai", "collaborative", "highlight"]),
   text: z.string(),
   note: z.string().nullable().optional(),
   shared: z.boolean().default(false),
@@ -126,8 +126,8 @@ export function countAnnotations(margins: Array<{ note: string | null }>): numbe
 }
 
 export function countTypedAnnotations(
-  margins: Array<{ type: "personal" | "ai" | "collaborative" }>,
-  type: "personal" | "ai" | "collaborative",
+  margins: Array<{ type: "personal" | "ai" | "collaborative" | "highlight" }>,
+  type: "personal" | "ai" | "collaborative" | "highlight",
 ) {
   return margins.filter((margin) => margin.type === type).length
 }
@@ -188,7 +188,7 @@ export const buildMarginSyncRows = (
     .filter(
       (
         annotation,
-      ): annotation is typeof annotation & { type: "personal" | "ai" | "collaborative" } =>
+      ): annotation is typeof annotation & { type: "personal" | "ai" | "collaborative" | "highlight" } =>
         annotation.type !== "footnote",
     )
     .map((annotation) => ({
