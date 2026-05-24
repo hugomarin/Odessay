@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Move workflow file writes from feature branches to post-merge main. Eliminates merge conflicts on workflow/review-history.jsonl and workflow/status.json when multiple worktrees run in parallel.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-184",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-184/workflow-files-cause-merge-conflicts-on-parallel-worktrees-move-to",
+      "commit": "2c561df",
+      "date": "2026-05-24",
+      "notes": "Validation: npm run typecheck (clean), npm run lint (same 6 pre-existing warnings), npm test (70 files, 392 tests passing), npm run ops:delivery:gate (PASS after updating gate script), traceability CI (SUCCESS after fixing ODE-177 commit hash + PM skill sync), Vercel preview (SUCCESS). Performance contract: not required — protocol/documentation change only. Files changed: workflow/workflow.md, workflow/status.json, .agents/skills/skill-code-review/SKILL.md, .agents/skills/skill-product-manager/SKILL.md, scripts/check-delivery-gate.mjs."
+    },
+    {
       "what": "Expand Reading margin annotations from a single-line clipped textarea into a 3-line preview with an explicit Show more/Show less toggle. MarginEntry now measures note content, keeps long annotations collapsed without internal scrolling, expands fully while editing or when explicitly toggled, and preserves the existing inline note-editing flow. Added a focused happy-dom test covering long-note expansion/collapse and the no-toggle path for short notes.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-178",
