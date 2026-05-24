@@ -10,6 +10,7 @@ const createMargin = (overrides: Partial<MarginHighlight> = {}): MarginHighlight
   anchor_start: 0,
   anchor_end: 4,
   note: "note",
+  type: "ai",
   ...overrides,
 })
 
@@ -62,5 +63,45 @@ describe("applyHighlight", () => {
 
     expect(applied).toBe(true)
     expect(root.querySelector("span.hl[data-id='margin-1']")?.textContent).toBe("Plain")
+  })
+
+  it("applies hl-ai class for AI margins", () => {
+    const root = document.createElement("div")
+    root.innerHTML = "<p>Plain text only</p>"
+
+    applyHighlight(root, createMargin({ type: "ai", anchor_start: 0, anchor_end: 5 }))
+
+    const wrapper = root.querySelector("span.hl-ai")
+    expect(wrapper).not.toBeNull()
+  })
+
+  it("applies hl-personal class for personal margins", () => {
+    const root = document.createElement("div")
+    root.innerHTML = "<p>Plain text only</p>"
+
+    applyHighlight(root, createMargin({ type: "personal", anchor_start: 0, anchor_end: 5 }))
+
+    const wrapper = root.querySelector("span.hl-personal")
+    expect(wrapper).not.toBeNull()
+  })
+
+  it("adds annotated class when note is present", () => {
+    const root = document.createElement("div")
+    root.innerHTML = "<p>Plain text only</p>"
+
+    applyHighlight(root, createMargin({ type: "ai", note: "A note", anchor_start: 0, anchor_end: 5 }))
+
+    const wrapper = root.querySelector("span.hl-ai.annotated")
+    expect(wrapper).not.toBeNull()
+  })
+
+  it("omits annotated class when note is absent", () => {
+    const root = document.createElement("div")
+    root.innerHTML = "<p>Plain text only</p>"
+
+    applyHighlight(root, createMargin({ type: "ai", note: null, anchor_start: 0, anchor_end: 5 }))
+
+    const wrapper = root.querySelector("span.hl-ai")
+    expect(wrapper?.classList.contains("annotated")).toBe(false)
   })
 })

@@ -428,6 +428,7 @@ export function ReadingInteractiveShell({
     anchor_start: m.anchor_start,
     anchor_end: m.anchor_end,
     note: m.text ?? m.note ?? null,
+    type: m.type,
   }))
 
   const annotationBubblePosition = selectionInfo?.bubblePosition ?? null

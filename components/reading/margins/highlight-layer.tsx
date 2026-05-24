@@ -7,6 +7,7 @@ export type MarginHighlight = {
   anchor_start: number
   anchor_end: number
   note: string | null
+  type: "personal" | "ai"
 }
 
 type HighlightLayerProps = {
@@ -63,6 +64,7 @@ function collectTextNodes(root: Element): Array<{ node: Text; start: number; end
 
 function decorateExistingMark(mark: HTMLElement, margin: MarginHighlight) {
   mark.classList.add("hl")
+  mark.classList.add(margin.type === "ai" ? "hl-ai" : "hl-personal")
   if (margin.note) {
     mark.classList.add("annotated")
   } else {
@@ -87,7 +89,8 @@ export function applyHighlight(root: Element, margin: MarginHighlight): boolean 
   if (!startPos || !endPos) return false
 
   const nodes = collectTextNodes(root)
-  const wrapperClass = `hl${margin.note ? " annotated" : ""}`
+  const typeClass = margin.type === "ai" ? "hl-ai" : "hl-personal"
+  const wrapperClass = `hl ${typeClass}${margin.note ? " annotated" : ""}`
   let wrapped = false
 
   for (let i = nodes.length - 1; i >= 0; i -= 1) {
