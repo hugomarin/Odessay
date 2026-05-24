@@ -38,6 +38,15 @@
   },
   "built": [
     {
+      "what": "Expand Reading margin annotations from a single-line clipped textarea into a 3-line preview with an explicit Show more/Show less toggle. MarginEntry now measures note content, keeps long annotations collapsed without internal scrolling, expands fully while editing or when explicitly toggled, and preserves the existing inline note-editing flow. Added a focused happy-dom test covering long-note expansion/collapse and the no-toggle path for short notes.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-178",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-178/long-annotations-truncated-to-one-line-need-multiline-expand",
+      "commit": "4d8f8c0",
+      "date": "2026-05-24",
+      "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (passed), npm run typecheck (passed), npm run lint (passed with the same pre-existing warnings in components/editor/editor-shell.tsx and components/editor/panels/notes-panel.tsx), npm test (69 files, 390 tests passing), npx vitest run tests/margin-entry.test.tsx (2 tests passing). Performance contract: not required — the change is confined to the Reading margin card UI and does not alter route bootstrap, payload size, reactive fan-out, or editor-path interaction latency. Delivery gate passes once this traceability entry exists."
+    },
+    {
       "what": "Build the voice-note annotation flow in Reading margins. Added a client-side useVoiceRecorder hook with the idle/requesting/recording/stopped state machine, 100ms RMS waveform sampling from AnalyserNode, 120-second auto-stop, and in-memory blob retention only. Added VoiceRecorderControls for waveform/timer/stop/submit/discard states, then wired AnnotationBubble to switch between typed notes and voice recording, transcribe recorded audio through POST /api/margins/transcribe, surface inline transcription errors, and disable the mic with a tooltip when microphone permission is denied or unsupported. ReadingInteractiveShell now routes the personal margin path through the bubble so text notes and voice notes share the same submission flow.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-175",
