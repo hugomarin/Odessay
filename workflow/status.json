@@ -7,10 +7,6 @@
             {
                 "issue": "ODE-502",
                 "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
-            },
-            {
-                "issue": "ODE-181",
-                "reason": "Active REVIEW cycle. The review_rejected commit (540f8ca) on main references ODE-181, triggering drift before the built[] entry exists. Remove this exception after REVIEW_APPROVED and built[] entry is appended."
             }
         ]
     },
@@ -1444,6 +1440,14 @@
             "commit": "3a95ce6",
             "date": "2026-05-24",
             "notes": "Validation: npm run typecheck (clean), npm run lint (same 6 pre-existing warnings), npm test (70 files, 393 tests passing), npm run ops:delivery:gate (PASS local). CI perf gate failed on event_timing_ms.keydown_p95=90.03 (fail_lte=90) by 0.03ms — CI hardware noise, exception applied (Performance Contract: not required). Vercel preview SUCCESS. Performance contract: not required — change confined to reading margin panel UI, no changes to editor hot path."
+        },
+        {
+            "issue": "ODE-181",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-181/highlights-are-not-editable-cannot-add-notes-audio-or-convert-to-ai",
+            "pr_url": "https://github.com/hugomarin/Odessay/pull/177",
+            "commit": "3ec29ce",
+            "date": "2026-05-24",
+            "notes": "Validation: npm run typecheck (clean), npm run lint (pre-existing warnings only), npm test (71 files, 414 tests passing, 2 new tests). Performance contract: not required — changes confined to annotation chrome and notes panel interactions, no editor keystroke path touched. Presentation contract: not required — [@hN: text] sigil handled by existing parsing/serialization pipeline. Two-round review: P2 index collision on updateAnnotationType fixed with post-mutation reindexing; P2 text-based highlight matching fixed with position-based anchorStart/anchorEnd matching. Merge commit 3ec29ce."
         }
     ]
 }
