@@ -47,6 +47,15 @@
       "notes": "Validation: npm run env:check (passed), npm run ops:status:drift (passed), npm run typecheck (passed), npm run lint (passed with the same pre-existing warnings in components/editor/editor-shell.tsx and components/editor/panels/notes-panel.tsx), npm test (69 files, 390 tests passing), npx vitest run tests/margin-entry.test.tsx (2 tests passing). Performance contract: not required — the change is confined to the Reading margin card UI and does not alter route bootstrap, payload size, reactive fan-out, or editor-path interaction latency. Delivery gate passes once this traceability entry exists."
     },
     {
+      "what": "Prefix AI annotation copy payloads so clipboard exports explain the inline annotation format before the copied markdown. `buildAiAnnotationCopy()` now prepends a dedicated instruction block for `annotationsOnly` and another for `fullText`, preserving the existing stripping of personal/collaborative annotations while giving the model explicit guidance about `[@N: contenido]` markers and quoted anchor passages. Added regression coverage for both payload variants and removed an adjacent unused import in the notes panel.",
+      "phase": "Fase 3 — Organizar y publicar",
+      "issue": "ODE-183",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-183/markdown-sent-to-ai-lacks-prompt-prefix-explaining-annotation-format",
+      "commit": "15d6baa",
+      "date": "2026-05-24",
+      "notes": "Validation: npm run env:check --if-present (failed because this worktree does not have .env.local), npm run ops:status:drift --if-present (passed), npm run typecheck (passed), npm run lint (passed with pre-existing warnings in components/editor/editor-shell.tsx), npm test -- --run tests/footnote-extension.test.ts (6 tests passing), npm test (68 files, 388 tests passing). Performance contract: not required because the change only rewrites clipboard payload strings and does not touch editor interaction, rendering, autosave, sync, or network hot paths. Presentation contract: not required because no `/write`, `/preview`, `/shared`, or public reading surface changed visually."
+    },
+    {
       "what": "Build the voice-note annotation flow in Reading margins. Added a client-side useVoiceRecorder hook with the idle/requesting/recording/stopped state machine, 100ms RMS waveform sampling from AnalyserNode, 120-second auto-stop, and in-memory blob retention only. Added VoiceRecorderControls for waveform/timer/stop/submit/discard states, then wired AnnotationBubble to switch between typed notes and voice recording, transcribe recorded audio through POST /api/margins/transcribe, surface inline transcription errors, and disable the mic with a tooltip when microphone permission is denied or unsupported. ReadingInteractiveShell now routes the personal margin path through the bubble so text notes and voice notes share the same submission flow.",
       "phase": "Fase 3 — Organizar y publicar",
       "issue": "ODE-175",

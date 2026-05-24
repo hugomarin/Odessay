@@ -9,6 +9,11 @@ import {
 } from "@/lib/editor/footnote-extension"
 
 describe("footnote extension helpers", () => {
+  const annotationsOnlyPrefix =
+    "El siguiente bloque contiene anotaciones del usuario sobre su documento. Cada anotacion usa el formato `[@N: contenido]`. Si una anotacion va precedida por una cita entre comillas, esa cita indica el pasaje del documento al que se refiere. Las anotaciones no forman parte del documento original; tratalas como instrucciones u observaciones del autor."
+  const fullTextPrefix =
+    "El siguiente texto fue producido por el usuario. Encontraras anotaciones del usuario marcadas con `[@N: contenido]`, donde N es el numero de la anotacion y contenido es el comentario del usuario sobre ese pasaje especifico. Estas anotaciones no forman parte del documento original; tenlas en cuenta al procesar el documento."
+
   it("normalizes references and keeps definitions aligned", () => {
     const markdown = "Body[^3] and more[^1]\n\n[^1]: First\n[^3]: Third"
 
@@ -49,8 +54,8 @@ describe("footnote extension helpers", () => {
     const markdown = "==Passage==[@1: simplify][@p1: for later][@c1: share with team][^1: source]"
 
     expect(buildAiAnnotationCopy(markdown)).toEqual({
-      annotationsOnly: '"Passage" [@1: simplify]',
-      fullText: "==Passage==[@1: simplify][^1: source]",
+      annotationsOnly: `${annotationsOnlyPrefix}\n\n"Passage" [@1: simplify]`,
+      fullText: `${fullTextPrefix}\n\n==Passage==[@1: simplify][^1: source]`,
     })
   })
 
@@ -58,8 +63,9 @@ describe("footnote extension helpers", () => {
     const markdown = "Intro[@1: check this] ==Highlighted==[@2: expand][@p2: personal note]"
 
     expect(buildAiAnnotationCopy(markdown)).toEqual({
-      annotationsOnly: '[@1: check this]\n"Highlighted" [@2: expand]',
-      fullText: "Intro[@1: check this] ==Highlighted==[@2: expand]",
+      annotationsOnly:
+        `${annotationsOnlyPrefix}\n\n[@1: check this]\n"Highlighted" [@2: expand]`,
+      fullText: `${fullTextPrefix}\n\nIntro[@1: check this] ==Highlighted==[@2: expand]`,
     })
   })
 })

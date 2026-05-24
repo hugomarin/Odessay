@@ -20,6 +20,10 @@ const INLINE_ANNOTATION_RE =
   /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
 const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c)?(\d+):\s*([^\]]*?)\]/g
+const AI_ANNOTATIONS_ONLY_PREFIX =
+  "El siguiente bloque contiene anotaciones del usuario sobre su documento. Cada anotacion usa el formato `[@N: contenido]`. Si una anotacion va precedida por una cita entre comillas, esa cita indica el pasaje del documento al que se refiere. Las anotaciones no forman parte del documento original; tratalas como instrucciones u observaciones del autor."
+const AI_FULL_TEXT_PREFIX =
+  "El siguiente texto fue producido por el usuario. Encontraras anotaciones del usuario marcadas con `[@N: contenido]`, donde N es el numero de la anotacion y contenido es el comentario del usuario sobre ese pasaje especifico. Estas anotaciones no forman parte del documento original; tenlas en cuenta al procesar el documento."
 
 const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal"]
 
@@ -212,9 +216,12 @@ export const buildAiAnnotationCopy = (
   markdown: string,
 ): { annotationsOnly: string; fullText: string } => {
   const normalized = normalizeMarkdownFootnotes(markdown)
+  const annotationsOnly = extractAiAnnotationsFromMarkdown(normalized)
+  const fullText = normalized.replaceAll(/\[@(?:p|c)\d+:\s*[^\]]*?\]/g, "").trimEnd()
+
   return {
-    annotationsOnly: extractAiAnnotationsFromMarkdown(normalized),
-    fullText: normalized.replaceAll(/\[@(?:p|c)\d+:\s*[^\]]*?\]/g, "").trimEnd(),
+    annotationsOnly: `${AI_ANNOTATIONS_ONLY_PREFIX}\n\n${annotationsOnly}`,
+    fullText: `${AI_FULL_TEXT_PREFIX}\n\n${fullText}`,
   }
 }
 
