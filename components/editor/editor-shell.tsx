@@ -2478,7 +2478,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           visitedRanges.add(key)
 
           const hasAnnotation = annotationRanges.some(
-            (ar) => ar.from >= range.from && ar.to <= range.to,
+            (ar) =>
+              (ar.from >= range.from && ar.to <= range.to) || // annotation inside highlight
+              ar.from === range.to, // annotation immediately after highlight (==text==[@1: ...])
           )
 
           if (!hasAnnotation) {
@@ -3825,16 +3827,20 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
                 onClose={closeActivePanel}
-                onNavigate={(type, index) => {
+                onNavigate={(type, index, pos) => {
                   if (!editor) return
-                  editor.state.doc.descendants((node, pos) => {
+                  if (pos != null) {
+                    editor.chain().focus().setTextSelection(pos).scrollIntoView().run()
+                    return
+                  }
+                  editor.state.doc.descendants((node, nodePos) => {
                     if (
                       (node.type.name === "annotationReference" ||
                         node.type.name === "footnoteReference") &&
                       (node.attrs.type as string) === type &&
                       (node.attrs.index as number) === index
                     ) {
-                      editor.chain().focus().setTextSelection(pos).scrollIntoView().run()
+                      editor.chain().focus().setTextSelection(nodePos).scrollIntoView().run()
                       return false
                     }
                   })

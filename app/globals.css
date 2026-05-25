@@ -401,21 +401,43 @@
 
   .odessay-editor-content mark,
   .prose-odessay mark {
-    background: hsl(45 90% 84%);
+    background: #e7af0233;
     border-radius: 2px;
     padding: 0;
     color: inherit;
+    box-shadow: none;
+    border-bottom: none;
+    text-decoration: underline dotted #e7af02;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
   }
 
-  /* Type-aware highlight: when a mark immediately precedes an AI/collab annotation ref */
-  .odessay-editor-content mark:has(+ sup.annotation-ref-ai),
-  .prose-odessay mark:has(+ sup.annotation-ref-ai) {
-    background: hsl(248 100% 94%);
+  /* AI annotations: fondo lila + underline lila */
+  .odessay-editor-content p:has(sup.annotation-ref-ai) mark,
+  .prose-odessay p:has(sup.annotation-ref-ai) mark {
+    background: #5B5BD620;
+    text-decoration: underline dotted #5B5BD6;
   }
 
-  .odessay-editor-content mark:has(+ sup.annotation-ref-collaborative),
-  .prose-odessay mark:has(+ sup.annotation-ref-collaborative) {
-    background: hsl(35 80% 88%);
+  /* Highlight annotations: fondo ámbar + underline ámbar */
+  .odessay-editor-content p:has(sup.annotation-ref-highlight) mark,
+  .prose-odessay p:has(sup.annotation-ref-highlight) mark {
+    background: #e7af0233;
+    text-decoration: underline dotted #e7af02;
+  }
+
+  /* Cuando un mark contiene una corrección, quitar su propia decoración
+     para que no se apile con el wavy de .pub-suggestion-pending */
+  .odessay-editor-content mark:has(.pub-suggestion-pending),
+  .prose-odessay mark:has(.pub-suggestion-pending) {
+    text-decoration: none;
+  }
+
+  /* Annotation ref icon */
+  .annotation-ref-icon {
+    font-size: 0.65em;
+    line-height: 1;
+    color: #5B5BD6;
   }
 
   /* Annotation superscripts: color by type */
@@ -424,8 +446,8 @@
     color: #5B5BD6;
   }
 
-  .odessay-editor-content sup.annotation-ref-collaborative,
-  .prose-odessay sup.annotation-ref-collaborative {
+  .odessay-editor-content sup.annotation-ref-highlight,
+  .prose-odessay sup.annotation-ref-highlight {
     color: #C07B2A;
   }
 
@@ -790,13 +812,10 @@
 }
 
 .pub-suggestion-pending {
-  border-radius: 4px;
-  background: hsl(22, 55%, 95%);
-  box-shadow: 0 0 0 1px hsla(22, 55%, 52%, 0.18);
-  text-decoration: underline;
-  text-decoration-color: hsl(22, 55%, 52%); /* terracota */
-  text-decoration-style: wavy;
   text-underline-offset: 3px;
+  -webkit-text-decoration: underline wavy #c87341;
+  text-decoration: underline wavy #c87341;
+  text-decoration-thickness: 1px;
 }
 
 .pub-suggestion-stale {

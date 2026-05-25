@@ -61,6 +61,30 @@ export const toggleMarkdownInlineMarker = (
 export const normalizeMarkdownHighlights = (markdown: string): string =>
   markdown.replace(/<mark(?:\s[^>]*)?>([\s\S]*?)<\/mark>/gi, "==$1==")
 
+const mergeFragmentedHighlights = (markdown: string): string => {
+  let result = markdown
+  let prev = ""
+  while (result !== prev) {
+    prev = result
+    // ==A==**==B==**==C== → ==A**B**C== (bold inside highlight)
+    result = result.replace(
+      /==([^=\n]*)==\*\*==([^=\n]*)==\*\*==([^=\n]*)==/g,
+      "==$1**$2**$3==",
+    )
+    // ==A==***==B==***==C== → ==A***B***C== (bold+italic)
+    result = result.replace(
+      /==([^=\n]*)==\*\*\*==([^=\n]*)==\*\*\*==([^=\n]*)==/g,
+      "==$1***$2***$3==",
+    )
+    // ==A==*==B==*==C== → ==A*B*C== (italic only — must come after ** passes)
+    result = result.replace(
+      /==([^=\n]*)==\*==([^=\n]*)==\*==([^=\n]*)==/g,
+      "==$1*$2*$3==",
+    )
+  }
+  return result
+}
+
 const TABLE_BLOCK_REGEX = /<table\b[\s\S]*?<\/table>/gi
 const TABLE_ROW_REGEX = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi
 const TABLE_CELL_REGEX = /<(td|th)\b([^>]*)>([\s\S]*?)<\/\1>/gi
@@ -171,7 +195,11 @@ export const convertHtmlTablesToMarkdown = (value: string): string => {
 }
 
 export const normalizeMarkdownForRoundTrip = (markdown: string): string =>
-  normalizeMarkdownFootnotes(normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)))
+  normalizeMarkdownFootnotes(
+    mergeFragmentedHighlights(
+      normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)),
+    ),
+  )
 
 export const materializeMarkdownForRichParser = (markdown: string): string =>
   normalizeMarkdownForRoundTrip(markdown).replace(/==([^=\n]+)==/g, "<mark>$1</mark>")
