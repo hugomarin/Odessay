@@ -353,7 +353,9 @@ export const AnnotationReferenceNode = Node.create({
       mergeAttributes(HTMLAttributes, {
         class: `annotation-ref annotation-ref-${type}`,
         "data-annotation-type": type,
+        style: "cursor:pointer",
       }),
+      ["span", { class: "annotation-ref-icon", "aria-hidden": "true" }, "↗"],
     ]
   },
 
@@ -369,22 +371,25 @@ export const AnnotationReferenceNode = Node.create({
         encodeURIComponent((node.attrs.text as string) ?? ""),
       )
       dom.className = `annotation-ref annotation-ref-${type}`
-      dom.textContent = String(node.attrs.index)
       dom.style.cursor = "pointer"
 
-      if (type === "footnote") {
-        dom.addEventListener("click", (event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          const pos = typeof getPos === "function" ? getPos() : null
-          dom.dispatchEvent(
-            new CustomEvent(FOOTNOTE_REF_EVENT, {
-              bubbles: true,
-              detail: { index: node.attrs.index as number, pos },
-            }),
-          )
-        })
-      }
+      const icon = document.createElement("span")
+      icon.className = "annotation-ref-icon"
+      icon.setAttribute("aria-hidden", "true")
+      icon.textContent = "↗"
+      dom.appendChild(icon)
+
+      dom.addEventListener("click", (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const pos = typeof getPos === "function" ? getPos() : null
+        dom.dispatchEvent(
+          new CustomEvent(FOOTNOTE_REF_EVENT, {
+            bubbles: true,
+            detail: { index: node.attrs.index as number, pos },
+          }),
+        )
+      })
 
       return { dom }
     }

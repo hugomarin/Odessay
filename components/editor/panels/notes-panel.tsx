@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { Mic, Trash2, X, Wand2 } from "lucide-react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { ChevronDown, Mic, Trash2, X } from "lucide-react"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
@@ -22,6 +22,13 @@ const TYPE_LABEL: Record<PanelEntryType, string> = {
   highlight: "Highlight",
 }
 
+const ANNOTATION_TYPE_OPTIONS: { type: AnnotationType; label: string; color: string }[] = [
+  { type: "ai", label: "AI", color: "#5B5BD6" },
+  { type: "highlight", label: "Highlight", color: "#E8A020" },
+  { type: "personal", label: "Personal", color: "#999990" },
+  { type: "footnote", label: "Footnote", color: "#999990" },
+]
+
 type PanelEntry = {
   id?: string
   type: PanelEntryType
@@ -41,8 +48,47 @@ type NotesPanelProps = {
   onDeleteHighlight: (anchorText: string, anchorStart?: number, anchorEnd?: number) => void
   onUpdateHighlight?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
   onConvertHighlightToAi?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
-  onNavigate: (type: AnnotationType, index: number) => void
+  onNavigate: (type: AnnotationType, index: number, pos?: number) => void
   onClose: () => void
+}
+
+function AutoTextarea({
+  value,
+  onChange,
+  onBlur,
+  onClick,
+  placeholder,
+  className,
+}: {
+  value: string
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void
+  onBlur: () => void
+  onClick: (e: React.MouseEvent<HTMLTextAreaElement>) => void
+  placeholder: string
+  className: string
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [value])
+
+  return (
+    <textarea
+      ref={ref}
+      value={value}
+      rows={1}
+      onChange={onChange}
+      onBlur={onBlur}
+      onClick={onClick}
+      placeholder={placeholder}
+      className={className}
+      style={{ overflow: "hidden" }}
+    />
+  )
 }
 
 function isStandaloneHighlight(entry: PanelEntry): boolean {
@@ -61,6 +107,11 @@ function VoiceRecorderInline({
   const [isSubmittingVoice, setIsSubmittingVoice] = useState(false)
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const prevBlobRef = useRef<Blob | null>(null)
+
+  useEffect(() => {
+    start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     if (blob && blob !== prevBlobRef.current && !isSubmittingVoice) {
@@ -108,15 +159,11 @@ function VoiceRecorderInline({
 
   if (state === "idle" || state === "requesting") {
     return (
-      <button
-        type="button"
-        onClick={start}
-        disabled={state === "requesting"}
-        className="inline-flex items-center gap-1 rounded-[6px] bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink disabled:opacity-50"
-      >
-        <Mic className="h-3 w-3" strokeWidth={1.5} />
-        {state === "requesting" ? "Requesting…" : "Record audio"}
-      </button>
+      <div className="flex items-center gap-2 text-[11px] text-ink-4">
+        <Mic className="h-3 w-3 animate-pulse" strokeWidth={1.5} />
+        <span>{state === "requesting" ? "Solicitando micrófono…" : "Iniciando…"}</span>
+        <button onClick={onCancel} className="ml-auto text-ink-4 hover:text-ink">Cancelar</button>
+      </div>
     )
   }
 
@@ -174,6 +221,15 @@ export function NotesPanel({
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [activeFilter, setActiveFilter] = useState<PanelEntryType | "all">("all")
   const [recordingKey, setRecordingKey] = useState<string | null>(null)
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+  const [typeDropdownKey, setTypeDropdownKey] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!typeDropdownKey) return
+    const close = () => setTypeDropdownKey(null)
+    document.addEventListener("click", close)
+    return () => document.removeEventListener("click", close)
+  }, [typeDropdownKey])
 
   useEffect(() => {
     setDrafts(
@@ -189,6 +245,14 @@ export function NotesPanel({
     const base = annotations.slice().sort((a, b) => a.type.localeCompare(b.type) || a.index - b.index)
     return activeFilter === "all" ? base : base.filter((a) => a.type === activeFilter)
   }, [annotations, activeFilter])
+  const orderedWithDisplay = useMemo(() => {
+    const counters = new Map<string, number>()
+    return ordered.map((annotation) => {
+      const n = (counters.get(annotation.type) ?? 0) + 1
+      counters.set(annotation.type, n)
+      return { ...annotation, displayIndex: n }
+    })
+  }, [ordered])
   const aiAnnotations = useMemo(() => annotations.filter((a) => a.type === "ai"), [annotations])
 
   const filterTabs: { id: PanelEntryType | "all"; label: string }[] = [
@@ -257,12 +321,12 @@ export function NotesPanel({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {ordered.map((annotation) => {
+              {orderedWithDisplay.map((annotation) => {
                 const key = `${annotation.type}:${annotation.index}`
                 const color = TYPE_COLOR[annotation.type]
                 const label = TYPE_LABEL[annotation.type]
+                const { displayIndex } = annotation
                 const draft = drafts[key] ?? ""
-                const lineCount = Math.max(1, draft.split("\n").length)
                 const isStandalone = isStandaloneHighlight(annotation)
                 const isHighlight = annotation.type === "highlight"
                 const isRecording = recordingKey === key
@@ -299,6 +363,10 @@ export function NotesPanel({
                   }
                 }
 
+                const isExpanded = expandedKeys.has(key)
+                const THREE_LINES_PX = 54 // 13px × 1.375 leading × 3
+                const needsToggle = draft.length > 100 || draft.split("\n").length > 3
+
                 return (
                   <article
                     key={key}
@@ -316,57 +384,105 @@ export function NotesPanel({
                         onCancel={() => setRecordingKey(null)}
                       />
                     ) : (
-                      <textarea
-                        value={draft}
-                        rows={lineCount}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
-                        onBlur={handleBlur}
-                        placeholder={
-                          annotation.type === "ai"
-                            ? "AI instruction…"
-                            : annotation.type === "highlight"
-                              ? "Add a note…"
-                              : "Note text…"
-                        }
-                        className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
-                      />
+                      <div>
+                        <div
+                          style={!isExpanded && needsToggle ? { maxHeight: THREE_LINES_PX, overflow: "hidden" } : undefined}
+                        >
+                          <AutoTextarea
+                            value={draft}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (!isExpanded && needsToggle) {
+                                setExpandedKeys((prev) => new Set(prev).add(key))
+                              }
+                            }}
+                            onChange={(e) => setDrafts((prev) => ({ ...prev, [key]: e.target.value }))}
+                            onBlur={handleBlur}
+                            placeholder={
+                              annotation.type === "ai"
+                                ? "AI instruction…"
+                                : annotation.type === "highlight"
+                                  ? "Add a note…"
+                                  : "Note text…"
+                            }
+                            className="w-full resize-none bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 outline-none leading-snug"
+                          />
+                        </div>
+                        {needsToggle && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedKeys((prev) => {
+                                const next = new Set(prev)
+                                isExpanded ? next.delete(key) : next.add(key)
+                                return next
+                              })
+                            }
+                            className="mt-0.5 font-sans text-[11px] text-ink-4 hover:text-ink transition-colors"
+                          >
+                            {isExpanded ? "ver menos" : "ver más"}
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     <div className="flex items-center justify-between mt-1.5">
-                      <div className="flex items-center gap-1.5">
-                        {isHighlight ? (
-                          <span
-                            className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
-                            style={{ color, backgroundColor: `${color}14` }}
-                          >
-                            {label} · {annotation.index}
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => onNavigate(annotation.type as AnnotationType, annotation.index)}
-                            className="rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] transition-opacity hover:opacity-70"
-                            style={{ color, backgroundColor: `${color}14` }}
-                            aria-label={`Go to ${label} ${annotation.index} in document`}
-                          >
-                            {label} · {annotation.index}
-                          </button>
-                        )}
-                        {isHighlight && !isRecording && (
-                          <button
-                            type="button"
-                            onClick={handleConvertToAi}
-                            className="inline-flex items-center gap-0.5 rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
-                            title="Convert to AI annotation"
-                          >
-                            <Wand2 className="h-2.5 w-2.5" strokeWidth={1.5} />
-                            AI
-                          </button>
+                      {/* Type badge — dropdown to change type */}
+                      <div className="relative" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => setTypeDropdownKey(typeDropdownKey === key ? null : key)}
+                          className="inline-flex items-center gap-1 rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em] transition-opacity hover:opacity-70"
+                          style={{ color, backgroundColor: `${color}14` }}
+                        >
+                          {label} · {displayIndex}
+                          <ChevronDown className="h-2.5 w-2.5" strokeWidth={2} />
+                        </button>
+                        {typeDropdownKey === key && (
+                          <div className="absolute bottom-full left-0 mb-1 z-50 min-w-[110px] rounded-[6px] border-[0.5px] border-border bg-bg shadow-md overflow-hidden">
+                            {ANNOTATION_TYPE_OPTIONS.filter((opt) => opt.type !== annotation.type).map((opt) => (
+                              <button
+                                key={opt.type}
+                                type="button"
+                                onClick={() => {
+                                  if (isStandalone && onConvertHighlightToAi && opt.type === "ai") {
+                                    onConvertHighlightToAi(annotation.anchor_text ?? "", draft, annotation.anchor_start, annotation.anchor_end)
+                                  } else if (onUpdateAnnotationType) {
+                                    onUpdateAnnotationType(annotation.type as AnnotationType, annotation.index, opt.type)
+                                  }
+                                  setTypeDropdownKey(null)
+                                }}
+                                className="flex w-full items-center px-2.5 py-1.5 text-left hover:bg-muted"
+                              >
+                                <span
+                                  className="font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
+                                  style={{ color: opt.color }}
+                                >
+                                  {opt.label}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
 
                       <div className="flex items-center gap-1">
+                        {/* Navigate to annotation in document */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onNavigate(
+                              annotation.type as AnnotationType,
+                              annotation.index,
+                              isStandalone ? annotation.anchor_start : undefined,
+                            )
+                          }
+                          className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
+                          aria-label="Go to annotation in document"
+                          title="Ir al texto"
+                        >
+                          <span className="text-[11px] leading-none">↗</span>
+                        </button>
                         {!isRecording && (
                           <button
                             type="button"
