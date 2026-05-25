@@ -149,5 +149,22 @@ export const toFriendlyAuthError = (message: string) => {
   return "Something went wrong. Please try again."
 }
 
+const normalizeAppOrigin = (value: string | undefined | null) => {
+  const trimmed = value?.trim()
+  if (!trimmed || !/^https?:\/\//.test(trimmed)) {
+    return null
+  }
+
+  return trimmed.replace(/\/$/, "")
+}
+
+export const getAuthConfirmRedirectUrl = (origin: string, next: string) => {
+  const appOrigin = normalizeAppOrigin(process.env.NEXT_PUBLIC_APP_URL)
+  const safeOrigin = appOrigin ?? origin.replace(/\/$/, "")
+  const safeNext = sanitizeRedirectPath(next, "/desk")
+
+  return `${safeOrigin}/auth/confirm?next=${encodeURIComponent(safeNext)}`
+}
+
 export const getResetPasswordRedirectUrl = (origin: string) =>
-  `${origin.replace(/\/$/, "")}/auth/confirm?next=/reset-password`
+  getAuthConfirmRedirectUrl(origin, "/reset-password")
