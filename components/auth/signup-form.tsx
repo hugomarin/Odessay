@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { createClient } from "@/lib/supabase/client"
 import {
+  getAuthConfirmRedirectUrl,
   isUsernameFormatValid,
   normalizeEmail,
   normalizeUsername,
@@ -137,7 +138,7 @@ export function SignupForm() {
         email: normalizeEmail(email),
         password,
         options: {
-          emailRedirectTo: `${origin}/auth/confirm?next=/desk`,
+          emailRedirectTo: getAuthConfirmRedirectUrl(origin, "/desk"),
           data: {
             display_name: displayName.trim(),
             username: normalizeUsername(username),
@@ -197,6 +198,7 @@ export function SignupForm() {
             onChange={(event) => setDisplayName(event.target.value)}
             aria-invalid={Boolean(errors.displayName)}
           />
+          <p className="text-[13px] text-ink-4">Name people will see on your profile.</p>
           {errors.displayName ? <p className="text-[13px] text-destructive">{errors.displayName}</p> : null}
         </div>
 
@@ -219,12 +221,14 @@ export function SignupForm() {
                 ? "text-[13px] text-[hsl(140,40%,32%)]"
                 : usernameStatus.state === "checking"
                   ? "text-[13px] text-ink-4"
-                  : "text-[13px] text-destructive"
+                  : errors.username || usernameStatus.state === "unavailable"
+                    ? "text-[13px] text-destructive"
+                    : "text-[13px] text-ink-4"
             }
           >
             {errors.username ??
               usernameStatus.message ??
-              "Use 3-32 lowercase letters, numbers, or underscores."}
+              "Unique handle for your profile and links. Use 3-32 lowercase letters, numbers, or underscores."}
           </p>
         </div>
 

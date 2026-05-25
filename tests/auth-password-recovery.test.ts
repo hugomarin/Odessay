@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  getAuthConfirmRedirectUrl,
   getResetPasswordRedirectUrl,
   normalizeEmail,
   validateForgotPasswordValues,
@@ -29,7 +30,15 @@ describe("password recovery validation", () => {
 
   it("builds reset-password redirects from the current app origin", () => {
     expect(getResetPasswordRedirectUrl("https://app.odessay.com/")).toBe(
-      "https://app.odessay.com/auth/confirm?next=/reset-password",
+      "https://app.odessay.com/auth/confirm?next=%2Freset-password",
+    )
+  })
+
+  it("prefers the configured app url for auth confirmation redirects", () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.odessay.com"
+
+    expect(getAuthConfirmRedirectUrl("http://localhost:3000", "/desk")).toBe(
+      "https://app.odessay.com/auth/confirm?next=%2Fdesk",
     )
   })
 })

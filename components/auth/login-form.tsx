@@ -63,10 +63,12 @@ export function LoginForm() {
     >
       <div className="space-y-2">
         <h1 className="font-lora text-[2rem] font-medium leading-[1.18] tracking-[-0.01em] text-ink">
-          Login
+          {needsEmailConfirmation ? "Check your email" : "Login"}
         </h1>
         <p className="max-w-sm text-sm leading-6 text-ink-3">
-          Return to your desk and continue writing where you left off.
+          {needsEmailConfirmation
+            ? "Open the confirmation link we sent to activate your account."
+            : "Return to your desk and continue writing where you left off."}
         </p>
       </div>
 
@@ -78,46 +80,52 @@ export function LoginForm() {
         onSubmit={handleSubmit}
       >
         {needsEmailConfirmation ? (
-          <p className="rounded-[8px] border-[0.5px] border-border bg-muted px-3 py-2 text-[13px] text-ink-3">
-            Your account was created. Confirm your email if required, then log in.
-          </p>
+          <div className="space-y-2 rounded-[8px] border-[0.5px] border-border bg-muted px-3 py-3 text-[13px] text-ink-3">
+            <p>Your account was created.</p>
+            <p>We sent a confirmation link to {email || "your email address"}.</p>
+            <p>Use that link to activate your account and continue directly to Odessay.</p>
+          </div>
         ) : null}
 
-        <div className="space-y-2">
-          <label className="text-[13px] font-medium text-ink-2" htmlFor="login-email">
-            Email
-          </label>
-          <Input
-            id="login-email"
-            autoComplete="email"
-            name="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            aria-invalid={Boolean(errors.email)}
-          />
-          {errors.email ? <p className="text-[13px] text-destructive">{errors.email}</p> : null}
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <label className="text-[13px] font-medium text-ink-2" htmlFor="login-password">
-              Password
+        {!needsEmailConfirmation ? (
+          <div className="space-y-2">
+            <label className="text-[13px] font-medium text-ink-2" htmlFor="login-email">
+              Email
             </label>
-            <Link className="text-[12px] text-ink-4 transition-colors hover:text-ink-2" href="/forgot-password">
-              Forgot your password?
-            </Link>
+            <Input
+              id="login-email"
+              autoComplete="email"
+              name="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              aria-invalid={Boolean(errors.email)}
+            />
+            {errors.email ? <p className="text-[13px] text-destructive">{errors.email}</p> : null}
           </div>
-          <Input
-            id="login-password"
-            autoComplete="current-password"
-            name="password"
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            aria-invalid={Boolean(errors.password)}
-          />
-          {errors.password ? <p className="text-[13px] text-destructive">{errors.password}</p> : null}
-        </div>
+        ) : null}
+
+        {!needsEmailConfirmation ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-[13px] font-medium text-ink-2" htmlFor="login-password">
+                Password
+              </label>
+              <Link className="text-[12px] text-ink-4 transition-colors hover:text-ink-2" href="/forgot-password">
+                Forgot your password?
+              </Link>
+            </div>
+            <Input
+              id="login-password"
+              autoComplete="current-password"
+              name="password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              aria-invalid={Boolean(errors.password)}
+            />
+            {errors.password ? <p className="text-[13px] text-destructive">{errors.password}</p> : null}
+          </div>
+        ) : null}
 
         {errors.form ? (
           <p className="rounded-[8px] border-[0.5px] border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
@@ -125,9 +133,11 @@ export function LoginForm() {
           </p>
         ) : null}
 
-        <Button className="h-11 w-full text-[14px]" disabled={isPending} type="submit">
-          {isPending ? "Logging in..." : "Login"}
-        </Button>
+        {!needsEmailConfirmation ? (
+          <Button className="h-11 w-full text-[14px]" disabled={isPending} type="submit">
+            {isPending ? "Logging in..." : "Login"}
+          </Button>
+        ) : null}
 
         <p className="text-[13px] text-ink-4">
           Don&apos;t have an account?{" "}
