@@ -10,6 +10,16 @@ Para implementación y secuenciación, este documento se complementa con:
 - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
+- `workflow/context/features/odessay-desktop-docs-corrections-log.md`
+
+**Nota de autoridad documental:**
+
+- Este documento es principalmente de **dirección de producto y principios arquitectónicos**.
+- La evaluación del estado actual del codebase vive normativamente en `odessay-desktop-migration-diagnostic.md`.
+- La partición del sistema en core/adapters vive normativamente en `odessay-desktop-target-architecture.md`.
+- La secuencia de ejecución vive normativamente en `odessay-desktop-migration-plan.md`.
+
+Las secciones históricas de evaluación o implementación temprana que aún permanezcan aquí deben leerse como contexto de transición, no como autoridad principal frente a esos documentos.
 
 ---
 

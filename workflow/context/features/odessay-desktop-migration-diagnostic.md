@@ -1,7 +1,12 @@
 # ODESSAY — Desktop Migration Diagnostic
 
 **Documento de diagnóstico para planear la migración arquitectónica a desktop.**
-Lee `workflow/context/features/odessay-desktop-app.md` para la dirección objetivo, `workflow/context/features/odessay-desktop-target-architecture.md` para la arquitectura objetivo, `workflow/context/core/odessay-arquitectura.md` para el estado canónico del producto y `workflow/context/features/odessay-sync.md` para la capa local-first vigente.
+Lee `workflow/context/features/odessay-desktop-app.md` para la dirección objetivo, `workflow/context/core/odessay-arquitectura.md` para el estado canónico del producto y `workflow/context/features/odessay-sync.md` para la capa local-first vigente.
+
+Después de este diagnóstico, la secuencia continúa con:
+
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
 
 ---
 

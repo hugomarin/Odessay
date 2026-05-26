@@ -5,6 +5,12 @@ Lee `odessay-fundacional.md` para la visión, `odessay-stack.md` para el stack, 
 
 Este documento define el comportamiento técnico y de UX del editor de Odessay. Es el componente más crítico del producto — donde ocurre todo.
 
+**Ámbito normativo:** este documento describe el comportamiento del editor y el runtime web actual, pero no debe leerse aislado de la estrategia desktop. Para decisiones sobre documento canónico, extracción de servicios o boundaries de runtime, usar además:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ---
 
 ## Modelo de edición: Rich Text con paridad Markdown
@@ -23,7 +29,9 @@ Sin embargo, el editor rico está deliberadamente restringido al subconjunto de 
 
 ### Fuente de verdad y conversión
 
-La fuente de verdad interna es siempre el JSON del editor (modelo ProseMirror/TipTap). Markdown es un formato de entrada y salida — nunca el modelo que se persiste.
+**Runtime web actual:** la fuente de verdad interna del editor es el JSON del editor (modelo ProseMirror/TipTap). Markdown actúa como formato de entrada/salida y como modo source de edición.
+
+**Dirección desktop / multi-runtime:** el editor no debe inferir por sí mismo el contrato documental global del producto. En desktop, el contrato canónico converge a `.md`; la representación rica del editor pasa a ser derivada de ese documento y no una fuente paralela.
 
 ```
 Markdown entrante → parsea a JSON → el usuario edita en modo rico → JSON se serializa a Markdown cuando se necesita
@@ -67,7 +75,7 @@ Los botones de la topbar (Bold, Italic, etc.) permanecen visibles pero con `opac
 
 El auto-save continúa funcionando. En modo Markdown el guardado local ocurre en cada `onChange` del textarea con debounce de 800ms (no inmediato como en modo rico, porque el JSON no está disponible hasta el re-parse). El status bar muestra "Saving..." / "Saved" igual que en modo rico.
 
-**Nota de implementación:** Al guardar en modo Markdown, se hace un re-parse silencioso a JSON para mantener `body_json` actualizado como fuente de verdad. El textarea edita el Markdown — no el JSON directamente.
+**Nota de implementación (runtime web actual):** Al guardar en modo Markdown, se hace un re-parse silencioso a JSON para mantener `body_json` actualizado como persistencia rica actual del runtime web. El textarea edita el Markdown — no el JSON directamente.
 
 ---
 

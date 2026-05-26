@@ -1,15 +1,15 @@
 {
   "_description": "Registro de decisiones arquitectónicas y técnicas del proyecto. Las decisiones globales aplican a todo el ciclo de vida, mientras que las de fase son específicas al ciclo de trabajo actual.",
   "_maintenance": "Debe actualizarse obligatoriamente mediante `/wf-decision` si se toma una decisión que altera el stack, la arquitectura o políticas globales.",
-  "last_updated": "2026-04-24",
+  "last_updated": "2026-05-26",
   "decisions_global": [
     {
-      "decision": "Local-first con IndexedDB (no localStorage)",
+      "decision": "Local-first con IndexedDB en el runtime web actual (no localStorage)",
       "doc": "workflow/context/core/odessay-arquitectura.md"
     },
     {
-      "decision": "body_json como fuente de verdad (no body_markdown)",
-      "doc": "workflow/context/core/odessay-modelo-datos.md"
+      "decision": "En el runtime web actual, `body_json` es la persistencia remota principal del editor rico; la dirección desktop converge a `.md` como contrato documental canónico",
+      "doc": "workflow/context/features/odessay-desktop-target-architecture.md"
     },
     {
       "decision": "Last-write-wins silencioso para conflictos de sync",

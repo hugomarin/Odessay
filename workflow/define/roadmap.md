@@ -5,6 +5,13 @@ Lee `workflow/context/core/odessay-fundacional.md` para la visión, `.agents/ski
 
 Este documento define el alcance completo del producto: fases, los issues macro que componen cada fase y sus dependencias. Es la fuente de verdad del qué y el cuándo. El cómo vive en los skills.
 
+**Ámbito del roadmap:** este documento mezcla fases ya ejecutadas del runtime web actual con dirección futura de desktop. Para cualquier issue o fase que toque desktop, shared core, `.md` como contrato documental, runtime boundaries o extracción de servicios, el roadmap debe leerse junto con:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 **Estructura en Linear:** cada fase es un **proyecto independiente** dentro del team Odessay. No hay un proyecto paraguas "Odessay" — el team ya cumple ese rol. Ver `.agents/skills/skill-product-manager/SKILL.md` §Jerarquía de Linear para el contrato completo.
 
 ---
@@ -58,7 +65,7 @@ Supabase Auth con email + contraseña. Páginas /signup y /login con sistema de 
 Dependencias: Create initial database schema migrations, Implement design system.
 
 **Implement local-first storage layer** `[backend, database]` `[critical-path]`
-Implementar la capa de persistencia local como base de toda la experiencia. En web: IndexedDB. Interfaz unificada `localDB` que abstrae el storage — los componentes no saben con qué hablan. Sync worker en background con cola de mutaciones y reintentos exponenciales. El usuario nunca espera a Supabase — la base local es la fuente de verdad operativa.
+Implementar la capa de persistencia local como base de toda la experiencia **del runtime web actual**. En web: IndexedDB. Interfaz unificada `localDB` que abstrae el storage — los componentes no saben con qué hablan. Sync worker en background con cola de mutaciones y reintentos exponenciales. El usuario nunca espera a Supabase — la base local es la fuente de verdad operativa de la web actual.
 Dependencias: Create initial database schema migrations.
 Referencia: `workflow/context/features/odessay-sync.md`, `.agents/skills/skill-backend/SKILL.md` (sección: Auto-save), `workflow/context/core/odessay-stack.md`.
 
@@ -390,11 +397,11 @@ Dependencias: Implement collections, Implement margins, Build /correspondences �
 
 ## Fase 7 — Desktop
 
-Al terminar esta fase: Odessay existe como aplicación nativa de escritorio en macOS. La arquitectura local-first (SQLite nativo, sync en background) es el fundamento — sin ella, no hay desktop app.
+Al terminar esta fase: Odessay existe como aplicación nativa de escritorio en macOS. El fundamento ya no es “empaquetar la web” ni “reemplazar IndexedDB por SQLite”, sino ejecutar el shared core sobre adapters desktop con filesystem `.md` como write-path principal y sync remoto como capacidad secundaria.
 
 ---
 
 **Package as desktop app (Tauri) — macOS** `[infra, desktop]`
-Empaquetar la webapp como aplicación nativa usando Tauri. SQLite nativo reemplaza IndexedDB como storage local. La webapp ya está diseñada para esto: lógica de negocio separada de presentación, interfaz `localDB` abstraída desde la Fase 0. Binarios para macOS como primera plataforma. Windows y Linux como expansión posterior.
+Empaquetar Odessay como aplicación nativa usando Tauri una vez que el core compartido y los adapters desktop estén listos. El write-path principal desktop usa filesystem `.md`; SQLite nativo puede existir como índice/caché derivado, no como reemplazo automático 1:1 de IndexedDB. Binarios para macOS como primera plataforma. Windows y Linux como expansión posterior.
 Dependencias: Implement local-first storage layer (Fase 0), todas las fases anteriores.
 Referencia: `workflow/context/core/odessay-stack.md` (sección: Desktop).

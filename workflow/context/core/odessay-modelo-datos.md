@@ -3,6 +3,14 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `odessay-fundacional.md` para la visión y `odessay-stack.md` para las tecnologías.
 
+Este documento describe principalmente el **modelo de datos remoto/cloud y el estado actual del runtime web**.
+
+No define por sí solo el contrato documental futuro del producto. Para la estrategia desktop y el rol de `.md` como documento canónico, usar además:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ---
 
 ## Entidades y relaciones
@@ -95,7 +103,7 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 | id | uuid | PK, default gen_random_uuid() | UUID generado en cliente, no en servidor |
 | author_id | uuid | FK → profiles, not null | Quien escribe |
 | title | text | nullable | Opcional |
-| body_json | jsonb | not null, default '{}' | **Fuente de verdad.** Contenido TipTap (ProseMirror JSON). No existe `body_markdown` — el Markdown se genera on-demand desde este campo vía `tiptap-markdown` |
+| body_json | jsonb | not null, default '{}' | **Persistencia remota actual del runtime web/cloud.** Contenido TipTap (ProseMirror JSON). No debe interpretarse como contrato documental universal del producto: la estrategia desktop converge a `.md` como documento canónico y trata `body_json` como representación rica/derivada o persistencia transitoria según el runtime. |
 | body_text | text | not null, default '' | Texto plano derivado de `body_json`. Para búsqueda full-text y contexto AI. Nunca editado directamente |
 | slug | text | nullable, unique por author_id | Generado del título. Usado solo en la URL pública `/{username}/{slug}`. Internamente se opera con `id` |
 | status | text | not null, default 'draft' | `new`, `exploring`, `draft`, `done` |
@@ -114,11 +122,13 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 
 **Edición:** Todos los estados (`new`, `exploring`, `draft`, `done`) son editables. El versionamiento se implementará a futuro para rastrear cambios post-publicación.
 
-**Auto-save (local-first):** No hay botón de guardar. El save ocurre en dos pasos desacoplados:
+**Auto-save (local-first, runtime web actual):** No hay botón de guardar. El save ocurre en dos pasos desacoplados:
 1. **Local (inmediato, sin debounce):** TipTap emite `onUpdate` → se escribe `body_json` y `body_text` en la base local (SQLite/IndexedDB). El status bar muestra "Saved" — el texto ya está seguro.
 2. **Remoto (background, debounce 1.5s):** El sync worker encola un PATCH a `/api/writings/[id]` con `body_json`, `body_text`, `updated_at` y `version`. Si falla, retry con backoff exponencial — silencioso para el usuario.
 
 La UI nunca espera a Supabase. El indicador de guardado es mínimo (statusbar, sin animaciones agresivas). La experiencia debe sentirse como escribir en papel.
+
+**Nota de transición:** este flujo describe el runtime web actual. En desktop objetivo, el write-path principal deja de ser `body_json -> base local -> sync remoto` y pasa a ser `archivo .md local -> índice/caché derivado -> sync remoto secundario`.
 
 ### collections
 
@@ -189,7 +199,7 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 
 ### margins
 
-Índice materializado de anotaciones embebidas en `writings.body_json`. La fuente de verdad vive en nodos TipTap `annotationReference`; esta tabla existe para listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
+Índice materializado de anotaciones embebidas en la representación rica del documento en el runtime web actual. La fuente de verdad del índice vive hoy en nodos TipTap `annotationReference`; esta tabla existe para listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
 
 | Campo | Tipo | Constraints | Nota |
 |-------|------|-------------|------|

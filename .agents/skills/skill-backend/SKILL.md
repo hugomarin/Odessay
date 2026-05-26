@@ -48,6 +48,7 @@ Si el trabajo toca:
 cargar además, según aplique:
 
 - `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
 

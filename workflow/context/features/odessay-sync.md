@@ -3,6 +3,14 @@
 **Feature spec para agentes de desarrollo.**
 Lee `workflow/context/core/odessay-arquitectura.md` §Arquitectura de datos y `workflow/context/core/odessay-stack.md` §Arquitectura local-first antes de implementar cualquier parte de esta capa.
 
+**Ámbito principal:** este documento describe sobre todo la capa local-first del **runtime web actual**.
+
+Para la dirección desktop y la transición hacia filesystem `.md` como write-path principal, usar además:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ---
 
 ## El principio que define todo
@@ -31,11 +39,13 @@ Usuario escribe
 
 **Por qué IndexedDB y no localStorage:** capacidad ilimitada, soporte de objetos complejos (el body_json de TipTap puede ser grande), transacciones atómicas, soporte en todos los navegadores modernos.
 
-### En desktop (Fase 7, Tauri)
+### En desktop (dirección objetivo)
 
-**Base local:** SQLite nativo vía el runtime de Tauri. La interfaz `localDB` se reimplementa sobre SQLite — los componentes no cambian.
+**Write-path principal:** filesystem local con documentos `.md`.
 
-**Por qué SQLite en desktop:** acceso nativo más rápido que IndexedDB, SQL completo para queries complejas, soporte de full-text search si se necesita en el futuro.
+**Persistencia derivada opcional:** SQLite o equivalente puede existir como índice/caché local para recientes, búsqueda, previews y metadata, pero no debe reemplazar al archivo `.md` como fuente canónica.
+
+**Implicación:** no asumir que `localDB` será en desktop la misma fuente operativa principal que hoy es en web. En desktop puede convertirse en una capa derivada o en una fachada sobre servicios más explícitos.
 
 ---
 
@@ -81,7 +91,7 @@ interface SyncMutation {
 
 ## Flujo de auto-save
 
-### Paso 1 — Guardar local (inmediato)
+### Paso 1 — Guardar local (inmediato, runtime web actual)
 
 El evento `onUpdate` de TipTap dispara en cada cambio. Sin debounce. Sin delay. La escritura en IndexedDB/SQLite es síncrona desde la perspectiva del usuario.
 
@@ -100,7 +110,7 @@ editor.on('update', ({ editor }) => {
 })
 ```
 
-### Paso 2 — Sync remoto (background)
+### Paso 2 — Sync remoto (background, runtime web actual)
 
 Un **sync worker** corre en background. Lee la cola de mutaciones pendientes y las envía a la API.
 
@@ -108,7 +118,7 @@ Un **sync worker** corre en background. Lee la cola de mutaciones pendientes y l
 
 **Idempotencia:** el endpoint `PATCH /api/writings/{id}` es idempotente. El campo `version` se incrementa pero no bloquea escrituras — last-write-wins.
 
-**Campos que se envían al servidor:** `body_json`, `body_text`, `updated_at`, `version`. Nunca el `id` (ya está en la URL), nunca `sync_status` (es campo local).
+**Campos que se envían al servidor:** `body_json`, `body_text`, `updated_at`, `version`. Nunca el `id` (ya está en la URL), nunca `sync_status` (es campo local). Esto describe el contrato del runtime web actual, no el futuro sync documental de desktop.
 
 ---
 

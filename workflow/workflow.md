@@ -66,6 +66,14 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 1. El Issue Brief desde Linear.
 2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar nada adicional por deducción propia.
 
+**Excepción obligatoria por gap de contexto arquitectónico:**
+- Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, y no cita la secuencia desktop en `Reference docs`, el agente debe detener BUILD y marcar `Context Gap` bloqueante.
+- En ese caso, no improvisar contexto desde el código. Pedir corrección del brief para incluir, según aplique:
+  - `workflow/context/features/odessay-desktop-app.md`
+  - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
+  - `workflow/context/features/odessay-desktop-target-architecture.md`
+  - `workflow/context/features/odessay-desktop-migration-plan.md`
+
 **Secuencia:**
 
 **Setup**

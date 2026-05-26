@@ -35,6 +35,7 @@ Si el cambio toca cualquiera de estas dimensiones:
 cargar además, según aplique:
 
 - `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
 
@@ -707,7 +708,7 @@ components/
 
 ## Editor TipTap
 
-Siempre `"use client"`. Siempre aislado. El output es ProseMirror JSON (`body_json`) + texto plano (`body_text`). Markdown es un formato de I/O, nunca el modelo persistido — ver `odessay-editor.md` (sección: Modelo de edición).
+Siempre `"use client"`. Siempre aislado. El output inmediato del editor en el runtime web actual es ProseMirror JSON (`body_json`) + texto plano (`body_text`). Markdown es hoy un formato de I/O y modo source en web, pero no debe asumirse aquí como una afirmación universal del producto: la estrategia desktop converge a `.md` como contrato documental canónico.
 
 El editor tiene dos modos de UI: **Rich** (edición visual, por defecto) y **Source** (Markdown crudo, para usuarios que lo prefieren). El toggle está en la topbar. Al cambiar de Source → Rich, el Markdown se re-parsea a JSON vía `tiptap-markdown`. No hay pérdida en ninguna dirección dentro del subconjunto soportado.
 

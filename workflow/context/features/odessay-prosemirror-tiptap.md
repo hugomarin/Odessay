@@ -3,6 +3,12 @@
 **Documento técnico de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-editor.md` y `workflow/context/features/odessay-sync.md` junto con este documento antes de tocar el editor.
 
+Este documento describe el backbone actual de ProseMirror/TipTap y su integración en el runtime web. Para decisiones sobre contrato documental canónico y arquitectura multi-runtime, usar además:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ---
 
 ## Objetivo
@@ -19,12 +25,13 @@ Documentar de forma explícita:
 ## Fuente de verdad del editor
 
 - En runtime de edición: `EditorState` de ProseMirror.
-- En persistencia: `body_json` (documento completo, no por bloques).
-- En interoperabilidad humana/export/import: Markdown materializado.
+- En persistencia web/cloud actual: `body_json` (documento completo, no por bloques).
+- En interoperabilidad humana/export/import y dirección desktop: Markdown materializado, con convergencia futura a `.md` como contrato documental compartido.
 
 Contrato:
 - ProseMirror es el motor de edición.
-- Markdown es capa de entrada/salida, no el estado vivo del editor.
+- Markdown no es el estado vivo del editor.
+- La relación exacta entre `body_json`, Markdown y persistencia depende del runtime y está gobernada por la secuencia desktop, no solo por este documento.
 
 ---
 
@@ -170,8 +177,9 @@ Normalizaciones actuales:
 
 ## D. Persistencia
 
-- `body_json` sigue siendo la fuente persistida.
-- Markdown es derivado y debe mantenerse consistente, no competir como fuente paralela.
+- En runtime web actual, `body_json` sigue siendo la persistencia remota principal del editor rico.
+- En dirección desktop, `.md` es el contrato documental canónico y `body_json` debe tratarse como representación rica/derivada o persistencia transitoria según el adapter.
+- Markdown y representación rica no deben competir como dos verdades independientes; su relación debe estar explícitamente definida por runtime.
 
 ---
 

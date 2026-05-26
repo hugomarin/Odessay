@@ -263,9 +263,17 @@ Approval rule:
 Documentos del proyecto que el agente debe leer antes de implementar.
 Usar siempre paths completos desde la raíz del repo.
 
+Ejemplo mínimo (backend/database tradicional, no baseline universal):
+
 - workflow/context/core/odessay-modelo-datos.md (sección: writings)
 - .agents/skills/skill-database/SKILL.md
 - .agents/skills/skill-backend/SKILL.md
+
+Regla:
+
+- No copiar este ejemplo por inercia.
+- `Reference docs` debe construirse desde el scope real del issue.
+- Si el issue toca desktop, shared core, runtime boundaries o contrato documental, la secuencia desktop reemplaza cualquier baseline implícito web/Supabase-first.
 
 **Qué incluir según el tipo de issue:**
 - Cualquier issue con UI → `.agents/skills/skill-design/SKILL.md` + `.agents/skills/skill-design/vistas.md`
@@ -374,8 +382,9 @@ Condiciones que deben ser verdaderas para cerrar el issue. Escritas en prosa. Si
 Deben ser verificables sin ambigüedad.
 
 Ejemplo: El usuario puede crear un writing desde /write, escribir texto, y verificar que
-persiste al recargar la página. El auto-save no genera errores en consola. El campo body_json
-en Supabase refleja el contenido del editor.
+persiste al recargar la página. El auto-save no genera errores en consola. La persistencia
+observada coincide con el contrato del runtime que el issue declara explícitamente
+(por ejemplo: base local web actual, sync remoto, o write-path desktop).
 
 ## Notes
 Contexto adicional, decisiones de diseño tomadas, edge cases conocidos, restricciones.

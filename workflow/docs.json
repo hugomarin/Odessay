@@ -13,7 +13,7 @@
     {
       "path": "workflow/context/core/odessay-arquitectura.md",
       "type": "core",
-      "description": "Stack completo (Next.js 15, React 19, TipTap, Supabase, SQLite, AI provider server-side configurable), los tres modos de uso con sus interfaces, navegación de tres columnas, rutas principales y decisiones arquitectónicas tomadas."
+      "description": "Arquitectura vigente del producto y del runtime web actual: stack, modos de uso, navegación, rutas y decisiones activas. Para desktop y multi-runtime debe leerse junto a la secuencia `odessay-desktop-*`."
     },
     {
       "path": "workflow/context/core/odessay-stack.md",
@@ -23,7 +23,7 @@
     {
       "path": "workflow/context/core/odessay-modelo-datos.md",
       "type": "core",
-      "description": "Schema completo de Supabase: todas las tablas (profiles, writings, correspondences, collections, invitations, margins), columnas, tipos, RLS policies y relaciones. Fuente de verdad de la capa de datos."
+      "description": "Schema completo de Supabase y de la capa cloud/colaborativa actual: tablas, columnas, RLS y relaciones. Describe el modelo remoto vigente; no sustituye el contrato documental desktop/multi-runtime."
     },
     {
       "path": "workflow/context/core/odessay-paginas.md",
@@ -39,12 +39,12 @@
     {
       "path": "workflow/context/features/odessay-editor.md",
       "type": "feature",
-      "description": "Comportamiento técnico y de UX del editor TipTap: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas."
+      "description": "Comportamiento técnico y de UX del editor TipTap en el runtime actual: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas. Para contrato documental futuro ver la secuencia desktop."
     },
     {
       "path": "workflow/context/features/odessay-prosemirror-tiptap.md",
       "type": "feature",
-      "description": "Backbone técnico de ProseMirror/TipTap: extensiones activas, implementación custom (footnotes, decorations), contrato de round-trip Markdown y guardrails para evitar regresiones."
+      "description": "Backbone técnico actual de ProseMirror/TipTap: extensiones activas, implementación custom, round-trip Markdown y guardrails del editor rico. Debe leerse con la estrategia desktop cuando el issue toca persistencia o contrato documental."
     },
     {
       "path": "workflow/context/features/odessay-ai-editor.md",
@@ -74,7 +74,7 @@
     {
       "path": "workflow/context/features/odessay-sync.md",
       "type": "feature",
-      "description": "Capa local-first: el usuario nunca espera a Supabase. Interfaz LocalDB, flujo auto-save (escritura local inmediata → sync remoto en background), debounce, backoff exponencial, last-write-wins y estados del statusbar."
+      "description": "Capa local-first del runtime web actual: LocalDB, auto-save local, sync remoto, debounce, retry y estados del statusbar. Para desktop y filesystem `.md`, usar además la secuencia `odessay-desktop-*`."
     },
     {
       "path": "workflow/context/features/odessay-desktop-app.md",
@@ -95,6 +95,11 @@
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
       "type": "feature",
       "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
+    },
+    {
+      "path": "workflow/context/features/odessay-desktop-docs-corrections-log.md",
+      "type": "feature",
+      "description": "Log de consolidación documental posterior a revisión adversarial: correcciones aplicadas al corpus, skills y workflow para distinguir runtime web actual, capa cloud y dirección desktop/multi-runtime."
     },
     {
       "path": "workflow/context/features/odessay-invitaciones.md",
