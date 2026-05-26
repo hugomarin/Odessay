@@ -11,6 +11,8 @@ El alcance específico del proyecto — fases e issues macro — vive en `workfl
 
 Usa Linear MCP para crear y gestionar todo directamente.
 
+Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boundaries, shared core, save path, sync, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md`.
+
 ---
 
 ## Descubrimiento documental para arquitectura y desktop
@@ -45,6 +47,7 @@ Regla:
 
 - si un issue cambia arquitectura, contratos, runtime boundaries, documento canónico o secuencia de migración, el brief no puede quedarse solo con docs técnicos locales del feature; debe incluir el doc desktop correspondiente
 - si el prompt menciona desktop de forma estratégica y el PM no cita ninguno de estos docs, el brief está incompleto
+- si además el issue cruza frontend/backend/database, el PM debe usar `skill-architecture` para clasificar ownership y boundaries antes de cerrar el brief
 
 ---
 
@@ -288,12 +291,14 @@ Regla:
 - Issues que tocan AI de corrección ortográfica, streaming de sugerencias o memoria de accept/reject → `workflow/context/features/odessay-ai-writing-assist.md` (obligatorio).
 - Issues que tocan extensiones de TipTap/ProseMirror, decorations, serializer/parser o round-trip Markdown ↔ JSON → `workflow/context/features/odessay-prosemirror-tiptap.md` (obligatorio).
 - Issues que tocan arquitectura del producto, portabilidad web/desktop/mobile, runtime boundaries, servicios compartidos, filesystem local, o el rol de `.md`/`body_json` → `workflow/context/features/odessay-desktop-app.md` + `workflow/context/features/odessay-desktop-migration-diagnostic.md` + `workflow/context/features/odessay-desktop-target-architecture.md` + `workflow/context/features/odessay-desktop-migration-plan.md`
+- Issues que tocan clasificación por capas, ownership entre frontend/backend/database, contracts de servicio o boundaries core/adapters → `.agents/skills/skill-architecture/SKILL.md` (obligatorio)
 
 **Regla de conexión de documentos (obligatoria):**
 - Si el issue cambia comportamiento de una feature documentada, el brief debe citar explícitamente ese documento en `Reference docs`.
 - Si no existe documento de feature para el cambio, el PM debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
 - No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
 - En temas de desktop/arquitectura, el PM debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
+- En temas de arquitectura, el PM debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
 
 **External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
 

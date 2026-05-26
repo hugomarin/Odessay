@@ -20,6 +20,7 @@ Antes de implementar en editor, cargar:
 
 Regla:
 - Si el cambio altera el contrato real de estos docs, actualizar el documento correspondiente y registrar la relación en el PR/issue. No dejar implementación desacoplada de spec.
+- Si el cambio cruza save path, sync, parser/serializer, services o runtime boundaries, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de decidir la implementación.
 
 ## Arquitectura multi-runtime — awareness obligatoria
 

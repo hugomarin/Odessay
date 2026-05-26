@@ -31,6 +31,9 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **No cargar por defecto:** skills técnicos (frontend, backend, database), testing. Solo si un issue de la fase los requiere explícitamente.
 
+**Excepción arquitectónica:**
+- Si la fase o los issues implican desktop, shared core, runtime boundaries, save path, sync/hydration, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de redactar briefs.
+
 **Secuencia (Diálogo de Alineación y Ejecución):**
 1. Resolver la fase (ver lógica de fallback arriba).
 2. Leer `workflow/status.json` y localizar la fase en `workflow/define/roadmap.md`.
@@ -40,11 +43,13 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 6. **Si existe el DoD:** El agente cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, el agente dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
 7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder.
 8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
-9. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
-10. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
+9. Si algún issue de la fase toca arquitectura o runtime boundaries, leer `.agents/skills/skill-architecture/SKILL.md` antes de fijar ownership y `Reference docs`.
+10. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
+11. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
     - Si el issue toca presentación de texto, incluir explícitamente `Presentation Contract` cross-mode (`/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}`) con criterios verificables.
-11. Crear los issues en Linear con su brief incluido.
-12. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
+    - Si el issue toca arquitectura, agregar en el brief una clasificación mínima: `Dominant layer`, `Runtime scope`, `Contracts touched`, `Required docs`.
+12. Crear los issues en Linear con su brief incluido.
+13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
 **Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD.
 

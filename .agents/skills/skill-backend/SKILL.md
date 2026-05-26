@@ -34,6 +34,7 @@ Antes de implementar, cargar docs según scope:
 Regla:
 - No hardcodear modelo en rutas de negocio.
 - Resolver proveedor/modelo por env y mantener contrato de error explícito de configuración.
+- Si el cambio toca core vs adapter, runtime boundaries o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de decidir la forma del backend.
 
 ## Arquitectura multi-runtime — awareness obligatoria
 

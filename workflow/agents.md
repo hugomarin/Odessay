@@ -7,6 +7,7 @@ Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digi
 - `workflow/docs.json`: El inventario completo del proyecto. Contiene la ruta y descripción de cada archivo en `workflow/` y `.agents/skills/`. Consúltalo para ubicarte.
 - `workflow/workflow.md`: El protocolo maestro. Define qué hace cada comando `/wf-*` (como `/wf-define` o `/wf-build`). Léelo SIEMPRE que recibas un comando.
 - `.agents/skills/`: Directorio que contiene el "cómo" (instrucciones técnicas, snippets y checklists por dominio de ingeniería o producto).
+- `.agents/skills/skill-architecture/SKILL.md`: La capa de clasificación arquitectónica. Úsala cuando la tarea toque desktop, multi-runtime, shared core, save path, sync, parser/serializer o boundaries entre frontend/backend.
 
 ## Cómo operar
 
@@ -19,6 +20,8 @@ Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, a
 2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 3. `workflow/context/features/odessay-desktop-target-architecture.md`
 4. `workflow/context/features/odessay-desktop-migration-plan.md`
+
+Si además la pregunta es “dónde debe vivir esto” o “qué capa toca”, carga también `.agents/skills/skill-architecture/SKILL.md` antes de decidir si el trabajo cae en frontend, backend o database.
 
 ## Regla de ramas y commits
 

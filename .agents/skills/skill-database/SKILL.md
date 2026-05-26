@@ -23,6 +23,7 @@ Regla general:
 
 - no diseñar cambios de schema que bloqueen o contradigan la estrategia de documento canónico compartido
 - si un issue toca `writings.body_json`, serializer/parser, sync documental o el rol futuro de la persistencia remota, cargar también:
+  - `.agents/skills/skill-architecture/SKILL.md`
   - `workflow/context/features/odessay-desktop-app.md`
   - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
   - `workflow/context/features/odessay-desktop-target-architecture.md`

@@ -246,6 +246,11 @@
       "description": "Workflow de PM en Linear: cómo escribir issues ejecutables, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Leer antes de crear o modificar issues."
     },
     {
+      "path": ".agents/skills/skill-architecture/SKILL.md",
+      "type": "skill",
+      "description": "Capa de clasificación arquitectónica de Odessay: cómo decidir si un cambio pertenece a UI, aplicación, dominio, shared core, web adapter, desktop adapter o servicio remoto, y qué contratos/invariantes deben fijarse antes de implementar."
+    },
+    {
       "path": ".agents/skills/skill-code-review/SKILL.md",
       "type": "skill",
       "description": "Checklist pre-PR: typecheck, lint, tests hermético, calidad de código, seguridad y performance. Define el estándar mínimo que debe cumplir cualquier entrega antes de abrir un PR."
