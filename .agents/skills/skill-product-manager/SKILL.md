@@ -15,6 +15,38 @@ Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boun
 
 ---
 
+## Modo de orquestación
+
+Este skill no sustituye al agente principal; lo guía.
+El rol de orquestación para `/wf-define` vive en `.agents/agents/product-manager.md`.
+
+Para `/wf-define`, el patrón correcto es:
+
+- un **agente de planeación** conduce la definición de fase
+- este skill provee el marco principal de planning, secuenciación y calidad de briefs
+- `skill-audit-planning` está disponible para revisar la calidad del plan antes de cerrarlo o al preparar `wf-audit`
+- `skill-architecture` entra como segunda capa obligatoria cuando el problema toca desktop, multi-runtime o boundaries del sistema
+- `skill-frontend`, `skill-backend`, `skill-database` u otros skills técnicos pueden participar como especialistas consultivos para responder dudas puntuales
+
+Reglas:
+
+- el roadmap no se construye como suma de workstreams aislados por disciplina
+- el agente principal debe sintetizar una sola propuesta coherente de hitos, dependencias, ownership y criterios de salida
+- si el entorno soporta subagentes, pueden usarse para consultas acotadas; si no, el mismo agente debe cargar los skills relevantes y producir la síntesis igualmente
+
+Señal de mala orquestación:
+
+- frontend propone una secuencia
+- backend propone otra
+- arquitectura propone una tercera
+- y el PM solo las concatena sin resolver contradicciones
+
+Eso produce planificación inflada y sin verdadero critical path. El agente de planeación debe cerrar esas tensiones antes de crear briefs o issues.
+
+Cuando existan dudas sobre cobertura del DoD, overlaps, huecos o secuencia entre issues, cargar además `.agents/skills/skill-audit-planning/SKILL.md`.
+
+---
+
 ## Descubrimiento documental para arquitectura y desktop
 
 Cuando el prompt, roadmap o conversación mencionen cualquiera de estas señales:

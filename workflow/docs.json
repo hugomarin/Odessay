@@ -191,6 +191,26 @@
       "description": "Gate de cierre de Fase 3 — Organizar y publicar: checklist de workspace multi-documento, recientes, find/replace, métricas, AI de publicación, preview, collections, export, auth/email y páginas públicas."
     },
     {
+      "path": "workflow/define/dod-fase-4.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 4 — Shared Core Multi-Runtime: checklist de partición core/adapters, contrato documental, boundaries de write-path/sync, desacoplamiento del runtime web y evidencia de no regresión sobre la experiencia web actual."
+    },
+    {
+      "path": "workflow/define/dod-fase-5.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 5 — Convergencia Web sobre el Core Compartido: checklist de adaptación del runtime web al core, explicitación de adapters web, alineación del local-first web al contrato documental y evidencia reproducible de invariantes compartidos."
+    },
+    {
+      "path": "workflow/define/dod-fase-6.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 6 — Desktop Local-First Runtime: checklist de app desktop usable, filesystem como base operativa, `.md` como fuente de verdad, Rich/Source sobre el mismo documento y operación offline local-first."
+    },
+    {
+      "path": "workflow/define/dod-fase-7.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 7 — Capacidades Remotas y Paridad Web/Desktop: checklist de integración remota compatible con local-first, paridad contractual web/desktop, compatibilidad de capacidades cross-runtime y política operativa de coexistencia."
+    },
+    {
       "path": "workflow/define/debrief.md",
       "type": "ops",
       "description": "Observaciones post-entrega organizadas por fase. Se alimenta con /wf-debrief tras cada merge. Cada entrada tiene ID estable, tipo (bug/mejora/ux-friction/deuda-tecnica) y prioridad sugerida. Las entradas aprobadas por el humano se convierten en issues en Linear."
@@ -233,6 +253,16 @@
     },
 
     {
+      "path": ".agents/agents/README.md",
+      "type": "agent",
+      "description": "Convención mínima para roles de agente en Odessay: ubicación, frontmatter requerido, naming, responsabilidades y relación entre workflow, agent roles y skills."
+    },
+    {
+      "path": ".agents/agents/product-manager.md",
+      "type": "agent",
+      "description": "Rol de agente para `/wf-define`: orquesta la planeación de fases, usa skill-product-manager como marco principal, convoca especialistas cuando hace falta y consolida roadmap, DoD y briefs en una sola voz."
+    },
+    {
       "path": ".agents/skills/skill-design/SKILL.md",
       "type": "skill",
       "description": "Sistema de diseño visual completo: paleta de colores (tokens ink/paper/accent), tipografía (Lora para contenido, Geist para UI), componentes ShadCN adaptados, iconos, transiciones y reglas visuales invariables."
@@ -266,6 +296,11 @@
       "path": ".agents/skills/skill-product-manager/SKILL.md",
       "type": "skill",
       "description": "Workflow de PM en Linear: cómo escribir issues ejecutables, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Leer antes de crear o modificar issues."
+    },
+    {
+      "path": ".agents/skills/skill-audit-planning/SKILL.md",
+      "type": "skill",
+      "description": "Checklist de audit de planeación para roadmap, DoD e Issue Briefs: verifica cobertura del DoD, overlaps, huecos, dependencias, secuencia y contratos faltantes antes de BUILD."
     },
     {
       "path": ".agents/skills/skill-architecture/SKILL.md",
@@ -324,6 +359,7 @@
     "workflow/perf/": "Artefactos de performance versionados del editor (baselines y budgets) para trazabilidad y gates de regresión.",
     "workflow/context/framework/": "Framework MECE genérico. No es específico de Odessay.",
     "workflow/context/reference/": "Prototipos HTML interactivos y screenshots. Referencia visual canónica.",
+    ".agents/agents/": "Roles de agente. Definen quién orquesta una clase de trabajo, cómo usa skills y contexto, y siguen la convención documentada en `.agents/agents/README.md`.",
     ".agents/skills/": "Instrucciones de implementación por dominio. Se leen cuando el issue toca ese área."
   }
 }

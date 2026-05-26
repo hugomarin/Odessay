@@ -1,7 +1,7 @@
 {
     "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
     "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-    "last_updated": "2026-05-24",
+    "last_updated": "2026-05-26",
     "traceability_exceptions": {
         "ignored_issue_ids": [
             {
@@ -11,30 +11,17 @@
         ]
     },
     "active_phase": {
-        "name": "Fase 3 — Organizar y publicar",
-        "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
+        "name": "Fase 4 — Shared Core Multi-Runtime",
+        "linear_project": "",
         "roadmap_ref": "workflow/define/roadmap.md"
     },
     "phase_plan": {
-        "phase": "Fase 3 — Organizar y publicar",
+        "phase": "Fase 4 — Shared Core Multi-Runtime",
         "source_of_truth": "workflow/define/roadmap.md",
-        "definition_of_done": "workflow/define/dod-fase-3.md",
-        "linear_project": "https://linear.app/z9ne/project/fase-3-organizar-y-publicar-679109c1d801",
-        "linear_issues": [
-            "ODE-103",
-            "ODE-104",
-            "ODE-106",
-            "ODE-107",
-            "ODE-134",
-            "ODE-135",
-            "ODE-136",
-            "ODE-137",
-            "ODE-138",
-            "ODE-139",
-            "ODE-140",
-            "ODE-141"
-        ],
-        "notes": "Fase activa. Linear project In Progress (startDate 2026-04-20, targetDate 2026-05-16). linear_issues lista los issues abiertos (Todo + Backlog) restantes; los completados se reflejan en built[]. Pendientes: ODE-103 templates auth, ODE-104 public pages, ODE-106 AI agent en wf-run, ODE-107 evaluar headless auth para agentes, ODE-134 export PDF/DOCX styling, ODE-135 polish desk list, ODE-136 title editing + AI suggestions, ODE-137 toolbar grouping, ODE-139 empty state al cerrar última pestaña, ODE-140 lifecycle de blank writing, ODE-141 collection chips."
+        "definition_of_done": "workflow/define/dod-fase-4.md",
+        "linear_project": "",
+        "linear_issues": [],
+        "notes": "Fase 3 se considera cerrada y el roadmap fue replanteado para priorizar la arquitectura multi-runtime. La siguiente fase activa se enfoca en shared core, contratos de servicio, contrato documental `.md` y desacoplamiento del runtime web. Writing Harness, correspondences e iniciativas de distribución salen del critical path hasta estabilizar desktop + web sobre el mismo core. Pendiente: co-crear `workflow/define/dod-fase-4.md` y luego crear el proyecto/los issues de Linear para esta fase."
     },
     "built": [
         {

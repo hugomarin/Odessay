@@ -5,7 +5,7 @@ Lee `workflow/context/core/odessay-fundacional.md` para la visión, `.agents/ski
 
 Este documento define el alcance completo del producto: fases, los issues macro que componen cada fase y sus dependencias. Es la fuente de verdad del qué y el cuándo. El cómo vive en los skills.
 
-**Ámbito del roadmap:** este documento mezcla fases ya ejecutadas del runtime web actual con dirección futura de desktop. Para cualquier issue o fase que toque desktop, shared core, `.md` como contrato documental, runtime boundaries o extracción de servicios, el roadmap debe leerse junto con:
+**Ámbito del roadmap:** este documento mezcla fases ya ejecutadas del runtime web actual con dirección futura de desktop. Desde el cierre de Fase 3, el roadmap pivota explícitamente a la creación del sistema multi-runtime de Odessay: shared core, adapters por runtime, desktop como foco principal y web como versión convergente sobre los mismos contratos. Para cualquier issue o fase que toque desktop, shared core, `.md` como contrato documental, runtime boundaries o extracción de servicios, el roadmap debe leerse junto con:
 
 - `workflow/context/features/odessay-desktop-app.md`
 - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
@@ -276,157 +276,138 @@ Touch targets (reading view y espacio público en mobile, Fase 2):
 
 ---
 
-## Fase 4 — Writing Harness / Editorial Intelligence Layer
+## Fase 4 — Shared Core Multi-Runtime
 
-Al terminar esta fase: Odessay deja de ser solo un editor con AI y se convierte en una capa de criterio editorial para escritura asistida por AI. El usuario puede pedir un diagnóstico por capas sobre intención, voz, retórica, estructura argumental, lógica informal, capa epistémica, emoción y audiencia antes de aceptar reescrituras. La promesa de fase es: escribir con AI sin perder voz, intención ni criterio.
-
----
-
-**Document product thesis and MVP scope for Writing Harness** `[product, ai-editor]` `[critical-path]`
-Convertir la iniciativa "Odessay - Writing Harness / Editorial Intelligence Layer" en un spec operativo: problema, ICP, casos de uso, criterios de éxito, alcance MVP y no-alcance explícito. La fase no debe construir un detector de AI ni un "humanizer"; debe evaluar si un texto tiene voz, intención, estructura y pensamiento propio.
-Dependencias: Working App usable para pruebas con design partners.
-Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
-
-**Define editorial layer taxonomy and scoring contract** `[product, ai-editor]` `[critical-path]`
-Definir las capas del harness como contrato de producto y datos: intención, voz, retórica, estructura argumentativa, lógica informal, capa epistémica, emoción y audiencia. Cada capa debe tener heurísticas, señales observables, tipos de hallazgo, severidad y formato de salida. El contrato debe priorizar diagnóstico accionable sobre calificación superficial.
-Dependencias: Document product thesis and MVP scope for Writing Harness.
-Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
-
-**Implement /api/ai/editorial-diagnosis — layered writing analysis** `[backend, ai-editor]` `[critical-path]`
-API route server-side que recibe el writing, contexto declarado del autor y configuración de análisis. Invoca el modelo con el harness editorial y devuelve diagnóstico estructurado por capas: intención probable, hallazgos prioritarios, evidencia textual, explicación breve y recomendación accionable. No reescribe por default.
-Dependencias: Define editorial layer taxonomy and scoring contract, Implement auto-save, Configure Supabase projects.
-Referencia: `.agents/skills/skill-backend/SKILL.md`, `workflow/context/features/odessay-ai-editor.md`.
-
-**Build editorial diagnosis panel in editor** `[frontend, ai-editor]` `[critical-path]`
-Panel lateral o surface integrada donde el autor ve el diagnóstico por capas. Debe mostrar un resumen prioritario, navegación por capa y evidencia anclada al texto. La experiencia se siente como tener un editor inteligente al lado, no como un corrector automático ni como una calificación moralizante.
-Dependencias: Implement /api/ai/editorial-diagnosis — layered writing analysis.
-Referencia: `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-frontend/SKILL.md`.
-
-**Anchor diagnosis findings to text ranges** `[frontend, ai-editor]`
-Renderizar hallazgos del harness como referencias navegables dentro del editor: frase fuerte subdesarrollada, tono genérico, cambio de audiencia, premisa oculta, recurso retórico débil, etc. El anclaje debe ser estable ante ediciones razonables y no interferir con escritura, selección, formato ni undo/redo.
-Dependencias: Build editorial diagnosis panel in editor.
-Referencia: `workflow/context/features/odessay-editor.md`.
-
-**Implement author intent and audience context controls** `[frontend, backend, ai-editor]`
-Permitir que el autor declare tipo de pieza, intención, audiencia, nivel de riesgo, tono deseado y restricciones. El harness debe usar este contexto para evitar feedback genérico. Sin intención explícita, Odessay puede inferirla, pero debe mostrar la inferencia como editable.
-Dependencias: Build editorial diagnosis panel in editor.
-Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
-
-**Implement selective recommendations and rewrite-after-diagnosis flow** `[frontend, backend, ai-editor]`
-Después del diagnóstico, ofrecer recomendaciones concretas y reescrituras opcionales por hallazgo o bloque. La reescritura nunca ocurre antes del diagnóstico ni sin aceptación del autor. Debe preservar intención, voz y criterio, no solo "hacer sonar mejor" el texto.
-Dependencias: Anchor diagnosis findings to text ranges, Implement author intent and audience context controls.
-Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
-
-**Build public Writing Slop / Voice Analyzer prototype** `[frontend, backend, ai-editor]`
-Herramienta pública de adquisición: el usuario pega un texto y recibe un diagnóstico rápido de voz, intención, genericidad, recursos retóricos, ideas fuertes subdesarrolladas y coherencia argumental. No promete detectar si se usó AI. Promesa: no detectamos si usaste AI; mostramos si tu texto tiene voz, intención y criterio.
-Dependencias: Implement /api/ai/editorial-diagnosis — layered writing analysis, Build public pages.
-Referencia: Linear initiative `Odessay - Writing Harness / Editorial Intelligence Layer`.
-
-**Validate Writing Harness with design partners** `[product, frontend, ai-editor]`
-Probar el harness con textos reales de design partners. Validar si el diagnóstico ayuda a decidir qué mejorar, si preserva voz, si evita moralizar el uso de AI y si sus recomendaciones se sienten accionables. Ajustar taxonomía y prompt con evidencia.
-Dependencias: Build editorial diagnosis panel in editor, Build public Writing Slop / Voice Analyzer prototype.
-Referencia: `.agents/skills/skill-ux-testing/SKILL.md`.
+Al terminar esta fase: Odessay deja de estar organizado alrededor del runtime web actual y pasa a tener un núcleo de producto explícito. Desktop deja de ser una idea “posterior” y se convierte en el driver arquitectónico del sistema, mientras web deja de ser la fuente implícita de verdad estructural.
 
 ---
 
-## Fase 5 — Corresponder
+**Hito**
+La arquitectura deja de estar implícita en el runtime web y queda expresada como una base de producto compartible entre runtimes.
 
-Al terminar esta fase: dos o más personas pueden sostener una conversación epistolar completa en Odessay. El flujo queda cerrado de punta a punta: iniciar respuesta desde lectura, persistir la relación entre writings, navegar el hilo completo y saber claramente si te toca responder.
+**Al cierre de esta fase debe ser verdad que:**
 
----
+- existe una partición explícita entre core compartido y responsabilidades específicas de plataforma
+- el contrato documental de Odessay queda definido como parte estructural del producto, no como detalle de implementación
+- desktop deja de depender de “empaquetar la web” como estrategia
+- cualquier trabajo posterior de web o desktop puede clasificarse por layer y runtime scope sin ambigüedad
 
-**Implement reply mechanism — /write?reply_to={id}** `[backend, frontend]` `[critical-path]`
-Entrada de respuesta desde reading view y desde /shared. El editor se abre pre-cargado como respuesta al writing origen, con contexto mínimo visible (autor + título + extracto corto) sin romper el foco de escritura. El writing nuevo se crea con `parent_id` y conserva independencia como pieza editorial.
-Dependencias: Build reading view, Implement writing_shares.
-Referencia: `workflow/context/core/odessay-flujos.md` (sección: Leer y Responder), `workflow/context/core/odessay-paginas.md`.
+**Temas que entran en esta fase**
 
-**Implement correspondence creation and tree structure** `[backend, database]` `[critical-path]`
-Crear correspondence automáticamente en la primera respuesta. Asignar `correspondence_id` al writing raíz y a todas las respuestas del árbol. Garantizar orden cronológico estable y relación padre-hijo consistente para reconstrucción de hilo en cliente. Trigger para actualizar `correspondences.updated_at` en cada nueva carta.
-Dependencias: Implement reply mechanism.
-Referencia: `workflow/context/core/odessay-modelo-datos.md` (sección: correspondences).
+- definición y fijación de boundaries multi-runtime
+- consolidación del contrato documental compartido
+- reducción del acoplamiento estructural al runtime web actual
+- criterios de validación para la migración
 
-**Implement correspondence participation and access rules** `[backend, database]`
-Definir quién puede ver y responder cada correspondencia según visibilidad del writing raíz y shares activos. Solo participantes autorizados acceden al hilo completo. Cambios de visibilidad y revocaciones de share no deben romper el historial ya emitido, pero sí bloquear accesos futuros no permitidos.
-Dependencias: Implement correspondence creation and tree structure, Implement shared and public visibility.
-Referencia: `workflow/context/core/odessay-modelo-datos.md`, `workflow/context/core/odessay-flujos.md` (sección: Leer y Responder).
+**Temas que no son objetivo de esta fase**
 
-**Build /correspondences — thread view** `[frontend, backend]`
-Vista de correspondencias con dos capas: inbox de hilos donde el usuario participa + detalle navegable del hilo seleccionado. Incluir participants bar (avatares apilados y stats), secuencia de mini-documentos con línea conectora y CTA claro para responder. Estado por hilo: `Your turn` / `Waiting` derivado del último writing del árbol.
-Dependencias: Implement correspondence participation and access rules.
-Referencia: `workflow/context/features/odessay-correspondencias.md`, `workflow/context/core/odessay-arquitectura.md` (sección: Correspondences), `.agents/skills/skill-design/vistas.md` (sección: Correspondences), `workflow/context/reference/correspondences.html`.
+- shell desktop final
+- capacidades remotas completas en desktop
+- expansión funcional de producto sobre una base aún inestable
 
-**Validate correspondence flow — end-to-end thread loop** `[frontend, backend]`
-Validar de punta a punta: lectura → responder → creación/actualización de correspondence → visualización del hilo → nuevo turno. Cubrir casos 1:1 y 1:N, además de regresiones de permisos (usuario sin acceso, share revocado, writing privado).
-Dependencias: Build /correspondences — thread view.
-Referencia: `.agents/skills/skill-ux-testing/SKILL.md`, `workflow/context/features/odessay-correspondencias.md`.
-
----
-
-## Fase 6 — Invitar y distribuir
-
-Al terminar esta fase: el producto puede crecer y distribuirse. Un autor puede traer a alguien nuevo a Odessay, la primera experiencia de esa persona es leer la carta que le escribieron y el contenido público está optimizado para descubrimiento y difusión.
-
----
-
-**Implement invitations — token generation and sharing link** `[backend, database]`
-Crear invitación con token único. Generar link /invite/{token} que el autor comparte por cualquier canal (WhatsApp, email, lo que prefiera). La invitación referencia el writing si existe. Estado: pending, accepted, expired.
-Dependencias: Implement correspondence creation and tree structure.
-Referencia: `workflow/context/features/odessay-invitaciones.md`, `workflow/context/core/odessay-flujos.md` (sección: Invitar).
-
-**Build /invite/{token} — invitation landing page** `[frontend]`
-Página de llegada para invitados sin autenticación. Muestra el writing-invitación si existe. Lleva al signup con email prellenado si viene de un link con email. La primera experiencia en Odessay es leer lo que alguien escribió para ti.
-Dependencias: Implement invitations.
-
-**Extend transactional email templates for invitations** `[frontend, backend, infra]`
-Añadir variante de email de invitación epistolar usando el canal de emails no-auth de Odessay. El canal por link sigue siendo principal; email funciona como canal complementario. No usar Supabase Auth templates para invitaciones de producto.
-Dependencias: Build /invite/{token}, Configure Supabase Auth custom SMTP on auth.odessay.com si el proveedor de envío no-auth comparte cuenta/proveedor.
-
-**Implement i18n — English and Spanish** `[frontend, infra]`
-next-intl configurado. Inglés como idioma default. Español como segundo idioma prioritario. Todas las cadenas de UI traducidas en ambos idiomas. URLs en inglés.
-Dependencias: Build public pages.
-
-**Implement SEO and Open Graph** `[frontend, backend]`
-Metadata para landing, /{username}, /{username}/{slug}. Open Graph con título, autor y extracto para writings públicos. Preview coherente en redes y mensajería.
-Dependencias: Build public author space, Build public pages.
-
-**Seed data — staging completo** `[infra, database]`
-Seed data completo para staging: correspondencias con múltiples participantes y árbol de respuestas, collections con writings clasificados y sin clasificar, márgenes de ejemplo, invitaciones en diferentes estados. Sin esto, los agentes no pueden testear flujos complejos de forma autónoma.
-Dependencias: Implement collections, Implement margins, Build /correspondences — thread view, Implement invitations.
-
----
-
-## Fase 7 — Desktop
-
-Al terminar esta fase: Odessay existe como aplicación nativa de escritorio en macOS. El fundamento ya no es “empaquetar la web” ni “reemplazar IndexedDB por SQLite”, sino ejecutar el shared core sobre adapters desktop con filesystem `.md` como write-path principal y sync remoto como capacidad secundaria.
-
----
-
-**Define desktop architecture contract and migration gates** `[product, architecture]`
-Fijar la secuencia obligatoria para desktop/multi-runtime en planning y ejecución: dirección, diagnóstico, target architecture, migration plan y contract review. Esta fase no empieza por Tauri; empieza por hacer obligatoria la partición entre shared core, adapters y runtime scope.
-Dependencias: Todas las fases anteriores.
 Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
 
-**Extract DocumentService and SaveWriting flow from web UI** `[architecture, frontend, backend]`
-Extraer el write-path fuera de componentes y endpoints implícitos. La UI no debe conocer `fetch("/api/writings/...")`; debe operar contra un contrato `DocumentService`. El output esperado es una implementación web inicial con boundaries explícitos.
-Dependencias: Define desktop architecture contract and migration gates.
-Referencia: `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+---
 
-**Extract SyncService and isolate web sync adapter** `[architecture, backend, frontend]`
-Separar cola, retry, hydration y transporte web. El sync remoto deja de ser comportamiento implícito de la UI y queda encapsulado como contrato + adapter web.
-Dependencias: Extract DocumentService and SaveWriting flow from web UI.
-Referencia: `workflow/context/features/odessay-sync.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+## Fase 5 — Convergencia Web sobre el Core Compartido
 
-**Stabilize document contract (.md, parser/serializer, derived rich state)** `[architecture, frontend, backend]`
-Fijar cómo se relacionan `.md`, `body_json`, import/export, round-trip y caches derivadas. El objetivo es que `body_json` deje de leerse como contrato universal y pase a ser representación dependiente del runtime.
-Dependencias: Extract SyncService and isolate web sync adapter.
-Referencia: `workflow/context/features/odessay-prosemirror-tiptap.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+Al terminar esta fase: la versión web sigue siendo first-class, pero deja de ser un conjunto de flujos especiales acoplados entre sí. Web pasa a ser la primera superficie operando sobre el core compartido y sobre adapters explícitos.
 
-**Implement desktop adapters for filesystem, local index and credentials** `[desktop, architecture, infra]`
-Introducir adapters desktop concretos para abrir/guardar `.md`, mantener índice/caché derivado y persistir credenciales locales seguras. La shell sigue siendo secundaria frente al contrato.
-Dependencias: Stabilize document contract (.md, parser/serializer, derived rich state).
-Referencia: `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/core/odessay-stack.md` (sección: Desktop).
+---
 
-**Package prepared core as desktop app (Tauri) — macOS** `[infra, desktop]`
-Empaquetar Odessay como aplicación nativa usando Tauri una vez que el core compartido y los adapters desktop estén listos. Binarios para macOS como primera plataforma. Windows y Linux como expansión posterior.
-Dependencias: Implement desktop adapters for filesystem, local index and credentials.
-Referencia: `workflow/context/core/odessay-stack.md` (sección: Desktop), `workflow/context/features/odessay-desktop-migration-plan.md`.
+**Hito**
+La web funciona como una implementación del sistema, no como la definición del sistema.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- los flujos principales de escritura y lectura web corren sobre contratos ya estabilizados
+- las dependencias del runtime web quedan encapsuladas como adapters identificables
+- la persistencia local-first de web respeta el mismo contrato documental que servirá para desktop
+- existe evidencia reproducible de que el core puede validarse sin depender de detalles accidentales del shell web
+
+**Temas que entran en esta fase**
+
+- convergencia del runtime web al core compartido
+- explicitación de adapters web
+- estabilización del write-path web sobre el contrato documental
+- harnesses y validación de invariantes compartidos
+
+**Temas que no son objetivo de esta fase**
+
+- entregar aún una app desktop usable
+- abrir nuevos frentes de feature que dependan de una base no cerrada
+
+Referencia: `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-sync.md`, `workflow/context/features/odessay-editor.md`, `.agents/skills/skill-architecture/SKILL.md`.
+
+---
+
+## Fase 6 — Desktop Local-First Runtime
+
+Al terminar esta fase: Odessay existe como app desktop usable para escritura local real. El documento vive primero en el disco del usuario y la app ya puede sostener la promesa central del producto desktop sin depender de login ni de red.
+
+---
+
+**Hito**
+Desktop ya escribe de verdad.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- la app desktop puede abrir, crear, editar y guardar documentos locales como capacidad nativa
+- `.md` funciona como fuente de verdad del writing en desktop
+- Rich mode y Source mode operan sobre el mismo documento canónico
+- assets locales, índice derivado y settings existen como soporte del documento, no como sustituto
+- la experiencia base desktop funciona offline
+
+**Temas que entran en esta fase**
+
+- runtime desktop local-first
+- filesystem como base operativa del writing
+- índice derivado y manejo local de assets/settings
+- shell desktop solo en la medida necesaria para operar el modelo file-based
+
+**Temas que no son objetivo de esta fase**
+
+- paridad completa de capacidades remotas
+- expansión colaborativa o social antes de cerrar la promesa local
+
+Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/core/odessay-stack.md`.
+
+---
+
+## Fase 7 — Capacidades Remotas y Paridad Web/Desktop
+
+Al terminar esta fase: desktop y web convergen como una sola plataforma Odessay. Comparten el mismo núcleo de producto y se diferencian solo por runtime y adapters. La red vuelve a entrar, pero ya como extensión del sistema local y no como condición de existencia del documento.
+
+---
+
+**Hito**
+Web y desktop ya no compiten entre sí; son dos superficies del mismo sistema.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- desktop puede conectarse a capacidades remotas sin perder su naturaleza local-first
+- web y desktop preservan el mismo contrato documental y los mismos invariantes de producto
+- publishing, sync, AI y auth se entienden como capacidades compatibles entre runtimes
+- existe una política clara de coexistencia, releases y migración entre superficies
+
+**Temas que entran en esta fase**
+
+- reintroducción de capacidades remotas sobre la base desktop ya estable
+- validación de paridad cross-runtime
+- estrategia operativa de convivencia web/desktop
+
+**Temas que no son objetivo de esta fase**
+
+- abrir nuevas líneas de producto antes de cerrar la convergencia
+
+Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-prosemirror-tiptap.md`, `workflow/context/core/odessay-stack.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+
+---
+
+## Horizonte Posterior — Iniciativas Diferidas
+
+Estas líneas no desaparecen del producto, pero salen del critical path mientras se construye la plataforma multi-runtime.
+
+- **Writing Harness / Editorial Intelligence Layer** — retomar cuando shared core, adapters y paridad web/desktop estén estables. Su valor depende de operar sobre un contrato documental sólido, no sobre un runtime acoplado.
+- **Correspondences** — retomar después de la base multi-runtime; la conversación epistolar debe construirse sobre contratos de documento, sharing y sync ya estabilizados.
+- **Invitations, distribution, i18n y SEO** — quedan diferidos hasta que la convivencia web/desktop y el modelo documental estén cerrados.

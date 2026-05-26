@@ -19,6 +19,10 @@ El comportamiento esperado es idéntico en ambas formas. Cuando el orquestador (
 
 PLAN no parte de issues existentes — parte de una fase definida en el roadmap. El output es el conjunto de issues que el agente de BUILD va a ejecutar.
 
+**Agente responsable:** `/wf-define` lo conduce el rol definido en `.agents/agents/product-manager.md`.
+
+Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal y activa skills especializados según el contexto de la fase. `workflow.md` define el protocolo; el documento del agente define la estrategia de orquestación.
+
 **Resolución de fase:**
 - Con argumento (`/wf-define fase-2`): usar la fase indicada.
 - Sin argumento (`/wf-define`): leer `workflow/status.json` → tomar `active_phase` como fase a planificar. Si la fase activa ya tiene todos sus issues creados en Linear, confirmar al humano antes de continuar.

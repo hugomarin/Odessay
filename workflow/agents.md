@@ -14,6 +14,12 @@ Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digi
 Este proyecto usa un modelo **contexto-justo-a-tiempo**:
 Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuencia definida paso a paso. No cargues contexto adicional al azar. Cada issue en Linear trae explícitamente citados los documentos que requiere en su línea `Referencia:`. Usa los skills solo cuando apliquen a la tarea en curso.
 
+Los **roles de agente** viven en `.agents/agents/`.
+
+- Para `/wf-define`, usar `.agents/agents/product-manager.md` como rol de orquestación.
+- La convención de formato para roles vive en `.agents/agents/README.md`.
+- Los skills en `.agents/skills/` complementan al rol; no lo reemplazan.
+
 Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, adapters, `.md` como documento canónico, o extracción de servicios, empieza por `workflow/docs.json` y sigue la secuencia documental de desktop:
 
 1. `workflow/context/features/odessay-desktop-app.md`
