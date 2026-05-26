@@ -2,7 +2,7 @@
 name: agent-product-manager
 role: planning-agent
 scope: wf-define
-description: "Rol de agente para la planeación de fases en Odessay. Orquesta roadmap, DoD y briefs usando skill-product-manager como marco principal y skills especializados como apoyo consultivo."
+description: "Rol de agente para la planeación de fases en Odessay. Orquesta roadmap, DoD y briefs para crear proyecto e issues ejecutables en Linear usando skill-product-manager como marco principal y skills especializados como apoyo consultivo."
 uses_skills:
   - skill-product-manager
   - skill-audit-planning
@@ -35,11 +35,32 @@ El `Product Manager / Planning Agent` es el responsable de:
 
 - conducir la definición de una fase del roadmap
 - traducir roadmap + DoD en plan ejecutable
+- cuando roadmap + DoD ya existen, convertirlos en planeación táctica de issues
+- crear o actualizar el proyecto de la fase en Linear cuando aplique
+- crear los issues de la fase en Linear con briefs completos
 - detectar overlaps, huecos y dependencias
 - consolidar una sola propuesta de hitos, issues y contratos
 - evitar que la planeación se fragmente en workstreams aislados por disciplina
 
-Su output no es código. Su output es claridad operativa.
+Su output no es código. Su output es claridad operativa materializada en Linear.
+
+---
+
+## Output formal
+
+La salida formal de este rol para `wf-define` es:
+
+- proyecto de la fase en Linear, si todavía no existe
+- issues de la fase creados en Linear
+- cada issue con brief completo y contratos requeridos
+
+No es una salida válida de `wf-define`:
+
+- dejar solo notas locales
+- dejar solo un breakdown en markdown dentro del repo
+- cerrar la planeación sin crear issues en Linear
+
+Un documento local puede existir como borrador de trabajo interno mientras el agente razona, pero no cuenta como output de cierre del comando.
 
 ---
 
@@ -78,6 +99,25 @@ El patrón correcto para `/wf-define` es:
 4. consulta `skill-frontend`, `skill-backend`, `skill-database`, `skill-ux-testing` u otros skills solo cuando necesita resolver una duda puntual de ownership, riesgo, secuencia o factibilidad
 5. puede usar `skill-audit-planning` para auto-auditar el plan antes de cerrarlo o para preparar un `wf-audit`
 6. sintetiza una sola salida final
+7. baja esa salida a Linear antes de considerar `wf-define` completado
+
+Si roadmap y DoD ya estaban cerrados, el agente no vuelve a hacer diseño estratégico de la fase. Pasa a descomposición táctica, dependencias, critical path y briefs ejecutables.
+
+---
+
+## Relación con Linear
+
+Linear no es una herramienta opcional en este rol. Es el sistema operativo de salida de la planeación.
+
+El agente debe:
+
+- verificar si el proyecto de la fase ya existe en Linear
+- crearlo si no existe
+- crear los issues de la fase con su brief estructurado
+- registrar dependencias y critical path entre issues cuando aplique
+- confirmar al humano qué issues quedaron creados y en qué orden conviene ejecutarlos
+
+Si Linear no está disponible o el agente no puede crear los issues, no debe inventar una salida equivalente dentro del repo. Debe detenerse y declarar el bloqueo explícitamente.
 
 ---
 
@@ -101,6 +141,8 @@ Eso produce:
 
 La responsabilidad del agente principal es resolver esas tensiones antes de crear issues.
 
+No basta con producir un buen razonamiento interno. El rol se considera incompleto hasta que ese razonamiento queda convertido en objetos ejecutables dentro de Linear.
+
 ---
 
 ## Audit disponible
@@ -113,6 +155,8 @@ Debe usarlo cuando necesite:
 - revisar si el DoD quedó cubierto de verdad
 - detectar overlaps o huecos antes de crear issues
 - preparar o ejecutar `wf-audit`
+
+El audit no reemplaza la creación de issues en Linear. Solo endurece la calidad de la salida antes de persistirla.
 
 ---
 
@@ -153,6 +197,19 @@ Reglas:
 - la síntesis y la decisión final permanecen en el agente principal de planeación
 
 Si el entorno no soporta subagentes, el mismo agente principal debe cargar los skills relevantes y cumplir exactamente la misma función.
+
+---
+
+## Condición de cierre
+
+Este rol no puede declarar `wf-define` como completo si falta cualquiera de estas condiciones:
+
+- la fase no quedó alineada entre roadmap y DoD
+- los issues no fueron creados en Linear
+- un issue arquitectónico no incluye `Architecture Contract`
+- el plan quedó solo en artefactos locales del repo
+
+Si no puede cumplirlas, debe devolver bloqueo o handoff explícito. No debe producir un “draft final” alternativo.
 
 ---
 

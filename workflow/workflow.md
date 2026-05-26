@@ -17,6 +17,8 @@ El comportamiento esperado es idéntico en ambas formas. Cuando el orquestador (
 
 **Objetivo:** descomponer una fase del roadmap en issues ejecutables y cargarlos en Linear.
 
+Si el roadmap de la fase y su DoD ya existen y están alineados, `wf-define` no rediseña la fase: entra directamente a **planeación táctica de issues**.
+
 PLAN no parte de issues existentes — parte de una fase definida en el roadmap. El output es el conjunto de issues que el agente de BUILD va a ejecutar.
 
 **Agente responsable:** `/wf-define` lo conduce el rol definido en `.agents/agents/product-manager.md`.
@@ -52,7 +54,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 4. Buscar si existe un documento `workflow/define/dod-[fase].md` (ej. `dod-fase-1.md`) para la fase actual.
 5. **Si no existe el DoD:** Pausar y co-crear el DoD iterando con el humano, basándose en el roadmap y los objetivos de experiencia.
 6. **Si existe el DoD:** El agente cruza el Roadmap contra el DoD. Si hay asimetrías de alcance, el agente dialoga con el humano para **complementar** el Roadmap y/o el DoD. Nada se borra, se enriquece el contrato.
-7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder.
+7. Una vez que ambos documentos están alineados y el humano da luz verde, proceder. Si la fase ya estaba estratégicamente definida, este paso marca el cambio explícito a planeación táctica de issues.
 8. Leer `.agents/skills/skill-product-manager/SKILL.md`.
 9. Si algún issue de la fase toca arquitectura o runtime boundaries, leer `.agents/skills/skill-architecture/SKILL.md` antes de fijar ownership y `Reference docs`.
 10. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
@@ -63,6 +65,8 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
 **Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
+
+**No es un output válido de DEFINE:** dejar un breakdown táctico solo en markdown dentro del repo sin persistirlo en Linear.
 
 **Restricción:** no abrir ramas ni escribir código en esta etapa.
 

@@ -11,6 +11,8 @@ El alcance específico del proyecto — fases e issues macro — vive en `workfl
 
 Usa Linear MCP para crear y gestionar todo directamente.
 
+Si la fase ya tiene roadmap y DoD, este skill se usa para convertir esa definición en planeación táctica de issues. No debe reabrir la estrategia de fase salvo que detecte una asimetría real entre roadmap y DoD.
+
 Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boundaries, shared core, save path, sync, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md`.
 
 ---
