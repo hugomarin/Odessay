@@ -12,7 +12,20 @@ description: Guía de base de datos de Odessay para migraciones, RLS, triggers, 
 
 ## Principio rector
 
-La base de datos es la fuente de verdad de Odessay. El schema en `odessay-modelo-datos.md` es la referencia. Cualquier cambio al schema pasa por una migración versionada.
+La base de datos remota es la fuente de verdad del **estado cloud actual** de Odessay. El schema en `odessay-modelo-datos.md` es la referencia para la capa remota y colaborativa. Cualquier cambio al schema pasa por una migración versionada.
+
+Matiz arquitectónico:
+
+- en el runtime web actual, gran parte del producto sigue operando sobre Supabase + local cache
+- en la dirección desktop, el documento canónico apunta a filesystem `.md`, no a la fila remota de `writings`
+
+Regla general:
+
+- no diseñar cambios de schema que bloqueen o contradigan la estrategia de documento canónico compartido
+- si un issue toca `writings.body_json`, serializer/parser, sync documental o el rol futuro de la persistencia remota, cargar también:
+  - `workflow/context/features/odessay-desktop-app.md`
+  - `workflow/context/features/odessay-desktop-target-architecture.md`
+  - `workflow/context/features/odessay-desktop-migration-plan.md`
 
 ---
 

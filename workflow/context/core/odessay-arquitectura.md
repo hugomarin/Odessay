@@ -22,6 +22,13 @@ Lee `odessay-fundacional.md` primero. Este documento prevalece sobre versiones a
 
 Ver `odessay-stack.md` para detalle completo.
 
+Para la estrategia de migración a desktop, usar además:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ---
 
 ## Los tres modos de Odessay

@@ -1,7 +1,7 @@
 # ODESSAY — Desktop Migration Diagnostic
 
 **Documento de diagnóstico para planear la migración arquitectónica a desktop.**
-Lee `workflow/context/features/odessay-desktop-app.md` para la dirección objetivo, `workflow/context/core/odessay-arquitectura.md` para el estado canónico del producto y `workflow/context/features/odessay-sync.md` para la capa local-first vigente.
+Lee `workflow/context/features/odessay-desktop-app.md` para la dirección objetivo, `workflow/context/features/odessay-desktop-target-architecture.md` para la arquitectura objetivo, `workflow/context/core/odessay-arquitectura.md` para el estado canónico del producto y `workflow/context/features/odessay-sync.md` para la capa local-first vigente.
 
 ---
 
@@ -391,13 +391,14 @@ Esto es especialmente importante para imágenes y sharing, donde web y desktop d
 
 ---
 
-## Siguiente documento recomendado
+## Documento siguiente en la secuencia
 
-Después de este diagnóstico, el siguiente artefacto debería ser un documento de diseño de target architecture, por ejemplo:
+El siguiente artefacto de esta serie es:
 
 - `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
 
-Ese documento debería responder:
+Esos documentos fijan:
 
 - qué vive en shared core
 - qué vive en web adapters

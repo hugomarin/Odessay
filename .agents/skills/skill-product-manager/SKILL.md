@@ -13,6 +13,41 @@ Usa Linear MCP para crear y gestionar todo directamente.
 
 ---
 
+## Descubrimiento documental para arquitectura y desktop
+
+Cuando el prompt, roadmap o conversación mencionen cualquiera de estas señales:
+
+- desktop
+- Tauri / Electron
+- mobile
+- shared core
+- adapters
+- runtime
+- filesystem
+- `.md` como fuente de verdad
+- local-first más allá del runtime web
+- separación frontend/backend para portabilidad
+- extracción de servicios (`DocumentService`, `SyncService`, etc.)
+
+el agente de PM debe asumir que el issue toca la estrategia arquitectónica del producto y cargar esta secuencia, en este orden:
+
+1. `workflow/context/features/odessay-desktop-app.md`
+2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
+3. `workflow/context/features/odessay-desktop-target-architecture.md`
+4. `workflow/context/features/odessay-desktop-migration-plan.md`
+
+Cómo llegar ahí:
+
+- primero consultar `workflow/docs.json` para ubicar el documento correcto y confirmar que existe en el inventario canónico
+- luego citar explícitamente en `Reference docs` solo los documentos de la secuencia que realmente condicionan el issue
+
+Regla:
+
+- si un issue cambia arquitectura, contratos, runtime boundaries, documento canónico o secuencia de migración, el brief no puede quedarse solo con docs técnicos locales del feature; debe incluir el doc desktop correspondiente
+- si el prompt menciona desktop de forma estratégica y el PM no cita ninguno de estos docs, el brief está incompleto
+
+---
+
 ## Estructura en Linear — leer antes de crear nada
 
 ```
@@ -244,11 +279,13 @@ Usar siempre paths completos desde la raíz del repo.
 - Issues con templates visuales reutilizables (emails, PDFs, public pages) → la sección correspondiente de `.agents/skills/skill-design/vistas.md` con el spec canónico citado por anchor (no genérico).
 - Issues que tocan AI de corrección ortográfica, streaming de sugerencias o memoria de accept/reject → `workflow/context/features/odessay-ai-writing-assist.md` (obligatorio).
 - Issues que tocan extensiones de TipTap/ProseMirror, decorations, serializer/parser o round-trip Markdown ↔ JSON → `workflow/context/features/odessay-prosemirror-tiptap.md` (obligatorio).
+- Issues que tocan arquitectura del producto, portabilidad web/desktop/mobile, runtime boundaries, servicios compartidos, filesystem local, o el rol de `.md`/`body_json` → `workflow/context/features/odessay-desktop-app.md` + `workflow/context/features/odessay-desktop-migration-diagnostic.md` + `workflow/context/features/odessay-desktop-target-architecture.md` + `workflow/context/features/odessay-desktop-migration-plan.md`
 
 **Regla de conexión de documentos (obligatoria):**
 - Si el issue cambia comportamiento de una feature documentada, el brief debe citar explícitamente ese documento en `Reference docs`.
 - Si no existe documento de feature para el cambio, el PM debe crear un sub-issue de documentación o ampliar el issue para incluir la actualización del documento y `workflow/docs.json`.
 - No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
+- En temas de desktop/arquitectura, el PM debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
 
 **External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
 

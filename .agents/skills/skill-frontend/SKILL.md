@@ -21,6 +21,30 @@ Antes de implementar en editor, cargar:
 Regla:
 - Si el cambio altera el contrato real de estos docs, actualizar el documento correspondiente y registrar la relación en el PR/issue. No dejar implementación desacoplada de spec.
 
+## Arquitectura multi-runtime — awareness obligatoria
+
+Si el cambio toca cualquiera de estas dimensiones:
+
+- save path del editor
+- navegación interna que dependa de storage
+- sync o hydration
+- serializer/parser del documento
+- extracción de servicios o boundaries de plataforma
+- features pensadas para web y desktop
+
+cargar además, según aplique:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
+Reglas generales:
+
+- No profundizar acoplamientos de UI a `/api/...` si el cambio toca arquitectura o flujos centrales.
+- No asumir que el runtime web actual es el modelo final del producto.
+- Cuando una decisión afecte portabilidad, pensar en `shared core` vs `web adapter`, no solo en “componente actual”.
+- Si un cambio de frontend fuerza una decisión sobre documento canónico, sync o boundaries de servicio, escalar al documento desktop correspondiente en vez de resolverlo localmente dentro del componente.
+
 ---
 
 ## Principio rector

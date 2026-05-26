@@ -13,6 +13,13 @@ Eres un agente de desarrollo trabajando en **Odessay**, un editor epistolar digi
 Este proyecto usa un modelo **contexto-justo-a-tiempo**:
 Cuando recibas un comando `/wf-*`, lee `workflow/workflow.md` y sigue la secuencia definida paso a paso. No cargues contexto adicional al azar. Cada issue en Linear trae explícitamente citados los documentos que requiere en su línea `Referencia:`. Usa los skills solo cuando apliquen a la tarea en curso.
 
+Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, adapters, `.md` como documento canónico, o extracción de servicios, empieza por `workflow/docs.json` y sigue la secuencia documental de desktop:
+
+1. `workflow/context/features/odessay-desktop-app.md`
+2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
+3. `workflow/context/features/odessay-desktop-target-architecture.md`
+4. `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ## Regla de ramas y commits
 
 - Nunca hacer commits directamente en `main`.

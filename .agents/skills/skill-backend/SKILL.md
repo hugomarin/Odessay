@@ -35,6 +35,29 @@ Regla:
 - No hardcodear modelo en rutas de negocio.
 - Resolver proveedor/modelo por env y mantener contrato de error explícito de configuración.
 
+## Arquitectura multi-runtime — awareness obligatoria
+
+Si el trabajo toca:
+
+- rutas `app/api/*` que hoy actúan como backend implícito del producto
+- sync, hydration o bootstrap remoto
+- auth/session boundaries
+- documento canónico o serializer/parser
+- servicios que luego existirán en desktop también
+
+cargar además, según aplique:
+
+- `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
+Reglas generales:
+
+- Tratar `app/api/*` como adapters web cuando el issue toca arquitectura, no como núcleo del producto.
+- No introducir nuevas dependencias del frontend a endpoints internos si el cambio puede expresarse como contrato de servicio.
+- Evitar decisiones de backend que re-entrenchen `body_json` o Supabase como verdad universal del producto sin contrastarlo contra la estrategia desktop.
+- Si un cambio crea o altera un contrato de servicio, documentar explícitamente si pertenece al core compartido o al adapter web.
+
 ---
 
 ## API Routes

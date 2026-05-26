@@ -5,6 +5,12 @@ Lee `workflow/context/core/odessay-fundacional.md` para la visión, `workflow/co
 
 Este documento captura la **dirección objetivo** de Odessay como Desktop App. No describe el estado exacto del runtime web actual; describe la arquitectura y las decisiones que deben guiar la implementación desktop y la convergencia futura entre web y desktop.
 
+Para implementación y secuenciación, este documento se complementa con:
+
+- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
+- `workflow/context/features/odessay-desktop-target-architecture.md`
+- `workflow/context/features/odessay-desktop-migration-plan.md`
+
 ---
 
 ## El principio que define desktop
