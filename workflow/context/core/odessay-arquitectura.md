@@ -15,7 +15,7 @@ Lee `odessay-fundacional.md` primero. Este documento prevalece sobre versiones a
 | Tipografía | Geist Sans + Lora | UI funcional + contenido epistolar |
 | Editor | TipTap (headless, sobre ProseMirror) | Motor de escritura |
 | Base de datos remota | Supabase (PostgreSQL + Auth + Realtime) | Persistencia cloud, auth, sync |
-| Base de datos local | SQLite (via Tauri/Electron en desktop) | Persistencia local, offline-first |
+| Base de datos local | Filesystem `.md` + índice local derivado | En desktop el documento vive en archivos `.md`; SQLite puede usarse como índice/caché. En web, IndexedDB cumple el rol derivado local-first. |
 | AI | Provider configurable (server-side) | Editor residente + writing assist |
 | Email | Supabase Auth SMTP + Resend | Supabase Auth envia emails de autenticacion via Resend SMTP en `auth.odessay.com`; Resend app-side queda para notificaciones/invitaciones no-auth |
 | Hosting | Vercel | Deploy web, dominio odessay.com |
@@ -142,10 +142,12 @@ Ver `odessay-editor.md` para spec completa.
 
 ## Arquitectura de datos — local-first
 
+### Runtime web actual
+
 ```
 Usuario escribe
       ↓
-  SQLite local   ← inmediato, nunca falla
+  IndexedDB local   ← inmediato, nunca falla
       ↓
   Sync queue     ← background worker silencioso
       ↓
@@ -156,7 +158,19 @@ El usuario **nunca espera a Supabase**. La base local es la fuente de verdad ope
 
 Cada writing tiene: `id`, `updated_at`, `version`, `sync_status`, `deleted_at`.
 
-Para desktop (Tauri/Electron): SQLite vía el runtime nativo. Para web: IndexedDB como caché local con sync a Supabase.
+### Runtime desktop objetivo
+
+```
+Usuario escribe
+      ↓
+Archivo .md local   ← write-path principal
+      ↓
+Índice/caché local derivado   ← opcional para recientes, búsqueda y metadata
+      ↓
+Sync remoto secundario        ← backup, publicación, multi-device
+```
+
+En desktop, el documento canónico vive en el filesystem local. Un índice local como SQLite puede existir para acelerar búsqueda, recientes, previews o metadata, pero no reemplaza al `.md` como fuente de verdad.
 
 ---
 

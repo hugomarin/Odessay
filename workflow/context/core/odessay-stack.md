@@ -62,7 +62,7 @@ Nunca mezclar Geist Sans y Lora en el mismo elemento.
 | Tecnología | Rol | Notas |
 |-----------|-----|-------|
 | Supabase | Base de datos remota, Auth, Realtime, Storage | PostgreSQL. RLS en todas las tablas. Realtime para notificaciones. **Es la capa remota, no la operativa.** |
-| SQLite | Base de datos local | Persistencia local para desktop (Tauri/Electron). IndexedDB como fallback en web. |
+| SQLite | Índice local / persistencia derivada | En desktop sirve como índice, caché o metadata operativa. El documento canónico vive en archivos `.md` del filesystem local. IndexedDB cumple ese rol derivado en web. |
 | AI Provider API (configurable) | Agente editor residente + writing assist | Siempre server-side. Proveedor/modelo se resuelven por configuración (env), sin hardcode de modelo en rutas de negocio. |
 | Resend | SMTP / email transaccional | SMTP provider para Supabase Auth en `auth.odessay.com`; app-side solo para emails no-auth como invitaciones o notificaciones de writings. |
 | Vercel | Hosting web | Deploy desde `main`. Branch previews para PRs. |
@@ -70,21 +70,25 @@ Nunca mezclar Geist Sans y Lora en el mismo elemento.
 ### Arquitectura local-first
 
 ```
-Usuario escribe → SQLite local (inmediato) → Sync queue → Supabase (background)
+Usuario escribe → base local operativa (inmediato) → Sync queue → Supabase (background)
 ```
 
 El usuario nunca espera a Supabase. La base local es la fuente de verdad operativa.
 
+**Matiz por runtime:**
+- **Web actual:** IndexedDB/local cache + sync queue + Supabase remoto.
+- **Desktop objetivo:** filesystem local como write-path principal, con índice derivado opcional (SQLite) y sync remoto secundario.
+
 ### Desktop (roadmap)
 
-La webapp está diseñada para ser empaquetada como desktop app sin reescritura mayor.
+Desktop no debe tratarse como una web app empaquetada. La meta es un **shared core** reutilizable (dominio, casos de uso, contrato Markdown, validación) con **adapters por runtime** para web, desktop y futuro mobile.
 
 | Opción | Trade-off |
 |--------|-----------|
 | **Tauri** | Ligereza, menor consumo, binarios pequeños. Más trabajo inicial. Recomendado para Odessay — coherente con la filosofía "Slow" del producto. |
 | **Electron** | Mayor velocidad de implementación, ecosistema maduro. Binarios más pesados. |
 
-**Decisión pendiente.** La arquitectura actual (Next.js + React + local-first) es compatible con ambas opciones. Lógica de negocio separada de presentación desde el inicio para facilitar la migración.
+**Decisión pendiente.** La shell final se decide después de fijar el contrato documental (`.md`), extraer servicios explícitos y separar infraestructura web de core compartido. No al revés.
 
 ### Herramientas de desarrollo y agentes
 
