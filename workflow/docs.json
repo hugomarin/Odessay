@@ -82,6 +82,11 @@
       "description": "Dirección objetivo para Desktop App: Markdown-first y filesystem-first, con `.md` como fuente de verdad, `.txt` como compatibilidad, TipTap como vista rica del documento canónico, auth opcional, sync/backup secundario y perfil Markdown compartido entre web y desktop."
     },
     {
+      "path": "workflow/context/features/odessay-desktop-migration-diagnostic.md",
+      "type": "feature",
+      "description": "Diagnóstico arquitectónico del codebase para la migración a desktop: mapa de responsabilidades, runtimes, portabilidad, hotspots de acoplamiento, tensiones del modelo documental actual y secuencia recomendada de extracción de servicios."
+    },
+    {
       "path": "workflow/context/features/odessay-invitaciones.md",
       "type": "feature",
       "description": "Sistema de invitaciones: la primera experiencia del invitado es leer la carta, no un registro vacío. Flujo del autor, flujo del invitado, landing /invite/{token}, estados (pending/accepted/expired) y email vía Resend."
