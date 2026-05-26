@@ -284,9 +284,11 @@ Las métricas se recalculan localmente y no bloquean el flujo de escritura.
 
 ## Auto-save
 
+**Ámbito:** esta sección describe el comportamiento del editor en el runtime web actual. No redefine por sí sola el contrato documental canónico multi-runtime.
+
 El editor guarda automáticamente. No hay botón de guardar. La experiencia debe sentirse como escribir en papel.
 
-### Mecanismo (local-first)
+### Mecanismo (local-first, runtime web actual)
 
 El auto-save es en dos pasos. La UI siempre refleja el estado local — nunca espera a Supabase.
 
@@ -299,6 +301,8 @@ El auto-save es en dos pasos. La UI siempre refleja el estado local — nunca es
 1. Después de 1.5 segundos sin actividad, el sync worker encola la mutación.
 2. Se hace PATCH a `/api/writings/[id]` con `body_json`, `body_text`, `updated_at` y `version`.
 3. Si falla: retry con backoff exponencial, silencioso. El status bar no interrumpe al usuario.
+
+**Nota de transición:** en desktop objetivo, el write-path principal deja de ser `body_json -> base local -> PATCH remoto` y pasa a `archivo .md local -> índice/caché derivado -> sync remoto secundario`. Ver la secuencia `odessay-desktop-*`.
 
 ### Primer guardado
 Si el writing no tiene ID (es nuevo), el save local genera un UUID en el cliente. El primer sync remoto hace POST con ese UUID como ID. La URL cambia de `/write` a `/write/[id]` sin recargar (`router.replace`).

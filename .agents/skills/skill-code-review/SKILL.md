@@ -70,6 +70,36 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 
 ---
 
+## Contrato de arquitectura — criterio bloqueante cuando aplica
+
+Si el PR toca cualquiera de estos scopes:
+
+- desktop o multi-runtime
+- shared core
+- save path
+- sync / hydration
+- parser / serializer
+- `DocumentService`, `SyncService`, `AIService`, `AuthService`, `SharingService`, `AssetService`
+- boundaries entre frontend / backend / database
+
+el review debe cargar además:
+
+- `.agents/skills/skill-architecture/SKILL.md`
+- la secuencia `odessay-desktop-*` citada en el brief
+
+Y debe exigir en el brief un `Architecture Contract` con:
+
+- `Layer`
+- `Runtime scope`
+- `Owner`
+- `Contracts touched`
+- `Invariants`
+- `Required docs`
+
+Si el issue requería ese contrato y no existe, está incompleto o el diff lo contradice, el PR no se aprueba.
+
+---
+
 ## Checklist de calidad
 
 ### Trazabilidad histórica (obligatoria)
@@ -78,6 +108,15 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - [ ] ¿Incluye `issue`, `branch`, `pr_url`, `commit`, `ts`, `notes` (y en review: `score`, `gate_result`)?
 - [ ] ¿No se editaron ni borraron entradas previas del archivo?
 - [ ] ¿El commit de workflow files fue en `main` post-merge (nunca en la rama de feature)?
+
+### Architecture contract review — verificar antes de aprobar cuando aplica
+- [ ] ¿El issue/brief declara `Architecture Contract` cuando el scope toca desktop, shared core, save/sync/parser, contracts de servicio o runtime boundaries?
+- [ ] ¿`Layer` está bien respetado? UI no orquesta save/sync/infra, adapters no redefinen dominio.
+- [ ] ¿`Runtime scope` es correcto? El diff no introduce dependencias web dentro de shared core ni trata cloud/web como si fueran universales.
+- [ ] ¿`Owner` coincide con la implementación real? No hay trabajo arquitectónico disfrazado de fix local en frontend/backend/database.
+- [ ] ¿`Contracts touched` existen y siguen siendo coherentes antes que las implementaciones concretas?
+- [ ] ¿`Invariants` siguen siendo verdad después del diff?
+- [ ] ¿Los `Required docs` del brief siguen alineados con el cambio final?
 
 ### Tests — verificar primero
 - [ ] `npm test` pasa sin errores y sin dependencias externas (sin Supabase real, sin red).
@@ -152,6 +191,7 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 
 ### Documentación
 - [ ] Si el cambio afecta la arquitectura, los docs están actualizados.
+- [ ] Si el cambio toca desktop/shared core/runtime boundaries/save/sync/parser, la secuencia `odessay-desktop-*` y el `Architecture Contract` siguen coherentes con el diff.
 - [ ] Si se agrega un endpoint nuevo, está documentado.
 - [ ] Si se cambia el schema, `odessay-modelo-datos.md` refleja el cambio.
 
@@ -186,12 +226,18 @@ Si el contrato es `not required`, el PR debe incluir una sección corta: "Perfor
 - **Identidad creada en hot path:** `crypto.randomUUID()`, `localDB.save()`, o cualquier efecto secundario de persistencia dentro del handler síncrono de `input`, `paste` o `click`.
 - **Múltiples fuentes de verdad para una dimensión:** `writingId` vive simultáneamente en params, estado local, Zustand y refs sin un owner claro.
 - El PR toca AI corrections/title suggestions/ProseMirror y no actualiza o no valida los documentos de referencia correspondientes (`odessay-ai-writing-assist.md`, `odessay-prosemirror-tiptap.md`) cuando cambió el contrato real.
+- El PR requería `Architecture Contract` y no lo trae, lo trae incompleto o el diff lo contradice.
+- UI actúa como orquestador de save/sync/infra cuando el contract declara `Application` o `Adapter`.
+- Un módulo `shared core` introduce dependencias de Next, Supabase, cookies, `fetch`, `window` o filesystem concreto.
+- Un adapter web/desktop redefine reglas de dominio en vez de implementar contratos ya fijados.
 
 **Referencias para verificación:**
 - `workflow/context/features/odessay-sync.md` — principio de navegación interna, arquitectura local-first, caso de estudio del editor
 - `workflow/context/core/odessay-arquitectura.md` — decisión de arquitectura sobre navegación interna vs navegación de página
 - `workflow/context/features/odessay-ai-writing-assist.md` — contrato operativo de AI corrections + title suggestion
 - `workflow/context/features/odessay-prosemirror-tiptap.md` — extensiones activas, backbone Markdown y guardrails de decorations/round-trip
+- `.agents/skills/skill-architecture/SKILL.md` — taxonomía de `Layer`, `Runtime scope`, `Owner`, contracts e invariants
+- `workflow/context/features/odessay-desktop-target-architecture.md` — partición objetivo entre shared core y adapters
 
 ## Documentación mínima por scope (obligatoria en review)
 
@@ -200,6 +246,8 @@ Si el PR toca alguno de estos scopes, el revisor debe verificar coherencia con d
   - validar contra `workflow/context/features/odessay-ai-writing-assist.md`.
 - TipTap / ProseMirror extensions / decorations / parser-serializer:
   - validar contra `workflow/context/features/odessay-prosemirror-tiptap.md`.
+- Desktop / shared core / runtime boundaries / save path / sync / parser / services:
+  - validar contra `.agents/skills/skill-architecture/SKILL.md` y la secuencia `odessay-desktop-*` citada en el brief.
 - Si el código final contradice el doc y el doc no fue actualizado:
   - rechazo por desalineación de contrato (no merge).
 

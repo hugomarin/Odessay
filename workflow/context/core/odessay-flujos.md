@@ -30,13 +30,15 @@ El mecanismo universal de respuesta (reply_to, parent_id) está documentado en `
 
 1. Desde `/desk`, clic en nuevo writing → llega a `/write`.
 2. Editor TipTap limpio. Título opcional. Empieza a escribir.
-3. Auto-save local-first: cada cambio se persiste inmediatamente en la base local (SQLite/IndexedDB). El sync a Supabase ocurre en background con debounce de 1.5s. Writing se crea como `draft` + `private`.
+3. Auto-save local-first en el runtime web actual: cada cambio se persiste inmediatamente en la base local web (IndexedDB). El sync a Supabase ocurre en background con debounce de 1.5s. Writing se crea como `draft` + `private`.
 4. Escribe por párrafos. En pausas naturales (fin de párrafo + ~8-15 seg), la AI editor puede intervenir con una observación al margen.
 5. El autor puede descartar la observación o atenderla. Sigue escribiendo.
 6. Cuando quiere, mueve el writing entre `new`, `exploring`, `draft` y `done`, y/o ajusta la visibilidad.
 7. Desde el editor, puede asignar el writing a una o más collections.
 
 No hay momento de "publicación" dramático. El writing existe desde el primer auto-save. El autor decide cuándo está listo y quién lo ve como acciones separadas, en el momento que quiera.
+
+**Nota de transición:** este flujo describe el runtime web actual. En desktop objetivo, el write-path principal pasa a filesystem `.md` y la sincronización remota queda como capacidad secundaria.
 
 ---
 

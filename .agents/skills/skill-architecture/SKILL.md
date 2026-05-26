@@ -43,12 +43,13 @@ Si la tarea cruza capas y no sabes si pertenece a frontend, backend o database, 
 
 ## Objetivo
 
-Responder cuatro preguntas antes de implementar:
+Responder cinco preguntas antes de implementar:
 
 1. ¿Qué tipo de trabajo es?
 2. ¿En qué capa debe vivir?
-3. ¿Qué runtime o adapter toca?
-4. ¿Qué contratos o invariantes deben preservarse?
+3. ¿Qué runtime o boundary toca?
+4. ¿Quién es owner de cada parte?
+5. ¿Qué contratos o invariantes deben preservarse?
 
 Sin estas respuestas, frontend/backend/database tienden a resolver localmente algo que era una decisión de arquitectura.
 
@@ -70,19 +71,17 @@ Después, cargar solo los docs técnicos del área específica:
 - editor / sync / prosemirror si el cambio toca documento o write-path
 - backend / database si toca adapters web o capa remota
 
-### Paso 2 — Clasificar el trabajo
+### Paso 2 — Clasificar el trabajo en tres ejes
 
-Cada cambio debe clasificarse en una de estas categorías dominantes:
+No mezclar en una sola etiqueta cosas que pertenecen a ejes distintos.
 
-- `UI only`
-- `Application / use case`
-- `Domain`
-- `Shared core`
-- `Web adapter`
-- `Desktop adapter`
-- `Remote / cloud service`
+Cada cambio debe clasificarse en:
 
-Se puede tocar más de una categoría, pero debe haber una dominante.
+- `Layer`
+- `Runtime scope`
+- `Owner`
+
+Solo después de eso se puede derivar un rótulo resumido como `UI only`, `Application`, `Web adapter`, etc.
 
 ### Paso 3 — Declarar ownership
 
@@ -113,17 +112,55 @@ Como mínimo, verificar:
 
 ---
 
-## Heurística de clasificación
+## Taxonomía operativa
 
-### `UI only`
+### Eje 1 — `Layer`
 
-Es `UI only` si:
+Usa uno dominante y opcionalmente secundarios:
+
+- `UI`
+- `Application`
+- `Domain`
+- `Adapter`
+
+`Adapter` puede ser luego especializado por runtime (`web`, `desktop`, `cloud`), pero la capa sigue siendo adapter.
+
+### Eje 2 — `Runtime scope`
+
+Usa uno dominante y opcionalmente secundarios:
+
+- `shared-core`
+- `web`
+- `desktop`
+- `cloud`
+- `mobile-future`
+
+Si un cambio afecta más de un runtime, declararlo explícitamente. No esconderlo bajo “shared core” si en realidad depende de Next o Supabase.
+
+### Eje 3 — `Owner`
+
+Declarar un owner principal:
+
+- `frontend`
+- `backend`
+- `database`
+- `architecture-first`
+
+`architecture-first` significa: antes de implementar, alguien debe fijar contrato y boundaries. No es válido “resolverlo en frontend” o “resolverlo en backend” por inercia.
+
+---
+
+## Heurística por layer
+
+### `UI`
+
+Es `UI` si:
 
 - cambia render, layout, estados visuales o interacción local
 - no redefine contratos
 - no toca save path, sync, parser o adapters
 
-### `Application / use case`
+### `Application`
 
 Es aplicación si:
 
@@ -147,9 +184,17 @@ Pregunta guía:
 
 > “¿Qué debe seguir siendo verdad aunque cambie la plataforma?”
 
-### `Web adapter`
+### `Adapter`
 
-Es adapter web si:
+Es `Adapter` si:
+
+- conecta el core con tecnología concreta
+- depende de HTTP, cookies, filesystem, IndexedDB, Supabase, Next, APIs nativas o storage específico
+- implementa un contrato de servicio para un runtime concreto
+
+#### `Adapter` + runtime `web`
+
+Es `Adapter` con runtime `web` si:
 
 - depende de Next
 - depende de `app/api/*`
@@ -157,18 +202,18 @@ Es adapter web si:
 - depende de Supabase browser/server clients
 - resuelve infraestructura del runtime web
 
-### `Desktop adapter`
+#### `Adapter` + runtime `desktop`
 
-Es adapter desktop si:
+Es `Adapter` con runtime `desktop` si:
 
 - depende de filesystem
 - depende de secure local storage
 - depende de APIs nativas
 - resuelve write-path local desktop
 
-### `Remote / cloud service`
+#### `Adapter` + runtime `cloud`
 
-Es servicio remoto si:
+Es `Adapter` con runtime `cloud` si:
 
 - coordina estado compartido fuera del dispositivo
 - usa auth remota, AI remota, sharing, publishing o backup
@@ -201,20 +246,24 @@ Si el cambio introduce o altera un servicio (`DocumentService`, etc.), primero s
 
 ## Output esperado de este skill
 
+Este output es **obligatorio** cuando la tarea toca desktop, shared core, runtime boundaries, save path, sync/hydration, parser/serializer, contratos de servicio o boundaries entre frontend/backend. PM lo debe poner en el brief y BUILD/REVIEW deben tratarlo como contrato operativo.
+
 Cuando se use este skill, debe producir explícitamente algo como:
 
 ### Architectural classification
 
-- Dominant layer: `...`
-- Secondary layers: `...`
+- Layer:
+  - Dominant: `UI | Application | Domain | Adapter`
+  - Secondary: `...`
 
 ### Runtime scope
 
-- Current runtime affected: `web | desktop | cloud`
-- Target runtime affected: `web | desktop | mobile | shared`
+- Current runtime affected: `shared-core | web | desktop | cloud | mobile-future`
+- Target runtime affected: `shared-core | web | desktop | cloud | mobile-future`
 
 ### Ownership
 
+- Primary owner: `frontend | backend | database | architecture-first`
 - Frontend owns: `...`
 - Backend owns: `...`
 - Database owns: `...`
@@ -229,6 +278,11 @@ Cuando se use este skill, debe producir explícitamente algo como:
 ### Invariants
 
 - `...`
+
+### Boundaries
+
+- Allowed dependencies: `...`
+- Forbidden dependencies: `...`
 
 ### Required docs for the issue
 
@@ -247,7 +301,7 @@ Ejemplo:
 - pero en realidad toca save path o shared core
 
 Acción:
-- reetiquetar mentalmente el problema como arquitectónico
+- reetiquetar el problema usando `Layer`, `Runtime scope` y `Owner`
 - pedir brief o issue actualizado si hace falta
 
 ### Caso 2 — El brief no trae los docs correctos
@@ -275,7 +329,7 @@ Acción:
 Orden correcto:
 
 1. PM define problema y scope
-2. Architecture clasifica capa, contracts y invariants
+2. Architecture clasifica `Layer`, `Runtime scope`, `Owner`, contracts e invariants
 3. Frontend / Backend / Database implementan dentro de esos límites
 
 ---

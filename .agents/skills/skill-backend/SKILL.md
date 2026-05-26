@@ -35,6 +35,7 @@ Regla:
 - No hardcodear modelo en rutas de negocio.
 - Resolver proveedor/modelo por env y mantener contrato de error explícito de configuración.
 - Si el cambio toca core vs adapter, runtime boundaries o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de decidir la forma del backend.
+- Si ese contrato no declara `Layer`, `Runtime scope`, `Owner`, `Contracts touched` e `Invariants`, marcar `Context Gap` y no fijar arquitectura desde una route o helper server-side.
 
 ## Arquitectura multi-runtime — awareness obligatoria
 
@@ -59,6 +60,7 @@ Reglas generales:
 - No introducir nuevas dependencias del frontend a endpoints internos si el cambio puede expresarse como contrato de servicio.
 - Evitar decisiones de backend que re-entrenchen `body_json` o Supabase como verdad universal del producto sin contrastarlo contra la estrategia desktop.
 - Si un cambio crea o altera un contrato de servicio, documentar explícitamente si pertenece al core compartido o al adapter web.
+- Si el trabajo real cae en `Layer: Application` o `Layer: Domain`, backend no debe resolverlo enteramente dentro de `app/api/*`; debe respetar la partición definida por `skill-architecture`.
 
 ---
 

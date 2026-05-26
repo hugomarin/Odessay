@@ -299,6 +299,14 @@ Regla:
 - No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
 - En temas de desktop/arquitectura, el PM debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
 - En temas de arquitectura, el PM debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
+- Si el issue toca desktop/shared core/runtime boundaries/save/sync/parser/servicios, el brief debe incluir además un bloque explícito `Architecture Contract` con:
+  - `Layer`
+  - `Runtime scope`
+  - `Owner`
+  - `Contracts touched`
+  - `Invariants`
+  - `Required docs`
+- Si falta cualquiera de esos campos, el issue no está listo para DEFINE ni para BUILD.
 
 **External references — obligatorias cuando el issue depende de un servicio o protocolo externo:**
 

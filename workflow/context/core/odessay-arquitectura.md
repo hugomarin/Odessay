@@ -201,4 +201,4 @@ Schema de entidades en `workflow/context/core/odessay-modelo-datos.md`.
 
 **Navegación interna vs navegación de página.** Dentro de una vista funcional (editor, desk, collections), los cambios de sub-estado (pestañas, filtros, paneles) son estado local, no rutas. La URL refleja el estado pero no lo controla. Los datos ya están en la base local (`localDB`), por lo que no debe dispararse un RSC fetch de Next.js. Ver `workflow/context/features/odessay-sync.md` §Principio de navegación interna y §Caso de estudio.
 
-**Documentos guardados completos, no por bloques.** El body_json de TipTap se guarda como documento completo. La granularidad de bloques (ProseMirror) es interna — no se expone en el schema. Simplifica sync, márgenes y AI en el MVP.
+**Documentos guardados completos, no por bloques, en el runtime web actual.** El `body_json` de TipTap se guarda como documento completo en la persistencia web/cloud actual. La granularidad de bloques (ProseMirror) es interna — no se expone en el schema. Esto simplifica sync, márgenes y AI en el MVP web, pero no redefine el contrato documental canónico de desktop, que converge a `.md`.

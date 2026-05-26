@@ -10,6 +10,8 @@ Este documento registra correcciones aplicadas al corpus para reducir contradicc
 
 No redefine arquitectura. Funciona como trazabilidad de cambios documentales y de skills.
 
+**Estado:** documento histórico. No forma parte de la secuencia normativa `odessay-desktop-*` que PM, BUILD y REVIEW deben cargar para decisiones de arquitectura.
+
 ---
 
 ## Objetivo de esta consolidación

@@ -21,6 +21,7 @@ Antes de implementar en editor, cargar:
 Regla:
 - Si el cambio altera el contrato real de estos docs, actualizar el documento correspondiente y registrar la relación en el PR/issue. No dejar implementación desacoplada de spec.
 - Si el cambio cruza save path, sync, parser/serializer, services o runtime boundaries, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de decidir la implementación.
+- En ese caso, no avanzar solo con intuición de componente: el issue/brief debe declarar `Layer`, `Runtime scope`, `Owner`, `Contracts touched` e `Invariants`. Si faltan, marcar `Context Gap`.
 
 ## Arquitectura multi-runtime — awareness obligatoria
 
@@ -46,6 +47,7 @@ Reglas generales:
 - No asumir que el runtime web actual es el modelo final del producto.
 - Cuando una decisión afecte portabilidad, pensar en `shared core` vs `web adapter`, no solo en “componente actual”.
 - Si un cambio de frontend fuerza una decisión sobre documento canónico, sync o boundaries de servicio, escalar al documento desktop correspondiente en vez de resolverlo localmente dentro del componente.
+- Si el change set termina viviendo fuera de `Layer: UI`, frontend no debe “cerrarlo” solo; debe seguir el contrato fijado por `skill-architecture`.
 
 ---
 

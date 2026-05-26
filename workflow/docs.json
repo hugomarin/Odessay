@@ -13,6 +13,8 @@
     {
       "path": "workflow/context/core/odessay-arquitectura.md",
       "type": "core",
+      "scope": "runtime-web-actual-plus-principios-de-producto",
+      "state": "canonical-with-runtime-bounds",
       "description": "Arquitectura vigente del producto y del runtime web actual: stack, modos de uso, navegación, rutas y decisiones activas. Para desktop y multi-runtime debe leerse junto a la secuencia `odessay-desktop-*`."
     },
     {
@@ -23,6 +25,8 @@
     {
       "path": "workflow/context/core/odessay-modelo-datos.md",
       "type": "core",
+      "scope": "capa-cloud-y-colaborativa-actual",
+      "state": "canonical-remote-not-document-contract",
       "description": "Schema completo de Supabase y de la capa cloud/colaborativa actual: tablas, columnas, RLS y relaciones. Describe el modelo remoto vigente; no sustituye el contrato documental desktop/multi-runtime."
     },
     {
@@ -33,17 +37,23 @@
     {
       "path": "workflow/context/core/odessay-flujos.md",
       "type": "core",
+      "scope": "flujos-de-producto-con-runtime-web-actual-como-base",
+      "state": "canonical-with-transition-notes",
       "description": "Flujos de usuario paso a paso (11 secciones): registrarse, escribir, publicar, leer, organizar, navegar el editor, responder, invitar y formatear. Depende de odessay-paginas.md para el mecanismo de respuesta."
     },
 
     {
       "path": "workflow/context/features/odessay-editor.md",
       "type": "feature",
+      "scope": "runtime-web-actual",
+      "state": "canonical-feature-doc-with-desktop-bounds",
       "description": "Comportamiento técnico y de UX del editor TipTap en el runtime actual: extensiones activas, shortcuts, modelo Rich Text con paridad Markdown, auto-save, modales, FootnoteExtension y layout de columnas. Para contrato documental futuro ver la secuencia desktop."
     },
     {
       "path": "workflow/context/features/odessay-prosemirror-tiptap.md",
       "type": "feature",
+      "scope": "runtime-web-backbone-y-contrato-de-round-trip",
+      "state": "canonical-feature-doc-with-desktop-bounds",
       "description": "Backbone técnico actual de ProseMirror/TipTap: extensiones activas, implementación custom, round-trip Markdown y guardrails del editor rico. Debe leerse con la estrategia desktop cuando el issue toca persistencia o contrato documental."
     },
     {
@@ -74,32 +84,44 @@
     {
       "path": "workflow/context/features/odessay-sync.md",
       "type": "feature",
+      "scope": "runtime-web-local-first",
+      "state": "canonical-feature-doc-with-desktop-bounds",
       "description": "Capa local-first del runtime web actual: LocalDB, auto-save local, sync remoto, debounce, retry y estados del statusbar. Para desktop y filesystem `.md`, usar además la secuencia `odessay-desktop-*`."
     },
     {
       "path": "workflow/context/features/odessay-desktop-app.md",
       "type": "feature",
+      "scope": "desktop-direction",
+      "state": "normative-entrypoint",
       "description": "Dirección objetivo para Desktop App: Markdown-first y filesystem-first, con `.md` como fuente de verdad, `.txt` como compatibilidad, TipTap como vista rica del documento canónico, auth opcional, sync/backup secundario y perfil Markdown compartido entre web y desktop."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-diagnostic.md",
       "type": "feature",
+      "scope": "desktop-migration-diagnostic",
+      "state": "normative-sequence-step-2",
       "description": "Diagnóstico arquitectónico del codebase para la migración a desktop: mapa de responsabilidades, runtimes, portabilidad, hotspots de acoplamiento, tensiones del modelo documental actual y secuencia recomendada de extracción de servicios."
     },
     {
       "path": "workflow/context/features/odessay-desktop-target-architecture.md",
       "type": "feature",
+      "scope": "desktop-target-architecture",
+      "state": "normative-sequence-step-3",
       "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio, reglas de dependencia, modelo documental objetivo y orden recomendado de extracción."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
       "type": "feature",
+      "scope": "desktop-migration-plan",
+      "state": "normative-sequence-step-4",
       "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
     },
     {
       "path": "workflow/context/features/odessay-desktop-docs-corrections-log.md",
       "type": "feature",
-      "description": "Log de consolidación documental posterior a revisión adversarial: correcciones aplicadas al corpus, skills y workflow para distinguir runtime web actual, capa cloud y dirección desktop/multi-runtime."
+      "scope": "historical-audit-log",
+      "state": "historical-not-normative",
+      "description": "Log histórico de consolidación documental posterior a revisión adversarial. Sirve para auditoría del proceso; no forma parte de la ruta normativa de descubrimiento desktop."
     },
     {
       "path": "workflow/context/features/odessay-invitaciones.md",
@@ -248,7 +270,9 @@
     {
       "path": ".agents/skills/skill-architecture/SKILL.md",
       "type": "skill",
-      "description": "Capa de clasificación arquitectónica de Odessay: cómo decidir si un cambio pertenece a UI, aplicación, dominio, shared core, web adapter, desktop adapter o servicio remoto, y qué contratos/invariantes deben fijarse antes de implementar."
+      "scope": "architecture-governance",
+      "state": "operational-gate-for-architecture-work",
+      "description": "Capa de clasificación arquitectónica de Odessay: separa `Layer`, `Runtime scope` y `Owner`, y define qué contracts/invariants deben fijarse antes de implementar cambios desktop, shared core, save/sync/parser o boundaries entre frontend/backend/database."
     },
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",

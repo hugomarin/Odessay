@@ -21,6 +21,8 @@ Si el prompt o task habla de desktop, portabilidad multi-runtime, shared core, a
 3. `workflow/context/features/odessay-desktop-target-architecture.md`
 4. `workflow/context/features/odessay-desktop-migration-plan.md`
 
+Esa secuencia de cuatro documentos es la ruta normativa. `odessay-desktop-docs-corrections-log.md` es solo histórico y no reemplaza ninguno de los cuatro pasos.
+
 Si además la pregunta es “dónde debe vivir esto” o “qué capa toca”, carga también `.agents/skills/skill-architecture/SKILL.md` antes de decidir si el trabajo cae en frontend, backend o database.
 
 ## Regla de ramas y commits

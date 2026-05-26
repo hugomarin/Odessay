@@ -10,7 +10,6 @@ Para implementación y secuenciación, este documento se complementa con:
 - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
-- `workflow/context/features/odessay-desktop-docs-corrections-log.md`
 
 **Nota de autoridad documental:**
 
@@ -19,7 +18,7 @@ Para implementación y secuenciación, este documento se complementa con:
 - La partición del sistema en core/adapters vive normativamente en `odessay-desktop-target-architecture.md`.
 - La secuencia de ejecución vive normativamente en `odessay-desktop-migration-plan.md`.
 
-Las secciones históricas de evaluación o implementación temprana que aún permanezcan aquí deben leerse como contexto de transición, no como autoridad principal frente a esos documentos.
+Las secciones históricas de evaluación o implementación temprana que aún permanezcan aquí deben leerse como contexto de transición, no como autoridad principal frente a esos documentos. El corrections log es histórico y no forma parte de la ruta normativa de descubrimiento.
 
 ---
 

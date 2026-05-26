@@ -401,7 +401,32 @@ Al terminar esta fase: Odessay existe como aplicación nativa de escritorio en m
 
 ---
 
-**Package as desktop app (Tauri) — macOS** `[infra, desktop]`
-Empaquetar Odessay como aplicación nativa usando Tauri una vez que el core compartido y los adapters desktop estén listos. El write-path principal desktop usa filesystem `.md`; SQLite nativo puede existir como índice/caché derivado, no como reemplazo automático 1:1 de IndexedDB. Binarios para macOS como primera plataforma. Windows y Linux como expansión posterior.
-Dependencias: Implement local-first storage layer (Fase 0), todas las fases anteriores.
-Referencia: `workflow/context/core/odessay-stack.md` (sección: Desktop).
+**Define desktop architecture contract and migration gates** `[product, architecture]`
+Fijar la secuencia obligatoria para desktop/multi-runtime en planning y ejecución: dirección, diagnóstico, target architecture, migration plan y contract review. Esta fase no empieza por Tauri; empieza por hacer obligatoria la partición entre shared core, adapters y runtime scope.
+Dependencias: Todas las fases anteriores.
+Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+
+**Extract DocumentService and SaveWriting flow from web UI** `[architecture, frontend, backend]`
+Extraer el write-path fuera de componentes y endpoints implícitos. La UI no debe conocer `fetch("/api/writings/...")`; debe operar contra un contrato `DocumentService`. El output esperado es una implementación web inicial con boundaries explícitos.
+Dependencias: Define desktop architecture contract and migration gates.
+Referencia: `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+
+**Extract SyncService and isolate web sync adapter** `[architecture, backend, frontend]`
+Separar cola, retry, hydration y transporte web. El sync remoto deja de ser comportamiento implícito de la UI y queda encapsulado como contrato + adapter web.
+Dependencias: Extract DocumentService and SaveWriting flow from web UI.
+Referencia: `workflow/context/features/odessay-sync.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+
+**Stabilize document contract (.md, parser/serializer, derived rich state)** `[architecture, frontend, backend]`
+Fijar cómo se relacionan `.md`, `body_json`, import/export, round-trip y caches derivadas. El objetivo es que `body_json` deje de leerse como contrato universal y pase a ser representación dependiente del runtime.
+Dependencias: Extract SyncService and isolate web sync adapter.
+Referencia: `workflow/context/features/odessay-prosemirror-tiptap.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`.
+
+**Implement desktop adapters for filesystem, local index and credentials** `[desktop, architecture, infra]`
+Introducir adapters desktop concretos para abrir/guardar `.md`, mantener índice/caché derivado y persistir credenciales locales seguras. La shell sigue siendo secundaria frente al contrato.
+Dependencias: Stabilize document contract (.md, parser/serializer, derived rich state).
+Referencia: `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/core/odessay-stack.md` (sección: Desktop).
+
+**Package prepared core as desktop app (Tauri) — macOS** `[infra, desktop]`
+Empaquetar Odessay como aplicación nativa usando Tauri una vez que el core compartido y los adapters desktop estén listos. Binarios para macOS como primera plataforma. Windows y Linux como expansión posterior.
+Dependencias: Implement desktop adapters for filesystem, local index and credentials.
+Referencia: `workflow/context/core/odessay-stack.md` (sección: Desktop), `workflow/context/features/odessay-desktop-migration-plan.md`.

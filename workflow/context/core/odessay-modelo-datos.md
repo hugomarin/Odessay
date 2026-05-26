@@ -8,6 +8,7 @@ Este documento describe principalmente el **modelo de datos remoto/cloud y el es
 No define por sí solo el contrato documental futuro del producto. Para la estrategia desktop y el rol de `.md` como documento canónico, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`
+- `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
 

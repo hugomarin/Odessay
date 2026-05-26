@@ -28,6 +28,7 @@ Regla general:
   - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
   - `workflow/context/features/odessay-desktop-target-architecture.md`
   - `workflow/context/features/odessay-desktop-migration-plan.md`
+- si falta `Layer`, `Runtime scope`, `Owner`, `Contracts touched` o `Invariants`, no diseñar el cambio de schema desde Supabase por inercia. Marcar `Context Gap`.
 
 ---
 
@@ -37,6 +38,8 @@ Antes de cualquier operación, lee `workflow/context/core/odessay-modelo-datos.m
 
 - `profiles` — Extiende auth.users. Username, display_name, bio.
 - `writings` — La unidad fundamental. Body en JSON (TipTap) + texto plano. Estado (draft/finished) y visibilidad (private/shared/public) como dimensiones independientes.
+  - En runtime web/cloud actual `body_json` sigue siendo persistencia remota operativa.
+  - En dirección desktop, eso no equivale al contrato documental canónico del producto.
 - `correspondences` — Identidad del diálogo. Se crea cuando un writing recibe su primera respuesta.
 - `collections` — Agrupaciones del autor. Un writing puede estar en múltiples collections.
 - `writing_collections` — Join table.

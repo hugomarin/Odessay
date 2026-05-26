@@ -33,6 +33,13 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 
 **Excepción arquitectónica:**
 - Si la fase o los issues implican desktop, shared core, runtime boundaries, save path, sync/hydration, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md` antes de redactar briefs.
+- En esos casos, cada issue debe salir de DEFINE con un **Architecture Contract** mínimo en el brief:
+  - `Layer`
+  - `Runtime scope`
+  - `Owner`
+  - `Contracts touched`
+  - `Invariants`
+  - `Required docs`
 
 **Secuencia (Diálogo de Alineación y Ejecución):**
 1. Resolver la fase (ver lógica de fallback arriba).
@@ -47,11 +54,11 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 10. Descomponer la fase en issues atómicos. **Para cada issue, leer ÚNICAMENTE los documentos de contexto listados en su línea `Referencia:`**.
 11. Redactar el Issue Brief estructurándolo según las guías de `.agents/skills/skill-product-manager/SKILL.md`. El agente DEBE inyectar como *Proof of Work/Acceptance Criteria* las pruebas rigurosas exigidas por el DoD para ese alcance.
     - Si el issue toca presentación de texto, incluir explícitamente `Presentation Contract` cross-mode (`/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}`) con criterios verificables.
-    - Si el issue toca arquitectura, agregar en el brief una clasificación mínima: `Dominant layer`, `Runtime scope`, `Contracts touched`, `Required docs`.
+    - Si el issue toca arquitectura, runtime boundaries, desktop/shared-core, save path, sync/hydration, parser/serializer o extracción de servicios, agregar en el brief un `Architecture Contract` obligatorio con: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`.
 12. Crear los issues en Linear con su brief incluido.
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
 
-**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD.
+**Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
 
 **Restricción:** no abrir ramas ni escribir código en esta etapa.
 
@@ -78,12 +85,14 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
   - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
   - `workflow/context/features/odessay-desktop-target-architecture.md`
   - `workflow/context/features/odessay-desktop-migration-plan.md`
+- Si el brief toca esos mismos scopes y además no incluye `Architecture Contract` con `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs`, BUILD también debe detenerse con `Context Gap` bloqueante. No inferir ese contrato desde el diff ni desde el código existente.
 
 **Secuencia:**
 
 **Setup**
 1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones/superficies que realmente toca el issue. Si una dimensión o superficie no aplica, registrar `not required` con justificación breve en vez de expandir evidencia innecesaria.
    > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
+   > _Architecture Contract: si el brief toca desktop/shared-core/runtime boundaries/save/sync/parser/services, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, detenerse._
 2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
 3. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
@@ -127,6 +136,7 @@ PLAN no parte de issues existentes — parte de una fase definida en el roadmap.
 3. `.agents/skills/skill-code-review/SKILL.md`.
 4. Si el brief tiene `Performance Contract` requerido: artefactos de performance del PR (trace + report + output de gate).
 5. Si el brief tiene `Presentation Contract` requerido: evidencia cross-mode (`write`, `preview`, `shared`, `public`) con foco en tablas, `pre/code`, URLs largas y overflow.
+6. Si el brief toca desktop/shared core/runtime boundaries/save path/sync/parser/serializer/servicios: `.agents/skills/skill-architecture/SKILL.md` + el `Architecture Contract` del brief.
 
 **No cargar por defecto:** documentos core, features, roadmap.
 
@@ -145,8 +155,14 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - existe trace reproducible;
    - `node scripts/check-performance-gate.mjs --trace <trace>` no reporta `required_failures`;
    - la evidencia está adjunta en PR/issue.
-3. Revisar diff contra el brief (scope, calidad, seguridad, performance).
-4. Dejar comentario en Linear: resultado de revisión.
+3. Validar `Architecture Contract` cuando aplica:
+   - el diff respeta `Layer` declarado;
+   - no invade runtimes o adapters fuera de `Runtime scope`;
+   - el owner efectivo del cambio coincide con `Owner`;
+   - `Contracts touched` e `Invariants` están preservados o actualizados explícitamente;
+   - los `Required docs` del brief siguen alineados con la implementación final.
+4. Revisar diff contra el brief (scope, calidad, seguridad, performance).
+5. Dejar comentario en Linear: resultado de revisión.
    - El comentario de REVIEW debe separar explícitamente:
      - `GateResult` (PASS/FAIL de contratos/checks),
      - `QualityScore` (calidad técnica del diff),
@@ -154,23 +170,23 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - Agregar evento en `workflow/review-history.jsonl` (append-only) con tipo:
      - `review_rejected` o `review_approved`,
      - incluyendo `issue`, `pr_url`, `branch`, `commit`, `score`, `gate_result`, `ts`, `reviewer`, `notes`.
-5. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
-6. Volver a `main`: `git switch main`.
-7. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
-8. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Commitear y pushear:
+6. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
+7. Volver a `main`: `git switch main`.
+8. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
+9. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Commitear y pushear:
    ```bash
    git add workflow/review-history.jsonl
    git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]"
    git push origin main
    ```
    > El evento `build_submitted` se aplaza a REVIEW para evitar que la rama de feature toque archivos de workflow, eliminando conflictos de merge en worktrees paralelos.
-9. Agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada. Commitear y pushear:
+10. Agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada. Commitear y pushear:
    ```bash
    git add workflow/status.json
    git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]"
    git push origin main
    ```
-10. Mover issue a `Done` en Linear.
+11. Mover issue a `Done` en Linear.
 
 **Nota:** el agente ejecuta el merge directamente. No requiere confirmación del humano salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
 
@@ -191,6 +207,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - hay `required_failures > 0` o métricas requeridas faltantes en `check-performance-gate`;
    - no existe justificación explícita cuando el brief marcó `Performance Contract: not required`.
    - falta evidencia de paridad cross-mode cuando `Presentation Contract` es requerido.
+   - el issue requería `Architecture Contract` y este no existe, está incompleto o el diff lo contradice.
    - existe un **security finding** aplicable al diff sin parche aplicado: open redirect, XSS via `dangerouslySetInnerHTML` sin sanitizar, SSRF en URLs construidas con input externo, secrets en logs/cliente, validación faltante en boundary (route handler, API public, webhook).
    - Vercel preview deploy en FAILURE — no se aprueba un PR que rompe el build/deploy, aunque el delivery gate local pase.
 3. Mover issue a `In Progress`.

@@ -24,6 +24,8 @@ Documentar de forma explícita:
 
 ## Fuente de verdad del editor
 
+**Regla de lectura:** esta sección distingue estado vivo de edición, persistencia remota web actual e interoperabilidad documental. No debe leerse como una afirmación universal de que `body_json` gobierna todos los runtimes del producto.
+
 - En runtime de edición: `EditorState` de ProseMirror.
 - En persistencia web/cloud actual: `body_json` (documento completo, no por bloques).
 - En interoperabilidad humana/export/import y dirección desktop: Markdown materializado, con convergencia futura a `.md` como contrato documental compartido.

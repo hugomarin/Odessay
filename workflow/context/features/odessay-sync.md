@@ -15,9 +15,11 @@ Para la dirección desktop y la transición hacia filesystem `.md` como write-pa
 
 ## El principio que define todo
 
-El usuario nunca espera a Supabase. Nunca. Ni al escribir, ni al guardar, ni al cargar. La base local es la fuente de verdad operativa. Supabase es la copia remota sincronizada.
+El usuario nunca espera a Supabase. Nunca. Ni al escribir, ni al guardar, ni al cargar. En el runtime web actual, la base local es la fuente de verdad operativa. Supabase es la copia remota sincronizada.
 
 Esto no es una optimización de performance — es una decisión de arquitectura que afecta todo el producto. Un producto epistolar que "guarda" con latencia no es un santuario: es una herramienta más. La escritura debe ser fluida, sin fricción de red.
+
+**Nota de transición:** en desktop, esta misma regla de fluidez se conserva, pero la fuente operativa principal del documento deja de ser la base local web y pasa a ser el archivo `.md`.
 
 ---
 
