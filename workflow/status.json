@@ -12,16 +12,24 @@
     },
     "active_phase": {
         "name": "Fase 4 — Shared Core Multi-Runtime",
-        "linear_project": "",
+        "linear_project": "https://linear.app/z9ne/project/fase-4-shared-core-multi-runtime-5f302db13185",
         "roadmap_ref": "workflow/define/roadmap.md"
     },
     "phase_plan": {
         "phase": "Fase 4 — Shared Core Multi-Runtime",
         "source_of_truth": "workflow/define/roadmap.md",
         "definition_of_done": "workflow/define/dod-fase-4.md",
-        "linear_project": "",
-        "linear_issues": [],
-        "notes": "Fase 3 se considera cerrada y el roadmap fue replanteado para priorizar la arquitectura multi-runtime. La fase activa se enfoca en shared core, contratos de servicio, contrato documental `.md` y desacoplamiento del runtime web. Writing Harness, correspondences e iniciativas de distribución salen del critical path hasta estabilizar desktop + web sobre el mismo core. Existe DoD en `workflow/define/dod-fase-4.md`. El siguiente paso operativo es `wf-define Fase 4` como planeación táctica de issues en Linear."
+        "linear_project": "https://linear.app/z9ne/project/fase-4-shared-core-multi-runtime-5f302db13185",
+        "linear_issues": [
+            "ODE-189",
+            "ODE-190",
+            "ODE-191",
+            "ODE-192",
+            "ODE-193",
+            "ODE-194",
+            "ODE-195"
+        ],
+        "notes": "Fase 3 se considera cerrada y el roadmap fue replanteado para priorizar la arquitectura multi-runtime. La fase activa se enfoca en shared core, contratos de servicio, contrato documental `.md` y desacoplamiento del runtime web. Writing Harness, correspondences e iniciativas de distribución salen del critical path hasta estabilizar desktop + web sobre el mismo core. Existe DoD en `workflow/define/dod-fase-4.md`. `wf-define Fase 4` ya creó el proyecto nuevo de Linear y el breakdown táctico inicial de issues: ODE-189 (service contracts), ODE-190 (DocumentService), ODE-191 (SyncService), ODE-192 (document contract), ODE-193 (AI/Auth), ODE-194 (Sharing), ODE-195 (invariant harness)."
     },
     "built": [
         {

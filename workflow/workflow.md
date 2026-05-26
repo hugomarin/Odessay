@@ -63,10 +63,18 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
     - Si el issue toca arquitectura, runtime boundaries, desktop/shared-core, save path, sync/hydration, parser/serializer o extracción de servicios, agregar en el brief un `Architecture Contract` obligatorio con: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`.
 12. Crear los issues en Linear con su brief incluido.
 13. Confirmar al humano: lista de issues creados, dependencias entre ellos y orden de ejecución sugerido. Ofrecer un comando `/wf-audit` si el humano quiere revisar la calidad de los issues contra el DoD.
+14. Entregar una `Execution Trace` explícita del proceso con:
+    - `Planning role`
+    - `Skills loaded`
+    - `Specialist consults`
+    - `Audit run`
+    - `Artifacts created`
+    - `Why`
 
 **Gate de salida:** los issues definidos en esta ejecución creados en Linear, cada uno con su Issue Brief completo. Sin brief por issue no hay BUILD. Si un issue es arquitectónico y no incluye `Architecture Contract`, DEFINE no está completo.
 
 **No es un output válido de DEFINE:** dejar un breakdown táctico solo en markdown dentro del repo sin persistirlo en Linear.
+**No es un output trazable suficiente de DEFINE:** decir que “se usó” un rol o skill sin declararlo en la `Execution Trace`.
 
 **Restricción:** no abrir ramas ni escribir código en esta etapa.
 

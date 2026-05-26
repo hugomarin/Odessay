@@ -13,6 +13,8 @@ Usa Linear MCP para crear y gestionar todo directamente.
 
 Si la fase ya tiene roadmap y DoD, este skill se usa para convertir esa definición en planeación táctica de issues. No debe reabrir la estrategia de fase salvo que detecte una asimetría real entre roadmap y DoD.
 
+Toda salida cerrada de `wf-define` debe incluir una `Execution Trace` explícita. No basta con asumir que el rol o los skills “quedaron implícitos”.
+
 Cuando el issue deje de ser solo producto/scope y pase a involucrar runtime boundaries, shared core, save path, sync, parser/serializer o extracción de servicios, cargar también `.agents/skills/skill-architecture/SKILL.md`.
 
 ---
@@ -46,6 +48,15 @@ Señal de mala orquestación:
 Eso produce planificación inflada y sin verdadero critical path. El agente de planeación debe cerrar esas tensiones antes de crear briefs o issues.
 
 Cuando existan dudas sobre cobertura del DoD, overlaps, huecos o secuencia entre issues, cargar además `.agents/skills/skill-audit-planning/SKILL.md`.
+
+La `Execution Trace` mínima debe declarar:
+
+- `Planning role`
+- `Skills loaded`
+- `Specialist consults`
+- `Audit run`
+- `Artifacts created`
+- `Why`
 
 ---
 

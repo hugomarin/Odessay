@@ -53,6 +53,7 @@ La salida formal de este rol para `wf-define` es:
 - proyecto de la fase en Linear, si todavía no existe
 - issues de la fase creados en Linear
 - cada issue con brief completo y contratos requeridos
+- una `Execution Trace` explícita de cómo se orquestó la planeación
 
 No es una salida válida de `wf-define`:
 
@@ -116,6 +117,7 @@ El agente debe:
 - crear los issues de la fase con su brief estructurado
 - registrar dependencias y critical path entre issues cuando aplique
 - confirmar al humano qué issues quedaron creados y en qué orden conviene ejecutarlos
+- declarar en la salida qué rol, skills y consultas efectivamente usó
 
 Si Linear no está disponible o el agente no puede crear los issues, no debe inventar una salida equivalente dentro del repo. Debe detenerse y declarar el bloqueo explícitamente.
 
@@ -157,6 +159,8 @@ Debe usarlo cuando necesite:
 - preparar o ejecutar `wf-audit`
 
 El audit no reemplaza la creación de issues en Linear. Solo endurece la calidad de la salida antes de persistirla.
+
+Si el audit se ejecuta, debe aparecer explícitamente en la `Execution Trace`. Si no se ejecuta, también debe declararse.
 
 ---
 
@@ -210,6 +214,21 @@ Este rol no puede declarar `wf-define` como completo si falta cualquiera de esta
 - el plan quedó solo en artefactos locales del repo
 
 Si no puede cumplirlas, debe devolver bloqueo o handoff explícito. No debe producir un “draft final” alternativo.
+
+---
+
+## Execution Trace obligatoria
+
+Toda ejecución de `wf-define` cerrada por este rol debe incluir una sección `Execution Trace` con:
+
+- `Planning role`: rol efectivamente usado
+- `Skills loaded`: skills realmente cargados, no skills meramente disponibles
+- `Specialist consults`: consultas explícitas a frontend/backend/database/ux u otros
+- `Audit run`: si se ejecutó `skill-audit-planning`, y sobre qué artefactos
+- `Artifacts created`: proyecto/issues/comentarios/documentos persistidos
+- `Why`: justificación corta de por qué esos skills/consultas fueron suficientes
+
+El objetivo no es verbosear el razonamiento interno, sino dejar trazabilidad operativa verificable.
 
 ---
 

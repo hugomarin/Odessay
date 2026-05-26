@@ -121,6 +121,14 @@ Un audit debe marcar `FAIL` si ocurre cualquiera de estas condiciones:
 
 El resultado del audit debe separarse en cuatro capas:
 
+Y debe incluir además una `Execution Trace` breve para que quede claro:
+
+- qué rol condujo el audit
+- qué skills fueron cargados
+- si hubo consulta a especialistas
+- qué artefactos se auditaron
+- qué evidencias quedaron fuera
+
 ### `GateResult`
 
 - `PASS`
