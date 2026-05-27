@@ -33,6 +33,15 @@
     },
     "built": [
         {
+            "what": "Define shared-core service contracts and migration boundaries for Fase 4. Created lib/services/contracts/ with 7 typed service interfaces (DocumentService, SyncService, AIService, AuthService, SharingService, AssetService, SettingsService) plus a shared service-types.ts with the ServiceResponse envelope, error codes, and descriptor types. Each contract declares Layer/RuntimeScope/Owner/Invariants/Hotspots without importing Next, Supabase, cookies, window, or filesystem APIs. Added tests/service-contracts.test.ts (import isolation + type-level assertions). Updated workflow/decisions.json with the agreed migration boundary.",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "issue": "ODE-189",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-189/define-shared-core-service-contracts-and-migration-boundaries",
+            "commit": "e03d55f",
+            "date": "2026-05-27",
+            "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), npm test -- --run tests/service-contracts.test.ts PASS, ops:delivery:gate PASS, Vercel PASS. Architecture Contract: COMPLIANT. Performance Contract: not required (contract/boundary issue, no hot-path changes). CI traceability FAIL due to perf gate on CI hardware — perf exception applied (not required + valid justification). Pre-existing test failures in footnote-extension/highlight-annotation (buildAiAnnotationCopy) exist on origin/main; not introduced by this PR. Review score: 9.0/10."
+        },
+        {
             "what": "Fix duplicate AI annotation margin refs. applyAnnotationToBody deletes existing annotationReference nodes in the re-annotated range before inserting the new one, recomputing offsets from character anchors on the post-deletion doc. handleMouseUp guards against annotationType reset when event comes from SelectionPopup/AnnotationBubble.",
             "phase": "Fase 3 — Organizar y publicar",
             "issue": "ODE-179",
