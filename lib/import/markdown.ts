@@ -1,6 +1,5 @@
-import { Editor } from "@tiptap/core"
-import { createEditorExtensions } from "@/lib/editor/extensions"
 import type { JSONContent } from "@tiptap/core"
+import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
 
@@ -14,7 +13,6 @@ const EMPTY = ""
 const SPACE = " "
 const NEWLINE = "\n"
 const UNTITLED = "Untitled"
-const BLOCK_SEP = "\n"
 const ERR_SIZE_PREFIX = "File is too large ("
 const ERR_SIZE_SUFFIX = "KB). Maximum supported size is 5MB."
 
@@ -41,16 +39,8 @@ const extractTitleFromMarkdown = (markdown: string, fileName: string): string =>
 }
 
 const parseMarkdownWithEditor = (markdown: string): { body_json: JSONContent; body_text: string } => {
-  const editor = new Editor({
-    extensions: createEditorExtensions(),
-    content: markdown,
-  })
-
-  const body_json = editor.getJSON()
-  const body_text = editor.getText({ blockSeparator: BLOCK_SEP })
-  editor.destroy()
-
-  return { body_json, body_text }
+  const snapshot = parseMarkdownToSnapshot(markdown)
+  return { body_json: snapshot.bodyJson, body_text: snapshot.bodyText }
 }
 
 export const parseMarkdownFile = async (file: File): Promise<ImportResult> => {

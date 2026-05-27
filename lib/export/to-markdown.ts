@@ -1,8 +1,9 @@
 import type { JSONContent } from "@tiptap/core"
-import { buildWritingMarkdown, getExportFileBaseName, sanitizeFileName } from "./writing-export"
+import { serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
+import { getExportFileBaseName, sanitizeFileName } from "./writing-export"
 
 export const serializeWritingToMarkdown = (bodyJson: JSONContent | null | undefined) =>
-  buildWritingMarkdown(bodyJson)
+  serializeDocumentToMarkdown(bodyJson)
 
 export const buildMarkdownDownloadName = (params: {
   title?: string | null
@@ -11,4 +12,3 @@ export const buildMarkdownDownloadName = (params: {
 }) => `${getExportFileBaseName(params)}.md`
 
 export const sanitizeMarkdownDownloadName = sanitizeFileName
-
