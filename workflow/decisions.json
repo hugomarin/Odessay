@@ -46,6 +46,10 @@
   ],
   "decisions_phase_active": [
     {
+      "decision": "Los contratos multi-runtime de Fase 4 viven en `lib/services/contracts/*`: shared core define operaciones, envelope de error, hotspots y ownership; adapters pueden implementar Next/Supabase/filesystem, pero los contratos no importan dependencias de runtime.",
+      "doc": "workflow/context/features/odessay-desktop-target-architecture.md"
+    },
+    {
       "decision": "FootnoteExtension custom (no existe en ecosistema)",
       "doc": "workflow/context/features/odessay-editor.md"
     }
