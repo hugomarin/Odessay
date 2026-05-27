@@ -111,9 +111,9 @@ import type {
   WritingStatus,
   WritingVisibility,
 } from "@/lib/local-db/schema"
-import { enqueueWritingUpsert } from "@/lib/sync"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
-import { hydrateLocalWritingFromRemote, needsBodyHydration } from "@/lib/sync/remote-bootstrap"
+import { webDocumentService } from "@/lib/services/web-document-service"
+import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import {
   closeTab,
   focusTab,
@@ -563,31 +563,40 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       const nextLifecycle = !activeId ? "local-only" : lifecycleRef.current
 
-      const nextWriting: LocalWriting = {
+      const nextRecord: WritingRecord = {
         id: nextId,
+        authorId: null,
         title: nextTitle,
-        body_json: editorInstance.getJSON() as Record<string, unknown>,
-        body_text: nextBodyText,
+        content: {
+          richText: editorInstance.getJSON() as Record<string, unknown>,
+          markdown: null,
+          plainText: nextBodyText,
+          canonicalSource: "rich-text",
+        },
+        slug: null,
         status: overrides?.status ?? statusRef.current,
         visibility: overrides?.visibility ?? visibilityRef.current,
+        parentId: null,
+        correspondenceId: null,
         version: nextVersion,
-        sync_status: "pending",
-        lifecycle: nextLifecycle,
-        created_at: baseCreatedAt,
-        updated_at: nowIso,
-        local_updated_at: Date.now(),
+        deletedAt: null,
+        createdAt: baseCreatedAt,
+        updatedAt: nowIso,
       }
 
       try {
-        await enqueueWritingUpsert(nextWriting)
+        const result = await webDocumentService.saveWriting({ writing: nextRecord })
+        if (result.error) {
+          throw new Error(result.error.message)
+        }
         versionRef.current = nextVersion
         setVersion(nextVersion)
         createdAtRef.current = baseCreatedAt
         setCreatedAt(baseCreatedAt)
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
-            nextWriting.sync_status,
-            nextWriting.lifecycle,
+            "pending",
+            nextLifecycle,
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
@@ -973,19 +982,27 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const nextTitle = deriveAutoTitle("", nowIso)
 
       try {
-        await localDB.writings.save({
-          id: nextId,
-          title: nextTitle,
-          body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
-          body_text: "",
-          status: "draft",
-          visibility: "private",
-          version: 0,
-          sync_status: "synced",
-          lifecycle: "local-only",
-          created_at: nowIso,
-          updated_at: nowIso,
-          local_updated_at: Date.now(),
+        await webDocumentService.saveWriting({
+          writing: {
+            id: nextId,
+            authorId: null,
+            title: nextTitle,
+            content: {
+              richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
+              markdown: null,
+              plainText: "",
+              canonicalSource: "rich-text",
+            },
+            slug: null,
+            status: "draft",
+            visibility: "private",
+            parentId: null,
+            correspondenceId: null,
+            version: 0,
+            deletedAt: null,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          },
         })
       } catch {
         // If the save fails (e.g., scope change in progress), fall back to
@@ -1094,35 +1111,36 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     const targetWritingId = hydrationWritingId
 
     const hydrateEditor = async () => {
-      let localWriting = await localDB.writings.get(targetWritingId)
+      let localWriting: LocalWriting | null = null
       let localCorrectionBlocks = await localDB.correctionBlocks.getByWriting(targetWritingId)
 
-      if (needsBodyHydration(localWriting)) {
-        // Editor shell mounts immediately; if the remote fetch takes longer than
-        // 200 ms, surface a subtle skeleton in the document area without
-        // blocking the surrounding UI.
-        const skeletonTimer = setTimeout(() => {
-          if (!cancelled) {
-            setIsBodyHydrating(true)
-          }
-        }, 200)
-
-        try {
-          await hydrateLocalWritingFromRemote(targetWritingId)
-        } catch (error) {
-          console.error(`[editor] lazy body hydration failed for ${targetWritingId}`, error)
-        } finally {
-          clearTimeout(skeletonTimer)
-          if (!cancelled) {
-            setIsBodyHydrating(false)
-          }
+      // openWriting handles local read + optional remote hydration in one call.
+      // Skeleton surfaces only when the call takes longer than 200 ms.
+      const skeletonTimer = setTimeout(() => {
+        if (!cancelled) {
+          setIsBodyHydrating(true)
         }
+      }, 200)
 
-        if (cancelled) {
+      try {
+        const openResult = await webDocumentService.openWriting(targetWritingId)
+        if (openResult.error) {
+          console.error(`[editor] openWriting failed for ${targetWritingId}`, openResult.error)
           return
         }
-
         localWriting = await localDB.writings.get(targetWritingId)
+      } catch (error) {
+        console.error(`[editor] openWriting failed for ${targetWritingId}`, error)
+        return
+      } finally {
+        clearTimeout(skeletonTimer)
+        if (!cancelled) {
+          setIsBodyHydrating(false)
+        }
+      }
+
+      if (cancelled) {
+        return
       }
 
       if (localCorrectionBlocks.length === 0) {
@@ -3529,22 +3547,30 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     setHydrationWritingId(nextWritingId)
     window.history.replaceState(null, "", `/write/${nextWritingId}`)
 
+    const blankDraftRecord: WritingRecord = {
+      id: nextWritingId,
+      authorId: null,
+      title: nextTitle,
+      content: {
+        richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
+        markdown: null,
+        plainText: "",
+        canonicalSource: "rich-text",
+      },
+      slug: null,
+      status: "draft",
+      visibility: "private",
+      parentId: null,
+      correspondenceId: null,
+      version: 0,
+      deletedAt: null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    }
+
     if (isActiveDraft) {
       try {
-        await localDB.writings.save({
-          id: nextWritingId,
-          title: nextTitle,
-          body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
-          body_text: "",
-          status: "draft",
-          visibility: "private",
-          version: 0,
-          sync_status: "synced",
-          lifecycle: "local-only",
-          created_at: nowIso,
-          updated_at: nowIso,
-          local_updated_at: Date.now(),
-        })
+        await webDocumentService.saveWriting({ writing: blankDraftRecord })
       } catch {
         // If save fails, revert the optimistic claim so persistEditorSnapshot
         // can fall back to identity-on-first-input.
@@ -3564,20 +3590,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     try {
-      await localDB.writings.save({
-        id: nextWritingId,
-        title: nextTitle,
-        body_json: EMPTY_EDITOR_JSON as Record<string, unknown>,
-        body_text: "",
-        status: "draft",
-        visibility: "private",
-        version: 0,
-        sync_status: "synced",
-        lifecycle: "local-only",
-        created_at: nowIso,
-        updated_at: nowIso,
-        local_updated_at: Date.now(),
-      })
+      await webDocumentService.saveWriting({ writing: blankDraftRecord })
     } catch {
       currentWritingIdRef.current = null
       setCurrentWritingId(null)
@@ -3638,15 +3651,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         return
       }
 
-      const response = await fetch(`/api/writings/${currentWritingId}/export?format=${format}`)
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { error?: { message?: string } }
-          | null
-        throw new Error(payload?.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
+      const result = await webDocumentService.exportWriting({ writingId: currentWritingId, format })
+      if (result.error) {
+        throw new Error(result.error.message)
       }
 
-      const blob = await response.blob()
+      const blob = new Blob([result.data.bytes.buffer as ArrayBuffer], { type: result.data.mimeType })
       downloadBlob(blob, `${exportFileBaseName}.${format}`)
     },
     [currentWritingId, downloadBlob, exportFileBaseName],
