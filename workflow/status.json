@@ -45,6 +45,15 @@
     },
     "built": [
         {
+            "what": "Extract web AI and auth adapters so product-facing consumers stop coupling directly to Supabase auth or internal route details. New lib/services/web-ai-service.ts implements AIService (suggestTitle, reviewPublication, hydrateCorrectionBlocks, persistCorrectionBlock) and lib/services/web-auth-service.ts implements AuthService (signIn, signUp, signOut, checkUsernameAvailability, getSession, updateDisplayName, updateUsername, requestEmailChange, updatePassword). Added lib/services/service-response.ts with ok/err/parseServiceEnvelope helpers. All product consumers migrated: login-form, signup-form, sign-out-button, account-form. Route handlers updated to normalized error codes. 4 focused tests in tests/ai-auth-services.test.ts covering happy-path AI and auth adapter operations.",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "issue": "ODE-193",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-193/separate-aiservice-and-authservice-from-direct-web-coupling",
+            "commit": "33c03fa",
+            "date": "2026-05-27",
+            "notes": "Validation (post-merge on main): typecheck PASS, lint PASS (pre-existing warnings only), tests PASS (77 files, 458 tests), Vercel PASS. Architecture Contract: COMPLIANT — Supabase auth calls contained inside web-auth-service.ts adapter, product consumers no longer own direct provider coupling, contracts are runtime-portable. Performance Contract: not required — no hot-path changes (all interaction latency, TTI, payload, waterfall, reactive fan-out explicitly not required per brief). Process deviation: PR merged before review cycle completed (DRAFT + Traceability gate failure); CI gate failure was branch-sync-only (ODE-191 absent from branch status.json per BUILD restriction, not a code issue). Review score: 8.25/10 post-hoc."
+        },
+        {
             "what": "Extract SyncService as the explicit application boundary for queue, retry, hydration, collection hydration, and sync status. New lib/services/web-sync-service.ts implements SyncService delegating to existing queue/worker/remote-bootstrap internals while keeping browser-only concerns (window, navigator, online listeners) inside SyncWorker. All callers — SyncBootstrap, CollectionsView, WritingCollectionsSection, ImportWritingDialog, LocalFirstDemo, DeskPage, DocumentService, BulkRemap — now route through webSyncService. 15 tests in sync-service.test.ts + 4 deduplication tests in sync-hydration.test.ts (fetchCount === 1 for 3 concurrent hydration calls).",
             "phase": "Fase 4 — Shared Core Multi-Runtime",
             "issue": "ODE-191",
