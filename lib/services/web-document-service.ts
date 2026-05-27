@@ -15,7 +15,8 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
-import { hydrateLocalWritingFromRemote, needsBodyHydration } from "@/lib/sync/remote-bootstrap"
+import { needsBodyHydration } from "@/lib/sync/remote-bootstrap"
+import { webSyncService } from "@/lib/services/web-sync-service"
 
 function localWritingToRecord(local: LocalWriting): WritingRecord {
   return {
@@ -109,7 +110,7 @@ export const webDocumentService: DocumentService = {
 
       if (!local || needsBodyHydration(local)) {
         try {
-          await hydrateLocalWritingFromRemote(writingId)
+          await webSyncService.hydrateWriting({ writingId })
           local = await localDB.writings.get(writingId)
         } catch {
           // fall through to not-found handling

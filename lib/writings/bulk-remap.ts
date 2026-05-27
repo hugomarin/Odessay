@@ -1,6 +1,7 @@
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus } from "@/lib/local-db/schema"
 import { enqueueWritingUpsert } from "@/lib/sync/queue"
+import { webSyncService } from "@/lib/sync"
 
 export type BulkRemapResult = {
   affectedCount: number
@@ -28,6 +29,7 @@ export async function bulkRemapStatusToDraft(
         sync_status: "pending",
       }
       await enqueueWritingUpsert(updated)
+      void webSyncService.scheduleFlush()
     } catch (error) {
       errors.push(
         error instanceof Error ? error.message : `Failed to remap writing ${writing.id}`,

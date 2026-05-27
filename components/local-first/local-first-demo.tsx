@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { localDB } from "@/lib/local-db";
 import type { LocalWriting } from "@/lib/local-db/schema";
-import { enqueueWritingUpsert } from "@/lib/sync";
+import { enqueueWritingUpsert, webSyncService } from "@/lib/sync";
 
 const createDemoWriting = (): LocalWriting => {
   const timestamp = new Date();
@@ -56,7 +56,10 @@ export function LocalFirstDemo() {
 
   const handleCreateDraft = () => {
     startTransition(() => {
-      void enqueueWritingUpsert(createDemoWriting()).then(refresh);
+      void enqueueWritingUpsert(createDemoWriting()).then(() => {
+        void webSyncService.scheduleFlush()
+        return refresh()
+      });
     });
   };
 

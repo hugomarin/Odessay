@@ -104,6 +104,10 @@ export type FlushSyncResult = {
   nextRetryAt: number | null
 }
 
+export type HydrateCollectionsResult = {
+  appliedCount: number
+}
+
 export type QuerySyncStatusInput = {
   writingId?: string
 }
@@ -119,7 +123,11 @@ export interface SyncService {
   enqueueMutation(input: EnqueueSyncMutationInput): Promise<ServiceResponse<SyncQueueReceipt>>
   hydrateWritings(): Promise<ServiceResponse<HydrateWritingsResult>>
   hydrateWriting(input: HydrateWritingInput): Promise<ServiceResponse<HydrateWritingResult>>
+  hydrateCollections(): Promise<ServiceResponse<HydrateCollectionsResult>>
   flushPending(): Promise<ServiceResponse<FlushSyncResult>>
+  scheduleFlush(): Promise<ServiceResponse<void>>
+  start(): Promise<ServiceResponse<void>>
+  stop(): Promise<ServiceResponse<void>>
   getRuntimeState(input?: QuerySyncStatusInput): Promise<ServiceResponse<SyncRuntimeState>>
 }
 
@@ -167,12 +175,44 @@ export const SYNC_SERVICE_CONTRACT = {
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "UNAVAILABLE"],
     },
     {
+      name: "hydrateCollections",
+      kind: "query",
+      summary: "Hydrate local collections and writing-collection assignments from the active remote adapter.",
+      input: ["none"],
+      output: ["HydrateCollectionsResult"],
+      errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "DB_ERROR", "UNAVAILABLE"],
+    },
+    {
       name: "flushPending",
       kind: "command",
       summary: "Process pending mutations according to adapter availability and retry policy.",
       input: ["none"],
       output: ["FlushSyncResult"],
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "RATE_LIMITED", "TIMEOUT", "UNAVAILABLE"],
+    },
+    {
+      name: "scheduleFlush",
+      kind: "command",
+      summary: "Request a deferred flush of pending mutations without awaiting completion.",
+      input: ["none"],
+      output: ["void"],
+      errorCodes: ["UNAVAILABLE"],
+    },
+    {
+      name: "start",
+      kind: "command",
+      summary: "Start the sync worker and online listeners for the active runtime adapter.",
+      input: ["none"],
+      output: ["void"],
+      errorCodes: ["UNAVAILABLE"],
+    },
+    {
+      name: "stop",
+      kind: "command",
+      summary: "Stop the sync worker and online listeners for the active runtime adapter.",
+      input: ["none"],
+      output: ["void"],
+      errorCodes: ["UNAVAILABLE"],
     },
     {
       name: "getRuntimeState",
