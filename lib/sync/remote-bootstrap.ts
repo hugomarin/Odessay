@@ -173,7 +173,7 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
   return promise
 }
 
-const hasLocalBody = (local: LocalWriting): boolean => {
+export const hasLocalBody = (local: LocalWriting): boolean => {
   if (local.body_text !== "") {
     return true
   }
