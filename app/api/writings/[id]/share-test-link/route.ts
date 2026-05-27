@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { createAdminClient } from "@/lib/supabase/admin"
-import { buildTestLinkPath, createTestLinkToken, getTestLinkEmail, pickLatestPendingTestLink } from "@/lib/sharing/test-link"
+import { createWebSharingService } from "@/lib/services/web-sharing-service"
 import { createClient } from "@/lib/supabase/server"
 
 type RouteContext = {
@@ -40,77 +39,6 @@ const getCurrentUserId = async () => {
   return user?.id ?? null
 }
 
-const verifyWritingOwnership = async (writingId: string, userId: string) => {
-  const supabase = createAdminClient()
-
-  const { data, error } = await supabase
-    .from("writings")
-    .select("id")
-    .eq("id", writingId)
-    .eq("author_id", userId)
-    .is("deleted_at", null)
-    .maybeSingle<{ id: string }>()
-
-  if (error) {
-    return { ok: false as const, error }
-  }
-
-  return { ok: true as const, exists: Boolean(data) }
-}
-
-const getActiveTestLink = async (writingId: string, userId: string) => {
-  const markerEmail = getTestLinkEmail(writingId)
-  const supabase = createAdminClient()
-
-  const { data, error } = await supabase
-    .from("invitations")
-    .select("token, email, status, created_at")
-    .eq("inviter_id", userId)
-    .eq("writing_id", writingId)
-    .eq("email", markerEmail)
-    .order("created_at", { ascending: false })
-    .limit(10)
-    .returns<Array<{ token: string; email: string; status: "pending" | "accepted" | "expired"; created_at: string }>>()
-
-  if (error) {
-    return { error }
-  }
-
-  return {
-    error: null,
-    invitation: pickLatestPendingTestLink(data ?? [], writingId),
-  }
-}
-
-const revokeActiveTestLinks = async (writingId: string, userId: string) => {
-  const markerEmail = getTestLinkEmail(writingId)
-  const supabase = createAdminClient()
-
-  const { data, error } = await supabase
-    .from("invitations")
-    .update({ status: "expired" })
-    .eq("inviter_id", userId)
-    .eq("writing_id", writingId)
-    .eq("email", markerEmail)
-    .eq("status", "pending")
-    .select("id")
-
-  if (error) {
-    return { error, revokedCount: 0 }
-  }
-
-  return { error: null, revokedCount: data?.length ?? 0 }
-}
-
-const toAbsolutePreviewLink = (request: Request, token: string) =>
-  new URL(buildTestLinkPath(token), request.url).toString()
-
-type RotatedPreviewLinkRow = {
-  token: string
-  created_at: string
-  replaced_previous: boolean
-}
-
 export async function GET(request: Request, context: RouteContext) {
   const writingId = await parseWritingId(context)
 
@@ -124,49 +52,16 @@ export async function GET(request: Request, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "No active session.")
   }
 
-  const ownership = await verifyWritingOwnership(writingId, userId)
+  const sharingService = await createWebSharingService({ userId, requestUrl: request.url })
+  const result = await sharingService.getPreviewLink(writingId)
 
-  if (!ownership.ok) {
-    return jsonError(500, "DB_ERROR", ownership.error.message)
+  if (result.error) {
+    const status =
+      result.error.code === "UNAUTHORIZED" ? 401 : result.error.code === "NOT_FOUND" ? 404 : 500
+    return jsonError(status, result.error.code, result.error.message)
   }
 
-  if (!ownership.exists) {
-    return jsonError(404, "NOT_FOUND", "Writing not found.")
-  }
-
-  const activeLinkResult = await getActiveTestLink(writingId, userId)
-
-  if (activeLinkResult.error) {
-    return jsonError(500, "DB_ERROR", activeLinkResult.error.message)
-  }
-
-  if (!activeLinkResult.invitation) {
-    return NextResponse.json(
-      {
-        data: {
-          active: false,
-          token: null,
-          link: null,
-          createdAt: null,
-        },
-        error: null,
-      },
-      { status: 200 },
-    )
-  }
-
-  return NextResponse.json(
-    {
-      data: {
-        active: true,
-        token: activeLinkResult.invitation.token,
-        link: toAbsolutePreviewLink(request, activeLinkResult.invitation.token),
-        createdAt: activeLinkResult.invitation.created_at,
-      },
-      error: null,
-    },
-    { status: 200 },
-  )
+  return NextResponse.json({ data: result.data, error: null }, { status: 200 })
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -182,53 +77,19 @@ export async function POST(request: Request, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "No active session.")
   }
 
-  const ownership = await verifyWritingOwnership(writingId, userId)
+  const sharingService = await createWebSharingService({ userId, requestUrl: request.url })
+  const result = await sharingService.rotatePreviewLink(writingId)
 
-  if (!ownership.ok) {
-    return jsonError(500, "DB_ERROR", ownership.error.message)
+  if (result.error) {
+    const status =
+      result.error.code === "UNAUTHORIZED" ? 401 : result.error.code === "NOT_FOUND" ? 404 : 500
+    return jsonError(status, result.error.code, result.error.message)
   }
 
-  if (!ownership.exists) {
-    return jsonError(404, "NOT_FOUND", "Writing not found.")
-  }
-
-  const token = createTestLinkToken()
-  const supabase = createAdminClient()
-
-  const { data, error } = await supabase
-    .rpc("rotate_test_preview_link", {
-      p_inviter_id: userId,
-      p_writing_id: writingId,
-      p_token: token,
-    })
-    .returns<RotatedPreviewLinkRow[]>()
-
-  if (error) {
-    return jsonError(500, "DB_ERROR", error.message)
-  }
-
-  const rotatedLink = Array.isArray(data) ? data[0] : null
-
-  if (!rotatedLink) {
-    return jsonError(500, "DB_ERROR", "Failed to generate an active preview link.")
-  }
-
-  return NextResponse.json(
-    {
-      data: {
-        active: true,
-        token: rotatedLink.token,
-        link: toAbsolutePreviewLink(request, rotatedLink.token),
-        createdAt: rotatedLink.created_at,
-        replacedPrevious: rotatedLink.replaced_previous,
-      },
-      error: null,
-    },
-    { status: 201 },
-  )
+  return NextResponse.json({ data: result.data, error: null }, { status: 201 })
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const writingId = await parseWritingId(context)
 
   if (!writingId) {
@@ -241,30 +102,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return jsonError(401, "UNAUTHORIZED", "No active session.")
   }
 
-  const ownership = await verifyWritingOwnership(writingId, userId)
+  const sharingService = await createWebSharingService({ userId, requestUrl: request.url })
+  const result = await sharingService.revokePreviewLink(writingId)
 
-  if (!ownership.ok) {
-    return jsonError(500, "DB_ERROR", ownership.error.message)
+  if (result.error) {
+    const status =
+      result.error.code === "UNAUTHORIZED" ? 401 : result.error.code === "NOT_FOUND" ? 404 : 500
+    return jsonError(status, result.error.code, result.error.message)
   }
 
-  if (!ownership.exists) {
-    return jsonError(404, "NOT_FOUND", "Writing not found.")
-  }
-
-  const revokeResult = await revokeActiveTestLinks(writingId, userId)
-
-  if (revokeResult.error) {
-    return jsonError(500, "DB_ERROR", revokeResult.error.message)
-  }
-
-  return NextResponse.json(
-    {
-      data: {
-        active: false,
-        revoked: revokeResult.revokedCount > 0,
-      },
-      error: null,
-    },
-    { status: 200 },
-  )
+  return NextResponse.json({ data: result.data, error: null }, { status: 200 })
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { createAdminClient } from "@/lib/supabase/admin"
+import { createWebSharingService } from "@/lib/services/web-sharing-service"
 import { createClient } from "@/lib/supabase/server"
 
 const MAX_IDS = 50
@@ -14,11 +14,6 @@ const getCurrentUserId = async () => {
     data: { user },
   } = await supabase.auth.getUser()
   return user?.id ?? null
-}
-
-type RecipientPreview = {
-  username: string
-  displayName: string
 }
 
 // GET /api/writings/shares?ids=uuid1,uuid2,... — batch list shares for multiple writings
@@ -50,68 +45,12 @@ export async function GET(req: Request) {
     }
   }
 
-  const admin = createAdminClient()
+  const sharingService = await createWebSharingService({ userId })
+  const result = await sharingService.listRecipientPreviews(ids)
 
-  // 1. Verify ownership in batch: which of these writings belong to the user?
-  const { data: ownedWritings, error: ownershipError } = await admin
-    .from("writings")
-    .select("id")
-    .in("id", ids)
-    .eq("author_id", userId)
-    .is("deleted_at", null)
-
-  if (ownershipError) {
-    return jsonError(500, "DB_ERROR", ownershipError.message)
+  if (result.error) {
+    return jsonError(result.error.code === "INVALID_INPUT" ? 400 : 500, result.error.code, result.error.message)
   }
 
-  const ownedIds = new Set((ownedWritings ?? []).map((w) => w.id))
-
-  if (ownedIds.size === 0) {
-    const emptyResult: Record<string, RecipientPreview[]> = {}
-    for (const id of ids) {
-      emptyResult[id] = []
-    }
-    return NextResponse.json({ data: emptyResult, error: null })
-  }
-
-  // 2. Fetch shares in batch for owned writings only
-  const { data: shares, error: sharesError } = await admin
-    .from("writing_shares")
-    .select("id, writing_id, shared_with_id, can_respond, created_at, profiles!shared_with_id(username, display_name)")
-    .in("writing_id", Array.from(ownedIds))
-    .order("created_at", { ascending: true })
-
-  if (sharesError) {
-    return jsonError(500, "DB_ERROR", sharesError.message)
-  }
-
-  const result: Record<string, RecipientPreview[]> = {}
-
-  for (const id of ids) {
-    result[id] = []
-  }
-
-  for (const share of shares ?? []) {
-    const writingId = share.writing_id as string
-
-    const rawProfile = (share.profiles ?? null) as
-      | { username: string; display_name: string }
-      | { username: string; display_name: string }[]
-      | null
-
-    const profile = Array.isArray(rawProfile) ? rawProfile[0] : rawProfile
-
-    if (!profile) continue
-
-    if (!result[writingId]) {
-      result[writingId] = []
-    }
-
-    result[writingId].push({
-      username: profile.username,
-      displayName: profile.display_name,
-    })
-  }
-
-  return NextResponse.json({ data: result, error: null })
+  return NextResponse.json({ data: result.data, error: null })
 }

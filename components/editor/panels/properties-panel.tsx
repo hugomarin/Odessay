@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   ChevronDown,
   Clipboard,
@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import { createBrowserSharingService } from "@/lib/services/web-sharing-service"
 import { cn } from "@/lib/utils"
 import { WritingStatusPicker } from "@/components/writings/writing-status-picker"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
@@ -42,14 +43,6 @@ type ShareLinkState = {
   token: string | null
   link: string | null
   createdAt: string | null
-}
-
-type ApiEnvelope<TData> = {
-  data: TData | null
-  error: {
-    code: string
-    message: string
-  } | null
 }
 
 type ExportFormat = "markdown" | "pdf" | "docx"
@@ -187,10 +180,10 @@ export function PropertiesPanel({
   const [isExportingDocx, setIsExportingDocx] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const { settings } = useUserSettingsContext()
+  const sharingService = useMemo(() => createBrowserSharingService(), [])
   const enabledStatuses = STATUS_OPTIONS.filter((s) => !settings.disabledStatuses.includes(s))
 
   const hasRemoteWriting = Boolean(writingId) && lifecycle === "server-confirmed"
-  const shareApiPath = hasRemoteWriting ? `/api/writings/${writingId}/share-test-link` : null
   const spellcheckEnabled = spellcheckPreference !== "off"
   const remoteFeatureMessage =
     lifecycle === "syncing"
@@ -198,7 +191,7 @@ export function PropertiesPanel({
       : "Sharing, collections, PDF, and Word become available after the first sync."
 
   const loadShareLink = useCallback(async () => {
-    if (!shareApiPath) {
+    if (!hasRemoteWriting || !writingId) {
       setShareLink(DEFAULT_SHARE_LINK_STATE)
       setShareError(null)
       return
@@ -208,28 +201,26 @@ export function PropertiesPanel({
     setShareError(null)
 
     try {
-      const response = await fetch(shareApiPath, { method: "GET" })
-      const payload = (await response.json()) as ApiEnvelope<ShareLinkState>
-
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Failed to load preview link.")
+      const result = await sharingService.getPreviewLink(writingId)
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? "Failed to load preview link.")
       }
 
-      setShareLink(payload.data)
+      setShareLink(result.data)
     } catch (error) {
       setShareLink(DEFAULT_SHARE_LINK_STATE)
       setShareError(error instanceof Error ? error.message : "Failed to load preview link.")
     } finally {
       setIsLoadingShareLink(false)
     }
-  }, [shareApiPath])
+  }, [hasRemoteWriting, sharingService, writingId])
 
   useEffect(() => {
     void loadShareLink()
   }, [loadShareLink])
 
   const handleGenerateShareLink = useCallback(async () => {
-    if (!shareApiPath) {
+    if (!hasRemoteWriting || !writingId) {
       return
     }
 
@@ -237,23 +228,21 @@ export function PropertiesPanel({
     setShareError(null)
 
     try {
-      const response = await fetch(shareApiPath, { method: "POST" })
-      const payload = (await response.json()) as ApiEnvelope<ShareLinkState & { replacedPrevious?: boolean }>
-
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Failed to generate preview link.")
+      const result = await sharingService.rotatePreviewLink(writingId)
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? "Failed to generate preview link.")
       }
 
-      setShareLink(payload.data)
+      setShareLink(result.data)
     } catch (error) {
       setShareError(error instanceof Error ? error.message : "Failed to generate preview link.")
     } finally {
       setIsSavingShareLink(false)
     }
-  }, [shareApiPath])
+  }, [hasRemoteWriting, sharingService, writingId])
 
   const handleRevokeShareLink = useCallback(async () => {
-    if (!shareApiPath) {
+    if (!hasRemoteWriting || !writingId) {
       return
     }
 
@@ -261,11 +250,9 @@ export function PropertiesPanel({
     setShareError(null)
 
     try {
-      const response = await fetch(shareApiPath, { method: "DELETE" })
-      const payload = (await response.json()) as ApiEnvelope<{ active: boolean; revoked: boolean }>
-
-      if (!response.ok || !payload.data) {
-        throw new Error(payload.error?.message ?? "Failed to revoke preview link.")
+      const result = await sharingService.revokePreviewLink(writingId)
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? "Failed to revoke preview link.")
       }
 
       setShareLink(DEFAULT_SHARE_LINK_STATE)
@@ -274,7 +261,7 @@ export function PropertiesPanel({
     } finally {
       setIsSavingShareLink(false)
     }
-  }, [shareApiPath])
+  }, [hasRemoteWriting, sharingService, writingId])
 
   const handleCopyShareLink = useCallback(async () => {
     if (!shareLink.link) {

@@ -1,16 +1,10 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { X } from "lucide-react"
+import type { ShareRecipient } from "@/lib/services/contracts/sharing-service"
+import { createBrowserSharingService } from "@/lib/services/web-sharing-service"
 import { cn } from "@/lib/utils"
-
-type ShareEntry = {
-  id: string
-  shared_with_id: string
-  can_respond: boolean
-  created_at: string
-  profiles: { username: string; display_name: string } | null
-}
 
 type UserSearchResult = {
   id: string
@@ -35,8 +29,8 @@ type WritingSharesSectionProps = {
 }
 
 export function WritingSharesSection({ writingId, onSharesStateChange }: WritingSharesSectionProps) {
-  const sharesApiPath = `/api/writings/${writingId}/shares`
-  const [shares, setShares] = useState<ShareEntry[]>([])
+  const sharingService = useMemo(() => createBrowserSharingService(), [])
+  const [shares, setShares] = useState<ShareRecipient[]>([])
   const [isLoadingShares, setIsLoadingShares] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [searchResults, setSearchResults] = useState<UserSearchResult[]>([])
@@ -49,17 +43,17 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
 
   useEffect(() => {
     setIsLoadingShares(true)
-    fetch(sharesApiPath)
-      .then((response) => response.json() as Promise<ApiEnvelope<ShareEntry[]>>)
-      .then((payload) => {
-        if (payload.data) {
-          setShares(payload.data)
-          onSharesStateChange?.(payload.data.length > 0)
+    sharingService
+      .listRecipients(writingId)
+      .then((result) => {
+        if (result.data) {
+          setShares(result.data)
+          onSharesStateChange?.(result.data.length > 0)
         }
       })
       .catch(() => null)
       .finally(() => setIsLoadingShares(false))
-  }, [onSharesStateChange, sharesApiPath])
+  }, [onSharesStateChange, sharingService, writingId])
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -80,7 +74,7 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       try {
         const response = await fetch(`/api/users/search?q=${encodeURIComponent(trimmed)}`)
         const payload = (await response.json()) as ApiEnvelope<UserSearchResult[]>
-        const existingIds = new Set(shares.map((share) => share.shared_with_id))
+        const existingIds = new Set(shares.map((share) => share.userId))
         const results = (payload.data ?? []).filter((user) => !existingIds.has(user.id))
 
         setSearchResults(results)
@@ -119,20 +113,18 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       setError(null)
 
       try {
-        const response = await fetch(sharesApiPath, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ shared_with_id: user.id }),
+        const result = await sharingService.shareWriting({
+          writingId,
+          sharedWithUserId: user.id,
         })
-        const payload = (await response.json()) as ApiEnvelope<ShareEntry>
 
-        if (!response.ok || !payload.data) {
-          setError(payload.error?.code === "ALREADY_SHARED" ? "Already shared with this user." : "Couldn't add this user. Please try again.")
+        if (result.error || !result.data) {
+          setError(result.error?.code === "ALREADY_SHARED" ? "Already shared with this user." : "Couldn't add this user. Please try again.")
           return
         }
 
         setShares((current) => {
-          const nextShares = [...current, payload.data!]
+          const nextShares = [...current, result.data]
           onSharesStateChange?.(nextShares.length > 0)
           return nextShares
         })
@@ -142,7 +134,7 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
         setIsSaving(false)
       }
     },
-    [onSharesStateChange, sharesApiPath],
+    [onSharesStateChange, sharingService, writingId],
   )
 
   const handleRevoke = useCallback(
@@ -151,19 +143,18 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       setError(null)
 
       try {
-        const response = await fetch(sharesApiPath, {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ shared_with_id: sharedWithId }),
+        const result = await sharingService.revokeShare({
+          writingId,
+          sharedWithUserId: sharedWithId,
         })
 
-        if (!response.ok) {
+        if (result.error) {
           setError("Couldn't revoke access. Please try again.")
           return
         }
 
         setShares((current) => {
-          const nextShares = current.filter((share) => share.shared_with_id !== sharedWithId)
+          const nextShares = current.filter((share) => share.userId !== sharedWithId)
           onSharesStateChange?.(nextShares.length > 0)
           return nextShares
         })
@@ -173,7 +164,7 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
         setIsSaving(false)
       }
     },
-    [onSharesStateChange, sharesApiPath],
+    [onSharesStateChange, sharingService, writingId],
   )
 
   return (
@@ -245,19 +236,19 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       {!isLoadingShares && shares.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5" data-testid="shares-list">
           {shares.map((share) => {
-            const name = share.profiles?.display_name?.trim() || share.profiles?.username || "Unknown"
-            const detail = share.can_respond ? "can respond" : "can read"
+            const name = share.displayName?.trim() || share.username || "Unknown"
+            const detail = share.canRespond ? "can respond" : "can read"
 
             return (
               <span
-                key={share.id}
+                key={`${share.userId}:${share.sharedAt}`}
                 className="inline-flex items-center gap-[5px] rounded-[6px] bg-[hsl(220_40%_96%)] px-[10px] py-1 text-[11px] font-medium text-[hsl(220_40%_38%)]"
                 data-testid="share-entry"
               >
                 <span className="truncate">{`${name} · ${detail}`}</span>
                 <button
                   type="button"
-                  onClick={() => void handleRevoke(share.shared_with_id)}
+                  onClick={() => void handleRevoke(share.userId)}
                   className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-current/70 transition-colors hover:text-current"
                   aria-label={`Remove ${name}`}
                 >

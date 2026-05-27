@@ -249,6 +249,12 @@ describe("service contracts", () => {
     expectTypeOf<SharingService["getPreviewLink"]>().toEqualTypeOf<
       (writingId: string) => Promise<ServiceResponse<PreviewLinkState>>
     >()
+    expectTypeOf<SharingService["rotatePreviewLink"]>().toEqualTypeOf<
+      (writingId: string) => Promise<ServiceResponse<PreviewLinkState>>
+    >()
+    expectTypeOf<SharingService["revokePreviewLink"]>().toEqualTypeOf<
+      (writingId: string) => Promise<ServiceResponse<{ writingId: string; revoked: boolean }>>
+    >()
     expectTypeOf<SharingService["listIncomingShares"]>().toEqualTypeOf<
       () => Promise<ServiceResponse<SharedWritingListItem[]>>
     >()
