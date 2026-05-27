@@ -45,6 +45,15 @@
     },
     "built": [
         {
+            "what": "Extract SharingService as the web/cloud adapter boundary for shares, shared writings, and test-link flows. New lib/services/web-sharing-service.ts implements SharingService (listRecipients, shareWriting, revokeShare, getPreviewLink, rotatePreviewLink, revokePreviewLink, listIncomingShares) plus BrowserSharingService extension (listRecipientPreviews). Route handlers for /shares, /share-test-link, /shared/writings reduced to thin adapters. desk/page.tsx, properties-panel.tsx, writing-shares-section.tsx migrated to createBrowserSharingService. Duplicate type definitions removed. 81 tests in sharing-service.test.ts (normalization, browser client fetch delegation, error surfacing, browser-bundle boundary regression).",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "issue": "ODE-194",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-194/separate-sharingservice-from-direct-web-coupling",
+            "commit": "82ff4e08ca4e481998901ea3326861f8d900afad",
+            "date": "2026-05-27",
+            "notes": "Vercel SUCCESS, delivery gate PASS. Architecture Contract compliant: layer domain+application+adapter, runtime scope web+cloud, owner backend. Performance Contract: payload weight required — evidence provided for 5 endpoints, no shape expansion. Two-round review: first review rejected for node:crypto leaking into client bundle (test-link.ts static import) + missing payload evidence. Both fixed in re-build. Review score: 8/10."
+        },
+        {
             "what": "Extract web AI and auth adapters so product-facing consumers stop coupling directly to Supabase auth or internal route details. New lib/services/web-ai-service.ts implements AIService (suggestTitle, reviewPublication, hydrateCorrectionBlocks, persistCorrectionBlock) and lib/services/web-auth-service.ts implements AuthService (signIn, signUp, signOut, checkUsernameAvailability, getSession, updateDisplayName, updateUsername, requestEmailChange, updatePassword). Added lib/services/service-response.ts with ok/err/parseServiceEnvelope helpers. All product consumers migrated: login-form, signup-form, sign-out-button, account-form. Route handlers updated to normalized error codes. 4 focused tests in tests/ai-auth-services.test.ts covering happy-path AI and auth adapter operations.",
             "phase": "Fase 4 — Shared Core Multi-Runtime",
             "issue": "ODE-193",
