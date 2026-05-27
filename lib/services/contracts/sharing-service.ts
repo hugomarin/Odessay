@@ -59,9 +59,9 @@ export const SHARING_SERVICE_CONTRACT = {
     "Normalize recipient and shared-writing payloads independently of Supabase joins or URL construction details.",
     "Keep invite token generation, absolute-link construction, and access persistence inside runtime adapters.",
   ],
-  layer: ["application", "adapter"],
-  runtimeScope: ["shared-core", "web", "cloud", "desktop"],
-  owner: "architecture-first",
+  layer: ["domain", "application", "adapter"],
+  runtimeScope: ["shared-core", "web", "cloud"],
+  owner: "backend",
   invariants: [
     "SharingService owns the semantics of who can access a writing and how preview links behave.",
     "Adapters may store shares differently, but they cannot redefine recipient shape, preview-link lifecycle, or ServiceResponse semantics.",

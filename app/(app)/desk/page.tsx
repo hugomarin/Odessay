@@ -32,6 +32,7 @@ import {
   buildDeskActivitySummary,
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
+import { createBrowserSharingService, type RecipientPreview } from "@/lib/services/web-sharing-service"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { webSyncService } from "@/lib/sync"
@@ -40,16 +41,6 @@ import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/exp
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { downloadBlob } from "@/lib/utils/download"
 
-
-type ApiEnvelope<T> = {
-  data: T | null
-  error: { code: string; message: string } | null
-}
-
-type RecipientPreview = {
-  username: string
-  displayName: string
-}
 
 type RenameTarget = {
   id: string
@@ -68,13 +59,6 @@ const EMPTY_SUMMARY: DeskActivitySummary = {
   },
   total: 0,
 }
-
-type SharedApiEnvelope<T> = {
-  data: T | null
-  error: { code: string; message: string } | null
-}
-
-
 
 export default function DeskPage() {
   const [summary, setSummary] = useState<DeskActivitySummary>(EMPTY_SUMMARY)
@@ -96,6 +80,7 @@ export default function DeskPage() {
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
+  const sharingService = useMemo(() => createBrowserSharingService(), [])
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
 
@@ -131,33 +116,26 @@ export default function DeskPage() {
       }
 
       try {
-        const response = await fetch(
-          `/api/writings/shares?ids=${encodeURIComponent(writingIds.join(","))}`,
-          { cache: "no-store" },
-        )
-        const payload = (await response.json()) as ApiEnvelope<
-          Record<string, RecipientPreview[]>
-        >
-
-        if (!response.ok || payload.error || !payload.data) {
+        const previewResult = await sharingService.listRecipientPreviews(writingIds)
+        if (previewResult.error || !previewResult.data) {
           return Object.fromEntries(
             writingIds.map((id) => [id, [] as RecipientPreview[]]),
           )
         }
 
         // Ensure every requested ID has an entry (backend returns [] for non-owned or missing)
-        const result: Record<string, RecipientPreview[]> = {}
+        const previewsByWritingId: Record<string, RecipientPreview[]> = {}
         for (const id of writingIds) {
-          result[id] = payload.data[id] ?? []
+          previewsByWritingId[id] = previewResult.data[id] ?? []
         }
-        return result
+        return previewsByWritingId
       } catch {
         return Object.fromEntries(
           writingIds.map((id) => [id, [] as RecipientPreview[]]),
         )
       }
     },
-    [],
+    [sharingService],
   )
 
   const syncRemoteWritings = useCallback(async () => {
@@ -229,16 +207,12 @@ export default function DeskPage() {
       setSharedError(null)
 
       try {
-        const response = await fetch("/api/shared/writings", {
-          cache: "no-store",
-        })
-        const payload = (await response.json()) as SharedApiEnvelope<SharedWritingListItem[]>
-
-        if (!response.ok || payload.error || !payload.data) {
-          throw new Error(payload.error?.message ?? "Failed to load shared writings.")
+        const sharedResult = await sharingService.listIncomingShares()
+        if (sharedResult.error || !sharedResult.data) {
+          throw new Error(sharedResult.error?.message ?? "Failed to load shared writings.")
         }
 
-        setSharedItems(payload.data)
+        setSharedItems(sharedResult.data)
         hasLoadedSharedRef.current = true
       } catch (error) {
         setSharedItems([])
@@ -247,7 +221,7 @@ export default function DeskPage() {
         setIsSharedLoading(false)
       }
     },
-    [],
+    [sharingService],
   )
 
   useEffect(() => {
