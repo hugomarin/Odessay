@@ -1,0 +1,101 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { JSONContent } from "@tiptap/core"
+import {
+  BODY_JSON_PERSISTENCE_ROLE,
+  CANONICAL_DOCUMENT_CONTRACT,
+  CANONICAL_DOCUMENT_EXTENSION,
+  CANONICAL_DOCUMENT_FORMAT,
+  ODESSAY_MARKDOWN_PROFILE_ID,
+} from "@/lib/editor/document-profile"
+import {
+  parseMarkdownToSnapshot,
+  serializeDocumentToMarkdown,
+  serializeDocumentToSnapshot,
+} from "@/lib/editor/document-serialization"
+import { buildWritingMarkdown } from "@/lib/export/writing-export"
+
+describe("document profile", () => {
+  it("declares markdown as the canonical document contract", () => {
+    expect(CANONICAL_DOCUMENT_FORMAT).toBe("markdown")
+    expect(CANONICAL_DOCUMENT_EXTENSION).toBe(".md")
+    expect(ODESSAY_MARKDOWN_PROFILE_ID).toBe("odessay-markdown-v1")
+    expect(BODY_JSON_PERSISTENCE_ROLE).toBe("transitional")
+    expect(CANONICAL_DOCUMENT_CONTRACT.bodyJsonRole).toBe("transitional")
+  })
+})
+
+describe("document serialization", () => {
+  beforeEach(() => {
+    vi.stubGlobal("crypto", {
+      randomUUID: vi.fn(() => "11111111-1111-4111-8111-111111111111"),
+    })
+  })
+
+  it("serializes rich body_json through the canonical markdown route", () => {
+    const markdown = serializeDocumentToMarkdown({
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Title" }],
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Alpha " },
+            { type: "text", text: "Beta", marks: [{ type: "highlight" }] },
+            { type: "text", text: " " },
+            {
+              type: "annotationReference",
+              attrs: { id: "ann-1", type: "footnote", index: 1, text: "Footnote body" },
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(markdown).toContain("# Title")
+    expect(markdown).toContain("Alpha ==Beta==")
+    expect(markdown).toContain("[^1: Footnote body]")
+  })
+
+  it("creates a stable snapshot for empty inputs", () => {
+    const snapshot = serializeDocumentToSnapshot(null)
+
+    expect(snapshot.bodyJson).toEqual({ type: "doc", content: [{ type: "paragraph" }] })
+    expect(snapshot.bodyText).toBe("")
+    expect(snapshot.markdown).toBe("")
+  })
+
+  it("keeps export markdown equivalent to the rich serializer on the supported subset", () => {
+    const bodyJson: JSONContent = {
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Title" }],
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Alpha " },
+            { type: "text", text: "Beta", marks: [{ type: "bold" }] },
+            { type: "text", text: " " },
+            {
+              type: "annotationReference",
+              attrs: { id: "ann-1", type: "footnote", index: 1, text: "Footnote body" },
+            },
+          ],
+        },
+      ],
+    }
+
+    expect(buildWritingMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1]\n\n[^1]: Footnote body")
+    expect(serializeDocumentToMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1: Footnote body]")
+  })
+})

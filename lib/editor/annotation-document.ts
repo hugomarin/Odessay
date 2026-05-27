@@ -1,7 +1,11 @@
 import { Editor } from "@tiptap/core"
 import type { JSONContent } from "@tiptap/core"
-import { createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
-import { getEditorFootnotes, type AnnotationType, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
+import { createEditorExtensions } from "@/lib/editor/extensions"
+import {
+  serializeDocumentToMarkdown,
+  serializeEditorToMarkdown,
+} from "@/lib/editor/document-serialization"
+import { type AnnotationType } from "@/lib/editor/footnote-node"
 
 type ApplyAnnotationInput = {
   bodyJson: JSONContent | null | undefined
@@ -81,19 +85,7 @@ const findAnnotationReferencesInRange = (
 }
 
 export const getBodyMarkdown = (bodyJson: JSONContent | null | undefined): string => {
-  if (!bodyJson) return ""
-  const editor = new Editor({
-    extensions: createEditorExtensions(),
-    content: bodyJson,
-  })
-  try {
-    return getMarkdownWithFootnoteDefinitions(
-      getEditorMarkdown(editor),
-      getEditorFootnotes(editor),
-    )
-  } finally {
-    editor.destroy()
-  }
+  return serializeDocumentToMarkdown(bodyJson)
 }
 
 export const applyAnnotationToBody = ({
@@ -156,10 +148,7 @@ export const applyAnnotationToBody = ({
 
     const nextBodyJson = editor.getJSON()
     const nextBodyText = editor.getText({ blockSeparator: "\n" }) || bodyText
-    const nextMarkdown = getMarkdownWithFootnoteDefinitions(
-      getEditorMarkdown(editor),
-      getEditorFootnotes(editor),
-    )
+    const nextMarkdown = serializeEditorToMarkdown(editor)
 
     return {
       bodyJson: nextBodyJson,
