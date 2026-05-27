@@ -1500,6 +1500,15 @@
             "commit": "3ec29ce",
             "date": "2026-05-24",
             "notes": "Validation: npm run typecheck (clean), npm run lint (pre-existing warnings only), npm test (71 files, 414 tests passing, 2 new tests). Performance contract: not required — changes confined to annotation chrome and notes panel interactions, no editor keystroke path touched. Presentation contract: not required — [@hN: text] sigil handled by existing parsing/serialization pipeline. Two-round review: P2 index collision on updateAnnotationType fixed with post-mutation reindexing; P2 text-based highlight matching fixed with position-based anchorStart/anchorEnd matching. Merge commit 3ec29ce."
+        },
+        {
+            "issue": "ODE-192",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-192/fix-the-canonical-document-contract-and-serializer-gate",
+            "pr_url": "https://github.com/hugomarin/Odessay/pull/185",
+            "commit": "cd3a7f6a076d76f44310674489ceaa447d28eea3",
+            "date": "2026-05-27",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "notes": "Declare canonical document contract (markdown/.md, body_json=transitional). New document-profile.ts and document-serialization.ts centralize rich/source serializer path. Round-trip tests added. Fix: exported serializeEditorToMarkdown to eliminate double editor in applyAnnotationToBody. 80 files, 467 tests. GateResult WARN (CI drift process artifact)."
         }
     ]
 }
