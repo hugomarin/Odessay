@@ -19,10 +19,6 @@
             {
                 "issue": "ODE-188",
                 "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
-            },
-            {
-                "issue": "ODE-190",
-                "reason": "Active in-flight issue referenced by workflow audit commits (review_rejected) on main before its built entry exists. False positive — remove this exception once ODE-190 is merged and added to built."
             }
         ]
     },
@@ -48,6 +44,15 @@
         "notes": "Fase 3 se considera cerrada y el roadmap fue replanteado para priorizar la arquitectura multi-runtime. La fase activa se enfoca en shared core, contratos de servicio, contrato documental `.md` y desacoplamiento del runtime web. Writing Harness, correspondences e iniciativas de distribución salen del critical path hasta estabilizar desktop + web sobre el mismo core. Existe DoD en `workflow/define/dod-fase-4.md`. `wf-define Fase 4` ya creó el proyecto nuevo de Linear y el breakdown táctico inicial de issues: ODE-189 (service contracts), ODE-190 (DocumentService), ODE-191 (SyncService), ODE-192 (document contract), ODE-193 (AI/Auth), ODE-194 (Sharing), ODE-195 (invariant harness)."
     },
     "built": [
+        {
+            "what": "Extract DocumentService as the canonical contract for the editor write-path. New lib/services/web-document-service.ts implements DocumentService using localDB + sync queue + HTTP fallback for export. editor-shell.tsx no longer owns direct /api/writings/* requests, localDB.writings calls, or enqueueWritingUpsert for the core write-path — all routed through webDocumentService. lib/sync/remote-bootstrap.ts exports hasLocalBody. Added 13 tests in document-service.test.ts (save/open/rename/delete/list/export/lifecycle preservation) and 3 integration tests in editor-write-path.test.tsx (write→save→close→reopen, rename, blank draft).",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "issue": "ODE-190",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-190/extract-documentservice-from-the-current-web-write-path",
+            "commit": "5b4fc53",
+            "date": "2026-05-27",
+            "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), 430 tests PASS, Vercel PASS. Architecture Contract: COMPLIANT — UI no longer owns transport details, adapter encapsulates HTTP/Supabase/localDB, lifecycle preserved (saveWriting reads existing DB entry). Performance Contract: required (interaction latency + reactive fan-out) — CI capture failed due to server startup (infrastructure, same as ODE-189); exception applied. Local evidence: 14 pass / 0 warn / 0 required failures, keydown_p95=11.40ms. Review score: 9.25/10. Round 2 after P1 lifecycle regression fixed."
+        },
         {
             "what": "Define shared-core service contracts and migration boundaries for Fase 4. Created lib/services/contracts/ with 7 typed service interfaces (DocumentService, SyncService, AIService, AuthService, SharingService, AssetService, SettingsService) plus a shared service-types.ts with the ServiceResponse envelope, error codes, and descriptor types. Each contract declares Layer/RuntimeScope/Owner/Invariants/Hotspots without importing Next, Supabase, cookies, window, or filesystem APIs. Added tests/service-contracts.test.ts (import isolation + type-level assertions). Updated workflow/decisions.json with the agreed migration boundary.",
             "phase": "Fase 4 — Shared Core Multi-Runtime",
