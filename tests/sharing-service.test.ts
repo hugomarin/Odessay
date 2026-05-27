@@ -1,7 +1,17 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { describe, expect, it, vi } from "vitest"
 import { createBrowserSharingService, normalizeShareRecipient } from "@/lib/services/web-sharing-service"
 
 describe("web sharing service", () => {
+  it("keeps node-only test-link helpers out of the browser bundle entrypoint", () => {
+    const source = readFileSync(resolve(process.cwd(), "lib/services/web-sharing-service.ts"), "utf8")
+
+    expect(source).not.toContain('from "@/lib/sharing/test-link"')
+    expect(source).not.toContain('await import("@/lib/sharing/test-link")')
+    expect(source).toContain('crypto.randomUUID()')
+  })
+
   it("normalizes route-level share rows into SharingService recipients", () => {
     expect(
       normalizeShareRecipient({

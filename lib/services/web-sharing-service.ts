@@ -8,7 +8,6 @@ import type {
 } from "@/lib/services/contracts/sharing-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { buildSharedWritingListItem, type RawAuthorProfile } from "@/lib/sharing/writing-shares"
-import { buildTestLinkPath, createTestLinkToken, getTestLinkEmail, pickLatestPendingTestLink } from "@/lib/sharing/test-link"
 
 type ApiEnvelope<T> = {
   data: T | null
@@ -52,6 +51,8 @@ type WebSharingServiceContext = {
 }
 
 const MAX_BATCH_SHARE_IDS = 50
+const TEST_LINK_EMAIL_PREFIX = "ux-eval+"
+const TEST_LINK_EMAIL_DOMAIN = "odessay.local"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -109,7 +110,7 @@ function buildAbsolutePreviewLink(requestUrl: string | undefined, token: string)
     return null
   }
 
-  return new URL(buildTestLinkPath(token), requestUrl).toString()
+  return new URL(`/preview/${token}`, requestUrl).toString()
 }
 
 function buildInactivePreviewLinkState(): PreviewLinkState {
@@ -139,6 +140,27 @@ function normalizeSharedWritingRows(rows: SharedWritingRow[]): SharedWritingList
 async function getAdminClient() {
   const { createAdminClient } = await import("@/lib/supabase/admin")
   return createAdminClient()
+}
+
+function createTestLinkToken() {
+  return crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "")
+}
+
+function getTestLinkEmail(writingId: string) {
+  return `${TEST_LINK_EMAIL_PREFIX}${writingId}@${TEST_LINK_EMAIL_DOMAIN}`
+}
+
+function pickLatestPendingTestLink(
+  rows: Array<{ token: string; email: string; status: "pending" | "accepted" | "expired"; created_at: string }>,
+  writingId: string,
+) {
+  const markerEmail = getTestLinkEmail(writingId)
+
+  const [latest] = rows
+    .filter((row) => row.status === "pending" && row.email === markerEmail)
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))
+
+  return latest ?? null
 }
 
 async function verifyWritingOwnership(writingId: string, userId: string) {
