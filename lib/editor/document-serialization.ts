@@ -21,7 +21,7 @@ const createDocumentEditor = (content: JSONContent | string) =>
     content,
   })
 
-const serializeEditorToMarkdown = (editor: Editor) =>
+export const serializeEditorToMarkdown = (editor: Editor) =>
   normalizeMarkdownForRoundTrip(
     getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
   )

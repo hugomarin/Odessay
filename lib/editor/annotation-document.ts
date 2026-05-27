@@ -1,7 +1,10 @@
 import { Editor } from "@tiptap/core"
 import type { JSONContent } from "@tiptap/core"
 import { createEditorExtensions } from "@/lib/editor/extensions"
-import { serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
+import {
+  serializeDocumentToMarkdown,
+  serializeEditorToMarkdown,
+} from "@/lib/editor/document-serialization"
 import { type AnnotationType } from "@/lib/editor/footnote-node"
 
 type ApplyAnnotationInput = {
@@ -145,7 +148,7 @@ export const applyAnnotationToBody = ({
 
     const nextBodyJson = editor.getJSON()
     const nextBodyText = editor.getText({ blockSeparator: "\n" }) || bodyText
-    const nextMarkdown = serializeDocumentToMarkdown(nextBodyJson)
+    const nextMarkdown = serializeEditorToMarkdown(editor)
 
     return {
       bodyJson: nextBodyJson,
