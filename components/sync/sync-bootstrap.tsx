@@ -2,19 +2,17 @@
 
 import { useEffect } from "react";
 import { setLocalDBScope } from "@/lib/local-db";
-import { getSyncWorker } from "@/lib/sync";
-import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap";
+import { webSyncService } from "@/lib/sync";
 import { createClient } from "@/lib/supabase/client";
 
 export function SyncBootstrap() {
   useEffect(() => {
     const supabase = createClient();
-    const worker = getSyncWorker();
     let isMounted = true;
 
     const hydrateFromRemote = async () => {
       try {
-        await hydrateLocalWritingsFromRemote();
+        await webSyncService.hydrateWritings();
         return true;
       } catch (error) {
         console.error("[sync:bootstrap]", error);
@@ -37,8 +35,8 @@ export function SyncBootstrap() {
         await hydrateFromRemote();
       }
 
-      worker.start();
-      worker.schedule(0);
+      await webSyncService.start();
+      await webSyncService.scheduleFlush();
     };
 
     void bootstrap();
@@ -48,13 +46,13 @@ export function SyncBootstrap() {
       if (session?.user?.id) {
         void hydrateFromRemote();
       }
-      worker.schedule(0);
+      void webSyncService.scheduleFlush();
     });
 
     return () => {
       isMounted = false;
       authListener.subscription.unsubscribe();
-      worker.stop();
+      void webSyncService.stop();
     };
   }, []);
 

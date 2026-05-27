@@ -19,7 +19,6 @@ import {
   dedupeCollectionIds,
   getWritingCollectionIds,
 } from "@/lib/collections/collections"
-import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap"
 import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
 import {
   getLocalDBScope,
@@ -34,9 +33,8 @@ import {
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
-import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
-import { getSyncWorker } from "@/lib/sync/worker"
+import { webSyncService } from "@/lib/sync"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
@@ -165,8 +163,8 @@ export default function DeskPage() {
   const syncRemoteWritings = useCallback(async () => {
     try {
       await Promise.all([
-        hydrateLocalWritingsFromRemote(),
-        hydrateLocalCollectionsFromRemote(),
+        webSyncService.hydrateWritings().then((r) => r.data).catch(() => null),
+        webSyncService.hydrateCollections().then((r) => r.data).catch(() => null),
       ])
       return true
     } catch (error) {
@@ -463,7 +461,7 @@ export default function DeskPage() {
         : [...currentIds, collectionId]
 
       await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
-      getSyncWorker().schedule(0)
+      void webSyncService.scheduleFlush()
     },
     [writingCollections],
   )
@@ -477,7 +475,7 @@ export default function DeskPage() {
       })
       const currentIds = getWritingCollectionIds(writingId, writingCollections)
       await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
-      getSyncWorker().schedule(0)
+      void webSyncService.scheduleFlush()
     },
     [writingCollections],
   )
@@ -653,7 +651,7 @@ export default function DeskPage() {
                     dedupeCollectionIds([...currentIds, collectionId]),
                   )
                 }
-                getSyncWorker().schedule(0)
+                void webSyncService.scheduleFlush()
               }}
               onCreateCollection={async (name) => {
                 const ownerId = getLocalDBScope()
@@ -668,7 +666,7 @@ export default function DeskPage() {
                     dedupeCollectionIds([...currentIds, collection.id]),
                   )
                 }
-                getSyncWorker().schedule(0)
+                void webSyncService.scheduleFlush()
               }}
             />
           )}

@@ -4,11 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Tags } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { buildCollectionOptions } from "@/lib/collections/collections"
-import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap"
 import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges } from "@/lib/local-db"
 import type { LocalCollection } from "@/lib/local-db/schema"
-import { getSyncWorker } from "@/lib/sync/worker"
+import { webSyncService } from "@/lib/sync"
 
 type WritingCollectionsSectionProps = {
   writingId: string
@@ -43,7 +42,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     let cancelled = false
 
     const hydrate = async () => {
-      await hydrateLocalCollectionsFromRemote().catch(() => null)
+      await webSyncService.hydrateCollections().catch(() => null)
       await loadLocalState(writingId, () => cancelled)
     }
 
@@ -76,7 +75,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
-    getSyncWorker().schedule(0)
+    void webSyncService.scheduleFlush()
   }
 
   const createAndAssign = async (name: string) => {
@@ -91,7 +90,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
     setCollections((current) => [collection, ...current])
-    getSyncWorker().schedule(0)
+    void webSyncService.scheduleFlush()
   }
 
   return (

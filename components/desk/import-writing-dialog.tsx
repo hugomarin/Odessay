@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { getLocalDBScope } from "@/lib/local-db"
 import { enqueueWritingUpsert } from "@/lib/sync/queue"
-import { getSyncWorker } from "@/lib/sync/worker"
+import { webSyncService } from "@/lib/sync"
 import { parseMarkdownFile } from "@/lib/import/markdown"
 import { parsePlainTextFile } from "@/lib/import/text"
 import type { LocalWriting } from "@/lib/local-db/schema"
@@ -105,7 +105,7 @@ export function ImportWritingDialog({ open, onOpenChange }: Props) {
       }
 
       await enqueueWritingUpsert(writing)
-      getSyncWorker().schedule(0)
+      void webSyncService.scheduleFlush()
 
       onOpenChange(false)
       router.push(WRITE_PREFIX + id)

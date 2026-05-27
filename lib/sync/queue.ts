@@ -32,7 +32,7 @@ const toRemotePayload = (writing: LocalWriting): RemoteWritingPayload => ({
   deleted_at: writing.deleted_at ?? null,
 });
 
-const enqueueMutation = async (
+export const enqueueMutation = async (
   writing: LocalWriting,
   operation: Extract<SyncMutation, { entity_kind: "writing" }>["operation"] = "upsert",
 ) => {
