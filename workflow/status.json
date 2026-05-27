@@ -7,6 +7,18 @@
             {
                 "issue": "ODE-502",
                 "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
+            },
+            {
+                "issue": "ODE-186",
+                "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
+            },
+            {
+                "issue": "ODE-187",
+                "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
+            },
+            {
+                "issue": "ODE-188",
+                "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
             }
         ]
     },
