@@ -73,6 +73,45 @@ describe("webDocumentService", () => {
       expect(pending).not.toBeNull()
       expect(pending?.operation).toBe("upsert")
     })
+
+    it("preserves lifecycle of an existing server-confirmed writing", async () => {
+      const existing = makeLocalWriting({
+        id: "writing-lifecycle",
+        title: "Existing",
+        lifecycle: "server-confirmed",
+        sync_status: "synced",
+      })
+      await localDB.writings.save(existing)
+
+      const result = await webDocumentService.saveWriting({
+        writing: {
+          id: "writing-lifecycle",
+          authorId: null,
+          title: "Updated Title",
+          content: {
+            richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Updated" }] }] },
+            markdown: null,
+            plainText: "Updated",
+            canonicalSource: "rich-text",
+          },
+          slug: null,
+          status: "draft",
+          visibility: "private",
+          parentId: null,
+          correspondenceId: null,
+          version: 2,
+          deletedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+        },
+      })
+
+      expect(result.error).toBeNull()
+
+      const local = await localDB.writings.get("writing-lifecycle")
+      expect(local?.lifecycle).toBe("server-confirmed")
+      expect(local?.sync_status).toBe("pending")
+    })
   })
 
   describe("openWriting", () => {

@@ -154,6 +154,6 @@ describe("editor write-path — DocumentService integration", () => {
     expect(openResult.error).toBeNull()
     expect(openResult.data?.id).toBe(draftId)
     expect(openResult.data?.version).toBe(0)
-    expect(openResult.data?.lifecycle).toBeUndefined() // Record does not carry lifecycle
+    // WritingRecord intentionally does not carry lifecycle — it is adapter-local state
   })
 })

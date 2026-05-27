@@ -132,7 +132,11 @@ export const webDocumentService: DocumentService = {
 
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
+      const existing = await localDB.writings.get(input.writing.id)
       const local = recordToLocalWriting(input.writing)
+      if (existing) {
+        local.lifecycle = existing.lifecycle
+      }
       await enqueueWritingUpsert(local)
       return ok(localWritingToRecord(local))
     } catch (error) {
@@ -215,7 +219,9 @@ export const webDocumentService: DocumentService = {
 
   async exportWriting(input: ExportWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>> {
     try {
-      const response = await fetch(`/api/writings/${input.writingId}/export?format=${input.format}`)
+      const response = await fetch(
+        `/api/writings/${encodeURIComponent(input.writingId)}/export?format=${encodeURIComponent(input.format)}`,
+      )
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
