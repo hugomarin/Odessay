@@ -9,5 +9,7 @@ export default function EditorPerfHarnessPage() {
     notFound()
   }
 
-  return <EditorShell writingId="perf-harness-writing" />
+  // CI runners start from a clean localDB, so the perf harness must exercise a
+  // guaranteed editor boot path instead of assuming a pre-existing writing id.
+  return <EditorShell forceNewWriting />
 }
