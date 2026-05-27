@@ -45,6 +45,15 @@
     },
     "built": [
         {
+            "what": "Extract SyncService as the explicit application boundary for queue, retry, hydration, collection hydration, and sync status. New lib/services/web-sync-service.ts implements SyncService delegating to existing queue/worker/remote-bootstrap internals while keeping browser-only concerns (window, navigator, online listeners) inside SyncWorker. All callers — SyncBootstrap, CollectionsView, WritingCollectionsSection, ImportWritingDialog, LocalFirstDemo, DeskPage, DocumentService, BulkRemap — now route through webSyncService. 15 tests in sync-service.test.ts + 4 deduplication tests in sync-hydration.test.ts (fetchCount === 1 for 3 concurrent hydration calls).",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "issue": "ODE-191",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-191/extract-syncservice-from-queue-retry-and-hydration",
+            "commit": "7e269f7",
+            "date": "2026-05-27",
+            "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), 453 tests PASS, delivery gate PASS, Vercel PASS. Architecture Contract: COMPLIANT — browser listeners in SyncWorker adapter, hydration not coupled to /api/* in contract, collection hydration routed through SyncService boundary, DocumentService and SyncService independent. Performance Contract: waterfall shape + reactive fan-out required — evidence test-backed (fetchCount === 1 proven by sync-hydration.test.ts; scheduleFlush debounced). CI perf capture failure was infrastructure-related (server startup timeout on CI runner, not a regression); hardware de CI exception applied. Review score: 9.5/10."
+        },
+        {
             "what": "Extract DocumentService as the canonical contract for the editor write-path. New lib/services/web-document-service.ts implements DocumentService using localDB + sync queue + HTTP fallback for export. editor-shell.tsx no longer owns direct /api/writings/* requests, localDB.writings calls, or enqueueWritingUpsert for the core write-path — all routed through webDocumentService. lib/sync/remote-bootstrap.ts exports hasLocalBody. Added 13 tests in document-service.test.ts (save/open/rename/delete/list/export/lifecycle preservation) and 3 integration tests in editor-write-path.test.tsx (write→save→close→reopen, rename, blank draft).",
             "phase": "Fase 4 — Shared Core Multi-Runtime",
             "issue": "ODE-190",
