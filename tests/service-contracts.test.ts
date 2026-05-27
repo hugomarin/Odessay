@@ -4,6 +4,7 @@ import { describe, expect, expectTypeOf, it } from "vitest"
 import {
   AI_SERVICE_CONTRACT,
   type AIService,
+  type MechanicalUncertainNote,
   type PersistCorrectionBlockInput,
   type PersistCorrectionBlockResult,
   type PublicationReviewRequest,
@@ -22,10 +23,15 @@ import {
   type AccountIdentity,
   type AuthService,
   type AuthSession,
+  type CheckUsernameAvailabilityInput,
   type RequestEmailChangeInput,
+  type SignInInput,
+  type SignUpInput,
+  type SignUpResult,
   type UpdateDisplayNameInput,
   type UpdatePasswordInput,
   type UpdateUsernameInput,
+  type UsernameAvailability,
 } from "@/lib/services/contracts/auth-service"
 import {
   DOCUMENT_SERVICE_CONTRACT,
@@ -192,10 +198,29 @@ describe("service contracts", () => {
     expectTypeOf<AIService["reviewPublication"]>().toEqualTypeOf<
       (input: PublicationReviewRequest) => Promise<ServiceResponse<PublicationReviewResult>>
     >()
+    expectTypeOf<PublicationReviewResult>().toMatchTypeOf<{
+      summary: string
+      language: string
+      corrections: unknown[]
+      uncertain: MechanicalUncertainNote[]
+      usage: unknown
+    }>()
     expectTypeOf<AIService["persistCorrectionBlock"]>().toEqualTypeOf<
       (input: PersistCorrectionBlockInput) => Promise<ServiceResponse<PersistCorrectionBlockResult>>
     >()
 
+    expectTypeOf<AuthService["signIn"]>().toEqualTypeOf<
+      (input: SignInInput) => Promise<ServiceResponse<AuthSession>>
+    >()
+    expectTypeOf<AuthService["signUp"]>().toEqualTypeOf<
+      (input: SignUpInput) => Promise<ServiceResponse<SignUpResult>>
+    >()
+    expectTypeOf<AuthService["signOut"]>().toEqualTypeOf<
+      () => Promise<ServiceResponse<null>>
+    >()
+    expectTypeOf<AuthService["checkUsernameAvailability"]>().toEqualTypeOf<
+      (input: CheckUsernameAvailabilityInput) => Promise<ServiceResponse<UsernameAvailability>>
+    >()
     expectTypeOf<AuthService["getSession"]>().toEqualTypeOf<
       () => Promise<ServiceResponse<AuthSession>>
     >()

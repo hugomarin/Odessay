@@ -1,10 +1,6 @@
 import { localDB } from "@/lib/local-db";
 import type { LocalCorrectionBlock, PublicationSuggestion } from "@/lib/local-db/schema";
-
-type ApiEnvelope<T> = {
-  data: T;
-  error: { code: string; message: string } | null;
-};
+import { webAIService } from "@/lib/services/web-ai-service";
 
 type CorrectionPersistenceError = Error & {
   status?: number;
@@ -54,46 +50,6 @@ export const mapPersistedCorrectionRecordToLocal = (
   syncedAt,
 });
 
-export const mapLocalCorrectionBlockToPersistedRecord = (
-  block: LocalCorrectionBlock,
-): PersistedCorrectionBlockRecord => ({
-  id: block.id,
-  writing_id: block.writingId,
-  block_id: block.blockId,
-  block_hash: block.blockHash,
-  suggestions: block.suggestions,
-  model: block.model,
-  created_at: block.createdAt,
-  latency_ms: block.latencyMs,
-  prompt_tokens: block.promptTokens,
-  completion_tokens: block.completionTokens,
-});
-
-const parseEnvelope = async <T>(response: Response): Promise<T> => {
-  let envelope: ApiEnvelope<T> | null = null;
-
-  try {
-    envelope = (await response.json()) as ApiEnvelope<T>;
-  } catch {
-    envelope = null;
-  }
-
-  if (!response.ok || envelope?.error) {
-    const rawMessage = envelope?.error?.message?.trim();
-    const message =
-      rawMessage && rawMessage.length > 0
-        ? rawMessage
-        : `Request failed with status ${response.status}.`;
-    const error: CorrectionPersistenceError = new Error(message);
-    error.status = response.status;
-    error.code = envelope?.error?.code ?? null;
-    error.url = response.url;
-    throw error;
-  }
-
-  return envelope?.data as T;
-};
-
 const isIgnorableCorrectionPersistenceError = (error: unknown) => {
   const status = (error as CorrectionPersistenceError | null | undefined)?.status;
   const code = (error as CorrectionPersistenceError | null | undefined)?.code;
@@ -111,11 +67,27 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
 
   const promise = (async () => {
     try {
-      const response = await fetch(`/api/corrections/hydrate?writingId=${encodeURIComponent(writingId)}`, {
-        method: "GET",
-        cache: "no-store",
-      });
-      const records = await parseEnvelope<PersistedCorrectionBlockRecord[]>(response);
+      const result = await webAIService.hydrateCorrectionBlocks(writingId);
+
+      if (result.error || !result.data) {
+        const error: CorrectionPersistenceError = new Error(result.error?.message ?? "Could not hydrate correction blocks.");
+        error.code = result.error?.code ?? "UNAVAILABLE";
+        error.status = result.error?.code === "UNAUTHORIZED" ? 401 : undefined;
+        throw error;
+      }
+
+      const records = result.data.map((block) => ({
+        id: block.id,
+        writing_id: block.writingId,
+        block_id: block.blockId,
+        block_hash: block.blockHash,
+        suggestions: block.suggestions,
+        model: block.model,
+        created_at: block.createdAt,
+        latency_ms: block.latencyMs,
+        prompt_tokens: block.promptTokens,
+        completion_tokens: block.completionTokens,
+      }));
       const localBlocks = records.map((record) => mapPersistedCorrectionRecordToLocal(record));
 
       await localDB.correctionBlocks.saveMany(localBlocks);
@@ -146,43 +118,46 @@ export const persistCorrectionBlockRemotely = async ({
   block?: LocalCorrectionBlock;
   deletedBlockIds?: string[];
 }) => {
-  let payload: {
-    persistedId: string | null;
-    deletedIds: string[];
-    syncedAt: string;
-  };
-
   try {
-    payload = await parseEnvelope<{
-      persistedId: string | null;
-      deletedIds: string[];
-      syncedAt: string;
-    }>(
-      await fetch("/api/corrections/persist", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          writingId: writingId ?? block?.writingId,
-          block: block ? mapLocalCorrectionBlockToPersistedRecord(block) : undefined,
-          deletedBlockIds,
-        }),
-      }),
-    );
+    const result = await webAIService.persistCorrectionBlock({
+      writingId: writingId ?? block?.writingId,
+      block: block
+        ? {
+            id: block.id,
+            writingId: block.writingId,
+            blockId: block.blockId,
+            blockHash: block.blockHash,
+            suggestions: block.suggestions,
+            model: block.model,
+            createdAt: block.createdAt,
+            latencyMs: block.latencyMs,
+            promptTokens: block.promptTokens,
+            completionTokens: block.completionTokens,
+            syncedAt: block.syncedAt,
+          }
+        : undefined,
+      deletedBlockIds,
+    });
+
+    if (result.error || !result.data) {
+      const error: CorrectionPersistenceError = new Error(result.error?.message ?? "Could not persist correction blocks.");
+      error.code = result.error?.code ?? "UNAVAILABLE";
+      error.status = result.error?.code === "UNAUTHORIZED" ? 401 : undefined;
+      throw error;
+    }
+
+    if (block && result.data.persistedId) {
+      await localDB.correctionBlocks.markSynced(result.data.persistedId, result.data.syncedAt);
+    }
+
+    if (result.data.deletedIds.length > 0) {
+      await localDB.correctionBlocks.deleteMany(result.data.deletedIds);
+    }
   } catch (error) {
     if (isIgnorableCorrectionPersistenceError(error)) {
       return;
     }
 
     throw error;
-  }
-
-  if (block && payload.persistedId) {
-    await localDB.correctionBlocks.markSynced(payload.persistedId, payload.syncedAt);
-  }
-
-  if (payload.deletedIds.length > 0) {
-    await localDB.correctionBlocks.deleteMany(payload.deletedIds);
   }
 };

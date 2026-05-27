@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
 import { Button } from "@/components/ui/button"
+import { webAuthService } from "@/lib/services/web-auth-service"
 import { cn } from "@/lib/utils"
-import { createClient } from "@/lib/supabase/client"
 
 type SignOutButtonProps = {
   variant?: "outline" | "ghost" | "default"
@@ -17,8 +17,7 @@ export function SignOutButton({ variant = "outline", className }: SignOutButtonP
 
   const handleSignOut = () => {
     startTransition(async () => {
-      const supabase = createClient()
-      await supabase.auth.signOut()
+      await webAuthService.signOut()
       router.replace("/login")
       router.refresh()
     })

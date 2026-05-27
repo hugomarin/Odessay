@@ -4,6 +4,7 @@ import { CheckCircle2, LoaderCircle, Copy } from "lucide-react"
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { webAuthService } from "@/lib/services/web-auth-service"
 import { cn } from "@/lib/utils"
 import {
   updateDisplayNameSchema,
@@ -21,21 +22,10 @@ type AccountFormProps = {
   }
 }
 
-type ApiEnvelope<T> = {
-  data: T | null
-  error: { code: string; message: string } | null
-}
-
 type InlineState =
   | { tone: "muted"; message: string }
   | { tone: "success"; message: string }
   | { tone: "error"; message: string }
-
-type UsernameAvailability = {
-  available: boolean
-  reason: "available" | "current" | "taken" | "reserved"
-  reservedUntil: string | null
-}
 
 function FieldHint({ state }: { state: InlineState | null }) {
   if (!state) {
@@ -188,33 +178,36 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     const controller = new AbortController()
     const timeoutId = window.setTimeout(async () => {
       try {
-        const response = await fetch(
-          `/api/user/update-username?username=${encodeURIComponent(parsed.data.username)}`,
-          { signal: controller.signal },
-        )
-        const payload = (await response.json()) as ApiEnvelope<UsernameAvailability>
+        const result = await webAuthService.checkUsernameAvailability({
+          username: parsed.data.username,
+          scope: "account",
+        })
 
-        if (!response.ok || !payload.data) {
+        if (controller.signal.aborted) {
+          return
+        }
+
+        if (result.error || !result.data) {
           setUsernameState({
             tone: "error",
-            message: payload.error?.message ?? "We could not validate this username right now.",
+            message: result.error?.message ?? "We could not validate this username right now.",
           })
           return
         }
 
         setUsernameState(
-          payload.data.available
+          result.data.available
             ? {
                 tone: "success",
                 message:
-                  payload.data.reason === "current"
+                  result.data.reason === "current"
                     ? "You are keeping your current username."
                     : "Username is available.",
               }
             : {
                 tone: "error",
                 message:
-                  payload.data.reason === "reserved"
+                  result.data.reason === "reserved"
                     ? "That username is temporarily reserved by another account."
                     : "That username is already taken.",
               },
@@ -250,23 +243,20 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startDisplayNameTransition(async () => {
-      const response = await fetch("/api/user/update-display-name", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      })
-      const payload = (await response.json()) as ApiEnvelope<{ displayName: string }>
+      const result = await webAuthService.updateDisplayName(parsed.data)
 
-      if (!response.ok || !payload.data) {
+      if (result.error || !result.data) {
         setDisplayNameState({
           tone: "error",
-          message: payload.error?.message ?? "Could not update display name.",
+          message: result.error?.message ?? "Could not update display name.",
         })
         return
       }
 
-      setDisplayName(payload.data.displayName)
-      setSavedDisplayName(payload.data.displayName)
+      const nextDisplayName = result.data.displayName ?? parsed.data.displayName
+
+      setDisplayName(nextDisplayName)
+      setSavedDisplayName(nextDisplayName)
       setDisplayNameState({
         tone: "success",
         message: "Display name updated.",
@@ -287,31 +277,25 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startUsernameTransition(async () => {
-      const response = await fetch("/api/user/update-username", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      })
-      const payload = (await response.json()) as ApiEnvelope<{
-        username: string
-        previousUsername: string
-        reservedUntil: string | null
-      }>
+      const previousUsername = savedUsername
+      const result = await webAuthService.updateUsername(parsed.data)
 
-      if (!response.ok || !payload.data) {
+      if (result.error || !result.data) {
         setUsernameState({
           tone: "error",
-          message: payload.error?.message ?? "Could not update username.",
+          message: result.error?.message ?? "Could not update username.",
         })
         return
       }
 
-      setUsername(payload.data.username)
-      setSavedUsername(payload.data.username)
+      const nextUsername = result.data.username ?? parsed.data.username
+
+      setUsername(nextUsername)
+      setSavedUsername(nextUsername)
       setUsernameState({
         tone: "success",
         message:
-          payload.data.reservedUntil != null
+          nextUsername !== previousUsername
             ? "Username updated. Your previous handle is reserved for 7 days."
             : "Username updated.",
       })
@@ -331,23 +315,20 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startEmailTransition(async () => {
-      const response = await fetch("/api/user/update-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      })
-      const payload = (await response.json()) as ApiEnvelope<{ email: string }>
+      const result = await webAuthService.requestEmailChange(parsed.data)
 
-      if (!response.ok || !payload.data) {
+      if (result.error || !result.data) {
         setEmailState({
           tone: "error",
-          message: payload.error?.message ?? "Could not start email change.",
+          message: result.error?.message ?? "Could not start email change.",
         })
         return
       }
 
-      setEmail(payload.data.email)
-      setSavedEmailRequest(payload.data.email)
+      const nextEmail = result.data.pendingEmail ?? parsed.data.email
+
+      setEmail(nextEmail)
+      setSavedEmailRequest(nextEmail)
       setEmailState({
         tone: "success",
         message: "Confirmation links were sent to your current and new email addresses.",
@@ -373,17 +354,12 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startPasswordTransition(async () => {
-      const response = await fetch("/api/user/update-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed.data),
-      })
-      const payload = (await response.json()) as ApiEnvelope<{ revokedOtherSessions: boolean }>
+      const result = await webAuthService.updatePassword(parsed.data)
 
-      if (!response.ok || !payload.data) {
+      if (result.error || !result.data) {
         setPasswordState({
           tone: "error",
-          message: payload.error?.message ?? "Could not update password.",
+          message: result.error?.message ?? "Could not update password.",
         })
         return
       }
@@ -393,9 +369,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
       setConfirmPassword("")
       setPasswordState({
         tone: "success",
-        message: payload.data.revokedOtherSessions
-          ? "Password updated. Other sessions were revoked."
-          : "Password updated.",
+        message: "Password updated. Other sessions were revoked.",
       })
       setExpandedRow(null)
     })

@@ -20,6 +20,7 @@ const INLINE_ANNOTATION_RE =
   /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c|h)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
 const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c|h)?(\d+):\s*([^\]]*?)\]/g
+const NON_AI_ANNOTATION_RE = /\[@(?:p|c|h)\d+:\s*[^\]]*?\]/g
 const AI_ANNOTATIONS_ONLY_PREFIX =
   "El siguiente bloque contiene instrucciones del usuario sobre su documento. Cada linea sigue el formato: cita del pasaje relevante seguida de la instruccion entre corchetes. Tratalas como directivas del autor sobre ese fragmento especifico."
 const ANNOTATION_NOTATION_COMMENT =
@@ -227,10 +228,11 @@ export const buildAiAnnotationCopy = (
 ): { annotationsOnly: string; fullText: string } => {
   const normalized = normalizeMarkdownFootnotes(markdown)
   const annotationsOnly = extractAiAnnotationsFromMarkdown(normalized)
+  const aiOnlyMarkdown = normalized.replaceAll(NON_AI_ANNOTATION_RE, "").trimEnd()
 
   return {
     annotationsOnly: `${AI_ANNOTATIONS_ONLY_PREFIX}\n\n${annotationsOnly}`,
-    fullText: `${ANNOTATION_NOTATION_COMMENT}\n\n${normalized.trimEnd()}`,
+    fullText: `${ANNOTATION_NOTATION_COMMENT}\n\n${aiOnlyMarkdown}`,
   }
 }
 
