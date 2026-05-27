@@ -27,13 +27,55 @@ export type CorrectionBlockInput = {
   hash: string
 }
 
-export type MechanicalCorrectionKind = "spelling" | "grammar" | "punctuation" | "rewriting"
+export type MechanicalCorrectionKind =
+  | "spelling"
+  | "accent"
+  | "grammar"
+  | "agreement"
+  | "punctuation"
+  | "duplication"
+  | "spacing"
+  | "basic_redaction"
 
 export type MechanicalCorrection = {
   blockId: string
   type: MechanicalCorrectionKind
+  severity?: "low" | "medium" | "high"
+  confidence?: "high" | "medium"
   originalText: string
   replacementText: string
+}
+
+export type MechanicalUncertainNote = {
+  blockId: string
+  text: string
+  reason: string
+  possibleReplacement: string | null
+}
+
+export type PersistedCorrectionSuggestionKind = "spelling" | "grammar" | "punctuation" | "rewriting"
+
+export type PersistedCorrectionSuggestionStatus =
+  | "pending"
+  | "pending-stale"
+  | "accepted"
+  | "rejected"
+  | "conflict"
+
+export type PersistedCorrectionSuggestion = {
+  id: string
+  kind: PersistedCorrectionSuggestionKind
+  title: string
+  reason: string
+  original_text: string
+  replacement_text: string
+  context_before?: string | null
+  context_after?: string | null
+  occurrence?: number | null
+  block_id?: string | null
+  source_hash?: string | null
+  correction_fingerprint?: string | null
+  status: PersistedCorrectionSuggestionStatus
 }
 
 export type PublicationReviewRequest = {
@@ -57,8 +99,10 @@ export type AiUsage = {
 }
 
 export type PublicationReviewResult = {
+  summary: string
   language: string
   corrections: MechanicalCorrection[]
+  uncertain: MechanicalUncertainNote[]
   usage: AiUsage | null
 }
 
@@ -67,7 +111,7 @@ export type PersistedCorrectionBlock = {
   writingId: string
   blockId: string
   blockHash: string
-  suggestions: MechanicalCorrection[]
+  suggestions: PersistedCorrectionSuggestion[]
   model: string
   createdAt: string
   latencyMs: number | null

@@ -19,6 +19,36 @@ export type AuthSession = {
   user: AccountIdentity | null
 }
 
+export type SignInInput = {
+  email: string
+  password: string
+}
+
+export type SignUpInput = {
+  displayName: string
+  username: string
+  email: string
+  password: string
+  nextPath?: string
+}
+
+export type SignUpResult = {
+  session: AuthSession
+  requiresEmailConfirmation: boolean
+}
+
+export type UsernameAvailability = {
+  available: boolean
+  reason: "available" | "current" | "taken" | "reserved"
+  reservedUntil: string | null
+  username: string
+}
+
+export type CheckUsernameAvailabilityInput = {
+  username: string
+  scope?: "signup" | "account"
+}
+
 export type UpdateDisplayNameInput = {
   displayName: string
 }
@@ -38,6 +68,10 @@ export type UpdatePasswordInput = {
 }
 
 export interface AuthService {
+  signIn(input: SignInInput): Promise<ServiceResponse<AuthSession>>
+  signUp(input: SignUpInput): Promise<ServiceResponse<SignUpResult>>
+  signOut(): Promise<ServiceResponse<null>>
+  checkUsernameAvailability(input: CheckUsernameAvailabilityInput): Promise<ServiceResponse<UsernameAvailability>>
   getSession(): Promise<ServiceResponse<AuthSession>>
   updateDisplayName(input: UpdateDisplayNameInput): Promise<ServiceResponse<AccountIdentity>>
   updateUsername(input: UpdateUsernameInput): Promise<ServiceResponse<AccountIdentity>>
@@ -64,6 +98,38 @@ export const AUTH_SERVICE_CONTRACT = {
   ],
   errorEnvelope: SERVICE_RESPONSE_ENVELOPE,
   operations: [
+    {
+      name: "signIn",
+      kind: "command",
+      summary: "Authenticate with the active web auth adapter without exposing provider SDK details to the UI.",
+      input: ["email", "password"],
+      output: ["AuthSession"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "UNAVAILABLE", "UNKNOWN"],
+    },
+    {
+      name: "signUp",
+      kind: "command",
+      summary: "Create an account and report whether email confirmation is still required.",
+      input: ["displayName", "username", "email", "password", "optional nextPath"],
+      output: ["SignUpResult"],
+      errorCodes: ["INVALID_INPUT", "CONFLICT", "UNAVAILABLE", "UNKNOWN"],
+    },
+    {
+      name: "signOut",
+      kind: "command",
+      summary: "Close the active session through the current runtime adapter.",
+      input: ["none"],
+      output: ["null"],
+      errorCodes: ["UNAVAILABLE", "UNKNOWN"],
+    },
+    {
+      name: "checkUsernameAvailability",
+      kind: "query",
+      summary: "Validate username availability for signup or authenticated account flows.",
+      input: ["username", "optional scope"],
+      output: ["UsernameAvailability"],
+      errorCodes: ["INVALID_INPUT", "UNAUTHORIZED", "UNAVAILABLE", "UNKNOWN"],
+    },
     {
       name: "getSession",
       kind: "session",
@@ -108,14 +174,16 @@ export const AUTH_SERVICE_CONTRACT = {
   hotspots: [
     {
       id: "supabase-session-coupling",
-      summary: "Session detection still depends directly on Next server helpers and Supabase auth APIs.",
+      summary: "Session entry points still depend directly on browser Supabase auth APIs and Next server helpers.",
       layer: ["application", "adapter"],
       runtimeScope: ["web", "cloud", "shared-core"],
       owner: "architecture-first",
       currentEntrypoints: [
         "lib/supabase/server.ts",
         "lib/supabase/middleware.ts",
-        "components/auth",
+        "components/auth/login-form.tsx",
+        "components/auth/signup-form.tsx",
+        "components/auth/sign-out-button.tsx",
       ],
     },
     {
@@ -129,6 +197,19 @@ export const AUTH_SERVICE_CONTRACT = {
         "app/api/user/update-email/route.ts",
         "app/api/user/update-password/route.ts",
         "app/api/user/update-username/route.ts",
+        "components/settings/account-form.tsx",
+      ],
+    },
+    {
+      id: "username-availability",
+      summary: "Username validation still leaks direct route knowledge into signup and account settings surfaces.",
+      layer: ["application", "adapter"],
+      runtimeScope: ["web", "shared-core"],
+      owner: "architecture-first",
+      currentEntrypoints: [
+        "app/api/auth/username/route.ts",
+        "components/auth/signup-form.tsx",
+        "components/settings/account-form.tsx",
       ],
     },
   ],

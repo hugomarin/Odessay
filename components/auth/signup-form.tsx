@@ -5,9 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { type FormEvent, useDeferredValue, useEffect, useMemo, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
 import {
-  getAuthConfirmRedirectUrl,
   isUsernameFormatValid,
   normalizeEmail,
   normalizeUsername,
@@ -16,6 +14,7 @@ import {
   validateSignupValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
+import { webAuthService } from "@/lib/services/web-auth-service"
 
 type UsernameStatus =
   | { state: "idle"; message: string | null }
@@ -68,19 +67,16 @@ export function SignupForm() {
       setUsernameStatus({ state: "checking", message: "Checking username..." })
 
       try {
-        const response = await fetch(
-          `/api/auth/username?value=${encodeURIComponent(normalizedUsername)}`,
-          {
-            signal: controller.signal,
-          },
-        )
+        const result = await webAuthService.checkUsernameAvailability({
+          username: normalizedUsername,
+          scope: "signup",
+        })
 
-        const payload = (await response.json()) as {
-          data: { available: boolean } | null
-          error: { code: string; message: string } | null
+        if (controller.signal.aborted) {
+          return
         }
 
-        if (!response.ok || !payload.data) {
+        if (result.error || !result.data) {
           setUsernameStatus({
             state: "unavailable",
             message: "We could not validate this username right now.",
@@ -89,7 +85,7 @@ export function SignupForm() {
         }
 
         setUsernameStatus(
-          payload.data.available
+          result.data.available
             ? { state: "available", message: "Username is available." }
             : { state: "unavailable", message: "That username is already taken." },
         )
@@ -132,26 +128,20 @@ export function SignupForm() {
     }
 
     startTransition(async () => {
-      const supabase = createClient()
-      const origin = window.location.origin
-      const { data, error } = await supabase.auth.signUp({
+      const result = await webAuthService.signUp({
+        displayName,
+        username,
         email: normalizeEmail(email),
         password,
-        options: {
-          emailRedirectTo: getAuthConfirmRedirectUrl(origin, "/desk"),
-          data: {
-            display_name: displayName.trim(),
-            username: normalizeUsername(username),
-          },
-        },
+        nextPath: "/desk",
       })
 
-      if (error) {
-        setErrors({ form: toFriendlyAuthError(error.message) })
+      if (result.error) {
+        setErrors({ form: toFriendlyAuthError(result.error.message) })
         return
       }
 
-      if (!data.session) {
+      if (result.data.requiresEmailConfirmation) {
         router.replace(
           `/login?email=${encodeURIComponent(normalizeEmail(email))}&checkEmail=1`,
         )

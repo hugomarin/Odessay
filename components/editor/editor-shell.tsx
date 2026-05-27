@@ -73,6 +73,7 @@ import {
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
 import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
+import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
 import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
@@ -112,6 +113,7 @@ import type {
   WritingVisibility,
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
+import { webAIService } from "@/lib/services/web-ai-service"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import {
@@ -190,13 +192,6 @@ type CorrectionToastState = {
   phase: "running" | "complete"
   completed: number
   total: number
-}
-
-type AutomaticCorrectionApiResponse = {
-  suggestions: PublicationSuggestion[]
-  model: string
-  promptTokens: number | null
-  completionTokens: number | null
 }
 
 const NotesPanel = lazy(() =>
@@ -2667,45 +2662,46 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           blockIds: [block.id],
         })
 
-        const response = await fetch("/api/ai/publication-review", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
+        const result = await webAIService.reviewPublication({
+          writingId: currentWritingIdRef.current ?? undefined,
+          title: titleRef.current,
+          markdown: block.text,
+          bodyText: block.text,
+          sourceHash: block.hash,
+          stream: false,
+          correctionBlock: {
+            id: block.id,
+            text: block.text,
+            hash: block.hash,
           },
-          body: JSON.stringify({
-            writingId: currentWritingIdRef.current ?? undefined,
-            title: titleRef.current,
-            markdown: block.text,
-            bodyText: block.text,
-            sourceHash: block.hash,
-            stream: false,
-            correctionBlock: {
-              id: block.id,
-              text: block.text,
-              hash: block.hash,
-            },
-            correctionMemory: {
-              entries: readCorrectionMemory(),
-            },
-          }),
+          correctionMemory: {
+            entries: readCorrectionMemory(),
+          },
         })
 
-        if (!response.ok) {
-          console.info(`[corrections] block analysis skipped status=${response.status}`)
+        if (result.error || !result.data) {
+          console.info(`[corrections] block analysis skipped code=${result.error?.code ?? "unknown"}`)
           correctionQueueCompletedRef.current += 1
           continue
-        }
-
-        const payload = (await response.json()) as {
-          data: AutomaticCorrectionApiResponse | null
-          error: { code: string; message: string } | null
         }
 
         if (!correctionsEnabledRef.current) {
           continue
         }
 
-        const suggestions = payload.data?.suggestions ?? []
+        const adapted = adaptCorrectionsContract({
+          summary: result.data.summary,
+          language:
+            result.data.language === "es" ||
+            result.data.language === "en" ||
+            result.data.language === "mixed" ||
+            result.data.language === "unknown"
+              ? result.data.language
+              : "unknown",
+          corrections: result.data.corrections,
+          uncertain: result.data.uncertain,
+        })
+        const suggestions = adapted.legacy.suggestions
         const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
         if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
@@ -2735,11 +2731,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
               blockId: block.id,
               blockHash: block.hash,
               suggestions: normalizedSuggestions,
-              model: payload.data?.model ?? "unknown-model",
+              model: result.data.usage?.model ?? "web-route",
               createdAt: new Date().toISOString(),
               latencyMs: Date.now() - requestStartedAt,
-              promptTokens: payload.data?.promptTokens ?? null,
-              completionTokens: payload.data?.completionTokens ?? null,
+              promptTokens: result.data.usage?.promptTokens ?? null,
+              completionTokens: result.data.usage?.completionTokens ?? null,
               syncedAt: null,
             }
           : null

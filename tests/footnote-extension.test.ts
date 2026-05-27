@@ -10,9 +10,9 @@ import {
 
 describe("footnote extension helpers", () => {
   const annotationsOnlyPrefix =
-    "El siguiente bloque contiene anotaciones del usuario sobre su documento. Cada anotacion usa el formato `[@N: contenido]`. Si una anotacion va precedida por una cita entre comillas, esa cita indica el pasaje del documento al que se refiere. Las anotaciones no forman parte del documento original; tratalas como instrucciones u observaciones del autor."
+    "El siguiente bloque contiene instrucciones del usuario sobre su documento. Cada linea sigue el formato: cita del pasaje relevante seguida de la instruccion entre corchetes. Tratalas como directivas del autor sobre ese fragmento especifico."
   const fullTextPrefix =
-    "El siguiente texto fue producido por el usuario. Encontraras anotaciones del usuario marcadas con `[@N: contenido]`, donde N es el numero de la anotacion y contenido es el comentario del usuario sobre ese pasaje especifico. Estas anotaciones no forman parte del documento original; tenlas en cuenta al procesar el documento."
+    "<!-- Anotaciones del autor embebidas en el texto. Formato: ==texto citado==[@N: instrucción] — el fragmento entre == es el pasaje al que refiere la instrucción entre corchetes. Son directivas del autor para ti; no forman parte del documento publicable. Tenlas en cuenta al procesar el texto. -->"
 
   it("normalizes references and keeps definitions aligned", () => {
     const markdown = "Body[^3] and more[^1]\n\n[^1]: First\n[^3]: Third"

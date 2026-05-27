@@ -101,17 +101,17 @@ export async function POST(request: Request) {
   const { userId } = await getCurrentUserId();
 
   if (!userId) {
-    return jsonError(401, "unauthorized", "Sign in to suggest a title.");
+    return jsonError(401, "UNAUTHORIZED", "Sign in to suggest a title.");
   }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
 
   if (!parsed.success) {
-    return jsonError(400, "invalid_request", "Could not read the title suggestion request.");
+    return jsonError(400, "INVALID_INPUT", "Could not read the title suggestion request.");
   }
 
   if (!hasEnoughTitleSuggestionContent(parsed.data.bodyText)) {
-    return jsonError(422, "insufficient_content", "Write a little more before asking AI for a title.");
+    return jsonError(422, "INVALID_INPUT", "Write a little more before asking AI for a title.");
   }
 
   try {
@@ -122,6 +122,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("[title-suggestions]", error);
-    return jsonError(502, "ai_request_failed", "Could not suggest a title right now.");
+    return jsonError(502, "AI_REQUEST_FAILED", "Could not suggest a title right now.");
   }
 }

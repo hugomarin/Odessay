@@ -5,7 +5,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { type FormEvent, useMemo, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
 import {
   normalizeEmail,
   sanitizeRedirectPath,
@@ -13,6 +12,7 @@ import {
   validateLoginValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
+import { webAuthService } from "@/lib/services/web-auth-service"
 
 export function LoginForm() {
   const router = useRouter()
@@ -39,14 +39,13 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
-      const supabase = createClient()
-      const { error } = await supabase.auth.signInWithPassword({
+      const result = await webAuthService.signIn({
         email: normalizeEmail(email),
         password,
       })
 
-      if (error) {
-        setErrors({ form: toFriendlyAuthError(error.message) })
+      if (result.error) {
+        setErrors({ form: toFriendlyAuthError(result.error.message) })
         return
       }
 

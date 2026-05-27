@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { hasEnoughTitleSuggestionContent } from "@/lib/ai/title-suggestions"
+import { webAIService } from "@/lib/services/web-ai-service"
 
 type RenameWritingModalProps = {
   open: boolean
@@ -20,11 +21,6 @@ type RenameWritingModalProps = {
   bodyText?: string
   onOpenChange: (open: boolean) => void
   onConfirm: (title: string) => void
-}
-
-type TitleSuggestionEnvelope = {
-  data: { title: string } | null
-  error: { code: string; message: string } | null
 }
 
 export function RenameWritingModal({
@@ -58,23 +54,16 @@ export function RenameWritingModal({
     setSuggestionError(null)
 
     try {
-      const response = await fetch("/api/ai/title-suggestions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          currentTitle: nextTitle,
-          bodyText,
-        }),
+      const result = await webAIService.suggestTitle({
+        currentTitle: nextTitle,
+        bodyText,
       })
-      const payload = (await response.json()) as TitleSuggestionEnvelope
 
-      if (!response.ok || payload.error || !payload.data) {
-        throw new Error(payload.error?.message ?? "Could not suggest a title.")
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? "Could not suggest a title.")
       }
 
-      setSuggestedTitle(payload.data.title)
+      setSuggestedTitle(result.data.title)
     } catch (error) {
       setSuggestionError(error instanceof Error ? error.message : "Could not suggest a title.")
     } finally {
