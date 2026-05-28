@@ -1528,6 +1528,16 @@
       "commit": "8324e68750c1b1777793545e6becabbe5088ee51",
       "date": "2026-05-28",
       "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), tests 82 files 478 PASS, Playwright closure flow PASS, delivery gate PASS, Vercel SUCCESS. Harness-first approach: deterministic /perf/* harnesses and fixture-backed routes preferred over live UI discovery. Signup and provider-backed flows explicitly kept as manual scope."
+    },
+    {
+      "what": "Run manual and provider-backed Fase 4 closure validation. Automated baseline executed and documented: typecheck PASS, lint PASS, tests 82 files 478 PASS, phase4 invariants PASS, Playwright closure flow PASS, delivery gate PASS. Validation report artifacts/phase4/ode-197-validation-report.md captures automated results and manual handoff checklist. No production code changes. Manual/provider-backed items remain pending human validation: signup, email auth, voice transcription, export inspection, AI quality, offline/online sync perception.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-197",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-197/run-manual-and-provider-backed-fase-4-closure-validation",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/188",
+      "commit": "1c956ee4c03ab7f8c14396f05e68003795a88966",
+      "date": "2026-05-28",
+      "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), tests 82 files 478 PASS, phase4 invariants PASS, Playwright closure flow PASS, delivery gate PASS, Vercel SUCCESS. CI traceability initially FAILED due to missing ODE-196 built entry (backfilled on main before merge). No security findings. Performance Contract: not required. Architecture Contract: not required. Manual validation handoff documented in report."
     }
   ]
 }
