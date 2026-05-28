@@ -147,6 +147,7 @@ export const SYNC_SERVICE_CONTRACT = {
     "SyncService owns mutation orchestration and hydration semantics, not the UI layer.",
     "Queueing and retry metadata are contract-level concerns; fetch, window, navigator, and Supabase details are adapter concerns.",
     "Hydration can target full indexes or single writings, but the caller must not know which web endpoint or local cache implementation serves that request.",
+    "A newly created writing starts at version 1 so the first remote persistence is valid under the server adapter contract (version >= 1).",
   ],
   errorEnvelope: SERVICE_RESPONSE_ENVELOPE,
   operations: [
