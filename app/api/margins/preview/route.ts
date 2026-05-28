@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { getPreviewSharedMargins } from "@/lib/margins/margins"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getPreviewWritingFromTestLink } from "@/lib/sharing/test-link-access"
 
@@ -41,17 +42,15 @@ export async function GET(request: Request) {
   const writingId = result.writing.id
   const admin = createAdminClient()
 
-  const { data, error } = await admin
-    .from("margins")
-    .select("id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at")
-    .eq("writing_id", writingId)
-    .eq("shared", true)
-    .order("anchor_start", { ascending: true })
-
-  if (error) {
-    console.error("[margins:preview:get]", { writingId, tokenFingerprint: token.slice(0, 8), error: error.message })
-    return jsonError(500, "DB_ERROR", error.message)
+  try {
+    const data = await getPreviewSharedMargins(admin, writingId)
+    return NextResponse.json({ data, error: null }, { status: 200 })
+  } catch (error) {
+    console.error("[margins:preview:get]", {
+      writingId,
+      tokenFingerprint: token.slice(0, 8),
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
+    return jsonError(500, "DB_ERROR", error instanceof Error ? error.message : "Failed to load preview margins.")
   }
-
-  return NextResponse.json({ data: data ?? [], error: null }, { status: 200 })
 }

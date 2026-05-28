@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { getAccessibleMargins, isLegacyMarginsSchemaError, normalizeMarginRecord } from "@/lib/margins/margins"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
@@ -56,18 +57,17 @@ export async function GET(request: Request) {
   const writingId = await resolveWritingId(writingIdentifier)
   if (!writingId) return jsonError(404, "NOT_FOUND", "Writing not found.")
 
-  const { data, error } = await supabase
-    .from("margins")
-    .select("id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at")
-    .eq("writing_id", writingId)
-    .order("anchor_start", { ascending: true })
-
-  if (error) {
-    console.error("[margins:get]", { userId: user.id, writingId, error: error.message })
-    return jsonError(500, "DB_ERROR", error.message)
+  try {
+    const data = await getAccessibleMargins(supabase, writingId)
+    return NextResponse.json({ data, error: null }, { status: 200 })
+  } catch (error) {
+    console.error("[margins:get]", {
+      userId: user.id,
+      writingId,
+      error: error instanceof Error ? error.message : "Unknown error",
+    })
+    return jsonError(500, "DB_ERROR", error instanceof Error ? error.message : "Failed to load margins.")
   }
-
-  return NextResponse.json({ data, error: null }, { status: 200 })
 }
 
 // POST /api/margins — create a new margin (highlight or annotation)
@@ -98,21 +98,42 @@ export async function POST(request: Request) {
     return jsonError(400, "INVALID_INPUT", "anchor_end must be greater than anchor_start.")
   }
 
-  const { data, error } = await supabase
+  const modernInsert = {
+    reader_id: user.id,
+    writing_id: resolvedWritingId,
+    anchor_start,
+    anchor_end,
+    anchor_text,
+    type: type === "footnote" ? "personal" : type,
+    text: text ?? note ?? "",
+    note: note ?? text ?? null,
+    shared: false,
+  }
+
+  let { data, error } = await supabase
     .from("margins")
-    .insert({
-      reader_id: user.id,
-      writing_id: resolvedWritingId,
-      anchor_start,
-      anchor_end,
-      anchor_text,
-      type: type === "footnote" ? "personal" : type,
-      text: text ?? note ?? "",
-      note: note ?? text ?? null,
-      shared: false,
-    })
+    .insert(modernInsert)
     .select()
     .single()
+
+  if (error && isLegacyMarginsSchemaError(error)) {
+    const legacyResult = await supabase
+      .from("margins")
+      .insert({
+        reader_id: user.id,
+        writing_id: resolvedWritingId,
+        anchor_start,
+        anchor_end,
+        anchor_text,
+        note: note ?? text ?? null,
+        shared: false,
+      })
+      .select("id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, note, shared, shared_at, created_at, updated_at")
+      .single()
+
+    data = legacyResult.data ? normalizeMarginRecord(legacyResult.data) : null
+    error = legacyResult.error
+  }
 
   if (error) {
     console.error("[margins:post]", { userId: user.id, writingId: resolvedWritingId, error: error.message })
