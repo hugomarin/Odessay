@@ -9,15 +9,26 @@ const supabaseAuthMock = vi.hoisted(() => ({
   getUser: vi.fn(),
 }))
 
+const localDBMock = vi.hoisted(() => ({
+  writings: {
+    get: vi.fn(),
+  },
+}))
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: supabaseAuthMock,
   }),
 }))
 
+vi.mock("@/lib/local-db", () => ({
+  localDB: localDBMock,
+}))
+
 describe("webAIService", () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
+    localDBMock.writings.get.mockReset()
   })
 
   it("maps title suggestions from the web route envelope", async () => {
@@ -119,6 +130,11 @@ describe("webAIService", () => {
   })
 
   it("hydrates correction blocks through the service envelope without leaking route details", async () => {
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      lifecycle: "server-confirmed",
+    })
+
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -156,6 +172,110 @@ describe("webAIService", () => {
         blockId: "block-1",
       }),
     ])
+  })
+
+  it("returns empty array without remote call for local-only writings in hydrateCorrectionBlocks", async () => {
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      lifecycle: "local-only",
+    })
+
+    const fetchSpy = vi.fn()
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const result = await webAIService.hydrateCorrectionBlocks("writing-1")
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual([])
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("returns empty array without remote call for syncing writings in hydrateCorrectionBlocks", async () => {
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      lifecycle: "syncing",
+    })
+
+    const fetchSpy = vi.fn()
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const result = await webAIService.hydrateCorrectionBlocks("writing-1")
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual([])
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("blocks suggestTitle for local-only writings when writingId is provided", async () => {
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      lifecycle: "local-only",
+    })
+
+    const result = await webAIService.suggestTitle({
+      currentTitle: "Untitled",
+      bodyText: "Some text.",
+      writingId: "writing-1",
+    })
+
+    expect(result.error).toEqual({
+      code: "INVALID_INPUT",
+      message: expect.stringContaining("local-only"),
+      retryable: false,
+    })
+    expect(result.data).toBeNull()
+  })
+
+  it("blocks suggestTitle for syncing writings when writingId is provided", async () => {
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      lifecycle: "syncing",
+    })
+
+    const result = await webAIService.suggestTitle({
+      currentTitle: "Untitled",
+      bodyText: "Some text.",
+      writingId: "writing-1",
+    })
+
+    expect(result.error).toEqual({
+      code: "INVALID_INPUT",
+      message: expect.stringContaining("syncing"),
+      retryable: false,
+    })
+    expect(result.data).toBeNull()
+  })
+
+  it("allows suggestTitle for server-confirmed writings when writingId is provided", async () => {
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      lifecycle: "server-confirmed",
+    })
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: { title: "Allowed", rationale: "OK" },
+            error: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    )
+
+    const result = await webAIService.suggestTitle({
+      currentTitle: "Untitled",
+      bodyText: "Some text.",
+      writingId: "writing-1",
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual({
+      title: "Allowed",
+      rationale: "OK",
+    })
   })
 })
 
