@@ -50,11 +50,35 @@ export const mapPersistedCorrectionRecordToLocal = (
   syncedAt,
 });
 
-const isIgnorableCorrectionPersistenceError = (error: unknown) => {
+const isAuthRelatedError = (error: unknown) => {
   const status = (error as CorrectionPersistenceError | null | undefined)?.status;
   const code = (error as CorrectionPersistenceError | null | undefined)?.code;
   return status === 401 || status === 403 || code === "UNAUTHORIZED" || code === "FORBIDDEN";
 };
+
+const isNotFoundError = (error: unknown) => {
+  const status = (error as CorrectionPersistenceError | null | undefined)?.status;
+  const code = (error as CorrectionPersistenceError | null | undefined)?.code;
+  return status === 404 || code === "NOT_FOUND";
+};
+
+async function shouldAttemptRemoteHydration(writingId: string): Promise<{ shouldHydrate: boolean; reason?: string }> {
+  const localWriting = await localDB.writings.get(writingId);
+
+  if (!localWriting) {
+    return { shouldHydrate: false, reason: "no local writing" };
+  }
+
+  if (localWriting.lifecycle === "local-only") {
+    return { shouldHydrate: false, reason: "local-only lifecycle" };
+  }
+
+  if (localWriting.lifecycle === "syncing") {
+    return { shouldHydrate: false, reason: "syncing lifecycle" };
+  }
+
+  return { shouldHydrate: true };
+}
 
 const inFlightCorrectionHydrations = new Map<string, Promise<LocalCorrectionBlock[]>>();
 
@@ -66,6 +90,13 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
   }
 
   const promise = (async () => {
+    const lifecycleCheck = await shouldAttemptRemoteHydration(writingId);
+
+    if (!lifecycleCheck.shouldHydrate) {
+      console.info(`[corrections:hydrate] skipped remote hydration for ${writingId}: ${lifecycleCheck.reason}`);
+      return [];
+    }
+
     try {
       const result = await webAIService.hydrateCorrectionBlocks(writingId);
 
@@ -95,7 +126,13 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
 
       return localBlocks;
     } catch (error) {
-      if (isIgnorableCorrectionPersistenceError(error)) {
+      if (isNotFoundError(error)) {
+        console.info(`[corrections:hydrate] remote writing not found for ${writingId}; treating as empty.`);
+        return [];
+      }
+
+      if (isAuthRelatedError(error)) {
+        console.warn(`[corrections:hydrate] auth failure for ${writingId}; degrading to empty.`);
         return [];
       }
 
@@ -154,7 +191,13 @@ export const persistCorrectionBlockRemotely = async ({
       await localDB.correctionBlocks.deleteMany(result.data.deletedIds);
     }
   } catch (error) {
-    if (isIgnorableCorrectionPersistenceError(error)) {
+    if (isAuthRelatedError(error)) {
+      console.warn(`[corrections:persist] auth failure for ${writingId ?? block?.writingId}; skipping remote persist.`);
+      return;
+    }
+
+    if (isNotFoundError(error)) {
+      console.info(`[corrections:persist] remote writing not found for ${writingId ?? block?.writingId}; skipping remote persist.`);
       return;
     }
 
