@@ -45,6 +45,16 @@
   },
   "built": [
     {
+      "what": "Align margins adapters with deployed schema. Added backward-compatible legacy fallback in lib/margins/margins.ts: isLegacyMarginsSchemaError uses Postgres error code 42703 + PGRST + column pattern matching; supabase: any replaced with typed MarginsSupabaseClient; reader_id normalized to null in preview path. Added getAccessibleMargins/getOwnedMargins/getPreviewSharedMargins helpers with modern/legacy query fallback. Migration 20260528153000 adds type/text/archived/resolved columns + highlight to type_check + 3 indexes. odessay-modelo-datos.md updated. 83 files, 483 tests PASS.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-200",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-200/align-margins-adapters-with-the-deployed-schema-and-restore",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/190",
+      "commit": "fa660ca5b68d0a2b119a87444d0a0a7976d97fc3",
+      "date": "2026-05-28",
+      "notes": "Two-round review: first rejected for missing perf trace, missing runtime evidence, odessay-modelo-datos.md not updated, isLegacyMarginsSchemaError fragility, and any proliferation. All fixed in second commit. Validation: typecheck PASS, lint PASS, tests 83 files 483 PASS, perf gate 14 pass 0 warn 1 skip (input_p95=4.84ms, keydown_p95=14.28ms, interaction_latency_p95=26.39ms), OPS_PERF_TRACE_PATH delivery gate PASS, Vercel SUCCESS, DB/browser/write-path runtime evidence provided."
+    },
+    {
       "what": "Build the multi-runtime invariant harness and Fase 4 closure evidence. New scripts/check-phase4-invariants.mjs runs 12 test suites and writes a structured JSON report to artifacts/phase4/. New tests/fase4-invariants.test.ts maps every required closure area (canonical document contract, write-path boundary, sync boundary, remote-capability boundaries) to explicit evidence suites and validates service-boundary runtimeScope metadata. New tests/reading-regression.test.tsx validates cross-surface reading parity (write/preview/public) for rich-text and plain-text fallback paths. Expanded service tests: exportWriting (document-service), hydrateCorrectionBlocks + signOut (ai-auth-services), rotatePreviewLink + revokePreviewLink + listIncomingShares (sharing-service). 82 test files, 478 tests PASS.",
       "phase": "Fase 4 — Shared Core Multi-Runtime",
       "issue": "ODE-195",
