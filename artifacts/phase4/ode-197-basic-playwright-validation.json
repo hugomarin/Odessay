@@ -1,0 +1,46 @@
+{
+  "generatedAt": "2026-05-28T03:00:28.820Z",
+  "baseURL": "http://127.0.0.1:3000",
+  "signup": {
+    "email": "hmarinr+ode197-1779937228819@pm.me",
+    "username": "ode197_37228819",
+    "result": "unexpected-state",
+    "details": [
+      "Final signup URL: http://127.0.0.1:3000/signup",
+      "Unexpected signup state. Visible error text: Already have an account? Log in"
+    ]
+  },
+  "services": {
+    "AuthService": {
+      "status": "fail",
+      "evidence": [
+        "Existing account login reached /desk."
+      ]
+    },
+    "DocumentService": {
+      "status": "fail",
+      "evidence": []
+    },
+    "SyncService": {
+      "status": "partial",
+      "evidence": []
+    },
+    "SharingService": {
+      "status": "partial",
+      "evidence": []
+    },
+    "ReadingSurfaces": {
+      "status": "partial",
+      "evidence": []
+    }
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+    "Failed to load resource: the server responded with a status of 400 (Bad Request)"
+  ],
+  "requestFailures": [
+    "403 http://127.0.0.1:3000/api/corrections/hydrate?writingId=4f6ca6de-e29c-4f0c-a0e8-9e59c0a7fedf",
+    "400 http://127.0.0.1:3000/api/writings/4f6ca6de-e29c-4f0c-a0e8-9e59c0a7fedf"
+  ],
+  "fatal": "page.waitForFunction: Timeout 30000ms exceeded."
+}
