@@ -45,6 +45,16 @@
   },
   "built": [
     {
+      "what": "Audit runtime context gaps and harden operational contracts after Fase 4 service remediations. New diagnostic document (odessay-fase4-runtime-contract-audit.md) analyzes ODE-198 through ODE-202 failures, classifying each as implementation bug vs operational contract gap. Five minimum operational contracts defined: C1 (Write-path Lifecycle Contract), C2 (Effective Production Schema Contract), C3 (Adapter Invariant Contract), C4 (Margins Synchronization Contract), C5 (Collections Assignment Contract). Updated 8 workflow docs with contract sections and checklists: odessay-arquitectura.md, odessay-modelo-datos.md, odessay-sync.md, odessay-margenes.md, odessay-collections.md, validacion-fase-4.md, playwright-catalog.md, docs.json.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-203",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-203/audit-runtime-context-gaps-and-harden-operational-contracts-after-fase",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/196",
+      "commit": "bf733fe",
+      "date": "2026-05-28",
+      "notes": "Score: 10/10. Documentation-only delivery — no code changes. Architecture Contract COMPLIANT: Layer=Architecture-first/Application/Adapter, Runtime scope=shared-core/web/cloud, Owner=architecture-first. All five required operational contracts documented with canonical locations. Discovery path for future agents explicit. Performance Contract: not required (valid justification per brief). Clean first-round approval."
+    },
+    {
       "what": "Fix replace_writing_collections RPC contract against the live collections schema. New migration removes the c.deleted_at IS NULL predicate from the collections ownership check — the column does not exist in the live schema, causing every collection assignment to fail with 500 DB_ERROR. New tests/api/writings-collections-route.test.ts adds 8 regression cases: 401, 400 invalid input, 404 PT404, 403 PT403, 200 success, deduplication, 500 unexpected DB error, empty collection list.",
       "phase": "Fase 4 — Shared Core Multi-Runtime",
       "issue": "ODE-201",
