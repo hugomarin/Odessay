@@ -45,6 +45,16 @@
   },
   "built": [
     {
+      "what": "Fix replace_writing_collections RPC contract against the live collections schema. New migration removes the c.deleted_at IS NULL predicate from the collections ownership check — the column does not exist in the live schema, causing every collection assignment to fail with 500 DB_ERROR. New tests/api/writings-collections-route.test.ts adds 8 regression cases: 401, 400 invalid input, 404 PT404, 403 PT403, 200 success, deduplication, 500 unexpected DB error, empty collection list.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-201",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-201/fix-replace-writing-collections-contract-against-the-live-collections",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/193",
+      "commit": "47ae9f0",
+      "date": "2026-05-28",
+      "notes": "Score: 9.0/10. P2: no Playwright/browser proof against real DB (mocked unit tests only). P3: OPS_PERF_TRACE_PATH not captured for behavioral perf dims (waterfall shape/reactive fan-out covered by tests). P3: tests/playwright/fase4-closure.e2e.ts not updated. Architecture Contract COMPLIANT: Adapter layer, web/cloud scope, no shared-core contamination."
+    },
+    {
       "what": "Gate corrections hydration by writing lifecycle. Added shouldAttemptRemoteHydration guard in lib/corrections/persistence.ts that reads localDB before attempting remote hydration. local-only and syncing writings return [] immediately without a remote call. server-confirmed writings hydrate as before. API route differentiated 404 (writing not found) from 403 (ownership denied). New persistence-lifecycle.test.ts covers all four lifecycle states. Fixed pre-existing TypeScript narrowing errors in ode-198-contract-evidence.test.ts.",
       "phase": "Fase 4 — Shared Core Multi-Runtime",
       "issue": "ODE-199",
