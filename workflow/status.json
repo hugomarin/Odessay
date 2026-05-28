@@ -1525,7 +1525,7 @@
       "issue": "ODE-196",
       "linear_url": "https://linear.app/z9ne/issue/ODE-196/automate-fase-4-critical-web-validation-with-playwright-harnesses",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/187",
-      "commit": "8324e68d732d8ab6cc00676db055a4c3716032f",
+      "commit": "8324e68750c1b1777793545e6becabbe5088ee51",
       "date": "2026-05-28",
       "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), tests 82 files 478 PASS, Playwright closure flow PASS, delivery gate PASS, Vercel SUCCESS. Harness-first approach: deterministic /perf/* harnesses and fixture-backed routes preferred over live UI discovery. Signup and provider-backed flows explicitly kept as manual scope."
     }
