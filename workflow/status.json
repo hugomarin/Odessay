@@ -1578,6 +1578,16 @@
       "commit": "1c956ee4c03ab7f8c14396f05e68003795a88966",
       "date": "2026-05-28",
       "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), tests 82 files 478 PASS, phase4 invariants PASS, Playwright closure flow PASS, delivery gate PASS, Vercel SUCCESS. CI traceability initially FAILED due to missing ODE-196 built entry (backfilled on main before merge). No security findings. Performance Contract: not required. Architecture Contract: not required. Manual validation handoff documented in report."
+    },
+    {
+      "what": "Harden web export adapter for unicode-safe filenames. Added buildContentDisposition() helper that emits both a legacy ASCII filename parameter and a RFC 5987 filename*=UTF-8'' parameter for modern browsers. Fixes ByteString failure when export titles contain Unicode characters (em-dashes, accented chars). Export document generation pipeline untouched — pure adapter fix. New tests/api/writings-export-route.test.ts (4 tests covering PDF+DOCX Unicode, all-non-ASCII fallback). Updated tests/export.test.ts to assert Unicode preservation through sanitizeFileName. Fase 4 closure matrix updated: export now passes as a verified service.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-202",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-202/harden-export-route-for-unicode-safe-filenames-and-rerun-fase-4",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/194",
+      "commit": "b87ded1",
+      "date": "2026-05-28",
+      "notes": "Score: 10/10. Clean first-round approval. GateResult PASS: typecheck/lint/tests PASS, ops:delivery:gate PASS, Traceability CI SUCCESS, Vercel preview SUCCESS. Performance Contract: not required (not an editor interaction change). Architecture Contract: COMPLIANT — Layer Adapter, Runtime scope web, Owner backend. Invariant preserved: export document generation and delivery concerns remain separable. Playwright Fase 4 pre-existing assertPreviewFixture failure unrelated to export, scoped out and documented in validation report."
     }
   ]
 }
