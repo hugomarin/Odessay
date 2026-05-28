@@ -1,13 +1,61 @@
-RUN  v4.1.0 /Users/hugomarin/Documents/App/Odessay
-
-
- Test Files  13 passed (13)
-      Tests  77 passed (77)
-   Start at  20:13:23
-   Duration  841ms (transform 1.01s, setup 0ms, import 2.15s, tests 669ms, environment 700ms)
-
 Running 1 test using 1 worker
 
-  ✓  1 [chromium] › tests/playwright/fase4-closure.e2e.ts:17:5 › fase 4 closure flow stays executable through proven harnesses (24.5s)
+  ✘  1 [chromium] › tests/playwright/fase4-closure.e2e.ts:17:5 › fase 4 closure flow stays executable through proven harnesses (2.1m)
 
-  1 passed (26.5s)
+
+  1) [chromium] › tests/playwright/fase4-closure.e2e.ts:17:5 › fase 4 closure flow stays executable through proven harnesses 
+
+    [31mTest timeout of 60000ms exceeded.[39m
+
+    Error: page.goto: net::ERR_ABORTED; maybe frame was detached?
+    Call log:
+    [2m  - navigating to "http://127.0.0.1:3000/perf/shared-canonical/fixture-writing-id", waiting until "load"[22m
+
+
+       at helpers/fase4.ts:129
+
+      127 |   await expect(page.getByText("Fixture Author @fixture-author")).toBeVisible()
+      128 |
+    > 129 |   await page.goto("/perf/shared-canonical/fixture-writing-id")
+          |              ^
+      130 |   await expect(page).toHaveURL("/perf/shared-canonical/semantic-write-title")
+      131 |   await expect(page.getByTestId("shared-canonical-harness")).toBeVisible()
+      132 | }
+        at assertSharedClosureSurface (/Users/hugomarin/Documents/App/Odessay/tests/playwright/helpers/fase4.ts:129:14)
+        at /Users/hugomarin/Documents/App/Odessay/tests/playwright/fase4-closure.e2e.ts:37:5
+        at /Users/hugomarin/Documents/App/Odessay/tests/playwright/fase4-closure.e2e.ts:35:3
+
+    [31mTearing down "context" exceeded the test timeout of 60000ms.[39m
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/fase4-closure.e2e.ts-fase--98b0a-le-through-proven-harnesses-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/fase4-closure.e2e.ts-fase--98b0a-le-through-proven-harnesses-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/fase4-closure.e2e.ts-fase--98b0a-le-through-proven-harnesses-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › tests/playwright/fase4-closure.e2e.ts:17:5 › fase 4 closure flow stays executable through proven harnesses 
+[2m[WebServer] [22m(node:4732) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:4733) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4752) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:4752) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+[2m[WebServer] [22mRead more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+[2m[WebServer] [22m(node:5454) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:5527) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:5583) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
+[2m[WebServer] [22m(node:6324) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[2m[WebServer] [22m(Use `node --trace-warnings ...` to show where the warning was created)
