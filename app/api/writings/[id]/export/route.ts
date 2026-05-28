@@ -32,9 +32,30 @@ const getRequestedFormat = (request: Request) => {
   return formatSchema.safeParse(searchParams.get("format"))
 }
 
+const buildContentDisposition = (filename: string): string => {
+  // Extract extension (e.g., ".pdf", ".docx") so we preserve it on the fallback
+  const extMatch = filename.match(/(\.[^.]+)$/)
+  const ext = extMatch ? extMatch[1] : ""
+
+  // ASCII fallback for legacy browsers (strip non-ASCII chars from basename)
+  const asciiFallback =
+    filename
+      .replace(/(\.[^.]+)$/, "")
+      .replace(/[^\x00-\x7F]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "export"
+
+  const safeFallback = `${asciiFallback}${ext}`
+
+  // RFC 5987 / RFC 8187 UTF-8 encoded filename for modern browsers
+  const encoded = encodeURIComponent(filename)
+
+  return `attachment; filename="${safeFallback}"; filename*=UTF-8''${encoded}`
+}
+
 const buildDownloadHeaders = (params: { contentType: string; filename: string }) => ({
   "Content-Type": params.contentType,
-  "Content-Disposition": `attachment; filename="${params.filename}"`,
+  "Content-Disposition": buildContentDisposition(params.filename),
   "Cache-Control": "private, no-store, max-age=0",
   "X-Content-Type-Options": "nosniff",
 })

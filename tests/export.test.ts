@@ -78,6 +78,13 @@ describe("export helpers", () => {
     expect(sanitizeFileName("Hello / world: draft")).toBe("Hello-world-draft")
   })
 
+  it("preserves Unicode punctuation in sanitized filenames", () => {
+    // Product-valid titles containing em-dashes must remain intact in the sanitized output
+    // so they can be properly encoded by the adapter layer (RFC 5987 filename*)
+    expect(sanitizeFileName("Hello — World")).toBe("Hello-—-World")
+    expect(sanitizeFileName("Café résumé — draft")).toBe("Cafe-resume-—-draft")
+  })
+
   it("parses table rows into the export document model", () => {
     const document = buildWritingExportDocument({
       type: "doc",
