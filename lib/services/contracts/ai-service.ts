@@ -8,6 +8,7 @@ import {
 export type TitleSuggestionRequest = {
   currentTitle: string
   bodyText: string
+  writingId?: string
 }
 
 export type TitleSuggestion = {

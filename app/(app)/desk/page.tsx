@@ -689,6 +689,7 @@ export default function DeskPage() {
             open={renameTarget !== null}
             title={renameTarget?.title ?? "Untitled writing"}
             bodyText={renameTarget?.bodyText ?? ""}
+            writingId={renameTarget?.id}
             onOpenChange={(open) => {
               if (!open) {
                 setRenameTarget(null)

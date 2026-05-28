@@ -1,5 +1,6 @@
 "use client"
 
+import { localDB } from "@/lib/local-db"
 import type {
   AIService,
   PersistCorrectionBlockInput,
@@ -12,6 +13,24 @@ import type {
 } from "@/lib/services/contracts/ai-service"
 import type { ServiceError } from "@/lib/services/contracts/service-types"
 import { err, ok, parseServiceEnvelope } from "@/lib/services/service-response"
+
+async function checkWritingLifecycleForRemoteAI(writingId: string): Promise<{ allowed: boolean; reason?: string }> {
+  const localWriting = await localDB.writings.get(writingId)
+
+  if (!localWriting) {
+    return { allowed: false, reason: "no local writing" }
+  }
+
+  if (localWriting.lifecycle === "local-only") {
+    return { allowed: false, reason: "local-only lifecycle" }
+  }
+
+  if (localWriting.lifecycle === "syncing") {
+    return { allowed: false, reason: "syncing lifecycle" }
+  }
+
+  return { allowed: true }
+}
 
 type TitleSuggestionPayload = {
   title: string
@@ -37,6 +56,18 @@ function unavailable<T>(message: string, code: ServiceError["code"] = "UNAVAILAB
 
 export const webAIService: AIService = {
   async suggestTitle(input: TitleSuggestionRequest) {
+    if (input.writingId) {
+      const lifecycleCheck = await checkWritingLifecycleForRemoteAI(input.writingId)
+
+      if (!lifecycleCheck.allowed) {
+        return err<TitleSuggestion>({
+          code: "INVALID_INPUT",
+          message: `Cannot suggest a title for a writing that has not been synced yet. (${lifecycleCheck.reason})`,
+          retryable: false,
+        })
+      }
+    }
+
     try {
       const response = await fetch("/api/ai/title-suggestions", {
         method: "POST",
@@ -103,6 +134,13 @@ export const webAIService: AIService = {
   },
 
   async hydrateCorrectionBlocks(writingId: string) {
+    const lifecycleCheck = await checkWritingLifecycleForRemoteAI(writingId)
+
+    if (!lifecycleCheck.allowed) {
+      console.info(`[ai-service:hydrate] skipped remote hydration for ${writingId}: ${lifecycleCheck.reason}`)
+      return ok<PersistedCorrectionBlock[]>([])
+    }
+
     try {
       const response = await fetch(`/api/corrections/hydrate?writingId=${encodeURIComponent(writingId)}`, {
         method: "GET",
