@@ -202,3 +202,30 @@ Schema de entidades en `workflow/context/core/odessay-modelo-datos.md`.
 **Navegación interna vs navegación de página.** Dentro de una vista funcional (editor, desk, collections), los cambios de sub-estado (pestañas, filtros, paneles) son estado local, no rutas. La URL refleja el estado pero no lo controla. Los datos ya están en la base local (`localDB`), por lo que no debe dispararse un RSC fetch de Next.js. Ver `workflow/context/features/odessay-sync.md` §Principio de navegación interna y §Caso de estudio.
 
 **Documentos guardados completos, no por bloques, en el runtime web actual.** El `body_json` de TipTap se guarda como documento completo en la persistencia web/cloud actual. La granularidad de bloques (ProseMirror) es interna — no se expone en el schema. Esto simplifica sync, márgenes y AI en el MVP web, pero no redefine el contrato documental canónico de desktop, que converge a `.md`.
+
+---
+
+## Invariantes de adapter
+
+Cuando datos del producto cruzan a infraestructura concreta (HTTP, SQL, filesystem, headers), debe existir una capa de normalización que garantice que lo que es válido para el producto sigue siendo válido para el runtime.
+
+### Reglas
+
+| Frontera | Invariante | Ejemplo de violación |
+|---|---|---|
+| Producto → HTTP headers | Los textos de usuario se normalizan antes de usarse en headers. | Título con `—` en `Content-Disposition` sin sanitización (ODE-202). |
+| Producto → SQL | Nunca interpolar texto de usuario en queries; usar parametrización. | Construcción de query con string template (bloqueante en REVIEW). |
+| Producto → Base de datos remota | `sync_status` es local-only; nunca enviarlo al servidor. | Enviar `sync_status` en el payload de PATCH `/api/writings/[id]`. |
+| Producto → Filesystem | Los nombres de archivo se sanitizan para el SO objetivo. | Guardar `.md` con caracteres reservados (`/`, `\`, `:`) sin escape. |
+| Producto → TipTap/JSON | Validar shape mínimo antes de persistencia; no asumir que TipTap siempre produce JSON válido. | Persistir `body_json` sin verificar que es un objeto parseable. |
+
+### Checklist de adapter para BUILD
+
+Antes de mergear código que toque una frontera:
+
+- [ ] ¿El dato del producto pasa por una transformación antes de cruzar a infraestructura?
+- [ ] ¿La transformación maneja el peor caso (texto vacío, Unicode, caracteres de control, longitud extrema)?
+- [ ] ¿Existe un test que falle si la transformación se omite?
+- [ ] ¿El contrato de entrada/salida del adapter está documentado?
+
+**Referencia:** `workflow/context/features/odessay-fase4-runtime-contract-audit.md` para el análisis de incidentes que motivaron estas reglas.

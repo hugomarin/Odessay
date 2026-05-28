@@ -15,7 +15,7 @@
       "type": "core",
       "scope": "runtime-web-actual-plus-principios-de-producto",
       "state": "canonical-with-runtime-bounds",
-      "description": "Arquitectura vigente del producto y del runtime web actual: stack, modos de uso, navegación, rutas y decisiones activas. Para desktop y multi-runtime debe leerse junto a la secuencia `odessay-desktop-*`."
+      "description": "Arquitectura vigente del producto y del runtime web actual: stack, modos de uso, navegación, rutas, decisiones activas e invariantes de adapter. Incluye §Invariantes de adapter que gobiernan cómo datos del producto cruzan a infraestructura concreta. Para desktop y multi-runtime debe leerse junto a la secuencia `odessay-desktop-*`."
     },
     {
       "path": "workflow/context/core/odessay-stack.md",
@@ -26,8 +26,8 @@
       "path": "workflow/context/core/odessay-modelo-datos.md",
       "type": "core",
       "scope": "capa-cloud-y-colaborativa-actual",
-      "state": "canonical-remote-not-document-contract",
-      "description": "Schema completo de Supabase y de la capa cloud/colaborativa actual: tablas, columnas, RLS y relaciones. Describe el modelo remoto vigente; no sustituye el contrato documental desktop/multi-runtime."
+      "state": "canonical-remote-with-effective-schema-contract",
+      "description": "Schema completo de Supabase y de la capa cloud/colaborativa actual: tablas, columnas, RLS y relaciones. Incluye §Contrato de schema efectivo con reglas de transición y checklist de validación contra schema deployado. Referencia obligatoria para issues que toquen migraciones, RPCs o cambios de tabla."
     },
     {
       "path": "workflow/context/core/odessay-paginas.md",
@@ -69,7 +69,7 @@
     {
       "path": "workflow/context/features/odessay-margenes.md",
       "type": "feature",
-      "description": "Sistema de márgenes: anotaciones que emergen mientras se lee (no son comentarios, son writings en borrador). Flujo de selección de texto, panel lateral, semántica y schema de la tabla margins."
+      "description": "Sistema de márgenes: anotaciones que emergen mientras se lee (no son comentarios, son writings en borrador). Flujo de selección de texto, panel lateral, semántica, schema de la tabla margins y contrato de sincronización. Incluye §Contrato de sincronización que gobierna la relación entre `annotationReference` en `body_json` y el índice materializado `margins`, con reglas de schema transition."
     },
     {
       "path": "workflow/context/features/odessay-correspondencias.md",
@@ -79,14 +79,14 @@
     {
       "path": "workflow/context/features/odessay-collections.md",
       "type": "feature",
-      "description": "Collections: interfaz de clasificación del archivo (no de lectura). Resuelve el problema de writings sin clasificar con preview sin apertura, bulk categorization y AI como propuesta no como acción automática."
+      "description": "Collections: interfaz de clasificación del archivo (no de lectura). Resuelve el problema de writings sin clasificar con preview sin apertura, bulk categorization, AI como propuesta no como acción automática, y contrato de asignación. Incluye §Contrato de asignación que gobierna la relación entre el RPC de collections y el schema efectivo deployado."
     },
     {
       "path": "workflow/context/features/odessay-sync.md",
       "type": "feature",
       "scope": "runtime-web-local-first",
       "state": "canonical-feature-doc-with-desktop-bounds",
-      "description": "Capa local-first del runtime web actual: LocalDB, auto-save local, sync remoto, debounce, retry y estados del statusbar. Para desktop y filesystem `.md`, usar además la secuencia `odessay-desktop-*`."
+      "description": "Capa local-first del runtime web actual: LocalDB, auto-save local, sync remoto, debounce, retry, estados del statusbar y contrato de lifecycle operativo. Incluye §Contrato de lifecycle operativo con matriz de operaciones válidas por estado (local-only, pending, synced, conflict, deleted). Para desktop y filesystem `.md`, usar además la secuencia `odessay-desktop-*`."
     },
     {
       "path": "workflow/context/features/odessay-desktop-app.md",
@@ -115,6 +115,13 @@
       "scope": "desktop-migration-plan",
       "state": "normative-sequence-step-4",
       "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
+    },
+    {
+      "path": "workflow/context/features/odessay-fase4-runtime-contract-audit.md",
+      "type": "feature",
+      "scope": "fase-4-post-remediation-audit",
+      "state": "normative-for-contract-definitions",
+      "description": "Diagnóstico post-remediación de Fase 4: analiza ODE-198 a ODE-202, clasifica fallas como bug vs gap de contrato, y fija cinco contratos operativos mínimos (C1–C5) con su ubicación canónica en workflow/context/. Referencia obligatoria para briefs que toquen lifecycle, schema, adapter o RPC."
     },
     {
       "path": "workflow/context/features/odessay-desktop-docs-corrections-log.md",
@@ -213,7 +220,7 @@
     {
       "path": "workflow/define/validacion-fase-4.md",
       "type": "ops",
-      "description": "Checklist operativo de validación de Fase 4: separa flujos bloqueantes y condicionales, y clasifica qué validar manualmente, qué automatizar con Playwright y qué casos mixtos requieren provider/dispositivo real."
+      "description": "Checklist operativo de validación de Fase 4: separa flujos bloqueantes y condicionales, clasifica qué validar manualmente, qué automatizar con Playwright, qué casos mixtos requieren provider/dispositivo real, y matriz de validación servicio-contrato. Incluye §Matriz de validación servicio-contrato que mapea cada servicio a su contrato operativo canónico."
     },
     {
       "path": "workflow/define/debrief.md",
@@ -228,7 +235,7 @@
     {
       "path": "workflow/testing/playwright-catalog.md",
       "type": "ops",
-      "description": "Catálogo operativo de assets Playwright del repo: organiza tests, helpers y scripts por familia, clasifica qué reutilizar, qué evitar y cómo prevenir proliferación de suites solapadas."
+      "description": "Catálogo operativo de assets Playwright del repo: organiza tests, helpers y scripts por familia, clasifica qué reutilizar, qué evitar, cómo prevenir proliferación de suites solapadas, y reglas de mapeo servicio-contrato. Incluye §Regla de mapeo servicio-contrato para vincular tests a contratos operativos explícitos."
     },
     {
       "path": "workflow/perf-budgets.json",

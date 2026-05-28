@@ -425,6 +425,52 @@ Aplicar el checklist de cinco puntos a la transición "cambio de pestaña":
 
 ---
 
+## Contrato de lifecycle operativo
+
+Este documento gobierna qué operaciones son válidas para un writing en cada estado del lifecycle local-first. Si un servicio intenta una operación inválida para el estado actual, es un bug de arquitectura, no solo de implementación.
+
+### Estados canónicos
+
+```
+local-only  →  pending  →  synced  →  conflict
+     ↓            ↓           ↓
+   deleted     deleted     deleted
+```
+
+- **`local-only`**: El writing existe solo en `localDB`. No tiene identidad remota. Ocurre al crear un nuevo draft antes del primer sync.
+- **`pending`**: El writing tiene identidad remota pero hay cambios locales no enviados. La cola de sync los procesará.
+- **`synced`**: El writing está alineado local y remotamente (last-write-wins).
+- **`conflict`**: El writing tiene cambios locales y la versión remota divergió. Estrategia: last-write-wins silencioso.
+- **`deleted`**: Soft delete local. El sync worker eventualmente refleja el borrado remoto.
+
+### Matriz de operaciones válidas
+
+| Operación | local-only | pending | synced | conflict | deleted |
+|---|---|---|---|---|---|
+| `DocumentService.save()` | ✓ | ✓ | ✓ | ✓ | ✗ |
+| `SyncService.enqueuePush()` | ✓ (si hay red) | ✓ | ✓ | ✓ | ✗ |
+| `AIService.hydrateCorrections()` | ✗ | ✗ | ✓ | ✓ | ✗ |
+| `SharingService.shareWriting()` | ✗ | ✗ | ✓ | consultar | ✗ |
+| `Export` (PDF/DOCX) | ✗ | ✗ | ✓ | ✓ | ✗ |
+| `Margins` (remoto) | ✗ | ✗ | ✓ | ✓ | ✗ |
+
+### Reglas
+
+1. **Un servicio nunca asume implícitamente que el writing está `synced`.** Debe verificar el estado o confiar en que el adapter valida.
+2. **Las operaciones que requieren identidad remota deben gatearse explícitamente.** Si un writing es `local-only`, el servicio debe retornar un valor vacío/defaults, no fallar ni hacer una llamada remota que inevitablemente dará 404.
+3. **El estado `sync_status` es local-only.** Nunca se envía al servidor. El server infiere el estado desde la existencia o no del `writing_id`.
+4. **Los borrados son locales primero.** Un `deleted` local eventualmente se propaga; hasta entonces, el writing no debe aparecer en listados locales.
+
+### Checklist de lifecycle para BUILD
+
+- [ ] ¿El issue declara en qué estados de lifecycle es válida cada operación remota?
+- [ ] ¿Existe un guard que evite llamadas remotas para writings `local-only`?
+- [ ] ¿Los tests cubren al menos `local-only` y `synced`?
+
+**Referencia histórica:** ODE-199 (corrections hydration sin guard de lifecycle) ilustra el costo de omitir este contrato.
+
+---
+
 ## Lo que este doc NO cubre
 
 - Implementación del endpoint `PATCH /api/writings/{id}` → `.agents/skills/skill-backend/SKILL.md`

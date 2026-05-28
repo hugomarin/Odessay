@@ -292,6 +292,36 @@ Actualizar este catálogo cuando aparezca cualquiera de estas condiciones:
 
 ---
 
+## Regla de mapeo servicio-contrato
+
+Los assets de Playwright y los tests automatizados en general deben poder vincularse a un contrato operativo, no solo a una superficie visual. Esto es especialmente importante para validaciones de cierre de fase.
+
+### Formato
+
+Cuando se cree o modifique un test que valida un servicio, agregar en su metadata o comentario de cabecera:
+
+```ts
+/**
+ * @contract C1 — Write-path Lifecycle Contract
+ * @doc workflow/context/features/odessay-sync.md §Contrato de lifecycle operativo
+ * @service DocumentService.save()
+ */
+```
+
+### Reglas
+
+1. **Un test de servicio sin `contract_ref` es incompleto.** El harness de invariantes puede pasar funcionalmente, pero el contrato subyacente sigue siendo implícito.
+2. **Los tests de UI no reemplazan los tests de contrato.** Un test E2E que hace click en "Export" y verifica la descarga no demuestra que el adapter maneja Unicode correctamente; solo demuestra que el flujo funciona para un caso.
+3. **Preferir tests de contrato aislados.** Cuando un contrato operativo es crítico (lifecycle, schema, adapter invariant), crear un test unitario o de integración que lo valide directamente, además de cualquier cobertura E2E.
+
+### Checklist para tests nuevos
+
+- [ ] ¿El test valida un contrato operativo documentado?
+- [ ] ¿El contrato está referenciado en el test o en su metadata?
+- [ ] ¿El test cubre al menos un caso edge del contrato (no solo el happy path)?
+
+---
+
 ## Decisión operativa vigente
 
 Para Fase 4 y validaciones de cierre similares:
@@ -301,3 +331,4 @@ Para Fase 4 y validaciones de cierre similares:
 - construir flujos maestros antes que suites dispersas
 - tratar auth real como excepción, no como baseline
 - no crear tests nuevos sin pasar antes por este catálogo
+- **mapear cada suite de servicio a un contrato operativo explícito**
