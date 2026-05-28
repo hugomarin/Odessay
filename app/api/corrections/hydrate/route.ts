@@ -29,21 +29,27 @@ async function getCurrentUserId() {
 }
 
 async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>, userId: string, writingId: string) {
-  const { data, error } = await supabase
+  const { data: writing, error: findError } = await supabase
     .from("writings")
-    .select("id")
+    .select("id, author_id")
     .eq("id", writingId)
-    .eq("author_id", userId)
     .maybeSingle();
 
-  if (error) {
-    return { ok: false as const, response: jsonError(500, "DB_ERROR", error.message) };
+  if (findError) {
+    return { ok: false as const, response: jsonError(500, "DB_ERROR", findError.message) };
   }
 
-  if (!data) {
+  if (!writing) {
     return {
       ok: false as const,
-      response: jsonError(403, "FORBIDDEN", "Writing not found or access denied."),
+      response: jsonError(404, "NOT_FOUND", "Writing not found."),
+    };
+  }
+
+  if (writing.author_id !== userId) {
+    return {
+      ok: false as const,
+      response: jsonError(403, "FORBIDDEN", "Writing access denied."),
     };
   }
 

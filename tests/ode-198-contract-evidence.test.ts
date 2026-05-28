@@ -66,7 +66,7 @@ describe("ODE-198 blank-draft version contract evidence", () => {
     const mutation = await localDB.syncQueue.getCurrentForWriting(draftId)
     expect(mutation).not.toBeNull()
     expect(mutation?.operation).toBe("upsert")
-    expect(mutation?.payload.version).toBe(1)
+    expect((mutation as Extract<typeof mutation, { entity_kind: "writing" }>)?.payload.version).toBe(1)
 
     // Server contract validation
     const serverParseResult = writingPayloadSchema.safeParse(mutation?.payload)
@@ -128,7 +128,7 @@ describe("ODE-198 blank-draft version contract evidence", () => {
 
     // Current mutation should reflect the latest version
     const currentMutation = await localDB.syncQueue.getCurrentForWriting(draftId)
-    expect(currentMutation?.payload.version).toBe(2)
+    expect((currentMutation as Extract<typeof currentMutation, { entity_kind: "writing" }>)?.payload.version).toBe(2)
 
     // Reopen should show version 2
     const openResult = await webDocumentService.openWriting(draftId)
