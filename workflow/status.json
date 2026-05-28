@@ -41,6 +41,16 @@
   },
   "built": [
     {
+      "what": "Add lifecycle guards to webAIService.hydrateCorrectionBlocks() and suggestTitle(). Passes writingId through RenameWritingModal and its 3 call sites (editor-shell, desk, collections). checkWritingLifecycleForRemoteAI helper blocks remote AI calls for local-only and syncing writings. 6 new lifecycle guard tests added in ai-auth-services.test.ts covering local-only, syncing, and server-confirmed states for both methods. Defense-in-depth with pre-existing persistence.ts guard from ODE-199.",
+      "phase": "Fase 5 — Convergencia Web sobre el Core Compartido",
+      "issue": "ODE-205",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-205/corrections-and-publication-review-compliance-migrate-direct-apiai",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/197",
+      "commit": "235cd66",
+      "date": "2026-05-28",
+      "notes": "Score: 9.25/10. P2: C1 matrix column headers in odessay-fase4-runtime-contract-audit.md and odessay-sync.md use 'pending'/'synced' but WritingLifecycle type uses 'syncing'/'server-confirmed' — pre-existing terminology gap from ODE-199, behavioral semantics correct. P3: no test for null localDB entry in checkWritingLifecycleForRemoteAI. All gates PASS: performance gate 14 pass 0 warn 1 skip 0 required_failures, delivery gate PASS, Vercel SUCCESS, Traceability SUCCESS. Architecture Contract: COMPLIANT — changes in Application/Adapter layer, 'use client', no UI to /api/ai direct calls. Clean first-round approval."
+    },
+    {
       "what": "Audit runtime context gaps and harden operational contracts after Fase 4 service remediations. New diagnostic document (odessay-fase4-runtime-contract-audit.md) analyzes ODE-198 through ODE-202 failures, classifying each as implementation bug vs operational contract gap. Five minimum operational contracts defined: C1 (Write-path Lifecycle Contract), C2 (Effective Production Schema Contract), C3 (Adapter Invariant Contract), C4 (Margins Synchronization Contract), C5 (Collections Assignment Contract). Updated 8 workflow docs with contract sections and checklists: odessay-arquitectura.md, odessay-modelo-datos.md, odessay-sync.md, odessay-margenes.md, odessay-collections.md, validacion-fase-4.md, playwright-catalog.md, docs.json.",
       "phase": "Fase 4 — Shared Core Multi-Runtime",
       "issue": "ODE-203",
