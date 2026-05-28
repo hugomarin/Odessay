@@ -328,10 +328,18 @@ describe("legacy margins schema compatibility", () => {
   it("detects missing modern margin columns as a legacy schema error", () => {
     expect(
       isLegacyMarginsSchemaError({
+        code: "42703",
         message: 'column margins.type does not exist',
         details: 'Could not find the type column on public.margins',
       }),
     ).toBe(true)
+    expect(
+      isLegacyMarginsSchemaError({
+        code: "42703",
+        message: "invalid input syntax for type text",
+        details: "input relation margins violated a cast",
+      }),
+    ).toBe(false)
     expect(isLegacyMarginsSchemaError({ message: "permission denied" })).toBe(false)
   })
 
@@ -351,11 +359,32 @@ describe("legacy margins schema compatibility", () => {
         updated_at: "2026-05-28T00:00:00.000Z",
       }),
     ).toMatchObject({
+      reader_id: VALID_UUID,
       type: "personal",
       text: "Legacy note",
       note: "Legacy note",
       archived: false,
       resolved: false,
+    })
+  })
+
+  it("leaves reader_id null when preview rows do not include an owner", () => {
+    expect(
+      normalizeMarginRecord({
+        id: "margin-1",
+        writing_id: VALID_UUID,
+        anchor_start: 0,
+        anchor_end: 5,
+        anchor_text: "Hello",
+        note: "Legacy note",
+        shared: true,
+        shared_at: null,
+        created_at: "2026-05-28T00:00:00.000Z",
+        updated_at: "2026-05-28T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      reader_id: null,
+      text: "Legacy note",
     })
   })
 
@@ -419,7 +448,7 @@ describe("legacy margins schema compatibility", () => {
       }),
     }
 
-    const margins = await syncMarginsFromBodyJson(supabase, {
+    const margins = await syncMarginsFromBodyJson(supabase as unknown as Parameters<typeof syncMarginsFromBodyJson>[0], {
       bodyJson: {
         type: "doc",
         content: [

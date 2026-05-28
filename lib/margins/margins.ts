@@ -7,6 +7,7 @@
 
 import { z } from "zod"
 import type { JSONContent } from "@tiptap/core"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { extractWritingAnnotationNodes, type MarkdownAnnotation } from "@/lib/editor/footnote-extension"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ export const shareMarginsBatchSchema = z.object({
 export const marginRecordSchema = z.object({
   id: z.string().uuid(),
   writing_id: z.string().uuid(),
-  reader_id: z.string().uuid(),
+  reader_id: z.string().uuid().nullable().optional(),
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(0),
   anchor_text: z.string(),
@@ -55,6 +56,8 @@ export const marginRecordSchema = z.object({
 })
 
 export type MarginRecord = z.infer<typeof marginRecordSchema>
+
+type MarginsSupabaseClient = Pick<SupabaseClient, "from">
 
 type MarginLegacyRow = {
   id: string
@@ -194,6 +197,10 @@ export function sortMarginsByPosition<T extends { anchor_start: number }>(margin
 export function isLegacyMarginsSchemaError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
 
+  const code =
+    "code" in error && typeof error.code === "string"
+      ? error.code
+      : null
   const message =
     "message" in error && typeof error.message === "string"
       ? error.message.toLowerCase()
@@ -203,11 +210,22 @@ export function isLegacyMarginsSchemaError(error: unknown): boolean {
       ? error.details.toLowerCase()
       : ""
   const combined = `${message} ${details}`
-
-  return (
-    combined.includes("margins") &&
-    ["type", "text", "archived", "resolved"].some((column) => combined.includes(column))
+  const missingLegacyColumns = ["type", "text", "archived", "resolved"]
+  const mentionsMargins = combined.includes("margins")
+  const mentionsMissingColumn = /(column|schema cache|could not find)/.test(combined)
+  const mentionsLegacyColumn = missingLegacyColumns.some((column) =>
+    combined.includes(`"${column}"`) ||
+    combined.includes(`'${column}'`) ||
+    combined.includes(`.${column}`) ||
+    combined.includes(` ${column} `) ||
+    combined.endsWith(` ${column}`),
   )
+
+  if (!mentionsMargins || !mentionsMissingColumn || !mentionsLegacyColumn) {
+    return false
+  }
+
+  return code == null || code === "42703" || code.startsWith("PGRST")
 }
 
 export function normalizeMarginRecord(row: MarginRuntimeRow): MarginRecord {
@@ -216,7 +234,7 @@ export function normalizeMarginRecord(row: MarginRuntimeRow): MarginRecord {
   return {
     id: row.id,
     writing_id: row.writing_id,
-    reader_id: row.reader_id ?? "",
+    reader_id: row.reader_id ?? null,
     anchor_start: row.anchor_start,
     anchor_end: row.anchor_end,
     anchor_text: row.anchor_text,
@@ -231,8 +249,7 @@ export function normalizeMarginRecord(row: MarginRuntimeRow): MarginRecord {
 }
 
 async function selectOwnedMargins(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   writingId: string,
   readerId: string,
 ) {
@@ -266,8 +283,7 @@ async function selectOwnedMargins(
 }
 
 async function selectAccessibleMargins(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   writingId: string,
 ) {
   const modern = await supabase
@@ -298,8 +314,7 @@ async function selectAccessibleMargins(
 }
 
 export async function getOwnedMargins(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   writingId: string,
   readerId: string,
 ): Promise<MarginRecord[]> {
@@ -308,8 +323,7 @@ export async function getOwnedMargins(
 }
 
 export async function getAccessibleMargins(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   writingId: string,
 ): Promise<MarginRecord[]> {
   const rows = await selectAccessibleMargins(supabase, writingId)
@@ -317,8 +331,7 @@ export async function getAccessibleMargins(
 }
 
 export async function getPreviewSharedMargins(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   writingId: string,
 ) {
   const modern = await supabase
@@ -388,8 +401,7 @@ export const buildMarginSyncRows = (
     }))
 
 export async function syncMarginsFromBodyJson(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   {
     bodyJson,
     writingId,
