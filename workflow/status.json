@@ -45,6 +45,16 @@
   },
   "built": [
     {
+      "what": "Gate corrections hydration by writing lifecycle. Added shouldAttemptRemoteHydration guard in lib/corrections/persistence.ts that reads localDB before attempting remote hydration. local-only and syncing writings return [] immediately without a remote call. server-confirmed writings hydrate as before. API route differentiated 404 (writing not found) from 403 (ownership denied). New persistence-lifecycle.test.ts covers all four lifecycle states. Fixed pre-existing TypeScript narrowing errors in ode-198-contract-evidence.test.ts.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-199",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-199/make-corrections-hydration-lifecycle-aware-for-local-only-and-pending",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/192",
+      "commit": "cea0804",
+      "date": "2026-05-28",
+      "notes": "Two-round review: R1 rejected for missing perf trace and missing Playwright/browser evidence. R2 approved after trace attached (14 pass 0 warn 1 skip, keydown_p95=12.06ms, input_p95=7.17ms, interaction_latency_p95=33.33ms), OPS_PERF_TRACE_PATH delivery gate PASS, Playwright write-blank-lifecycle PASS + write-new-first-paste PASS, network capture showing 0 false 403s during blank draft flow. Architecture Contract: COMPLIANT — lifecycle gate at persistence layer (Application), not UI. P3: 404/403 split reveals resource existence to authenticated users (negligible risk with UUID v4). Score: 9.75/10."
+    },
+    {
       "what": "Reconcile blank draft version contract. Aligns DocumentService and SyncService contracts with blank draft lifecycle (version tracking, local-first commit boundary). Fixes version number propagation on new blank drafts.",
       "phase": "Fase 4 — Shared Core Multi-Runtime",
       "issue": "ODE-198",
