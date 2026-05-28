@@ -9,6 +9,7 @@ const DEFAULT_STDOUT_PATH = "artifacts/phase4/phase4-invariants.log";
 
 const SUITES = [
   "tests/fase4-invariants.test.ts",
+  "tests/annotation-document.test.ts",
   "tests/reading-regression.test.tsx",
   "tests/document-service.test.ts",
   "tests/editor-write-path.test.tsx",
@@ -21,6 +22,8 @@ const SUITES = [
   "tests/test-link.test.ts",
   "tests/service-contracts.test.ts",
 ];
+
+const PLAYWRIGHT_SUITES = ["tests/playwright/fase4-closure.e2e.ts"];
 
 const MANUAL_QA_FLOWS = [
   "write/save/close/reopen in browser",
@@ -73,14 +76,20 @@ function ensureParent(path) {
 
 function main() {
   const options = parseArgs(process.argv);
-  const command = ["vitest", "run", ...SUITES];
+  const vitestCommand = ["vitest", "run", ...SUITES];
+  const playwrightCommand = ["playwright", "test", ...PLAYWRIGHT_SUITES];
 
   let stdout = "";
   try {
-    stdout = execFileSync("npx", command, {
+    const vitestStdout = execFileSync("npx", vitestCommand, {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
+    const playwrightStdout = execFileSync("npx", playwrightCommand, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    stdout = `${vitestStdout.trim()}\n\n${playwrightStdout.trim()}`.trim();
   } catch (error) {
     const failureStdout = `${error.stdout ?? ""}${error.stderr ?? ""}`.trim();
     ensureParent(options.stdoutPath);
@@ -95,10 +104,12 @@ function main() {
     generated_at_utc: new Date().toISOString(),
     suite: "phase4-invariants",
     status: "pass",
-    command: `npx ${command.join(" ")}`,
+    commands: [`npx ${vitestCommand.join(" ")}`, `npx ${playwrightCommand.join(" ")}`],
     suites: SUITES,
+    playwright_suites: PLAYWRIGHT_SUITES,
     categories: {
       canonical_document_contract: [
+        "tests/annotation-document.test.ts",
         "tests/markdown-roundtrip.test.ts",
         "tests/reading-regression.test.tsx",
       ],
@@ -116,6 +127,7 @@ function main() {
         "tests/test-link-access.test.ts",
         "tests/service-contracts.test.ts",
       ],
+      web_closure_path: ["tests/playwright/fase4-closure.e2e.ts"],
     },
     manual_qa_required: MANUAL_QA_FLOWS,
     stdout_path: options.stdoutPath,
