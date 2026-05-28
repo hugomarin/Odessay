@@ -117,6 +117,46 @@ describe("webAIService", () => {
       },
     })
   })
+
+  it("hydrates correction blocks through the service envelope without leaking route details", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: [
+              {
+                id: "persisted-1",
+                writingId: "writing-1",
+                blockId: "block-1",
+                blockHash: "hash-1",
+                suggestions: [],
+                model: "gpt-test",
+                createdAt: "2026-05-27T00:00:00.000Z",
+                latencyMs: 120,
+                promptTokens: 11,
+                completionTokens: 7,
+                syncedAt: "2026-05-27T00:00:01.000Z",
+              },
+            ],
+            error: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    )
+
+    const result = await webAIService.hydrateCorrectionBlocks("writing-1")
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: "persisted-1",
+        writingId: "writing-1",
+        blockId: "block-1",
+      }),
+    ])
+  })
 })
 
 describe("webAuthService", () => {
@@ -269,6 +309,20 @@ describe("webAuthService", () => {
       reason: "current",
       reservedUntil: null,
       username: "writer",
+    })
+  })
+
+  it("signs out through the Supabase browser adapter", async () => {
+    supabaseAuthMock.signOut.mockResolvedValue({
+      error: null,
+    })
+
+    const result = await webAuthService.signOut()
+
+    expect(supabaseAuthMock.signOut).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({
+      data: null,
+      error: null,
     })
   })
 })

@@ -224,6 +224,40 @@ describe("webDocumentService", () => {
     })
   })
 
+  describe("exportWriting", () => {
+    it("normalizes export artifacts through the document-service boundary", async () => {
+      await localDB.writings.save(makeLocalWriting({ id: "writing-export", title: "Export Me" }))
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() =>
+          Promise.resolve(
+            new Response(new Uint8Array([1, 2, 3, 4]), {
+              status: 200,
+              headers: {
+                "Content-Type": "application/pdf",
+              },
+            }),
+          ),
+        ),
+      )
+
+      const result = await webDocumentService.exportWriting({
+        writingId: "writing-export",
+        format: "pdf",
+      })
+
+      expect(result.error).toBeNull()
+      expect(result.data).toEqual({
+        writingId: "writing-export",
+        format: "pdf",
+        fileName: "Export Me.pdf",
+        mimeType: "application/pdf",
+        bytes: new Uint8Array([1, 2, 3, 4]),
+      })
+    })
+  })
+
   describe("deleteWriting", () => {
     it("soft-deletes a writing and enqueues sync", async () => {
       const local = makeLocalWriting()

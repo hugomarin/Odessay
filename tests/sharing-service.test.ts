@@ -78,4 +78,98 @@ describe("web sharing service", () => {
       retryable: false,
     })
   })
+
+  it("rotates preview links through the browser sharing boundary", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            active: true,
+            token: "preview-token",
+            link: "https://app.odessay.com/preview/preview-token",
+            createdAt: "2026-05-27T00:00:00.000Z",
+          },
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    )
+
+    const sharingService = createBrowserSharingService(fetchMock as typeof fetch)
+    const result = await sharingService.rotatePreviewLink("writing-1")
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/writings/writing-1/share-test-link", { method: "POST" })
+    expect(result.data).toEqual({
+      active: true,
+      token: "preview-token",
+      link: "https://app.odessay.com/preview/preview-token",
+      createdAt: "2026-05-27T00:00:00.000Z",
+    })
+  })
+
+  it("revokes preview links through the browser sharing boundary", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            writingId: "writing-1",
+            revoked: true,
+          },
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    )
+
+    const sharingService = createBrowserSharingService(fetchMock as typeof fetch)
+    const result = await sharingService.revokePreviewLink("writing-1")
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/writings/writing-1/share-test-link", { method: "DELETE" })
+    expect(result.data).toEqual({
+      writingId: "writing-1",
+      revoked: true,
+    })
+  })
+
+  it("loads incoming shared writings through the stable shared list payload", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: "writing-1",
+              title: "Shared writing",
+              slug: "shared-writing",
+              excerpt: "Body excerpt",
+              updatedAt: "2026-05-27T00:00:00.000Z",
+              author: {
+                username: "hugo",
+                displayName: "Hugo Marín",
+              },
+            },
+          ],
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    )
+
+    const sharingService = createBrowserSharingService(fetchMock as typeof fetch)
+    const result = await sharingService.listIncomingShares()
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/shared/writings", { cache: "no-store" })
+    expect(result.data).toEqual([
+      {
+        id: "writing-1",
+        title: "Shared writing",
+        slug: "shared-writing",
+        excerpt: "Body excerpt",
+        updatedAt: "2026-05-27T00:00:00.000Z",
+        author: {
+          username: "hugo",
+          displayName: "Hugo Marín",
+        },
+      },
+    ])
+  })
 })
