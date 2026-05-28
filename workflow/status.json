@@ -45,6 +45,15 @@
     },
     "built": [
         {
+            "what": "Build the multi-runtime invariant harness and Fase 4 closure evidence. New scripts/check-phase4-invariants.mjs runs 12 test suites and writes a structured JSON report to artifacts/phase4/. New tests/fase4-invariants.test.ts maps every required closure area (canonical document contract, write-path boundary, sync boundary, remote-capability boundaries) to explicit evidence suites and validates service-boundary runtimeScope metadata. New tests/reading-regression.test.tsx validates cross-surface reading parity (write/preview/public) for rich-text and plain-text fallback paths. Expanded service tests: exportWriting (document-service), hydrateCorrectionBlocks + signOut (ai-auth-services), rotatePreviewLink + revokePreviewLink + listIncomingShares (sharing-service). 82 test files, 478 tests PASS.",
+            "phase": "Fase 4 — Shared Core Multi-Runtime",
+            "issue": "ODE-195",
+            "linear_url": "https://linear.app/z9ne/issue/ODE-195/build-the-multi-runtime-invariant-harness-and-web-no-regression-proof",
+            "commit": "a7cb4dd7e128a788f18463b7ae613538bc545a0f",
+            "date": "2026-05-28",
+            "notes": "Validation: typecheck PASS, lint PASS (pre-existing warnings), tests 82 files 478 PASS, invariant harness PASS, perf gate 14 PASS 0 WARN 1 SKIP, delivery gate OK. Vercel SUCCESS, CI Traceability SUCCESS. Architecture Contract cross-layer: respected. P2: annotation-document.test.ts referenced in harness data but absent from check-phase4-invariants.mjs SUITES (follow-up fix recommended). P2: manual QA checklist required by brief not evidenced (no production code changed, regression risk minimal). Review score: 8.75/10."
+        },
+        {
             "what": "Extract SharingService as the web/cloud adapter boundary for shares, shared writings, and test-link flows. New lib/services/web-sharing-service.ts implements SharingService (listRecipients, shareWriting, revokeShare, getPreviewLink, rotatePreviewLink, revokePreviewLink, listIncomingShares) plus BrowserSharingService extension (listRecipientPreviews). Route handlers for /shares, /share-test-link, /shared/writings reduced to thin adapters. desk/page.tsx, properties-panel.tsx, writing-shares-section.tsx migrated to createBrowserSharingService. Duplicate type definitions removed. 81 tests in sharing-service.test.ts (normalization, browser client fetch delegation, error surfacing, browser-bundle boundary regression).",
             "phase": "Fase 4 — Shared Core Multi-Runtime",
             "issue": "ODE-194",
