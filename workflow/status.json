@@ -23,25 +23,21 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 4 — Shared Core Multi-Runtime",
-    "linear_project": "https://linear.app/z9ne/project/fase-4-shared-core-multi-runtime-5f302db13185",
+    "name": "Fase 5 — Convergencia Web sobre el Core Compartido",
+    "linear_project": "https://linear.app/z9ne/project/fase-5-convergencia-web-sobre-el-core-compartido-348ad05072bb",
     "roadmap_ref": "workflow/define/roadmap.md"
   },
   "phase_plan": {
-    "phase": "Fase 4 — Shared Core Multi-Runtime",
+    "phase": "Fase 5 — Convergencia Web sobre el Core Compartido",
     "source_of_truth": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-4.md",
-    "linear_project": "https://linear.app/z9ne/project/fase-4-shared-core-multi-runtime-5f302db13185",
+    "definition_of_done": "workflow/define/dod-fase-5.md",
+    "linear_project": "https://linear.app/z9ne/project/fase-5-convergencia-web-sobre-el-core-compartido-348ad05072bb",
     "linear_issues": [
-      "ODE-189",
-      "ODE-190",
-      "ODE-191",
-      "ODE-192",
-      "ODE-193",
-      "ODE-194",
-      "ODE-195"
+      "ODE-204",
+      "ODE-205",
+      "ODE-206"
     ],
-    "notes": "Fase 3 se considera cerrada y el roadmap fue replanteado para priorizar la arquitectura multi-runtime. La fase activa se enfoca en shared core, contratos de servicio, contrato documental `.md` y desacoplamiento del runtime web. Writing Harness, correspondences e iniciativas de distribución salen del critical path hasta estabilizar desktop + web sobre el mismo core. Existe DoD en `workflow/define/dod-fase-4.md`. `wf-define Fase 4` ya creó el proyecto nuevo de Linear y el breakdown táctico inicial de issues: ODE-189 (service contracts), ODE-190 (DocumentService), ODE-191 (SyncService), ODE-192 (document contract), ODE-193 (AI/Auth), ODE-194 (Sharing), ODE-195 (invariant harness)."
+    "notes": "Fase 4 cerrada: ODE-189–ODE-195 (plan original) + ODE-198–ODE-203 (remediación y cierre documental). ODE-192 y ODE-203 ambos en built. Contratos operativos C1–C5 committed en ODE-203 (PR #196). Fase 5 se enfoca en convergencia del runtime web al core compartido, explicitación de adapters, compliance del flujo AI y harness de cierre. Issues: ODE-204 (verificación cierre Fase 4 + transición), ODE-205 (corrections/AI compliance), ODE-206 (convergence harness y evidencia DoD). DoD en workflow/define/dod-fase-5.md. wf-define ejecutado 2026-05-28."
   },
   "built": [
     {
