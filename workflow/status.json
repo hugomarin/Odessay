@@ -45,6 +45,16 @@
   },
   "built": [
     {
+      "what": "Reconcile blank draft version contract. Aligns DocumentService and SyncService contracts with blank draft lifecycle (version tracking, local-first commit boundary). Fixes version number propagation on new blank drafts.",
+      "phase": "Fase 4 — Shared Core Multi-Runtime",
+      "issue": "ODE-198",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-198",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/191",
+      "commit": "2a66b2b68520fc6c5af5e665635ba5c3428d5060",
+      "date": "2026-05-28",
+      "notes": "Retroactively added — PR #191 merged without status.json entry. review_rejected was logged before final approval and merge."
+    },
+    {
       "what": "Align margins adapters with deployed schema. Added backward-compatible legacy fallback in lib/margins/margins.ts: isLegacyMarginsSchemaError uses Postgres error code 42703 + PGRST + column pattern matching; supabase: any replaced with typed MarginsSupabaseClient; reader_id normalized to null in preview path. Added getAccessibleMargins/getOwnedMargins/getPreviewSharedMargins helpers with modern/legacy query fallback. Migration 20260528153000 adds type/text/archived/resolved columns + highlight to type_check + 3 indexes. odessay-modelo-datos.md updated. 83 files, 483 tests PASS.",
       "phase": "Fase 4 — Shared Core Multi-Runtime",
       "issue": "ODE-200",
