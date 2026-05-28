@@ -112,6 +112,7 @@ export const DOCUMENT_SERVICE_CONTRACT = {
     "DocumentService names writing operations in product terms and never in route or storage terms.",
     "The contract may carry richText and markdown side by side, but it cannot declare either runtime transport as the source of truth.",
     "Adapters can implement save/list/export differently per runtime, but they must preserve the same WritingRecord shape and ServiceResponse envelope.",
+    "A newly created writing starts at version 1 so the first remote persistence is valid under the server adapter contract (version >= 1).",
   ],
   errorEnvelope: SERVICE_RESPONSE_ENVELOPE,
   operations: [

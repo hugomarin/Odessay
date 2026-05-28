@@ -283,7 +283,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [bodyText, setBodyText] = useState("")
   const [markdownSelectionState, setMarkdownSelectionState] = useState<MarkdownSelectionSnapshot | null>(null)
   const [syncStatus, setSyncStatus] = useState<EditorSaveState>("saved")
-  const [version, setVersion] = useState(0)
+  const [version, setVersion] = useState(1)
   const [richFootnoteRevision, setRichFootnoteRevision] = useState(0)
   const [createdAt, setCreatedAt] = useState<string | null>(null)
   const [writingSlug, setWritingSlug] = useState<string | null>(null)
@@ -993,7 +993,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             visibility: "private",
             parentId: null,
             correspondenceId: null,
-            version: 0,
+            version: 1,
             deletedAt: null,
             createdAt: nowIso,
             updatedAt: nowIso,
@@ -1020,7 +1020,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setTitle(nextTitle)
       setHasExplicitTitle(false)
       setBodyText("")
-      setVersion(0)
+      setVersion(1)
       createdAtRef.current = nowIso
       setCreatedAt(nowIso)
       setWritingSlug(null)
@@ -1030,7 +1030,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setSyncStatus("saved-local")
       titleRef.current = nextTitle
       hasExplicitTitleRef.current = false
-      versionRef.current = 0
+      versionRef.current = 1
       writingSlugRef.current = null
       statusRef.current = "draft"
       visibilityRef.current = "private"
@@ -1080,7 +1080,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setTitle(UNTITLED_WRITING_TITLE)
       setHasExplicitTitle(false)
       setBodyText("")
-      setVersion(0)
+      setVersion(1)
       setCreatedAt(null)
       setWritingSlug(null)
       setLifecycle("local-only")
@@ -1089,7 +1089,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       applyCorrectionSuggestionUpdate(() => [], { immediate: true })
       titleRef.current = UNTITLED_WRITING_TITLE
       hasExplicitTitleRef.current = false
-      versionRef.current = 0
+      versionRef.current = 1
       createdAtRef.current = null
       writingSlugRef.current = null
       lifecycleRef.current = "local-only"
@@ -3558,7 +3558,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       visibility: "private",
       parentId: null,
       correspondenceId: null,
-      version: 0,
+      version: 1,
       deletedAt: null,
       createdAt: nowIso,
       updatedAt: nowIso,

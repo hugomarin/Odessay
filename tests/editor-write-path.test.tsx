@@ -141,7 +141,7 @@ describe("editor write-path — DocumentService integration", () => {
         visibility: "private",
         parentId: null,
         correspondenceId: null,
-        version: 0,
+        version: 1,
         deletedAt: null,
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
@@ -153,7 +153,7 @@ describe("editor write-path — DocumentService integration", () => {
     const openResult = await webDocumentService.openWriting(draftId)
     expect(openResult.error).toBeNull()
     expect(openResult.data?.id).toBe(draftId)
-    expect(openResult.data?.version).toBe(0)
+    expect(openResult.data?.version).toBe(1)
     // WritingRecord intentionally does not carry lifecycle — it is adapter-local state
   })
 })
