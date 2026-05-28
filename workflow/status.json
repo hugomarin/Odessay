@@ -41,6 +41,16 @@
   },
   "built": [
     {
+      "what": "Build Fase 5 convergence harness: service-contract matrix (5 principal services → C1–C5), adapter boundary compliance (lib/services/contracts/ verified clean of Next/Supabase/window/fs via static import analysis), and DoD evidence for all 8 blocks (6 PASS, 2 not-applicable with justification). New scripts/check-phase5-invariants.mjs, tests/fase5-invariants.test.ts, tests/web-adapter-boundary.test.ts, artifacts/phase5/phase5-report.json. 521 tests PASS.",
+      "phase": "Fase 5 — Convergencia Web sobre el Core Compartido",
+      "issue": "ODE-206",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-206/build-fase-5-convergence-harness-service-contract-matrix-adapter",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/198",
+      "commit": "f5e1bd5",
+      "date": "2026-05-28",
+      "notes": "Score: 9.5/10. P3: AIService mapped to C1/odessay-sync.md — odessay-ai-writing-assist.md would be more precise canonical doc for future audits. P3: forbiddenGlobalPatterns uses raw-string check (not AST). All gates PASS: typecheck PASS, lint PASS, 521 tests PASS, ops:delivery:gate PASS, Vercel SUCCESS, CI Traceability SUCCESS. Performance Contract: not required (valid justification). Architecture Contract: COMPLIANT — Application/Test layer, web+shared-core scope. Clean first-round approval. Gate de cierre de Fase 5."
+    },
+    {
       "what": "Add lifecycle guards to webAIService.hydrateCorrectionBlocks() and suggestTitle(). Passes writingId through RenameWritingModal and its 3 call sites (editor-shell, desk, collections). checkWritingLifecycleForRemoteAI helper blocks remote AI calls for local-only and syncing writings. 6 new lifecycle guard tests added in ai-auth-services.test.ts covering local-only, syncing, and server-confirmed states for both methods. Defense-in-depth with pre-existing persistence.ts guard from ODE-199.",
       "phase": "Fase 5 — Convergencia Web sobre el Core Compartido",
       "issue": "ODE-205",
