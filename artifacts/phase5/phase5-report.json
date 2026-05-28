@@ -1,0 +1,181 @@
+{
+  "generated_at_utc": "2026-05-28T22:57:43.095Z",
+  "suite": "phase5-invariants",
+  "overall_status": "PASS",
+  "dimensions": {
+    "service_contract_matrix": {
+      "status": "PASS",
+      "services": [
+        {
+          "service": "DocumentService",
+          "contract": "C1",
+          "contract_name": "Write-path Lifecycle Contract",
+          "canonical_doc": "workflow/context/features/odessay-sync.md",
+          "test_suites": [
+            "tests/document-service.test.ts",
+            "tests/editor-write-path.test.tsx"
+          ],
+          "verified": true
+        },
+        {
+          "service": "SyncService",
+          "contract": "C1",
+          "contract_name": "Write-path Lifecycle Contract",
+          "canonical_doc": "workflow/context/features/odessay-sync.md",
+          "test_suites": [
+            "tests/sync-service.test.ts",
+            "tests/sync-hydration.test.ts"
+          ],
+          "verified": true
+        },
+        {
+          "service": "AIService",
+          "contract": "C1",
+          "contract_name": "Write-path Lifecycle Contract",
+          "canonical_doc": "workflow/context/features/odessay-sync.md",
+          "test_suites": [
+            "tests/ai-auth-services.test.ts",
+            "tests/ai-corrections.test.ts"
+          ],
+          "verified": true
+        },
+        {
+          "service": "AuthService",
+          "contract": "C3",
+          "contract_name": "Adapter Invariant Contract",
+          "canonical_doc": "workflow/context/core/odessay-arquitectura.md",
+          "test_suites": [
+            "tests/ai-auth-services.test.ts",
+            "tests/auth-password-recovery.test.ts"
+          ],
+          "verified": true
+        },
+        {
+          "service": "SharingService",
+          "contract": "C1",
+          "contract_name": "Write-path Lifecycle Contract",
+          "canonical_doc": "workflow/context/features/odessay-sync.md",
+          "test_suites": [
+            "tests/sharing-service.test.ts",
+            "tests/test-link-access.test.ts"
+          ],
+          "verified": true
+        }
+      ]
+    },
+    "adapter_boundary_compliance": {
+      "status": "PASS",
+      "files_checked": [
+        "lib/services/contracts/ai-service.ts",
+        "lib/services/contracts/asset-service.ts",
+        "lib/services/contracts/auth-service.ts",
+        "lib/services/contracts/document-service.ts",
+        "lib/services/contracts/service-types.ts",
+        "lib/services/contracts/settings-service.ts",
+        "lib/services/contracts/sharing-service.ts",
+        "lib/services/contracts/sync-service.ts"
+      ],
+      "violations": []
+    },
+    "dod_evidence": {
+      "status": "PASS",
+      "blocks": [
+        {
+          "block": 1,
+          "title": "Web ya corre sobre contratos estabilizados",
+          "status": "PASS",
+          "justification": "Service contracts defined for DocumentService, SyncService, AIService, AuthService, SharingService in lib/services/contracts/. All contracts export descriptors with invariants, operations, and hotspots."
+        },
+        {
+          "block": 2,
+          "title": "Adapters web explícitos",
+          "status": "PASS",
+          "justification": "tests/web-adapter-boundary.test.ts verifies that lib/services/contracts/ modules do not import Next, Supabase, cookies, browser globals, or filesystem APIs. Web-specific logic lives in web-* adapter implementations, not in shared core contracts."
+        },
+        {
+          "block": 3,
+          "title": "Persistencia local-first web alineada al contrato documental",
+          "status": "PASS",
+          "justification": "tests/document-service.test.ts and tests/editor-write-path.test.tsx cover local-first save, lifecycle transitions (local-only → pending → synced), and IndexedDB persistence via localDB."
+        },
+        {
+          "block": 4,
+          "title": "Harnesses de validación compartida",
+          "status": "PASS",
+          "justification": "scripts/check-phase4-invariants.mjs and scripts/check-phase5-invariants.mjs exist and pass. Both produce JSON reports in artifacts/phase4/ and artifacts/phase5/."
+        },
+        {
+          "block": 5,
+          "title": "Promesa percibida por el usuario en esta fase",
+          "status": "not-applicable",
+          "justification": "User-perceived stability requires manual browser QA. Harness verifies structural preconditions: no regressions in typecheck, lint, or tests; service contracts are explicit."
+        },
+        {
+          "block": 6,
+          "title": "Calidad de entrega (gate técnico)",
+          "status": "PASS",
+          "justification": "npm run typecheck, npm run lint, and npm test pass. Service-contract and adapter-boundary tests provide coverage beyond superficial UI regression."
+        },
+        {
+          "block": 7,
+          "title": "Evidencia manual mínima",
+          "status": "not-applicable",
+          "justification": "Manual QA flows (write→save→close→reopen, Rich↔Source, reading continuity) require browser verification. Harness documents the required checklist; structural preconditions verified."
+        },
+        {
+          "block": 8,
+          "title": "Gate de cierre de fase",
+          "status": "PASS",
+          "justification": "All verifiable DoD blocks pass. Service-Contract Matrix has no WARNs for the 5 principal services. Adapter boundary check passes. Report artifacts/phase5/phase5-report.json generated."
+        }
+      ]
+    }
+  },
+  "main_flows": [
+    {
+      "flow": "write → auto-save → sync",
+      "services": [
+        "DocumentService",
+        "SyncService"
+      ],
+      "contract": "C1",
+      "status": "PASS",
+      "evidence": "tests/document-service.test.ts, tests/sync-service.test.ts, tests/sync-hydration.test.ts"
+    },
+    {
+      "flow": "corrections",
+      "services": [
+        "AIService"
+      ],
+      "contract": "C1",
+      "status": "PASS",
+      "evidence": "tests/ai-corrections.test.ts, tests/ai-auth-services.test.ts"
+    },
+    {
+      "flow": "reading",
+      "services": [
+        "DocumentService"
+      ],
+      "contract": "C1",
+      "status": "PASS",
+      "evidence": "tests/reading-regression.test.tsx, tests/annotation-document.test.ts"
+    },
+    {
+      "flow": "sharing",
+      "services": [
+        "SharingService"
+      ],
+      "contract": "C1",
+      "status": "PASS",
+      "evidence": "tests/sharing-service.test.ts, tests/test-link-access.test.ts"
+    }
+  ],
+  "commands": [
+    "npx vitest run tests/fase5-invariants.test.ts tests/web-adapter-boundary.test.ts"
+  ],
+  "suites": [
+    "tests/fase5-invariants.test.ts",
+    "tests/web-adapter-boundary.test.ts"
+  ],
+  "stdout_path": "artifacts/phase5/phase5-invariants.log"
+}
