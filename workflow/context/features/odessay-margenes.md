@@ -123,6 +123,36 @@ Los márgenes compartidos no se convierten en un writing independiente en v1 —
 
 ---
 
+## Contrato de sincronización de márgenes
+
+La relación entre nodos `annotationReference` en `body_json` y la tabla materializada `margins` debe ser explícita y verificable.
+
+### Invariantes
+
+1. **`body_json` es la fuente de verdad del contenido anotado.** Los nodos `annotationReference` en el documento TipTap definen qué anotaciones existen, dónde están y de qué tipo son.
+2. **`margins` es un índice materializado.** Su único propósito es permitir listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
+3. **Sincronización por `save`.** Cada `save` del writing extrae nodos `annotationReference` desde `body_json`, hace upsert por `id` en `margins`, y elimina las filas cuyo `id` ya no existe en el documento.
+4. **Transición de schema.** Durante una transición de schema de `margins`, el adapter debe soportar tanto el schema legacy (`note`) como el schema moderno (`type`, `text`, `archived`, `resolved`). El código debe detectar qué schema está activo y adaptar la query sin fallar.
+
+### Reglas de schema transition
+
+| Escenario | Comportamiento esperado |
+|---|---|
+| Schema deployado tiene `type`, `text` | Usar columnas modernas. |
+| Schema deployado no tiene `type`, `text` | Fallback a `note` como campo canónico; loguear la detección de schema legacy. |
+| Columnas nuevas aparecen en prod | El código ya las usa (forward compatibility). |
+| Columnas legacy desaparecen de prod | Remover fallback después de confirmar que todos los entornos están migrados. |
+
+### Checklist de margins para BUILD
+
+- [ ] ¿El código de sincronización lee desde `body_json` y escribe en `margins`, nunca al revés?
+- [ ] ¿Existe fallback para schema legacy si la migración aún no corre?
+- [ ] ¿Los tests cubren ambos schemas (moderno y legacy)?
+
+**Referencia histórica:** ODE-200 (margins adapters vs deployed schema) ilustra el costo de omitir este contrato.
+
+---
+
 ## Relación con el AI editor
 
 El AI editor tiene acceso a los márgenes del autor en el contexto de escritura de una respuesta. Puede observar: *"Marcaste tres pasajes sobre la idea de distancia. Tu respuesta aún no los ha integrado."*

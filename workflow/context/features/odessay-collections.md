@@ -166,6 +166,27 @@ Schema completo en `workflow/context/core/odessay-modelo-datos.md`.
 
 ---
 
+## Contrato de asignación de collections
+
+La asignación de writings a collections es una operación de adapter que depende del schema efectivo de la tabla `collections`. Este contrato gobierna esa dependencia.
+
+### Invariantes
+
+1. **Validación de schema.** El RPC `replace_writing_collections` (o cualquier query SQL que opere sobre `collections`) solo puede referenciar columnas que existen en el schema deployado.
+2. **No se asumen columnas de soft-delete.** La tabla `collections` no tiene `deleted_at` en el schema efectivo actual. Cualquier query que filtre por `deleted_at IS NULL` fallará.
+3. **Ownership verificado.** La asignación verifica que el usuario autenticado es owner de la collection (`owner_id = auth.uid()`).
+4. **PK compuesta.** `writing_collections` usa `(writing_id, collection_id)` como clave primaria. La asignación debe manejar duplicados con idempotencia (upsert o delete+insert).
+
+### Reglas para RPCs nuevos
+
+- [ ] ¿La query fue ejecutada contra el schema deployado (staging o prod)?
+- [ ] ¿No referencia columnas que no existen en el schema efectivo?
+- [ ] ¿Maneja el caso de lista vacía (desasignar todas las collections)?
+
+**Referencia histórica:** ODE-201 (replace_writing_collections RPC vs live schema) ilustra el costo de omitir este contrato.
+
+---
+
 ## Lo que este doc NO cubre
 
 - Panel Properties del editor (donde también se asignan collections) → `workflow/context/features/odessay-editor.md`

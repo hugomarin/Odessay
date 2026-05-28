@@ -271,6 +271,32 @@ El `id` del usuario autenticado (`auth.uid()`) se usa en todas las RLS policies 
 
 ---
 
+## Contrato de schema efectivo
+
+Este documento describe el schema **objetivo** de Odessay. El schema **efectivo** de producción puede divergir durante una transición. Las reglas siguientes gobiernan esa divergencia:
+
+### Reglas de transición de schema
+
+1. **Objetivo vs efectivo.** `odessay-modelo-datos.md` describe el schema deseado; no garantiza que el schema deployado coincida punto por punto.
+2. **Transición explícita.** Todo cambio de schema pasa por un estado de transición donde código y schema deployado coexisten con posible divergencia.
+3. **Forward compatibility.** El código debe soportar el schema futuro (no fallar cuando una columna nueva aparece).
+4. **Backward compatibility.** El código no debe romper el schema actual (no asumir que una columna existe hasta que la migración está deployada).
+5. **Validación de RPC.** Un RPC, trigger o función SQL no está listo para producción hasta que se valida contra el schema efectivo. No basta con validar contra el schema objetivo documentado.
+
+### Checklist de transición para BUILD
+
+Antes de mergear un cambio que toque schema:
+
+- [ ] ¿La migración SQL ya fue aplicada al ambiente de staging/producción?
+- [ ] ¿El código tiene fallback para el schema anterior si la migración aún no corre?
+- [ ] ¿Los RPCs/triggers referencian solo columnas que existen en el schema deployado?
+- [ ] ¿Se actualizó este documento para reflejar el schema objetivo?
+- [ ] ¿Existe evidencia de que el schema deployado coincide con lo que el código espera?
+
+**Referencia histórica:** ODE-200 (margins schema transition) y ODE-201 (collections RPC vs live schema) ilustran el costo de omitir este checklist.
+
+---
+
 ## Índices
 
 - `profiles.username` — unique, lookup por URL

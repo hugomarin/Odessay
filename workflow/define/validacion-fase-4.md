@@ -155,7 +155,37 @@ Estos casos no deberían confiarse solo a Playwright.
 
 ---
 
-## 7) Recomendación práctica de ejecución
+## 7) Matriz de validación servicio-contrato
+
+Además de validar flujos de UI, Fase 4 requiere validar que cada servicio está gobernado por un contrato operativo explícito. Un flujo de UI que pasa no garantiza que el contrato subyacente sea reproducible.
+
+### Formato
+
+Para cada servicio validado, se debe poder responder:
+
+1. ¿Qué contrato operativo gobierna este servicio?
+2. ¿Dónde vive documentado ese contrato?
+3. ¿El código actual respeta el contrato sin reconstruirlo desde implementación?
+
+### Matriz mínima
+
+| Servicio | Contrato operativo | Documento canónico | Estado |
+|---|---|---|---|
+| `DocumentService.save()` | Write-path Lifecycle Contract (C1) | `workflow/context/features/odessay-sync.md` §Contrato de lifecycle operativo | Verificado por tests/document-service.test.ts |
+| `SyncService.enqueuePush()` | Write-path Lifecycle Contract (C1) | `workflow/context/features/odessay-sync.md` §Contrato de lifecycle operativo | Verificado por tests/sync-service.test.ts |
+| `AIService.hydrateCorrections()` | Write-path Lifecycle Contract (C1) | `workflow/context/features/odessay-sync.md` §Contrato de lifecycle operativo | Verificado por tests/ai-auth-services.test.ts |
+| Margins sync | Margins Synchronization Contract (C4) | `workflow/context/features/odessay-margenes.md` §Contrato de sincronización | Verificado por tests/margins-*.test.ts |
+| Collections assignment | Collections Assignment Contract (C5) | `workflow/context/features/odessay-collections.md` §Contrato de asignación | Verificado por tests/api/writings-collections-route.test.ts |
+| Export adapter | Adapter Invariant Contract (C3) | `workflow/context/core/odessay-arquitectura.md` §Invariantes de adapter | Verificado por tests/export.test.ts |
+| Todos los RPCs | Effective Schema Contract (C2) | `workflow/context/core/odessay-modelo-datos.md` §Contrato de schema efectivo | Verificado por review de SQL en PR |
+
+### Regla
+
+Si un servicio no tiene `contract_ref` en su metadata de test, el harness de invariantes emite `WARN`.
+
+---
+
+## 8) Recomendación práctica de ejecución
 
 ### Primero Playwright
 
