@@ -28,6 +28,9 @@ import {
   isShared,
   toggleShare,
   getSharedForToken,
+  syncMarginsFromBodyJson,
+  isLegacyMarginsSchemaError,
+  normalizeMarginRecord,
 } from "@/lib/margins/margins"
 
 const VALID_UUID = "550e8400-e29b-41d4-a716-446655440000"
@@ -318,5 +321,166 @@ describe("getSharedForToken", () => {
 
   it("returns empty array for empty margins", () => {
     expect(getSharedForToken([], "token")).toEqual([])
+  })
+})
+
+describe("legacy margins schema compatibility", () => {
+  it("detects missing modern margin columns as a legacy schema error", () => {
+    expect(
+      isLegacyMarginsSchemaError({
+        code: "42703",
+        message: 'column margins.type does not exist',
+        details: 'Could not find the type column on public.margins',
+      }),
+    ).toBe(true)
+    expect(
+      isLegacyMarginsSchemaError({
+        code: "42703",
+        message: "invalid input syntax for type text",
+        details: "input relation margins violated a cast",
+      }),
+    ).toBe(false)
+    expect(isLegacyMarginsSchemaError({ message: "permission denied" })).toBe(false)
+  })
+
+  it("normalizes a legacy row to the modern margin shape", () => {
+    expect(
+      normalizeMarginRecord({
+        id: "margin-1",
+        writing_id: VALID_UUID,
+        reader_id: VALID_UUID,
+        anchor_start: 0,
+        anchor_end: 5,
+        anchor_text: "Hello",
+        note: "Legacy note",
+        shared: true,
+        shared_at: null,
+        created_at: "2026-05-28T00:00:00.000Z",
+        updated_at: "2026-05-28T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      reader_id: VALID_UUID,
+      type: "personal",
+      text: "Legacy note",
+      note: "Legacy note",
+      archived: false,
+      resolved: false,
+    })
+  })
+
+  it("leaves reader_id null when preview rows do not include an owner", () => {
+    expect(
+      normalizeMarginRecord({
+        id: "margin-1",
+        writing_id: VALID_UUID,
+        anchor_start: 0,
+        anchor_end: 5,
+        anchor_text: "Hello",
+        note: "Legacy note",
+        shared: true,
+        shared_at: null,
+        created_at: "2026-05-28T00:00:00.000Z",
+        updated_at: "2026-05-28T00:00:00.000Z",
+      }),
+    ).toMatchObject({
+      reader_id: null,
+      text: "Legacy note",
+    })
+  })
+
+  it("falls back to legacy upsert/select during write-through sync", async () => {
+    const missingColumnsError = {
+      message: 'column margins.type does not exist',
+      details: 'Could not find the type column on public.margins',
+    }
+
+    const upsertCalls: unknown[] = []
+    const selectCalls: string[] = []
+
+    const supabase = {
+      from: () => ({
+        upsert: async (rows: unknown) => {
+          upsertCalls.push(rows)
+          return upsertCalls.length === 1
+            ? { error: missingColumnsError }
+            : { error: null }
+        },
+        delete: () => ({
+          eq: () => ({
+            eq: () => ({
+              not: async () => ({ error: null }),
+            }),
+          }),
+        }),
+        select: (query: string) => {
+          selectCalls.push(query)
+          return {
+            eq: () => ({
+              eq: () => ({
+                order: async () => {
+                  if (query.includes("type, text")) {
+                    return { data: null, error: missingColumnsError }
+                  }
+
+                  return {
+                    data: [
+                      {
+                        id: "margin-1",
+                        reader_id: VALID_UUID,
+                        writing_id: VALID_UUID,
+                        anchor_start: 0,
+                        anchor_end: 5,
+                        anchor_text: "Hello",
+                        note: "Legacy note",
+                        shared: false,
+                        shared_at: null,
+                        created_at: "2026-05-28T00:00:00.000Z",
+                        updated_at: "2026-05-28T00:00:00.000Z",
+                      },
+                    ],
+                    error: null,
+                  }
+                },
+              }),
+            }),
+          }
+        },
+      }),
+    }
+
+    const margins = await syncMarginsFromBodyJson(supabase as unknown as Parameters<typeof syncMarginsFromBodyJson>[0], {
+      bodyJson: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              { type: "text", text: "Hello", marks: [{ type: "highlight" }] },
+              {
+                type: "text",
+                text: "",
+              },
+              {
+                type: "annotationReference",
+                attrs: { id: "margin-1", type: "highlight", index: 1, text: "Legacy note" },
+              },
+            ],
+          },
+        ],
+      },
+      writingId: VALID_UUID,
+      readerId: VALID_UUID,
+    })
+
+    expect(upsertCalls).toHaveLength(2)
+    expect(selectCalls.some((query) => query.includes("type, text"))).toBe(true)
+    expect(margins).toEqual([
+      expect.objectContaining({
+        id: "margin-1",
+        type: "personal",
+        text: "Legacy note",
+        note: "Legacy note",
+      }),
+    ])
   })
 })

@@ -90,10 +90,14 @@ CREATE TABLE margins (
   anchor_end      int NOT NULL,
   anchor_text     text NOT NULL, -- el pasaje marcado (snapshot)
   -- Contenido
-  note            text,          -- anotación del lector (puede ser null = solo highlight)
+  type            text NOT NULL DEFAULT 'personal', -- personal | ai | collaborative | highlight
+  text            text NOT NULL DEFAULT '',         -- contenido canónico de la anotación
+  note            text,                             -- alias legacy mantenido por compatibilidad
   -- Estado
-  shared          boolean DEFAULT false,
+  shared          boolean NOT NULL DEFAULT false,
   shared_at       timestamptz,
+  archived        boolean NOT NULL DEFAULT false,
+  resolved        boolean NOT NULL DEFAULT false,
   -- Timestamps
   created_at      timestamptz DEFAULT now(),
   updated_at      timestamptz DEFAULT now()
@@ -111,6 +115,8 @@ CREATE TABLE margins (
 
 El `anchor_text` guarda un snapshot del pasaje marcado en el momento de la anotación. Esto protege contra cambios en el writing original — la referencia siempre apunta al texto correcto aunque el autor edite su writing después.
 
+`text` es el campo canónico del contrato actual del adapter web. `note` se mantiene como alias legacy durante la transición para no romper readers o escrituras contra esquemas que todavía no hayan absorbido la expansión completa de `margins`.
+
 La posición (`anchor_start`, `anchor_end`) se calcula sobre `body_text` (texto plano). Para renderizar el highlight en la vista de lectura se mapea la posición del texto plano a los nodos del JSON de TipTap.
 
 Los márgenes compartidos no se convierten en un writing independiente en v1 — se comparten como colección de objetos `margin`. En v2 se puede explorar la posibilidad de que el lector "compile" sus márgenes en un writing propio antes de compartir.
@@ -122,4 +128,3 @@ Los márgenes compartidos no se convierten en un writing independiente en v1 —
 El AI editor tiene acceso a los márgenes del autor en el contexto de escritura de una respuesta. Puede observar: *"Marcaste tres pasajes sobre la idea de distancia. Tu respuesta aún no los ha integrado."*
 
 El AI nunca cita los márgenes directamente ni los incorpora al texto. Solo los usa como contexto para sus observaciones — coherente con su rol de guardián del proceso, no generador de contenido.
-

@@ -7,6 +7,7 @@
 
 import { z } from "zod"
 import type { JSONContent } from "@tiptap/core"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import { extractWritingAnnotationNodes, type MarkdownAnnotation } from "@/lib/editor/footnote-extension"
 
 // ─── Schemas ─────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ export const shareMarginsBatchSchema = z.object({
 export const marginRecordSchema = z.object({
   id: z.string().uuid(),
   writing_id: z.string().uuid(),
-  reader_id: z.string().uuid(),
+  reader_id: z.string().uuid().nullable().optional(),
   anchor_start: z.number().int().min(0),
   anchor_end: z.number().int().min(0),
   anchor_text: z.string(),
@@ -55,6 +56,33 @@ export const marginRecordSchema = z.object({
 })
 
 export type MarginRecord = z.infer<typeof marginRecordSchema>
+
+type MarginsSupabaseClient = Pick<SupabaseClient, "from">
+
+type MarginLegacyRow = {
+  id: string
+  writing_id: string
+  reader_id?: string
+  anchor_start: number
+  anchor_end: number
+  anchor_text: string
+  note?: string | null
+  shared: boolean
+  shared_at?: string | null
+  created_at: string
+  updated_at?: string
+}
+
+type MarginRuntimeRow = Partial<MarginRecord> & MarginLegacyRow
+
+const MODERN_MARGIN_SELECT =
+  "id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at"
+
+const LEGACY_MARGIN_SELECT =
+  "id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, note, shared, shared_at, created_at, updated_at"
+
+const LEGACY_PREVIEW_MARGIN_SELECT =
+  "id, writing_id, anchor_start, anchor_end, anchor_text, note, shared, shared_at, created_at, updated_at"
 
 // ─── Parse helpers ────────────────────────────────────────────────────────────
 
@@ -166,6 +194,175 @@ export function sortMarginsByPosition<T extends { anchor_start: number }>(margin
   return [...margins].sort((a, b) => a.anchor_start - b.anchor_start)
 }
 
+export function isLegacyMarginsSchemaError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+
+  const code =
+    "code" in error && typeof error.code === "string"
+      ? error.code
+      : null
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message.toLowerCase()
+      : ""
+  const details =
+    "details" in error && typeof error.details === "string"
+      ? error.details.toLowerCase()
+      : ""
+  const combined = `${message} ${details}`
+  const missingLegacyColumns = ["type", "text", "archived", "resolved"]
+  const mentionsMargins = combined.includes("margins")
+  const mentionsMissingColumn = /(column|schema cache|could not find)/.test(combined)
+  const mentionsLegacyColumn = missingLegacyColumns.some((column) =>
+    combined.includes(`"${column}"`) ||
+    combined.includes(`'${column}'`) ||
+    combined.includes(`.${column}`) ||
+    combined.includes(` ${column} `) ||
+    combined.endsWith(` ${column}`),
+  )
+
+  if (!mentionsMargins || !mentionsMissingColumn || !mentionsLegacyColumn) {
+    return false
+  }
+
+  return code == null || code === "42703" || code.startsWith("PGRST")
+}
+
+export function normalizeMarginRecord(row: MarginRuntimeRow): MarginRecord {
+  const note = row.note ?? row.text ?? null
+
+  return {
+    id: row.id,
+    writing_id: row.writing_id,
+    reader_id: row.reader_id ?? null,
+    anchor_start: row.anchor_start,
+    anchor_end: row.anchor_end,
+    anchor_text: row.anchor_text,
+    type: row.type ?? "personal",
+    text: row.text ?? note ?? "",
+    note,
+    shared: row.shared,
+    shared_at: row.shared_at ?? null,
+    archived: row.archived ?? false,
+    resolved: row.resolved ?? false,
+  }
+}
+
+async function selectOwnedMargins(
+  supabase: MarginsSupabaseClient,
+  writingId: string,
+  readerId: string,
+) {
+  const modern = await supabase
+    .from("margins")
+    .select(MODERN_MARGIN_SELECT)
+    .eq("writing_id", writingId)
+    .eq("reader_id", readerId)
+    .order("anchor_start", { ascending: true })
+
+  if (!modern.error) {
+    return (modern.data ?? []) as MarginRuntimeRow[]
+  }
+
+  if (!isLegacyMarginsSchemaError(modern.error)) {
+    throw modern.error
+  }
+
+  const legacy = await supabase
+    .from("margins")
+    .select(LEGACY_MARGIN_SELECT)
+    .eq("writing_id", writingId)
+    .eq("reader_id", readerId)
+    .order("anchor_start", { ascending: true })
+
+  if (legacy.error) {
+    throw legacy.error
+  }
+
+  return (legacy.data ?? []) as MarginRuntimeRow[]
+}
+
+async function selectAccessibleMargins(
+  supabase: MarginsSupabaseClient,
+  writingId: string,
+) {
+  const modern = await supabase
+    .from("margins")
+    .select(MODERN_MARGIN_SELECT)
+    .eq("writing_id", writingId)
+    .order("anchor_start", { ascending: true })
+
+  if (!modern.error) {
+    return (modern.data ?? []) as MarginRuntimeRow[]
+  }
+
+  if (!isLegacyMarginsSchemaError(modern.error)) {
+    throw modern.error
+  }
+
+  const legacy = await supabase
+    .from("margins")
+    .select(LEGACY_MARGIN_SELECT)
+    .eq("writing_id", writingId)
+    .order("anchor_start", { ascending: true })
+
+  if (legacy.error) {
+    throw legacy.error
+  }
+
+  return (legacy.data ?? []) as MarginRuntimeRow[]
+}
+
+export async function getOwnedMargins(
+  supabase: MarginsSupabaseClient,
+  writingId: string,
+  readerId: string,
+): Promise<MarginRecord[]> {
+  const rows = await selectOwnedMargins(supabase, writingId, readerId)
+  return rows.map((row) => normalizeMarginRecord({ ...row, reader_id: row.reader_id ?? readerId }))
+}
+
+export async function getAccessibleMargins(
+  supabase: MarginsSupabaseClient,
+  writingId: string,
+): Promise<MarginRecord[]> {
+  const rows = await selectAccessibleMargins(supabase, writingId)
+  return rows.map((row) => normalizeMarginRecord(row))
+}
+
+export async function getPreviewSharedMargins(
+  supabase: MarginsSupabaseClient,
+  writingId: string,
+) {
+  const modern = await supabase
+    .from("margins")
+    .select("id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at")
+    .eq("writing_id", writingId)
+    .eq("shared", true)
+    .order("anchor_start", { ascending: true })
+
+  if (!modern.error) {
+    return (modern.data ?? []).map((row: MarginRuntimeRow) => normalizeMarginRecord(row))
+  }
+
+  if (!isLegacyMarginsSchemaError(modern.error)) {
+    throw modern.error
+  }
+
+  const legacy = await supabase
+    .from("margins")
+    .select(LEGACY_PREVIEW_MARGIN_SELECT)
+    .eq("writing_id", writingId)
+    .eq("shared", true)
+    .order("anchor_start", { ascending: true })
+
+  if (legacy.error) {
+    throw legacy.error
+  }
+
+  return (legacy.data ?? []).map((row: MarginRuntimeRow) => normalizeMarginRecord(row))
+}
+
 type SyncRow = Pick<
   MarginRecord,
   | "id"
@@ -204,8 +401,7 @@ export const buildMarginSyncRows = (
     }))
 
 export async function syncMarginsFromBodyJson(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: MarginsSupabaseClient,
   {
     bodyJson,
     writingId,
@@ -220,8 +416,24 @@ export async function syncMarginsFromBodyJson(
 
   if (syncRows.length > 0) {
     const { error: upsertError } = await supabase.from("margins").upsert(syncRows, { onConflict: "id" })
-    if (upsertError) {
+    if (upsertError && !isLegacyMarginsSchemaError(upsertError)) {
       throw upsertError
+    }
+
+    if (upsertError) {
+      const legacyRows = syncRows.map((row) => ({
+        id: row.id,
+        writing_id: row.writing_id,
+        reader_id: row.reader_id,
+        anchor_start: row.anchor_start,
+        anchor_end: row.anchor_end,
+        anchor_text: row.anchor_text,
+        note: row.note ?? row.text ?? null,
+      }))
+      const { error: legacyUpsertError } = await supabase.from("margins").upsert(legacyRows, { onConflict: "id" })
+      if (legacyUpsertError) {
+        throw legacyUpsertError
+      }
     }
   }
 
@@ -237,18 +449,7 @@ export async function syncMarginsFromBodyJson(
     throw deleteError
   }
 
-  const { data, error } = await supabase
-    .from("margins")
-    .select("id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, type, text, note, shared, shared_at, archived, resolved, created_at, updated_at")
-    .eq("writing_id", writingId)
-    .eq("reader_id", readerId)
-    .order("anchor_start", { ascending: true })
-
-  if (error) {
-    throw error
-  }
-
-  return data as MarginRecord[]
+  return getOwnedMargins(supabase, writingId, readerId)
 }
 
 export const filterCopyableAnnotations = (annotations: MarkdownAnnotation[], type: "ai") =>

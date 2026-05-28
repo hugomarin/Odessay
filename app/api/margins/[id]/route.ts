@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { isLegacyMarginsSchemaError, normalizeMarginRecord } from "@/lib/margins/margins"
 import { createClient } from "@/lib/supabase/server"
 
 const jsonError = (status: number, code: string, message: string) =>
@@ -50,13 +51,35 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     updateData.shared_at = parsed.data.shared ? new Date().toISOString() : null
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("margins")
     .update(updateData)
     .eq("id", id)
     .eq("reader_id", user.id)
     .select()
     .maybeSingle()
+
+  if (error && isLegacyMarginsSchemaError(error)) {
+    const legacyUpdateData: typeof updateData = {}
+    if (updateData.note !== undefined || updateData.text !== undefined) {
+      legacyUpdateData.note = updateData.note ?? updateData.text ?? null
+    }
+    if (updateData.shared !== undefined) {
+      legacyUpdateData.shared = updateData.shared
+      legacyUpdateData.shared_at = updateData.shared_at ?? null
+    }
+
+    const legacyResult = await supabase
+      .from("margins")
+      .update(legacyUpdateData)
+      .eq("id", id)
+      .eq("reader_id", user.id)
+      .select("id, reader_id, writing_id, anchor_start, anchor_end, anchor_text, note, shared, shared_at, created_at, updated_at")
+      .maybeSingle()
+
+    data = legacyResult.data ? normalizeMarginRecord(legacyResult.data) : null
+    error = legacyResult.error
+  }
 
   if (error) {
     console.error("[margins:patch]", { userId: user.id, marginId: id, error: error.message })

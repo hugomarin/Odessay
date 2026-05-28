@@ -210,7 +210,7 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 | anchor_start | integer | not null | Offset de inicio del highlight en el texto renderizado |
 | anchor_end | integer | not null | Offset de fin del highlight en el texto renderizado |
 | anchor_text | text | not null | Copia del pasaje resaltado |
-| type | text | not null, check in (`personal`, `ai`, `collaborative`) | Footnotes no se materializan en `margins` |
+| type | text | not null, check in (`personal`, `ai`, `collaborative`, `highlight`) | Footnotes no se materializan en `margins`; los highlights standalone sí |
 | text | text | not null | Contenido de la anotación |
 | note | text | nullable | Alias legacy mantenido durante la transición; replica `text` |
 | shared | boolean | not null, default false | Si el lector comparte la anotación con el autor |
