@@ -6,6 +6,11 @@ import { getPreviewWritingFromTestLink } from "@/lib/sharing/test-link-access"
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
 
+const TEST_LINK_FIXTURE_ENABLED = process.env.ODE_TEST_LINK_FIXTURES === "1"
+const PREVIEW_MARGIN_FIXTURES: Record<string, []> = {
+  fixturepreviewoktoken0001: [],
+}
+
 // GET /api/margins/preview?token=<token> — list shared margins for a preview writing
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -27,6 +32,10 @@ export async function GET(request: Request) {
 
   if (result.state !== "ok") {
     return jsonError(404, "NOT_FOUND", "Preview link not found or revoked.")
+  }
+
+  if (TEST_LINK_FIXTURE_ENABLED && token in PREVIEW_MARGIN_FIXTURES) {
+    return NextResponse.json({ data: PREVIEW_MARGIN_FIXTURES[token], error: null }, { status: 200 })
   }
 
   const writingId = result.writing.id

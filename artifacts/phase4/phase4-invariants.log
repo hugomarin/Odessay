@@ -1,0 +1,13 @@
+RUN  v4.1.0 /Users/hugomarin/Documents/App/Odessay
+
+
+ Test Files  13 passed (13)
+      Tests  77 passed (77)
+   Start at  20:13:23
+   Duration  841ms (transform 1.01s, setup 0ms, import 2.15s, tests 669ms, environment 700ms)
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › tests/playwright/fase4-closure.e2e.ts:17:5 › fase 4 closure flow stays executable through proven harnesses (24.5s)
+
+  1 passed (26.5s)

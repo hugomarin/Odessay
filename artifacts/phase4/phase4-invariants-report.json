@@ -1,0 +1,60 @@
+{
+  "generated_at_utc": "2026-05-28T02:13:51.295Z",
+  "suite": "phase4-invariants",
+  "status": "pass",
+  "commands": [
+    "npx vitest run tests/fase4-invariants.test.ts tests/annotation-document.test.ts tests/reading-regression.test.tsx tests/document-service.test.ts tests/editor-write-path.test.tsx tests/sync-service.test.ts tests/sync-hydration.test.ts tests/markdown-roundtrip.test.ts tests/ai-auth-services.test.ts tests/sharing-service.test.ts tests/test-link-access.test.ts tests/test-link.test.ts tests/service-contracts.test.ts",
+    "npx playwright test tests/playwright/fase4-closure.e2e.ts"
+  ],
+  "suites": [
+    "tests/fase4-invariants.test.ts",
+    "tests/annotation-document.test.ts",
+    "tests/reading-regression.test.tsx",
+    "tests/document-service.test.ts",
+    "tests/editor-write-path.test.tsx",
+    "tests/sync-service.test.ts",
+    "tests/sync-hydration.test.ts",
+    "tests/markdown-roundtrip.test.ts",
+    "tests/ai-auth-services.test.ts",
+    "tests/sharing-service.test.ts",
+    "tests/test-link-access.test.ts",
+    "tests/test-link.test.ts",
+    "tests/service-contracts.test.ts"
+  ],
+  "playwright_suites": [
+    "tests/playwright/fase4-closure.e2e.ts"
+  ],
+  "categories": {
+    "canonical_document_contract": [
+      "tests/annotation-document.test.ts",
+      "tests/markdown-roundtrip.test.ts",
+      "tests/reading-regression.test.tsx"
+    ],
+    "write_path_boundary": [
+      "tests/document-service.test.ts",
+      "tests/editor-write-path.test.tsx"
+    ],
+    "sync_boundary": [
+      "tests/sync-service.test.ts",
+      "tests/sync-hydration.test.ts"
+    ],
+    "remote_capability_boundaries": [
+      "tests/ai-auth-services.test.ts",
+      "tests/sharing-service.test.ts",
+      "tests/test-link-access.test.ts",
+      "tests/service-contracts.test.ts"
+    ],
+    "web_closure_path": [
+      "tests/playwright/fase4-closure.e2e.ts"
+    ]
+  },
+  "manual_qa_required": [
+    "write/save/close/reopen in browser",
+    "Rich ↔ Source on representative content",
+    "import/export round-trip with real files",
+    "preview/shared/public human reading check",
+    "share/test-link real access check",
+    "offline/online sync perception"
+  ],
+  "stdout_path": "artifacts/phase4/phase4-invariants.log"
+}
