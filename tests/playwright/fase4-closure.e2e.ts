@@ -12,6 +12,8 @@ import {
   openWriteNewHarness,
 } from "./helpers/fase4"
 
+test.setTimeout(60_000)
+
 test("fase 4 closure flow stays executable through proven harnesses", async ({ page }) => {
   await test.step("inventory proven Playwright assets before executing the closure flow", async () => {
     await assertFase4AssetInventory()

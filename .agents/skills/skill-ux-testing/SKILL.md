@@ -178,6 +178,27 @@ El `Performance Contract` del brief lo declara explícitamente. Si el brief marc
 - Cada test es independiente. Crea sus propios datos, limpia después.
 - Corre contra staging. Nunca contra producción.
 
+### Reuse-first obligatorio
+
+Antes de crear un test nuevo o un script nuevo de browser automation, revisar:
+
+- `workflow/testing/playwright-catalog.md`
+
+El agente debe clasificar los assets existentes como:
+
+- `usable as-is`
+- `usable as pattern`
+- `avoid for new work`
+
+Reglas:
+
+- si ya existe un harness o helper estable para el flujo, reutilízalo
+- si el nuevo flujo solo varía un tramo pequeño de uno existente, extiende el test o helper actual antes de crear otro archivo
+- si el test propuesto depende de discovery visual, login improvisado, botones ambiguos o rutas sin fixture, probablemente está mal planteado
+- auth real debe tratarse como excepción; los harnesses `/perf/*` y fixtures deterministas son el baseline preferido
+
+Para Fase 4 y cierres similares, prioriza flujos maestros de validación sobre colecciones de smoke tests dispersos.
+
 ### Estructura de un test
 
 ```typescript

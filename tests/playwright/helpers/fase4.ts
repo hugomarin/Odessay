@@ -1,4 +1,5 @@
-import { expect, type Locator, type Page } from "@playwright/test"
+import { existsSync } from "node:fs"
+import { expect, type ConsoleMessage, type Locator, type Page } from "@playwright/test"
 
 export const FASE4_PLAYWRIGHT_ASSET_INVENTORY = {
   usableAsIs: [
@@ -29,11 +30,45 @@ export const FASE4_PLAYWRIGHT_ASSET_INVENTORY = {
 } as const
 
 export async function assertFase4AssetInventory() {
+  const inventoriedAssets = Object.values(FASE4_PLAYWRIGHT_ASSET_INVENTORY).flat()
+
   expect(FASE4_PLAYWRIGHT_ASSET_INVENTORY.usableAsIs.length).toBeGreaterThanOrEqual(6)
   expect(FASE4_PLAYWRIGHT_ASSET_INVENTORY.usableAsPattern.length).toBeGreaterThanOrEqual(3)
   expect(FASE4_PLAYWRIGHT_ASSET_INVENTORY.discardForClosureFlow).toContain(
     "tests/playwright/ode-126-new-writing-fix.e2e.ts",
   )
+
+  for (const assetPath of inventoriedAssets) {
+    expect(existsSync(assetPath), `Inventoried Playwright asset is missing: ${assetPath}`).toBe(true)
+  }
+}
+
+async function expectNoConsoleErrors(
+  page: Page,
+  run: () => Promise<void>,
+  options?: { allowlist?: RegExp[] },
+) {
+  const consoleErrors: string[] = []
+  const allowlist = options?.allowlist ?? []
+
+  const handleConsole = (message: ConsoleMessage) => {
+    if (message.type() !== "error") return
+
+    const text = message.text()
+    if (allowlist.some((pattern) => pattern.test(text))) return
+
+    consoleErrors.push(text)
+  }
+
+  page.on("console", handleConsole)
+
+  try {
+    await run()
+  } finally {
+    page.off("console", handleConsole)
+  }
+
+  expect(consoleErrors).toEqual([])
 }
 
 export async function openWriteNewHarness(page: Page) {
@@ -74,13 +109,15 @@ export async function assertWritePersistenceOnStableHarness(page: Page, text: st
 }
 
 export async function assertPreviewFixture(page: Page) {
-  await page.goto("/preview/fixturepreviewoktoken0001", { waitUntil: "domcontentloaded" })
-  await expect(page.getByText("Read-only UX preview")).toBeVisible()
-  await expect(page.getByTestId("preview-body")).toContainText("Preview fixture heading")
-  await expect(page.getByTestId("preview-body").locator("table")).toBeVisible()
+  await expectNoConsoleErrors(page, async () => {
+    await page.goto("/preview/fixturepreviewoktoken0001", { waitUntil: "domcontentloaded" })
+    await expect(page.getByText("Read-only UX preview")).toBeVisible()
+    await expect(page.getByTestId("preview-body")).toContainText("Preview fixture heading")
+    await expect(page.getByTestId("preview-body").locator("table")).toBeVisible()
 
-  const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
-  expect(hasOverflow).toBe(false)
+    const hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
+    expect(hasOverflow).toBe(false)
+  })
 }
 
 export async function assertSharedClosureSurface(page: Page) {
@@ -112,6 +149,7 @@ export async function assertReadingHarness(page: Page) {
 
 export async function assertCanonicalHarnesses(page: Page) {
   await page.goto("/perf/write-canonical/fixture-writing-id")
+  await page.waitForURL("**/perf/write-canonical/semantic-write-title", { timeout: 15_000 })
   await expect(page).toHaveURL("/perf/write-canonical/semantic-write-title")
   await expect(page.getByTestId("write-canonical-harness")).toBeVisible()
 
