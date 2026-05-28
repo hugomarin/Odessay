@@ -90,7 +90,6 @@ export function WritingEditorContent({
             className={cn(
               "EditorRichContent",
               "rounded-[8px] border-[0.5px] border-transparent bg-transparent",
-              "focus-within:border-border/40",
             )}
           >
             <EditorContent editor={editor} />

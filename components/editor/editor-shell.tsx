@@ -1093,6 +1093,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       createdAtRef.current = null
       writingSlugRef.current = null
       lifecycleRef.current = "local-only"
+      window.requestAnimationFrame(() => {
+        editor.commands.focus("start")
+      })
       return
     }
 
@@ -1292,6 +1295,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 .focus(undefined, { scrollIntoView: false })
                 .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
                 .run()
+            } else {
+              editor.commands.focus("start")
             }
 
             applyWindowScroll()
@@ -3582,6 +3587,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         saveState: "saved",
         hasPendingSync: false,
       })
+      // Double rAF: first waits for React to commit the new tab to the DOM,
+      // second ensures the editor contenteditable is focusable.
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
+          editorEl?.focus()
+        })
+      })
       return
     }
 
@@ -3599,6 +3612,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       title: nextTitle,
       saveState: "saved",
       hasPendingSync: false,
+    })
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
+        editorEl?.focus()
+      })
     })
   }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
 
