@@ -468,6 +468,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         open={renameWritingTarget !== null}
         title={renameWritingTarget?.title ?? "Untitled writing"}
         bodyText={renameWritingTarget?.bodyText ?? ""}
+        writingId={renameWritingTarget?.id}
         onOpenChange={(open) => {
           if (!open) {
             setRenameWritingTarget(null)

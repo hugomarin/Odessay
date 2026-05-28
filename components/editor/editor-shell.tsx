@@ -4031,6 +4031,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           open={renameModalOpen}
           title={renameModalSnapshot?.title ?? UNTITLED_WRITING_TITLE}
           bodyText={renameModalSnapshot?.bodyText ?? ""}
+          writingId={currentWritingIdRef.current ?? undefined}
           onOpenChange={handleRenameModalOpenChange}
           onConfirm={handleRenameWritingConfirm}
         />

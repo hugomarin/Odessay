@@ -19,6 +19,7 @@ type RenameWritingModalProps = {
   open: boolean
   title: string
   bodyText?: string
+  writingId?: string
   onOpenChange: (open: boolean) => void
   onConfirm: (title: string) => void
 }
@@ -27,6 +28,7 @@ export function RenameWritingModal({
   open,
   title,
   bodyText = "",
+  writingId,
   onOpenChange,
   onConfirm,
 }: RenameWritingModalProps) {
@@ -57,6 +59,7 @@ export function RenameWritingModal({
       const result = await webAIService.suggestTitle({
         currentTitle: nextTitle,
         bodyText,
+        writingId,
       })
 
       if (result.error || !result.data) {
