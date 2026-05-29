@@ -88,3 +88,7 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     </section>
   )
 }
+
+export function generateStaticParams() {
+  return [{ token: "placeholder" }]
+}

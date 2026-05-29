@@ -1,0 +1,48 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Odessay",
+  "version": "0.1.0",
+  "identifier": "com.z9ne.odessay",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "TAURI_ENV=true npm run dev",
+    "beforeBuildCommand": "node scripts/prepare-tauri-build.mjs"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Odessay",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'",
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "entitlements": null
+    }
+  }
+}

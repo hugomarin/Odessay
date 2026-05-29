@@ -29,3 +29,7 @@ export default async function SharedCanonicalHarnessPage({ params }: PageProps) 
     </main>
   )
 }
+
+export function generateStaticParams() {
+  return [{ id: "placeholder" }]
+}

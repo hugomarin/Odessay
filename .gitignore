@@ -51,5 +51,14 @@ artifacts/perf/
 .playwright-mcp/
 artifacts/*.docx
 artifacts/*.pdf
+scripts/capture-blank-draft-network.mjs
 scripts/generate-export-evidence.ts
 scripts/test-pdf-server.mjs
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+/dist
+
+# Supabase
+supabase/.temp/

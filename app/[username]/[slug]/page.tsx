@@ -131,3 +131,7 @@ export default async function PublicWritingPage({ params }: PageProps) {
     />
   )
 }
+
+export function generateStaticParams() {
+  return [{ username: "placeholder", slug: "placeholder" }]
+}

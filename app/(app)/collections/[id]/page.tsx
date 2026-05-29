@@ -9,3 +9,7 @@ export default async function CollectionDetailPage({ params }: CollectionDetailP
 
   return <CollectionsView initialExpandedCollectionId={id} />
 }
+
+export function generateStaticParams() {
+  return [{ id: "placeholder" }]
+}

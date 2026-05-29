@@ -1,7 +1,10 @@
-import { type NextRequest } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { updateSession } from "@/lib/supabase/middleware"
 
 export async function middleware(request: NextRequest) {
+  if (process.env.TAURI_ENV === "true") {
+    return NextResponse.next({ request })
+  }
   return updateSession(request)
 }
 

@@ -18,7 +18,9 @@
     "ops:perf:gate": "node scripts/check-performance-gate.mjs",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
@@ -31,6 +33,7 @@
     "@react-pdf/renderer": "^4.3.2",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "@tauri-apps/api": "^2.11.0",
     "@tiptap/core": "^3.20.4",
     "@tiptap/extension-blockquote": "^3.20.4",
     "@tiptap/extension-bold": "^3.20.4",
@@ -53,10 +56,10 @@
     "@tiptap/extension-table": "^3.20.4",
     "@tiptap/extension-table-cell": "^3.20.4",
     "@tiptap/extension-table-header": "^3.20.4",
-    "@tiptap/pm": "^3.20.4",
     "@tiptap/extension-table-row": "^3.20.4",
     "@tiptap/extension-text": "^3.20.4",
     "@tiptap/html": "^3.21.0",
+    "@tiptap/pm": "^3.20.4",
     "@tiptap/react": "^3.20.4",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -75,6 +78,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.2.1",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.2",

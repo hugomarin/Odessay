@@ -176,3 +176,7 @@ export default async function SharedReadingPage({ params }: PageProps) {
     />
   )
 }
+
+export function generateStaticParams() {
+  return [{ id: "placeholder" }]
+}
