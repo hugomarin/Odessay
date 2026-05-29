@@ -20,6 +20,15 @@ pub fn run() {
       commands::document::write_file,
       commands::document::rename_file,
       commands::document::list_recent_files,
+      commands::document::resolve_asset_path,
+      commands::index::index_upsert,
+      commands::index::index_list,
+      commands::index::index_delete,
+      commands::index::index_rebuild,
+      commands::settings::settings_read,
+      commands::settings::settings_write,
+      commands::settings::settings_delete,
+      commands::settings::settings_list_keys,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
