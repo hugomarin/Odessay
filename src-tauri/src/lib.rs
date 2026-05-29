@@ -1,8 +1,12 @@
 pub mod commands;
 
+use tauri::menu::{Menu, MenuItem, Submenu};
+use tauri::Emitter;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_fs::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
@@ -12,6 +16,17 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      let new_file = MenuItem::with_id(app, "new-file", "New File", true, None::<&str>)?;
+      let open_file = MenuItem::with_id(app, "open-file", "Open File...", true, Some("CmdOrCtrl+O"))?;
+      let file_submenu = Submenu::with_items(app, "File", true, &[&new_file, &open_file])?;
+      let menu = Menu::with_items(app, &[&file_submenu])?;
+      app.set_menu(menu)?;
+
+      app.on_menu_event(|app, event| {
+        let _ = app.emit(&format!("menu:{}", event.id().as_ref()), ());
+      });
+
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
