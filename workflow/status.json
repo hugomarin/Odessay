@@ -23,23 +23,38 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 5 — Convergencia Web sobre el Core Compartido",
-    "linear_project": "https://linear.app/z9ne/project/fase-5-convergencia-web-sobre-el-core-compartido-348ad05072bb",
+    "name": "Fase 6 — Desktop Local-First Runtime",
+    "linear_project": "https://linear.app/z9ne/project/fase-6-desktop-local-first-runtime-c4b2c0e833ae",
     "roadmap_ref": "workflow/define/roadmap.md"
   },
   "phase_plan": {
-    "phase": "Fase 5 — Convergencia Web sobre el Core Compartido",
+    "phase": "Fase 6 — Desktop Local-First Runtime",
     "source_of_truth": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-5.md",
-    "linear_project": "https://linear.app/z9ne/project/fase-5-convergencia-web-sobre-el-core-compartido-348ad05072bb",
+    "definition_of_done": "workflow/define/dod-fase-6.md",
+    "linear_project": "https://linear.app/z9ne/project/fase-6-desktop-local-first-runtime-c4b2c0e833ae",
     "linear_issues": [
-      "ODE-204",
-      "ODE-205",
-      "ODE-206"
+      "ODE-207",
+      "ODE-208",
+      "ODE-209",
+      "ODE-210",
+      "ODE-211",
+      "ODE-212",
+      "ODE-213",
+      "ODE-214"
     ],
-    "notes": "Fase 4 cerrada: ODE-189–ODE-195 (plan original) + ODE-198–ODE-203 (remediación y cierre documental). ODE-192 y ODE-203 ambos en built. Contratos operativos C1–C5 committed en ODE-203 (PR #196). Fase 5 se enfoca en convergencia del runtime web al core compartido, explicitación de adapters, compliance del flujo AI y harness de cierre. Issues: ODE-204 (verificación cierre Fase 4 + transición), ODE-205 (corrections/AI compliance), ODE-206 (convergence harness y evidencia DoD). DoD en workflow/define/dod-fase-5.md. wf-define ejecutado 2026-05-28."
+    "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-213 (native app menu + filesystem open + desktop shortcuts). Pendientes: ODE-211 (DoD validation harness), ODE-212 (perf-budgets grace_lte), ODE-214 (format context menu right-click). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Wire native app menu (File > New File / Open File... ⌘O), filesystem open dialog (tauri-plugin-dialog), and desktop keyboard shortcuts. MenuBuilder in Rust with SubmenuBuilder (Odessay/File/Edit/Window), menu:open-file/new-file events bridged to useTauriMenuEvents hook via Tauri Emitter. handleMenuOpenFile in editor-shell parses .md content via desktopDocumentEngine.sourceToRich() and creates new writing. Runtime-aware replace shortcut: ⌘⌥F in desktop (⌘H reserved by macOS), ⌘H in web. Race-condition-safe useTauriMenuEvents with useRef+cancelled flag. dialog:allow-open and dialog:allow-save in capabilities. 580 tests PASS.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-213",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-213/wire-native-app-menu-filesystem-open-dialog-and-desktop-keyboard",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/203",
+      "commit": "8a41a0f",
+      "date": "2026-05-29",
+      "notes": "Score: 9.0/10. Architecture Contract COMPLIANT: Adapter(Rust menu)+Application(event bridge)+UI(shortcut labels), desktop-only scope, all 5 invariants preserved. P2: @tauri-apps/plugin-dialog not declared in package.json initially — caught by Vercel gate in first review round, fixed in commits 6af3380+8a41a0f. CI perf gate event_timing_ms.input_p95=60.34ms — exception applied: Performance Contract not required (menu/dialog, not writing hot path). Three QA fixes applied post-BUILD: duplicate Odessay menu, listener leak race condition, missing dialog capabilities permissions."
+    },
     {
       "what": "Desktop local infrastructure: LocalIndexService (SQLite derived index with upsert/delete/listRecent/rebuildFromDirectory), DesktopAssetService (relative asset path resolver via Tauri canonicalize), DesktopSettingsService (OS config dir JSON persistence). FilesystemDocumentService extended to optionally integrate LocalIndexService for listWritings acceleration and index fan-out on save/rename/delete. Rust commands: index_upsert/list/delete/rebuild, settings_read/write/delete/list_keys, resolve_asset_path. rusqlite bundled. 580 tests PASS including reactive fan-out test.",
       "phase": "Fase 6 — Desktop Local-First Runtime",
