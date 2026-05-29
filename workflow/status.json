@@ -5,6 +5,10 @@
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
+        "issue": "ODE-207",
+        "reason": "Active issue in review cycle (PR #199). The review_rejected commit on main includes [ODE-207] in its subject, triggering a false positive in the drift check. Will be removed from exceptions and added to built[] upon REVIEW APROBADO."
+      },
+      {
         "issue": "ODE-502",
         "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
       },
