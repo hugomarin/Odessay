@@ -115,6 +115,8 @@ import type {
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { webAIService } from "@/lib/services/web-ai-service"
 import { webDocumentService } from "@/lib/services/web-document-service"
+import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import {
   closeTab,
@@ -1235,7 +1237,18 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         const viewState = activeTab?.view_state
 
         if (viewState?.mode === "markdown") {
-          const nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
+          let nextMarkdown: string
+          if (isDesktopRuntime()) {
+            const result = desktopDocumentEngine.richToSource(editor)
+            if (!result.success) {
+              console.error("[ODE-209] DesktopDocumentEngine.richToSource failed:", result.error)
+              nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
+            } else {
+              nextMarkdown = result.markdown
+            }
+          } else {
+            nextMarkdown = normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)))
+          }
           modeRef.current = "markdown"
           setMode("markdown")
           setMarkdownValue(nextMarkdown)
@@ -2188,7 +2201,18 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       if (nextMode === "markdown") {
         modeRef.current = "markdown"
         setMode("markdown")
-        const bodyMarkdown = getEditorMarkdown(editor)
+        let bodyMarkdown: string
+        if (isDesktopRuntime()) {
+          const result = desktopDocumentEngine.richToSource(editor)
+          if (!result.success) {
+            console.error("[ODE-209] DesktopDocumentEngine.richToSource failed:", result.error)
+            bodyMarkdown = getEditorMarkdown(editor)
+          } else {
+            bodyMarkdown = result.markdown
+          }
+        } else {
+          bodyMarkdown = getEditorMarkdown(editor)
+        }
         const footnoteNodes = getEditorFootnotes(editor)
         setMarkdownValue(normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)))
         return
@@ -2197,7 +2221,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const normalizedMarkdown = normalizeMarkdownForRoundTrip(markdownValue)
       modeRef.current = "rich"
       isApplyingContentRef.current = true
-      editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+      if (isDesktopRuntime()) {
+        const result = desktopDocumentEngine.sourceToRich(normalizedMarkdown)
+        if (result.success) {
+          editor.commands.setContent(result.snapshot.bodyJson)
+        } else {
+          console.error("[ODE-209] DesktopDocumentEngine.sourceToRich failed:", result.error)
+          editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+        }
+      } else {
+        editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+      }
       isApplyingContentRef.current = false
       setMarkdownValue(normalizedMarkdown)
       setMode("rich")
