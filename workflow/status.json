@@ -1,13 +1,9 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-05-28",
+  "last_updated": "2026-05-29",
   "traceability_exceptions": {
     "ignored_issue_ids": [
-      {
-        "issue": "ODE-207",
-        "reason": "Active issue in review cycle (PR #199). The review_rejected commit on main includes [ODE-207] in its subject, triggering a false positive in the drift check. Will be removed from exceptions and added to built[] upon REVIEW APROBADO."
-      },
       {
         "issue": "ODE-502",
         "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
@@ -44,6 +40,16 @@
     "notes": "Fase 4 cerrada: ODE-189–ODE-195 (plan original) + ODE-198–ODE-203 (remediación y cierre documental). ODE-192 y ODE-203 ambos en built. Contratos operativos C1–C5 committed en ODE-203 (PR #196). Fase 5 se enfoca en convergencia del runtime web al core compartido, explicitación de adapters, compliance del flujo AI y harness de cierre. Issues: ODE-204 (verificación cierre Fase 4 + transición), ODE-205 (corrections/AI compliance), ODE-206 (convergence harness y evidencia DoD). DoD en workflow/define/dod-fase-5.md. wf-define ejecutado 2026-05-28."
   },
   "built": [
+    {
+      "what": "Initialize Tauri v2 desktop shell integrated with Next.js 15 App Router. Static export strategy for desktop (TAURI_BUILD=true). npm scripts tauri:dev and tauri:build. Auth middleware bypass for TAURI_ENV. Filesystem capability scoped to $DOCUMENT/**. generateStaticParams added to all dynamic routes (safe no-op for web). prepare-tauri-build.mjs patches Next.js for static export and restores on completion. 521 tests PASS.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-207",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-207/initialize-tauri-desktop-shell-and-project-structure",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/199",
+      "commit": "e5113f9",
+      "date": "2026-05-29",
+      "notes": "Second round approval. P1 pnpm->npm fixed, package-lock.json synced, CSP configured. Architecture Contract COMPLIANT: Layer=Adapter(Desktop)+Infra, Runtime scope=desktop, Contracts touched=none, Invariants respected. Score 9.75/10."
+    },
     {
       "what": "Build Fase 5 convergence harness: service-contract matrix (5 principal services → C1–C5), adapter boundary compliance (lib/services/contracts/ verified clean of Next/Supabase/window/fs via static import analysis), and DoD evidence for all 8 blocks (6 PASS, 2 not-applicable with justification). New scripts/check-phase5-invariants.mjs, tests/fase5-invariants.test.ts, tests/web-adapter-boundary.test.ts, artifacts/phase5/phase5-report.json. 521 tests PASS.",
       "phase": "Fase 5 — Convergencia Web sobre el Core Compartido",
