@@ -41,6 +41,16 @@
   },
   "built": [
     {
+      "what": "Desktop local infrastructure: LocalIndexService (SQLite derived index with upsert/delete/listRecent/rebuildFromDirectory), DesktopAssetService (relative asset path resolver via Tauri canonicalize), DesktopSettingsService (OS config dir JSON persistence). FilesystemDocumentService extended to optionally integrate LocalIndexService for listWritings acceleration and index fan-out on save/rename/delete. Rust commands: index_upsert/list/delete/rebuild, settings_read/write/delete/list_keys, resolve_asset_path. rusqlite bundled. 580 tests PASS including reactive fan-out test.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-210",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-210/desktop-local-infrastructure-derived-index-assetservice-and",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/202",
+      "commit": "af50884",
+      "date": "2026-05-29",
+      "notes": "Score: 9.75/10. Architecture Contract COMPLIANT: Layer=Adapter(Desktop), Runtime=desktop-only, no web runtime deps. Invariants: index derived/rebuildable, .md authoritative, 3 layers independent. P3: index_rebuild without SQLite transaction (low impact, fallback covers outage). CI perf failure on event_timing_ms.input_p95=60.07ms — exception applied (interaction latency not required). Clean first-round approval."
+    },
+    {
       "what": "Initialize Tauri v2 desktop shell integrated with Next.js 15 App Router. Static export strategy for desktop (TAURI_BUILD=true). npm scripts tauri:dev and tauri:build. Auth middleware bypass for TAURI_ENV. Filesystem capability scoped to $DOCUMENT/**. generateStaticParams added to all dynamic routes (safe no-op for web). prepare-tauri-build.mjs patches Next.js for static export and restores on completion. 521 tests PASS.",
       "phase": "Fase 6 — Desktop Local-First Runtime",
       "issue": "ODE-207",
