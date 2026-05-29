@@ -8,6 +8,8 @@
     {
       "identifier": "fs:default",
       "allow": [{ "path": "$DOCUMENT/**" }]
-    }
+    },
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

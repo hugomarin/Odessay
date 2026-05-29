@@ -1,4 +1,5 @@
 import { getShortcutForPlatform, isMacPlatform, type ShortcutDisplay } from "@/lib/keyboard-shortcuts"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
 export type EditorShortcutAction =
   | "bold"
@@ -61,8 +62,8 @@ const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
 const isCommandKey = (event: KeyboardLikeEvent) =>
   isMacPlatform() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey
 
-const hasNoExtraModifiers = (event: KeyboardLikeEvent, options: { shift?: boolean } = {}) =>
-  event.shiftKey === (options.shift ?? false) && !event.altKey
+const hasNoExtraModifiers = (event: KeyboardLikeEvent, options: { shift?: boolean; alt?: boolean } = {}) =>
+  event.shiftKey === (options.shift ?? false) && event.altKey === (options.alt ?? false)
 
 const matchesKey = (event: KeyboardLikeEvent, key: string, code?: string) => {
   if (event.key.toLowerCase() === key) {
@@ -76,7 +77,7 @@ const matchesKey = (event: KeyboardLikeEvent, key: string, code?: string) => {
   return event.code === code
 }
 
-const matches = (event: KeyboardLikeEvent, key: string, options: { shift?: boolean; code?: string } = {}) =>
+const matches = (event: KeyboardLikeEvent, key: string, options: { shift?: boolean; alt?: boolean; code?: string } = {}) =>
   matchesKey(event, key, options.code) && isCommandKey(event) && hasNoExtraModifiers(event, options)
 
 export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcutAction | null => {
@@ -152,7 +153,12 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "find"
   }
 
-  if (matches(event, "h", { code: "KeyH" })) {
+  // In desktop, ⌘H is reserved by macOS (Hide Window). Replace uses ⌘⌥F instead.
+  if (isDesktopRuntime()) {
+    if (matches(event, "f", { alt: true, code: "KeyF" })) {
+      return "replace"
+    }
+  } else if (matches(event, "h", { code: "KeyH" })) {
     return "replace"
   }
 
@@ -172,5 +178,8 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
 }
 
 export const getEditorShortcutLabel = (action: EditorShortcutAction): string | null => {
+  if (action === "replace" && isDesktopRuntime()) {
+    return "⌘⌥F"
+  }
   return getShortcutForPlatform(EDITOR_SHORTCUT_LABELS[action])
 }
