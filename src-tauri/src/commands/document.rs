@@ -104,3 +104,22 @@ pub fn list_recent_files(dir: String, limit: usize) -> Result<Vec<FileMetadata>,
     files.truncate(limit);
     Ok(files)
 }
+
+/// Resolve a relative asset path against the document's directory.
+/// Returns the absolute path if the file exists, or an error if it does not.
+#[tauri::command]
+pub fn resolve_asset_path(doc_path: String, relative_path: String) -> Result<String, String> {
+    let doc = Path::new(&doc_path);
+    let dir = doc.parent().unwrap_or(Path::new("."));
+    let resolved = dir.join(&relative_path);
+    let canonical = resolved.canonicalize().map_err(|e| {
+        format!("resolve_asset_path: {} (resolved: {})", e, resolved.display())
+    })?;
+    if !canonical.is_file() {
+        return Err(format!(
+            "resolve_asset_path: not a file: {}",
+            canonical.display()
+        ));
+    }
+    Ok(canonical.to_string_lossy().to_string())
+}

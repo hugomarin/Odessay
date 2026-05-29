@@ -20,6 +20,7 @@ import {
   tauriWriteFile,
 } from "@/lib/services/desktop/tauri-commands"
 import type { DesktopFileMetadata } from "@/lib/services/desktop/tauri-commands"
+import type { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,10 @@ function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T>
 
 function isoNow(): string {
   return new Date().toISOString()
+}
+
+function isoToMs(iso: string): number {
+  return new Date(iso).getTime()
 }
 
 function slugify(title: string): string {
@@ -84,10 +89,32 @@ function fileMetadataToSummary(meta: DesktopFileMetadata): WritingSummary {
   }
 }
 
+function indexEntryToSummary(entry: {
+  path: string
+  title: string
+  createdAt: number
+  modifiedAt: number
+}): WritingSummary {
+  return {
+    id: entry.path,
+    authorId: null,
+    title: entry.title,
+    slug: null,
+    status: "draft",
+    visibility: "private",
+    parentId: null,
+    correspondenceId: null,
+    version: 1,
+    deletedAt: null,
+    createdAt: new Date(entry.createdAt).toISOString(),
+    updatedAt: new Date(entry.modifiedAt).toISOString(),
+    excerpt: null,
+  }
+}
+
 // ─── Desktop-specific types ───────────────────────────────────────────────────
 
 export type SavedListener = (writingId: string) => void
-
 export type CreateDraftResult = {
   path: string
   writing: WritingRecord
@@ -109,17 +136,27 @@ export type CreateDraftResult = {
  *  - Write-path: UI → saveWriting() → tauriWriteFile() → .md on disk.
  *  - Auth and sync failures must never block the local save.
  *  - Markdown serialization/deserialization lives here (TypeScript), not in Rust.
+ *
+ * ODE-210 additions:
+ *  - Optional LocalIndexService for derived recent-list acceleration.
+ *  - Index is updated on save, rename, create, and delete.
+ *  - If index is absent or unreadable, falls back to directory listing.
  */
 export class FilesystemDocumentService implements DocumentService {
   readonly writingsDir: string
+  readonly localIndex?: LocalIndexService
 
   private savedListeners: SavedListener[] = []
   private pendingSaves = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly autoSaveDebounceMs: number
 
-  constructor(writingsDir: string, autoSaveDebounceMs = 500) {
+  constructor(
+    writingsDir: string,
+    options?: { localIndex?: LocalIndexService; autoSaveDebounceMs?: number },
+  ) {
     this.writingsDir = writingsDir
-    this.autoSaveDebounceMs = autoSaveDebounceMs
+    this.localIndex = options?.localIndex
+    this.autoSaveDebounceMs = options?.autoSaveDebounceMs ?? 500
   }
 
   // ─── Event subscription ────────────────────────────────────────────────────
@@ -160,13 +197,29 @@ export class FilesystemDocumentService implements DocumentService {
     this.pendingSaves.set(writing.id, timer)
   }
 
+  // ─── Index helpers ─────────────────────────────────────────────────────────
+
+  private async upsertIndex(writing: WritingRecord): Promise<void> {
+    if (!this.localIndex) return
+    const title = writing.title ?? filenameToTitle(writing.id.split("/").pop() ?? "untitled")
+    await this.localIndex.upsert(
+      writing.id,
+      title,
+      isoToMs(writing.createdAt),
+      Date.now(),
+    )
+  }
+
+  private async deleteIndex(path: string): Promise<void> {
+    if (!this.localIndex) return
+    await this.localIndex.delete(path)
+  }
+
   // ─── Desktop-specific helpers ──────────────────────────────────────────────
 
   /**
    * Create a new .md file in writingsDir and return a WritingRecord.
    * writingId = absolute file path.
-   *
-   * Requirement §2 (ODE-208): createDraft(title?) → new .md file in user writings dir.
    */
   async createDraft(title?: string): Promise<ServiceResponse<CreateDraftResult>> {
     const displayTitle = title ?? "Untitled"
@@ -201,6 +254,7 @@ export class FilesystemDocumentService implements DocumentService {
         createdAt: now,
         updatedAt: now,
       }
+      await this.upsertIndex(writing)
       return ok({ path, writing })
     } catch (e) {
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to create draft")
@@ -210,12 +264,19 @@ export class FilesystemDocumentService implements DocumentService {
   // ─── DocumentService interface ─────────────────────────────────────────────
 
   /**
-   * List .md files in writingsDir sorted by modification time (most recent first).
-   * No index needed — reads directory directly (ODE-210 will add SQLite index).
+   * List writings.
+   * If a LocalIndexService is configured, reads from the SQLite index.
+   * Otherwise falls back to directory listing.
    */
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     void input
     try {
+      if (this.localIndex) {
+        const entries = await this.localIndex.listRecent(200)
+        if (entries.length > 0) {
+          return ok(entries.map(indexEntryToSummary))
+        }
+      }
       const files = await tauriListRecentFiles(this.writingsDir, 200)
       return ok(files.map(fileMetadataToSummary))
     } catch (e) {
@@ -225,9 +286,6 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Open a .md file by its absolute path (writingId = path).
-   * Returns a WritingRecord with content.markdown = raw file content.
-   *
-   * Requirement §3 (ODE-208): openDocument(path) reads the .md from the filesystem.
    */
   async openWriting(writingId: string): Promise<ServiceResponse<WritingRecord>> {
     try {
@@ -264,13 +322,8 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Serialize writing.content.markdown and write it to disk.
+   * Updates the SQLite index if configured.
    * Emits a "saved" event after the file is fully persisted.
-   *
-   * Performance Contract §interaction-latency: completes in < 100ms for typical
-   * documents (< 100KB). The atomic write (write-then-rename) in Rust prevents
-   * partial reads but adds no perceptible latency at typical document sizes.
-   *
-   * Requirement §4 (ODE-208): promise does not resolve until the file is saved.
    */
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     const { writing } = input
@@ -282,6 +335,7 @@ export class FilesystemDocumentService implements DocumentService {
         updatedAt: isoNow(),
         version: writing.version + 1,
       }
+      await this.upsertIndex(savedRecord)
       this.emitSaved(writing.id)
       return ok(savedRecord)
     } catch (e) {
@@ -291,10 +345,6 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Rename the .md file to a slug derived from the new title.
-   * The returned WritingRecord has id = newPath.
-   *
-   * Consumers must update their reference to the writingId after a rename.
-   * Requirement §5 (ODE-208): renameDocument(oldPath, newPath) renames on disk.
    */
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     const { writingId, title } = input
@@ -330,6 +380,10 @@ export class FilesystemDocumentService implements DocumentService {
         createdAt: now,
         updatedAt: now,
       }
+
+      await this.deleteIndex(writingId)
+      await this.upsertIndex(renamedRecord)
+
       return ok(renamedRecord)
     } catch (e) {
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to rename writing")
@@ -338,7 +392,7 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Delete the .md file from disk.
-   * Returns the record with deletedAt set.
+   * Removes from the SQLite index if configured.
    */
   async deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>> {
     const { writingId } = input
@@ -347,16 +401,15 @@ export class FilesystemDocumentService implements DocumentService {
       if (openResult.error) return openResult as ServiceResponse<WritingRecord>
       const record = openResult.data!
 
-      // Move the file to a .trash/ sibling directory so it is no longer listed
-      // but can be recovered. ODE-210 will add permanent deletion and SQLite cleanup.
       const parts = writingId.split("/")
       const filename = parts.pop()!
       const dir = parts.join("/")
       const trashDir = `${dir}/.trash`
       await tauriRenameFile(writingId, `${trashDir}/${filename}`).catch(() => {
-        // If rename fails (e.g. cross-device), fall back silently. The record is
-        // still marked deleted in the returned WritingRecord.
+        // If rename fails, fall back silently.
       })
+
+      await this.deleteIndex(writingId)
 
       const deletedRecord: WritingRecord = {
         ...record,
@@ -371,7 +424,6 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Collections are not supported without a database.
-   * Returns an empty list — ODE-210 will add the SQLite layer.
    */
   async listWritingCollections(
     writingId: string,
@@ -382,7 +434,6 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Collections are not supported without a database.
-   * No-op — ODE-210 will add the SQLite layer.
    */
   async setWritingCollections(
     input: SetWritingCollectionsInput,
@@ -392,8 +443,7 @@ export class FilesystemDocumentService implements DocumentService {
   }
 
   /**
-   * Basic markdown export — returns the raw .md content as bytes.
-   * PDF/DOCX export can be added in a later issue.
+   * Basic markdown export.
    */
   async exportWriting(input: ExportWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>> {
     if (input.format !== "pdf" && input.format !== "docx") {
