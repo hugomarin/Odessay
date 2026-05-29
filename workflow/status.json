@@ -1624,6 +1624,16 @@
       "commit": "b87ded1",
       "date": "2026-05-28",
       "notes": "Score: 10/10. Clean first-round approval. GateResult PASS: typecheck/lint/tests PASS, ops:delivery:gate PASS, Traceability CI SUCCESS, Vercel preview SUCCESS. Performance Contract: not required (not an editor interaction change). Architecture Contract: COMPLIANT — Layer Adapter, Runtime scope web, Owner backend. Invariant preserved: export document generation and delivery concerns remain separable. Playwright Fase 4 pre-existing assertPreviewFixture failure unrelated to export, scoped out and documented in validation report."
+    },
+    {
+      "what": "FilesystemDocumentService desktop adapter: Rust commands (open_file, create_file, write_file atomic, rename_file, list_recent_files), typed TS wrappers (tauri-commands.ts), FilesystemDocumentService implements DocumentService. writingId = absolute .md path. Debounced scheduleAutoSave emits exactly 1 saved event per debounce window. Markdown serialization in TypeScript, Rust is pure I/O. 17 tests including 2 Performance Contract tests. 538 total tests PASS.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-208",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-208/implement-filesystemdocumentservice-md-as-desktop-write-path-source-of",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/200",
+      "commit": "f73840e",
+      "date": "2026-05-29",
+      "notes": "Score 8.5/10. Architecture Contract COMPLIANT: Layer=Adapter(Desktop), Runtime=desktop, DocumentService interface unchanged. P2: exportWriting dead-code guard; P2: deleteWriting silent-failure in trash move. Both non-DoD methods, no consumers yet. Clean first-round approval."
     }
   ]
 }
