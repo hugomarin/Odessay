@@ -1634,6 +1634,16 @@
       "commit": "f73840e",
       "date": "2026-05-29",
       "notes": "Score 8.5/10. Architecture Contract COMPLIANT: Layer=Adapter(Desktop), Runtime=desktop, DocumentService interface unchanged. P2: exportWriting dead-code guard; P2: deleteWriting silent-failure in trash move. Both non-DoD methods, no consumers yet. Clean first-round approval."
+    },
+    {
+      "what": "Desktop document engine and Rich/Source mode toggle wiring. New DesktopDocumentEngine class (richToSource, sourceToRich, serializeBodyJson, validateRoundTrip) using document-serialization.ts as the single canonical serializer. editor-shell.tsx mode toggle routes through DesktopDocumentEngine when isDesktopRuntime(). New runtime-detection.ts via window.__TAURI_INTERNALS__. 23 new tests covering full Markdown profile round-trip (headings, bold/italic/strike/highlight, links, inline code, blockquotes, lists, code blocks, tables, footnotes) and performance contract (< 200ms for ~1000-word document). 561 total tests PASS.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-209",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-209/desktop-write-path-rich-mode-and-source-mode-on-same-canonical-md",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/201",
+      "commit": "43d1453",
+      "date": "2026-05-29",
+      "notes": "Score 5.0/10 (adjusted). Human override: perf gate initially rejected for event_timing_ms.keydown_p95=93.37ms (3.4ms sobre fail_lte=90ms, sin grace_lte, required_failures=1). Hugo autorizó el merge — overrun atribuible a ruido de CI, PR no toca hot path de keydown. Calidad del diff: 7.5/10 base. Architecture Contract COMPLIANT: Layer=Application(Document Engine)+UI, Runtime=desktop, Invariants: TipTap as rich view, single canonical serializer, explicit errors. Recommendation: add grace_lte=95 to event_timing_ms.keydown_p95 budget if CI noise pattern confirmed."
     }
   ]
 }
