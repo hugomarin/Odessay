@@ -61,3 +61,7 @@ export default async function WriteDetailPage({ params }: WriteDetailPageProps) 
 
   return <EditorShell key={routeResolution.writingId} writingId={routeResolution.writingId} />
 }
+
+export function generateStaticParams() {
+  return [{ id: "placeholder" }]
+}

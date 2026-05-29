@@ -202,3 +202,7 @@ export default async function PublicAuthorPage({ params }: PageProps) {
     </section>
   )
 }
+
+export function generateStaticParams() {
+  return [{ username: "placeholder" }]
+}

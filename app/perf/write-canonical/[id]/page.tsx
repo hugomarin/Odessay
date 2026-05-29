@@ -9,3 +9,7 @@ export default async function WriteCanonicalHarnessPage({ params }: PageProps) {
 
   return <WriteCanonicalHarness id={id} />
 }
+
+export function generateStaticParams() {
+  return [{ id: "placeholder" }]
+}

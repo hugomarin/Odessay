@@ -31,3 +31,7 @@ export default async function WriteTransientRacePage({ params }: WriteTransientR
 
   return <EditorShell writingId={routeResolution.writingId} />
 }
+
+export function generateStaticParams() {
+  return [{ id: "placeholder" }]
+}
