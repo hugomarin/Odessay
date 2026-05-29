@@ -186,7 +186,7 @@ try {
   patchAppLayout()
   patchSupabaseServer()
   patchWritePage()
-  execSync("TAURI_BUILD=true pnpm build", { stdio: "inherit", cwd: root })
+  execSync("TAURI_BUILD=true npm run build", { stdio: "inherit", cwd: root })
 } catch (err) {
   exitCode = err.status || 1
 } finally {

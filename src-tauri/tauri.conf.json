@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "TAURI_ENV=true pnpm dev",
+    "beforeDevCommand": "TAURI_ENV=true npm run dev",
     "beforeBuildCommand": "node scripts/prepare-tauri-build.mjs"
   },
   "app": {
@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'",
       "capabilities": ["default"]
     }
   },
