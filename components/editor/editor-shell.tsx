@@ -117,6 +117,7 @@ import { webAIService } from "@/lib/services/web-ai-service"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
+import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import {
   closeTab,
@@ -3663,6 +3664,58 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     forceNewWritingRequestedRef.current = true
     void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [forceNewWriting, handleCreateWorkspaceTab, sessionLoaded])
+
+  const handleMenuOpenFile = useCallback(
+    async (_path: string, content: string) => {
+      persistCurrentWorkspaceViewState()
+      const nowIso = new Date().toISOString()
+      const nextWritingId = createWritingId()
+      const parseResult = desktopDocumentEngine.sourceToRich(content)
+      const bodyJson = parseResult.success ? parseResult.snapshot.bodyJson : EMPTY_EDITOR_JSON
+      const bodyText = parseResult.success ? parseResult.snapshot.bodyText : ""
+      const nextTitle = deriveAutoTitle(bodyText, nowIso)
+
+      const record: WritingRecord = {
+        id: nextWritingId,
+        authorId: null,
+        title: nextTitle,
+        content: {
+          richText: bodyJson as Record<string, unknown>,
+          markdown: null,
+          plainText: bodyText,
+          canonicalSource: "rich-text",
+        },
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parentId: null,
+        correspondenceId: null,
+        version: 1,
+        deletedAt: null,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      }
+
+      try {
+        await webDocumentService.saveWriting({ writing: record })
+      } catch {
+        return
+      }
+
+      currentWritingIdRef.current = nextWritingId
+      setCurrentWritingId(nextWritingId)
+      setHydrationWritingId(nextWritingId)
+      openWritingTab({ writingId: nextWritingId, title: nextTitle, saveState: "saved-local", hasPendingSync: false })
+      router.push(`/write/${nextWritingId}`)
+    },
+    [persistCurrentWorkspaceViewState, router],
+  )
+
+  const handleMenuNewFile = useCallback(() => {
+    void handleCreateWorkspaceTab({ skipConfirm: true })
+  }, [handleCreateWorkspaceTab])
+
+  useTauriMenuEvents({ onOpenFile: handleMenuOpenFile, onNewFile: handleMenuNewFile })
 
   const exportFileBaseName = useMemo(
     () =>
