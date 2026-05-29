@@ -1,6 +1,6 @@
 pub mod commands;
 
-use tauri::menu::{Menu, MenuItem, Submenu};
+use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::Emitter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,10 +17,43 @@ pub fn run() {
         )?;
       }
 
+      let app_menu = SubmenuBuilder::new(app, "Odessay")
+        .about(None)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .separator()
+        .quit()
+        .build()?;
+
       let new_file = MenuItem::with_id(app, "new-file", "New File", true, None::<&str>)?;
       let open_file = MenuItem::with_id(app, "open-file", "Open File...", true, Some("CmdOrCtrl+O"))?;
-      let file_submenu = Submenu::with_items(app, "File", true, &[&new_file, &open_file])?;
-      let menu = Menu::with_items(app, &[&file_submenu])?;
+      let file_menu = SubmenuBuilder::new(app, "File")
+        .items(&[&new_file, &open_file])
+        .build()?;
+
+      let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+      let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .maximize()
+        .close_window()
+        .build()?;
+
+      let menu = MenuBuilder::new(app)
+        .items(&[&app_menu, &file_menu, &edit_menu, &window_menu])
+        .build()?;
+
       app.set_menu(menu)?;
 
       app.on_menu_event(|app, event| {
