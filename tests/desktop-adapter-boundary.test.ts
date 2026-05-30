@@ -28,6 +28,7 @@ const forbiddenGlobalPatterns = [
 
 const allowedImports = new Set([
   "@tauri-apps/api/core",
+  "@/lib/runtime/detect",
   "@/lib/services/contracts/document-service",
   "@/lib/services/contracts/asset-service",
   "@/lib/services/contracts/settings-service",

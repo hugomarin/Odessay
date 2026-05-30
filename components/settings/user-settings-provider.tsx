@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import type { WritingStatus } from "@/lib/writings/status"
 import type { UserSettings } from "@/lib/user/settings"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 
 type UserSettingsContextValue = {
   settings: UserSettings
@@ -34,6 +35,15 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
+    // Desktop runtime stays local-first: the cloud settings endpoint lives behind the
+    // web auth gate. Keep defaults until a native SettingsService lands (ODE-218+).
+    if (isTauriRuntime()) {
+      setSettings(DEFAULT_SETTINGS)
+      setIsLoading(false)
+      setError(null)
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
@@ -57,6 +67,11 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
   }, [])
 
   const update = useCallback(async (updates: { disabledStatuses: WritingStatus[] }) => {
+    if (isTauriRuntime()) {
+      setSettings({ disabledStatuses: updates.disabledStatuses })
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
