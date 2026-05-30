@@ -5,10 +5,6 @@
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
-        "issue": "ODE-215",
-        "reason": "In-progress Fase 7 issue. The review_rejected workflow commit on main tags [ODE-215] before merge, causing a false-positive drift hit. Remove this exception and add to built[] when REVIEW APROBADO."
-      },
-      {
         "issue": "ODE-502",
         "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
       },
@@ -49,6 +45,15 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Runtime-aware app layout and sync bootstrap for desktop local-first. New isTauriRuntime()/isWebRuntime() helpers (lib/runtime/detect.ts). app/(app)/layout.tsx splits by TAURI_BUILD: web preserves SSR redirect to /login, desktop renders editor without cookies/Supabase. sync-bootstrap splits into bootstrapWeb/bootstrapDesktop. desk/page.tsx skips hydrateRemoteIfNeeded for Tauri+anonymous scope. UserSettingsProvider skips /api/user/settings fetch in Tauri. prepare-tauri-build.mjs no longer patches layout.tsx. Reproducible performance harness (scripts/evidence/capture-ode-215-tauri-waterfall.mjs) confirms TTI 49ms and 0 auth/api hits. 606 tests.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-215",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-215/make-app-layout-auth-gate-runtime-aware-so-desktop-loads-local-first",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/207",
+      "commit": "c797554",
+      "date": "2026-05-30"
+    },
     {
       "what": "Add grace_lte (+20% over fail_lte) to all required metrics in workflow/perf-budgets.json that lacked a grace band. Prevents CI noise from blocking delivery on marginal overruns (precedent: ODE-209 rejected for 3.4ms overrun on keydown_p95). 12 metrics updated across event_dispatch_ms, event_timing_ms, interaction_latency_ms, and long_tasks_ge_50ms. Gate script already supported grace_lte via hardFailLte = grace_lte ?? fail_lte.",
       "phase": "Fase 6 — Desktop Local-First Runtime",
