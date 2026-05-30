@@ -9,7 +9,9 @@ type WriteDetailPageProps = {
   params: Promise<{ id: string }>
 }
 
-const WRITING_SELECT = "id, title, slug, body_json, body_text, updated_at, author_id, visibility, deleted_at, status, version, sync_status, parent_id, correspondence_id"
+const WRITING_SELECT =
+  "id, title, slug, body_json, body_text, updated_at, author_id, visibility, deleted_at, status, version, sync_status, parent_id, correspondence_id"
+const isTauriBuild = process.env.TAURI_BUILD === "true"
 
 const resolveOwnedWriting = async (userId: string, identifier: string) => {
   const admin = createAdminClient()
@@ -36,7 +38,12 @@ const resolveOwnedWriting = async (userId: string, identifier: string) => {
   return null
 }
 
-export default async function WriteDetailPage({ params }: WriteDetailPageProps) {
+async function DesktopWriteDetailPage({ params }: WriteDetailPageProps) {
+  const { id: identifier } = await params
+  return <EditorShell key={identifier} writingId={identifier} />
+}
+
+async function WebWriteDetailPage({ params }: WriteDetailPageProps) {
   const { id: identifier } = await params
   const supabase = await createClient()
   const {
@@ -61,6 +68,8 @@ export default async function WriteDetailPage({ params }: WriteDetailPageProps) 
 
   return <EditorShell key={routeResolution.writingId} writingId={routeResolution.writingId} />
 }
+
+export default isTauriBuild ? DesktopWriteDetailPage : WebWriteDetailPage
 
 export function generateStaticParams() {
   return [{ id: "placeholder" }]
