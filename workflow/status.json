@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Replace prepare-tauri-build.mjs file-system patches with runtime-conditional code. lib/supabase/server.ts factory splits on TAURI_BUILD: desktop returns anon stateless client (no cookies), web preserves SSR cookies path via dynamic imports. write/page.tsx DesktopWritePage is non-async and skips searchParams. write/[id]/page.tsx DesktopWriteDetailPage skips SSR auth and renders EditorShell directly. components/auth/login-form.tsx router.refresh() guarded by isTauriRuntime(). prepare-tauri-build.mjs: removed patchSupabaseServer/restoreSupabaseServer/patchWritePage/restoreWritePage — only route handler disabling and dir exclusion remain. Static export generates 18/18 pages clean, git status clean post-build. 606 tests.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-216",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-216/replace-prepare-tauri-buildmjs-file-system-patches-with-runtime",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/208",
+      "commit": "a0227a1",
+      "date": "2026-05-30",
+      "notes": "Score: 9.5/10. Architecture Contract COMPLIANT: Layer=Application+Adapter, Runtime scope=TAURI_BUILD conditional, dead-code elimination confirmed (next/headers absent from desktop bundle), SSR+cookies preserved on web, no .backup files post-build, build pipeline no longer patches repo files architecturally. P2: TTI required evidence provided as architectural reasoning only (Tauri toolchain environmental constraint); payload weight evidence solid. Clean first-round approval."
+    },
+    {
       "what": "Runtime-aware app layout and sync bootstrap for desktop local-first. New isTauriRuntime()/isWebRuntime() helpers (lib/runtime/detect.ts). app/(app)/layout.tsx splits by TAURI_BUILD: web preserves SSR redirect to /login, desktop renders editor without cookies/Supabase. sync-bootstrap splits into bootstrapWeb/bootstrapDesktop. desk/page.tsx skips hydrateRemoteIfNeeded for Tauri+anonymous scope. UserSettingsProvider skips /api/user/settings fetch in Tauri. prepare-tauri-build.mjs no longer patches layout.tsx. Reproducible performance harness (scripts/evidence/capture-ode-215-tauri-waterfall.mjs) confirms TTI 49ms and 0 auth/api hits. 606 tests.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-215",
