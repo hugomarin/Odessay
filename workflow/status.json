@@ -5,6 +5,10 @@
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
+        "issue": "ODE-215",
+        "reason": "In-progress Fase 7 issue. The review_rejected workflow commit on main tags [ODE-215] before merge, causing a false-positive drift hit. Remove this exception and add to built[] when REVIEW APROBADO."
+      },
+      {
         "issue": "ODE-502",
         "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
       },
