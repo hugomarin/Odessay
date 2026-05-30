@@ -1728,6 +1728,11 @@
       "commit": "ed7879a",
       "date": "2026-05-30",
       "notes": "Score: 10.0/10. Clean first-round approval. GateResult PASS: typecheck PASS, lint PASS (only pre-existing warnings), tests PASS (595), ops:delivery:gate PASS. Performance Contract: not required — harness/validation issue, no hot path touched. Architecture Contract COMPLIANT: Layer Application+Infra(validation), Runtime desktop, Owner backend/architecture-first. Contracts touched: DocumentService, AssetService, SettingsService. Invariants preserved: adapter boundary isolation, .md as source of truth, index as derived accelerator only."
+    },
+    {
+      "issue": "ODE-218",
+      "commit": "bbcb9c7",
+      "date": "2026-05-30"
     }
   ]
 }
