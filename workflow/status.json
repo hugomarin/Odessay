@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-05-29",
+  "last_updated": "2026-05-30",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -45,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-213 (native app menu + filesystem open + desktop shortcuts). Pendientes: ODE-211 (DoD validation harness), ODE-212 (perf-budgets grace_lte), ODE-214 (format context menu right-click). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Extend native macOS menu (built in ODE-213) with Format and View submenus, complete Edit and App menus. Format submenu: headings, lists, blockquote, body, bold, italic, strikethrough, highlight, inline code, code block, link, footnote, table, image, plus Subscope B (Clear Styles, Horizontal Rule, Add Date). View submenu: Focus Mode, Show/Hide Library/Toolbar/Tab Bar, Enter Full Screen (Tauri predefined). Edit completed with Find, Copy as Markdown, Copy as HTML. App menu adds Settings…. Bridge useTauriEditorMenuEvents maps menu:<action-id> → onRunAction with refs (register-once-on-mount, no re-renders on keydown). Subscope B implemented as pure Tiptap commands (clearStyles via clearNodes+unsetAllMarks, horizontalRule via @tiptap/extension-horizontal-rule) or clipboard ops (copyAsMarkdown via tiptap-markdown serializer, copyAsHtml via @tiptap/html generateHTML, date via insertContent YYYY-MM-DD). Undo/Redo uses Tauri predefined which reaches Tiptap History via contenteditable. 580 tests PASS.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-214",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-214/native-macos-menu-bar-format-edit-and-view-menus-wired-to",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/204",
+      "commit": "df49e70",
+      "date": "2026-05-30",
+      "notes": "Score: 7.0/10 (PASS_HUMAN_OVERRIDE). Architecture Contract COMPLIANT: Adapter(Rust MenuBuilder)+Application(useTauriEditorMenuEvents bridge)+UI(Subscope B commands+toggles). IDs Rust = action ids de EditorShortcutAction. First round rejected: P0 Vercel preview FAILURE (pnpm-lock.yaml out of date sin actualizar @tiptap/extension-horizontal-rule@^3.22.5 — mismo root cause que ODE-207). Fix: commit df49e70 eliminó pnpm-lock.yaml para alinear con npm. P1 perf gate event_timing_ms.input_p95=64.11ms (4.11ms sobre fail_lte=60, sin grace_lte) overridden — diff es passive (menu wiring + bridge con refs), ~4ms variance en CI hardware coincide con precedente ODE-209. ContextGaps: Date extension declarada como existente no existía (implementado como insertContent), setters toggleTopbar/toggleTabBar (declarados como existentes) no existían (añadidos como estado local en editor-shell). P3: 29 listeners separados (refactor opcional). Recomendaciones: gitignore + pre-commit guard para pnpm-lock.yaml regeneración, evaluar grace_lte para event_timing_ms.input_p95 (ya causó override en ODE-209 y aquí)."
+    },
     {
       "what": "Wire native app menu (File > New File / Open File... ⌘O), filesystem open dialog (tauri-plugin-dialog), and desktop keyboard shortcuts. MenuBuilder in Rust with SubmenuBuilder (Odessay/File/Edit/Window), menu:open-file/new-file events bridged to useTauriMenuEvents hook via Tauri Emitter. handleMenuOpenFile in editor-shell parses .md content via desktopDocumentEngine.sourceToRich() and creates new writing. Runtime-aware replace shortcut: ⌘⌥F in desktop (⌘H reserved by macOS), ⌘H in web. Race-condition-safe useTauriMenuEvents with useRef+cancelled flag. dialog:allow-open and dialog:allow-save in capabilities. 580 tests PASS.",
       "phase": "Fase 6 — Desktop Local-First Runtime",
