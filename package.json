@@ -20,7 +20,8 @@
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "desktop:release": "node scripts/release-desktop.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
