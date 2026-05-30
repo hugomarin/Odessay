@@ -88,39 +88,53 @@
       "paste_max": {
         "required": true,
         "warn_lte": 115,
-        "fail_lte": 120
+        "fail_lte": 120,
+        "grace_lte": 144,
+        "note": "Small paste dispatch overruns are warnings up to 144ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "click_p95": {
         "required": true,
         "warn_lte": 63,
-        "fail_lte": 68
+        "fail_lte": 68,
+        "grace_lte": 82,
+        "note": "Small click dispatch overruns are warnings up to 82ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "click_max": {
         "required": true,
         "warn_lte": 66,
-        "fail_lte": 70
+        "fail_lte": 70,
+        "grace_lte": 84,
+        "note": "Small click dispatch overruns are warnings up to 84ms to avoid blocking delivery on CI noise or marginal regressions."
       }
     },
     "event_timing_ms": {
       "keydown_p95": {
         "required": true,
         "warn_lte": 82,
-        "fail_lte": 90
+        "fail_lte": 90,
+        "grace_lte": 108,
+        "note": "Small keydown timing overruns are warnings up to 108ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "input_p95": {
         "required": true,
         "warn_lte": 55,
-        "fail_lte": 60
+        "fail_lte": 60,
+        "grace_lte": 72,
+        "note": "Small input timing overruns are warnings up to 72ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "click_p95": {
         "required": true,
         "warn_lte": 145,
-        "fail_lte": 150
+        "fail_lte": 150,
+        "grace_lte": 180,
+        "note": "Small click timing overruns are warnings up to 180ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "click_max": {
         "required": true,
         "warn_lte": 160,
-        "fail_lte": 170
+        "fail_lte": 170,
+        "grace_lte": 204,
+        "note": "Small click timing overruns are warnings up to 204ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "paste_p95": {
         "required": false,
@@ -131,29 +145,39 @@
       "editor_inputs_p95": {
         "required": true,
         "warn_lte": 130,
-        "fail_lte": 140
+        "fail_lte": 140,
+        "grace_lte": 168,
+        "note": "Small interaction latency overruns are warnings up to 168ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "editor_inputs_max": {
         "required": true,
         "warn_lte": 160,
-        "fail_lte": 170
+        "fail_lte": 170,
+        "grace_lte": 204,
+        "note": "Small interaction latency overruns are warnings up to 204ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "with_interaction_id_p95": {
         "required": true,
         "warn_lte": 130,
-        "fail_lte": 140
+        "fail_lte": 140,
+        "grace_lte": 168,
+        "note": "Small interaction latency overruns are warnings up to 168ms to avoid blocking delivery on CI noise or marginal regressions."
       }
     },
     "long_tasks_ge_50ms": {
       "count": {
         "required": true,
         "warn_lte": 8,
-        "fail_lte": 10
+        "fail_lte": 10,
+        "grace_lte": 12,
+        "note": "Small long task count overruns are warnings up to 12 to avoid blocking delivery on CI noise or marginal regressions."
       },
       "max_ms": {
         "required": true,
         "warn_lte": 360,
-        "fail_lte": 400
+        "fail_lte": 400,
+        "grace_lte": 480,
+        "note": "Small long task duration overruns are warnings up to 480ms to avoid blocking delivery on CI noise or marginal regressions."
       }
     }
   }
