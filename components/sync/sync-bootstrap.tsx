@@ -5,6 +5,7 @@ import { setLocalDBScope } from "@/lib/local-db";
 import { webSyncService } from "@/lib/sync";
 import { createClient } from "@/lib/supabase/client";
 import { isTauriRuntime } from "@/lib/runtime/detect";
+import { getAuthService } from "@/lib/services/auth-service-factory";
 
 export function SyncBootstrap() {
   useEffect(() => {
@@ -22,18 +23,17 @@ export function SyncBootstrap() {
     };
 
     const bootstrapWeb = async () => {
+      const sessionResult = await getAuthService().getSession();
+      const userId = sessionResult.data?.user?.id ?? undefined;
       const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
 
       if (!isMounted) {
         return null;
       }
 
-      setLocalDBScope(user?.id);
+      setLocalDBScope(userId);
 
-      if (user?.id) {
+      if (userId) {
         await hydrateFromRemote();
       }
 

@@ -1,0 +1,54 @@
+{
+  "issue": "ODE-218",
+  "capturedAt": "2026-05-30T21:26:21.676Z",
+  "origin": "http://127.0.0.1:54392",
+  "tauriShimInjected": true,
+  "contract": {
+    "Waterfall shape (required)": {
+      "rule": "desktop signIn fires exactly 1+ request to *.supabase.co, 0 to /api/*",
+      "supabaseHits": 1,
+      "apiHits": 0,
+      "pass": true
+    },
+    "No /api/* from origin (required)": {
+      "rule": "0 requests to origin/api/* during signIn",
+      "count": 0,
+      "pass": true
+    },
+    "External traffic is Supabase-only": {
+      "rule": "all external requests go to *.supabase.co",
+      "externalCount": 1,
+      "pass": true
+    }
+  },
+  "counts": {
+    "total": 1,
+    "supabase": 1,
+    "apiInternal": 0,
+    "external": 1
+  },
+  "waterfall": {
+    "supabaseHits": [
+      {
+        "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/token?grant_type=password",
+        "method": "POST",
+        "resourceType": "fetch"
+      }
+    ],
+    "apiHits": [],
+    "allRequests": [
+      {
+        "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/token?grant_type=password",
+        "method": "POST",
+        "resourceType": "fetch"
+      }
+    ]
+  },
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 400 ()"
+  ],
+  "artifacts": {
+    "loginPage": "evidence/ode-218/login-page.png",
+    "afterSignIn": "evidence/ode-218/signin-network-settled.png"
+  }
+}

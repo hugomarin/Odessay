@@ -13,7 +13,7 @@ import {
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
 import { isTauriRuntime } from "@/lib/runtime/detect"
-import { webAuthService } from "@/lib/services/web-auth-service"
+import { getAuthService } from "@/lib/services/auth-service-factory"
 
 export function LoginForm() {
   const router = useRouter()
@@ -40,7 +40,7 @@ export function LoginForm() {
     }
 
     startTransition(async () => {
-      const result = await webAuthService.signIn({
+      const result = await getAuthService().signIn({
         email: normalizeEmail(email),
         password,
       })
