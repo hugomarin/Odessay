@@ -1689,6 +1689,16 @@
       "commit": "43d1453",
       "date": "2026-05-29",
       "notes": "Score 5.0/10 (adjusted). Human override: perf gate initially rejected for event_timing_ms.keydown_p95=93.37ms (3.4ms sobre fail_lte=90ms, sin grace_lte, required_failures=1). Hugo autorizó el merge — overrun atribuible a ruido de CI, PR no toca hot path de keydown. Calidad del diff: 7.5/10 base. Architecture Contract COMPLIANT: Layer=Application(Document Engine)+UI, Runtime=desktop, Invariants: TipTap as rich view, single canonical serializer, explicit errors. Recommendation: add grace_lte=95 to event_timing_ms.keydown_p95 budget if CI noise pattern confirmed."
+    },
+    {
+      "what": "Fase 6 desktop DoD validation harness and manual evidence. New tests: desktop-adapter-boundary.test.ts (static analysis of web runtime imports), fase6-invariants.test.ts (save/load local, round-trip Rich↔Source, index resilience, offline operation, Service-Contract Matrix for 3 desktop adapters). New harness: scripts/check-fase6-invariants.mjs generates artifacts/fase6/report.json with PASS for all 8 DoD blocks. Evidence: artifacts/fase6/evidence.md documents manual QA checklist for desktop runtime. 595 total tests PASS.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-211",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-211/fase-6-desktop-dod-validation-harness-and-manual-evidence",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/206",
+      "commit": "ed7879a",
+      "date": "2026-05-30",
+      "notes": "Score: 10.0/10. Clean first-round approval. GateResult PASS: typecheck PASS, lint PASS (only pre-existing warnings), tests PASS (595), ops:delivery:gate PASS. Performance Contract: not required — harness/validation issue, no hot path touched. Architecture Contract COMPLIANT: Layer Application+Infra(validation), Runtime desktop, Owner backend/architecture-first. Contracts touched: DocumentService, AssetService, SettingsService. Invariants preserved: adapter boundary isolation, .md as source of truth, index as derived accelerator only."
     }
   ]
 }
