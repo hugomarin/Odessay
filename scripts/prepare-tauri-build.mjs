@@ -2,35 +2,25 @@
 /**
  * Prepare the Next.js app for Tauri static export.
  *
- * Next.js `output: 'export'` does not support API / Route handlers,
- * dynamic pages without generateStaticParams, or server-only APIs
- * like `cookies()`. This script temporarily applies build-time patches
- * so the static build succeeds, then restores them.
+ * Next.js `output: 'export'` does not support API / Route handlers or
+ * directories with dynamic-only pages. This script temporarily moves those
+ * out of the app/ tree so the static build succeeds, then restores them.
  *
  * Usage:
  *   node scripts/prepare-tauri-build.mjs
  *
- * Strategy documented in ODE-207: static export for desktop shell.
- * Long-term, desktop will use Tauri commands instead of Next.js API routes
- * and will not depend on SSR cookies.
+ * All architectural files (layout, supabase/server, write pages, login-form)
+ * are natively runtime-aware via TAURI_BUILD env flag — no patching required.
+ * See ODE-215 (layout) and ODE-216 (remaining files).
  */
 import { execSync } from "node:child_process"
 import globPkg from "glob"
-import { renameSync, writeFileSync, existsSync } from "node:fs"
+import { renameSync, existsSync } from "node:fs"
 import { join } from "node:path"
 
 const { sync } = globPkg
 const root = process.cwd()
 const disabledSuffix = ".route-disabled"
-
-// app/(app)/layout.tsx is now runtime-aware natively (process.env.TAURI_BUILD branch).
-// See ODE-215: no patching required for static export.
-
-const supabaseServerPath = join(root, "lib", "supabase", "server.ts")
-const supabaseServerBackupPath = supabaseServerPath + ".backup"
-
-const writePagePath = join(root, "app", "(app)", "write", "page.tsx")
-const writePageBackupPath = writePagePath + ".backup"
 
 // Directories inside app/ to temporarily exclude from static export.
 // They are moved outside app/ because Next.js scans all subdirectories.
@@ -40,26 +30,6 @@ const dirsToExclude = [
   { inside: "app/[username]", outside: ".excluded-app-username" },
   { inside: "app/perf", outside: ".excluded-app-perf" },
 ]
-
-const staticSupabaseServer = `import { createClient as createSupabaseClient } from "@supabase/supabase-js"
-import { supabasePublicKey, supabaseUrl } from "@/lib/supabase/shared"
-
-export const createClient = async () => {
-  return createSupabaseClient(supabaseUrl, supabasePublicKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
-`
-
-const staticWritePage = `import { EditorShell } from "@/components/editor/editor-shell"
-
-export default function WritePage() {
-  return <EditorShell />
-}
-`
 
 function disableRouteHandlers() {
   const routes = sync("app/**/route.ts", { cwd: root })
@@ -117,48 +87,14 @@ function restoreDirs() {
   }
 }
 
-function patchSupabaseServer() {
-  if (existsSync(supabaseServerPath)) {
-    renameSync(supabaseServerPath, supabaseServerBackupPath)
-    writeFileSync(supabaseServerPath, staticSupabaseServer, "utf-8")
-    console.log("[tauri-build] Patched lib/supabase/server.ts for static export")
-  }
-}
-
-function restoreSupabaseServer() {
-  if (existsSync(supabaseServerBackupPath)) {
-    renameSync(supabaseServerBackupPath, supabaseServerPath)
-    console.log("[tauri-build] Restored lib/supabase/server.ts")
-  }
-}
-
-function patchWritePage() {
-  if (existsSync(writePagePath)) {
-    renameSync(writePagePath, writePageBackupPath)
-    writeFileSync(writePagePath, staticWritePage, "utf-8")
-    console.log("[tauri-build] Patched app/(app)/write/page.tsx for static export")
-  }
-}
-
-function restoreWritePage() {
-  if (existsSync(writePageBackupPath)) {
-    renameSync(writePageBackupPath, writePagePath)
-    console.log("[tauri-build] Restored app/(app)/write/page.tsx")
-  }
-}
-
 let exitCode = 0
 try {
   disableRouteHandlers()
   excludeDirs()
-  patchSupabaseServer()
-  patchWritePage()
   execSync("TAURI_BUILD=true npm run build", { stdio: "inherit", cwd: root })
 } catch (err) {
   exitCode = err.status || 1
 } finally {
-  restoreWritePage()
-  restoreSupabaseServer()
   restoreDirs()
   enableRouteHandlers()
 }

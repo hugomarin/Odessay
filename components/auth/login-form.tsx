@@ -12,6 +12,7 @@ import {
   validateLoginValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import { webAuthService } from "@/lib/services/web-auth-service"
 
 export function LoginForm() {
@@ -50,7 +51,9 @@ export function LoginForm() {
       }
 
       router.replace(redirectTo)
-      router.refresh()
+      if (!isTauriRuntime()) {
+        router.refresh()
+      }
     })
   }
 
