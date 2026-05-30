@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Wire npm run desktop:release — versioned DMG release pipeline. New scripts/release-desktop.mjs: checkVersionDrift validates package.json vs tauri.conf.json versions (fail-fast on drift), runs tauri build, copies DMG to dist/releases/Odessay-{version}-aarch64.dmg. New docs/desktop-distribution.md: build instructions, xattr quarantine workaround for unsigned apps, versioning convention, deferred signing debt documented. 3 unit smoke tests (drift detected, no drift, correct paths). 609 tests.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-217",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-217/wire-production-dmg-build-pipeline-with-versioned-releases-command",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/209",
+      "commit": "bd18ba5",
+      "date": "2026-05-30",
+      "notes": "Score: 9.0/10. Architecture Contract COMPLIANT: Layer=Adapter(build pipeline), Runtime scope=desktop, Owner=backend, all invariants respected (single-command reproducible DMG, package.json as single version source of truth, unsigned DMG with documented workaround). P2: DMG screenshot evidence not attached to PR (deferred — requires Rust toolchain). P3: findDmg no sort before [0]; aarch64 hardcoded. Clean first-round approval."
+    },
+    {
       "what": "Replace prepare-tauri-build.mjs file-system patches with runtime-conditional code. lib/supabase/server.ts factory splits on TAURI_BUILD: desktop returns anon stateless client (no cookies), web preserves SSR cookies path via dynamic imports. write/page.tsx DesktopWritePage is non-async and skips searchParams. write/[id]/page.tsx DesktopWriteDetailPage skips SSR auth and renders EditorShell directly. components/auth/login-form.tsx router.refresh() guarded by isTauriRuntime(). prepare-tauri-build.mjs: removed patchSupabaseServer/restoreSupabaseServer/patchWritePage/restoreWritePage — only route handler disabling and dir exclusion remain. Static export generates 18/18 pages clean, git status clean post-build. 606 tests.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-216",
