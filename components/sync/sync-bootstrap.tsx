@@ -4,11 +4,12 @@ import { useEffect } from "react";
 import { setLocalDBScope } from "@/lib/local-db";
 import { webSyncService } from "@/lib/sync";
 import { createClient } from "@/lib/supabase/client";
+import { isTauriRuntime } from "@/lib/runtime/detect";
 
 export function SyncBootstrap() {
   useEffect(() => {
-    const supabase = createClient();
     let isMounted = true;
+    const desktop = isTauriRuntime();
 
     const hydrateFromRemote = async () => {
       try {
@@ -20,13 +21,14 @@ export function SyncBootstrap() {
       }
     };
 
-    const bootstrap = async () => {
+    const bootstrapWeb = async () => {
+      const supabase = createClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!isMounted) {
-        return;
+        return null;
       }
 
       setLocalDBScope(user?.id);
@@ -37,21 +39,32 @@ export function SyncBootstrap() {
 
       await webSyncService.start();
       await webSyncService.scheduleFlush();
+
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        setLocalDBScope(session?.user?.id);
+        if (session?.user?.id) {
+          void hydrateFromRemote();
+        }
+        void webSyncService.scheduleFlush();
+      });
+
+      return authListener.subscription;
     };
 
-    void bootstrap();
+    const bootstrapDesktop = async () => {
+      setLocalDBScope(undefined);
+      await webSyncService.start();
+      await webSyncService.scheduleFlush();
+      return null;
+    };
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setLocalDBScope(session?.user?.id);
-      if (session?.user?.id) {
-        void hydrateFromRemote();
-      }
-      void webSyncService.scheduleFlush();
-    });
+    const subscriptionPromise = desktop ? bootstrapDesktop() : bootstrapWeb();
 
     return () => {
       isMounted = false;
-      authListener.subscription.unsubscribe();
+      void subscriptionPromise.then((subscription) => {
+        subscription?.unsubscribe();
+      });
       void webSyncService.stop();
     };
   }, []);

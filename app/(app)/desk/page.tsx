@@ -36,6 +36,7 @@ import { createBrowserSharingService, type RecipientPreview } from "@/lib/servic
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { webSyncService } from "@/lib/sync"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
@@ -154,6 +155,12 @@ export default function DeskPage() {
   const hydrateRemoteIfNeeded = useCallback(
     async (force = false) => {
       if (!force && hasHydratedRemoteRef.current) {
+        return
+      }
+
+      // Desktop without a signed-in session stays local-first: no requests to Supabase or /api/*.
+      if (isTauriRuntime() && getLocalDBScope() === "anonymous") {
+        hasHydratedRemoteRef.current = true
         return
       }
 
