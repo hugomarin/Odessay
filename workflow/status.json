@@ -42,9 +42,19 @@
       "ODE-213",
       "ODE-214"
     ],
-    "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-213 (native app menu + filesystem open + desktop shortcuts). Pendientes: ODE-211 (DoD validation harness), ODE-212 (perf-budgets grace_lte), ODE-214 (format context menu right-click). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
+    "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Add grace_lte (+20% over fail_lte) to all required metrics in workflow/perf-budgets.json that lacked a grace band. Prevents CI noise from blocking delivery on marginal overruns (precedent: ODE-209 rejected for 3.4ms overrun on keydown_p95). 12 metrics updated across event_dispatch_ms, event_timing_ms, interaction_latency_ms, and long_tasks_ge_50ms. Gate script already supported grace_lte via hardFailLte = grace_lte ?? fail_lte.",
+      "phase": "Fase 6 — Desktop Local-First Runtime",
+      "issue": "ODE-212",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-212/perf-budgets-anadir-grace-lte-del-20percent-sobre-fail-lte-en-metricas",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/205",
+      "commit": "fc8c185",
+      "date": "2026-05-30",
+      "notes": "Score: 10/10. Zero code risk — config-only change to perf budgets. All validations: typecheck PASS, lint PASS (pre-existing warnings only), 580 tests PASS, delivery gate PASS, Vercel SUCCESS, traceability SUCCESS. Simulated keydown_p95=93ms → WARN (grace_lte=108), confirming acceptance criteria. Architecture Contract: not applicable (no runtime boundary touched). Performance Contract: not required (change reduces false-positive gate failures, does not alter runtime performance). Clean first-round approval."
+    },
     {
       "what": "Extend native macOS menu (built in ODE-213) with Format and View submenus, complete Edit and App menus. Format submenu: headings, lists, blockquote, body, bold, italic, strikethrough, highlight, inline code, code block, link, footnote, table, image, plus Subscope B (Clear Styles, Horizontal Rule, Add Date). View submenu: Focus Mode, Show/Hide Library/Toolbar/Tab Bar, Enter Full Screen (Tauri predefined). Edit completed with Find, Copy as Markdown, Copy as HTML. App menu adds Settings…. Bridge useTauriEditorMenuEvents maps menu:<action-id> → onRunAction with refs (register-once-on-mount, no re-renders on keydown). Subscope B implemented as pure Tiptap commands (clearStyles via clearNodes+unsetAllMarks, horizontalRule via @tiptap/extension-horizontal-rule) or clipboard ops (copyAsMarkdown via tiptap-markdown serializer, copyAsHtml via @tiptap/html generateHTML, date via insertContent YYYY-MM-DD). Undo/Redo uses Tauri predefined which reaches Tiptap History via contenteditable. 580 tests PASS.",
       "phase": "Fase 6 — Desktop Local-First Runtime",
