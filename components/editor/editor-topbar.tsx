@@ -59,6 +59,7 @@ type EditorTopbarProps = {
   onToggleFocusMode: () => void
   onTogglePanel: (panel: "notes" | "properties" | "publication") => void
   onRunAction: RunEditorAction
+  isTabBarVisible?: boolean
 }
 
 type TopbarActionItem = {
@@ -203,6 +204,7 @@ export function EditorTopbar({
   onToggleFocusMode,
   onTogglePanel,
   onRunAction,
+  isTabBarVisible = true,
 }: EditorTopbarProps) {
   const pendingRichSelectionRef = useRef<RichSelectionRange | null>(null)
   const actionState = useEditorActionState(editor)
@@ -371,14 +373,16 @@ export function EditorTopbar({
         className="EditorTopbar sticky top-0 z-20 flex h-[56px] items-center bg-sb/96 backdrop-blur supports-[backdrop-filter]:bg-sb/90"
       >
         <div className="flex min-w-0 flex-1 items-center">
-          <EditorTabs
-            tabs={tabs}
-            activeTabId={activeTabId}
-            onSelectTab={onSelectTab}
-            onCloseTab={onCloseTab}
-            onRenameTab={onRenameTab}
-            onNewTab={onNewTab}
-          />
+          {isTabBarVisible ? (
+            <EditorTabs
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={onSelectTab}
+              onCloseTab={onCloseTab}
+              onRenameTab={onRenameTab}
+              onNewTab={onNewTab}
+            />
+          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-3 border-l-[0.5px] border-border/80 bg-transparent px-3">
