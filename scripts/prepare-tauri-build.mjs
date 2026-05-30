@@ -23,8 +23,8 @@ const { sync } = globPkg
 const root = process.cwd()
 const disabledSuffix = ".route-disabled"
 
-const appLayoutPath = join(root, "app", "(app)", "layout.tsx")
-const appLayoutBackupPath = appLayoutPath + ".backup"
+// app/(app)/layout.tsx is now runtime-aware natively (process.env.TAURI_BUILD branch).
+// See ODE-215: no patching required for static export.
 
 const supabaseServerPath = join(root, "lib", "supabase", "server.ts")
 const supabaseServerBackupPath = supabaseServerPath + ".backup"
@@ -40,23 +40,6 @@ const dirsToExclude = [
   { inside: "app/[username]", outside: ".excluded-app-username" },
   { inside: "app/perf", outside: ".excluded-app-perf" },
 ]
-
-const desktopAppLayout = `import { Sidebar } from "@/components/navigation/sidebar"
-import { UserSettingsProvider } from "@/components/settings/user-settings-provider"
-
-export default function AppLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <UserSettingsProvider>
-      <Sidebar
-        initialSidebarMode="expanded"
-        user={{ email: null, displayName: null, username: null }}
-      >
-        {children}
-      </Sidebar>
-    </UserSettingsProvider>
-  )
-}
-`
 
 const staticSupabaseServer = `import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { supabasePublicKey, supabaseUrl } from "@/lib/supabase/shared"
@@ -134,21 +117,6 @@ function restoreDirs() {
   }
 }
 
-function patchAppLayout() {
-  if (existsSync(appLayoutPath)) {
-    renameSync(appLayoutPath, appLayoutBackupPath)
-    writeFileSync(appLayoutPath, desktopAppLayout, "utf-8")
-    console.log("[tauri-build] Patched app/(app)/layout.tsx for static export")
-  }
-}
-
-function restoreAppLayout() {
-  if (existsSync(appLayoutBackupPath)) {
-    renameSync(appLayoutBackupPath, appLayoutPath)
-    console.log("[tauri-build] Restored app/(app)/layout.tsx")
-  }
-}
-
 function patchSupabaseServer() {
   if (existsSync(supabaseServerPath)) {
     renameSync(supabaseServerPath, supabaseServerBackupPath)
@@ -183,7 +151,6 @@ let exitCode = 0
 try {
   disableRouteHandlers()
   excludeDirs()
-  patchAppLayout()
   patchSupabaseServer()
   patchWritePage()
   execSync("TAURI_BUILD=true npm run build", { stdio: "inherit", cwd: root })
@@ -192,7 +159,6 @@ try {
 } finally {
   restoreWritePage()
   restoreSupabaseServer()
-  restoreAppLayout()
   restoreDirs()
   enableRouteHandlers()
 }
