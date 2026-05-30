@@ -1,0 +1,276 @@
+{
+  "issue": "ODE-215",
+  "capturedAt": "2026-05-30T19:34:56.462Z",
+  "origin": "http://127.0.0.1:51260",
+  "tauriShimInjected": true,
+  "wallClockMs": 664,
+  "navigation": {
+    "startTime": 0,
+    "domInteractive": 49.20000001788139,
+    "domContentLoadedEventEnd": 49.20000001788139,
+    "loadEventEnd": 112.60000002384186
+  },
+  "counts": {
+    "total": 47,
+    "external": 0,
+    "supabaseAuth": 0,
+    "apiInternal": 0
+  },
+  "waterfall": {
+    "supabaseAuthHits": [],
+    "apiHits": [],
+    "externalHits": [],
+    "allRequests": [
+      {
+        "url": "http://127.0.0.1:51260/desk",
+        "method": "GET",
+        "resourceType": "document"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/media/110cbef534704ef8-s.p.woff2",
+        "method": "GET",
+        "resourceType": "font"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/media/13971731025ec697-s.p.woff2",
+        "method": "GET",
+        "resourceType": "font"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/media/27834908180db20f-s.p.woff2",
+        "method": "GET",
+        "resourceType": "font"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/media/5c0c2bcbaa4149ca-s.p.woff2",
+        "method": "GET",
+        "resourceType": "font"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/css/a56ef1c68410bfa3.css",
+        "method": "GET",
+        "resourceType": "stylesheet"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/css/87aa759dd6010098.css",
+        "method": "GET",
+        "resourceType": "stylesheet"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/webpack-105a5eefbd988208.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/4bd1b696-100b9d70ed4e49c1.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/1255-bdfb8df66d4c19b1.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/main-app-ac4e595a1838a2b1.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/44530001-a9ce8b2fb3979725.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/445-af6196394f744d12.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/535-61abe047230b3b5e.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/3323-1d2486b431fa6e2d.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/3248-cc75651293035fa6.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/app/layout-f538bd98f2c3263b.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/70e0d97a-a4a4c8cb0cb4556f.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/54a60aa6-a66357855a586165.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/4554-75264894fddfa7d7.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/2619-04bc32f026a0d946.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/5476-532d29f7435ab286.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/7573-dff3343da742ca47.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/1515-2d93facae6976ae9.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/8536-3d16d4a240c355b5.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/6573-d51ff97a8812a450.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/8941-40eebad8c76a843a.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/4976-fff2ca491911e400.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/5335-7ccde3e2e1fe8eb7.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/5857-ee694957f880e1c7.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/5633-2122369dfe2a02c3.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/app/(app)/desk/page-916b3ec48b4d6f59.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/1575-a89983b5d660c59e.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/374-03badbf06d255a46.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/2315-c547504bebc4a023.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/app/(app)/layout-73c5016d3b60ec1e.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/odessay-logo.svg",
+        "method": "GET",
+        "resourceType": "image"
+      },
+      {
+        "url": "http://127.0.0.1:51260/write.txt?new=1&_rsc=1brhm",
+        "method": "GET",
+        "resourceType": "fetch"
+      },
+      {
+        "url": "http://127.0.0.1:51260/collections.txt?_rsc=1brhm",
+        "method": "GET",
+        "resourceType": "fetch"
+      },
+      {
+        "url": "http://127.0.0.1:51260/settings.txt?_rsc=1brhm",
+        "method": "GET",
+        "resourceType": "fetch"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/8996-62e8c9b9e5f9d73a.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/app/(app)/collections/page-08b24d81c73ae3ae.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/6463-534aaf87a433893f.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/1594-da11a315df401c37.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/app/(app)/write/page-836ce9889671a473.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/4755-c92dbaf7b125126f.js",
+        "method": "GET",
+        "resourceType": "script"
+      },
+      {
+        "url": "http://127.0.0.1:51260/_next/static/chunks/app/(app)/settings/layout-71e0f7d7c297981c.js",
+        "method": "GET",
+        "resourceType": "script"
+      }
+    ]
+  },
+  "contract": {
+    "Waterfall (required)": {
+      "rule": "0 requests to *.supabase.co/auth/* or /api/*",
+      "pass": true
+    },
+    "TTI (required)": {
+      "rule": "performance.getEntriesByType(\"navigation\")[0].domInteractive < 1500 ms",
+      "observedMs": 49.20000001788139,
+      "pass": true
+    }
+  },
+  "consoleErrors": [],
+  "artifacts": {
+    "screenshot": "evidence/ode-215/desk-first-paint.png"
+  }
+}
