@@ -1,6 +1,6 @@
 "use client"
 
-import { createClient } from "@/lib/supabase/client"
+import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import {
   isUsernameFormatValid,
   normalizeEmail,
@@ -62,12 +62,10 @@ function sessionFromUser(user: {
   }
 }
 
-// Token storage is a stub delegated to ODE-219 (Keychain persistence).
-// For now, getSession reads from the Supabase client's in-memory session.
 export const desktopAuthService: AuthService = {
   async signIn(input: SignInInput): Promise<ServiceResponse<AuthSession>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase.auth.signInWithPassword({
         email: normalizeEmail(input.email),
         password: input.password,
@@ -91,7 +89,7 @@ export const desktopAuthService: AuthService = {
 
   async signUp(input: SignUpInput): Promise<ServiceResponse<SignUpResult>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       // Deep link redirect for desktop is handled by ODE-220.
       // For now, use a placeholder that will be replaced by the deep link handler.
       const { data, error } = await supabase.auth.signUp({
@@ -126,7 +124,7 @@ export const desktopAuthService: AuthService = {
 
   async signOut(): Promise<ServiceResponse<null>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { error } = await supabase.auth.signOut()
 
       if (error) {
@@ -155,7 +153,7 @@ export const desktopAuthService: AuthService = {
         return err(toServiceError("INVALID_INPUT", "Username format is invalid."))
       }
 
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase
         .from("public_profiles")
         .select("username")
@@ -183,11 +181,9 @@ export const desktopAuthService: AuthService = {
     }
   },
 
-  // Reads the active session from the Supabase client's in-memory state.
-  // Keychain-backed persistence is delegated to ODE-219.
   async getSession(): Promise<ServiceResponse<AuthSession>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase.auth.getUser()
 
       if (error) {
@@ -208,7 +204,7 @@ export const desktopAuthService: AuthService = {
 
   async updateDisplayName(input: UpdateDisplayNameInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase.auth.updateUser({
         data: { display_name: input.displayName.trim() },
       })
@@ -236,7 +232,7 @@ export const desktopAuthService: AuthService = {
   async updateUsername(input: UpdateUsernameInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
       const username = normalizeUsername(input.username)
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase.auth.updateUser({
         data: { username },
       })
@@ -264,7 +260,7 @@ export const desktopAuthService: AuthService = {
   // Email change redirect URL will be wired via deep links in ODE-220.
   async requestEmailChange(input: RequestEmailChangeInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase.auth.updateUser({
         email: normalizeEmail(input.email),
       })
@@ -291,7 +287,7 @@ export const desktopAuthService: AuthService = {
 
   async updatePassword(input: UpdatePasswordInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
-      const supabase = createClient()
+      const supabase = createDesktopClient()
       const { data, error } = await supabase.auth.updateUser({
         password: input.newPassword,
       })
