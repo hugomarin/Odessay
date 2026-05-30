@@ -24,6 +24,14 @@ export type EditorShortcutAction =
   | "image"
   | "find"
   | "replace"
+  | "clearStyles"
+  | "horizontalRule"
+  | "copyAsMarkdown"
+  | "copyAsHtml"
+  | "date"
+  | "toggleSidebar"
+  | "toggleTopbar"
+  | "toggleTabBar"
 
 export type KeyboardLikeEvent = {
   key: string
@@ -57,6 +65,14 @@ const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
   image: { mac: "⌘⇧I", windows: "Ctrl+Shift+I" },
   find: { mac: "⌘F", windows: "Ctrl+F" },
   replace: { mac: "⌘H", windows: "Ctrl+H" },
+  clearStyles: { mac: "", windows: "" },
+  horizontalRule: { mac: "⌘⇧-", windows: "Ctrl+Shift+-" },
+  copyAsMarkdown: { mac: "", windows: "" },
+  copyAsHtml: { mac: "", windows: "" },
+  date: { mac: "", windows: "" },
+  toggleSidebar: { mac: "", windows: "" },
+  toggleTopbar: { mac: "", windows: "" },
+  toggleTabBar: { mac: "", windows: "" },
 }
 
 const isCommandKey = (event: KeyboardLikeEvent) =>

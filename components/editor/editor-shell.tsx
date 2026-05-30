@@ -1,7 +1,8 @@
 "use client"
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { getMarkRange } from "@tiptap/core"
+import { getMarkRange, type JSONContent } from "@tiptap/core"
+import { generateHTML } from "@tiptap/html"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
@@ -118,6 +119,7 @@ import { webDocumentService } from "@/lib/services/web-document-service"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
+import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import {
   closeTab,
@@ -129,7 +131,7 @@ import {
   saveTabViewState,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
-import { setSidebarMode } from "@/lib/stores/ui-shell-store"
+import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
 
 type EditorShellProps = {
   writingId?: string
@@ -310,6 +312,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [tableModalOpen, setTableModalOpen] = useState(false)
   const [imageModalOpen, setImageModalOpen] = useState(false)
   const [isFocusMode, setIsFocusMode] = useState(false)
+  const [isTopbarVisible, setIsTopbarVisible] = useState(true)
+  const [isTabBarVisible, setIsTabBarVisible] = useState(true)
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
   const [findQuery, setFindQuery] = useState("")
   const [replaceValue, setReplaceValue] = useState("")
@@ -1615,6 +1619,15 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           case "settings":
             router.push("/settings")
             return true
+          case "toggleSidebar":
+            toggleSidebarMode()
+            return true
+          case "toggleTopbar":
+            setIsTopbarVisible((currentState) => !currentState)
+            return true
+          case "toggleTabBar":
+            setIsTabBarVisible((currentState) => !currentState)
+            return true
           default:
             return false
         }
@@ -1986,6 +1999,59 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         case "image":
           setImageModalOpen(true)
           return
+        case "clearStyles":
+          editor.chain().focus().clearNodes().unsetAllMarks().run()
+          return
+        case "horizontalRule":
+          editor.chain().focus().setHorizontalRule().run()
+          return
+        case "date": {
+          const now = new Date()
+          const yyyy = now.getFullYear()
+          const mm = String(now.getMonth() + 1).padStart(2, "0")
+          const dd = String(now.getDate()).padStart(2, "0")
+          editor.chain().focus().insertContent(`${yyyy}-${mm}-${dd}`).run()
+          return
+        }
+        case "copyAsMarkdown": {
+          const { from: mdFrom, to: mdTo } = editor.state.selection
+          let markdown: string
+          if (mdFrom === mdTo) {
+            markdown = getEditorMarkdown(editor)
+          } else {
+            const slice = editor.state.doc.slice(mdFrom, mdTo)
+            const serializer = (editor.storage as { markdown?: { serializer?: { serialize: (node: unknown) => string } } }).markdown?.serializer
+            if (serializer) {
+              try {
+                const tempDoc = editor.schema.nodes.doc.create(null, slice.content)
+                markdown = serializer.serialize(tempDoc)
+              } catch {
+                markdown = editor.state.doc.textBetween(mdFrom, mdTo, "\n")
+              }
+            } else {
+              markdown = editor.state.doc.textBetween(mdFrom, mdTo, "\n")
+            }
+          }
+          void navigator.clipboard.writeText(markdown)
+          return
+        }
+        case "copyAsHtml": {
+          const { from: htmlFrom, to: htmlTo } = editor.state.selection
+          let html: string
+          if (htmlFrom === htmlTo) {
+            html = editor.getHTML()
+          } else {
+            const slice = editor.state.doc.slice(htmlFrom, htmlTo)
+            try {
+              const sliceData = slice.toJSON() as { content?: JSONContent[] }
+              html = generateHTML({ type: "doc", content: sliceData.content ?? [] }, editor.extensionManager.extensions)
+            } catch {
+              html = editor.getHTML()
+            }
+          }
+          void navigator.clipboard.writeText(html)
+          return
+        }
         default:
           return
       }
@@ -3716,6 +3782,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [handleCreateWorkspaceTab])
 
   useTauriMenuEvents({ onOpenFile: handleMenuOpenFile, onNewFile: handleMenuNewFile })
+  useTauriEditorMenuEvents(handleRunAction)
 
   const exportFileBaseName = useMemo(
     () =>
@@ -3842,7 +3909,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   return (
     <section id="editor" data-page="editor" className="min-h-screen bg-bg">
       <div className="EditorLayout hidden min-h-screen flex-col md:flex">
-        {!isFocusMode ? (
+        {!isFocusMode && isTopbarVisible ? (
           <EditorTopbar
             editor={editor}
             mode={mode}
@@ -3860,6 +3927,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
               setActivePanel((current) => (current === panel ? null : panel))
             }}
             onRunAction={handleRunAction}
+            isTabBarVisible={isTabBarVisible}
           />
         ) : null}
 

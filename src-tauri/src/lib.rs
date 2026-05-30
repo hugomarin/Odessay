@@ -17,8 +17,11 @@ pub fn run() {
         )?;
       }
 
+      let settings = MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
       let app_menu = SubmenuBuilder::new(app, "Odessay")
         .about(None)
+        .separator()
+        .item(&settings)
         .separator()
         .services()
         .separator()
@@ -34,6 +37,9 @@ pub fn run() {
         .items(&[&new_file, &open_file])
         .build()?;
 
+      let find = MenuItem::with_id(app, "find", "Find", true, Some("CmdOrCtrl+F"))?;
+      let copy_md = MenuItem::with_id(app, "copyAsMarkdown", "Copy as Markdown", true, None::<&str>)?;
+      let copy_html = MenuItem::with_id(app, "copyAsHtml", "Copy as HTML", true, None::<&str>)?;
       let edit_menu = SubmenuBuilder::new(app, "Edit")
         .undo()
         .redo()
@@ -42,6 +48,74 @@ pub fn run() {
         .copy()
         .paste()
         .select_all()
+        .separator()
+        .item(&find)
+        .separator()
+        .item(&copy_md)
+        .item(&copy_html)
+        .build()?;
+
+      let heading1 = MenuItem::with_id(app, "heading1", "Heading 1", true, Some("CmdOrCtrl+Shift+1"))?;
+      let heading2 = MenuItem::with_id(app, "heading2", "Heading 2", true, Some("CmdOrCtrl+Shift+2"))?;
+      let heading3 = MenuItem::with_id(app, "heading3", "Heading 3", true, Some("CmdOrCtrl+Shift+9"))?;
+      let paragraph = MenuItem::with_id(app, "paragraph", "Body", true, Some("CmdOrCtrl+Shift+0"))?;
+      let blockquote = MenuItem::with_id(app, "blockquote", "Blockquote", true, Some("CmdOrCtrl+Shift+6"))?;
+      let bullet_list = MenuItem::with_id(app, "bulletList", "Bullet List", true, Some("CmdOrCtrl+Shift+L"))?;
+      let ordered_list = MenuItem::with_id(app, "orderedList", "Ordered List", true, Some("CmdOrCtrl+Shift+O"))?;
+      let bold = MenuItem::with_id(app, "bold", "Bold", true, Some("CmdOrCtrl+B"))?;
+      let italic = MenuItem::with_id(app, "italic", "Italic", true, Some("CmdOrCtrl+I"))?;
+      let strike = MenuItem::with_id(app, "strike", "Strikethrough", true, Some("CmdOrCtrl+Shift+X"))?;
+      let highlight = MenuItem::with_id(app, "highlight", "Highlight", true, Some("CmdOrCtrl+Shift+H"))?;
+      let inline_code = MenuItem::with_id(app, "inlineCode", "Code", true, Some("CmdOrCtrl+Shift+C"))?;
+      let code_block = MenuItem::with_id(app, "codeBlock", "Code Block", true, Some("CmdOrCtrl+Shift+D"))?;
+      let link = MenuItem::with_id(app, "link", "Add Link", true, Some("CmdOrCtrl+K"))?;
+      let footnote = MenuItem::with_id(app, "footnote", "Add Footnote", true, Some("CmdOrCtrl+Shift+A"))?;
+      let table = MenuItem::with_id(app, "table", "Add Table", true, Some("CmdOrCtrl+Shift+T"))?;
+      let image = MenuItem::with_id(app, "image", "Add Image", true, Some("CmdOrCtrl+Shift+I"))?;
+      let clear_styles = MenuItem::with_id(app, "clearStyles", "Clear Styles", true, None::<&str>)?;
+      let horizontal_rule = MenuItem::with_id(app, "horizontalRule", "Horizontal Rule", true, Some("CmdOrCtrl+Shift+-"))?;
+      let date = MenuItem::with_id(app, "date", "Add Date", true, None::<&str>)?;
+
+      let format_menu = SubmenuBuilder::new(app, "Format")
+        .item(&heading1)
+        .item(&heading2)
+        .item(&heading3)
+        .item(&paragraph)
+        .separator()
+        .item(&bullet_list)
+        .item(&ordered_list)
+        .item(&blockquote)
+        .separator()
+        .item(&bold)
+        .item(&italic)
+        .item(&strike)
+        .item(&highlight)
+        .item(&inline_code)
+        .item(&code_block)
+        .separator()
+        .item(&link)
+        .item(&footnote)
+        .item(&table)
+        .item(&image)
+        .separator()
+        .item(&clear_styles)
+        .item(&horizontal_rule)
+        .item(&date)
+        .build()?;
+
+      let focus_mode = MenuItem::with_id(app, "focusMode", "Focus Mode", true, Some("CmdOrCtrl+Shift+F"))?;
+      let toggle_sidebar = MenuItem::with_id(app, "toggleSidebar", "Show Library", true, None::<&str>)?;
+      let toggle_topbar = MenuItem::with_id(app, "toggleTopbar", "Show Toolbar", true, None::<&str>)?;
+      let toggle_tab_bar = MenuItem::with_id(app, "toggleTabBar", "Show Tab Bar", true, None::<&str>)?;
+
+      let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&focus_mode)
+        .separator()
+        .item(&toggle_sidebar)
+        .item(&toggle_topbar)
+        .item(&toggle_tab_bar)
+        .separator()
+        .fullscreen()
         .build()?;
 
       let window_menu = SubmenuBuilder::new(app, "Window")
@@ -51,7 +125,7 @@ pub fn run() {
         .build()?;
 
       let menu = MenuBuilder::new(app)
-        .items(&[&app_menu, &file_menu, &edit_menu, &window_menu])
+        .items(&[&app_menu, &file_menu, &edit_menu, &format_menu, &view_menu, &window_menu])
         .build()?;
 
       app.set_menu(menu)?;
