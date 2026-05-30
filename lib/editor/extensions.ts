@@ -10,6 +10,7 @@ import Heading from "@tiptap/extension-heading"
 import Highlight from "@tiptap/extension-highlight"
 import Image from "@tiptap/extension-image"
 import History from "@tiptap/extension-history"
+import HorizontalRule from "@tiptap/extension-horizontal-rule"
 import Italic from "@tiptap/extension-italic"
 import Link from "@tiptap/extension-link"
 import ListItem from "@tiptap/extension-list-item"
@@ -74,6 +75,7 @@ export const createEditorExtensions = (): Extensions => [
   AnnotationReferenceNode,
   FootnoteExtension,
   History,
+  HorizontalRule.extend({ addKeyboardShortcuts: () => ({}) }),
   Placeholder.configure({
     placeholder: ({ node }) => (node.type.name === "heading" ? "Heading..." : ""),
   }),
