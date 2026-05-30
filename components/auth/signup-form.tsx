@@ -14,7 +14,7 @@ import {
   validateSignupValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
-import { webAuthService } from "@/lib/services/web-auth-service"
+import { getAuthService } from "@/lib/services/auth-service-factory"
 
 type UsernameStatus =
   | { state: "idle"; message: string | null }
@@ -67,7 +67,7 @@ export function SignupForm() {
       setUsernameStatus({ state: "checking", message: "Checking username..." })
 
       try {
-        const result = await webAuthService.checkUsernameAvailability({
+        const result = await getAuthService().checkUsernameAvailability({
           username: normalizedUsername,
           scope: "signup",
         })
@@ -128,7 +128,7 @@ export function SignupForm() {
     }
 
     startTransition(async () => {
-      const result = await webAuthService.signUp({
+      const result = await getAuthService().signUp({
         displayName,
         username,
         email: normalizeEmail(email),
