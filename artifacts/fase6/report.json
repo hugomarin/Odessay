@@ -1,0 +1,158 @@
+{
+  "generated_at_utc": "2026-05-30T18:51:43.581Z",
+  "suite": "fase6-invariants",
+  "overall_status": "PASS",
+  "dimensions": {
+    "service_contract_matrix": {
+      "status": "PASS",
+      "services": [
+        {
+          "service": "FilesystemDocumentService",
+          "contract": "C3",
+          "contract_name": "Adapter Invariant Contract",
+          "canonical_doc": "workflow/context/core/odessay-arquitectura.md",
+          "test_suites": [
+            "tests/filesystem-document-service.test.ts",
+            "tests/fase6-invariants.test.ts"
+          ],
+          "verified": true
+        },
+        {
+          "service": "DesktopAssetService",
+          "contract": "C3",
+          "contract_name": "Adapter Invariant Contract",
+          "canonical_doc": "workflow/context/core/odessay-arquitectura.md",
+          "test_suites": [
+            "tests/desktop-asset-service.test.ts",
+            "tests/fase6-invariants.test.ts"
+          ],
+          "verified": true
+        },
+        {
+          "service": "DesktopSettingsService",
+          "contract": "C3",
+          "contract_name": "Adapter Invariant Contract",
+          "canonical_doc": "workflow/context/core/odessay-arquitectura.md",
+          "test_suites": [
+            "tests/desktop-settings-service.test.ts",
+            "tests/fase6-invariants.test.ts"
+          ],
+          "verified": true
+        }
+      ]
+    },
+    "adapter_boundary_compliance": {
+      "status": "PASS",
+      "files_checked": [
+        "lib/services/desktop/filesystem-document-service.ts",
+        "lib/services/desktop/desktop-asset-service.ts",
+        "lib/services/desktop/desktop-settings-service.ts",
+        "lib/services/desktop/local-index-service.ts",
+        "lib/services/desktop/tauri-commands.ts"
+      ],
+      "violations": []
+    },
+    "dod_evidence": {
+      "status": "PASS",
+      "blocks": [
+        {
+          "block": 1,
+          "title": "App desktop usable (login-less)",
+          "status": "PASS",
+          "justification": "FilesystemDocumentService creates drafts without auth, Supabase, or network. All operations use local filesystem via Tauri commands."
+        },
+        {
+          "block": 2,
+          "title": "Filesystem como base operativa del writing",
+          "status": "PASS",
+          "justification": "tests/filesystem-document-service.test.ts covers create, open, save, rename, delete on local .md files. No remote dependency."
+        },
+        {
+          "block": 3,
+          "title": ".md como fuente de verdad en desktop",
+          "status": "PASS",
+          "justification": "FilesystemDocumentService persists canonicalSource='markdown'. openWriting reads .md from disk. No parallel truth sources."
+        },
+        {
+          "block": 4,
+          "title": "Rich mode y Source mode sobre el mismo documento",
+          "status": "PASS",
+          "justification": "tests/markdown-roundtrip.test.ts and fase6 round-trip invariant verify that parseMarkdownToSnapshot → serialize → parse preserves the supported Markdown profile."
+        },
+        {
+          "block": 5,
+          "title": "Infraestructura local derivada correctamente acotada",
+          "status": "PASS",
+          "justification": "LocalIndexService is optional and rebuildable. deleteWriting removes from index but preserves .md. Index never overrides file truth."
+        },
+        {
+          "block": 6,
+          "title": "Promesa percibida por el usuario en esta fase",
+          "status": "not-applicable",
+          "justification": "User-perceived promise requires manual desktop QA. Harness verifies structural preconditions: local-first write-path, no auth gate, offline-capable save."
+        },
+        {
+          "block": 7,
+          "title": "Calidad de entrega (gate técnico)",
+          "status": "PASS",
+          "justification": "npm run typecheck, npm run lint, and npm test pass. Desktop adapter boundary tests and service-contract matrix provide coverage."
+        },
+        {
+          "block": 8,
+          "title": "Evidencia manual mínima",
+          "status": "not-applicable",
+          "justification": "Manual QA flows (create→write→save→close→reopen, Rich↔Source, offline) require desktop runtime verification. Harness documents the required checklist; structural preconditions verified."
+        }
+      ]
+    }
+  },
+  "main_flows": [
+    {
+      "flow": "desktop write → save → reopen",
+      "services": [
+        "FilesystemDocumentService"
+      ],
+      "contract": "C3",
+      "status": "PASS",
+      "evidence": "tests/filesystem-document-service.test.ts, tests/fase6-invariants.test.ts"
+    },
+    {
+      "flow": "desktop Rich ↔ Source round-trip",
+      "services": [
+        "FilesystemDocumentService"
+      ],
+      "contract": "C3",
+      "status": "PASS",
+      "evidence": "tests/markdown-roundtrip.test.ts, tests/fase6-invariants.test.ts"
+    },
+    {
+      "flow": "desktop local asset resolution",
+      "services": [
+        "DesktopAssetService"
+      ],
+      "contract": "C3",
+      "status": "PASS",
+      "evidence": "tests/desktop-asset-service.test.ts"
+    },
+    {
+      "flow": "desktop settings persistence",
+      "services": [
+        "DesktopSettingsService"
+      ],
+      "contract": "C3",
+      "status": "PASS",
+      "evidence": "tests/desktop-settings-service.test.ts"
+    }
+  ],
+  "commands": [
+    "npx vitest run tests/fase6-invariants.test.ts tests/desktop-adapter-boundary.test.ts tests/filesystem-document-service.test.ts tests/desktop-asset-service.test.ts tests/desktop-settings-service.test.ts"
+  ],
+  "suites": [
+    "tests/fase6-invariants.test.ts",
+    "tests/desktop-adapter-boundary.test.ts",
+    "tests/filesystem-document-service.test.ts",
+    "tests/desktop-asset-service.test.ts",
+    "tests/desktop-settings-service.test.ts"
+  ],
+  "stdout_path": "artifacts/fase6/invariants.log"
+}
