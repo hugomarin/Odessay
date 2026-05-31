@@ -1,3 +1,4 @@
+import { DesktopAppShell } from "@/components/navigation/desktop-app-shell"
 import { Sidebar } from "@/components/navigation/sidebar"
 import { UserSettingsProvider } from "@/components/settings/user-settings-provider"
 
@@ -11,12 +12,7 @@ export default async function AppLayout({ children }: AppLayoutProps) {
   if (isTauriBuild) {
     return (
       <UserSettingsProvider>
-        <Sidebar
-          initialSidebarMode="expanded"
-          user={{ email: null, displayName: null, username: null }}
-        >
-          {children}
-        </Sidebar>
+        <DesktopAppShell>{children}</DesktopAppShell>
       </UserSettingsProvider>
     )
   }
