@@ -19,6 +19,10 @@
       {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
+      },
+      {
+        "issue": "ODE-219",
+        "reason": "Second review round in progress — review_rejected commit on main (e856bb0) creates premature reference before built entry. Remove this exception after merge."
       }
     ]
   },
