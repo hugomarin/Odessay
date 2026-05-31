@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import type { Session } from "@supabase/supabase-js"
 import { Sidebar } from "@/components/navigation/sidebar"
-import { getAuthService } from "@/lib/services/auth-service-factory"
+import { createDesktopClient } from "@/lib/supabase/desktop-client"
 
 type ShellUser = {
   displayName: string | null
@@ -18,16 +19,30 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ShellUser>(ANON_USER)
 
   useEffect(() => {
-    void getAuthService()
-      .getSession()
-      .then((result) => {
-        if (!result.data?.user) {
-          router.replace("/login")
-          return
-        }
-        const { email, displayName, username } = result.data.user
-        setUser({ email: email ?? null, displayName: displayName ?? null, username: username ?? null })
+    const supabase = createDesktopClient()
+    let mounted = true
+
+    const hydrate = (session: Session | null) => {
+      if (!mounted) return
+      if (!session?.user) {
+        router.replace("/login")
+        return
+      }
+      const u = session.user
+      setUser({
+        email: u.email ?? null,
+        displayName: (u.user_metadata?.display_name as string) ?? null,
+        username: (u.user_metadata?.username as string) ?? null,
       })
+    }
+
+    void supabase.auth.getSession().then(({ data }) => hydrate(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => hydrate(session))
+
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+    }
   }, [router])
 
   return (
