@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-05-30",
+  "last_updated": "2026-06-01",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -20,10 +20,6 @@
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
       },
-      {
-        "issue": "ODE-219",
-        "reason": "Second review round in progress — review_rejected commit on main (e856bb0) creates premature reference before built entry. Remove this exception after merge."
-      }
     ]
   },
   "active_phase": {
@@ -1737,6 +1733,14 @@
       "issue": "ODE-218",
       "commit": "bbcb9c7",
       "date": "2026-05-30"
+    },
+    {
+      "issue": "ODE-219",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-219/persist-desktop-auth-tokens-in-macos-keychain-via-tauri-plugin",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/211",
+      "commit": "55ec9e9",
+      "date": "2026-06-01",
+      "notes": "Score: 9.5/10. GateResult PASS. Key discovery: createBrowserClient from @supabase/ssr silently overrides auth.storage with cookies — fix is createClient from @supabase/supabase-js. Architecture Contract COMPLIANT: Keychain tokens via keyring crate (apple-native), never in localStorage, signOut cleans all entries, onAuthStateChange wait resolves post-signIn race. Two follow-ups: ODE-231 (desktop write routing), ODE-232 (tauri-plugin-store for unsigned DMG persistence). context_risk=true: SSR adapter undocumented behavior, Keychain ACL limitation with ad-hoc signing."
     }
   ]
 }
