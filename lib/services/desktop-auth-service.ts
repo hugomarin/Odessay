@@ -75,6 +75,26 @@ export const desktopAuthService: AuthService = {
         return err(toServiceError("UNAUTHORIZED", error.message))
       }
 
+      // Wait for Supabase to flush the session to Keychain (async storage)
+      // before returning. Otherwise router.replace("/desk") fires while the
+      // setItem promise is still in flight, DesktopAppShell mounts on /desk,
+      // its getSession() resolves null, and bounces the user back to /login.
+      await new Promise<void>((resolve) => {
+        let unsubscribe: (() => void) | null = null
+        const timeout = setTimeout(() => {
+          unsubscribe?.()
+          resolve()
+        }, 3000)
+        const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+          if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session) {
+            clearTimeout(timeout)
+            sub.subscription.unsubscribe()
+            resolve()
+          }
+        })
+        unsubscribe = () => sub.subscription.unsubscribe()
+      })
+
       return ok(sessionFromUser(data.user))
     } catch (error) {
       return err(

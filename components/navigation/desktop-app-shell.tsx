@@ -22,12 +22,8 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
     const supabase = createDesktopClient()
     let mounted = true
 
-    const hydrate = (session: Session | null) => {
-      if (!mounted) return
-      if (!session?.user) {
-        router.replace("/login")
-        return
-      }
+    const applySession = (session: Session | null) => {
+      if (!mounted || !session?.user) return
       const u = session.user
       setUser({
         email: u.email ?? null,
@@ -36,8 +32,29 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
       })
     }
 
-    void supabase.auth.getSession().then(({ data }) => hydrate(data.session))
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, session) => hydrate(session))
+    // Authoritative initial check: getSession awaits Keychain hydration before
+    // resolving. If it returns null, the user is genuinely unauthenticated.
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+      if (!data.session?.user) {
+        router.replace("/login")
+        return
+      }
+      applySession(data.session)
+    })
+
+    // Subscribe to subsequent changes. NEVER redirect on INITIAL_SESSION or
+    // TOKEN_REFRESHED with null — those can fire transiently when the layout
+    // remounts on navigation, and we'd bounce the authenticated user back to
+    // /login. Only redirect on explicit SIGNED_OUT.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+      if (event === "SIGNED_OUT") {
+        router.replace("/login")
+        return
+      }
+      applySession(session)
+    })
 
     return () => {
       mounted = false
