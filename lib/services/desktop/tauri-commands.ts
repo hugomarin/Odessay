@@ -90,3 +90,17 @@ export async function tauriSettingsDelete(configDir: string, key: string): Promi
 export async function tauriSettingsListKeys(configDir: string): Promise<string[]> {
   return invoke<string[]>("settings_list_keys", { configDir })
 }
+
+// ─── Keychain ─────────────────────────────────────────────────────────────────
+
+export async function tauriKeychainWrite(account: string, value: string): Promise<void> {
+  return invoke<void>("keychain_write_token", { account, value })
+}
+
+export async function tauriKeychainRead(account: string): Promise<string | null> {
+  return invoke<string | null>("keychain_read_token", { account })
+}
+
+export async function tauriKeychainDelete(account: string): Promise<void> {
+  return invoke<void>("keychain_delete_token", { account })
+}

@@ -30,6 +30,13 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }))
 
+vi.mock("@/lib/supabase/desktop-client", () => ({
+  createDesktopClient: () => ({
+    auth: supabaseAuthMock,
+    from: () => supabaseFromMock,
+  }),
+}))
+
 // isTauriRuntime is stubbed per test via vi.stubGlobal
 vi.mock("@/lib/runtime/detect", () => ({
   isTauriRuntime: vi.fn(() => false),

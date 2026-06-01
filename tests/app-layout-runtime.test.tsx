@@ -18,6 +18,9 @@ const SIDEBAR_MARKER = function Sidebar() {
 const USER_SETTINGS_MARKER = function UserSettingsProvider() {
   return null
 }
+const DESKTOP_APP_SHELL_MARKER = function DesktopAppShell() {
+  return null
+}
 
 vi.mock("next/headers", () => ({
   cookies: cookiesMock,
@@ -33,6 +36,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/components/navigation/sidebar", () => ({
   Sidebar: SIDEBAR_MARKER,
+}))
+
+vi.mock("@/components/navigation/desktop-app-shell", () => ({
+  DesktopAppShell: DESKTOP_APP_SHELL_MARKER,
 }))
 
 vi.mock("@/components/settings/user-settings-provider", () => ({
@@ -122,17 +129,13 @@ describe("app/(app)/layout runtime split", () => {
       vi.stubEnv("TAURI_BUILD", "true")
     })
 
-    it("renders Sidebar with anonymous user and never touches cookies or supabase", async () => {
+    it("renders DesktopAppShell and never touches cookies or supabase server", async () => {
       const AppLayout = await loadLayout()
 
       const element = (await AppLayout({ children: "child" })) as ReactElement
-      const sidebar = getSidebarElement(element)
-      const props = sidebar.props as {
-        initialSidebarMode: string
-        user: { email: string | null; displayName: string | null; username: string | null }
-      }
-      expect(props.initialSidebarMode).toBe("expanded")
-      expect(props.user).toEqual({ email: null, displayName: null, username: null })
+      expect(element.type).toBe(USER_SETTINGS_MARKER)
+      const shell = (element.props as { children: ReactElement }).children
+      expect(shell.type).toBe(DESKTOP_APP_SHELL_MARKER)
 
       expect(cookiesMock).not.toHaveBeenCalled()
       expect(createSupabaseServerMock).not.toHaveBeenCalled()

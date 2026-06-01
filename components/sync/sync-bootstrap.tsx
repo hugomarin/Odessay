@@ -52,7 +52,8 @@ export function SyncBootstrap() {
     };
 
     const bootstrapDesktop = async () => {
-      setLocalDBScope(undefined);
+      const sessionResult = await getAuthService().getSession();
+      setLocalDBScope(sessionResult.data?.user?.id ?? undefined);
       await webSyncService.start();
       await webSyncService.scheduleFlush();
       return null;

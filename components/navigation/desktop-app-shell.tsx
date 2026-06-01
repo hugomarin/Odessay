@@ -1,0 +1,70 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import type { Session } from "@supabase/supabase-js"
+import { Sidebar } from "@/components/navigation/sidebar"
+import { createDesktopClient } from "@/lib/supabase/desktop-client"
+
+type ShellUser = {
+  displayName: string | null
+  email: string | null
+  username: string | null
+}
+
+const ANON_USER: ShellUser = { email: null, displayName: null, username: null }
+
+export function DesktopAppShell({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
+  const [user, setUser] = useState<ShellUser>(ANON_USER)
+
+  useEffect(() => {
+    const supabase = createDesktopClient()
+    let mounted = true
+
+    const applySession = (session: Session | null) => {
+      if (!mounted || !session?.user) return
+      const u = session.user
+      setUser({
+        email: u.email ?? null,
+        displayName: (u.user_metadata?.display_name as string) ?? null,
+        username: (u.user_metadata?.username as string) ?? null,
+      })
+    }
+
+    // Authoritative initial check: getSession awaits Keychain hydration before
+    // resolving. If it returns null, the user is genuinely unauthenticated.
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+      if (!data.session?.user) {
+        router.replace("/login")
+        return
+      }
+      applySession(data.session)
+    })
+
+    // Subscribe to subsequent changes. NEVER redirect on INITIAL_SESSION or
+    // TOKEN_REFRESHED with null — those can fire transiently when the layout
+    // remounts on navigation, and we'd bounce the authenticated user back to
+    // /login. Only redirect on explicit SIGNED_OUT.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return
+      if (event === "SIGNED_OUT") {
+        router.replace("/login")
+        return
+      }
+      applySession(session)
+    })
+
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+    }
+  }, [router])
+
+  return (
+    <Sidebar initialSidebarMode="expanded" user={user}>
+      {children}
+    </Sidebar>
+  )
+}

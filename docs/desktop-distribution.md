@@ -67,6 +67,40 @@ Alternatively, the user can right-click the app in Finder → **Open** → click
 
 ---
 
+## macOS Keychain access
+
+Odessay stores authentication tokens in the macOS Keychain rather than in browser `localStorage`. This keeps credentials in the system's secure enclave and ensures sessions survive app restarts.
+
+### First sign-in prompt
+
+On the **first sign-in** after installing a new build, macOS will show a system dialog:
+
+> _"odessay" wants to use your confidential information stored in "Odessay" in your keychain._
+
+The user must click **Always Allow** to let the app store and retrieve session tokens without prompting on every launch. Clicking **Allow** (without "Always") works but will trigger the dialog again the next time the app restarts.
+
+If the user clicks **Deny**, the app falls back to an unauthenticated state and will ask them to sign in again on the next launch.
+
+### Viewing stored credentials
+
+The entry is visible in **Keychain Access** (Applications → Utilities → Keychain Access) under:
+
+- **Keychain:** login
+- **Kind:** application password
+- **Service name:** Odessay
+
+### Removing stored credentials manually
+
+If a user wants to force a clean sign-in state:
+
+```bash
+security delete-generic-password -s "Odessay" -a "sb-*"
+```
+
+Or delete the entry directly in Keychain Access.
+
+---
+
 ## Code signing — deferred debt
 
 Code signing and notarization with an Apple Developer ID ($99/year) are **intentionally out of scope** for the current milestone. Without signing:
