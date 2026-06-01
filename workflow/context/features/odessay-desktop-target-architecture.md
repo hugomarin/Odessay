@@ -386,6 +386,38 @@ Implementaciones:
 - web: `SupabaseWebAuthService`
 - desktop: `DesktopAuthService`
 
+### Storage de tokens en desktop: restricciones por tipo de firma
+
+**El storage de tokens depende del estado de firma del bundle.**
+
+#### Apps ad-hoc signed (sin Apple Developer ID)
+
+macOS Keychain asocia los ACL de cada entry con la code signature del proceso que lo creó. Las apps ad-hoc no tienen identidad verificable entre ejecuciones: el write funciona y el entry aparece en Keychain Access, pero el read desde el siguiente proceso falla silenciosamente (devuelve `NoEntry`).
+
+**Solución para distribución ad-hoc:** `tauri-plugin-store` — JSON file en el app data dir (`$APPDATA/odessay/secure.dat`). No es secure storage del SO, pero persiste confiablemente sin depender de ACL. Mantiene el mismo contrato de adapter (`getItem/setItem/removeItem`) para que el switch a Keychain sea drop-in cuando llegue el Developer ID.
+
+#### Apps firmadas con Apple Developer ID
+
+Keychain funciona correctamente. La identidad del proceso es verificable y los ACL persisten entre ejecuciones. Migrar a Keychain cuando llegue code signing formal.
+
+#### Regla operativa
+
+Nunca usar `@supabase/ssr.createBrowserClient` en el runtime desktop. Este wrapper hardcodea un adapter de cookies que sobreescribe silenciosamente cualquier `auth.storage` custom pasado en options (ver `node_modules/@supabase/ssr/dist/module/createBrowserClient.js`). Usar `createClient` de `@supabase/supabase-js` directamente, que sí respeta el storage custom:
+
+```ts
+// ❌ NO — storage custom se ignora silenciosamente
+import { createBrowserClient } from "@supabase/ssr"
+createBrowserClient(url, key, { auth: { storage: myStorage } })
+
+// ✅ SÍ — storage custom respetado
+import { createClient } from "@supabase/supabase-js"
+createClient(url, key, { auth: { storage: myStorage, persistSession: true, autoRefreshToken: true } })
+```
+
+#### Singleton obligatorio
+
+El cliente desktop debe ser singleton. Cada instancia nueva nace con sesión vacía en memoria. Si `signIn` y el siguiente `getSession` usan instancias distintas, `getSession` devuelve `null` aunque el signIn haya tenido éxito y el storage esté escrito correctamente.
+
 ### `SharingService`
 
 Debe cubrir:

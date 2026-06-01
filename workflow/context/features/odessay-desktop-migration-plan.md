@@ -369,7 +369,7 @@ Montar el runtime final cuando la arquitectura ya soporte desktop de forma natur
 
 - decisión final de shell
 - build funcional desktop
-- validación de flows core
+- validación de flows core en el bundle de producción (no solo en `tauri dev`)
 
 ### No objetivos
 
@@ -379,10 +379,21 @@ Montar el runtime final cuando la arquitectura ya soporte desktop de forma natur
 
 - elegir shell demasiado pronto
 - condicionar la arquitectura a una API específica del shell
+- asumir que lo que funciona en `tauri dev` funciona en el DMG distribuido (son entornos distintos — ver `odessay-desktop-migration-diagnostic.md §Diferencias entre tauri dev y tauri build`)
+
+### Prerequisitos de merge para cualquier issue de Fase 7
+
+Todo PR de Fase 7 debe validarse contra el bundle de producción antes de mergear:
+
+1. **Bifurcación `isTauriBuild` en toda página `(app)` nueva con server auth.** Sin esto, `redirect("/login")` se bake en el RSC payload del static export y la página bouncea al usuario aunque haya sesión. Ver patrón en `app/(app)/layout.tsx`, `app/(app)/write/[id]/page.tsx`, `app/(app)/settings/account/page.tsx`.
+
+2. **CI parity validation (ODE-225) debe estar Done** antes de cerrar Fase 7. Valida que las capacidades del bundle de producción son idénticas a las de `tauri dev`. No es un issue de cierre opcional — es el gate de calidad de toda la fase.
+
+3. **DevTools habilitado** (`tauri = { features = ["devtools"] }` en `Cargo.toml`) mientras Fase 7 esté abierta. Sin acceso a consola en el DMG, los bugs son indiagnosticables.
 
 ### Criterio de salida
 
-La shell solo hospeda el producto; no define el core ni fuerza la estructura del sistema.
+La shell solo hospeda el producto; no define el core ni fuerza la estructura del sistema. El DMG distribuido es usable como app real, no solo como salida del comando `tauri build`.
 
 ---
 

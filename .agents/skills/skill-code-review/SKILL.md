@@ -176,6 +176,21 @@ Si el issue requería ese contrato y no existe, está incompleto o el diff lo co
   - AI writing assist (`corrections/title`): salida estructurada de sugerencias, sin auto-aplicación.
 - [ ] ¿Los bordes son `0.5px`? ¿Los iconos tienen `strokeWidth={1.5}`?
 
+### Desktop bundle — verificar cuando el PR toca Tauri o desktop
+
+Aplicar este bloque si el diff toca cualquiera de: `src-tauri/`, `lib/runtime/`, `lib/supabase/desktop-client.ts`, `lib/services/desktop-*`, `lib/auth/secure-storage.ts`, `app/(app)/**/page.tsx` con server auth, o `scripts/prepare-tauri-build.mjs`.
+
+**`tauri dev` y el DMG de producción son entornos distintos.** Lo que funciona en dev puede fallar silenciosamente en el bundle. Referencias: `odessay-desktop-migration-diagnostic.md §Diferencias entre tauri dev y tauri build`, `odessay-desktop-target-architecture.md §Storage de tokens`.
+
+- [ ] **CSP incluye `ipc:` y `http://ipc.localhost` en `connect-src`.** Sin esto, todos los `invoke()` fallan silenciosamente (devuelven `null`, no throw). La primera señal es un error de consola "Refused to connect to ipc://localhost/..." — solo visible si DevTools está habilitado.
+- [ ] **Se usa `createClient` de `@supabase/supabase-js`, no `createBrowserClient` de `@supabase/ssr`.** El wrapper SSR hardcodea cookies como storage y sobreescribe silenciosamente cualquier `auth.storage` custom. En el custom protocol del DMG las cookies no persisten.
+- [ ] **`keyring` crate declara backend explícito.** `features = []` compila sin error pero usa mock en memoria: write devuelve Ok, read devuelve null. Para macOS: `features = ["apple-native"]`.
+- [ ] **Toda página `app/(app)/**/page.tsx` nueva con `redirect("/login")` server-side tiene bifurcación `isTauriBuild`.** Sin esto, el redirect se bake en el RSC payload del static export y la página bouncea siempre, aunque haya sesión.
+- [ ] **DevTools habilitado en el bundle** (`tauri = { features = ["devtools"] }` en `src-tauri/Cargo.toml`) mientras Fase 7 esté abierta. Sin consola en el DMG, los bugs de auth, IPC y CSP son indiagnosticables.
+- [ ] **El flow fue probado en el DMG real**, no solo en `tauri dev`. Mínimo: signin → navegar a una ruta interna → cerrar app → reabrir → verificar sesión preservada.
+
+Si alguno de estos checks falla → **rechazar**. Son bloqueantes porque los bugs resultantes no se detectan en tests unitarios ni en `tauri dev`.
+
 ### Base de datos
 - [ ] Migraciones versionadas y con rollback documentado.
 - [ ] `odessay-modelo-datos.md` actualizado si hubo cambios de schema.

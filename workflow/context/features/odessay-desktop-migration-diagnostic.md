@@ -396,6 +396,40 @@ Esto es especialmente importante para imágenes y sharing, donde web y desktop d
 
 ---
 
+## Diferencias entre `tauri dev` y `tauri build` (bundle de producción)
+
+**`tauri dev` y el DMG producido por `tauri build` son entornos fundamentalmente distintos.** Probar solo en `tauri dev` es engañoso — varios problemas son invisibles hasta que se prueba el bundle real.
+
+| Dimensión | `tauri dev` | `tauri build` (DMG) |
+|---|---|---|
+| Carga el frontend desde | `http://localhost:3000` (servidor Next.js real) | `tauri://localhost` (custom protocol, static export) |
+| CSP del bundle | No aplica (dev bypassa el CSP del bundle) | Aplica estrictamente — bloquea `ipc:` si no se declara |
+| Tauri IPC (`invoke()`) | Funciona sin restricción | Requiere `ipc:` y `http://ipc.localhost` en `connect-src` |
+| Server-side auth (cookies, `getUser()`) | Funciona (Next SSR corriendo) | No existe — las páginas se pre-renderizan con cookies vacías |
+| `redirect("/login")` server-side | Funciona correctamente | Se bake en el RSC payload — redirige en toda visita aunque haya sesión |
+| Supabase storage (`localStorage`, cookies) | Funciona con `document.cookie` normal | Cookies no persisten en custom protocol; storage custom requerido |
+| DevTools | Siempre disponible | Requiere `features = ["devtools"]` en `Cargo.toml` (obligatorio en Fase 7) |
+
+### Consecuencias para el desarrollo
+
+**Toda feature que toca auth, storage, sync, Tauri commands o network debe validarse contra el DMG real** (`npm run desktop:release`), no solo contra `tauri dev`. Las pruebas en `tauri dev` no detectan:
+
+- CSP bloqueando Tauri IPC (`invoke()` devuelve `null` silenciosamente)
+- Páginas con `redirect("/login")` server-side que se rompen en el static export
+- Storage adapters custom ignorados por wrappers SSR (ver `odessay-desktop-target-architecture.md §Storage de tokens`)
+- Keyring sin features declarados (mock backend silencioso)
+- Rutas dynamic (`/write/[id]`) para UUIDs no declarados en `generateStaticParams`
+
+### Checklist antes de marcar un issue desktop como Done
+
+1. ¿Se corrió `npm run desktop:release` y se instaló el DMG resultante?
+2. ¿El CSP del bundle incluye `ipc:` y `http://ipc.localhost` en `connect-src`?
+3. ¿Toda página `(app)` nueva con server auth tiene bifurcación `isTauriBuild`?
+4. ¿DevTools está habilitado en el bundle (`features = ["devtools"]`) para poder diagnosticar?
+5. ¿El flow completo (signin → navegar → cerrar → reabrir) fue probado en el DMG real?
+
+---
+
 ## Documento siguiente en la secuencia
 
 El siguiente artefacto de esta serie es:
