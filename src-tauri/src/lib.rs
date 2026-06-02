@@ -2,6 +2,7 @@ pub mod commands;
 
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::Emitter;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -107,6 +108,7 @@ pub fn run() {
       let toggle_sidebar = MenuItem::with_id(app, "toggleSidebar", "Show Library", true, None::<&str>)?;
       let toggle_topbar = MenuItem::with_id(app, "toggleTopbar", "Show Toolbar", true, None::<&str>)?;
       let toggle_tab_bar = MenuItem::with_id(app, "toggleTabBar", "Show Tab Bar", true, None::<&str>)?;
+      let devtools = MenuItem::with_id(app, "openDevtools", "Open DevTools", true, Some("Alt+CmdOrCtrl+I"))?;
 
       let view_menu = SubmenuBuilder::new(app, "View")
         .item(&focus_mode)
@@ -114,6 +116,8 @@ pub fn run() {
         .item(&toggle_sidebar)
         .item(&toggle_topbar)
         .item(&toggle_tab_bar)
+        .separator()
+        .item(&devtools)
         .separator()
         .fullscreen()
         .build()?;
@@ -131,6 +135,12 @@ pub fn run() {
       app.set_menu(menu)?;
 
       app.on_menu_event(|app, event| {
+        if event.id().as_ref() == "openDevtools" {
+          if let Some(window) = app.get_webview_window("main") {
+            window.open_devtools();
+          }
+          return;
+        }
         let _ = app.emit(&format!("menu:{}", event.id().as_ref()), ());
       });
 

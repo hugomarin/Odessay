@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { setLocalDBScope } from "@/lib/local-db";
+import { createDesktopClient } from "@/lib/supabase/desktop-client";
 import { webSyncService } from "@/lib/sync";
 import { createClient } from "@/lib/supabase/client";
 import { isTauriRuntime } from "@/lib/runtime/detect";
@@ -52,11 +53,17 @@ export function SyncBootstrap() {
     };
 
     const bootstrapDesktop = async () => {
+      const supabase = createDesktopClient();
+
       const sessionResult = await getAuthService().getSession();
       setLocalDBScope(sessionResult.data?.user?.id ?? undefined);
       await webSyncService.start();
       await webSyncService.scheduleFlush();
-      return null;
+      const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+        setLocalDBScope(session?.user?.id);
+        void webSyncService.scheduleFlush();
+      });
+      return () => authListener.subscription.unsubscribe();
     };
 
     const subscriptionPromise = desktop ? bootstrapDesktop() : bootstrapWeb();
@@ -64,6 +71,10 @@ export function SyncBootstrap() {
     return () => {
       isMounted = false;
       void subscriptionPromise.then((subscription) => {
+        if (typeof subscription === "function") {
+          subscription();
+          return;
+        }
         subscription?.unsubscribe();
       });
       void webSyncService.stop();

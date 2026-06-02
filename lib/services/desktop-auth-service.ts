@@ -2,6 +2,7 @@
 
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import {
+  getConfiguredAuthConfirmRedirectUrl,
   isUsernameFormatValid,
   normalizeEmail,
   normalizeUsername,
@@ -110,12 +111,11 @@ export const desktopAuthService: AuthService = {
   async signUp(input: SignUpInput): Promise<ServiceResponse<SignUpResult>> {
     try {
       const supabase = createDesktopClient()
-      // Deep link redirect for desktop is handled by ODE-220.
-      // For now, use a placeholder that will be replaced by the deep link handler.
       const { data, error } = await supabase.auth.signUp({
         email: normalizeEmail(input.email),
         password: input.password,
         options: {
+          emailRedirectTo: getConfiguredAuthConfirmRedirectUrl(input.nextPath ?? "/desk"),
           data: {
             display_name: input.displayName.trim(),
             username: normalizeUsername(input.username),

@@ -5,11 +5,14 @@ import { type FormEvent, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
+  getConfiguredResetPasswordRedirectUrl,
   getResetPasswordRedirectUrl,
   normalizeEmail,
   validateForgotPasswordValues,
   type AuthFieldErrors,
 } from "@/lib/auth/validation"
+import { isTauriRuntime } from "@/lib/runtime/detect"
+import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { createClient } from "@/lib/supabase/client"
 
 const successMessage =
@@ -35,9 +38,12 @@ export function ForgotPasswordForm() {
     }
 
     startTransition(async () => {
-      const supabase = createClient()
+      const desktop = isTauriRuntime()
+      const supabase = desktop ? createDesktopClient() : createClient()
+      const redirectTo = desktop ? getConfiguredResetPasswordRedirectUrl() : getResetPasswordRedirectUrl(window.location.origin)
+
       const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-        redirectTo: getResetPasswordRedirectUrl(window.location.origin),
+        redirectTo,
       })
 
       if (error) {

@@ -158,6 +158,16 @@ const normalizeAppOrigin = (value: string | undefined | null) => {
   return trimmed.replace(/\/$/, "")
 }
 
+const getConfiguredAppOrigin = () => {
+  const configured = normalizeAppOrigin(process.env.NEXT_PUBLIC_APP_URL)
+
+  if (!configured) {
+    throw new Error("NEXT_PUBLIC_APP_URL must be configured for auth email callbacks.")
+  }
+
+  return configured
+}
+
 export const getAuthConfirmRedirectUrl = (origin: string, next: string) => {
   const appOrigin = normalizeAppOrigin(process.env.NEXT_PUBLIC_APP_URL)
   const safeOrigin = appOrigin ?? origin.replace(/\/$/, "")
@@ -166,5 +176,13 @@ export const getAuthConfirmRedirectUrl = (origin: string, next: string) => {
   return `${safeOrigin}/auth/confirm?next=${encodeURIComponent(safeNext)}`
 }
 
+export const getConfiguredAuthConfirmRedirectUrl = (next: string) =>
+  `${getConfiguredAppOrigin()}/auth/confirm?next=${encodeURIComponent(
+    sanitizeRedirectPath(next, "/desk"),
+  )}`
+
 export const getResetPasswordRedirectUrl = (origin: string) =>
   getAuthConfirmRedirectUrl(origin, "/reset-password")
+
+export const getConfiguredResetPasswordRedirectUrl = () =>
+  getConfiguredAuthConfirmRedirectUrl("/reset-password")

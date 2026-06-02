@@ -12,6 +12,7 @@ let client: SupabaseClient | null = null
 // Singleton: all desktop auth operations share one client instance so that
 // the in-memory session written by signIn is visible to subsequent getSession()
 // calls without requiring a Keychain round-trip on every operation.
+//
 export const createDesktopClient = (): SupabaseClient => {
   if (client) return client
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -22,8 +23,7 @@ export const createDesktopClient = (): SupabaseClient => {
       storage: keychainStorage,
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false, // desktop uses deep links (ODE-220), not URL hash
-      flowType: "pkce",
+      detectSessionInUrl: false, // desktop email callbacks complete in web, not in-app URLs
     },
   })
   return client
