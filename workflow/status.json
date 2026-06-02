@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Replace keyring Rust crate (macOS Keychain) with tauri-plugin-store (JSON file in app-data dir) as desktop auth token backend. Adds DesktopStartupRedirect component to route app launch to /desk (session) or /login (no session). keychainStorage TS adapter contract unchanged.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-232",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-232/replace-keychain-backend-with-tauri-plugin-store-for-unsigned",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/214",
+      "commit": "65e9587",
+      "date": "2026-06-02",
+      "notes": "Score: 8.5/10. Architecture Contract COMPLIANT: Layer=Adapter(desktop), Runtime scope=desktop, Owner=backend, all invariants preserved. P2: docs show com.odessay.app but tauri.conf.json is com.z9ne.odessay (wrong path in manual-delete command); P2: missing Performance Contract declaration in PR body; P3: empty placeholder test; P3: secure.dat is plaintext JSON, not encrypted (brief incorrectly stated encrypted at rest). Traceability SUCCESS, Vercel SUCCESS, all checks PASS. Clean first-round approval."
+    },
+    {
       "what": "Guard all 6 router.replace/push sites in EditorShell with isDesktopRuntime() so URL stays at /write in desktop DMG (static export only pre-renders /write/placeholder). Wire createWorkspaceTabRef for newWriting action on desktop. Web navigation behavior unchanged.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-231",
