@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-01",
+  "last_updated": "2026-06-02",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -19,10 +19,6 @@
       {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
-      },
-      {
-        "issue": "ODE-220",
-        "reason": "TEMPORARY: review_rejected commit on main references [ODE-220] pre-merge, triggering false-positive drift. Remove this entry and add ODE-220 to built[] after merge."
       }
     ]
   },
@@ -49,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Simplify desktop auth email callbacks to web-only for MVP. Desktop signup sends confirmation email with web redirect to /auth/confirm?next=/desk. Desktop forgot-password sends recovery email with web redirect to /auth/confirm?next=/reset-password. Removed PKCE flowType and deep-link wiring from desktop-client. Added getConfiguredAuthConfirmRedirectUrl helper using NEXT_PUBLIC_APP_URL. Added DevTools menu item in Tauri (View > Open DevTools, Alt+CmdOrCtrl+I) with devtools feature in Cargo.toml. auth state listener added to sync-bootstrap desktop path. 627 tests PASS.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-220",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-220/keep-desktop-auth-email-callbacks-web-only-for-mvp",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/212",
+      "commit": "57bb202",
+      "date": "2026-06-02",
+      "notes": "Score: 9.0/10. Architecture Contract COMPLIANT: Layer=Adapter, Runtime scope=desktop+web+cloud, emailRedirectTo wired to NEXT_PUBLIC_APP_URL, deep-link auth forbidden. Perf contract: not required (auth routing, not editor path). CI required two REVIEW rounds to unblock: (1) trailing comma in status.json caused JSON parse error, (2) missing [ODE-220] tag in commit subject triggered delivery gate. Both were infrastructure/process issues, not code quality issues."
+    },
     {
       "what": "Wire npm run desktop:release — versioned DMG release pipeline. New scripts/release-desktop.mjs: checkVersionDrift validates package.json vs tauri.conf.json versions (fail-fast on drift), runs tauri build, copies DMG to dist/releases/Odessay-{version}-aarch64.dmg. New docs/desktop-distribution.md: build instructions, xattr quarantine workaround for unsigned apps, versioning convention, deferred signing debt documented. 3 unit smoke tests (drift detected, no drift, correct paths). 609 tests.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
