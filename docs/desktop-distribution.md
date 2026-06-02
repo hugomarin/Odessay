@@ -67,37 +67,33 @@ Alternatively, the user can right-click the app in Finder → **Open** → click
 
 ---
 
-## macOS Keychain access
+## Session token storage
 
-Odessay stores authentication tokens in the macOS Keychain rather than in browser `localStorage`. This keeps credentials in the system's secure enclave and ensures sessions survive app restarts.
+Odessay stores authentication tokens in a local JSON file managed by `tauri-plugin-store` rather than in `localStorage` or the macOS Keychain. This ensures sessions survive app restarts without requiring code signing.
 
-### First sign-in prompt
+The store file lives in the app data directory:
 
-On the **first sign-in** after installing a new build, macOS will show a system dialog:
+```
+~/Library/Application Support/com.odessay.app/secure.dat
+```
 
-> _"odessay" wants to use your confidential information stored in "Odessay" in your keychain._
+No system dialog is shown on first sign-in. The file is created automatically when the user signs in for the first time.
 
-The user must click **Always Allow** to let the app store and retrieve session tokens without prompting on every launch. Clicking **Allow** (without "Always") works but will trigger the dialog again the next time the app restarts.
+### Why not the macOS Keychain?
 
-If the user clicks **Deny**, the app falls back to an unauthenticated state and will ask them to sign in again on the next launch.
+macOS Keychain ACLs bind each entry to the code signature of the writing process. Ad-hoc signed apps (no Apple Developer ID) have no stable identity between executions: the write succeeds, but the read from the next process instance fails silently. `tauri-plugin-store` avoids this by writing to the app data directory, which is accessible to the app regardless of signing status.
 
-### Viewing stored credentials
-
-The entry is visible in **Keychain Access** (Applications → Utilities → Keychain Access) under:
-
-- **Keychain:** login
-- **Kind:** application password
-- **Service name:** Odessay
+When formal code signing is added (Apple Developer ID), migration to Keychain is a drop-in change — the `keychainStorage` TypeScript adapter contract (`getItem`/`setItem`/`removeItem`) remains unchanged and only the Rust commands need to be swapped back.
 
 ### Removing stored credentials manually
 
-If a user wants to force a clean sign-in state:
+If a user wants to force a clean sign-in state, delete the store file:
 
 ```bash
-security delete-generic-password -s "Odessay" -a "sb-*"
+rm ~/Library/Application\ Support/com.odessay.app/secure.dat
 ```
 
-Or delete the entry directly in Keychain Access.
+Or sign out from within the app — this calls `removeItem` on the stored tokens and clears the file automatically.
 
 ---
 

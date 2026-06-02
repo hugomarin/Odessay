@@ -1,8 +1,10 @@
-import Link from "next/link";
+import Link from "next/link"
+import { DesktopStartupRedirect } from "@/components/navigation/desktop-startup-redirect"
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-background text-foreground">
+      <DesktopStartupRedirect />
       <div className="relative isolate overflow-hidden">
         <div className="absolute inset-x-0 top-0 -z-10 h-[420px] bg-[radial-gradient(circle_at_top,_hsla(var(--cursor),0.12),_transparent_58%)]" />
         <div className="absolute inset-x-0 top-0 -z-10 h-px bg-border/80" />
