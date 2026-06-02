@@ -19,10 +19,6 @@
       {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
-      },
-      {
-        "issue": "ODE-231",
-        "reason": "Pre-merge drift false-positive: review_rejected commit on main references ODE-231 before it is merged into built[]. Exemption removed once ODE-231 is in built[]."
       }
     ]
   },
@@ -49,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Guard all 6 router.replace/push sites in EditorShell with isDesktopRuntime() so URL stays at /write in desktop DMG (static export only pre-renders /write/placeholder). Wire createWorkspaceTabRef for newWriting action on desktop. Web navigation behavior unchanged.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-231",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-231/refactor-desktop-write-routing-to-use-internal-state-instead-of",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/213",
+      "commit": "d6af931",
+      "date": "2026-06-02",
+      "notes": "Score: 10.0/10. Architecture Contract: Layer=UI, Runtime scope=Desktop only, Owner=EditorShell. Perf contract: not required (guards only, no keydown/input path changes). Two review rounds: ronda 1 rejected for missing Performance/Architecture Contract declarations; ronda 2 approved after declarations added to PR and brief."
+    },
     {
       "what": "Simplify desktop auth email callbacks to web-only for MVP. Desktop signup sends confirmation email with web redirect to /auth/confirm?next=/desk. Desktop forgot-password sends recovery email with web redirect to /auth/confirm?next=/reset-password. Removed PKCE flowType and deep-link wiring from desktop-client. Added getConfiguredAuthConfirmRedirectUrl helper using NEXT_PUBLIC_APP_URL. Added DevTools menu item in Tauri (View > Open DevTools, Alt+CmdOrCtrl+I) with devtools feature in Cargo.toml. auth state listener added to sync-bootstrap desktop path. 627 tests PASS.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
