@@ -10,6 +10,7 @@ import * as runtimeDetect from "@/lib/runtime/detect"
 
 const supabaseAuthMock = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
+  onAuthStateChange: vi.fn(),
   signUp: vi.fn(),
   signOut: vi.fn(),
   getUser: vi.fn(),
@@ -120,6 +121,7 @@ describe("getAuthService factory", () => {
 describe("desktopAuthService", () => {
   beforeEach(() => {
     supabaseAuthMock.signInWithPassword.mockReset()
+    supabaseAuthMock.onAuthStateChange.mockReset()
     supabaseAuthMock.signUp.mockReset()
     supabaseAuthMock.signOut.mockReset()
     supabaseAuthMock.getUser.mockReset()
@@ -127,6 +129,18 @@ describe("desktopAuthService", () => {
     supabaseFromMock.maybeSingle.mockReset()
     supabaseFromMock.select.mockReturnThis()
     supabaseFromMock.eq.mockReturnThis()
+    supabaseAuthMock.onAuthStateChange.mockImplementation((callback) => {
+      queueMicrotask(() => {
+        callback("SIGNED_IN", { user: { id: "session-user" } })
+      })
+      return {
+        data: {
+          subscription: {
+            unsubscribe: vi.fn(),
+          },
+        },
+      }
+    })
   })
 
   // signIn — Performance Contract: exactly 1 Supabase request, 0 /api/* calls
@@ -267,6 +281,45 @@ describe("desktopAuthService", () => {
 
     expect(result.data?.available).toBe(false)
     expect(result.data?.reason).toBe("taken")
+  })
+
+  it("signUp sends web confirmation redirects to Supabase", async () => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://odessay.vercel.app"
+
+    supabaseAuthMock.signUp.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          new_email: null,
+          email_confirmed_at: null,
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+        session: null,
+      },
+      error: null,
+    })
+
+    const result = await desktopAuthService.signUp({
+      displayName: "Writer",
+      username: "Writer",
+      email: "writer@example.com",
+      password: "supersecret",
+      nextPath: "/desk",
+    })
+
+    expect(supabaseAuthMock.signUp).toHaveBeenCalledWith({
+      email: "writer@example.com",
+      password: "supersecret",
+      options: {
+        emailRedirectTo: "https://odessay.vercel.app/auth/confirm?next=%2Fdesk",
+        data: {
+          display_name: "Writer",
+          username: "writer",
+        },
+      },
+    })
+    expect(result.data?.requiresEmailConfirmation).toBe(true)
   })
 
   it("updateDisplayName uses supabase.auth.updateUser without calling /api/*", async () => {

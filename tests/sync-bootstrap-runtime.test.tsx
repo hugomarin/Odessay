@@ -12,6 +12,7 @@ const scheduleFlushMock = vi.fn(() => Promise.resolve())
 const hydrateWritingsMock = vi.fn(() => Promise.resolve({ data: null }))
 const supabaseGetUserMock = vi.fn()
 const onAuthStateChangeMock = vi.fn()
+const desktopOnAuthStateChangeMock = vi.fn()
 const isTauriRuntimeMock = vi.fn()
 
 vi.mock("@/lib/local-db", () => ({
@@ -32,6 +33,14 @@ vi.mock("@/lib/supabase/client", () => ({
     auth: {
       getUser: supabaseGetUserMock,
       onAuthStateChange: onAuthStateChangeMock,
+    },
+  }),
+}))
+
+vi.mock("@/lib/supabase/desktop-client", () => ({
+  createDesktopClient: () => ({
+    auth: {
+      onAuthStateChange: desktopOnAuthStateChangeMock,
     },
   }),
 }))
@@ -59,8 +68,12 @@ beforeEach(() => {
   hydrateWritingsMock.mockClear()
   supabaseGetUserMock.mockReset()
   onAuthStateChangeMock.mockReset()
+  desktopOnAuthStateChangeMock.mockReset()
   isTauriRuntimeMock.mockReset()
   onAuthStateChangeMock.mockReturnValue({
+    data: { subscription: { unsubscribe: vi.fn() } },
+  })
+  desktopOnAuthStateChangeMock.mockReturnValue({
     data: { subscription: { unsubscribe: vi.fn() } },
   })
   container = document.createElement("div")
@@ -77,13 +90,14 @@ afterEach(async () => {
 })
 
 describe("SyncBootstrap runtime split", () => {
-  it("on desktop, does not invoke supabase.auth and seeds anonymous scope", async () => {
+  it("on desktop, seeds scope and skips web auth bootstrap", async () => {
     isTauriRuntimeMock.mockReturnValue(true)
 
     await renderBootstrap()
 
     expect(supabaseGetUserMock).not.toHaveBeenCalled()
     expect(onAuthStateChangeMock).not.toHaveBeenCalled()
+    expect(desktopOnAuthStateChangeMock).toHaveBeenCalled()
     expect(hydrateWritingsMock).not.toHaveBeenCalled()
     expect(setLocalDBScopeMock).toHaveBeenCalledWith(undefined)
     expect(startMock).toHaveBeenCalled()
