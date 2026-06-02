@@ -19,7 +19,7 @@
       {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
-      },
+      }
     ]
   },
   "active_phase": {
