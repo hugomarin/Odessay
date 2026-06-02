@@ -336,6 +336,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const forceNewWritingRequestedRef = useRef(false)
+  const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -555,7 +556,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           navigatedToDraftRef.current = true
           if (isPerfHarness()) {
             window.history.replaceState(null, "", `/write/${nextId}`)
-          } else {
+          } else if (!isDesktopRuntime()) {
             router.replace(`/write/${nextId}`)
           }
         }
@@ -952,7 +953,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       if (activeTab?.writing_id) {
         if (isPerfHarness()) {
           window.history.replaceState(null, "", `/write/${activeTab.slug ?? activeTab.writing_id}`)
-        } else {
+        } else if (!isDesktopRuntime()) {
           router.replace(`/write/${activeTab.slug ?? activeTab.writing_id}`)
         }
         return
@@ -1045,7 +1046,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       navigatedToDraftRef.current = true
       if (isPerfHarness()) {
         window.history.replaceState(null, "", `/write/${nextId}`)
-      } else {
+      } else if (!isDesktopRuntime()) {
         router.replace(`/write/${nextId}`)
       }
     }
@@ -1386,7 +1387,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
 
         setWritingSlug(localWriting.slug)
-        router.replace(`/write/${localWriting.slug}`)
+        if (!isDesktopRuntime()) {
+          router.replace(`/write/${localWriting.slug}`)
+        }
       })()
     })
   }, [currentWritingId, routeWritingId, router])
@@ -1614,7 +1617,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             setIsFocusMode((currentState) => !currentState)
             return true
           case "newWriting":
-            router.push("/write?new=1")
+            if (isDesktopRuntime()) {
+              void createWorkspaceTabRef.current?.({ skipConfirm: true })
+            } else {
+              router.push("/write?new=1")
+            }
             return true
           case "settings":
             router.push("/settings")
@@ -3647,7 +3654,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     currentWritingIdRef.current = nextWritingId
     setCurrentWritingId(nextWritingId)
     setHydrationWritingId(nextWritingId)
-    window.history.replaceState(null, "", `/write/${nextWritingId}`)
+    if (!isDesktopRuntime()) {
+      window.history.replaceState(null, "", `/write/${nextWritingId}`)
+    }
 
     const blankDraftRecord: WritingRecord = {
       id: nextWritingId,
@@ -3721,6 +3730,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       })
     })
   }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
+  createWorkspaceTabRef.current = handleCreateWorkspaceTab
 
   useEffect(() => {
     if (!forceNewWriting || !sessionLoaded || forceNewWritingRequestedRef.current) {
@@ -3772,7 +3782,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setCurrentWritingId(nextWritingId)
       setHydrationWritingId(nextWritingId)
       openWritingTab({ writingId: nextWritingId, title: nextTitle, saveState: "saved-local", hasPendingSync: false })
-      router.push(`/write/${nextWritingId}`)
+      if (!isDesktopRuntime()) {
+        router.push(`/write/${nextWritingId}`)
+      }
     },
     [persistCurrentWorkspaceViewState, router],
   )
