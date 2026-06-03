@@ -1,6 +1,11 @@
 import { Editor } from "@tiptap/core"
 import type { JSONContent } from "@tiptap/core"
+import { dump, load } from "js-yaml"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
+import {
+  normalizeCanonicalDocumentMetadata,
+  type CanonicalDocumentMetadata,
+} from "@/lib/editor/document-profile"
 import { getEditorFootnotes, getMarkdownWithFootnoteDefinitions } from "@/lib/editor/footnote-node"
 import {
   materializeMarkdownForRichParser,
@@ -13,13 +18,98 @@ export type DocumentSerializationSnapshot = {
   markdown: string
 }
 
+export type CanonicalDocumentFileSnapshot = {
+  metadata: CanonicalDocumentMetadata | null
+  snapshot: DocumentSerializationSnapshot
+  markdown: string
+}
+
 const BLOCK_SEPARATOR = "\n"
+const FRONTMATTER_DELIMITER = "---"
 
 const createDocumentEditor = (content: JSONContent | string) =>
   new Editor({
     extensions: createEditorExtensions(),
     content,
   })
+
+const normalizeLineEndings = (value: string) => value.replace(/\r\n?/g, "\n")
+
+const splitCanonicalDocumentSource = (
+  source: string,
+): { frontmatter: string | null; markdown: string } => {
+  const normalizedSource = normalizeLineEndings(source)
+
+  if (!normalizedSource.startsWith(`${FRONTMATTER_DELIMITER}\n`)) {
+    return { frontmatter: null, markdown: normalizedSource }
+  }
+
+  const closingIndex = normalizedSource.indexOf(`\n${FRONTMATTER_DELIMITER}\n`, FRONTMATTER_DELIMITER.length + 1)
+  if (closingIndex === -1) {
+    return { frontmatter: null, markdown: normalizedSource }
+  }
+
+  return {
+    frontmatter: normalizedSource.slice(FRONTMATTER_DELIMITER.length + 1, closingIndex),
+    markdown: normalizedSource
+      .slice(closingIndex + `\n${FRONTMATTER_DELIMITER}\n`.length)
+      .replace(/^\n/, ""),
+  }
+}
+
+const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetadata => {
+  const parsed = load(frontmatter)
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Canonical front-matter must be a YAML mapping.")
+  }
+
+  const record = parsed as Record<string, unknown>
+  const rawId = typeof record.id === "string" ? record.id.trim() : ""
+  if (!rawId) {
+    throw new Error("Canonical front-matter requires a non-empty id.")
+  }
+
+  const readIsoString = (value: unknown): string | undefined => {
+    if (typeof value === "string") {
+      return value
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value.toISOString()
+    }
+
+    return undefined
+  }
+
+  return normalizeCanonicalDocumentMetadata({
+    id: rawId,
+    slug: typeof record.slug === "string" ? record.slug : null,
+    status: typeof record.status === "string" ? record.status : undefined,
+    visibility: typeof record.visibility === "string" ? record.visibility : undefined,
+    version: typeof record.version === "number" ? record.version : undefined,
+    createdAt: readIsoString(record.created_at),
+    updatedAt: readIsoString(record.updated_at),
+  })
+}
+
+export const serializeCanonicalFrontmatter = (metadata: CanonicalDocumentMetadata): string => {
+  const normalized = normalizeCanonicalDocumentMetadata(metadata)
+  const yaml = dump(
+    {
+      id: normalized.id,
+      slug: normalized.slug,
+      status: normalized.status,
+      visibility: normalized.visibility,
+      version: normalized.version,
+      created_at: normalized.createdAt,
+      updated_at: normalized.updatedAt,
+    },
+    { lineWidth: -1, noRefs: true, sortKeys: false },
+  ).trimEnd()
+
+  return `${FRONTMATTER_DELIMITER}\n${yaml}\n${FRONTMATTER_DELIMITER}`
+}
 
 export const serializeEditorToMarkdown = (editor: Editor) =>
   normalizeMarkdownForRoundTrip(
@@ -56,7 +146,7 @@ export const serializeDocumentToSnapshot = (
 }
 
 export const parseMarkdownToSnapshot = (markdown: string): DocumentSerializationSnapshot => {
-  const normalizedMarkdown = normalizeMarkdownForRoundTrip(markdown)
+  const normalizedMarkdown = normalizeMarkdownForRoundTrip(splitCanonicalDocumentSource(markdown).markdown)
   const editor = createDocumentEditor(materializeMarkdownForRichParser(normalizedMarkdown))
 
   try {
@@ -67,5 +157,24 @@ export const parseMarkdownToSnapshot = (markdown: string): DocumentSerialization
     }
   } finally {
     editor.destroy()
+  }
+}
+
+export const serializeDocumentFile = (
+  bodyJson: JSONContent | null | undefined,
+  metadata: CanonicalDocumentMetadata,
+): string => {
+  const markdown = serializeDocumentToMarkdown(bodyJson)
+  const frontmatter = serializeCanonicalFrontmatter(metadata)
+  return markdown ? `${frontmatter}\n\n${markdown}` : `${frontmatter}\n`
+}
+
+export const parseDocumentFileToSnapshot = (source: string): CanonicalDocumentFileSnapshot => {
+  const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
+
+  return {
+    metadata: frontmatter ? parseCanonicalFrontmatter(frontmatter) : null,
+    snapshot: parseMarkdownToSnapshot(markdown),
+    markdown: normalizeMarkdownForRoundTrip(markdown),
   }
 }

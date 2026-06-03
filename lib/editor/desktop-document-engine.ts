@@ -1,10 +1,13 @@
 import type { Editor, JSONContent } from "@tiptap/core"
 import {
-  parseMarkdownToSnapshot,
+  parseDocumentFileToSnapshot,
+  serializeDocumentFile,
   serializeDocumentToMarkdown,
   serializeEditorToMarkdown,
+  type CanonicalDocumentFileSnapshot,
   type DocumentSerializationSnapshot,
 } from "@/lib/editor/document-serialization"
+import type { CanonicalDocumentMetadata } from "@/lib/editor/document-profile"
 import { normalizeMarkdownForRoundTrip } from "@/lib/editor/markdown-format"
 
 export type DesktopSerializeResult =
@@ -13,6 +16,10 @@ export type DesktopSerializeResult =
 
 export type DesktopParseResult =
   | { success: true; snapshot: DocumentSerializationSnapshot }
+  | { success: false; error: string }
+
+export type DesktopParseFileResult =
+  | { success: true; document: CanonicalDocumentFileSnapshot }
   | { success: false; error: string }
 
 export type DesktopRoundTripResult =
@@ -56,12 +63,29 @@ export class DesktopDocumentEngine {
    */
   sourceToRich(markdown: string): DesktopParseResult {
     try {
-      const snapshot = parseMarkdownToSnapshot(markdown)
+      const snapshot = parseDocumentFileToSnapshot(markdown).snapshot
       return { success: true, snapshot }
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Source→Rich parse failed",
+      }
+    }
+  }
+
+  /**
+   * Parse a canonical source document that may include front-matter.
+   *
+   * Scope: filesystem-backed write-path where the file itself is the contract.
+   */
+  parseSourceDocument(source: string): DesktopParseFileResult {
+    try {
+      const document = parseDocumentFileToSnapshot(source)
+      return { success: true, document }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Source document parse failed",
       }
     }
   }
@@ -85,6 +109,24 @@ export class DesktopDocumentEngine {
   }
 
   /**
+   * Serialize a canonical source document with front-matter + markdown body.
+   */
+  serializeSourceDocument(
+    bodyJson: JSONContent | null | undefined,
+    metadata: CanonicalDocumentMetadata,
+  ): DesktopSerializeResult {
+    try {
+      const markdown = serializeDocumentFile(bodyJson, metadata)
+      return { success: true, markdown }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Document file serialization failed",
+      }
+    }
+  }
+
+  /**
    * Validate that a markdown string survives a full Rich → Source → Rich round-trip
    * without degradation within the supported Markdown profile.
    *
@@ -92,28 +134,43 @@ export class DesktopDocumentEngine {
    * Returns ok=false with an explicit error if anything degrades.
    */
   validateRoundTrip(markdown: string): DesktopRoundTripResult {
-    const parsed = this.sourceToRich(markdown)
-    if (!parsed.success) {
-      return { ok: false, error: parsed.error }
+    const parsedDocument = this.parseSourceDocument(markdown)
+    if (!parsedDocument.success) {
+      return { ok: false, error: parsedDocument.error }
     }
 
-    const serialized = this.serializeBodyJson(parsed.snapshot.bodyJson)
+    const serialized =
+      parsedDocument.document.metadata !== null
+        ? this.serializeSourceDocument(parsedDocument.document.snapshot.bodyJson, parsedDocument.document.metadata)
+        : this.serializeBodyJson(parsedDocument.document.snapshot.bodyJson)
     if (!serialized.success) {
       return { ok: false, error: serialized.error }
     }
 
-    const reparsed = this.sourceToRich(serialized.markdown)
-    if (!reparsed.success) {
-      return { ok: false, error: reparsed.error }
+    const reparsedDocument = this.parseSourceDocument(serialized.markdown)
+    if (!reparsedDocument.success) {
+      return { ok: false, error: reparsedDocument.error }
     }
 
-    const normalizedOriginal = normalizeMarkdownForRoundTrip(markdown)
-    const normalizedRoundTrip = normalizeMarkdownForRoundTrip(reparsed.snapshot.markdown)
+    const normalizedOriginal = normalizeMarkdownForRoundTrip(parsedDocument.document.markdown)
+    const normalizedRoundTrip = normalizeMarkdownForRoundTrip(reparsedDocument.document.snapshot.markdown)
 
     if (normalizedOriginal !== normalizedRoundTrip) {
       return {
         ok: false,
         error: `Round-trip mismatch.\nOriginal:\n${normalizedOriginal}\nRound-trip:\n${normalizedRoundTrip}`,
+      }
+    }
+
+    if (parsedDocument.document.metadata || reparsedDocument.document.metadata) {
+      const normalizedOriginalMetadata = JSON.stringify(parsedDocument.document.metadata)
+      const normalizedRoundTripMetadata = JSON.stringify(reparsedDocument.document.metadata)
+
+      if (normalizedOriginalMetadata !== normalizedRoundTripMetadata) {
+        return {
+          ok: false,
+          error: `Front-matter mismatch.\nOriginal:\n${normalizedOriginalMetadata}\nRound-trip:\n${normalizedRoundTripMetadata}`,
+        }
       }
     }
 
