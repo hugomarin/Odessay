@@ -11,7 +11,10 @@ import {
   ODESSAY_MARKDOWN_PROFILE_ID,
 } from "@/lib/editor/document-profile"
 import {
+  parseDocumentFileToSnapshot,
   parseMarkdownToSnapshot,
+  serializeCanonicalFrontmatter,
+  serializeDocumentFile,
   serializeDocumentToMarkdown,
   serializeDocumentToSnapshot,
 } from "@/lib/editor/document-serialization"
@@ -97,5 +100,81 @@ describe("document serialization", () => {
 
     expect(buildWritingMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1]\n\n[^1]: Footnote body")
     expect(serializeDocumentToMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1: Footnote body]")
+  })
+
+  it("serializes canonical front-matter with stable field ordering", () => {
+    expect(
+      serializeCanonicalFrontmatter({
+        id: "writing-123",
+        slug: "hello-world",
+        status: "draft",
+        visibility: "private",
+        version: 2,
+        createdAt: "2026-06-03T00:00:00.000Z",
+        updatedAt: "2026-06-03T01:00:00.000Z",
+      }),
+    ).toBe(`---
+id: writing-123
+slug: hello-world
+status: draft
+visibility: private
+version: 2
+created_at: '2026-06-03T00:00:00.000Z'
+updated_at: '2026-06-03T01:00:00.000Z'
+---`)
+  })
+
+  it("serializes and parses a canonical source document with front-matter", () => {
+    const source = serializeDocumentFile(
+      {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Canonical body" }],
+          },
+        ],
+      },
+      {
+        id: "writing-123",
+        slug: "canonical-body",
+        status: "draft",
+        visibility: "private",
+        version: 4,
+        createdAt: "2026-06-03T00:00:00.000Z",
+        updatedAt: "2026-06-03T02:00:00.000Z",
+      },
+    )
+
+    const parsed = parseDocumentFileToSnapshot(source)
+
+    expect(parsed.metadata).toEqual({
+      id: "writing-123",
+      slug: "canonical-body",
+      status: "draft",
+      visibility: "private",
+      version: 4,
+      createdAt: "2026-06-03T00:00:00.000Z",
+      updatedAt: "2026-06-03T02:00:00.000Z",
+    })
+    expect(parsed.snapshot.markdown).toBe("Canonical body")
+    expect(parsed.snapshot.bodyText).toBe("Canonical body")
+  })
+
+  it("parses markdown snapshots even when the source includes canonical front-matter", () => {
+    const snapshot = parseMarkdownToSnapshot(`---
+id: writing-123
+slug: hello-world
+status: draft
+visibility: private
+version: 2
+created_at: '2026-06-03T00:00:00.000Z'
+updated_at: '2026-06-03T01:00:00.000Z'
+---
+
+# Hello world`)
+
+    expect(snapshot.markdown).toBe("# Hello world")
+    expect(snapshot.bodyText).toBe("Hello world")
   })
 })

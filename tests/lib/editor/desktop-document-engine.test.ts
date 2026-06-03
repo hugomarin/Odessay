@@ -242,6 +242,29 @@ describe("DesktopDocumentEngine", () => {
   })
 
   describe("sourceToRich", () => {
+    it("parses canonical front-matter without treating it as document content", () => {
+      const markdown = `---
+id: writing-123
+slug: title
+status: draft
+visibility: private
+version: 2
+created_at: '2026-06-03T00:00:00.000Z'
+updated_at: '2026-06-03T01:00:00.000Z'
+---
+
+# Title
+
+Paragraph body`
+
+      const result = engine.sourceToRich(markdown)
+      expect(result.success).toBe(true)
+      if (!result.success) return
+      expect(result.snapshot.markdown).toContain("# Title")
+      expect(result.snapshot.markdown).toContain("Paragraph body")
+      expect(result.snapshot.markdown).not.toContain("created_at")
+    })
+
     it("parses headings, paragraphs and marks to ProseMirror JSON", () => {
       const markdown = `# Title
 
@@ -314,6 +337,25 @@ Paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, [link](https://exa
   })
 
   describe("validateRoundTrip", () => {
+    it("passes for a canonical source file with front-matter", () => {
+      const markdown = `---
+id: writing-123
+slug: title
+status: draft
+visibility: private
+version: 2
+created_at: '2026-06-03T00:00:00.000Z'
+updated_at: '2026-06-03T01:00:00.000Z'
+---
+
+# Title
+
+Paragraph with [^1: Note].`
+
+      const result = engine.validateRoundTrip(markdown)
+      expect(result.ok).toBe(true)
+    })
+
     it("passes for the full supported markdown profile", () => {
       const markdown = `# Title
 
