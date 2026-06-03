@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Formaliza y endurece serializer/parser canónico TipTap↔.md (shared-core). Agrega CanonicalDocumentMetadata, serializeDocumentFile, parseDocumentFileToSnapshot y serializeCanonicalFrontmatter con front-matter YAML (id, slug, status, visibility, version, created_at, updated_at). Round-trip json↔md verificado con fixtures (nested lists, tables, code fences, footnotes, front-matter). DesktopDocumentEngine actualizado para parsear/serializar archivos fuente canónicos completos.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-241",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-241/markdown-canonico-serializerparser-tiptapmd-con-round-trip-fiel",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/216",
+      "commit": "6f4e613",
+      "date": "2026-06-03",
+      "notes": "Score: 9.75/10. Architecture Contract COMPLIANT: Layer=Shared-core, Runtime scope=shared, Owner=backend/shared, all invariants preserved. P3: serializeCanonicalFrontmatter double-normalizes (defensive, harmless). 643 tests. Two BUILD rounds: ronda 1 bloqueó por Reference docs incompleto (faltaban odessay-desktop-app.md + odessay-desktop-migration-plan.md); ronda 2 completó tras PM review del brief."
+    },
+    {
       "what": "Replace keyring Rust crate (macOS Keychain) with tauri-plugin-store (JSON file in app-data dir) as desktop auth token backend. Adds DesktopStartupRedirect component to route app launch to /desk (session) or /login (no session). keychainStorage TS adapter contract unchanged.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-232",
