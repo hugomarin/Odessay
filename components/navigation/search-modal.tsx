@@ -13,6 +13,7 @@ import { useRecentWritings, type RecentWritingItem } from "@/hooks/useRecentWrit
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { cn } from "@/lib/utils"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type SearchResult = {
   writing: LocalWriting
@@ -239,12 +240,12 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   }, [debouncedQuery, allWritings])
 
   const handleSelectRecent = useCallback((item: RecentWritingItem) => {
-    router.push(`/write/${item.slug ?? item.writingId}`)
+    router.push(buildWritingRouteHref("/write", { id: item.writingId, slug: item.slug }))
     onOpenChange(false)
   }, [router, onOpenChange])
 
   const handleSelectResult = useCallback((result: SearchResult) => {
-    router.push(`/write/${result.writing.slug ?? result.writing.id}`)
+    router.push(buildWritingRouteHref("/write", { id: result.writing.id, slug: result.writing.slug }))
     onOpenChange(false)
   }, [router, onOpenChange])
 

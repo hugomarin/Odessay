@@ -7,7 +7,7 @@ import { buildCollectionOptions } from "@/lib/collections/collections"
 import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges } from "@/lib/local-db"
 import type { LocalCollection } from "@/lib/local-db/schema"
-import { webSyncService } from "@/lib/sync"
+import { getSyncService } from "@/lib/sync"
 
 type WritingCollectionsSectionProps = {
   writingId: string
@@ -42,7 +42,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     let cancelled = false
 
     const hydrate = async () => {
-      await webSyncService.hydrateCollections().catch(() => null)
+      await getSyncService().hydrateCollections().catch(() => null)
       await loadLocalState(writingId, () => cancelled)
     }
 
@@ -75,7 +75,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     selectedIdsRef.current = nextIds
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
-    void webSyncService.scheduleFlush()
+    void getSyncService().scheduleFlush()
   }
 
   const createAndAssign = async (name: string) => {
@@ -90,7 +90,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     setSelectedIds(nextIds)
     await setLocalWritingCollections(writingId, nextIds)
     setCollections((current) => [collection, ...current])
-    void webSyncService.scheduleFlush()
+    void getSyncService().scheduleFlush()
   }
 
   return (

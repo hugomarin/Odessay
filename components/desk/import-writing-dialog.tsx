@@ -12,9 +12,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { getLocalDBScope } from "@/lib/local-db"
 import { enqueueWritingUpsert } from "@/lib/sync/queue"
-import { webSyncService } from "@/lib/sync"
+import { getSyncService } from "@/lib/sync"
 import { parseMarkdownFile } from "@/lib/import/markdown"
 import { parsePlainTextFile } from "@/lib/import/text"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import type { LocalWriting } from "@/lib/local-db/schema"
 
 const MD_EXT = ".md"
@@ -28,7 +29,6 @@ const PRIVATE_VIS = "private" as const
 const PENDING_SYNC = "pending" as const
 const LOCAL_LIFECYCLE = "local-only" as const
 const ANON_SCOPE = "anonymous"
-const WRITE_PREFIX = "/write/"
 const EMPTY_VAL = ""
 const ACCEPT_ATTR = ".md,.txt,text/markdown,text/plain"
 const DROP_ARIA_LABEL = "Drop a file here or click to browse"
@@ -105,10 +105,10 @@ export function ImportWritingDialog({ open, onOpenChange }: Props) {
       }
 
       await enqueueWritingUpsert(writing)
-      void webSyncService.scheduleFlush()
+      void getSyncService().scheduleFlush()
 
       onOpenChange(false)
-      router.push(WRITE_PREFIX + id)
+      router.push(buildWritingRouteHref("/write", { id, slug: null }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : IMPORT_FAIL_ERR
       setError(msg)

@@ -16,7 +16,7 @@ import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { needsBodyHydration } from "@/lib/sync/remote-bootstrap"
-import { webSyncService } from "@/lib/services/web-sync-service"
+import { getSyncService } from "@/lib/sync/sync-service-factory"
 
 function localWritingToRecord(local: LocalWriting): WritingRecord {
   return {
@@ -110,7 +110,7 @@ export const webDocumentService: DocumentService = {
 
       if (!local || needsBodyHydration(local)) {
         try {
-          await webSyncService.hydrateWriting({ writingId })
+          await getSyncService().hydrateWriting({ writingId })
           local = await localDB.writings.get(writingId)
         } catch {
           // fall through to not-found handling

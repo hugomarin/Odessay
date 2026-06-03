@@ -121,6 +121,7 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
   focusTab,
@@ -132,6 +133,7 @@ import {
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
+import { useHydrationProgress } from "@/lib/sync/hydration-progress"
 
 type EditorShellProps = {
   writingId?: string
@@ -277,6 +279,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
   const routeWritingId = writingId ?? null
   const initialHydrationSession = createRouteHydrationSessionState(routeWritingId)
+  const hydrationProgress = useHydrationProgress()
 
   const [currentWritingId, setCurrentWritingId] = useState<string | null>(initialHydrationSession.activeWritingId)
   const [hydrationWritingId, setHydrationWritingId] = useState<string | null>(initialHydrationSession.hydrationWritingId)
@@ -948,17 +951,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
-      const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
-      if (activeTab?.writing_id) {
-        if (isPerfHarness()) {
-          window.history.replaceState(null, "", `/write/${activeTab.slug ?? activeTab.writing_id}`)
-        } else if (!isDesktopRuntime()) {
-          router.replace(`/write/${activeTab.slug ?? activeTab.writing_id}`)
+      if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
+        const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
+        if (activeTab?.writing_id) {
+          const nextHref = buildWritingRouteHref("/write", {
+            id: activeTab.writing_id,
+            slug: activeTab.slug,
+          })
+          if (isPerfHarness()) {
+            window.history.replaceState(null, "", nextHref)
+          } else if (!isDesktopRuntime()) {
+            router.replace(nextHref)
+          }
+          return
         }
-        return
       }
-    }
 
     openDraftTab()
   }, [editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
@@ -3543,7 +3550,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         currentWritingIdRef.current = nextTab.writing_id
         setCurrentWritingId(nextTab.writing_id)
         setHydrationWritingId(nextTab.writing_id)
-        window.history.replaceState(null, "", `/write/${nextTab.slug ?? nextTab.writing_id}`)
+        window.history.replaceState(
+          null,
+          "",
+          buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
+        )
         return
       }
 
@@ -3585,7 +3596,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         currentWritingIdRef.current = nextTab.writing_id
         setCurrentWritingId(nextTab.writing_id)
         setHydrationWritingId(nextTab.writing_id)
-        window.history.replaceState(null, "", `/write/${nextTab.slug ?? nextTab.writing_id}`)
+        window.history.replaceState(
+          null,
+          "",
+          buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
+        )
         return
       }
 
@@ -3945,6 +3960,39 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
         <div className="flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col">
+            {isDesktopRuntime() && hydrationProgress.active ? (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg/88 backdrop-blur-sm">
+                <div className="w-full max-w-[360px] rounded-[20px] border border-border/70 bg-paper px-6 py-5 text-center shadow-[0_20px_60px_rgba(39,27,22,0.12)]">
+                  <p className="font-sans text-[11px] font-medium tracking-[0.18em] text-ink-4 uppercase">
+                    Desktop Sync
+                  </p>
+                  <h2 className="mt-3 font-lora text-[26px] leading-[1.25] text-ink">
+                    Syncing your writings…
+                  </h2>
+                  <p className="mt-2 text-[13px] leading-[1.6] text-ink-4">
+                    {hydrationProgress.total > 0
+                      ? `${hydrationProgress.completed} of ${hydrationProgress.total} writings ready on this device`
+                      : "Preparing your library on this device"}
+                  </p>
+                  <div className="mt-5 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-300 ease-out"
+                      style={{
+                        width:
+                          hydrationProgress.total > 0
+                            ? `${Math.min(
+                                100,
+                                Math.round(
+                                  (hydrationProgress.completed / hydrationProgress.total) * 100,
+                                ),
+                              )}%`
+                            : "18%",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {sessionLoaded && editorSession.tabs.length === 0 ? (
               <EditorEmptyState onNewWriting={handleCreateWorkspaceTab} />
             ) : (

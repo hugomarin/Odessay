@@ -1,4 +1,6 @@
+import { Suspense } from "react"
 import { EditorShell } from "@/components/editor/editor-shell"
+import { DesktopWriteEntry } from "@/components/editor/desktop-write-entry"
 
 type WritePageProps = {
   searchParams?: Promise<{
@@ -9,7 +11,13 @@ type WritePageProps = {
 const isTauriBuild = process.env.TAURI_BUILD === "true"
 
 function DesktopWritePage() {
-  return <EditorShell />
+  // useSearchParams (inside DesktopWriteEntry) requires a Suspense boundary in
+  // the static export build.
+  return (
+    <Suspense fallback={null}>
+      <DesktopWriteEntry />
+    </Suspense>
+  )
 }
 
 async function WebWritePage({ searchParams }: WritePageProps) {
