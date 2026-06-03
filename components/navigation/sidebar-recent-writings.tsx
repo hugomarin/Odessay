@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Clock3 } from "lucide-react";
 import { useRecentWritings } from "@/hooks/useRecentWritings";
 import { cn } from "@/lib/utils";
+import { buildWritingRouteHref } from "@/lib/writings/writing-route";
 
 type SidebarRecentWritingsProps = {
   collapsed: boolean;
@@ -27,7 +28,7 @@ export function SidebarRecentWritings({ collapsed }: SidebarRecentWritingsProps)
         {recentWritings.map((writing) => (
           <Link
             key={writing.writingId}
-            href={`/write/${writing.slug ?? writing.writingId}`}
+            href={buildWritingRouteHref("/write", { id: writing.writingId, slug: writing.slug })}
             className="flex min-w-0 items-center gap-2 rounded-md px-2 py-[8px] text-left transition-colors hover:bg-muted-hover"
           >
             {writing.isOpen ? <span className="w-[6px] shrink-0" aria-hidden="true" /> : (

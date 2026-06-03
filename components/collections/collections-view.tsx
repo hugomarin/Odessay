@@ -32,7 +32,7 @@ import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activity"
 import { enqueueWritingUpsert } from "@/lib/sync/queue"
-import { webSyncService } from "@/lib/sync"
+import { getSyncService } from "@/lib/sync"
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
@@ -92,9 +92,10 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     let cancelled = false
 
     const bootstrap = async () => {
+      const syncService = getSyncService()
       await Promise.all([
-        webSyncService.hydrateWritings().catch(() => null),
-        webSyncService.hydrateCollections().catch(() => null),
+        syncService.hydrateWritings().catch(() => null),
+        syncService.hydrateCollections().catch(() => null),
       ])
 
       if (!cancelled) {
@@ -103,7 +104,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     }
 
     void bootstrap()
-    void webSyncService.scheduleFlush()
+    void getSyncService().scheduleFlush()
 
     const debounced = debounce(() => void loadLocalState(), 100, {
       leading: false,
@@ -194,7 +195,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       name,
     })
 
-    void webSyncService.scheduleFlush()
+    void getSyncService().scheduleFlush()
     return collection
   }, [])
 
@@ -206,7 +207,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         : [...currentIds, collectionId]
 
       await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
-      void webSyncService.scheduleFlush()
+      void getSyncService().scheduleFlush()
     },
     [assignments],
   )
@@ -216,7 +217,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       const collection = await createCollection(name)
       const currentIds = getWritingCollectionIds(writingId, assignments)
       await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
-      void webSyncService.scheduleFlush()
+      void getSyncService().scheduleFlush()
     },
     [assignments, createCollection],
   )
@@ -378,7 +379,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                   }
 
                   void deleteLocalCollection(activeCollection).then(() => {
-                    void webSyncService.scheduleFlush()
+                    void getSyncService().scheduleFlush()
                     router.push("/collections")
                   })
                 }}
@@ -428,7 +429,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                               (getWritingCollectionIds(row.id, assignments) ?? []).filter(
                                 (collectionId) => collectionId !== initialExpandedCollectionId,
                               ),
-                            ).then(() => void webSyncService.scheduleFlush())
+                            ).then(() => void getSyncService().scheduleFlush())
                           }}
                           className="inline-flex h-7 items-center rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[10px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                         >
@@ -455,7 +456,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
             setIsRenaming(true)
             try {
               await updateLocalCollection(activeCollection, { name })
-              void webSyncService.scheduleFlush()
+              void getSyncService().scheduleFlush()
               setRenameOpen(false)
             } finally {
               setIsRenaming(false)

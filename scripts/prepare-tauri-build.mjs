@@ -91,7 +91,16 @@ let exitCode = 0
 try {
   disableRouteHandlers()
   excludeDirs()
-  execSync("TAURI_BUILD=true npm run build", { stdio: "inherit", cwd: root })
+  // NEXT_PUBLIC_TAURI_BUILD is the client-visible twin of TAURI_BUILD. Plain
+  // TAURI_BUILD is NOT inlined into client bundles (Next only inlines
+  // NEXT_PUBLIC_* vars), so any runtime `process.env.TAURI_BUILD` check inside a
+  // client component evaluates to false in the packaged DMG. Modules that branch
+  // at client runtime (e.g. lib/writings/writing-route.ts) must read the public
+  // twin instead.
+  execSync("TAURI_BUILD=true NEXT_PUBLIC_TAURI_BUILD=true npm run build", {
+    stdio: "inherit",
+    cwd: root,
+  })
 } catch (err) {
   exitCode = err.status || 1
 } finally {

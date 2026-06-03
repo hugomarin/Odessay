@@ -7,7 +7,7 @@ import type {
   SyncMutation,
 } from "@/lib/local-db/schema";
 import { emitSyncStatusChange } from "@/lib/sync/events";
-import { getSyncWorker } from "@/lib/sync/worker";
+import { getSyncService } from "@/lib/sync/sync-service-factory";
 
 const createMutationId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -52,7 +52,7 @@ export const enqueueMutation = async (
     status: "pending",
   });
 
-  getSyncWorker().schedule();
+  void getSyncService().scheduleFlush();
 };
 
 export const enqueueWritingUpsert = async (writing: LocalWriting) => {

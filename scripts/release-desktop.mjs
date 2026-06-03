@@ -57,10 +57,7 @@ function main() {
   const { version } = drift
   console.log(`[desktop:release] Building Odessay ${version}…`)
 
-  // 2. Ensure output directory exists
-  mkdirSync(join(root, RELEASES_DIR), { recursive: true })
-
-  // 3. Build — beforeBuildCommand in tauri.conf.json handles the Next.js static export prep
+  // 2. Build — beforeBuildCommand in tauri.conf.json handles the Next.js static export prep
   try {
     execSync("npm run tauri:build", { stdio: "inherit", cwd: root })
   } catch (err) {
@@ -68,7 +65,7 @@ function main() {
     process.exit(err.status || 1)
   }
 
-  // 4. Locate the DMG produced by Tauri
+  // 3. Locate the DMG produced by Tauri
   const bundleDir = join(root, DMG_BUNDLE_DIR)
   const sourceDmg = findDmg(bundleDir)
   if (!sourceDmg) {
@@ -79,7 +76,9 @@ function main() {
     process.exit(1)
   }
 
-  // 5. Copy to dist/releases/ with versioned name
+  // 4. Copy to dist/releases/ with versioned name. Next static export rewrites
+  // dist during the build, so create this directory only after tauri:build.
+  mkdirSync(join(root, RELEASES_DIR), { recursive: true })
   const destName = `Odessay-${version}-aarch64.dmg`
   const destPath = join(root, RELEASES_DIR, destName)
   copyFileSync(sourceDmg, destPath)

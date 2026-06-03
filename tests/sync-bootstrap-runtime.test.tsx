@@ -10,6 +10,7 @@ const startMock = vi.fn(() => Promise.resolve())
 const stopMock = vi.fn(() => Promise.resolve())
 const scheduleFlushMock = vi.fn(() => Promise.resolve())
 const hydrateWritingsMock = vi.fn(() => Promise.resolve({ data: null }))
+const hydrateCollectionsMock = vi.fn(() => Promise.resolve({ data: null }))
 const supabaseGetUserMock = vi.fn()
 const onAuthStateChangeMock = vi.fn()
 const desktopOnAuthStateChangeMock = vi.fn()
@@ -19,13 +20,14 @@ vi.mock("@/lib/local-db", () => ({
   setLocalDBScope: setLocalDBScopeMock,
 }))
 
-vi.mock("@/lib/sync", () => ({
-  webSyncService: {
+vi.mock("@/lib/sync/sync-service-factory", () => ({
+  getSyncService: () => ({
     start: startMock,
     stop: stopMock,
     scheduleFlush: scheduleFlushMock,
     hydrateWritings: hydrateWritingsMock,
-  },
+    hydrateCollections: hydrateCollectionsMock,
+  }),
 }))
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -66,6 +68,7 @@ beforeEach(() => {
   stopMock.mockClear()
   scheduleFlushMock.mockClear()
   hydrateWritingsMock.mockClear()
+  hydrateCollectionsMock.mockClear()
   supabaseGetUserMock.mockReset()
   onAuthStateChangeMock.mockReset()
   desktopOnAuthStateChangeMock.mockReset()
@@ -99,6 +102,7 @@ describe("SyncBootstrap runtime split", () => {
     expect(onAuthStateChangeMock).not.toHaveBeenCalled()
     expect(desktopOnAuthStateChangeMock).toHaveBeenCalled()
     expect(hydrateWritingsMock).not.toHaveBeenCalled()
+    expect(hydrateCollectionsMock).not.toHaveBeenCalled()
     expect(setLocalDBScopeMock).toHaveBeenCalledWith(undefined)
     expect(startMock).toHaveBeenCalled()
     expect(scheduleFlushMock).toHaveBeenCalled()
@@ -112,6 +116,7 @@ describe("SyncBootstrap runtime split", () => {
 
     expect(supabaseGetUserMock).toHaveBeenCalled()
     expect(hydrateWritingsMock).not.toHaveBeenCalled()
+    expect(hydrateCollectionsMock).not.toHaveBeenCalled()
     expect(setLocalDBScopeMock).toHaveBeenCalledWith(undefined)
     expect(startMock).toHaveBeenCalled()
     expect(onAuthStateChangeMock).toHaveBeenCalled()
@@ -126,6 +131,7 @@ describe("SyncBootstrap runtime split", () => {
     expect(supabaseGetUserMock).toHaveBeenCalled()
     expect(setLocalDBScopeMock).toHaveBeenCalledWith("user-1")
     expect(hydrateWritingsMock).toHaveBeenCalled()
+    expect(hydrateCollectionsMock).toHaveBeenCalled()
     expect(startMock).toHaveBeenCalled()
     expect(onAuthStateChangeMock).toHaveBeenCalled()
   })
