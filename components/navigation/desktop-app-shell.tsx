@@ -32,15 +32,23 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
       })
     }
 
-    // Authoritative initial check: getSession awaits Keychain hydration before
-    // resolving. If it returns null, the user is genuinely unauthenticated.
-    void supabase.auth.getSession().then(({ data }) => {
+    // Authoritative initial check: getSession reads from storage, then getUser
+    // validates the token against the server. A stored token with a rotated key
+    // will pass getSession but fail getUser — we force re-login in that case.
+    void supabase.auth.getSession().then(async ({ data: sessionData }) => {
       if (!mounted) return
-      if (!data.session?.user) {
+      if (!sessionData.session?.user) {
         router.replace("/login")
         return
       }
-      applySession(data.session)
+      const { error: userError } = await supabase.auth.getUser()
+      if (!mounted) return
+      if (userError) {
+        // Token invalid (e.g., rotated key) — force re-login
+        router.replace("/login")
+        return
+      }
+      applySession(sessionData.session)
     })
 
     // Subscribe to subsequent changes. NEVER redirect on INITIAL_SESSION or
