@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { ZodError } from "zod"
+import { verifyCurrentPassword } from "@/lib/auth/account-settings"
 import { createClient } from "@/lib/supabase/server"
-import { verifyCurrentPassword } from "@/lib/supabase/queries/user"
 import { updatePasswordSchema } from "@/lib/validation/account-schemas"
 
 const jsonError = (status: number, code: string, message: string) =>

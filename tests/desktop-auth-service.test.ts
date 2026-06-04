@@ -5,6 +5,7 @@ import { desktopAuthService } from "@/lib/services/desktop-auth-service"
 import { webAuthService } from "@/lib/services/web-auth-service"
 import { getAuthService } from "@/lib/services/auth-service-factory"
 import * as runtimeDetect from "@/lib/runtime/detect"
+import * as accountSettings from "@/lib/auth/account-settings"
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -21,13 +22,18 @@ const supabaseAuthMock = vi.hoisted(() => ({
 const supabaseFromMock = vi.hoisted(() => ({
   select: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
+  update: vi.fn().mockReturnThis(),
+  single: vi.fn(),
   maybeSingle: vi.fn(),
 }))
+
+const supabaseRpcMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: supabaseAuthMock,
     from: () => supabaseFromMock,
+    rpc: supabaseRpcMock,
   }),
 }))
 
@@ -35,6 +41,7 @@ vi.mock("@/lib/supabase/desktop-client", () => ({
   createDesktopClient: () => ({
     auth: supabaseAuthMock,
     from: () => supabaseFromMock,
+    rpc: supabaseRpcMock,
   }),
 }))
 
@@ -126,9 +133,12 @@ describe("desktopAuthService", () => {
     supabaseAuthMock.signOut.mockReset()
     supabaseAuthMock.getUser.mockReset()
     supabaseAuthMock.updateUser.mockReset()
+    supabaseRpcMock.mockReset()
     supabaseFromMock.maybeSingle.mockReset()
     supabaseFromMock.select.mockReturnThis()
     supabaseFromMock.eq.mockReturnThis()
+    supabaseFromMock.update.mockReturnThis()
+    supabaseFromMock.single.mockResolvedValue({ data: { id: "user-1" }, error: null })
     supabaseAuthMock.onAuthStateChange.mockImplementation((callback) => {
       queueMicrotask(() => {
         callback("SIGNED_IN", { user: { id: "session-user" } })
@@ -271,7 +281,7 @@ describe("desktopAuthService", () => {
 
   it("checkUsernameAvailability reports taken when profile exists", async () => {
     supabaseFromMock.maybeSingle.mockResolvedValue({
-      data: { username: "taken_name" },
+      data: { id: "other-user" },
       error: null,
     })
 
@@ -342,8 +352,144 @@ describe("desktopAuthService", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled()
     expect(supabaseAuthMock.updateUser).toHaveBeenCalledWith({ data: { display_name: "New Name" } })
+    expect(supabaseFromMock.update).toHaveBeenCalledWith(
+      expect.objectContaining({ display_name: "New Name" }),
+    )
     expect(result.data?.displayName).toBe("New Name")
 
+    vi.unstubAllGlobals()
+  })
+
+  it("updateUsername claims and syncs username directly without calling /api/*", async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal("fetch", fetchSpy)
+    supabaseAuthMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          user_metadata: { username: "writer" },
+        },
+      },
+      error: null,
+    })
+    supabaseFromMock.maybeSingle
+      .mockResolvedValueOnce({ data: { username: "writer" }, error: null })
+      .mockResolvedValueOnce({ data: null, error: null })
+    supabaseRpcMock.mockResolvedValue({
+      data: [{ username: "writer_next", previous_username: "writer", reserved_until: null }],
+      error: null,
+    })
+    supabaseAuthMock.updateUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          user_metadata: { display_name: "Writer", username: "writer_next" },
+        },
+      },
+      error: null,
+    })
+
+    const result = await desktopAuthService.updateUsername({ username: "writer_next" })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(supabaseRpcMock).toHaveBeenCalledWith("claim_profile_username", {
+      target_username: "writer_next",
+    })
+    expect(supabaseAuthMock.updateUser).toHaveBeenCalledWith({
+      data: { username: "writer_next" },
+    })
+    expect(result.data?.username).toBe("writer_next")
+
+    vi.unstubAllGlobals()
+  })
+
+  it("requestEmailChange uses a web callback redirect without calling /api/*", async () => {
+    const fetchSpy = vi.fn()
+    vi.stubGlobal("fetch", fetchSpy)
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.odessay.com"
+    supabaseAuthMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          email_confirmed_at: "2026-05-01T00:00:00.000Z",
+          new_email: null,
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+    supabaseAuthMock.updateUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          new_email: "next@example.com",
+          email_confirmed_at: "2026-05-01T00:00:00.000Z",
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+
+    const result = await desktopAuthService.requestEmailChange({ email: "next@example.com" })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(supabaseAuthMock.updateUser).toHaveBeenCalledWith(
+      { email: "next@example.com" },
+      { emailRedirectTo: "https://app.odessay.com/auth/confirm?next=%2Fsettings%2Faccount" },
+    )
+    expect(result.data?.pendingEmail).toBe("next@example.com")
+
+    vi.unstubAllGlobals()
+  })
+
+  it("updatePassword verifies the current password and updates directly without /api/*", async () => {
+    const fetchSpy = vi.fn()
+    const verifyCurrentPasswordSpy = vi
+      .spyOn(accountSettings, "verifyCurrentPassword")
+      .mockResolvedValue(true)
+    vi.stubGlobal("fetch", fetchSpy)
+    supabaseAuthMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          new_email: null,
+          email_confirmed_at: "2026-05-01T00:00:00.000Z",
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+    supabaseAuthMock.updateUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          new_email: null,
+          email_confirmed_at: "2026-05-01T00:00:00.000Z",
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+    supabaseAuthMock.signOut.mockResolvedValue({ error: null })
+
+    const result = await desktopAuthService.updatePassword({
+      currentPassword: "old-secret",
+      newPassword: "new-secret-123",
+    })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(verifyCurrentPasswordSpy).toHaveBeenCalledWith("writer@example.com", "old-secret")
+    expect(supabaseAuthMock.updateUser).toHaveBeenCalledWith({ password: "new-secret-123" })
+    expect(supabaseAuthMock.signOut).toHaveBeenCalledWith({ scope: "others" })
+    expect(result.error).toBeNull()
+
+    verifyCurrentPasswordSpy.mockRestore()
     vi.unstubAllGlobals()
   })
 })

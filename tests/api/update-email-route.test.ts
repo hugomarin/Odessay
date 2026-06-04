@@ -44,7 +44,7 @@ describe("POST /api/user/update-email", () => {
     expect(body).toEqual({ data: { email: "new@example.com" }, error: null })
     expect(supabaseMock.updateUser).toHaveBeenCalledWith(
       { email: "new@example.com" },
-      { emailRedirectTo: "https://app.odessay.com/auth/confirm?next=/settings/account" },
+      { emailRedirectTo: "https://app.odessay.com/auth/confirm?next=%2Fsettings%2Faccount" },
     )
   })
 

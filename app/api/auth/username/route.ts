@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { resolveUsernameAvailability } from "@/lib/auth/username-validation"
 import { createClient } from "@/lib/supabase/server"
 import { isUsernameFormatValid, normalizeUsername } from "@/lib/auth/validation"
 
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     const supabase = await createClient()
     const { data, error } = await supabase
       .from("public_profiles")
-      .select("username")
+      .select("id")
       .eq("username", username)
       .maybeSingle()
 
@@ -47,10 +48,10 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      data: {
-        available: !data,
-        username,
-      },
+      data: resolveUsernameAvailability({
+        requestedUsername: username,
+        matchingProfileId: data?.id ?? null,
+      }),
       error: null,
     })
   } catch (error) {

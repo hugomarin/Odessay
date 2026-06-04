@@ -79,7 +79,7 @@ export function SyncBootstrap() {
 
       await syncService.start();
       await syncService.scheduleFlush();
-      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
           setLocalDBScope(undefined);
           return;
@@ -93,7 +93,7 @@ export function SyncBootstrap() {
         }
 
         setLocalDBScope(nextUserId);
-        await hydrateFromRemote();
+        void hydrateFromRemote();
         void syncService.scheduleFlush();
       });
       return () => authListener.subscription.unsubscribe();

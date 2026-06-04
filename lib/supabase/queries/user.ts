@@ -1,7 +1,6 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js"
+import { resolveUsernameAvailability } from "@/lib/auth/username-validation"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { supabasePublicKey, supabaseUrl } from "@/lib/supabase/shared"
 
 export type AccountSettingsSnapshot = {
   id: string
@@ -97,35 +96,14 @@ export async function getUsernameAvailability(
       .maybeSingle(),
   ])
 
-  if (profile?.id === userId) {
-    return {
-      available: true,
-      reason: "current",
-      reservedUntil: null,
-    }
-  }
-
-  if (profile?.id) {
-    return {
-      available: false,
-      reason: "taken",
-      reservedUntil: null,
-    }
-  }
-
-  if (reservation && reservation.owner_id !== userId) {
-    return {
-      available: false,
-      reason: "reserved",
-      reservedUntil: reservation.reserved_until,
-    }
-  }
-
-  return {
-    available: true,
-    reason: "available",
-    reservedUntil: null,
-  }
+  return resolveUsernameAvailability({
+    requestedUsername: username,
+    currentUserId: userId,
+    currentUsername: profile?.id === userId ? username : null,
+    matchingProfileId: profile?.id ?? null,
+    reservationOwnerId: reservation?.owner_id ?? null,
+    reservedUntil: reservation?.reserved_until ?? null,
+  })
 }
 
 export async function claimUsernameForCurrentUser(username: string) {
@@ -149,20 +127,4 @@ export async function claimUsernameForCurrentUser(username: string) {
     previousUsername: row.previous_username as string,
     reservedUntil: (row.reserved_until as string | null) ?? null,
   }
-}
-
-export async function verifyCurrentPassword(email: string, password: string) {
-  const verificationClient = createSupabaseClient(supabaseUrl, supabasePublicKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-
-  const { error } = await verificationClient.auth.signInWithPassword({
-    email,
-    password,
-  })
-
-  return !error
 }

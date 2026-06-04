@@ -24,8 +24,8 @@ describe("getSyncService", () => {
     cleanup()
   })
 
-  it("selects the desktop sync adapter in a TAURI_BUILD client bundle", async () => {
-    vi.stubEnv("TAURI_BUILD", "true")
+  it("selects the desktop sync adapter in a NEXT_PUBLIC_TAURI_BUILD client bundle", async () => {
+    vi.stubEnv("NEXT_PUBLIC_TAURI_BUILD", "true")
     vi.resetModules()
     // @ts-expect-error simulate browser globalThis.window
     globalThis.window = globalThis
