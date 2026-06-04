@@ -403,6 +403,8 @@ npm run ops:delivery:gate
 
 Si este gate falla, el issue no puede pasar a `In Review`.
 
+> **Nota de validación de workflow:** antes de cualquier commit en `main` que toque `workflow/status.json` o `workflow/review-history.jsonl`, se debe ejecutar `node scripts/validate-workflow-json.mjs` para garantizar que el JSON/JSONL sea parseable. Esto previene regresiones como comas finales inválidas que bloquean CI.
+
 ### Validation
 [LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
 

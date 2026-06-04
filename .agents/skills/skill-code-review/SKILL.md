@@ -473,6 +473,7 @@ Si el archivo no existe, crearlo. Este log es la fuente de verdad para tendencia
 
 Tras aprobar y mergear, appendear **ambos** eventos (`build_submitted` + `review_approved`) y commitear en `main`:
 ```bash
+node scripts/validate-workflow-json.mjs
 git add workflow/review-history.jsonl
 git commit -m "chore(workflow): append build_submitted + review_approved for ODE-XX [ODE-XX]"
 git push origin main
@@ -481,6 +482,7 @@ git push origin main
 Tras rechazar, appendear solo `review_rejected` y commitear en `main`:
 ```bash
 git switch main
+node scripts/validate-workflow-json.mjs
 git add workflow/review-history.jsonl
 git commit -m "chore(workflow): append review_rejected for ODE-XX"
 git push origin main
@@ -525,9 +527,9 @@ Con REVIEW APROBADO, ejecutar en este orden:
 → Volver a `main`: `git switch main`.
 → Sincronizar `main`: `git pull --ff-only origin main`.
 → Appendear `build_submitted` + `review_approved` a `workflow/review-history.jsonl` y commitear:
-  `git add workflow/review-history.jsonl && git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
+  `node scripts/validate-workflow-json.mjs && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
 → Actualizar `workflow/status.json` (`built[]`) y commitear:
-  `git add workflow/status.json && git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]" && git push origin main`
+  `node scripts/validate-workflow-json.mjs && git add workflow/status.json && git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]" && git push origin main`
 → Mover el issue a Done en Linear (`scripts/linear-cli.mjs move`).
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
