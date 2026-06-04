@@ -1850,6 +1850,15 @@
       "commit": "70c79c9",
       "date": "2026-06-04",
       "notes": "Score: 10.0/10. Performance Contract: not required (workflow tooling). GateResult PASS. CI perf gate failure informative only (not required). No findings."
+    },
+    {
+      "issue": "ODE-234",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-234/validate-statusjson-json-before-workflow-commits-to-prevent-trailing",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/223",
+      "commit": "bad243c",
+      "date": "2026-06-04",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Score: 10.0/10. Performance Contract: not required (workflow tooling). GateResult PASS. New validate-workflow-json.mjs script, pre-commit hook, workflow.md updated with validation steps, skill files synced, npm script added. CI traceability gate initially failed on process-sync check; fixed during review by updating skill-code-review and skill-product-manager SKILL.md."
     }
   ]
 }
