@@ -24,6 +24,7 @@ export type LocalWriting = {
   id: string;
   author_id?: string | null;
   title?: string | null;
+  canonical_path?: string | null;
   body_json: Record<string, unknown>;
   body_text: string;
   slug?: string | null;

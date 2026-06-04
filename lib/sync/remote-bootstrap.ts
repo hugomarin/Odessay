@@ -99,6 +99,7 @@ export const mapRemoteWritingToLocal = (
     id: remoteWriting.id,
     author_id: remoteWriting.author_id,
     title: remoteWriting.title ?? null,
+    canonical_path: existingLocalWriting?.canonical_path ?? null,
     body_json: hasBody
       ? normalizeBodyJson(remoteWriting.body_json)
       : (existingLocalWriting?.body_json ?? EMPTY_BODY_JSON),

@@ -15,6 +15,8 @@ import type { LocalCollection, SyncMutation } from "@/lib/local-db/schema"
 import type { ServiceResponse } from "@/lib/services/contracts/service-types"
 import { localDB } from "@/lib/local-db"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
+import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands"
 import {
   beginHydrationProgress,
   completeHydrationProgress,
@@ -250,11 +252,38 @@ async function processWritingMutation(userId: string, mutation: Extract<SyncMuta
   }
 
   const existing = await localDB.writings.get(mutation.entity_id)
+  let canonicalPayload = mutation.payload
+
+  if (existing?.canonical_path) {
+    try {
+      const source = await tauriOpenFile(existing.canonical_path)
+      const parsed = desktopDocumentEngine.parseSourceDocument(source)
+
+      if (parsed.success) {
+        canonicalPayload = {
+          ...canonicalPayload,
+          body_json: parsed.document.snapshot.bodyJson as Record<string, unknown>,
+          body_text: parsed.document.snapshot.bodyText,
+          slug: parsed.document.metadata?.slug ?? canonicalPayload.slug ?? null,
+          status: parsed.document.metadata?.status ?? canonicalPayload.status,
+          visibility: parsed.document.metadata?.visibility ?? canonicalPayload.visibility,
+          version: parsed.document.metadata?.version ?? canonicalPayload.version,
+          updated_at: parsed.document.metadata?.updatedAt ?? canonicalPayload.updated_at,
+        }
+      }
+    } catch (error) {
+      logDesktopSyncError("failed to read canonical desktop file before cloud push", {
+        canonicalPath: existing.canonical_path,
+        writingId: mutation.entity_id,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
 
   const row = {
     // Spread payload FIRST, then pin id/author_id. The locally-created writing
     // carries author_id: null, so spreading payload last would overwrite it.
-    ...mutation.payload,
+    ...canonicalPayload,
     id: mutation.entity_id,
     author_id: userId,
   }
