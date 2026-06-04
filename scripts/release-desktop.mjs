@@ -40,6 +40,7 @@ function findDmg(bundleDir) {
 
 function main() {
   const root = process.cwd()
+  const allowLocalhost = process.argv.includes("--allow-localhost")
 
   // 1. Version drift check — fail fast
   const drift = checkVersionDrift(root)
@@ -54,10 +55,30 @@ function main() {
     process.exit(1)
   }
 
+  // 2. Web runtime URL check — prevent shipping a DMG that points to localhost
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || ""
+  const isLocalhost = /localhost|127\.0\.0\.1/.test(appUrl)
+  if (isLocalhost && !allowLocalhost) {
+    console.error(
+      `[desktop:release] INVALID WEB RUNTIME URL\n` +
+        `  NEXT_PUBLIC_APP_URL=${appUrl}\n` +
+        `\n` +
+        `  A production DMG must connect to the hosted web runtime, not localhost.\n` +
+        `  Fix one of:\n` +
+        `    • NEXT_PUBLIC_APP_URL=https://odessay.vercel.app npm run desktop:release\n` +
+        `    • npm run desktop:release:prod\n` +
+        `    • npm run desktop:release -- --allow-localhost  (only for local testing)`
+    )
+    process.exit(1)
+  }
+
   const { version } = drift
   console.log(`[desktop:release] Building Odessay ${version}…`)
+  if (isLocalhost && allowLocalhost) {
+    console.log(`[desktop:release] WARNING: DMG will connect to local dev server (${appUrl}). Do not distribute this build.`)
+  }
 
-  // 2. Build — beforeBuildCommand in tauri.conf.json handles the Next.js static export prep
+  // 3. Build — beforeBuildCommand in tauri.conf.json handles the Next.js static export prep
   try {
     execSync("npm run tauri:build", { stdio: "inherit", cwd: root })
   } catch (err) {
