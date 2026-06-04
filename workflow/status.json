@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Desktop AI adapter proxying to hosted web AI runtime via Bearer token. Factory (ai-service-factory.ts) selects desktopAIService in Tauri, webAIService otherwise. request-auth.ts extends AI routes to accept Bearer + cookie auth without breaking web. Graceful degradation on net/auth failure — AI never blocks write path. 659 tests PASS.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-223",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-223/implement-desktop-ai-adapter-via-authenticated-web-ai-proxy",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/220",
+      "commit": "b46d001",
+      "date": "2026-06-04",
+      "notes": "Score: 8.0/10. Architecture Contract COMPLIANT: Layer=Application+Adapter/desktop, Runtime scope=shared-core+desktop+cloud+web, Owner=backend. All invariants preserved (no bundle-local AI deps, provider keys server-side, write path free, web unchanged). P2: perf brief not updated for PM relaxation, desktop:release absent, request-auth Bearer path lacks unit test."
+    },
+    {
       "what": "Desktop account settings routed through direct Supabase auth adapter (no /api/* local transport). Shared username-validation module extracted. NEXT_PUBLIC_TAURI_BUILD runtime detection fix. void hydrateFromRemote unblocks desktop auth listener. sanitizeRedirectPath + extractMalformedAuthRedirect guard auth callback middleware. Migration fixes claim_profile_username 42702 column ambiguity (two qualified references). Evidence harness page doubly guarded (VERCEL env check + PRIVATE_ROUTES middleware).",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-221",
