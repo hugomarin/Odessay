@@ -5,10 +5,6 @@
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
-        "issue": "ODE-221",
-        "reason": "Active in-progress issue. Workflow commit (review_rejected) landed on main before the feature branch merged, causing drift check to find the ID in main history before it appears in built[]. Remove when ODE-221 is added to built[]."
-      },
-      {
         "issue": "ODE-502",
         "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
       },
@@ -49,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Desktop account settings routed through direct Supabase auth adapter (no /api/* local transport). Shared username-validation module extracted. NEXT_PUBLIC_TAURI_BUILD runtime detection fix. void hydrateFromRemote unblocks desktop auth listener. sanitizeRedirectPath + extractMalformedAuthRedirect guard auth callback middleware. Migration fixes claim_profile_username 42702 column ambiguity (two qualified references). Evidence harness page doubly guarded (VERCEL env check + PRIVATE_ROUTES middleware).",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-221",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-221/replace-desktop-settings-api-calls-with-direct-supabase-auth-adapter",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/219",
+      "commit": "f47234b",
+      "date": "2026-06-04",
+      "notes": "Score: 9.75/10 (R2). Architecture Contract COMPLIANT: Layer=Adapter+Application, Runtime scope=desktop+web auth callback+database RPC, Owner=frontend+database, all invariants preserved (desktop settings no /api/*, web-only callbacks intact, shared validation, RLS not bypassed). Waterfall contract PASS: 4 mutations all api=0. Two review rounds: R1 rejected for typecheck proof absent, waterfall artifact missing, security finding on evidence page. R2 all resolved."
+    },
     {
       "what": "DesktopDocumentService factory: editor desktop routes through runtime-aware factory (FilesystemDocumentService en desktop, webDocumentService en web). Escrituras desktop a .md canónico como fuente de verdad, IndexedDB queda como índice derivado con campo canonical_path. Migración one-time IndexedDB→filesystem idempotente. Cloud push reconstruido desde archivo .md antes de sincronizar. IDB schema v12 con índice by-canonical-path. ensureMigrated() con retry resilience (migrationPromise reseteable). 651 tests PASS.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
