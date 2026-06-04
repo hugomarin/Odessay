@@ -325,6 +325,60 @@ Esto es una buena prueba de diseño: si la arquitectura sirve para web y desktop
 
 ---
 
+## §Auth — Autenticación Web vs Desktop
+
+Esta sección documenta las diferencias concretas entre los dos runtimes de autenticación y los gotchas que han costado tiempo de debug. Es fuente de verdad para cualquier trabajo futuro que toque auth, sync o migración de sesión.
+
+### Tabla comparada
+
+| Dimensión | Web | Desktop |
+|-----------|-----|---------|
+| **Cliente Supabase** | `createBrowserClient` desde `@supabase/ssr` | `createClient` desde `@supabase/supabase-js` |
+| **Storage de sesión** | Cookies HTTP (cookie store de Next.js) | macOS Keychain vía `keychainStorage` (o `tauri-plugin-store` para bundles ad-hoc sin Developer ID) |
+| **Mecanismo de escritura** | SSR: middleware refresca tokens en cada request; Server Components leen/escriben cookies vía `createServerClient` | Cliente-directo: singleton mantiene sesión en memoria y persiste a Keychain vía adapter `auth.storage` |
+| **API key** | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` (o `ANON_KEY` como fallback) | Igual — usa la misma publishable key |
+| **Firma de JWT** | Validada por Supabase Auth; refresh automático manejado por `@supabase/ssr` | Validada por Supabase Auth; refresh automático habilitado con `autoRefreshToken: true` en `createClient` |
+| **Detección de runtime** | N/A (es el default) | `isTauriRuntime()` lee `window.__TAURI_INTERNALS__` o `NEXT_PUBLIC_TAURI_BUILD` |
+| **Email callbacks** | Se completan in-app vía `/auth/confirm` con `token_hash` | Se completan en el navegador web (no in-app); `detectSessionInUrl: false` en el cliente desktop |
+| **Routing de auth** | Middleware Next.js redirige `/desk` → `/login` si no hay sesión | No hay middleware; `DesktopAppShell` monta la ruta y el componente decide si redirigir |
+| **Bootstrap de sync** | `SyncBootstrap` usa `createClient()` + `onAuthStateChange` para hydration | `SyncBootstrap` usa `createDesktopClient()` + `onAuthStateChange` idéntico pero con Keychain-backed session |
+
+### Gotchas (advertencias operativas)
+
+1. **`process.env.TAURI_BUILD` NO llega al bundle cliente**  
+   En `lib/supabase/server.ts` se usa `process.env.TAURI_BUILD` para decidir qué factory devolver en SSR, pero esa variable no está disponible en el bundle del cliente. Para detección de runtime en cliente usar siempre `isTauriRuntime()` (que lee `window.__TAURI_INTERNALS__`) o `NEXT_PUBLIC_TAURI_BUILD`. Ver `lib/runtime/detect.ts`.
+
+2. **`@supabase/ssr` pisa `auth.storage` con cookies**  
+   `createBrowserClient` hardcodea un adapter de cookies que sobreescribe silenciosamente cualquier `auth.storage` custom pasado en options (ver `node_modules/@supabase/ssr/dist/module/createBrowserClient.js`). En desktop, donde no hay cookies persistentes, usar obligatoriamente `createClient` de `@supabase/supabase-js` con `storage: keychainStorage`.  
+   ```ts
+   // ❌ NO — storage custom se ignora silenciosamente
+   import { createBrowserClient } from "@supabase/ssr"
+   createBrowserClient(url, key, { auth: { storage: myStorage } })
+
+   // ✅ SÍ — storage custom respetado
+   import { createClient } from "@supabase/supabase-js"
+   createClient(url, key, { auth: { storage: myStorage, persistSession: true, autoRefreshToken: true } })
+   ```
+
+3. **Token viejo (llave rotada) da 403 silencioso, no 401**  
+   Cuando la API key de Supabase rota o el token expira de forma inesperada, el cliente no siempre emite un error explícito. En su lugar, las queries subsiguientes devuelven `null` como si el usuario fuera anónimo, lo que se manifiesta como 403 en logs de red o comportamiento de "sesión perdida". No confundir con un bug de sync — verificar primero la validez del token en Keychain o cookies.
+
+4. **PostgREST `upsert` / `return=representation` disparan 42501 con la política actual de `writings`**  
+   La política RLS de `writings` que usa subconsulta de correspondencia (ver [ODE-237](https://linear.app/z9ne/issue/ODE-237/fix-bug-en-politica-rls-de-writings-subconsulta-de-correspondencia)) rechaza operaciones `upsert` con `return=representation` cuando el usuario no tiene visibilidad previa del registro. Esto afecta tanto a web como desktop, pero en desktop es más difícil de diagnosticar porque no hay middleware que normalice el error. Usar `select` + `insert`/`update` explícitos en lugar de `upsert` cuando la política RLS sea compleja.
+
+5. **Singleton obligatorio en desktop**  
+   Cada instancia nueva de `createDesktopClient` nace con sesión vacía en memoria. Si `signIn` y el siguiente `getSession` usan instancias distintas, `getSession` devuelve `null` aunque el `signIn` haya tenido éxito y el Keychain esté escrito correctamente. El factory `createDesktopClient` debe retornar siempre la misma instancia.  
+   Ver también: `desktop-auth-service.ts` espera explícitamente el evento `SIGNED_IN` vía `onAuthStateChange` antes de resolver `signIn()`, para evitar que el router navegue a `/desk` antes de que la sesión esté visible en memoria.
+
+### Referencias cruzadas
+
+- [ODE-219](https://linear.app/z9ne/issue/ODE-219/persist-desktop-auth-tokens-in-macos-keychain-via-tauri-plugin) — Persistencia de tokens en Keychain (implementación inicial).
+- [ODE-220](https://linear.app/z9ne/issue/ODE-220/keep-desktop-auth-email-callbacks-web-only-for-mvp) — Decisión de mantener callbacks de email en web para MVP desktop.
+- [ODE-232](https://linear.app/z9ne/issue/ODE-232/replace-keychain-backend-with-tauri-plugin-store-for-unsigned) — Migración a `tauri-plugin-store` para bundles ad-hoc sin Apple Developer ID.
+- [ODE-237](https://linear.app/z9ne/issue/ODE-237/fix-bug-en-politica-rls-de-writings-subconsulta-de-correspondencia) — Fix de política RLS que afecta operaciones `upsert`/`return=representation`.
+
+---
+
 ## Contratos de servicio objetivo
 
 ### `DocumentService`

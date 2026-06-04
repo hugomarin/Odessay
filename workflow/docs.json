@@ -107,7 +107,7 @@
       "type": "feature",
       "scope": "desktop-target-architecture",
       "state": "normative-sequence-step-3",
-      "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio, reglas de dependencia, modelo documental objetivo y orden recomendado de extracción."
+      "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio, reglas de dependencia, modelo documental objetivo, orden recomendado de extracción, y §Auth comparativa web vs desktop con gotchas operativas."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
