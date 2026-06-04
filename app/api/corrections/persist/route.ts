@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 
 const publicationSuggestionSchema = z.object({
   id: z.string().trim().min(1),
@@ -54,15 +54,6 @@ const jsonError = (status: number, code: string, message: string) =>
     { status },
   );
 
-async function getCurrentUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { userId: user?.id ?? null };
-}
-
 async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>, userId: string, writingId: string) {
   const { data, error } = await supabase
     .from("writings")
@@ -86,7 +77,7 @@ async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>
 }
 
 export async function POST(request: Request) {
-  const { userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");

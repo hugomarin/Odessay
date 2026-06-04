@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 
 const querySchema = z.object({
   writingId: z.string().uuid(),
@@ -18,15 +18,6 @@ const jsonError = (status: number, code: string, message: string) =>
     },
     { status },
   );
-
-async function getCurrentUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { userId: user?.id ?? null };
-}
 
 async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>, userId: string, writingId: string) {
   const { data: writing, error: findError } = await supabase
@@ -57,7 +48,7 @@ async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>
 }
 
 export async function GET(request: Request) {
-  const { userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.");
