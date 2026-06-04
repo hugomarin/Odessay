@@ -214,7 +214,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
      ```bash
      git switch main
      git add workflow/review-history.jsonl
-     git commit -m "chore(workflow): append review_rejected for {ISSUE-ID} [{ISSUE-ID}]"
+     git commit -m "chore(workflow): append review_rejected for {ISSUE-ID}"
      git push origin main
      git switch -
      ```

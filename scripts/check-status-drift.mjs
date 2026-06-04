@@ -62,7 +62,10 @@ const subjects = execSync(`git log --pretty=%s ${ref}`, {
 });
 
 const gitIssueSet = new Set(
-  [...subjects.matchAll(/\bODE-\d+\b/g)]
+  subjects
+    .split("\n")
+    .filter((line) => !line.includes("review_rejected"))
+    .flatMap((line) => [...line.matchAll(/\bODE-\d+\b/g)])
     .map((match) => match[0])
     .filter((issue) => !ignoredIssues.has(issue)),
 );

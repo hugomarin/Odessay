@@ -482,7 +482,7 @@ Tras rechazar, appendear solo `review_rejected` y commitear en `main`:
 ```bash
 git switch main
 git add workflow/review-history.jsonl
-git commit -m "chore(workflow): append review_rejected for ODE-XX [ODE-XX]"
+git commit -m "chore(workflow): append review_rejected for ODE-XX"
 git push origin main
 ```
 
@@ -544,7 +544,7 @@ El issue vuelve a In Progress hasta que se corrija.
 ```
 → Comentar en Linear con el formato anterior (`scripts/linear-cli.mjs comment`).
 → Commitear `workflow/review-history.jsonl` en `main` y pushear:
-  `git switch main && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append review_rejected for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main && git switch -`
+  `git switch main && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append review_rejected for {ISSUE-ID}" && git push origin main && git switch -`
 → No hacer merge. Mover issue de `In Review` → `In Progress` (`scripts/linear-cli.mjs move`).
 → No modificar el código — el agente revisor no implementa.
 
