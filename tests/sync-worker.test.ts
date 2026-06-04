@@ -72,6 +72,7 @@ const createLocalDbMock = () => {
     writings: {
       save: vi.fn(async (_nextWriting: LocalWriting) => undefined),
       get: vi.fn(async () => writing),
+      getByCanonicalPath: vi.fn(async () => null),
       getAll: vi.fn(async () => [writing]),
       delete: vi.fn(async () => undefined),
     },

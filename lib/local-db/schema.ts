@@ -1,7 +1,7 @@
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 11;
+export const LOCAL_DB_VERSION = 12;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -24,6 +24,7 @@ export type LocalWriting = {
   id: string;
   author_id?: string | null;
   title?: string | null;
+  canonical_path?: string | null;
   body_json: Record<string, unknown>;
   body_text: string;
   slug?: string | null;

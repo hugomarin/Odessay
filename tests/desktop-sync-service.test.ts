@@ -24,6 +24,7 @@ const localDBMock = {
 }
 
 const getSessionMock = vi.fn()
+const tauriOpenFileMock = vi.fn()
 
 const writingsOrderMock = vi.fn()
 const writingsEqMock = vi.fn(() => ({ order: writingsOrderMock }))
@@ -80,6 +81,10 @@ vi.mock("@/lib/supabase/desktop-client", () => ({
   }),
 }))
 
+vi.mock("@/lib/services/desktop/tauri-commands", () => ({
+  tauriOpenFile: tauriOpenFileMock,
+}))
+
 describe("desktopSyncService", () => {
   beforeEach(() => {
     vi.resetModules()
@@ -107,6 +112,7 @@ describe("desktopSyncService", () => {
     collectionsEqMock.mockReset()
     collectionsSelectMock.mockReset()
     writingCollectionsSelectMock.mockReset()
+    tauriOpenFileMock.mockReset()
 
     writingsEqMock.mockImplementation(() => ({ order: writingsOrderMock }))
     writingsSelectMock.mockImplementation(() => ({ eq: writingsEqMock }))
@@ -260,6 +266,80 @@ describe("desktopSyncService", () => {
     // Local row is flipped to synced/server-confirmed (no remote re-map).
     expect(localDBMock.writings.save).toHaveBeenCalledWith(
       expect.objectContaining({ sync_status: "synced", lifecycle: "server-confirmed" }),
+    )
+  })
+
+  it("rebuilds the cloud payload from the canonical markdown file when canonical_path exists", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    tauriOpenFileMock.mockResolvedValue(`---
+id: writing-1
+slug: canonical-slug
+status: draft
+visibility: private
+version: 4
+created_at: 2026-06-01T00:00:00.000Z
+updated_at: 2026-06-03T00:00:00.000Z
+---
+
+# Canonical title
+
+Body from markdown truth.`)
+
+    localDBMock.syncQueue.getPending
+      .mockResolvedValueOnce([
+        {
+          id: "mutation-1",
+          entity_kind: "writing",
+          entity_id: "writing-1",
+          entity_key: "writing:writing-1",
+          operation: "upsert",
+          payload: {
+            author_id: null,
+            title: "Stale cache title",
+            body_json: { type: "doc", content: [] },
+            body_text: "Stale cache body",
+            slug: null,
+            status: "draft",
+            visibility: "private",
+            parent_id: null,
+            correspondence_id: null,
+            version: 2,
+            updated_at: "2026-06-02T00:00:00.000Z",
+            deleted_at: null,
+          },
+          created_at: Date.now(),
+          attempts: 0,
+        },
+      ])
+      .mockResolvedValueOnce([])
+
+    localDBMock.writings.get.mockResolvedValue({
+      id: "writing-1",
+      canonical_path: "/docs/writing-1.md",
+      author_id: "user-1",
+      title: "Cached title",
+      sync_status: "pending",
+      lifecycle: "local-only",
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const result = await desktopSyncService.flushPending()
+
+    expect(result.error).toBeNull()
+    expect(tauriOpenFileMock).toHaveBeenCalledWith("/docs/writing-1.md")
+    expect(writingsInsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "writing-1",
+        slug: "canonical-slug",
+        body_text: "Canonical title\nBody from markdown truth.",
+        version: 4,
+        updated_at: "2026-06-03T00:00:00.000Z",
+      }),
     )
   })
 })

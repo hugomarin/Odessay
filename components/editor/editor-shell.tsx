@@ -115,7 +115,11 @@ import type {
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { webAIService } from "@/lib/services/web-ai-service"
-import { webDocumentService } from "@/lib/services/web-document-service"
+import {
+  createDesktopDraft,
+  getDocumentService,
+  importDesktopWritingFile,
+} from "@/lib/services/document-service-factory"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
@@ -591,7 +595,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       try {
-        const result = await webDocumentService.saveWriting({ writing: nextRecord })
+        const result = await (await getDocumentService()).saveWriting({ writing: nextRecord })
         if (result.error) {
           throw new Error(result.error.message)
         }
@@ -992,28 +996,37 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const nextTitle = deriveAutoTitle("", nowIso)
 
       try {
-        await webDocumentService.saveWriting({
-          writing: {
-            id: nextId,
-            authorId: null,
-            title: nextTitle,
-            content: {
-              richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
-              markdown: null,
-              plainText: "",
-              canonicalSource: "rich-text",
+        if (isDesktopRuntime()) {
+          const result = await createDesktopDraft({ title: nextTitle })
+          if (result.error || !result.data) {
+            throw new Error(result.error?.message ?? "Failed to create desktop draft")
+          }
+          currentWritingIdRef.current = result.data.id
+        } else {
+          await (await getDocumentService()).saveWriting({
+            writing: {
+              id: nextId,
+              authorId: null,
+              title: nextTitle,
+              content: {
+                richText: EMPTY_EDITOR_JSON as Record<string, unknown>,
+                markdown: null,
+                plainText: "",
+                canonicalSource: "rich-text",
+              },
+              slug: null,
+              status: "draft",
+              visibility: "private",
+              parentId: null,
+              correspondenceId: null,
+              version: 1,
+              deletedAt: null,
+              createdAt: nowIso,
+              updatedAt: nowIso,
             },
-            slug: null,
-            status: "draft",
-            visibility: "private",
-            parentId: null,
-            correspondenceId: null,
-            version: 1,
-            deletedAt: null,
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          },
-        })
+          })
+          currentWritingIdRef.current = nextId
+        }
       } catch {
         // If the save fails (e.g., scope change in progress), fall back to
         // the identity-on-first-input path in persistEditorSnapshot.
@@ -1022,15 +1035,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       openWritingTab({
-        writingId: nextId,
+        writingId: currentWritingIdRef.current ?? nextId,
         title: nextTitle,
         saveState: "saved-local",
         hasPendingSync: false,
         replaceDraft: true,
       })
 
-      currentWritingIdRef.current = nextId
-      setCurrentWritingId(nextId)
+      setCurrentWritingId(currentWritingIdRef.current ?? nextId)
       setHydrationWritingId(null)
       setTitle(nextTitle)
       setHasExplicitTitle(false)
@@ -1052,9 +1064,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       lifecycleRef.current = "local-only"
       navigatedToDraftRef.current = true
       if (isPerfHarness()) {
-        window.history.replaceState(null, "", `/write/${nextId}`)
+        window.history.replaceState(null, "", `/write/${currentWritingIdRef.current ?? nextId}`)
       } else if (!isDesktopRuntime()) {
-        router.replace(`/write/${nextId}`)
+        router.replace(`/write/${currentWritingIdRef.current ?? nextId}`)
       }
     }
 
@@ -1136,7 +1148,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }, 200)
 
       try {
-        const openResult = await webDocumentService.openWriting(targetWritingId)
+        const openResult = await (await getDocumentService()).openWriting(targetWritingId)
         if (openResult.error) {
           console.error(`[editor] openWriting failed for ${targetWritingId}`, openResult.error)
           return
@@ -3696,7 +3708,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
     if (isActiveDraft) {
       try {
-        await webDocumentService.saveWriting({ writing: blankDraftRecord })
+        if (isDesktopRuntime()) {
+          const result = await createDesktopDraft({ title: nextTitle })
+          if (result.error || !result.data) {
+            throw new Error(result.error?.message ?? "Failed to create desktop draft")
+          }
+          currentWritingIdRef.current = result.data.id
+          setCurrentWritingId(result.data.id)
+          setHydrationWritingId(result.data.id)
+        } else {
+          await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
+        }
       } catch {
         // If save fails, revert the optimistic claim so persistEditorSnapshot
         // can fall back to identity-on-first-input.
@@ -3707,7 +3729,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       openWritingTab({
-        writingId: nextWritingId,
+        writingId: currentWritingIdRef.current ?? nextWritingId,
         title: nextTitle,
         saveState: "saved",
         hasPendingSync: false,
@@ -3724,7 +3746,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     try {
-      await webDocumentService.saveWriting({ writing: blankDraftRecord })
+      if (isDesktopRuntime()) {
+        const result = await createDesktopDraft({ title: nextTitle })
+        if (result.error || !result.data) {
+          throw new Error(result.error?.message ?? "Failed to create desktop draft")
+        }
+        currentWritingIdRef.current = result.data.id
+        setCurrentWritingId(result.data.id)
+        setHydrationWritingId(result.data.id)
+      } else {
+        await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
+      }
     } catch {
       currentWritingIdRef.current = null
       setCurrentWritingId(null)
@@ -3733,7 +3765,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     openWritingTab({
-      writingId: nextWritingId,
+      writingId: currentWritingIdRef.current ?? nextWritingId,
       title: nextTitle,
       saveState: "saved",
       hasPendingSync: false,
@@ -3788,15 +3820,30 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       try {
-        await webDocumentService.saveWriting({ writing: record })
+        if (isDesktopRuntime()) {
+          const result = await importDesktopWritingFile(_path, content)
+          if (result.error || !result.data) {
+            throw new Error(result.error?.message ?? "Failed to import desktop file")
+          }
+          currentWritingIdRef.current = result.data.id
+          setCurrentWritingId(result.data.id)
+          setHydrationWritingId(result.data.id)
+        } else {
+          await (await getDocumentService()).saveWriting({ writing: record })
+        }
       } catch {
         return
       }
 
-      currentWritingIdRef.current = nextWritingId
-      setCurrentWritingId(nextWritingId)
-      setHydrationWritingId(nextWritingId)
-      openWritingTab({ writingId: nextWritingId, title: nextTitle, saveState: "saved-local", hasPendingSync: false })
+      currentWritingIdRef.current = currentWritingIdRef.current ?? nextWritingId
+      setCurrentWritingId(currentWritingIdRef.current)
+      setHydrationWritingId(currentWritingIdRef.current)
+      openWritingTab({
+        writingId: currentWritingIdRef.current,
+        title: nextTitle,
+        saveState: "saved-local",
+        hasPendingSync: false,
+      })
       if (!isDesktopRuntime()) {
         router.push(`/write/${nextWritingId}`)
       }
@@ -3847,7 +3894,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         return
       }
 
-      const result = await webDocumentService.exportWriting({ writingId: currentWritingId, format })
+      const result = await (await getDocumentService()).exportWriting({ writingId: currentWritingId, format })
       if (result.error) {
         throw new Error(result.error.message)
       }
