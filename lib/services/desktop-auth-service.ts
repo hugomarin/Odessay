@@ -208,10 +208,19 @@ export const desktopAuthService: AuthService = {
   async signOut(): Promise<ServiceResponse<null>> {
     try {
       const supabase = createDesktopClient()
-      const { error } = await supabase.auth.signOut()
 
-      if (error) {
-        return err(toServiceError("UNAVAILABLE", error.message, true))
+      // Race with timeout to avoid indefinite hang if the network request or
+      // storage plugin stalls (ODE-238). The storage adapter already has its
+      // own timeout and never blocks, so this catches the server call phase.
+      const signOutPromise = supabase.auth.signOut()
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("signOut timeout")), 5000),
+      )
+
+      try {
+        await Promise.race([signOutPromise, timeoutPromise])
+      } catch {
+        console.warn("[desktop-auth-service] signOut timed out, continuing")
       }
 
       return ok(null)
