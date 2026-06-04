@@ -17,10 +17,6 @@
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
       },
       {
-        "issue": "ODE-243",
-        "reason": "In-flight issue: review_rejected commit in main references ODE-243 but the issue is not yet merged. Exempt from drift until approved and merged; remove this exception when adding to built[]."
-      },
-      {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
       }
@@ -49,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "DesktopDocumentService factory: editor desktop routes through runtime-aware factory (FilesystemDocumentService en desktop, webDocumentService en web). Escrituras desktop a .md canónico como fuente de verdad, IndexedDB queda como índice derivado con campo canonical_path. Migración one-time IndexedDB→filesystem idempotente. Cloud push reconstruido desde archivo .md antes de sincronizar. IDB schema v12 con índice by-canonical-path. ensureMigrated() con retry resilience (migrationPromise reseteable). 651 tests PASS.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-243",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-243/save-path-canonico-desktop-md-fuente-de-verdad-indexeddb-indice",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/218",
+      "commit": "59b7c26",
+      "date": "2026-06-04",
+      "notes": "Score: 9.75/10 (R2). Architecture Contract COMPLIANT: Layer=Application+Adapter, Runtime scope=desktop+cloud, Owner=backend, all invariants preserved (.md única fuente de verdad, write-local-first, IndexedDB derivado, cloud push desde .md). Performance Contract PASS: interaction_latency_ms.editor_inputs_p95=36.26ms (warn≤130), required_failures=0. Two review rounds: R1 rejected for missing perf evidence + fan-out test + migration Promise resilience + O(n) scan. R2 all resolved. CI traceability false positive from review_rejected commit pattern (workflow design issue, tracked in ProcessInsights)."
+    },
     {
       "what": "Fix bug en política RLS de writings: subconsulta de correspondencia auto-referente. Drop+recreate de writings_insert_author y writings_update_author con corrección de c.root_writing_id=id (era c.root_writing_id=c.id) y parent.id=parent_id (era parent.id=parent.parent_id). Migración follow-up idempotente con rollback comentado. Regresión test (3 tests) verifica que los patrones bugueados no regresen.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
