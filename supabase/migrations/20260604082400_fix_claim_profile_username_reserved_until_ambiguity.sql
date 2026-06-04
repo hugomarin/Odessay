@@ -78,8 +78,8 @@ begin
         updated_at = timezone('utc', now());
 
   delete from public.username_reservations
-  where username = normalized_username
-    and owner_id = actor_id;
+  where username_reservations.username = normalized_username
+    and username_reservations.owner_id = actor_id;
 
   return query
     select normalized_username, current_username, next_reserved_until;
