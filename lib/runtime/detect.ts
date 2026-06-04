@@ -6,11 +6,11 @@
  * during SSR (`typeof window === "undefined"`), they return `false`.
  *
  * Tauri v2 injects `window.__TAURI_INTERNALS__` into the renderer at startup.
- * The bundled DMG also sets TAURI_BUILD=true at compile time, which is the
- * stable fallback for runtime adapter selection when the injected global is not
- * visible yet.
+ * The bundled DMG also sets NEXT_PUBLIC_TAURI_BUILD=true at compile time,
+ * which is the stable fallback for runtime adapter selection when the injected
+ * global is not visible yet.
  */
-const isTauriBuild = process.env.TAURI_BUILD === "true"
+const isTauriBuild = process.env.NEXT_PUBLIC_TAURI_BUILD === "true"
 
 export const isTauriRuntime = (): boolean =>
   typeof window !== "undefined" &&

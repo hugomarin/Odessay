@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useMemo, useState, useTransition } from "react"
+import { Suspense, useEffect, useState, useTransition } from "react"
 import { useSearchParams } from "next/navigation"
 import { getAuthService } from "@/lib/services/auth-service-factory"
 
@@ -18,7 +18,6 @@ type HarnessState =
 
 function SettingsAccountEvidenceClient() {
   const searchParams = useSearchParams()
-  const authService = useMemo(() => getAuthService(), [])
   const [state, setState] = useState<HarnessState>({ status: "loading" })
   const [lastResult, setLastResult] = useState("idle")
   const [isPending, startTransition] = useTransition()
@@ -40,7 +39,7 @@ function SettingsAccountEvidenceClient() {
       return
     }
 
-    void authService.signIn({ email, password }).then((result) => {
+    void getAuthService().signIn({ email, password }).then((result) => {
       if (cancelled) {
         return
       }
@@ -69,7 +68,7 @@ function SettingsAccountEvidenceClient() {
     return () => {
       cancelled = true
     }
-  }, [authService, searchParams])
+  }, [searchParams])
 
   const runStep = (name: string, work: () => Promise<unknown>) => {
     startTransition(async () => {
@@ -102,7 +101,7 @@ function SettingsAccountEvidenceClient() {
         data-testid="ode-221-update-display-name"
         disabled={isPending}
         onClick={() =>
-          runStep("displayName", async () => authService.updateDisplayName({ displayName: nextDisplayName }))
+          runStep("displayName", async () => getAuthService().updateDisplayName({ displayName: nextDisplayName }))
         }
         type="button"
       >
@@ -112,7 +111,7 @@ function SettingsAccountEvidenceClient() {
         data-testid="ode-221-update-username"
         disabled={isPending}
         onClick={() =>
-          runStep("username", async () => authService.updateUsername({ username: nextUsername }))
+          runStep("username", async () => getAuthService().updateUsername({ username: nextUsername }))
         }
         type="button"
       >
@@ -122,7 +121,7 @@ function SettingsAccountEvidenceClient() {
         data-testid="ode-221-update-email"
         disabled={isPending}
         onClick={() =>
-          runStep("email", async () => authService.requestEmailChange({ email: nextEmail }))
+          runStep("email", async () => getAuthService().requestEmailChange({ email: nextEmail }))
         }
         type="button"
       >
@@ -133,7 +132,7 @@ function SettingsAccountEvidenceClient() {
         disabled={isPending}
         onClick={() =>
           runStep("password", async () =>
-            authService.updatePassword({
+            getAuthService().updatePassword({
               currentPassword,
               newPassword: nextPassword,
             }),

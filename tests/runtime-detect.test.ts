@@ -39,8 +39,8 @@ describe("runtime detect helpers", () => {
     expect(isWebRuntime()).toBe(false)
   })
 
-  it("returns isTauriRuntime=true in a TAURI_BUILD client bundle without injected internals", async () => {
-    vi.stubEnv("TAURI_BUILD", "true")
+  it("returns isTauriRuntime=true in a NEXT_PUBLIC_TAURI_BUILD client bundle without injected internals", async () => {
+    vi.stubEnv("NEXT_PUBLIC_TAURI_BUILD", "true")
     vi.resetModules()
     // @ts-expect-error simulate browser globalThis.window
     globalThis.window = globalThis
