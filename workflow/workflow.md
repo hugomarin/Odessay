@@ -189,15 +189,17 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 6. Hacer merge del PR via CLI: `gh pr merge {número} --merge`.
 7. Volver a `main`: `git switch main`.
 8. Sincronizar `main` local con remoto: `git pull --ff-only origin main`.
-9. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Commitear y pushear:
+9. En `main`, appendear **ambos** eventos a `workflow/review-history.jsonl` (append-only): primero `build_submitted` con los datos del PR (branch, commit HEAD, PR URL, notas de BUILD), luego `review_approved` con los datos del review (score, gate_result, reviewer, findings). Antes de commitear, validar que `workflow/review-history.jsonl` y `workflow/status.json` sean parseables:
    ```bash
+   node scripts/validate-workflow-json.mjs
    git add workflow/review-history.jsonl
    git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]"
    git push origin main
    ```
    > El evento `build_submitted` se aplaza a REVIEW para evitar que la rama de feature toque archivos de workflow, eliminando conflictos de merge en worktrees paralelos.
-10. Agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada. Commitear y pushear:
+10. Agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada. Antes de commitear, validar que el JSON resultante es parseable:
    ```bash
+   node scripts/validate-workflow-json.mjs
    git add workflow/status.json
    git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]"
    git push origin main
@@ -213,6 +215,7 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    - Commitear el entry en `main` y pushear:
      ```bash
      git switch main
+     node scripts/validate-workflow-json.mjs
      git add workflow/review-history.jsonl
      git commit -m "chore(workflow): append review_rejected for {ISSUE-ID}"
      git push origin main
