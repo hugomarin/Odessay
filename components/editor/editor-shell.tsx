@@ -3855,7 +3855,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [handleCreateWorkspaceTab])
 
-  useTauriMenuEvents({ onOpenFile: handleMenuOpenFile, onNewFile: handleMenuNewFile })
+  const handleSaveComplete = useCallback(async (path: string) => {
+    const writingId = currentWritingIdRef.current
+    if (!writingId || !isDesktopRuntime()) return
+    const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+    await relocateDesktopWriting(writingId, path)
+  }, [])
+
   useTauriEditorMenuEvents(handleRunAction)
 
   const exportFileBaseName = useMemo(
@@ -3868,25 +3874,42 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [bodyText, currentWritingId, displayTitle],
   )
 
+  const getBodyMarkdown = useCallback(() => {
+    if (!editor) return null
+    return modeRef.current === "markdown"
+      ? markdownValue
+      : normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+        )
+  }, [editor, markdownValue])
+
+  const handleGetSaveContent = useCallback(() => {
+    const content = getBodyMarkdown()
+    if (content === null) return null
+    return { content: `${content.trimEnd()}\n`, defaultName: exportFileBaseName }
+  }, [getBodyMarkdown, exportFileBaseName])
+
+  useTauriMenuEvents({
+    onOpenFile: handleMenuOpenFile,
+    onNewFile: handleMenuNewFile,
+    onGetSaveContent: handleGetSaveContent,
+    onSaveComplete: handleSaveComplete,
+    documentKey: currentWritingId,
+  })
+
   const downloadBlob = useCallback((blob: Blob, filename: string) => {
     downloadBlobUtil(blob, filename)
   }, [])
 
   const exportMarkdown = useCallback(async () => {
-    if (!editor) {
+    const bodyMarkdown = getBodyMarkdown()
+    if (bodyMarkdown === null) {
       return
     }
 
-    const bodyMarkdown =
-      modeRef.current === "markdown"
-        ? markdownValue
-        : normalizeMarkdownForRoundTrip(
-            getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
-          )
-
     const blob = new Blob([`${bodyMarkdown.trimEnd()}\n`], { type: "text/markdown;charset=utf-8" })
     downloadBlob(blob, `${exportFileBaseName}.md`)
-  }, [downloadBlob, editor, exportFileBaseName, markdownValue])
+  }, [downloadBlob, exportFileBaseName, getBodyMarkdown])
 
   const exportBinary = useCallback(
     async (format: "pdf" | "docx") => {

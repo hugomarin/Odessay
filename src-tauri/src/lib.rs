@@ -35,8 +35,12 @@ pub fn run() {
 
       let new_file = MenuItem::with_id(app, "new-file", "New File", true, None::<&str>)?;
       let open_file = MenuItem::with_id(app, "open-file", "Open File...", true, Some("CmdOrCtrl+O"))?;
+      let save_to_disk = MenuItem::with_id(app, "save-to-disk", "Save to Disk", true, Some("CmdOrCtrl+S"))?;
+      let save_as = MenuItem::with_id(app, "save-as", "Save As…", true, Some("CmdOrCtrl+Shift+S"))?;
       let file_menu = SubmenuBuilder::new(app, "File")
         .items(&[&new_file, &open_file])
+        .separator()
+        .items(&[&save_to_disk, &save_as])
         .build()?;
 
       let find = MenuItem::with_id(app, "find", "Find", true, Some("CmdOrCtrl+F"))?;
