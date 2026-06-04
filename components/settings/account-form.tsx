@@ -4,7 +4,7 @@ import { CheckCircle2, LoaderCircle, Copy } from "lucide-react"
 import { useDeferredValue, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { webAuthService } from "@/lib/services/web-auth-service"
+import { getAuthService } from "@/lib/services/auth-service-factory"
 import { cn } from "@/lib/utils"
 import {
   updateDisplayNameSchema,
@@ -120,6 +120,7 @@ function CredRow({
 }
 
 export function AccountForm({ initialAccount }: AccountFormProps) {
+  const authService = useMemo(() => getAuthService(), [])
   const [displayName, setDisplayName] = useState(initialAccount.displayName)
   const [username, setUsername] = useState(initialAccount.username)
   const [email, setEmail] = useState(initialAccount.email)
@@ -178,7 +179,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     const controller = new AbortController()
     const timeoutId = window.setTimeout(async () => {
       try {
-        const result = await webAuthService.checkUsernameAvailability({
+        const result = await authService.checkUsernameAvailability({
           username: parsed.data.username,
           scope: "account",
         })
@@ -228,7 +229,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
       controller.abort()
       window.clearTimeout(timeoutId)
     }
-  }, [deferredUsername, isUsernameDirty])
+  }, [authService, deferredUsername, isUsernameDirty])
 
   const handleDisplayNameSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -243,7 +244,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startDisplayNameTransition(async () => {
-      const result = await webAuthService.updateDisplayName(parsed.data)
+      const result = await authService.updateDisplayName(parsed.data)
 
       if (result.error || !result.data) {
         setDisplayNameState({
@@ -278,7 +279,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
 
     startUsernameTransition(async () => {
       const previousUsername = savedUsername
-      const result = await webAuthService.updateUsername(parsed.data)
+      const result = await authService.updateUsername(parsed.data)
 
       if (result.error || !result.data) {
         setUsernameState({
@@ -315,7 +316,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startEmailTransition(async () => {
-      const result = await webAuthService.requestEmailChange(parsed.data)
+      const result = await authService.requestEmailChange(parsed.data)
 
       if (result.error || !result.data) {
         setEmailState({
@@ -354,7 +355,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     }
 
     startPasswordTransition(async () => {
-      const result = await webAuthService.updatePassword(parsed.data)
+      const result = await authService.updatePassword(parsed.data)
 
       if (result.error || !result.data) {
         setPasswordState({

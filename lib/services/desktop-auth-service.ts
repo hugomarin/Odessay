@@ -1,8 +1,9 @@
 "use client"
 
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import { getAccountEmailChangeRedirectUrl, verifyCurrentPassword } from "@/lib/auth/account-settings"
+import { resolveUsernameAvailability } from "@/lib/auth/username-validation"
 import {
-  getConfiguredAuthConfirmRedirectUrl,
   isUsernameFormatValid,
   normalizeEmail,
   normalizeUsername,
@@ -63,6 +64,68 @@ function sessionFromUser(user: {
   }
 }
 
+async function checkDesktopUsernameAvailability(
+  input: CheckUsernameAvailabilityInput,
+): Promise<ServiceResponse<UsernameAvailability>> {
+  const username = normalizeUsername(input.username)
+
+  if (!isUsernameFormatValid(username)) {
+    return err(toServiceError("INVALID_INPUT", "Username format is invalid."))
+  }
+
+  const supabase = createDesktopClient()
+  let currentUserId: string | null = null
+  let currentUsername: string | null = null
+
+  if (input.scope === "account") {
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError) {
+      return err(toServiceError("UNAVAILABLE", userError.message, true))
+    }
+
+    if (!user) {
+      return err(toServiceError("UNAUTHORIZED", "No active session."))
+    }
+
+    currentUserId = user.id
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .maybeSingle()
+
+    if (profileError) {
+      return err(toServiceError("UNAVAILABLE", "Could not validate this username right now.", true))
+    }
+
+    currentUsername = profile?.username ?? null
+  }
+
+  const { data, error } = await supabase
+    .from("public_profiles")
+    .select("id")
+    .eq("username", username)
+    .maybeSingle()
+
+  if (error) {
+    return err(toServiceError("UNAVAILABLE", "Could not validate this username right now.", true))
+  }
+
+  return ok<UsernameAvailability>(
+    resolveUsernameAvailability({
+      requestedUsername: username,
+      currentUserId,
+      currentUsername,
+      matchingProfileId: data?.id ?? null,
+    }),
+  )
+}
+
 export const desktopAuthService: AuthService = {
   async signIn(input: SignInInput): Promise<ServiceResponse<AuthSession>> {
     try {
@@ -115,7 +178,7 @@ export const desktopAuthService: AuthService = {
         email: normalizeEmail(input.email),
         password: input.password,
         options: {
-          emailRedirectTo: getConfiguredAuthConfirmRedirectUrl(input.nextPath ?? "/desk"),
+          emailRedirectTo: getAccountEmailChangeRedirectUrl(input.nextPath ?? "/desk"),
           data: {
             display_name: input.displayName.trim(),
             username: normalizeUsername(input.username),
@@ -167,29 +230,7 @@ export const desktopAuthService: AuthService = {
     input: CheckUsernameAvailabilityInput,
   ): Promise<ServiceResponse<UsernameAvailability>> {
     try {
-      const username = normalizeUsername(input.username)
-
-      if (!isUsernameFormatValid(username)) {
-        return err(toServiceError("INVALID_INPUT", "Username format is invalid."))
-      }
-
-      const supabase = createDesktopClient()
-      const { data, error } = await supabase
-        .from("public_profiles")
-        .select("username")
-        .eq("username", username)
-        .maybeSingle()
-
-      if (error) {
-        return err(toServiceError("UNAVAILABLE", "Could not validate this username right now.", true))
-      }
-
-      return ok<UsernameAvailability>({
-        available: !data,
-        reason: !data ? "available" : "taken",
-        reservedUntil: null,
-        username,
-      })
+      return await checkDesktopUsernameAvailability(input)
     } catch (error) {
       return err(
         toServiceError(
@@ -225,8 +266,9 @@ export const desktopAuthService: AuthService = {
   async updateDisplayName(input: UpdateDisplayNameInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
       const supabase = createDesktopClient()
+      const displayName = input.displayName.trim()
       const { data, error } = await supabase.auth.updateUser({
-        data: { display_name: input.displayName.trim() },
+        data: { display_name: displayName },
       })
 
       if (error) {
@@ -235,6 +277,20 @@ export const desktopAuthService: AuthService = {
 
       if (!data.user) {
         return err(toServiceError("UNAUTHORIZED", "No active session."))
+      }
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          display_name: displayName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.user.id)
+        .select("id")
+        .single()
+
+      if (profileError) {
+        return err(toServiceError("DB_ERROR", profileError.message, true))
       }
 
       return ok(mapIdentity(data.user))
@@ -253,8 +309,72 @@ export const desktopAuthService: AuthService = {
     try {
       const username = normalizeUsername(input.username)
       const supabase = createDesktopClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        return err(toServiceError("UNAVAILABLE", userError.message, true))
+      }
+
+      if (!user) {
+        return err(toServiceError("UNAUTHORIZED", "No active session."))
+      }
+
+      const availability = await checkDesktopUsernameAvailability({
+        username,
+        scope: "account",
+      })
+
+      if (availability.error || !availability.data) {
+        return availability
+      }
+
+      if (!availability.data.available) {
+        return err(
+          toServiceError(
+            "CONFLICT",
+            availability.data.reason === "reserved"
+              ? "That username is temporarily reserved by another account."
+              : "That username is already taken.",
+          ),
+        )
+      }
+
+      const { data: claimResult, error: claimError } = await supabase.rpc("claim_profile_username", {
+        target_username: username,
+      })
+
+      if (claimError) {
+        if (claimError.message.includes("USERNAME_RESERVED")) {
+          return err(
+            toServiceError(
+              "CONFLICT",
+              "That username is temporarily reserved by another account.",
+            ),
+          )
+        }
+
+        if (claimError.message.includes("USERNAME_TAKEN")) {
+          return err(toServiceError("CONFLICT", "That username is already taken."))
+        }
+
+        if (claimError.message.includes("INVALID_USERNAME")) {
+          return err(toServiceError("INVALID_INPUT", "Username format is invalid."))
+        }
+
+        return err(toServiceError("DB_ERROR", claimError.message, true))
+      }
+
+      const row = Array.isArray(claimResult) ? claimResult[0] : claimResult
+      const nextUsername =
+        row && typeof row === "object" && "username" in row && typeof row.username === "string"
+          ? row.username
+          : username
+
       const { data, error } = await supabase.auth.updateUser({
-        data: { username },
+        data: { username: nextUsername },
       })
 
       if (error) {
@@ -277,13 +397,50 @@ export const desktopAuthService: AuthService = {
     }
   },
 
-  // Email change redirect URL will be wired via deep links in ODE-220.
   async requestEmailChange(input: RequestEmailChangeInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
       const supabase = createDesktopClient()
-      const { data, error } = await supabase.auth.updateUser({
-        email: normalizeEmail(input.email),
-      })
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        return err(toServiceError("UNAVAILABLE", userError.message, true))
+      }
+
+      if (!user?.email) {
+        return err(toServiceError("UNAUTHORIZED", "No active session."))
+      }
+
+      if (!user.email_confirmed_at) {
+        return err(
+          toServiceError(
+            "CONFLICT",
+            "Confirm your current email before requesting another change.",
+          ),
+        )
+      }
+
+      if (user.new_email) {
+        return err(
+          toServiceError(
+            "CONFLICT",
+            "You already have a pending email change. Confirm or revoke it from your inbox first.",
+          ),
+        )
+      }
+
+      const nextEmail = normalizeEmail(input.email)
+
+      if (nextEmail === normalizeEmail(user.email)) {
+        return err(toServiceError("INVALID_INPUT", "Use a different email address."))
+      }
+
+      const { data, error } = await supabase.auth.updateUser(
+        { email: nextEmail },
+        { emailRedirectTo: getAccountEmailChangeRedirectUrl(input.redirectTo) },
+      )
 
       if (error) {
         return err(toServiceError("UNAVAILABLE", error.message, true))
@@ -308,6 +465,27 @@ export const desktopAuthService: AuthService = {
   async updatePassword(input: UpdatePasswordInput): Promise<ServiceResponse<AccountIdentity>> {
     try {
       const supabase = createDesktopClient()
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError) {
+        return err(toServiceError("UNAVAILABLE", userError.message, true))
+      }
+
+      if (!user?.email) {
+        return err(toServiceError("UNAUTHORIZED", "No active session."))
+      }
+
+      if (input.currentPassword) {
+        const isCurrentPasswordValid = await verifyCurrentPassword(user.email, input.currentPassword)
+
+        if (!isCurrentPasswordValid) {
+          return err(toServiceError("FORBIDDEN", "Your current password is incorrect."))
+        }
+      }
+
       const { data, error } = await supabase.auth.updateUser({
         password: input.newPassword,
       })
@@ -318,6 +496,12 @@ export const desktopAuthService: AuthService = {
 
       if (!data.user) {
         return err(toServiceError("UNAUTHORIZED", "No active session."))
+      }
+
+      const { error: revokeError } = await supabase.auth.signOut({ scope: "others" })
+
+      if (revokeError) {
+        console.error("[desktop-auth-service:update-password:revoke]", revokeError)
       }
 
       return ok(mapIdentity(data.user))
