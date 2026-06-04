@@ -135,4 +135,25 @@ describe("SyncBootstrap runtime split", () => {
     expect(startMock).toHaveBeenCalled()
     expect(onAuthStateChangeMock).toHaveBeenCalled()
   })
+
+  it("desktop auth listener does not block USER_UPDATED on remote hydrate", async () => {
+    isTauriRuntimeMock.mockReturnValue(true)
+
+    await renderBootstrap()
+
+    const callback = desktopOnAuthStateChangeMock.mock.calls[0]?.[0]
+    expect(typeof callback).toBe("function")
+
+    hydrateWritingsMock.mockImplementation(
+      () => new Promise(() => {}),
+    )
+    hydrateCollectionsMock.mockResolvedValue({ data: null })
+
+    const returnValue = callback?.("USER_UPDATED", { user: { id: "user-1" } })
+
+    expect(returnValue).toBeUndefined()
+    expect(setLocalDBScopeMock).toHaveBeenCalledWith("user-1")
+    expect(hydrateWritingsMock).toHaveBeenCalled()
+    expect(scheduleFlushMock).toHaveBeenCalled()
+  })
 })
