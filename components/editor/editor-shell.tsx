@@ -378,7 +378,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
-  const lastSavePathRef = useRef<string | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -3868,27 +3867,26 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [bodyText, currentWritingId, displayTitle],
   )
 
-  const handleGetSaveContent = useCallback(() => {
+  const getBodyMarkdown = useCallback(() => {
     if (!editor) return null
-    const content =
-      modeRef.current === "markdown"
-        ? markdownValue
-        : normalizeMarkdownForRoundTrip(
-            getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
-          )
-    return { content: `${content.trimEnd()}\n`, defaultName: exportFileBaseName }
-  }, [editor, exportFileBaseName, markdownValue])
+    return modeRef.current === "markdown"
+      ? markdownValue
+      : normalizeMarkdownForRoundTrip(
+          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+        )
+  }, [editor, markdownValue])
 
-  const handleSaveComplete = useCallback((path: string) => {
-    lastSavePathRef.current = path
-  }, [])
+  const handleGetSaveContent = useCallback(() => {
+    const content = getBodyMarkdown()
+    if (content === null) return null
+    return { content: `${content.trimEnd()}\n`, defaultName: exportFileBaseName }
+  }, [getBodyMarkdown, exportFileBaseName])
 
   useTauriMenuEvents({
     onOpenFile: handleMenuOpenFile,
     onNewFile: handleMenuNewFile,
     onGetSaveContent: handleGetSaveContent,
-    onSaveComplete: handleSaveComplete,
-    lastSavePath: lastSavePathRef.current,
+    documentKey: currentWritingId,
   })
 
   const downloadBlob = useCallback((blob: Blob, filename: string) => {
@@ -3896,20 +3894,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [])
 
   const exportMarkdown = useCallback(async () => {
-    if (!editor) {
+    const bodyMarkdown = getBodyMarkdown()
+    if (bodyMarkdown === null) {
       return
     }
 
-    const bodyMarkdown =
-      modeRef.current === "markdown"
-        ? markdownValue
-        : normalizeMarkdownForRoundTrip(
-            getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
-          )
-
     const blob = new Blob([`${bodyMarkdown.trimEnd()}\n`], { type: "text/markdown;charset=utf-8" })
     downloadBlob(blob, `${exportFileBaseName}.md`)
-  }, [downloadBlob, editor, exportFileBaseName, markdownValue])
+  }, [downloadBlob, exportFileBaseName, getBodyMarkdown])
 
   const exportBinary = useCallback(
     async (format: "pdf" | "docx") => {
