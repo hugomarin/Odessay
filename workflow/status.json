@@ -17,6 +17,10 @@
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
       },
       {
+        "issue": "ODE-243",
+        "reason": "In-flight issue: review_rejected commit in main references ODE-243 but the issue is not yet merged. Exempt from drift until approved and merged; remove this exception when adding to built[]."
+      },
+      {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
       }
