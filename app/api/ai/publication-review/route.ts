@@ -13,7 +13,7 @@ import { filterCorrectionsByMemory } from "@/lib/ai/correction-memory";
 import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter";
 import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 
 const memoryEntrySchema = z.object({
   fingerprint: z.string().trim().min(1),
@@ -118,15 +118,6 @@ const mechanicalCorrectionsResponseFormat = {
 } as const;
 
 const getCorrectionsMaxTokens = () => BLOCK_CORRECTIONS_MAX_TOKENS;
-
-async function getCurrentUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { userId: user?.id ?? null };
-}
 
 async function callCorrectionsModel({
   config,
@@ -727,7 +718,7 @@ export async function POST(request: Request) {
   const tStart = Date.now();
   console.info("[corrections] POST start");
 
-  const { userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
   const tAuth = Date.now();
   console.info(`[corrections] auth done authMs=${tAuth - tStart}`);
 

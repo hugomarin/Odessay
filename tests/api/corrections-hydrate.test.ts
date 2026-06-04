@@ -34,10 +34,11 @@ const adminFromMock = vi.hoisted(() =>
   }),
 )
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({
-    auth: supabaseAuthMock,
-  })),
+vi.mock("@/lib/supabase/request-auth", () => ({
+  getCurrentUserFromRequest: vi.fn(async () => {
+    const result = await supabaseAuthMock.getUser()
+    return { userId: result.data?.user?.id ?? null }
+  }),
 }))
 
 vi.mock("@/lib/supabase/admin", () => ({

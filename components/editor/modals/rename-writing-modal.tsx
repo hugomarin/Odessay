@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { hasEnoughTitleSuggestionContent } from "@/lib/ai/title-suggestions"
-import { webAIService } from "@/lib/services/web-ai-service"
+import { getAIService } from "@/lib/services/ai-service-factory"
 
 type RenameWritingModalProps = {
   open: boolean
@@ -56,7 +56,7 @@ export function RenameWritingModal({
     setSuggestionError(null)
 
     try {
-      const result = await webAIService.suggestTitle({
+      const result = await getAIService().suggestTitle({
         currentTitle: nextTitle,
         bodyText,
         writingId,

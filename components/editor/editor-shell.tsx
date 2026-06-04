@@ -114,7 +114,7 @@ import type {
   WritingVisibility,
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
-import { webAIService } from "@/lib/services/web-ai-service"
+import { getAIService } from "@/lib/services/ai-service-factory"
 import {
   createDesktopDraft,
   getDocumentService,
@@ -2794,7 +2794,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           blockIds: [block.id],
         })
 
-        const result = await webAIService.reviewPublication({
+        const result = await getAIService().reviewPublication({
           writingId: currentWritingIdRef.current ?? undefined,
           title: titleRef.current,
           markdown: block.text,

@@ -10,7 +10,7 @@ import {
   hasEnoughTitleSuggestionContent,
   titleSuggestionResponseSchema,
 } from "@/lib/ai/title-suggestions";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 
 const requestSchema = z.object({
   currentTitle: z.string().trim().max(160).default("Untitled writing"),
@@ -28,15 +28,6 @@ const jsonError = (status: number, code: string, message: string) =>
     },
     { status },
   );
-
-async function getCurrentUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { userId: user?.id ?? null };
-}
 
 async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>) {
   const config = getAIProviderConfig();
@@ -98,7 +89,7 @@ async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>
 }
 
 export async function POST(request: Request) {
-  const { userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "Sign in to suggest a title.");
