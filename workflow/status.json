@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(auth): desktop sign-out hang — use runtime auth service in SignOutButton (root cause), 3s timeout on keychainStorage.removeItem with graceful swallow, 5s Promise.race timeout in desktopAuthService.signOut, getUser() bootstrap validation to detect rotated-key tokens and force re-login. Web auth behavior unchanged. 659 tests PASS.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-238",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-238/desktop-el-sign-out-se-cuelga-no-cierra-sesion",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/224",
+      "commit": "6a1ba29",
+      "date": "2026-06-04",
+      "notes": "Score: 8.5/10. Performance Contract: not required (auth flow fix, no runtime contract). GateResult PASS. P2: getUser() on bootstrap conflates network errors with invalid tokens — offline regression, no offline requirement in brief. P3x4: misleading removeItem comment, sign-out-button.tsx missing from Files affected, no Architecture Contract in brief, PR body missing perf contract section. All CI gates green. Clean first-round approval."
+    },
+    {
       "what": "Documented §Auth web vs desktop in odessay-desktop-target-architecture.md: comparative table (8 dimensions), 5 operational gotchas with code examples, cross-references to ODE-219/220/232/237. Updated workflow/docs.json. Docs-only, no code changes.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-240",
