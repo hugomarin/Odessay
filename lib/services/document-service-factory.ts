@@ -490,6 +490,12 @@ export async function createDesktopDraft(
   return documentService.createDraft(options)
 }
 
+export async function relocateDesktopWriting(writingId: string, newPath: string): Promise<void> {
+  const existing = await localDB.writings.get(writingId)
+  if (!existing) return
+  await enqueueWritingUpsert({ ...existing, canonical_path: newPath, local_updated_at: Date.now() })
+}
+
 export async function importDesktopWritingFile(
   path: string,
   content: string,

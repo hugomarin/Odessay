@@ -9,7 +9,7 @@ type Handlers = {
   onOpenFile: (path: string, content: string) => void
   onNewFile: (path: string) => void
   onGetSaveContent?: () => { content: string; defaultName: string } | null
-  onSaveComplete?: (path: string) => void
+  onSaveComplete?: (path: string) => Promise<void> | void
   documentKey?: string | null
 }
 

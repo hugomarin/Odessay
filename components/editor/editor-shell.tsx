@@ -3855,6 +3855,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [handleCreateWorkspaceTab])
 
+  const handleSaveComplete = useCallback(async (path: string) => {
+    const writingId = currentWritingIdRef.current
+    if (!writingId || !isDesktopRuntime()) return
+    const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+    await relocateDesktopWriting(writingId, path)
+  }, [])
+
   useTauriEditorMenuEvents(handleRunAction)
 
   const exportFileBaseName = useMemo(
@@ -3886,6 +3893,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     onOpenFile: handleMenuOpenFile,
     onNewFile: handleMenuNewFile,
     onGetSaveContent: handleGetSaveContent,
+    onSaveComplete: handleSaveComplete,
     documentKey: currentWritingId,
   })
 
