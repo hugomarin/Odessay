@@ -1840,6 +1840,16 @@
       "date": "2026-06-03",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Score 7/10. GateResult PASS. Sync hibrido desktop cliente-directo sobre IndexedDB (almacen local-first ratificado): sesion local en flush, author_id pinneado al usuario, INSERT/UPDATE planos (no upsert/return=representation por bug RLS 42501 -> ODE-237), routing desktop via /write?id, scope solo limpia en SIGNED_OUT. Offline->online validado. Performance Contract not required (first-login hydration a filesystem diferida a ODE-239). Follow-ups: ODE-237 (RLS writings), ODE-238 (sign-out cuelga), ODE-236 (localeCompare), ODE-239 (archivos en disco)."
+    },
+    {
+      "what": "Fix review_rejected commit format on main to omit [ISSUE-ID] from subject, preventing false-positive drift in check-status-drift.mjs. Updated workflow.md protocol, skill-product-manager/SKILL.md exception note, skill-code-review/SKILL.md aligned examples, and added defensive filter in check-status-drift.mjs.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-235",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-235/review-rejected-commits-on-main-should-not-include-issue-id-tag-in",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/222",
+      "commit": "70c79c9",
+      "date": "2026-06-04",
+      "notes": "Score: 10.0/10. Performance Contract: not required (workflow tooling). GateResult PASS. CI perf gate failure informative only (not required). No findings."
     }
   ]
 }
