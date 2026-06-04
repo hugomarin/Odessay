@@ -11,6 +11,7 @@ import {
   titleSuggestionResponseSchema,
 } from "@/lib/ai/title-suggestions";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
+import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
 
 const requestSchema = z.object({
   currentTitle: z.string().trim().max(160).default("Untitled writing"),
@@ -89,30 +90,39 @@ async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>
 }
 
 export async function POST(request: Request) {
+  const preflight = handleCorsPreflight(request)
+  if (preflight) return preflight
+
   const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
-    return jsonError(401, "UNAUTHORIZED", "Sign in to suggest a title.");
+    return withCorsHeaders(jsonError(401, "UNAUTHORIZED", "Sign in to suggest a title."), request);
   }
 
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
 
   if (!parsed.success) {
-    return jsonError(400, "INVALID_INPUT", "Could not read the title suggestion request.");
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", "Could not read the title suggestion request."), request);
   }
 
   if (!hasEnoughTitleSuggestionContent(parsed.data.bodyText)) {
-    return jsonError(422, "INVALID_INPUT", "Write a little more before asking AI for a title.");
+    return withCorsHeaders(jsonError(422, "INVALID_INPUT", "Write a little more before asking AI for a title."), request);
   }
 
   try {
     const suggestion = await requestTitleSuggestion(parsed.data);
-    return NextResponse.json({
+    return withCorsHeaders(NextResponse.json({
       data: suggestion,
       error: null,
-    });
+    }), request);
   } catch (error) {
     console.error("[title-suggestions]", error);
-    return jsonError(502, "AI_REQUEST_FAILED", "Could not suggest a title right now.");
+    return withCorsHeaders(jsonError(502, "AI_REQUEST_FAILED", "Could not suggest a title right now."), request);
   }
+}
+
+export async function OPTIONS(request: Request) {
+  const preflight = handleCorsPreflight(request)
+  if (preflight) return preflight
+  return withCorsHeaders(new Response(null, { status: 204 }), request)
 }

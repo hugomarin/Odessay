@@ -1,0 +1,161 @@
+{
+  "issue": "ODE-221",
+  "capturedAt": "2026-06-04T14:46:21.774Z",
+  "origin": "http://127.0.0.1:50189",
+  "contract": {
+    "Waterfall shape (required)": {
+      "rule": "desktop settings account mutations hit Supabase directly and 0 origin /api/* routes",
+      "pass": true
+    }
+  },
+  "steps": [
+    {
+      "step": "updateDisplayName",
+      "total": 3,
+      "apiHits": [],
+      "supabaseHits": [
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user",
+          "method": "PUT",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/writings?select=id%2Cauthor_id%2Ctitle%2Cslug%2Cstatus%2Cvisibility%2Cparent_id%2Ccorrespondence_id%2Cversion%2Cdeleted_at%2Ccreated_at%2Cupdated_at%2Cbody_json%2Cbody_text&author_id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd&order=updated_at.desc",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/profiles?id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd&select=id",
+          "method": "PATCH",
+          "resourceType": "fetch"
+        }
+      ],
+      "pass": true
+    },
+    {
+      "step": "updateUsername",
+      "total": 7,
+      "apiHits": [],
+      "supabaseHits": [
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/collections?select=id%2Cowner_id%2Cname%2Cdescription%2Cvisibility%2Ccreated_at%2Cupdated_at&owner_id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/writing_collections?select=collection_id%2Cwriting_id%2Cadded_at",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/profiles?select=username&id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/public_profiles?select=id&username=eq.ode221_cacc290f_next",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/rpc/claim_profile_username",
+          "method": "POST",
+          "resourceType": "fetch"
+        }
+      ],
+      "pass": true
+    },
+    {
+      "step": "requestEmailChange",
+      "total": 3,
+      "apiHits": [],
+      "supabaseHits": [
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user?redirect_to=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fconfirm%3Fnext%3D%252Fsettings%252Faccount",
+          "method": "PUT",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/writings?select=id%2Cauthor_id%2Ctitle%2Cslug%2Cstatus%2Cvisibility%2Cparent_id%2Ccorrespondence_id%2Cversion%2Cdeleted_at%2Ccreated_at%2Cupdated_at%2Cbody_json%2Cbody_text&author_id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd&order=updated_at.desc",
+          "method": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "pass": true
+    },
+    {
+      "step": "updatePassword",
+      "total": 9,
+      "apiHits": [],
+      "supabaseHits": [
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/token?grant_type=password",
+          "method": "POST",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/collections?select=id%2Cowner_id%2Cname%2Cdescription%2Cvisibility%2Ccreated_at%2Cupdated_at&owner_id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/writing_collections?select=collection_id%2Cwriting_id%2Cadded_at",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/user",
+          "method": "PUT",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/writings?select=id%2Cauthor_id%2Ctitle%2Cslug%2Cstatus%2Cvisibility%2Cparent_id%2Ccorrespondence_id%2Cversion%2Cdeleted_at%2Ccreated_at%2Cupdated_at%2Cbody_json%2Cbody_text&author_id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd&order=updated_at.desc",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/auth/v1/logout?scope=others",
+          "method": "POST",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/collections?select=id%2Cowner_id%2Cname%2Cdescription%2Cvisibility%2Ccreated_at%2Cupdated_at&owner_id=eq.eb6c66b7-b5fe-4de3-bbdf-fe3de0c34bbd",
+          "method": "GET",
+          "resourceType": "fetch"
+        },
+        {
+          "url": "https://vkdvprzxyccgmhifwmfz.supabase.co/rest/v1/writing_collections?select=collection_id%2Cwriting_id%2Cadded_at",
+          "method": "GET",
+          "resourceType": "fetch"
+        }
+      ],
+      "pass": true
+    }
+  ],
+  "consoleErrors": [
+    "Failed to load resource: the server responded with a status of 400 ()"
+  ],
+  "artifacts": {
+    "screenshot": "evidence/ode-221/settings-account.png"
+  }
+}

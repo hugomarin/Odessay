@@ -14,6 +14,7 @@ import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
 import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
+import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
 
 const memoryEntrySchema = z.object({
   fingerprint: z.string().trim().min(1),
@@ -715,6 +716,9 @@ const streamCorrectionsFromModel = ({
 };
 
 export async function POST(request: Request) {
+  const preflight = handleCorsPreflight(request)
+  if (preflight) return preflight
+
   const tStart = Date.now();
   console.info("[corrections] POST start");
 
@@ -723,28 +727,28 @@ export async function POST(request: Request) {
   console.info(`[corrections] auth done authMs=${tAuth - tStart}`);
 
   if (!userId) {
-    return jsonError(401, "UNAUTHORIZED", "No active session.");
+    return withCorsHeaders(jsonError(401, "UNAUTHORIZED", "No active session."), request);
   }
 
   try {
     getAIProviderConfig();
   } catch (configErr) {
     const message = configErr instanceof Error ? configErr.message : "AI provider not configured.";
-    return jsonError(500, "MISSING_CONFIG", message);
+    return withCorsHeaders(jsonError(500, "MISSING_CONFIG", message), request);
   }
 
   const rawBody = await request.json();
   const parsedRequest = requestSchema.safeParse(rawBody);
 
   if (!parsedRequest.success) {
-    return jsonError(400, "INVALID_INPUT", parsedRequest.error.message);
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", parsedRequest.error.message), request);
   }
 
   try {
     if (parsedRequest.data.stream) {
-      return streamCorrectionsFromModel({
+      return withCorsHeaders(streamCorrectionsFromModel({
         requestBody: parsedRequest.data,
-      });
+      }), request);
     }
 
     const result = await requestCorrections(parsedRequest.data);
@@ -758,7 +762,7 @@ export async function POST(request: Request) {
     });
     console.info(`[corrections] success totalRouteMs=${tEnd - tStart}`);
 
-    return NextResponse.json(
+    return withCorsHeaders(NextResponse.json(
       {
         data: createJsonResponsePayload({
           requestBody: parsedRequest.data,
@@ -769,12 +773,18 @@ export async function POST(request: Request) {
         error: null,
       },
       { status: 200 },
-    );
+    ), request);
   } catch (error) {
     const tEnd = Date.now();
     const message = error instanceof Error ? error.message : "Publication review request failed.";
     console.info(`[corrections] error totalRouteMs=${tEnd - tStart} message=${message}`);
 
-    return jsonError(502, "AI_REVIEW_FAILED", message);
+    return withCorsHeaders(jsonError(502, "AI_REVIEW_FAILED", message), request);
   }
+}
+
+export async function OPTIONS(request: Request) {
+  const preflight = handleCorsPreflight(request)
+  if (preflight) return preflight
+  return withCorsHeaders(new Response(null, { status: 204 }), request)
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
+import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
 
 const publicationSuggestionSchema = z.object({
   id: z.string().trim().min(1),
@@ -77,6 +78,9 @@ async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>
 }
 
 export async function POST(request: Request) {
+  const preflight = handleCorsPreflight(request)
+  if (preflight) return preflight
+
   const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
@@ -143,7 +147,7 @@ export async function POST(request: Request) {
     return jsonError(500, "DB_ERROR", error.message);
   }
 
-  return NextResponse.json(
+  return withCorsHeaders(NextResponse.json(
     {
       data: {
         persistedId: data.id,
@@ -153,5 +157,11 @@ export async function POST(request: Request) {
       error: null,
     },
     { status: 200 },
-  );
+  ), request);
+}
+
+export async function OPTIONS(request: Request) {
+  const preflight = handleCorsPreflight(request)
+  if (preflight) return preflight
+  return withCorsHeaders(new Response(null, { status: 204 }), request)
 }
