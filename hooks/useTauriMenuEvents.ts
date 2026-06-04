@@ -8,15 +8,24 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 type Handlers = {
   onOpenFile: (path: string, content: string) => void
   onNewFile: (path: string) => void
+  onGetSaveContent?: () => { content: string; defaultName: string } | null
+  onSaveComplete?: (path: string) => void
+  lastSavePath?: string | null
 }
 
-export function useTauriMenuEvents({ onOpenFile, onNewFile }: Handlers) {
+export function useTauriMenuEvents({ onOpenFile, onNewFile, onGetSaveContent, onSaveComplete, lastSavePath }: Handlers) {
   const onOpenFileRef = useRef(onOpenFile)
   const onNewFileRef = useRef(onNewFile)
+  const onGetSaveContentRef = useRef(onGetSaveContent)
+  const onSaveCompleteRef = useRef(onSaveComplete)
+  const lastSavePathRef = useRef(lastSavePath ?? null)
 
   // Keep refs current without re-registering Tauri listeners
   useEffect(() => { onOpenFileRef.current = onOpenFile }, [onOpenFile])
   useEffect(() => { onNewFileRef.current = onNewFile }, [onNewFile])
+  useEffect(() => { onGetSaveContentRef.current = onGetSaveContent }, [onGetSaveContent])
+  useEffect(() => { onSaveCompleteRef.current = onSaveComplete }, [onSaveComplete])
+  useEffect(() => { lastSavePathRef.current = lastSavePath ?? null }, [lastSavePath])
 
   useEffect(() => {
     if (!isDesktopRuntime()) return
@@ -51,6 +60,41 @@ export function useTauriMenuEvents({ onOpenFile, onNewFile }: Handlers) {
       await invoke<string>("create_file", { dir, filename })
       onNewFileRef.current(path)
     }).then((ul) => {
+      if (cancelled) { ul(); return }
+      unlisteners.push(ul)
+    })
+
+    async function writeDocumentToDisk(forcePicker: boolean) {
+      const payload = onGetSaveContentRef.current?.()
+      if (!payload) return
+
+      let path: string | null = null
+
+      if (!forcePicker && lastSavePathRef.current) {
+        path = lastSavePathRef.current
+      } else {
+        path = await save({
+          defaultPath: `${payload.defaultName}.md`,
+          filters: [{ name: "Markdown", extensions: ["md"] }],
+        })
+        if (!path) return
+      }
+
+      if (!path.endsWith(".md")) {
+        path = `${path}.md`
+      }
+
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("write_file", { path, content: payload.content })
+      onSaveCompleteRef.current?.(path)
+    }
+
+    listen("menu:save-to-disk", () => writeDocumentToDisk(false)).then((ul) => {
+      if (cancelled) { ul(); return }
+      unlisteners.push(ul)
+    })
+
+    listen("menu:save-as", () => writeDocumentToDisk(true)).then((ul) => {
       if (cancelled) { ul(); return }
       unlisteners.push(ul)
     })

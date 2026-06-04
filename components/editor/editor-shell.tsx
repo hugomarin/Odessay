@@ -378,6 +378,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
+  const lastSavePathRef = useRef<string | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -3855,7 +3856,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [handleCreateWorkspaceTab])
 
-  useTauriMenuEvents({ onOpenFile: handleMenuOpenFile, onNewFile: handleMenuNewFile })
   useTauriEditorMenuEvents(handleRunAction)
 
   const exportFileBaseName = useMemo(
@@ -3867,6 +3867,29 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }),
     [bodyText, currentWritingId, displayTitle],
   )
+
+  const handleGetSaveContent = useCallback(() => {
+    if (!editor) return null
+    const content =
+      modeRef.current === "markdown"
+        ? markdownValue
+        : normalizeMarkdownForRoundTrip(
+            getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+          )
+    return { content: `${content.trimEnd()}\n`, defaultName: exportFileBaseName }
+  }, [editor, exportFileBaseName, markdownValue])
+
+  const handleSaveComplete = useCallback((path: string) => {
+    lastSavePathRef.current = path
+  }, [])
+
+  useTauriMenuEvents({
+    onOpenFile: handleMenuOpenFile,
+    onNewFile: handleMenuNewFile,
+    onGetSaveContent: handleGetSaveContent,
+    onSaveComplete: handleSaveComplete,
+    lastSavePath: lastSavePathRef.current,
+  })
 
   const downloadBlob = useCallback((blob: Blob, filename: string) => {
     downloadBlobUtil(blob, filename)
