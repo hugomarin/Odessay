@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { supabasePublicKey, supabaseUrl } from "@/lib/supabase/shared"
 
 const AUTH_ROUTES = ["/login", "/signup"]
-const PRIVATE_ROUTES = ["/desk", "/write", "/collections", "/correspondences", "/shared", "/settings"]
+const PRIVATE_ROUTES = ["/desk", "/write", "/collections", "/correspondences", "/shared", "/settings", "/evidence"]
 const AUTH_CONFIRM_TYPES = new Set(["email", "recovery", "email_change", "invite", "magiclink", "signup"])
 
 const matchesRoute = (pathname: string, routes: string[]) =>
