@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
 import { Button } from "@/components/ui/button"
-import { webAuthService } from "@/lib/services/web-auth-service"
+import { getAuthService } from "@/lib/services/auth-service-factory"
 import { cn } from "@/lib/utils"
 
 type SignOutButtonProps = {
@@ -17,7 +17,7 @@ export function SignOutButton({ variant = "outline", className }: SignOutButtonP
 
   const handleSignOut = () => {
     startTransition(async () => {
-      await webAuthService.signOut()
+      await getAuthService().signOut()
       router.replace("/login")
       router.refresh()
     })
