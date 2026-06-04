@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Fix bug en política RLS de writings: subconsulta de correspondencia auto-referente. Drop+recreate de writings_insert_author y writings_update_author con corrección de c.root_writing_id=id (era c.root_writing_id=c.id) y parent.id=parent_id (era parent.id=parent.parent_id). Migración follow-up idempotente con rollback comentado. Regresión test (3 tests) verifica que los patrones bugueados no regresen.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-237",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-237/fix-bug-en-politica-rls-de-writings-subconsulta-de-correspondencia",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/217",
+      "commit": "26e88c3",
+      "date": "2026-06-04",
+      "notes": "Score: 9.5/10. Architecture Contract COMPLIANT: Layer=Database(RLS policy), Runtime scope=shared, Owner=database, invariants preserved. Performance Contract: not required (RLS change, no runtime impact). P3: PR body sin outputs crudos de validación (compensado por BUILD comment Linear). P3: tests/ no listado en Files affected del brief. Clean first-round approval."
+    },
+    {
       "what": "Formaliza y endurece serializer/parser canónico TipTap↔.md (shared-core). Agrega CanonicalDocumentMetadata, serializeDocumentFile, parseDocumentFileToSnapshot y serializeCanonicalFrontmatter con front-matter YAML (id, slug, status, visibility, version, created_at, updated_at). Round-trip json↔md verificado con fixtures (nested lists, tables, code fences, footnotes, front-matter). DesktopDocumentEngine actualizado para parsear/serializar archivos fuente canónicos completos.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-241",
