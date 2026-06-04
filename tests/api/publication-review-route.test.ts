@@ -5,10 +5,11 @@ const supabaseMock = vi.hoisted(() => ({
   getUser: vi.fn(),
 }))
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({
-    auth: supabaseMock,
-  })),
+vi.mock("@/lib/supabase/request-auth", () => ({
+  getCurrentUserFromRequest: vi.fn(async () => {
+    const result = await supabaseMock.getUser()
+    return { userId: result.data?.user?.id ?? null }
+  }),
 }))
 
 vi.mock("@/lib/ai/provider-config", () => ({

@@ -1,6 +1,6 @@
 import { localDB } from "@/lib/local-db";
 import type { LocalCorrectionBlock, PublicationSuggestion } from "@/lib/local-db/schema";
-import { webAIService } from "@/lib/services/web-ai-service";
+import { getAIService } from "@/lib/services/ai-service-factory";
 
 type CorrectionPersistenceError = Error & {
   status?: number;
@@ -98,7 +98,7 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
     }
 
     try {
-      const result = await webAIService.hydrateCorrectionBlocks(writingId);
+      const result = await getAIService().hydrateCorrectionBlocks(writingId);
 
       if (result.error || !result.data) {
         const error: CorrectionPersistenceError = new Error(result.error?.message ?? "Could not hydrate correction blocks.");
@@ -156,7 +156,7 @@ export const persistCorrectionBlockRemotely = async ({
   deletedBlockIds?: string[];
 }) => {
   try {
-    const result = await webAIService.persistCorrectionBlock({
+    const result = await getAIService().persistCorrectionBlock({
       writingId: writingId ?? block?.writingId,
       block: block
         ? {
