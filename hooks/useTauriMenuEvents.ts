@@ -109,9 +109,17 @@ export function useTauriMenuEvents({ onOpenFile, onNewFile, onGetSaveContent, on
       unlisteners.push(ul)
     })
 
+    const preventBrowserSaveShortcuts = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', preventBrowserSaveShortcuts, true)
+
     return () => {
       cancelled = true
       unlisteners.forEach((ul) => ul())
+      window.removeEventListener('keydown', preventBrowserSaveShortcuts, true)
     }
   }, []) // register once on mount — callbacks accessed via refs
 }
