@@ -5,10 +5,6 @@
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
-        "issue": "ODE-221",
-        "reason": "Active in-progress issue. Workflow commit (review_rejected) landed on main before the feature branch was merged, causing drift check to find the ID in main history before it appears in built[]. Remove this exception when ODE-221 is added to built[]."
-      },
-      {
         "issue": "ODE-502",
         "reason": "Historical git identifier referenced by merged commits/PR #146 but not resolvable as a current Linear issue. Ignore it for status drift and do not propagate it in later review notes."
       },
