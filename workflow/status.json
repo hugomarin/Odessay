@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Documented §Auth web vs desktop in odessay-desktop-target-architecture.md: comparative table (8 dimensions), 5 operational gotchas with code examples, cross-references to ODE-219/220/232/237. Updated workflow/docs.json. Docs-only, no code changes.",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-240",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-240/documentar-el-sistema-de-autenticacion-web-vs-desktop",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/221",
+      "commit": "d94b531",
+      "date": "2026-06-04",
+      "notes": "Score: 10.0/10. Performance Contract: not required (documentation). No findings. BUILD context gap: none."
+    },
+    {
       "what": "Desktop AI adapter proxying to hosted web AI runtime via Bearer token. Factory (ai-service-factory.ts) selects desktopAIService in Tauri, webAIService otherwise. request-auth.ts extends AI routes to accept Bearer + cookie auth without breaking web. Graceful degradation on net/auth failure — AI never blocks write path. 659 tests PASS.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-223",
