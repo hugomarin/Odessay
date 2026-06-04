@@ -22,6 +22,7 @@ type LocalDB = {
   writings: {
     save: (writing: LocalWriting) => Promise<void>;
     get: (id: string) => Promise<LocalWriting | null>;
+    getByCanonicalPath: (canonicalPath: string) => Promise<LocalWriting | null>;
     getAll: (filters?: WritingListFilters) => Promise<LocalWriting[]>;
     delete: (id: string) => Promise<void>;
   };
@@ -196,9 +197,20 @@ const openDatabase = () => {
       const oldVersion = event.oldVersion;
 
       if (!database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
-        database.createObjectStore(LOCAL_DB_STORES.writings, {
+        const writingStore = database.createObjectStore(LOCAL_DB_STORES.writings, {
           keyPath: "id",
         });
+        writingStore.createIndex("by-canonical-path", "canonical_path", { unique: false });
+      } else {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writings);
+
+          if (!store.indexNames.contains("by-canonical-path")) {
+            store.createIndex("by-canonical-path", "canonical_path", { unique: false });
+          }
+        }
       }
 
       if (!database.objectStoreNames.contains(LOCAL_DB_STORES.collections)) {
@@ -414,6 +426,18 @@ const openDatabase = () => {
         }
       }
 
+      if (oldVersion > 0 && oldVersion < 12 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writings);
+
+          if (!store.indexNames.contains("by-canonical-path")) {
+            store.createIndex("by-canonical-path", "canonical_path", { unique: false });
+          }
+        }
+      }
+
       if (oldVersion > 0 && oldVersion < 10 && database.objectStoreNames.contains("publication-reviews")) {
         database.deleteObjectStore("publication-reviews");
       }
@@ -480,6 +504,12 @@ const saveWriting = async (writing: LocalWriting) => {
 const getWriting = async (id: string) =>
   withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
     const writing = await runRequest(store.get(id));
+    return (writing as LocalWriting | undefined) ?? null;
+  });
+
+const getWritingByCanonicalPath = async (canonicalPath: string) =>
+  withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
+    const writing = await runRequest(store.index("by-canonical-path").get(canonicalPath));
     return (writing as LocalWriting | undefined) ?? null;
   });
 
@@ -923,6 +953,7 @@ const localDBInstance: LocalDB = {
   writings: {
     save: saveWriting,
     get: getWriting,
+    getByCanonicalPath: getWritingByCanonicalPath,
     getAll: getAllWritings,
     delete: softDeleteWriting,
   },

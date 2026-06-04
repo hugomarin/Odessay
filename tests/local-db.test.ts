@@ -96,6 +96,17 @@ describe("localDB", () => {
     expect(await localDB.writings.get("writing-b")).toBeNull();
   });
 
+  it("reads writings by canonical filesystem path", async () => {
+    setLocalDBScope("canonical-path-user");
+    await localDB.writings.save({
+      ...createWriting("writing-canonical", 1),
+      canonical_path: "/Users/test/Odessay/letter.md",
+    });
+
+    const writing = await localDB.writings.getByCanonicalPath("/Users/test/Odessay/letter.md");
+    expect(writing?.id).toBe("writing-canonical");
+  });
+
   it("compacts sync mutations by writing id", async () => {
     setLocalDBScope("queue-user");
 

@@ -119,11 +119,6 @@ function toLocalWriting(record: WritingRecord, canonicalPath: string): LocalWrit
   }
 }
 
-async function findWritingByCanonicalPath(path: string) {
-  const writings = await localDB.writings.getAll({ includeDeleted: true })
-  return writings.find((writing) => writing.canonical_path === path) ?? null
-}
-
 async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> {
   const { appConfigDir, documentDir, join } = await import("@tauri-apps/api/path")
 
@@ -156,7 +151,12 @@ class DesktopDocumentService implements DocumentService {
     if (!this.migrationPromise) {
       this.migrationPromise = migrateIndexedDbToFilesystem({
         filesystem: this.runtime.filesystem,
-      }).then(() => undefined)
+      })
+        .then(() => undefined)
+        .catch((error) => {
+          this.migrationPromise = null
+          throw error
+        })
     }
 
     await this.migrationPromise
@@ -228,9 +228,8 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
-    await this.ensureMigrated()
-
     try {
+      await this.ensureMigrated()
       const writings = await localDB.writings.getAll({ includeDeleted: input?.includeDeleted })
       const summaries: WritingSummary[] = writings.map((writing) => ({
         ...toCanonicalRecord(writing),
@@ -244,11 +243,13 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async openWriting(writingId: string): Promise<ServiceResponse<WritingRecord>> {
-    await this.ensureMigrated()
-
     try {
+      await this.ensureMigrated()
       const existing = await localDB.writings.get(writingId)
-      const canonicalPath = existing?.canonical_path ?? (await findWritingByCanonicalPath(writingId))?.canonical_path ?? writingId
+      const canonicalPath =
+        existing?.canonical_path ??
+        (await localDB.writings.getByCanonicalPath(writingId))?.canonical_path ??
+        writingId
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 
       if (fileResult.error || !fileResult.data) {
@@ -291,9 +292,8 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    await this.ensureMigrated()
-
     try {
+      await this.ensureMigrated()
       const existing = await localDB.writings.get(input.writing.id)
       const canonicalPath = await this.resolveCanonicalPath(input.writing)
       const derived = await this.writeCanonicalFile(input.writing, canonicalPath)
@@ -314,9 +314,8 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async createDraft(options: DesktopDraftOptions = {}): Promise<ServiceResponse<WritingRecord>> {
-    await this.ensureMigrated()
-
     try {
+      await this.ensureMigrated()
       const nowIso = new Date().toISOString()
       const writing: WritingRecord = {
         id: options.writingId?.trim() || createWritingId(),
@@ -362,9 +361,8 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    await this.ensureMigrated()
-
     try {
+      await this.ensureMigrated()
       const existing = await localDB.writings.get(input.writingId)
       if (!existing?.canonical_path) {
         return err("NOT_FOUND", `Writing ${input.writingId} not found`)
@@ -396,9 +394,8 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>> {
-    await this.ensureMigrated()
-
     try {
+      await this.ensureMigrated()
       const existing = await localDB.writings.get(input.writingId)
       if (!existing?.canonical_path) {
         return err("NOT_FOUND", `Writing ${input.writingId} not found`)
@@ -447,17 +444,21 @@ class DesktopDocumentService implements DocumentService {
     mimeType: string
     bytes: Uint8Array
   }>> {
-    await this.ensureMigrated()
+    try {
+      await this.ensureMigrated()
 
-    const localWriting = await localDB.writings.get(input.writingId)
-    if (!localWriting?.canonical_path) {
-      return err("NOT_FOUND", `Writing ${input.writingId} not found`)
+      const localWriting = await localDB.writings.get(input.writingId)
+      if (!localWriting?.canonical_path) {
+        return err("NOT_FOUND", `Writing ${input.writingId} not found`)
+      }
+
+      return this.runtime.filesystem.exportWriting({
+        writingId: localWriting.canonical_path,
+        format: input.format,
+      })
+    } catch (error) {
+      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
     }
-
-    return this.runtime.filesystem.exportWriting({
-      writingId: localWriting.canonical_path,
-      format: input.format,
-    })
   }
 }
 

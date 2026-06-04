@@ -1,7 +1,7 @@
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 11;
+export const LOCAL_DB_VERSION = 12;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
