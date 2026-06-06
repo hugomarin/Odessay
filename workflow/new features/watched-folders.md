@@ -1,12 +1,67 @@
-# Watched Folders
+# Workspace / Watched Folders
+
+**Linear:** [ODE-245](https://linear.app/z9ne/issue/ODE-245)
 
 ## Resumen
 
-Permite al usuario agregar carpetas del filesystem (locales, de Claude, de proyectos, etc.) para que Odessay las vigile. Cada archivo `.md` o `.txt` dentro de esas carpetas puede tener metadata en base de datos (status, tipo, etiquetas) y opcionalmente sincronizarse a la nube para acceso web.
+Nueva sección **Workspace** en el sidebar izquierdo (debajo de Desk) que permite agregar carpetas de proyectos del filesystem para que Odessay las vigile. Cada archivo `.md` o `.txt` dentro de esas carpetas puede tener metadata en base de datos (status, tipo, etiquetas) y opcionalmente sincronizarse a la nube para acceso web.
 
 ## Motivación
 
 Los documentos creados en el desktop app ya se auto-guardan en disco, pero el usuario tiene archivos `.md` existentes en múltiples carpetas del sistema (notas de Claude, proyectos, documentación) que no están en Odessay. Esta feature permite trabajar con esos archivos desde Odessay sin moverlos ni modificarlos, agregando metadata y sync opcionales.
+
+---
+
+## Entry point: Workspace en el sidebar
+
+El acceso a la feature es una nueva entrada en el sidebar principal:
+
+```
+Desk          ← existente (LayoutGrid icon)
+Workspace     ← nuevo (Layers icon)  ← /workspace
+Collections   ← existente
+```
+
+**Icono:** `Layers` de Lucide React (`strokeWidth={1.5}`)
+**Ruta:** `/workspace`
+**Shortcut:** pendiente de definir post-MVP
+
+La página de Workspace es el hub para gestionar carpetas vigiladas y navegar sus archivos.
+
+---
+
+## MVP de exploración (ODE-245)
+
+> Objetivo: sentir el flujo antes de comprometerse con la arquitectura completa.
+
+### Lo que incluye el MVP
+
+| Feature | Implementación |
+|---------|---------------|
+| Item "Workspace" en sidebar | `NAV_ITEMS` en `sidebar.tsx` |
+| Ruta `/workspace` | `app/(app)/workspace/page.tsx` |
+| Agregar carpeta | Tauri `open()` dialog (folder picker) |
+| Persistencia de rutas | `tauri-plugin-store` |
+| Listar archivos `.md` | Tauri `readDir` recursivo |
+| Abrir archivo | Navegar a `/write?path=...` |
+
+### Lo que NO incluye el MVP
+
+- No `.odessay/` ni metadata en disco
+- No IndexedDB ni Supabase sync
+- No FSEvents / watcher en tiempo real
+- No snapshots / versiones
+- No metadata (status, tags, tipo)
+
+### Preguntas a responder con el MVP
+
+1. ¿Lista plana o árbol de carpetas? ¿Cómo se siente navegar?
+2. ¿Abrir en editor existente o panel inline nuevo?
+3. ¿El nombre "Workspace" comunica bien? ¿O mejor "Local" / "Proyectos"?
+4. ¿Dónde va la acción de añadir carpeta — sidebar expandido o dentro de la página?
+5. ¿Se necesita búsqueda dentro de las carpetas desde el MVP?
+
+---
 
 ## Prioridades
 
