@@ -44,12 +44,6 @@ import { cn } from "@/lib/utils"
 
 type AddWorkspaceStep = "chooser" | "existing" | "scratch"
 
-type PreviewState = {
-  fileId: string
-  content: string
-  preview: string
-}
-
 type WorkspaceActionState =
   | { type: "rename"; workspace: WorkspaceSummary | WorkspaceDetail }
   | { type: "remove"; workspace: WorkspaceSummary | WorkspaceDetail }
@@ -119,8 +113,50 @@ function matchesFileQuery(file: WorkspaceFile, query: string) {
   return [file.name, file.relativePath].some((value) => value.toLowerCase().includes(normalizedQuery))
 }
 
-function workspaceAvailabilityLabel(workspace: WorkspaceSummary | WorkspaceDetail) {
-  return workspace.status === "missing" ? "Missing folder" : "Workspace"
+function WorkspaceSearchInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+}) {
+  return (
+    <div className="relative flex-1 min-w-[200px] max-w-[560px]">
+      <Search className="absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-ink-4" strokeWidth={1.5} />
+      <Input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-9 rounded-[8px] border-transparent bg-muted/70 pl-9 pr-4 text-[13px] font-sans text-ink placeholder:text-ink-4 shadow-none"
+      />
+    </div>
+  )
+}
+
+function WorkspaceControlChip({
+  active = false,
+  onClick,
+  children,
+}: {
+  active?: boolean
+  onClick?: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-[8px] px-5 text-[13px] text-ink-2 transition-colors",
+        active ? "bg-muted text-ink" : "bg-muted/70 hover:bg-muted hover:text-ink",
+      )}
+    >
+      {children}
+    </button>
+  )
 }
 
 function workspaceMissingMessage(workspace: WorkspaceSummary | WorkspaceDetail) {
@@ -361,51 +397,18 @@ function DesktopWorkspaceIndex() {
   return (
     <>
       <div className="flex min-h-full flex-col bg-bg">
-        <div className="border-b-[0.5px] border-border px-10 pb-8 pt-10">
+        <div className="border-b-[0.5px] border-border px-10 py-7">
           <div className="flex items-start justify-between gap-6">
             <div className="max-w-[620px]">
-              <h1 className="font-lora text-[48px] leading-[1.05] tracking-[-0.03em] text-ink">
+              <h1 className="text-[24px] font-medium tracking-[-0.03em] text-ink">
                 Workspace
               </h1>
-              <p className="mt-3 text-[17px] leading-7 text-ink-3">
+              <p className="mt-1 text-[14px] text-ink-4">
                 Local workspaces that keep your files in context.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 pt-1">
-              <div className="relative w-[280px]">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search workspaces..."
-                  className="h-10 rounded-[10px] pl-9"
-                />
-              </div>
-              <div className="inline-flex h-10 items-center rounded-[10px] border-[0.5px] border-border bg-sb p-1">
-                <button
-                  type="button"
-                  onClick={() => handleLayoutChange("grid")}
-                  className={cn(
-                    "inline-flex h-8 items-center gap-2 rounded-[8px] px-3 text-sm transition-colors",
-                    layout === "grid" ? "bg-muted text-ink" : "text-ink-3 hover:text-ink",
-                  )}
-                >
-                  <LayoutGrid className="h-4 w-4" strokeWidth={1.5} />
-                  Grid
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleLayoutChange("list")}
-                  className={cn(
-                    "inline-flex h-8 items-center gap-2 rounded-[8px] px-3 text-sm transition-colors",
-                    layout === "list" ? "bg-muted text-ink" : "text-ink-3 hover:text-ink",
-                  )}
-                >
-                  <List className="h-4 w-4" strokeWidth={1.5} />
-                  List
-                </button>
-              </div>
+            <div className="flex items-center gap-3">
               <Button
                 type="button"
                 className="h-10 rounded-[10px] px-4"
@@ -417,6 +420,24 @@ function DesktopWorkspaceIndex() {
                 <Plus className="h-4 w-4" strokeWidth={1.5} />
                 Add workspace
               </Button>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+            <WorkspaceSearchInput
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Filter by name..."
+            />
+            <div className="flex items-center gap-2">
+              <WorkspaceControlChip active={layout === "grid"} onClick={() => handleLayoutChange("grid")}>
+                <LayoutGrid className="h-4 w-4" strokeWidth={1.5} />
+                Grid
+              </WorkspaceControlChip>
+              <WorkspaceControlChip active={layout === "list"} onClick={() => handleLayoutChange("list")}>
+                <List className="h-4 w-4" strokeWidth={1.5} />
+                List
+              </WorkspaceControlChip>
             </div>
           </div>
         </div>
@@ -496,22 +517,18 @@ function DesktopWorkspaceIndex() {
                           )}
                           <p className="mt-1 truncate text-sm text-ink-4">{workspace.rootPath}</p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full border-[0.5px] border-border px-2.5 py-1 text-[11px] uppercase tracking-[0.08em] text-ink-4">
-                            {workspaceAvailabilityLabel(workspace)}
-                          </span>
-                          <WorkspaceActionsMenu
-                            workspace={workspace}
-                            onRename={() => {
-                              setWorkspaceAction({ type: "rename", workspace })
-                              setWorkspaceActionValue(workspace.name)
-                            }}
-                            onRemove={() => {
-                              setWorkspaceAction({ type: "remove", workspace })
-                              setWorkspaceActionValue(workspace.name)
-                            }}
-                          />
-                        </div>
+                        <WorkspaceActionsMenu
+                          workspace={workspace}
+                          triggerClassName="shrink-0 border-[0.5px] border-border bg-bg"
+                          onRename={() => {
+                            setWorkspaceAction({ type: "rename", workspace })
+                            setWorkspaceActionValue(workspace.name)
+                          }}
+                          onRemove={() => {
+                            setWorkspaceAction({ type: "remove", workspace })
+                            setWorkspaceActionValue(workspace.name)
+                          }}
+                        />
                       </div>
                       {workspace.status === "missing" ? (
                         <p className="mt-4 max-w-[44ch] text-sm leading-6 text-ink-3">
@@ -641,8 +658,6 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const deferredQuery = useDeferredValue(searchQuery)
   const [isLoading, setIsLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [preview, setPreview] = useState<PreviewState | null>(null)
-  const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newFileName, setNewFileName] = useState("")
   const [isCreatingFile, setIsCreatingFile] = useState(false)
@@ -708,56 +723,6 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     }
   }, [loadWorkspace, workspace])
 
-  useEffect(() => {
-    if (!workspace || !preview?.fileId) {
-      return
-    }
-
-    const selectedFile = workspace.files.find((file) => file.id === preview.fileId)
-    if (!selectedFile) {
-      setPreview(null)
-      return
-    }
-
-    let cancelled = false
-
-    void getDesktopWorkspaceService().then(async (service) => {
-      const nextPreview = await service.readFilePreview(selectedFile.path)
-      if (cancelled) {
-        return
-      }
-
-      setPreview({
-        fileId: selectedFile.id,
-        content: nextPreview.content,
-        preview: nextPreview.preview,
-      })
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [preview?.fileId, workspace])
-
-  const openPreview = async (file: WorkspaceFile) => {
-    setPreviewLoadingId(file.id)
-    setErrorMessage(null)
-
-    try {
-      const service = await getDesktopWorkspaceService()
-      const nextPreview = await service.readFilePreview(file.path)
-      setPreview({
-        fileId: file.id,
-        content: nextPreview.content,
-        preview: nextPreview.preview,
-      })
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to preview file")
-    } finally {
-      setPreviewLoadingId(null)
-    }
-  }
-
   const openInEditor = async (file: WorkspaceFile) => {
     setErrorMessage(null)
 
@@ -784,7 +749,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       setNewFileName("")
       setIsCreateDialogOpen(false)
       await loadWorkspace()
-      await openPreview(file)
+      await openInEditor(file)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to create file")
     } finally {
@@ -897,76 +862,76 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     )
   }
 
-  const selectedFile =
-    (preview ? workspace.files.find((file) => file.id === preview.fileId) : null) ?? pinnedFile
-
   return (
     <>
-      <div className="min-h-full bg-bg px-10 py-10">
-        <div className="flex items-start justify-between gap-8 border-b-[0.5px] border-border pb-6">
-          <div className="min-w-0">
+      <div className="min-h-full bg-bg">
+        <div className="border-b-[0.5px] border-border px-10 py-7">
+          <div className="flex items-start justify-between gap-8">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/workspace"
+                  className="inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                >
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                  Workspace
+                </Link>
+              </div>
+              <div className="mt-2 flex items-center gap-3">
+                <h1 className="text-[24px] font-medium tracking-[-0.03em] text-ink">
+                  {workspace.name}
+                </h1>
+                <WorkspaceActionsMenu
+                  workspace={workspace}
+                  triggerClassName="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                  onRename={() => {
+                    setWorkspaceAction({ type: "rename", workspace })
+                    setWorkspaceActionValue(workspace.name)
+                  }}
+                  onRemove={() => {
+                    setWorkspaceAction({ type: "remove", workspace })
+                    setWorkspaceActionValue(workspace.name)
+                  }}
+                />
+              </div>
+              <div className="mt-1 flex items-center gap-2 text-[14px] text-ink-4">
+                <Folder className="h-4 w-4" strokeWidth={1.5} />
+                <span>{workspace.rootPath}</span>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3">
-              <h1 className="font-lora text-[44px] leading-[1.05] tracking-[-0.03em] text-ink">
-                {workspace.name}
-              </h1>
-              <WorkspaceActionsMenu
-                workspace={workspace}
-                triggerClassName="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-                onRename={() => {
-                  setWorkspaceAction({ type: "rename", workspace })
-                  setWorkspaceActionValue(workspace.name)
-                }}
-                onRemove={() => {
-                  setWorkspaceAction({ type: "remove", workspace })
-                  setWorkspaceActionValue(workspace.name)
-                }}
-              />
-            </div>
-            <div className="mt-3 flex items-center gap-2 text-sm text-ink-4">
-              <Folder className="h-4 w-4" strokeWidth={1.5} />
-              <span>{workspace.rootPath}</span>
-            </div>
-            <div className="mt-2 text-sm text-ink-4">
-              Files from this workspace stay in their local folder. Odessay tracks them through
-              <span className="mx-1 font-medium text-ink-3">.odyssey/index.json</span>
-              for identity and preview.
+              <Button type="button" onClick={() => setIsCreateDialogOpen(true)}>
+                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                New file
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Button type="button" onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4" strokeWidth={1.5} />
-              New file
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <div className="relative w-full max-w-[360px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
-            <Input
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+            <WorkspaceSearchInput
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search files..."
-              className="h-10 rounded-[10px] pl-9"
+              onChange={setSearchQuery}
+              placeholder="Filter by name..."
             />
           </div>
         </div>
 
-        {errorMessage ? (
-          <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
+        <div className="px-10 py-8">
+          {errorMessage ? (
+            <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
             {errorMessage}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
 
-        {pinnedFile ? (
-          <section className="mt-8">
+          {pinnedFile ? (
+            <section>
             <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-4">
               Pinned
             </div>
             <button
               type="button"
-              onClick={() => void openPreview(pinnedFile)}
+              onClick={() => void openInEditor(pinnedFile)}
               className="flex w-full items-center gap-4 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-left transition-colors hover:bg-muted/40"
             >
               <FileText className="h-5 w-5 shrink-0 text-ink-2" strokeWidth={1.5} />
@@ -983,72 +948,46 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
               <span className="text-sm text-ink-4">{formatFileTimestamp(pinnedFile.modifiedAt)}</span>
             </button>
-          </section>
-        ) : null}
+            </section>
+          ) : null}
 
-        <section className={cn("mt-8", pinnedFile ? "" : "mt-10")}>
-          <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-4">
-            Files
-          </div>
-          {visibleFiles.length === 0 ? (
-            <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
-              {workspace.fileCount === 0
-                ? "This workspace does not have any .md or .txt files yet. Create one to start working from this local folder."
-                : "No files match your search."}
+          <section className={cn("mt-8", pinnedFile ? "" : "mt-0")}>
+            <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-4">
+              Files
             </div>
-          ) : (
-            <div className="overflow-hidden rounded-[16px] border-[0.5px] border-border bg-sb">
-              {visibleFiles.map((file, index) => (
-                <button
-                  key={file.id}
-                  type="button"
-                  onClick={() => void openPreview(file)}
-                  className={cn(
-                    "grid w-full grid-cols-[minmax(0,1fr)_100px_170px] items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/40",
-                    index > 0 ? "border-t-[0.5px] border-border" : "",
-                    preview?.fileId === file.id ? "bg-muted/40" : "",
-                  )}
-                >
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-4">
-                      <FileText className="h-5 w-5 shrink-0 text-ink-2" strokeWidth={1.5} />
-                      <span className="truncate text-[17px] text-ink">{file.name}</span>
+            {visibleFiles.length === 0 ? (
+              <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
+                {workspace.fileCount === 0
+                  ? "This workspace does not have any .md or .txt files yet. Create one to start working from this local folder."
+                  : "No files match your search."}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-[16px] border-[0.5px] border-border bg-sb">
+                {visibleFiles.map((file, index) => (
+                  <button
+                    key={file.id}
+                    type="button"
+                    onClick={() => void openInEditor(file)}
+                    className={cn(
+                      "grid w-full grid-cols-[minmax(0,1fr)_100px_170px] items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/40",
+                      index > 0 ? "border-t-[0.5px] border-border" : "",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-4">
+                        <FileText className="h-5 w-5 shrink-0 text-ink-2" strokeWidth={1.5} />
+                        <span className="truncate text-[17px] text-ink">{file.name}</span>
+                      </div>
+                      <div className="truncate pl-9 pt-1 text-sm text-ink-4">{fileSecondaryLabel(file)}</div>
                     </div>
-                    <div className="truncate pl-9 pt-1 text-sm text-ink-4">{fileSecondaryLabel(file)}</div>
-                  </div>
-                  <span className="text-sm text-ink-4">{formatFileSize(file.size)}</span>
-                  <span className="text-sm text-ink-4">
-                    {previewLoadingId === file.id ? "Loading..." : formatFileTimestamp(file.modifiedAt)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {preview && selectedFile ? (
-          <section className="mt-8 rounded-[18px] border-[0.5px] border-border bg-sb">
-            <div className="flex items-center justify-between gap-4 border-b-[0.5px] border-border px-5 py-4">
-              <div>
-                <div className="text-[16px] font-medium text-ink">{selectedFile.name}</div>
-                <div className="mt-1 text-sm text-ink-4">{selectedFile.relativePath}</div>
+                    <span className="text-sm text-ink-4">{formatFileSize(file.size)}</span>
+                    <span className="text-sm text-ink-4">{formatFileTimestamp(file.modifiedAt)}</span>
+                  </button>
+                ))}
               </div>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" onClick={() => setPreview(null)}>
-                  Close
-                </Button>
-                <Button type="button" onClick={() => void openInEditor(selectedFile)}>
-                  Open in editor
-                </Button>
-              </div>
-            </div>
-            <div className="px-6 py-5">
-              <pre className="whitespace-pre-wrap break-words font-sans text-[15px] leading-7 text-ink">
-                {preview.content}
-              </pre>
-            </div>
+            )}
           </section>
-        ) : null}
+        </div>
       </div>
 
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
