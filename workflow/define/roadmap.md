@@ -404,6 +404,43 @@ Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/contex
 
 ---
 
+## Fase 7.1 — Exploración de Workspace Local / Watched Folders
+
+Al terminar esta fase: Odessay habrá validado si trabajar sobre carpetas locales existentes del usuario debe convertirse en una línea formal del producto, sin mezclar esa exploración con el gate de convergencia web/desktop.
+
+---
+
+**Hito**
+Existe evidencia de producto y arquitectura suficiente para decidir si `Workspace` / watched folders entra al roadmap principal como capacidad estable.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- la exploración corre sobre la base desktop ya convergida, sin reabrir el contrato documental de Fase 7
+- Odessay puede inspeccionar carpetas locales elegidas por el usuario y listar documentos compatibles de forma usable
+- queda claro cuál sería el contrato correcto para abrir un archivo local existente dentro del editor
+- existe una decisión explícita sobre si esta línea se promueve, se recorta o se cancela
+
+**Temas que entran en esta fase**
+
+- exploración acotada de `Workspace` / watched folders sobre filesystem local
+- validación de UX de navegación de carpetas y apertura de archivos existentes
+- definición de boundaries entre UI, application y adapter desktop para esta línea
+- evidencia para decidir si hace falta `.odessay/`, metadata local, watcher en tiempo real o sync posterior
+
+**Temas que no son objetivo de esta fase**
+
+- reabrir el gate de Fase 7
+- comprometer la arquitectura completa de metadata, snapshots, sync cloud o indexación permanente sin evidencia
+- mezclar esta exploración con una promesa ya cerrada de paridad remota web/desktop
+
+**Issue semilla sugerido**
+
+- `ODE-245` — exploración MVP de Workspace / watched folders, reposicionado como validación post-convergencia y no como trabajo de cierre de Fase 7
+
+Referencia: `workflow/new features/watched-folders.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+
+---
+
 ## Horizonte Posterior — Iniciativas Diferidas
 
 Estas líneas no desaparecen del producto, pero salen del critical path mientras se construye la plataforma multi-runtime.

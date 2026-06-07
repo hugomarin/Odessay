@@ -218,6 +218,11 @@
       "description": "Gate de cierre de Fase 7 — Capacidades Remotas y Paridad Web/Desktop: checklist de integración remota compatible con local-first, paridad contractual web/desktop, compatibilidad de capacidades cross-runtime y política operativa de coexistencia."
     },
     {
+      "path": "workflow/define/dod-fase-7-1.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 7.1 — Exploración de Workspace Local / Watched Folders: checklist para separar la exploración post-convergencia del cierre de Fase 7, validar flujo mínimo sobre carpetas locales existentes y producir una decisión explícita de promoción, recorte o cancelación."
+    },
+    {
       "path": "workflow/define/validacion-fase-4.md",
       "type": "ops",
       "description": "Checklist operativo de validación de Fase 4: separa flujos bloqueantes y condicionales, clasifica qué validar manualmente, qué automatizar con Playwright, qué casos mixtos requieren provider/dispositivo real, y matriz de validación servicio-contrato. Incluye §Matriz de validación servicio-contrato que mapea cada servicio a su contrato operativo canónico."
