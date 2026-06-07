@@ -496,6 +496,33 @@ export async function relocateDesktopWriting(writingId: string, newPath: string)
   await enqueueWritingUpsert({ ...existing, canonical_path: newPath, local_updated_at: Date.now() })
 }
 
+export async function relocateDesktopWritingByCanonicalPath(
+  previousPath: string,
+  nextPath: string,
+): Promise<void> {
+  const existing = await localDB.writings.getByCanonicalPath(previousPath)
+  if (!existing || existing.canonical_path === nextPath) {
+    return
+  }
+
+  await enqueueWritingUpsert({
+    ...existing,
+    canonical_path: nextPath,
+    local_updated_at: Date.now(),
+  })
+}
+
+export async function markDesktopWritingDeletedByCanonicalPath(
+  canonicalPath: string,
+): Promise<void> {
+  const existing = await localDB.writings.getByCanonicalPath(canonicalPath)
+  if (!existing || existing.sync_status === "deleted") {
+    return
+  }
+
+  await enqueueWritingDelete(existing.id)
+}
+
 export async function importDesktopWritingFile(
   path: string,
   content: string,

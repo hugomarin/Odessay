@@ -8,8 +8,9 @@
     "core:event:default",
     {
       "identifier": "fs:default",
-      "allow": [{ "path": "$DOCUMENT/**" }]
+      "allow": [{ "path": "$HOME/**" }]
     },
+    "fs:allow-watch",
     "dialog:allow-open",
     "dialog:allow-save"
   ]

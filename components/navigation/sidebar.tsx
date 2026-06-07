@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } fro
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutGrid, PanelLeftDashed, Plus, Search } from "lucide-react"
+import { Layers3, LayoutGrid, PanelLeftDashed, Plus, Search } from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
@@ -60,6 +60,7 @@ function SquareLibraryIcon({ className }: { className?: string }) {
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/desk", label: "Desk", icon: LayoutGrid, section: "sidebar-nav-desk" },
+  { href: "/workspace", label: "Workspace", icon: Layers3, section: "sidebar-nav-workspace" },
   {
     href: "/collections",
     label: "Collections",
