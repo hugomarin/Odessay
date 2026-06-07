@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 https://odessay.vercel.app https://*.supabase.co wss://*.supabase.co; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: https://asset.localhost;",
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 https://odessay.vercel.app https://*.supabase.co wss://*.supabase.co; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: https://asset.localhost https://*.supabase.co; media-src 'self' blob:;",
       "capabilities": ["default"]
     }
   },
@@ -42,7 +42,8 @@
       "frameworks": [],
       "minimumSystemVersion": "10.15",
       "signingIdentity": null,
-      "entitlements": null
+      "entitlements": "./entitlements.plist",
+      "infoPlist": "./Info.plist"
     }
   }
 }
