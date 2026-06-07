@@ -1,3 +1,5 @@
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
+
 type WorkspaceRouteSource = {
   slug: string
 }
@@ -6,10 +8,8 @@ type WorkspaceFileRouteSource = WorkspaceRouteSource & {
   fileId: string
 }
 
-const isTauriBuild = process.env.NEXT_PUBLIC_TAURI_BUILD === "true"
-
 export const buildWorkspaceHref = ({ slug }: WorkspaceRouteSource) => {
-  if (isTauriBuild) {
+  if (isDesktopRuntime()) {
     return `/workspace?slug=${encodeURIComponent(slug)}`
   }
 
@@ -17,7 +17,7 @@ export const buildWorkspaceHref = ({ slug }: WorkspaceRouteSource) => {
 }
 
 export const buildWorkspaceFileHref = ({ slug, fileId }: WorkspaceFileRouteSource) => {
-  if (isTauriBuild) {
+  if (isDesktopRuntime()) {
     const params = new URLSearchParams({
       slug,
       fileId,
