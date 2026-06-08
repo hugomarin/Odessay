@@ -349,12 +349,17 @@ export class DesktopWorkspaceService {
       previousSnapshot = null
     }
 
+    console.log("[workspace:watch] starting watcher for", rootPath)
+
     return watchFsPaths(
       [rootPath],
       (event) => {
         if (shouldIgnoreWorkspaceWatchEvent(event)) {
+          console.log("[workspace:watch] ignored event", event.type, event.paths)
           return
         }
+
+        console.log("[workspace:watch] event received", event.type, event.paths)
 
         reconcilePromise = reconcilePromise
           .catch(() => undefined)
@@ -372,10 +377,11 @@ export class DesktopWorkspaceService {
             }
 
             previousSnapshot = nextSnapshot
+            console.log("[workspace:watch] calling onChange after sync")
             onChange()
           })
       },
-      { recursive: true, delayMs: 500 },
+      { recursive: true, delayMs: 300 },
     )
   }
 

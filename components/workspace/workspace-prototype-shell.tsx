@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  ExternalLink,
   FileText,
   Folder,
   LayoutGrid,
@@ -409,17 +410,17 @@ function DesktopWorkspaceIndex() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button
+              <button
                 type="button"
-                className="h-10 rounded-[10px] px-4"
                 onClick={() => {
                   setStep("chooser")
                   setIsDialogOpen(true)
                 }}
+                className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
               >
-                <Plus className="h-4 w-4" strokeWidth={1.5} />
+                <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
                 Add workspace
-              </Button>
+              </button>
             </div>
           </div>
 
@@ -699,21 +700,27 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     return workspace ? pickPinnedFile(workspace.files) : null
   }, [workspace])
 
+  const watchedRootPath = workspace?.status === "ready" ? workspace.rootPath : null
+
   useEffect(() => {
-    if (!workspace || workspace.status !== "ready") {
+    if (!watchedRootPath) {
       return
     }
 
     let cancelled = false
     let stopWatching: (() => Promise<void>) | null = null
 
-    void getDesktopWorkspaceService().then(async (service) => {
-      stopWatching = await service.watchWorkspace(workspace.rootPath, () => {
-        if (!cancelled) {
-          void loadWorkspace()
-        }
+    void getDesktopWorkspaceService()
+      .then(async (service) => {
+        stopWatching = await service.watchWorkspace(watchedRootPath, () => {
+          if (!cancelled) {
+            void loadWorkspace()
+          }
+        })
       })
-    })
+      .catch((error) => {
+        console.warn("[workspace] file watcher setup failed:", error)
+      })
 
     return () => {
       cancelled = true
@@ -721,7 +728,13 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         void stopWatching()
       }
     }
-  }, [loadWorkspace, workspace])
+  }, [loadWorkspace, watchedRootPath])
+
+  useEffect(() => {
+    const handleFocus = () => void loadWorkspace()
+    window.addEventListener("focus", handleFocus)
+    return () => window.removeEventListener("focus", handleFocus)
+  }, [loadWorkspace])
 
   const openInEditor = async (file: WorkspaceFile) => {
     setErrorMessage(null)
@@ -868,14 +881,16 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         <div className="border-b-[0.5px] border-border px-10 py-7">
           <div className="flex items-start justify-between gap-8">
             <div className="min-w-0">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-2">
                 <Link
                   href="/workspace"
-                  className="inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
                 >
                   <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
                   Workspace
                 </Link>
+                <span className="text-[13px] text-ink-4/50">/</span>
+                <span className="truncate text-[13px] text-ink-4">{workspace.rootPath}</span>
               </div>
               <div className="mt-2 flex items-center gap-3">
                 <h1 className="text-[24px] font-medium tracking-[-0.03em] text-ink">
@@ -894,17 +909,17 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   }}
                 />
               </div>
-              <div className="mt-1 flex items-center gap-2 text-[14px] text-ink-4">
-                <Folder className="h-4 w-4" strokeWidth={1.5} />
-                <span>{workspace.rootPath}</span>
-              </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <Button type="button" onClick={() => setIsCreateDialogOpen(true)}>
-                <Plus className="h-4 w-4" strokeWidth={1.5} />
+              <button
+                type="button"
+                onClick={() => setIsCreateDialogOpen(true)}
+                className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              >
+                <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
                 New file
-              </Button>
+              </button>
             </div>
           </div>
 
@@ -963,27 +978,74 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
             ) : (
               <div className="overflow-hidden rounded-[16px] border-[0.5px] border-border bg-sb">
-                {visibleFiles.map((file, index) => (
-                  <button
-                    key={file.id}
-                    type="button"
-                    onClick={() => void openInEditor(file)}
-                    className={cn(
-                      "grid w-full grid-cols-[minmax(0,1fr)_100px_170px] items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/40",
-                      index > 0 ? "border-t-[0.5px] border-border" : "",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-center gap-4">
-                        <FileText className="h-5 w-5 shrink-0 text-ink-2" strokeWidth={1.5} />
-                        <span className="truncate text-[17px] text-ink">{file.name}</span>
-                      </div>
-                      <div className="truncate pl-9 pt-1 text-sm text-ink-4">{fileSecondaryLabel(file)}</div>
-                    </div>
-                    <span className="text-sm text-ink-4">{formatFileSize(file.size)}</span>
-                    <span className="text-sm text-ink-4">{formatFileTimestamp(file.modifiedAt)}</span>
-                  </button>
-                ))}
+                <table className="w-full table-fixed border-collapse">
+                  <colgroup>
+                    <col />
+                    <col className="w-[90px]" />
+                    <col className="w-[160px]" />
+                    <col className="w-[52px]" />
+                  </colgroup>
+                  <tbody>
+                    {visibleFiles.map((file) => (
+                      <tr
+                        key={file.id}
+                        role="link"
+                        tabIndex={0}
+                        aria-label={`Open ${file.name} in editor`}
+                        onClick={() => void openInEditor(file)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault()
+                            void openInEditor(file)
+                          }
+                        }}
+                        className="group cursor-pointer bg-sb transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 [&:not(:first-child)]:border-t-[0.5px] [&:not(:first-child)]:border-border"
+                      >
+                        <td className="py-[18px] pl-5 pr-5 align-top md:align-middle">
+                          <div
+                            style={{
+                              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
+                            }}
+                          >
+                            <div className="flex min-w-0 items-center gap-3">
+                              <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+                              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                                {file.name}
+                              </p>
+                            </div>
+                            {fileSecondaryLabel(file) !== "Root folder" ? (
+                              <p className="truncate pl-[22px] pt-1 text-[12px] text-ink-3">
+                                {fileSecondaryLabel(file)}
+                              </p>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
+                          <span className="whitespace-nowrap">{formatFileSize(file.size)}</span>
+                        </td>
+                        <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
+                          <span className="whitespace-nowrap">{formatFileTimestamp(file.modifiedAt)}</span>
+                        </td>
+                        <td className="py-[18px] pl-0 pr-4 align-top md:align-middle">
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              aria-label={`Open ${file.name} in editor`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void openInEditor(file)
+                              }}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                            >
+                              <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </section>

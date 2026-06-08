@@ -12,6 +12,10 @@ import type {
   WritingSummary,
 } from "@/lib/services/contracts/document-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
+import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization"
+import { renderWritingToDocxBytes } from "@/lib/export/to-docx"
+import { renderWritingToPdfBytes } from "@/lib/export/to-pdf"
+import { buildWritingExportDocument } from "@/lib/export/writing-export"
 import {
   tauriCreateFile,
   tauriListRecentFiles,
@@ -42,8 +46,10 @@ function isoToMs(iso: string): number {
 
 function slugify(title: string): string {
   return title
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "untitled"
 }
@@ -442,22 +448,38 @@ export class FilesystemDocumentService implements DocumentService {
     return ok([])
   }
 
-  /**
-   * Basic markdown export.
-   */
   async exportWriting(input: ExportWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>> {
     if (input.format !== "pdf" && input.format !== "docx") {
       return err("UNSUPPORTED", `Export format ${input.format} is not supported on desktop yet`)
     }
     try {
       const markdown = await tauriOpenFile(input.writingId)
+      const parsed = parseDocumentFileToSnapshot(markdown)
+      const document = buildWritingExportDocument(parsed.snapshot.bodyJson)
       const filename = input.writingId.split("/").pop()?.replace(/\.md$/, "") ?? "export"
-      const bytes = new TextEncoder().encode(markdown)
+      const title = extractTitle(parsed.markdown, filename)
+
+      const bytes =
+        input.format === "pdf"
+          ? await renderWritingToPdfBytes({
+              title,
+              bodyText: parsed.snapshot.bodyText,
+              document,
+            })
+          : await renderWritingToDocxBytes({
+              title,
+              bodyText: parsed.snapshot.bodyText,
+              document,
+            })
+
       return ok({
         writingId: input.writingId,
         format: input.format,
-        fileName: `${filename}.md`,
-        mimeType: "text/markdown",
+        fileName: `${filename}.${input.format}`,
+        mimeType:
+          input.format === "pdf"
+            ? "application/pdf"
+            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         bytes,
       })
     } catch (e) {
