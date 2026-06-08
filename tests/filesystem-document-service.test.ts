@@ -1,4 +1,8 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import JSZip from "jszip"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
 import { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
@@ -398,6 +402,23 @@ describe("FilesystemDocumentService", () => {
     })
     expect(result.error).toBeNull()
     expect(result.data).toEqual([])
+    vi.useFakeTimers()
+  })
+
+  it("exportWriting returns real DOCX bytes instead of markdown text", async () => {
+    vi.useRealTimers()
+    const path = `${WRITINGS_DIR}/export-me.md`
+    mockFiles.set(path, "# Export Me\n\nA paragraph with **formatting**.")
+
+    const result = await service.exportWriting({ writingId: path, format: "docx" })
+
+    expect(result.error).toBeNull()
+    expect(result.data!.fileName).toBe("export-me.docx")
+    expect(result.data!.mimeType).toBe("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+    expect(new TextDecoder().decode(result.data!.bytes.slice(0, 4))).toBe("PK\u0003\u0004")
+
+    const zip = await JSZip.loadAsync(result.data!.bytes)
+    expect(zip.file("word/document.xml")).not.toBeNull()
     vi.useFakeTimers()
   })
 

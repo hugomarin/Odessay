@@ -17,7 +17,7 @@ Los documentos creados en el desktop app ya se auto-guardan en disco, pero el us
 El acceso a la feature es una nueva entrada en el sidebar principal:
 
 ```
-Desk          ← existente (LayoutGrid icon)
+Desk          ← existente (LayoutGrid icon)e
 Workspace     ← nuevo (Layers icon)  ← /workspace
 Collections   ← existente
 ```

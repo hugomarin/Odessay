@@ -2,6 +2,7 @@ import {
   BorderStyle,
   Document as DocxDocument,
   HeadingLevel,
+  ImageRun,
   Paragraph,
   Packer,
   Table,
@@ -30,6 +31,7 @@ const inlineRunToDocx = (run: WritingExportInline) => {
     strike: run.strike || undefined,
     font: run.code ? S.FONT_FAMILY_CODE_DOCX : S.FONT_FAMILY_BODY,
     size: run.code ? S.ptToHalfPoints(S.CODE_INLINE_FONT_SIZE_PT) : S.FONT_SIZE_BODY_DOCX,
+    noProof: run.code || undefined,
     color: run.linkHref ? S.LINK_COLOR : S.TEXT_COLOR,
     underline: run.linkHref ? { type: "single" } : undefined,
     shading: run.highlight
@@ -40,6 +42,81 @@ const inlineRunToDocx = (run: WritingExportInline) => {
       : undefined,
   })
 }
+
+const readImageType = (src: string, contentType: string | null): "png" | "jpg" | "gif" | "bmp" => {
+  const normalizedType = contentType?.toLowerCase() ?? ""
+  if (normalizedType.includes("jpeg") || normalizedType.includes("jpg")) return "jpg"
+  if (normalizedType.includes("gif")) return "gif"
+  if (normalizedType.includes("bmp")) return "bmp"
+  if (normalizedType.includes("png")) return "png"
+
+  const pathname = src.split("?")[0]?.toLowerCase() ?? ""
+  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "jpg"
+  if (pathname.endsWith(".gif")) return "gif"
+  if (pathname.endsWith(".bmp")) return "bmp"
+  return "png"
+}
+
+const imageFallbackParagraph = (src: string, alt?: string | null) =>
+  new Paragraph({
+    children: [
+      new TextRun({
+        text: alt?.trim() || "Image",
+        bold: true,
+        font: S.FONT_FAMILY_BODY,
+        size: S.FONT_SIZE_BODY_DOCX,
+      }),
+      new TextRun({
+        text: `: ${src}`,
+        font: S.FONT_FAMILY_BODY,
+        size: S.FONT_SIZE_BODY_DOCX,
+        color: S.LINK_COLOR,
+        underline: { type: "single" },
+      }),
+    ],
+    spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
+  })
+
+const imageBlockToDocx = async (block: Extract<WritingExportBlock, { type: "image" }>) => {
+  try {
+    const response = await fetch(block.image.src)
+    if (!response.ok) {
+      return [imageFallbackParagraph(block.image.src, block.image.alt)]
+    }
+
+    const data = await response.arrayBuffer()
+    return [
+      new Paragraph({
+        children: [
+          new ImageRun({
+            type: readImageType(block.image.src, response.headers.get("content-type")),
+            data,
+            transformation: {
+              width: S.IMAGE_MAX_WIDTH_PX,
+              height: S.IMAGE_MAX_HEIGHT_PX,
+            },
+          }),
+        ],
+        spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
+      }),
+    ]
+  } catch {
+    return [imageFallbackParagraph(block.image.src, block.image.alt)]
+  }
+}
+
+const codeBlockRunsToDocx = (code: string) =>
+  code.split("\n").map(
+    (line, index) =>
+      new TextRun({
+        text: line.length ? line : " ",
+        break: index === 0 ? undefined : 1,
+        font: S.FONT_FAMILY_CODE_DOCX,
+        size: S.ptToHalfPoints(S.CODE_BLOCK_FONT_SIZE_PT),
+        color: S.CODE_BLOCK_TEXT_COLOR.replace("#", ""),
+        noProof: true,
+      }),
+  )
 
 export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[] => {
   switch (block.type) {
@@ -109,14 +186,22 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
     case "codeBlock":
       return [
         new Paragraph({
-          children: [
-            new TextRun({
-              text: block.code.trimEnd(),
-              font: S.FONT_FAMILY_CODE_DOCX,
-              size: S.ptToHalfPoints(S.CODE_BLOCK_FONT_SIZE_PT),
-            }),
-          ],
-          spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
+          children: codeBlockRunsToDocx(block.code.trimEnd()),
+          spacing: {
+            before: S.ptToTwips(4),
+            after: S.ptToTwips(S.CODE_BLOCK_MARGIN_BOTTOM_PT),
+            line: S.CODE_BLOCK_LINE_HEIGHT_DOCX,
+          },
+          indent: {
+            left: S.CODE_BLOCK_PADDING_TWIPS,
+            right: S.CODE_BLOCK_PADDING_TWIPS,
+          },
+          border: {
+            top: { style: BorderStyle.SINGLE, color: S.CODE_BLOCK_BORDER_COLOR.replace("#", ""), size: 4, space: 6 },
+            bottom: { style: BorderStyle.SINGLE, color: S.CODE_BLOCK_BORDER_COLOR.replace("#", ""), size: 4, space: 6 },
+            left: { style: BorderStyle.SINGLE, color: S.CODE_BLOCK_BORDER_COLOR.replace("#", ""), size: 4, space: 6 },
+            right: { style: BorderStyle.SINGLE, color: S.CODE_BLOCK_BORDER_COLOR.replace("#", ""), size: 4, space: 6 },
+          },
           shading: {
             type: ShadingType.CLEAR,
             fill: S.CODE_BLOCK_BACKGROUND.replace("#", ""),
@@ -200,14 +285,24 @@ export const blockToElements = (block: WritingExportBlock): (Paragraph | Table)[
         }),
       ]
     }
+    case "image":
+      return [imageFallbackParagraph(block.image.src, block.image.alt)]
     default:
       return []
   }
 }
 
-export const renderWritingToDocxBuffer = async ({ title, bodyText, document }: RenderDocxParams) => {
+const blockToElementsAsync = async (block: WritingExportBlock): Promise<(Paragraph | Table)[]> => {
+  if (block.type === "image") {
+    return imageBlockToDocx(block)
+  }
+
+  return blockToElements(block)
+}
+
+const buildDocxDocument = async ({ title, bodyText, document }: RenderDocxParams) => {
   const bodyElements = document.blocks.length
-    ? document.blocks.flatMap((block) => blockToElements(block))
+    ? (await Promise.all(document.blocks.map((block) => blockToElementsAsync(block)))).flat()
     : bodyText?.trim()
       ? [
           new Paragraph({
@@ -249,7 +344,7 @@ export const renderWritingToDocxBuffer = async ({ title, bodyText, document }: R
       ]
     : []
 
-  const doc = new DocxDocument({
+  return new DocxDocument({
     styles: {
       default: {
         document: {
@@ -299,6 +394,14 @@ export const renderWritingToDocxBuffer = async ({ title, bodyText, document }: R
       },
     ],
   })
+}
 
+export const renderWritingToDocxBytes = async (params: RenderDocxParams) => {
+  const doc = await buildDocxDocument(params)
+  return new Uint8Array(await Packer.toArrayBuffer(doc))
+}
+
+export const renderWritingToDocxBuffer = async (params: RenderDocxParams) => {
+  const doc = await buildDocxDocument(params)
   return Packer.toBuffer(doc)
 }

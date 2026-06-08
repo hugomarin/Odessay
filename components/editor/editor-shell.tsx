@@ -3992,7 +3992,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       const blob = new Blob([result.data.bytes.buffer as ArrayBuffer], { type: result.data.mimeType })
-      downloadBlob(blob, `${exportFileBaseName}.${format}`)
+      downloadBlob(blob, result.data.fileName || `${exportFileBaseName}.${format}`)
     },
     [currentWritingId, downloadBlob, exportFileBaseName],
   )

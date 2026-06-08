@@ -14,6 +14,7 @@ import type {
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { getExportFileBaseName } from "@/lib/export/writing-export"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { needsBodyHydration } from "@/lib/sync/remote-bootstrap"
 import { getSyncService } from "@/lib/sync/sync-service-factory"
@@ -243,12 +244,16 @@ export const webDocumentService: DocumentService = {
           : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
       const local = await localDB.writings.get(input.writingId)
-      const title = local?.title?.trim() || input.writingId.slice(0, 8)
+      const fileBaseName = getExportFileBaseName({
+        title: local?.title,
+        bodyText: local?.body_text,
+        writingId: input.writingId,
+      })
 
       return ok({
         writingId: input.writingId,
         format: input.format,
-        fileName: `${title}.${input.format}`,
+        fileName: `${fileBaseName}.${input.format}`,
         mimeType: contentType,
         bytes,
       })

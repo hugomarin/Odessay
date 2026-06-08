@@ -1,7 +1,6 @@
-import path from "node:path"
 import React from "react"
 import type { ReactNode } from "react"
-import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer"
+import { Document, Font, Image, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer"
 import type { WritingExportBlock, WritingExportDocument, WritingExportInline } from "./writing-export"
 import * as S from "./styles"
 
@@ -11,47 +10,24 @@ type RenderPdfParams = {
   document: WritingExportDocument
 }
 
-const FONT_ROOT = path.resolve(process.cwd(), "node_modules/geist/dist/fonts/geist-sans")
-const GEIST_SANS_REGULAR = path.join(FONT_ROOT, "Geist-Regular.ttf")
-const GEIST_SANS_ITALIC = path.join(FONT_ROOT, "Geist-Italic.ttf")
-const GEIST_SANS_BOLD = path.join(FONT_ROOT, "Geist-Bold.ttf")
-const GEIST_SANS_BOLD_ITALIC = path.join(FONT_ROOT, "Geist-BoldItalic.ttf")
+let codeFontRegistered = false
 
-let fontsRegistered = false
+const getCodeFontSource = () =>
+  typeof window === "undefined" ? `${process.cwd()}/public${S.FONT_PATH_CODE}` : S.FONT_PATH_CODE
 
-const registerFonts = () => {
-  if (fontsRegistered) {
+const registerCodeFont = () => {
+  if (codeFontRegistered) {
     return
   }
 
   Font.register({
-    family: S.FONT_FAMILY_BODY,
-    src: GEIST_SANS_REGULAR,
+    family: S.FONT_FAMILY_CODE,
+    src: getCodeFontSource(),
   })
-
-  Font.register({
-    family: S.FONT_FAMILY_BODY,
-    src: GEIST_SANS_ITALIC,
-    fontStyle: "italic",
-  })
-
-  Font.register({
-    family: S.FONT_FAMILY_BODY,
-    src: GEIST_SANS_BOLD,
-    fontWeight: 700,
-  })
-
-  Font.register({
-    family: S.FONT_FAMILY_BODY,
-    src: GEIST_SANS_BOLD_ITALIC,
-    fontStyle: "italic",
-    fontWeight: 700,
-  })
-
-  fontsRegistered = true
+  codeFontRegistered = true
 }
 
-const createStyles = (bodyFontFamily: string) =>
+const createStyles = (bodyFontFamily: string, codeFontFamily = S.FONT_FAMILY_CODE) =>
   StyleSheet.create({
     page: {
       paddingHorizontal: S.PAGE_MARGIN_HORIZONTAL_PX,
@@ -108,10 +84,13 @@ const createStyles = (bodyFontFamily: string) =>
       marginBottom: S.LIST_ITEM_MARGIN_BOTTOM_PT,
     },
     codeBlock: {
-      fontFamily: S.FONT_FAMILY_CODE,
+      fontFamily: codeFontFamily,
       fontSize: S.CODE_BLOCK_FONT_SIZE_PT,
       lineHeight: S.CODE_BLOCK_LINE_HEIGHT,
+      color: S.CODE_BLOCK_TEXT_COLOR,
       backgroundColor: S.CODE_BLOCK_BACKGROUND,
+      borderWidth: 1,
+      borderColor: S.CODE_BLOCK_BORDER_COLOR,
       padding: S.CODE_BLOCK_PADDING_PX,
       borderRadius: S.CODE_BLOCK_BORDER_RADIUS_PX,
       marginBottom: S.CODE_BLOCK_MARGIN_BOTTOM_PT,
@@ -147,7 +126,7 @@ const createStyles = (bodyFontFamily: string) =>
       textDecorationLine: "line-through",
     },
     code: {
-      fontFamily: S.FONT_FAMILY_CODE,
+      fontFamily: codeFontFamily,
       fontSize: S.CODE_INLINE_FONT_SIZE_PT,
     },
     highlight: {
@@ -192,10 +171,21 @@ const createStyles = (bodyFontFamily: string) =>
       padding: S.TABLE_CELL_PADDING_PX,
       backgroundColor: S.TABLE_HEADER_BACKGROUND,
     },
+    image: {
+      width: S.IMAGE_MAX_WIDTH_PX,
+      maxHeight: S.IMAGE_MAX_HEIGHT_PX,
+      objectFit: "contain",
+      marginBottom: S.PARAGRAPH_MARGIN_BOTTOM_PT,
+    },
+    imageFallback: {
+      marginBottom: S.PARAGRAPH_MARGIN_BOTTOM_PT,
+      color: S.LINK_COLOR,
+      textDecorationLine: "underline",
+    },
   })
 
-const styles = createStyles(S.FONT_FAMILY_BODY)
-const fallbackStyles = createStyles("Helvetica")
+const styles = createStyles(S.FONT_FAMILY_FALLBACK)
+const fallbackStyles = createStyles("Helvetica", S.FONT_FAMILY_CODE_FALLBACK)
 
 const renderInlineRuns = (runs: WritingExportInline[], keyPrefix: string, currentStyles = styles): ReactNode[] =>
   runs.map((run, index) => {
@@ -215,7 +205,7 @@ const renderInlineRuns = (runs: WritingExportInline[], keyPrefix: string, curren
     )
   })
 
-const renderBlock = (block: WritingExportBlock, index: number, currentStyles = styles): ReactNode => {
+const renderBlock = (block: WritingExportBlock, index: number, currentStyles = styles, renderImages = true): ReactNode => {
   switch (block.type) {
     case "paragraph":
       return (
@@ -291,12 +281,21 @@ const renderBlock = (block: WritingExportBlock, index: number, currentStyles = s
         </View>
       )
     }
+    case "image":
+      return renderImages ? (
+        // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image does not expose the DOM alt prop.
+        <Image key={`image-${index}`} src={block.image.src} style={currentStyles.image} />
+      ) : (
+        <Text key={`image-fallback-${index}`} style={currentStyles.imageFallback}>
+          {block.image.alt?.trim() || "Image"}: {block.image.src}
+        </Text>
+      )
     default:
       return null
   }
 }
 
-export const renderWritingToPdfBuffer = async ({ title, bodyText, document }: RenderPdfParams) => {
+const renderWritingToPdfBlob = async ({ title, bodyText, document }: RenderPdfParams, renderImages = true) => {
   const renderWithStyles = async (currentStyles: typeof styles) => {
     const footnoteBlocks = document.footnotes.length
       ? [
@@ -313,7 +312,7 @@ export const renderWritingToPdfBuffer = async ({ title, bodyText, document }: Re
       : []
 
     const bodyBlocks = document.blocks.length
-      ? document.blocks.flatMap((block, index) => renderBlock(block, index, currentStyles) ?? [])
+      ? document.blocks.flatMap((block, index) => renderBlock(block, index, currentStyles, renderImages) ?? [])
       : bodyText?.trim()
         ? [<Text key="fallback-body" style={currentStyles.paragraph}>{bodyText.trim()}</Text>]
         : []
@@ -328,14 +327,29 @@ export const renderWritingToPdfBuffer = async ({ title, bodyText, document }: Re
       </Document>
     )
 
-    return renderToBuffer(pdfDocument)
+    return pdf(pdfDocument).toBlob()
   }
 
   try {
-    registerFonts()
+    registerCodeFont()
     return await renderWithStyles(styles)
   } catch (error) {
-    console.warn("[export:pdf] Falling back to built-in PDF fonts", error)
+    console.warn("[export:pdf] Falling back to built-in PDF rendering", error)
     return renderWithStyles(fallbackStyles)
   }
+}
+
+export const renderWritingToPdfBytes = async (params: RenderPdfParams) => {
+  try {
+    const blob = await renderWritingToPdfBlob(params, true)
+    return new Uint8Array(await blob.arrayBuffer())
+  } catch (error) {
+    console.warn("[export:pdf] Falling back to image links", error)
+    const blob = await renderWritingToPdfBlob(params, false)
+    return new Uint8Array(await blob.arrayBuffer())
+  }
+}
+
+export const renderWritingToPdfBuffer = async (params: RenderPdfParams) => {
+  return Buffer.from(await renderWritingToPdfBytes(params))
 }

@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import type { JSONContent } from "@tiptap/core"
 import { Table } from "docx"
 import JSZip from "jszip"
 import { buildWritingMarkdown, buildWritingExportDocument, getExportFileBaseName, sanitizeFileName } from "@/lib/export/writing-export"
 import * as styles from "@/lib/export/styles"
 import { blockToElements, renderWritingToDocxBuffer } from "@/lib/export/to-docx"
+import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
 
 const sampleBody: JSONContent = {
   type: "doc",
@@ -38,6 +39,15 @@ const sampleBody: JSONContent = {
     },
   ],
 }
+
+const tinyPng = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+  0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+  0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+])
 
 describe("export helpers", () => {
   it("serializes a writing body to markdown", () => {
@@ -121,11 +131,40 @@ describe("export helpers", () => {
     }
   })
 
+  it("parses images into the export document model and markdown", () => {
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { src: "https://example.com/image.png", alt: "Diagram" },
+        },
+      ],
+    })
+
+    expect(document.blocks).toEqual([
+      {
+        type: "image",
+        image: { src: "https://example.com/image.png", alt: "Diagram", title: null },
+      },
+    ])
+    expect(buildWritingMarkdown({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { src: "https://example.com/image.png", alt: "Diagram" },
+        },
+      ],
+    })).toBe("![Diagram](https\\://example\\.com/image\\.png)")
+  })
+
   it("shares export styles between PDF and DOCX (DRY)", () => {
     expect(styles.PAGE_BACKGROUND_COLOR).toBe("#ffffff")
     expect(styles.FONT_FAMILY_BODY).toBe("Geist Sans")
     expect(styles.FONT_FAMILY_FALLBACK).toBe("Helvetica")
     expect(styles.TEXT_COLOR).toBe("#161310")
+    expect(styles.CODE_BLOCK_BACKGROUND).toBe("#fafdff")
     expect(styles.TABLE_BORDER_COLOR).toBeDefined()
     expect(styles.TABLE_HEADER_BACKGROUND).toBeDefined()
     expect(styles.LINE_HEIGHT_DOCX).toBeDefined()
@@ -206,6 +245,78 @@ describe("DOCX exporter", () => {
 
     const buffer = await renderWritingToDocxBuffer({ title: "Table Export", document })
     expect(Buffer.isBuffer(buffer)).toBe(true)
+    expect(buffer.length).toBeGreaterThan(1000)
+  })
+
+  it("renderWritingToDocxBuffer embeds image blocks", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(tinyPng, {
+          status: 200,
+          headers: { "Content-Type": "image/png" },
+        }),
+      ),
+    )
+
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { src: "https://example.com/image.png", alt: "Diagram" },
+        },
+      ],
+    })
+
+    const buffer = await renderWritingToDocxBuffer({ title: "Image Export", document })
+    const zip = await JSZip.loadAsync(buffer)
+    const mediaFiles = Object.keys(zip.files).filter((name) => name.startsWith("word/media/"))
+
+    expect(mediaFiles.length).toBeGreaterThan(0)
+    vi.unstubAllGlobals()
+  })
+
+  it("renderWritingToDocxBuffer preserves code block line breaks and styles", async () => {
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [
+        {
+          type: "codeBlock",
+          content: [{ type: "text", text: "first line\nsecond line\nthird line" }],
+        },
+      ],
+    })
+
+    const buffer = await renderWritingToDocxBuffer({ title: "Code Export", document })
+    const zip = await JSZip.loadAsync(buffer)
+    const xml = await zip.file("word/document.xml")?.async("string")
+
+    expect(xml).toContain("<w:br/>")
+    expect(xml).toContain(`w:fill="${styles.CODE_BLOCK_BACKGROUND.replace("#", "")}"`)
+    expect(xml).toContain(`w:color="${styles.CODE_BLOCK_BORDER_COLOR.replace("#", "")}"`)
+    expect(xml).toContain('w:space="6"')
+    expect(xml).toContain(styles.FONT_FAMILY_CODE_DOCX)
+    expect(xml).toContain("<w:noProof/>")
+    expect(xml).toContain(styles.CODE_BLOCK_TEXT_COLOR.replace("#", ""))
+  })
+})
+
+describe("PDF exporter", () => {
+  it("renderWritingToPdfBuffer renders code blocks with the registered mono font", async () => {
+    const document = buildWritingExportDocument({
+      type: "doc",
+      content: [
+        {
+          type: "codeBlock",
+          content: [{ type: "text", text: "first line\nsecond line" }],
+        },
+      ],
+    })
+
+    const buffer = await renderWritingToPdfBuffer({ title: "Code Export", document })
+
+    expect(buffer.subarray(0, 4).toString()).toBe("%PDF")
     expect(buffer.length).toBeGreaterThan(1000)
   })
 })

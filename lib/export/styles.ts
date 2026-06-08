@@ -17,8 +17,11 @@ export const FONT_FAMILY_BODY = "Geist Sans"
 export const FONT_FAMILY_FALLBACK = "Helvetica"
 export const FONT_FAMILY_HEADING = "Times-Roman"
 export const FONT_FAMILY_HEADING_BOLD = "Times-Bold"
-export const FONT_FAMILY_CODE = "Courier"
-export const FONT_FAMILY_CODE_DOCX = "Courier New"
+export const FONT_FAMILY_CODE = "Roboto Mono"
+export const FONT_FAMILY_CODE_FALLBACK = "Courier"
+export const FONT_FAMILY_CODE_DOCX = "Roboto Mono"
+export const FONT_FAMILY_CODE_DOCX_FALLBACK = "Consolas"
+export const FONT_PATH_CODE = "/fonts/roboto-mono/RobotoMono-Regular.ttf"
 
 export const FONT_SIZE_BODY_PT = 11
 export const FONT_SIZE_BODY_PDF = 11
@@ -60,11 +63,15 @@ export const LIST_INDENT_DOCX = 360 // twips
 
 // ── Code blocks ──
 export const CODE_BLOCK_FONT_SIZE_PT = 10
-export const CODE_BLOCK_LINE_HEIGHT = 1.5
-export const CODE_BLOCK_BACKGROUND = "#eee5d6"
-export const CODE_BLOCK_PADDING_PX = 10
+export const CODE_BLOCK_LINE_HEIGHT = 1.58
+export const CODE_BLOCK_LINE_HEIGHT_DOCX = 320
+export const CODE_BLOCK_BACKGROUND = "#fafdff"
+export const CODE_BLOCK_BORDER_COLOR = "#c9dce8"
+export const CODE_BLOCK_TEXT_COLOR = "#173242"
+export const CODE_BLOCK_PADDING_PX = 16
+export const CODE_BLOCK_PADDING_TWIPS = 300
 export const CODE_BLOCK_BORDER_RADIUS_PX = 6
-export const CODE_BLOCK_MARGIN_BOTTOM_PT = 12
+export const CODE_BLOCK_MARGIN_BOTTOM_PT = 14
 
 // ── Inline code ──
 export const CODE_INLINE_FONT_SIZE_PT = 10
@@ -93,6 +100,10 @@ export const TABLE_BORDER_COLOR = "#d8cec0"
 export const TABLE_HEADER_BACKGROUND = "#f8f3ea"
 export const TABLE_CELL_PADDING_PX = 6
 export const TABLE_CELL_PADDING_TWIPS = Math.round(TABLE_CELL_PADDING_PX * 15)
+
+// ── Images ──
+export const IMAGE_MAX_WIDTH_PX = 520
+export const IMAGE_MAX_HEIGHT_PX = 320
 
 // ── Conversion helpers ──
 
