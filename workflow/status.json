@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(export): detect Tauri runtime and use correct font URL for PDF code blocks. getCodeFontSource() now returns http://tauri.localhost/... in Tauri WebView instead of root-relative /fonts/... which fails under asset protocol scope. Added explicit fetch verification in browser so font load failures are logged, not silently swallowed by react-pdf Courier fallback. [ODE-259]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-259",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-259/fix-pdf-code-font-registration-path-in-tauri-webview-root-relative",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/242",
+      "commit": "4a905ef",
+      "date": "2026-06-09",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 679 tests PASS. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(desktop): match created file by path instead of name in createFile. Compute expectedPath with join(workspace.rootPath, normalizedName) before creation, then match against candidate.path in the refreshed snapshot. Prevents false match when a workspace contains a file with the same name in a subdirectory (e.g. docs/notes.md vs root notes.md). [ODE-254]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-254",
