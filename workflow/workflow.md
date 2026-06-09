@@ -327,7 +327,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
     git commit -m "chore(workflow): record {ISSUE-ID} ship_completed [{ISSUE-ID}]"
     git push origin {rama}
     ```
-11. Dejar comentario en Linear con Context Report completo:
+11. Dejar comentario en Linear con Context Report completo. **Este paso es obligatorio — no avanzar al paso 12 hasta confirmar que el comentario fue creado** (MCP retorna el ID del comentario; GraphQL retorna `success: true`):
     - `Context Gaps Detected = yes | no`
     - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
     - `Additional Instructions Requested`: instrucciones extra pedidas al humano durante SHIP.
@@ -335,12 +335,13 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
     - `Recommended Context Fixes`: cambios concretos en issue brief/docs para prevenir repetición.
     - Outputs de validación: typecheck, lint, vitest, delivery gate.
     - Link al PR.
-12. Mover issue a `Done` en Linear.
+    Si la llamada falla o no retorna confirmación: reintentar una vez. Si sigue fallando: reportar el bloqueo al humano y no mover a Done hasta resolverlo.
+12. Mover issue a `Done` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
 13. Emitir `SHIP completado — PR #{número} abierto, listo para merge manual.`
 
 **Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los archivos `workflow/review-history.jsonl` y `workflow/status.json` se actualizan en la **rama de feature** (no en main), a diferencia del flujo BUILD+REVIEW.
 
-**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/status.json` y `review-history.jsonl` actualizados en la rama de feature (paso 10) + issue en `Done` (paso 12).
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/status.json` y `review-history.jsonl` actualizados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `Done` (paso 12).
 
 ---
 
