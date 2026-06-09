@@ -3,6 +3,7 @@ import type { ReactNode } from "react"
 import { Document, Font, Image, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer"
 import type { WritingExportBlock, WritingExportDocument, WritingExportInline } from "./writing-export"
 import * as S from "./styles"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 
 type RenderPdfParams = {
   title: string
@@ -12,18 +13,44 @@ type RenderPdfParams = {
 
 let codeFontRegistered = false
 
-const getCodeFontSource = () =>
-  typeof window === "undefined" ? `${process.cwd()}/public${S.FONT_PATH_CODE}` : S.FONT_PATH_CODE
+const getCodeFontSource = () => {
+  if (typeof window === "undefined") {
+    return `${process.cwd()}/public${S.FONT_PATH_CODE}`
+  }
+  if (isTauriRuntime()) {
+    return S.FONT_PATH_CODE_TAURI
+  }
+  return S.FONT_PATH_CODE
+}
 
 const registerCodeFont = () => {
   if (codeFontRegistered) {
     return
   }
 
+  const src = getCodeFontSource()
+
   Font.register({
     family: S.FONT_FAMILY_CODE,
-    src: getCodeFontSource(),
+    src,
   })
+
+  // Explicitly verify font accessibility in browser so failures are logged,
+  // not silently swallowed by react-pdf's internal fallback to Courier.
+  if (typeof window !== "undefined") {
+    fetch(src)
+      .then((response) => {
+        if (!response.ok) {
+          console.error(
+            `[export:pdf] Code font not accessible at ${src}: ${response.status} ${response.statusText}`,
+          )
+        }
+      })
+      .catch((err) => {
+        console.error(`[export:pdf] Code font fetch failed at ${src}:`, err)
+      })
+  }
+
   codeFontRegistered = true
 }
 
