@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): match created file by path instead of name in createFile. Compute expectedPath with join(workspace.rootPath, normalizedName) before creation, then match against candidate.path in the refreshed snapshot. Prevents false match when a workspace contains a file with the same name in a subdirectory (e.g. docs/notes.md vs root notes.md). [ODE-254]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-254",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-254/fix-createfile-resolving-new-file-by-name-only-should-match-by-path",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/241",
+      "commit": "da2bed0",
+      "date": "2026-06-09",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 679 tests PASS. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(workspace): cancel async watcher setup on unmount to prevent OS-level leak. In WorkspaceIndexPrototype and WorkspaceDetailPrototype, after stopWatching is assigned inside the Promise callback, check cancelled flag and call stopWatching() immediately if the component already unmounted. Applies to both watchWorkspaces (index) and watchWorkspace (detail). [ODE-253]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-253",
