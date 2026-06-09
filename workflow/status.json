@@ -56,6 +56,16 @@
       "notes": "Delivery gate blocked when base=main because branch inherits ODE-245 commits without [ODE-245] traceability tags. Security fix implements requirements 1-3 from brief. Typecheck PASS, lint PASS (pre-existing warnings only), 664 tests PASS, 4 pre-existing failures. Performance Contract: not required."
     },
     {
+      "what": "feat(desktop): workspace exploration vertical slice — local workspace + watched folder foundation. Workspace sidebar entry, grid/list index, add workspace from existing folder or scratch, workspace detail with .md file list, inline preview, open in editor, .odyssey/index.json for stable identity, filesystem watch with basic rename/move/delete reconciliation. [ODE-245]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-245",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-245/exploreworkspace-vertical-slice-local-workspace-watched-folder",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "62074de",
+      "date": "2026-06-08",
+      "notes": "Shipped together with ODE-246 security fix. Explore slice approach: build complete end-to-end feature first, then iterate. Delivery gate passes when base=ODE-245 branch. Typecheck PASS, lint PASS (pre-existing warnings), 664 tests PASS, 4 pre-existing failures."
+    },
+    {
       "what": "fix(auth): desktop sign-out hang — use runtime auth service in SignOutButton (root cause), 3s timeout on keychainStorage.removeItem with graceful swallow, 5s Promise.race timeout in desktopAuthService.signOut, getUser() bootstrap validation to detect rotated-key tokens and force re-login. Web auth behavior unchanged. 659 tests PASS.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-238",
