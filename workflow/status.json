@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): serialize registerWorkspace calls with a promise queue to prevent duplicate entries for the same rootPath. Two concurrent addExistingWorkspace calls now result in exactly one stored workspace record. [ODE-258]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-258",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-258/fix-registerworkspace-race-condition-allowing-duplicate-entries-for",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/235",
+      "commit": "87d5596",
+      "date": "2026-06-09",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 669 tests PASS, 4 pre-existing failures. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(api): migrate /api/writings/* routes to Bearer-token auth (getCurrentUserFromRequest). Replaced local cookie-only getCurrentUserId() with getCurrentUserFromRequest(request) in all 7 writings routes. Desktop sync worker can now authenticate via Bearer token. Web cookie auth continues to work. [ODE-249]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-249",
