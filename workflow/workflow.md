@@ -304,10 +304,19 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 **Validación**
 6. `npm run typecheck` + `npm run lint` + `npx vitest run`. Si Performance Contract es `required`, generar la evidencia indicada en el brief. Guardar outputs.
-7. `npm run ops:delivery:gate`. Debe terminar en verde.
+7. Ejecutar el delivery gate con el base ref correcto:
+   - **Sin `--branch`** (rama propia del issue): `npm run ops:delivery:gate`
+   - **Con `--branch`** (rama compartida con otros issues): `GITHUB_BASE_REF=origin/{branch} npm run ops:delivery:gate`
+   El base ref `origin/{branch}` limita el gate a los commits nuevos de este issue, excluyendo commits anteriores de la rama que pertenecen a otros issues. Debe terminar en verde.
 
 **Entrega**
-8. `git push -u origin {rama}`. Abrir el PR con body completo (link al issue, qué se hizo, cómo testear, outputs del paso 6). Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`. Si falla, editar con `gh pr edit {n} --body "..."` antes de continuar.
+8. `git push -u origin {rama}`. Luego verificar si ya existe un PR abierto para esta rama:
+   ```bash
+   gh pr list --head {rama} --state open --json number,body
+   ```
+   - **Si ya existe PR**: agregar este issue al body existente con `gh pr edit {número} --body "..."`. No crear un PR nuevo.
+   - **Si no existe PR**: crear PR con body completo (links a todos los issues del branch, qué se hizo, cómo testear, outputs del paso 6).
+   Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`.
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`.
 10. Actualizar `workflow/status.json` y `workflow/review-history.jsonl` en la **rama de feature** (no en main):
     - Agregar el issue a `built` de la fase activa en `status.json`.
@@ -367,10 +376,23 @@ gh pr list --state open --json number,title,body,headRefName | \
 ```
 Si no hay PR para un issue: marcar `SIN PR — skipped` y continuar con los demás.
 
+**Modos de revisión:**
+
+**Sin `--branch`** — cada issue tiene su propio PR. El diff de cada PR cubre exclusivamente ese issue. Revisar cada PR de forma independiente.
+
+**Con `--branch`** — todos los issues comparten un único PR y un único diff acumulado. En este caso:
+- El diff completo cubre múltiples issues; no se puede aislar por archivo.
+- Aislar los commits de cada issue por su etiqueta:
+  ```bash
+  git log origin/{branch}..HEAD --oneline --grep="\[{ID}\]"
+  ```
+- Revisar cada issue contra los commits etiquetados con su ID. Si un commit no tiene etiqueta de ningún issue del grupo, marcarlo como `commit sin trazabilidad` en el Context Report.
+- Los gates de calidad (`typecheck`, `lint`, `vitest`, `delivery gate` con `GITHUB_BASE_REF=origin/{branch}`) se corren una sola vez para el PR completo y aplican a todos los issues.
+
 **Secuencia:**
 1. Obtener briefs y diffs en paralelo (un agente por issue cuando sea posible).
-2. Para cada issue, contrastar el diff con su brief:
-   - Correctness: ¿el diff implementa lo que el brief pide?
+2. Para cada issue, contrastar sus commits (o el diff completo si no hay `--branch`) con su brief:
+   - Correctness: ¿los commits del issue implementan lo que el brief pide?
    - Seguridad: aplica la misma política que wf-review — cualquier finding es bloqueante.
    - Performance Contract: si es `required`, verificar que hay evidencia adjunta en el PR.
    - Architecture Contract: verificar que el diff respeta `Layer`, `Runtime scope`, `Owner` e `Invariants`.
