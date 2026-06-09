@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(security): restrict Tauri filesystem capability from $HOME/** to $DOCUMENT/**. Added path traversal validation in workspace_create (rejects .., /, \\ in parent_path and name; canonicalizes parent before join). Added canonicalize() in workspace_sync before traversal to prevent symlink escape. [ODE-246]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-246",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-246/restrict-tauri-filesystem-capability-scope-from-dollarhome-to",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "d452f0b",
+      "date": "2026-06-08",
+      "notes": "Delivery gate blocked when base=main because branch inherits ODE-245 commits without [ODE-245] traceability tags. Security fix implements requirements 1-3 from brief. Typecheck PASS, lint PASS (pre-existing warnings only), 664 tests PASS, 4 pre-existing failures. Performance Contract: not required."
+    },
+    {
       "what": "fix(auth): desktop sign-out hang — use runtime auth service in SignOutButton (root cause), 3s timeout on keychainStorage.removeItem with graceful swallow, 5s Promise.race timeout in desktopAuthService.signOut, getUser() bootstrap validation to detect rotated-key tokens and force re-login. Web auth behavior unchanged. 659 tests PASS.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-238",
