@@ -77,9 +77,14 @@ const imageFallbackParagraph = (src: string, alt?: string | null) =>
     spacing: { after: S.PARAGRAPH_MARGIN_BOTTOM_DOCX },
   })
 
+const IMAGE_FETCH_TIMEOUT_MS = 10_000
+
 const imageBlockToDocx = async (block: Extract<WritingExportBlock, { type: "image" }>) => {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS)
+
   try {
-    const response = await fetch(block.image.src)
+    const response = await fetch(block.image.src, { signal: controller.signal })
     if (!response.ok) {
       return [imageFallbackParagraph(block.image.src, block.image.alt)]
     }
@@ -102,6 +107,8 @@ const imageBlockToDocx = async (block: Extract<WritingExportBlock, { type: "imag
     ]
   } catch {
     return [imageFallbackParagraph(block.image.src, block.image.alt)]
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
