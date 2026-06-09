@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(cors): add CORS headers to all error responses in corrections/hydrate and corrections/persist. All error paths (401, 400, 403, 404, 500) and the delete-only 200 path now wrap responses with withCorsHeaders(..., request) so the desktop client receives structured JSON instead of opaque CORS blocks. [ODE-250]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-250",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-250/add-cors-headers-to-all-error-responses-in-correctionshydrate-and",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/233",
+      "commit": "da1e6c6",
+      "date": "2026-06-08",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 667 tests PASS, 4 pre-existing failures. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(security): sanitize workspace_create name parameter to prevent path traversal. Validates name rejects /, \\, and .. sequences. Validates parent_path resolves to existing directory via canonicalize(). workspace_sync canonicalizes root_path before all operations. Defense-in-depth complement to ODE-246. [ODE-252]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-252",

@@ -84,31 +84,31 @@ export async function POST(request: Request) {
   const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
-    return jsonError(401, "UNAUTHORIZED", "No active session.");
+    return withCorsHeaders(jsonError(401, "UNAUTHORIZED", "No active session."), request);
   }
 
   const rawBody = await request.json();
   const parsedBody = requestSchema.safeParse(rawBody);
 
   if (!parsedBody.success) {
-    return jsonError(400, "INVALID_INPUT", parsedBody.error.message);
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", parsedBody.error.message), request);
   }
 
   const effectiveWritingId = parsedBody.data.block?.writing_id ?? parsedBody.data.writingId;
 
   if (!effectiveWritingId) {
-    return jsonError(400, "INVALID_INPUT", "writingId is required.");
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", "writingId is required."), request);
   }
 
   if (parsedBody.data.block && parsedBody.data.block.writing_id !== effectiveWritingId) {
-    return jsonError(400, "INVALID_INPUT", "block.writing_id must match writingId.");
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", "block.writing_id must match writingId."), request);
   }
 
   const supabase = createAdminClient();
   const ownership = await ensureOwnedWriting(supabase, userId, effectiveWritingId);
 
   if (!ownership.ok) {
-    return ownership.response;
+    return withCorsHeaders(ownership.response, request);
   }
 
   if (parsedBody.data.deletedBlockIds.length > 0) {
@@ -119,12 +119,12 @@ export async function POST(request: Request) {
       .in("id", parsedBody.data.deletedBlockIds);
 
     if (error) {
-      return jsonError(500, "DB_ERROR", error.message);
+      return withCorsHeaders(jsonError(500, "DB_ERROR", error.message), request);
     }
   }
 
   if (!parsedBody.data.block) {
-    return NextResponse.json(
+    return withCorsHeaders(NextResponse.json(
       {
         data: {
           persistedId: null,
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
         error: null,
       },
       { status: 200 },
-    );
+    ), request);
   }
 
   const { data, error } = await supabase
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+    return withCorsHeaders(jsonError(500, "DB_ERROR", error.message), request);
   }
 
   return withCorsHeaders(NextResponse.json(
