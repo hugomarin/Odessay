@@ -134,6 +134,8 @@ async function reconcileWorkspaceSnapshot(
 export class DesktopWorkspaceService {
   constructor(private readonly settingsService: DesktopSettingsService) {}
 
+  private registerQueue: Promise<unknown> = Promise.resolve()
+
   private async readRecords(): Promise<WorkspaceRecord[]> {
     const result = await this.settingsService.getDesktopSettings()
     const workspaces = result.data?.workspaces ?? []
@@ -232,36 +234,41 @@ export class DesktopWorkspaceService {
     source: WorkspaceRecord["source"],
     explicitName?: string,
   ): Promise<WorkspaceRecord> {
-    const records = await this.readRecords()
-    const existing = records.find((record) => record.rootPath === rootPath)
-    const snapshot = await tauriWorkspaceSync(rootPath)
+    const task = async (): Promise<WorkspaceRecord> => {
+      const records = await this.readRecords()
+      const existing = records.find((record) => record.rootPath === rootPath)
+      const snapshot = await tauriWorkspaceSync(rootPath)
 
-    if (existing) {
-      return existing
+      if (existing) {
+        return existing
+      }
+
+      const baseName = explicitName?.trim() || snapshot.name
+      const baseSlug = slugifyWorkspaceName(baseName)
+      let slug = baseSlug
+      let suffix = 2
+
+      while (records.some((record) => record.slug === slug)) {
+        slug = `${baseSlug}-${suffix}`
+        suffix += 1
+      }
+
+      const nowIso = new Date().toISOString()
+      const nextRecord: WorkspaceRecord = {
+        slug,
+        name: baseName,
+        rootPath,
+        source,
+        addedAt: nowIso,
+        lastOpenedAt: null,
+      }
+
+      await this.writeRecords([...records, nextRecord])
+      return nextRecord
     }
 
-    const baseName = explicitName?.trim() || snapshot.name
-    const baseSlug = slugifyWorkspaceName(baseName)
-    let slug = baseSlug
-    let suffix = 2
-
-    while (records.some((record) => record.slug === slug)) {
-      slug = `${baseSlug}-${suffix}`
-      suffix += 1
-    }
-
-    const nowIso = new Date().toISOString()
-    const nextRecord: WorkspaceRecord = {
-      slug,
-      name: baseName,
-      rootPath,
-      source,
-      addedAt: nowIso,
-      lastOpenedAt: null,
-    }
-
-    await this.writeRecords([...records, nextRecord])
-    return nextRecord
+    this.registerQueue = this.registerQueue.catch(() => undefined).then(task)
+    return this.registerQueue as Promise<WorkspaceRecord>
   }
 
   async openFileInEditor(filePath: string): Promise<string> {
