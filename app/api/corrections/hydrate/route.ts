@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   const { userId } = await getCurrentUserFromRequest(request);
 
   if (!userId) {
-    return jsonError(401, "UNAUTHORIZED", "No active session.");
+    return withCorsHeaders(jsonError(401, "UNAUTHORIZED", "No active session."), request);
   }
 
   const parsedQuery = querySchema.safeParse({
@@ -63,14 +63,14 @@ export async function GET(request: Request) {
   });
 
   if (!parsedQuery.success) {
-    return jsonError(400, "INVALID_INPUT", parsedQuery.error.message);
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", parsedQuery.error.message), request);
   }
 
   const supabase = createAdminClient();
   const ownership = await ensureOwnedWriting(supabase, userId, parsedQuery.data.writingId);
 
   if (!ownership.ok) {
-    return ownership.response;
+    return withCorsHeaders(ownership.response, request);
   }
 
   const { data, error } = await supabase
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
     .order("created_at", { ascending: true });
 
   if (error) {
-    return jsonError(500, "DB_ERROR", error.message);
+    return withCorsHeaders(jsonError(500, "DB_ERROR", error.message), request);
   }
 
   return withCorsHeaders(NextResponse.json({ data: data ?? [], error: null }, { status: 200 }), request);
