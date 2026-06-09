@@ -37,11 +37,22 @@ vi.mock("@/lib/supabase/client", () => ({
   }),
 }))
 
+const keychainStorageMock = vi.hoisted(() => ({
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+}))
+
+vi.mock("@/lib/auth/secure-storage", () => ({
+  keychainStorage: keychainStorageMock,
+}))
+
 vi.mock("@/lib/supabase/desktop-client", () => ({
   createDesktopClient: () => ({
     auth: supabaseAuthMock,
     from: () => supabaseFromMock,
     rpc: supabaseRpcMock,
+    storageKey: "sb-test-auth-token",
   }),
 }))
 
@@ -260,6 +271,26 @@ describe("desktopAuthService", () => {
 
     expect(supabaseAuthMock.signOut).toHaveBeenCalledOnce()
     expect(result).toEqual({ data: null, error: null })
+  })
+
+  it("signOut returns SIGNOUT_INCOMPLETE when supabase.auth.signOut times out", async () => {
+    vi.useFakeTimers()
+    supabaseAuthMock.signOut.mockImplementation(() => new Promise(() => {}))
+    keychainStorageMock.removeItem.mockResolvedValue(undefined)
+
+    const signOutPromise = desktopAuthService.signOut()
+    vi.advanceTimersByTime(5000)
+
+    const result = await signOutPromise
+
+    expect(supabaseAuthMock.signOut).toHaveBeenCalledOnce()
+    expect(keychainStorageMock.removeItem).toHaveBeenCalledWith("sb-test-auth-token")
+    expect(keychainStorageMock.removeItem).toHaveBeenCalledWith("sb-test-auth-token-code-verifier")
+    expect(result.error?.code).toBe("SIGNOUT_INCOMPLETE")
+    expect(result.error?.message).toContain("timed out")
+    expect(result.data).toBeNull()
+
+    vi.useRealTimers()
   })
 
   it("checkUsernameAvailability queries public_profiles without calling /api/*", async () => {

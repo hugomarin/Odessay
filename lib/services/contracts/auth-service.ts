@@ -120,7 +120,7 @@ export const AUTH_SERVICE_CONTRACT = {
       summary: "Close the active session through the current runtime adapter.",
       input: ["none"],
       output: ["null"],
-      errorCodes: ["UNAVAILABLE", "UNKNOWN"],
+      errorCodes: ["SIGNOUT_INCOMPLETE", "UNAVAILABLE", "UNKNOWN"],
     },
     {
       name: "checkUsernameAvailability",
