@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createWebSharingService } from "@/lib/services/web-sharing-service"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
 type RouteContext = {
   params: Promise<{ id: string }>
@@ -30,15 +30,6 @@ const parseWritingId = async (context: RouteContext) => {
   return parsed.success ? parsed.data.id : null
 }
 
-const getCurrentUserId = async () => {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  return user?.id ?? null
-}
-
 export async function GET(request: Request, context: RouteContext) {
   const writingId = await parseWritingId(context)
 
@@ -46,7 +37,7 @@ export async function GET(request: Request, context: RouteContext) {
     return jsonError(400, "INVALID_INPUT", "Invalid writing id.")
   }
 
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(request)
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.")
@@ -71,7 +62,7 @@ export async function POST(request: Request, context: RouteContext) {
     return jsonError(400, "INVALID_INPUT", "Invalid writing id.")
   }
 
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(request)
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.")
@@ -96,7 +87,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     return jsonError(400, "INVALID_INPUT", "Invalid writing id.")
   }
 
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(request)
 
   if (!userId) {
     return jsonError(401, "UNAUTHORIZED", "No active session.")

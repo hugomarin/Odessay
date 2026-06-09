@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { GET } from "@/app/api/writings/route"
 
-const supabaseMock = vi.hoisted(() => ({
-  getUser: vi.fn(),
-}))
+const getCurrentUserFromRequestMock = vi.hoisted(() => vi.fn())
 
 const supabaseAdminMock = vi.hoisted(() => ({
   from: vi.fn(() => ({
@@ -15,10 +13,8 @@ const supabaseAdminMock = vi.hoisted(() => ({
   })),
 }))
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({
-    auth: supabaseMock,
-  })),
+vi.mock("@/lib/supabase/request-auth", () => ({
+  getCurrentUserFromRequest: getCurrentUserFromRequestMock,
 }))
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -27,16 +23,14 @@ vi.mock("@/lib/supabase/admin", () => ({
 
 describe("GET /api/writings", () => {
   beforeEach(() => {
-    supabaseMock.getUser.mockReset()
+    getCurrentUserFromRequestMock.mockReset()
     supabaseAdminMock.from.mockReset()
   })
 
   it("returns 401 when there is no active session", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: null },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: null })
 
-    const response = await GET()
+    const response = await GET(new Request("http://localhost/api/writings"))
     const body = await response.json()
 
     expect(response.status).toBe(401)
@@ -47,11 +41,7 @@ describe("GET /api/writings", () => {
   })
 
   it("selects only metadata columns without body_json or body_text", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: {
-        user: { id: "user-1" },
-      },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: "user-1" })
 
     const orderMock = vi.fn(() => ({
       data: [
@@ -79,7 +69,7 @@ describe("GET /api/writings", () => {
     const fromMock = vi.fn(() => ({ select: selectMock }))
     supabaseAdminMock.from.mockImplementation(fromMock as unknown as typeof supabaseAdminMock.from)
 
-    const response = await GET()
+    const response = await GET(new Request("http://localhost/api/writings"))
     const body = await response.json()
 
     expect(response.status).toBe(200)
@@ -99,11 +89,7 @@ describe("GET /api/writings", () => {
   })
 
   it("does not include body_json or body_text in any row of the response", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: {
-        user: { id: "user-1" },
-      },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: "user-1" })
 
     const orderMock = vi.fn(() => ({
       data: [
@@ -146,7 +132,7 @@ describe("GET /api/writings", () => {
     const fromMock = vi.fn(() => ({ select: selectMock }))
     supabaseAdminMock.from.mockImplementation(fromMock as unknown as typeof supabaseAdminMock.from)
 
-    const response = await GET()
+    const response = await GET(new Request("http://localhost/api/writings"))
     const body = await response.json()
 
     expect(response.status).toBe(200)

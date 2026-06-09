@@ -7,7 +7,7 @@
 
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json(
@@ -21,17 +21,8 @@ const jsonError = (status: number, code: string, message: string) =>
     { status },
   )
 
-async function getCurrentUserId() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  return { userId: user?.id ?? null }
-}
-
-export async function GET() {
-  const { userId } = await getCurrentUserId()
+export async function GET(request: Request) {
+  const { userId } = await getCurrentUserFromRequest(request)
   const supabase = createAdminClient()
 
   if (!userId) {

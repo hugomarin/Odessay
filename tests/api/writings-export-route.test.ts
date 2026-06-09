@@ -1,18 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { GET } from "@/app/api/writings/[id]/export/route"
 
-const supabaseMock = vi.hoisted(() => ({
-  getUser: vi.fn(),
-}))
+const getCurrentUserFromRequestMock = vi.hoisted(() => vi.fn())
 
 const supabaseAdminMock = vi.hoisted(() => ({
   from: vi.fn() as any,
 }))
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: vi.fn(async () => ({
-    auth: supabaseMock,
-  })),
+vi.mock("@/lib/supabase/request-auth", () => ({
+  getCurrentUserFromRequest: getCurrentUserFromRequestMock,
 }))
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -29,7 +25,7 @@ vi.mock("@/lib/export/to-docx", () => ({
 
 describe("GET /api/writings/[id]/export", () => {
   beforeEach(() => {
-    supabaseMock.getUser.mockReset()
+    getCurrentUserFromRequestMock.mockReset()
     supabaseAdminMock.from.mockReset()
   })
 
@@ -51,7 +47,7 @@ describe("GET /api/writings/[id]/export", () => {
   })
 
   it("returns 401 when there is no active session", async () => {
-    supabaseMock.getUser.mockResolvedValue({ data: { user: null } })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: null })
 
     const response = await GET(mockRequest("pdf"), mockContext())
     const body = await response.json()
@@ -61,7 +57,7 @@ describe("GET /api/writings/[id]/export", () => {
   })
 
   it("returns Content-Disposition with RFC 5987 encoding for Unicode filenames (PDF)", async () => {
-    supabaseMock.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: "user-1" })
 
     supabaseAdminMock.from.mockReturnValue({
       select: vi.fn(() => ({
@@ -83,7 +79,7 @@ describe("GET /api/writings/[id]/export", () => {
   })
 
   it("returns Content-Disposition with RFC 5987 encoding for Unicode filenames (DOCX)", async () => {
-    supabaseMock.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: "user-1" })
 
     supabaseAdminMock.from.mockReturnValue({
       select: vi.fn(() => ({
@@ -105,7 +101,7 @@ describe("GET /api/writings/[id]/export", () => {
   })
 
   it("returns a safe fallback filename when title is all non-ASCII", async () => {
-    supabaseMock.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: "user-1" })
 
     supabaseAdminMock.from.mockReturnValue({
       select: vi.fn(() => ({

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { syncMarginsFromBodyJson } from "@/lib/margins/margins";
 import { normalizeWritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status";
 
@@ -37,17 +37,8 @@ const jsonError = (status: number, code: string, message: string) =>
     { status },
   );
 
-async function getCurrentUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return { userId: user?.id ?? null };
-}
-
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const { userId } = await getCurrentUserId();
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { userId } = await getCurrentUserFromRequest(request);
   const supabase = createAdminClient();
 
   if (!userId) {
@@ -76,7 +67,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
   const supabase = createAdminClient();
 
   if (!userId) {
@@ -210,7 +201,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 }
 
 export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const { userId } = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
   const supabase = createAdminClient();
 
   if (!userId) {

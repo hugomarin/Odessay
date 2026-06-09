@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 
 const payloadSchema = z.object({
   collection_ids: z.array(z.string().uuid()),
@@ -18,17 +19,8 @@ const logRouteError = (route: string, error: unknown) => {
   console.error(`[${route}]`, error);
 };
 
-async function getCurrentUserId() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  return user?.id ?? null;
-}
-
-export async function GET(_request: Request, context: { params: Promise<{ id: string }> }) {
-  const userId = await getCurrentUserId();
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { userId } = await getCurrentUserFromRequest(request);
   const supabase = await createClient();
 
   if (!userId) {
@@ -66,7 +58,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 }
 
 export async function PUT(request: Request, context: { params: Promise<{ id: string }> }) {
-  const userId = await getCurrentUserId();
+  const { userId } = await getCurrentUserFromRequest(request);
   const supabase = await createClient();
 
   if (!userId) {
