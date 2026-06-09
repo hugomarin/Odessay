@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-04",
+  "last_updated": "2026-06-08",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -1889,6 +1889,15 @@
       "date": "2026-06-04",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Score: 10.0/10. Performance Contract: not required (workflow tooling). GateResult PASS. New validate-workflow-json.mjs script, pre-commit hook, workflow.md updated with validation steps, skill files synced, npm script added. CI traceability gate initially failed on process-sync check; fixed during review by updating skill-code-review and skill-product-manager SKILL.md."
+    },
+    {
+      "issue": "ODE-247",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-247/enforce-currentpassword-check-unconditionally-in-updatepassword",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "bd45c16",
+      "date": "2026-06-08",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Security fix: updatePassword now unconditionally requires currentPassword. Omitting or providing empty currentPassword returns INVALID_INPUT without calling supabase.auth.updateUser. 2 new tests added. Typecheck PASS. Lint PASS (pre-existing warnings only). 22 tests PASS in desktop-auth-service.test.ts."
     }
   ]
 }
