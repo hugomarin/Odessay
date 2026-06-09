@@ -1908,6 +1908,15 @@
       "date": "2026-06-08",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Security fix: updatePassword now unconditionally requires currentPassword. Omitting or providing empty currentPassword returns INVALID_INPUT without calling supabase.auth.updateUser. 2 new tests added. Typecheck PASS. Lint PASS (pre-existing warnings only). 22 tests PASS in desktop-auth-service.test.ts."
+    },
+    {
+      "issue": "ODE-251",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-251",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/232",
+      "commit": "3ede1e4",
+      "date": "2026-06-08",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Fix: escapeMarkdownText no longer applied to image src and link href in markdown export. URLs are now used verbatim. Test updated. Typecheck PASS. Lint PASS (pre-existing warnings). 14/14 export tests PASS. 4 unrelated pre-existing failures in desktop-adapter-boundary and desktop-asset-service."
     }
   ]
 }
