@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): restore image upload in DesktopAssetService and correct boundary test. Updated allowedImports in desktop-adapter-boundary.test.ts to permit @/lib/supabase/desktop-client (JWT direct, no cookies/SSR) and all other legitimate desktop adapter dependencies. Fixed false positive on DOCX MIME type string containing 'document.'. Replaced UNAVAILABLE test in desktop-asset-service.test.ts with full Supabase mock coverage (auth, storage upload, DB insert, signed URL, error handling, cleanup). [ODE-260]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-260",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-260/fixdesktop-restore-image-upload-in-desktopassetservice-y-corregir",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/239",
+      "commit": "65f0ab0",
+      "date": "2026-06-09",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 42 desktop tests PASS. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "Fix Supabase middleware dropping session refresh for /api routes. Removed early return on /api paths in lib/supabase/middleware.ts so createServerClient runs and can refresh expired access tokens via the refresh token. API routes using Bearer token auth (getCurrentUserFromRequest) are unaffected — they validate tokens independently. Added 5 regression tests in tests/supabase-middleware.test.ts covering createServerClient invocation, no-redirect for unauthenticated /api requests, cookie refresh on /api routes, and preserved private-route redirect behavior. [ODE-256]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-256",
