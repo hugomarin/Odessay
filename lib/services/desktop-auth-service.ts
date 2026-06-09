@@ -1,6 +1,7 @@
 "use client"
 
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import { keychainStorage } from "@/lib/auth/secure-storage"
 import { getAccountEmailChangeRedirectUrl, verifyCurrentPassword } from "@/lib/auth/account-settings"
 import { resolveUsernameAvailability } from "@/lib/auth/username-validation"
 import {
@@ -219,8 +220,22 @@ export const desktopAuthService: AuthService = {
 
       try {
         await Promise.race([signOutPromise, timeoutPromise])
-      } catch {
-        console.warn("[desktop-auth-service] signOut timed out, continuing")
+      } catch (raceError) {
+        if (raceError instanceof Error && raceError.message === "signOut timeout") {
+          // Clear local session regardless of server result so the user is
+          // not left with a valid local token. The server revocation may
+          // still be in-flight — report that to the caller.
+          const storageKey = (supabase as unknown as { storageKey: string }).storageKey
+          await keychainStorage.removeItem(storageKey)
+          await keychainStorage.removeItem(`${storageKey}-code-verifier`)
+          return err(
+            toServiceError(
+              "SIGNOUT_INCOMPLETE",
+              "Sign out timed out. Your local session was cleared, but the remote session may still be active.",
+            ),
+          )
+        }
+        throw raceError
       }
 
       return ok(null)
