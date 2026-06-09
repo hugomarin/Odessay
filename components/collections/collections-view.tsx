@@ -16,6 +16,7 @@ import {
   getWritingCollectionIds,
   UNCATEGORIZED_COLLECTION_ID,
 } from "@/lib/collections/collections"
+import { buildCollectionHref } from "@/lib/collections/collection-route"
 import {
   createLocalCollection,
   deleteLocalCollection,
@@ -286,7 +287,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         <div className="flex-1 overflow-y-auto px-6 py-6 md:px-9">
           <div className="mx-auto grid w-full max-w-[1040px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
             <Link
-              href={`/collections/${UNCATEGORIZED_COLLECTION_ID}`}
+              href={buildCollectionHref(UNCATEGORIZED_COLLECTION_ID)}
               className="flex min-h-[96px] flex-col justify-between rounded-[10px] border-[0.5px] border-dashed border-border bg-transparent px-[14px] py-3 transition-colors hover:bg-muted/40"
             >
               <div className="flex items-start justify-between gap-3">
@@ -300,7 +301,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
             {collectionSummaries.map((summary) => (
               <Link
                 key={summary.id}
-                href={`/collections/${summary.id}`}
+                href={buildCollectionHref(summary.id)}
                 className="flex min-h-[96px] flex-col justify-between rounded-[10px] border-[0.5px] border-border bg-sb px-[14px] py-3 transition-colors hover:bg-muted/30"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -334,7 +335,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
             try {
               const collection = await createCollection(name)
               setCreateOpen(false)
-              router.push(`/collections/${collection.id}`)
+              router.push(buildCollectionHref(collection.id))
             } finally {
               setIsCreating(false)
             }

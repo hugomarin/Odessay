@@ -16,6 +16,12 @@ export type WritingExportInline = {
   footnoteRef?: number
 }
 
+export type WritingExportImage = {
+  src: string
+  alt?: string | null
+  title?: string | null
+}
+
 export type WritingExportBlock =
   | {
       type: "paragraph"
@@ -49,6 +55,10 @@ export type WritingExportBlock =
   | {
       type: "table"
       rows: string[][]
+    }
+  | {
+      type: "image"
+      image: WritingExportImage
     }
 
 export type WritingExportDocument = {
@@ -91,6 +101,23 @@ const readNumber = (value: unknown): number | null => {
 }
 
 const readString = (value: unknown): string | null => (typeof value === "string" ? value : null)
+
+const readImage = (node: ExportNode): WritingExportImage | null => {
+  if (node.type !== "image") {
+    return null
+  }
+
+  const src = readString(node.attrs?.src)?.trim()
+  if (!src) {
+    return null
+  }
+
+  return {
+    src,
+    alt: readString(node.attrs?.alt),
+    title: readString(node.attrs?.title),
+  }
+}
 
 const normalizeInlineRuns = (runs: WritingExportInline[]) => {
   const normalized: WritingExportInline[] = []
@@ -230,14 +257,52 @@ const collectTableRows = (node: ExportNode, footnotes: WritingExportFootnote[]) 
   return rows
 }
 
+const collectParagraphBlocks = (node: ExportNode, footnotes: WritingExportFootnote[]): WritingExportBlock[] => {
+  const blocks: WritingExportBlock[] = []
+  let inlineBuffer: ExportNode[] = []
+
+  const flushInlines = () => {
+    const inlines = collectInlineRuns(inlineBuffer, footnotes)
+    inlineBuffer = []
+    if (inlines.length) {
+      blocks.push({ type: "paragraph", inlines })
+    }
+  }
+
+  for (const child of node.content ?? []) {
+    const image = readImage(child)
+    if (image) {
+      flushInlines()
+      blocks.push({ type: "image", image })
+      continue
+    }
+
+    inlineBuffer.push(child)
+  }
+
+  flushInlines()
+
+  if (!blocks.length) {
+    blocks.push({ type: "paragraph", inlines: [] })
+  }
+
+  return blocks
+}
+
 const collectBlocks = (nodes: ExportNode[] | undefined, footnotes: WritingExportFootnote[]): WritingExportBlock[] => {
   const blocks: WritingExportBlock[] = []
 
   for (const node of nodes ?? []) {
     switch (node.type) {
       case "paragraph": {
-        const inlines = collectInlineRuns(node.content, footnotes)
-        blocks.push({ type: "paragraph", inlines })
+        blocks.push(...collectParagraphBlocks(node, footnotes))
+        break
+      }
+      case "image": {
+        const image = readImage(node)
+        if (image) {
+          blocks.push({ type: "image", image })
+        }
         break
       }
       case "heading": {
@@ -379,6 +444,8 @@ const renderBlockToMarkdown = (block: WritingExportBlock) => {
 
       return [formatRow(rows[0]), separator, ...rows.slice(1).map(formatRow)].join("\n")
     }
+    case "image":
+      return `![${escapeMarkdownText(block.image.alt ?? "")}](${escapeMarkdownText(block.image.src)})`
     default:
       return ""
   }

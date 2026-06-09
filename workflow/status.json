@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-04",
+  "last_updated": "2026-06-08",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -45,6 +45,36 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "fix(security): sanitize workspace_create name parameter to prevent path traversal. Validates name rejects /, \\, and .. sequences. Validates parent_path resolves to existing directory via canonicalize(). workspace_sync canonicalizes root_path before all operations. Defense-in-depth complement to ODE-246. [ODE-252]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-252",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-252/sanitize-workspace-create-name-parameter-to-prevent-path-traversal",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "d452f0b",
+      "date": "2026-06-08",
+      "notes": "Shipped via /wf-ship ODE-252 --branch codex/ode-246-restrict-filesystem-scope. Code changes already implemented in ODE-246 commit d452f0b. Typecheck PASS. Lint PASS (pre-existing warnings only). 666 tests PASS, 4 pre-existing failures. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
+      "what": "fix(security): restrict Tauri filesystem capability from $HOME/** to $DOCUMENT/**. Added path traversal validation in workspace_create (rejects .., /, \\ in parent_path and name; canonicalizes parent before join). Added canonicalize() in workspace_sync before traversal to prevent symlink escape. [ODE-246]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-246",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-246/restrict-tauri-filesystem-capability-scope-from-dollarhome-to",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "d452f0b",
+      "date": "2026-06-08",
+      "notes": "Delivery gate blocked when base=main because branch inherits ODE-245 commits without [ODE-245] traceability tags. Security fix implements requirements 1-3 from brief. Typecheck PASS, lint PASS (pre-existing warnings only), 664 tests PASS, 4 pre-existing failures. Performance Contract: not required."
+    },
+    {
+      "what": "feat(desktop): workspace exploration vertical slice — local workspace + watched folder foundation. Workspace sidebar entry, grid/list index, add workspace from existing folder or scratch, workspace detail with .md file list, inline preview, open in editor, .odyssey/index.json for stable identity, filesystem watch with basic rename/move/delete reconciliation. [ODE-245]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-245",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-245/exploreworkspace-vertical-slice-local-workspace-watched-folder",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "62074de",
+      "date": "2026-06-08",
+      "notes": "Shipped together with ODE-246 security fix. Explore slice approach: build complete end-to-end feature first, then iterate. Delivery gate passes when base=ODE-245 branch. Typecheck PASS, lint PASS (pre-existing warnings), 664 tests PASS, 4 pre-existing failures."
+    },
     {
       "what": "fix(auth): desktop sign-out hang — use runtime auth service in SignOutButton (root cause), 3s timeout on keychainStorage.removeItem with graceful swallow, 5s Promise.race timeout in desktopAuthService.signOut, getUser() bootstrap validation to detect rotated-key tokens and force re-login. Web auth behavior unchanged. 659 tests PASS.",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
@@ -1869,6 +1899,15 @@
       "date": "2026-06-04",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Score: 10.0/10. Performance Contract: not required (workflow tooling). GateResult PASS. New validate-workflow-json.mjs script, pre-commit hook, workflow.md updated with validation steps, skill files synced, npm script added. CI traceability gate initially failed on process-sync check; fixed during review by updating skill-code-review and skill-product-manager SKILL.md."
+    },
+    {
+      "issue": "ODE-247",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-247/enforce-currentpassword-check-unconditionally-in-updatepassword",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "bd45c16",
+      "date": "2026-06-08",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Security fix: updatePassword now unconditionally requires currentPassword. Omitting or providing empty currentPassword returns INVALID_INPUT without calling supabase.auth.updateUser. 2 new tests added. Typecheck PASS. Lint PASS (pre-existing warnings only). 22 tests PASS in desktop-auth-service.test.ts."
     }
   ]
 }

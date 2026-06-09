@@ -487,12 +487,14 @@ export const desktopAuthService: AuthService = {
         return err(toServiceError("UNAUTHORIZED", "No active session."))
       }
 
-      if (input.currentPassword) {
-        const isCurrentPasswordValid = await verifyCurrentPassword(user.email, input.currentPassword)
+      if (!input.currentPassword || input.currentPassword.trim() === "") {
+        return err(toServiceError("INVALID_INPUT", "Current password is required."))
+      }
 
-        if (!isCurrentPasswordValid) {
-          return err(toServiceError("FORBIDDEN", "Your current password is incorrect."))
-        }
+      const isCurrentPasswordValid = await verifyCurrentPassword(user.email, input.currentPassword)
+
+      if (!isCurrentPasswordValid) {
+        return err(toServiceError("FORBIDDEN", "Your current password is incorrect."))
       }
 
       const { data, error } = await supabase.auth.updateUser({

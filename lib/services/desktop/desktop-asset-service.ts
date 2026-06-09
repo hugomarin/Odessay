@@ -5,49 +5,79 @@ import type {
 } from "@/lib/services/contracts/asset-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { tauriResolveAssetPath } from "@/lib/services/desktop/tauri-commands"
+import { createDesktopClient } from "@/lib/supabase/desktop-client"
+
+const TEN_YEARS_SECONDS = 315_360_000
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
 }
 
-function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
-  return { data: null, error: { code, message, retryable: false } }
+function err<T>(code: ServiceError["code"], message: string, retryable = false): ServiceResponse<T> {
+  return { data: null, error: { code, message, retryable } }
 }
 
-/**
- * Desktop adapter for AssetService.
- *
- * Architecture Contract §ODE-210:
- *  - Resolves relative asset paths against the document's directory.
- *  - Does not modify the .md; only resolves and verifies paths.
- *  - No dependency on Next.js, Supabase, cookies, or window.
- */
 export class DesktopAssetService implements AssetService {
-  /**
-   * Resolve a relative asset path against the document's directory.
-   * Returns the absolute filesystem path if the file exists.
-   */
   async resolveAssetPath(docPath: string, relativePath: string): Promise<ServiceResponse<string>> {
     try {
       const absolute = await tauriResolveAssetPath(docPath, relativePath)
       return ok(absolute)
     } catch (e) {
-      return err(
-        "NOT_FOUND",
-        e instanceof Error ? e.message : `Asset not found: ${relativePath}`,
-      )
+      return err("NOT_FOUND", e instanceof Error ? e.message : `Asset not found: ${relativePath}`)
     }
   }
 
-  /**
-   * Upload an image asset for a writing.
-   * On desktop, this copies the file to an `assets/` sibling directory
-   * of the document and returns a local file:// URL.
-   */
   async uploadImageAsset(input: UploadImageAssetInput): Promise<ServiceResponse<WritingAsset>> {
-    // TODO: implement local asset storage when there is a UI consumer.
-    // For now, return an error indicating local asset upload is not yet implemented.
-    void input
-    return err("UNAVAILABLE", "Local asset upload is not yet implemented on desktop")
+    const supabase = createDesktopClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return err("UNAUTHORIZED", "Not authenticated")
+    }
+
+    const ext = input.fileName.split(".").pop()?.toLowerCase() ?? "bin"
+    const assetId = crypto.randomUUID()
+    const storagePath = `${user.id}/${input.writingId}/${assetId}.${ext}`
+
+    const { error: uploadError } = await supabase.storage
+      .from("writing-assets")
+      .upload(storagePath, input.bytes, { contentType: input.contentType, upsert: false })
+
+    if (uploadError) {
+      return err("STORAGE_ERROR", uploadError.message, true)
+    }
+
+    const { error: dbError } = await supabase.from("writing_assets").insert({
+      id: assetId,
+      writing_id: input.writingId,
+      author_id: user.id,
+      storage_path: storagePath,
+      mime_type: input.contentType,
+      size_bytes: input.sizeBytes,
+    })
+
+    if (dbError) {
+      void supabase.storage.from("writing-assets").remove([storagePath])
+      return err("DB_ERROR", dbError.message)
+    }
+
+    const { data: signed, error: signError } = await supabase.storage
+      .from("writing-assets")
+      .createSignedUrl(storagePath, TEN_YEARS_SECONDS)
+
+    if (signError || !signed) {
+      return err("STORAGE_ERROR", "Failed to create asset URL", true)
+    }
+
+    return ok({
+      assetId,
+      writingId: input.writingId,
+      url: signed.signedUrl,
+      alt: input.alt ?? null,
+      mimeType: input.contentType,
+      sizeBytes: input.sizeBytes,
+    })
   }
 }
+
+export const desktopAssetService = new DesktopAssetService()

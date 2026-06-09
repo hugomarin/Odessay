@@ -7,6 +7,25 @@ export type DesktopFileMetadata = {
   size: number
 }
 
+export type DesktopWorkspaceFile = {
+  id: string
+  path: string
+  relativePath: string
+  name: string
+  modifiedAt: number
+  size: number
+  inode: number
+}
+
+export type DesktopWorkspaceSnapshot = {
+  rootPath: string
+  name: string
+  fileCount: number
+  folderCount: number
+  updatedAt: number | null
+  files: DesktopWorkspaceFile[]
+}
+
 export type IndexEntry = {
   path: string
   title: string
@@ -42,6 +61,16 @@ export async function tauriResolveAssetPath(
   relativePath: string,
 ): Promise<string> {
   return invoke<string>("resolve_asset_path", { docPath, relativePath })
+}
+
+// ─── Workspace ───────────────────────────────────────────────────────────────
+
+export async function tauriWorkspaceCreate(parentPath: string, name: string): Promise<string> {
+  return invoke<string>("workspace_create", { parentPath, name })
+}
+
+export async function tauriWorkspaceSync(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
+  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath })
 }
 
 // ─── Local Index ──────────────────────────────────────────────────────────────

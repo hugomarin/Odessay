@@ -13,6 +13,19 @@ El comportamiento esperado es idéntico en ambas formas. Cuando el orquestador (
 
 ---
 
+## Interacción con Linear
+
+Todos los comandos `/wf-*` usan **Linear MCP** para leer issues, cambiar estados y dejar comentarios (`get_issue`, `save_issue`, `save_comment`, `list_issue_statuses`).
+
+Si el MCP no está disponible en la sesión, usar la API GraphQL como fallback:
+- Endpoint: `https://api.linear.app/graphql` — Header: `Authorization: <LINEAR_API_KEY>`
+- Leer issue: `query { issue(id: "...") { title description state { name } } }`
+- Obtener IDs de estado: `query { workflowStates { nodes { id name } } }`
+- Mover estado: `mutation { issueUpdate(id: "...", input: { stateId: "..." }) { success } }`
+- Comentar: `mutation { commentCreate(input: { issueId: "...", body: "..." }) { success } }`
+
+---
+
 ## `/wf-define [fase?]` o `wf-define [fase?]` — PLAN
 
 **Objetivo:** descomponer una fase del roadmap en issues ejecutables y cargarlos en Linear.
@@ -256,6 +269,171 @@ Categorías que activan esta política, no exhaustivas:
 Excepción: si el finding ya existía en `main` antes del PR y es claramente fuera de scope, abrir issue de seguridad separado y referenciarlo; pero seguir bloqueando si el PR amplía la superficie afectada o si el código tocado por el PR queda al lado del finding (no se cierra un PR que pasa por encima de un hueco visible).
 
 El razonamiento detrás de la política: cuando se marca un finding como "no bloqueante para probar", el costo de cerrar el round de review desaparece, pero el finding se queda en la rama y suele postergarse hasta que vuelve como hard reject en el siguiente review — el costo total crece, no baja. Es más barato pedirlo en el primer review.
+
+---
+
+## `/wf-ship [issue-id]` o `wf-ship [issue-id]` — SHIP
+
+**Objetivo:** implementar sobre el brief aprobado, abrir PR y cerrar el issue en Linear sin pasar por wf-review. El PR queda abierto para que el humano decida cuándo mergear.
+
+**Estado Linear:** `Todo` o `Backlog` (con brief) → `In Progress` al iniciar → `Done` al confirmar PR.
+
+**Resolución de issue:**
+- Con argumento (`/wf-ship ODE-22`): usar el issue indicado.
+- Con `--branch <nombre>` (`/wf-ship ODE-22 --branch codex/ode-245-foo`): trabajar sobre esa rama existente en lugar de crear una nueva.
+
+**Contexto a cargar:**
+1. El Issue Brief desde Linear.
+2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican.
+
+**Excepción obligatoria por gap de contexto arquitectónico:** aplica la misma excepción que wf-build (ver sección BUILD). Si el brief toca desktop, shared core, runtime boundaries o servicios sin citar la secuencia desktop en `Reference docs`, detener SHIP y marcar `Context Gap` bloqueante.
+
+**Secuencia:**
+
+**Setup**
+1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones que realmente toca el issue.
+2. Resolver la rama de trabajo:
+   - Si se pasó `--branch <nombre>`: `git switch <nombre>` — la rama ya existe, no crear nada.
+   - Si no se pasó `--branch` y la rama actual no es `main`: trabajar en la rama actual.
+   - Si no se pasó `--branch` y la rama actual es `main`: `git switch -c codex/{issue-id}-{descripcion}` antes de cualquier edición.
+3. Mover issue a `In Progress` en Linear.
+4. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
+
+**Ejecución**
+5. Implementar según el brief. Commits atómicos: `tipo(scope): descripción [ISSUE-ID]`.
+
+**Validación**
+6. `npm run typecheck` + `npm run lint` + `npx vitest run`. Si Performance Contract es `required`, generar la evidencia indicada en el brief. Guardar outputs.
+7. Ejecutar el delivery gate con el base ref correcto:
+   - **Sin `--branch`** (rama propia del issue): `npm run ops:delivery:gate`
+   - **Con `--branch`** (rama compartida con otros issues): `GITHUB_BASE_REF=origin/{branch} npm run ops:delivery:gate`
+   El base ref `origin/{branch}` limita el gate a los commits nuevos de este issue, excluyendo commits anteriores de la rama que pertenecen a otros issues. Debe terminar en verde.
+
+**Entrega**
+8. `git push -u origin {rama}`. Luego verificar si ya existe un PR abierto para esta rama:
+   ```bash
+   gh pr list --head {rama} --state open --json number,body
+   ```
+   - **Si ya existe PR**: agregar este issue al body existente con `gh pr edit {número} --body "..."`. No crear un PR nuevo.
+   - **Si no existe PR**: crear PR con body completo (links a todos los issues del branch, qué se hizo, cómo testear, outputs del paso 6).
+   Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`.
+9. Confirmar PR en OPEN: `gh pr view {número} --json state`.
+10. Actualizar `workflow/status.json` y `workflow/review-history.jsonl` en la **rama de feature** (no en main):
+    - Agregar el issue a `built` de la fase activa en `status.json`.
+    - Appendear evento `ship_completed` a `review-history.jsonl`.
+    ```bash
+    node scripts/validate-workflow-json.mjs
+    git add workflow/status.json workflow/review-history.jsonl
+    git commit -m "chore(workflow): record {ISSUE-ID} ship_completed [{ISSUE-ID}]"
+    git push origin {rama}
+    ```
+11. Dejar comentario en Linear con Context Report completo. **Este paso es obligatorio — no avanzar al paso 12 hasta confirmar que el comentario fue creado** (MCP retorna el ID del comentario; GraphQL retorna `success: true`):
+    - `Context Gaps Detected = yes | no`
+    - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
+    - `Additional Instructions Requested`: instrucciones extra pedidas al humano durante SHIP.
+    - `Decisions Made During Build`: decisiones tomadas para destrabar ejecución.
+    - `Recommended Context Fixes`: cambios concretos en issue brief/docs para prevenir repetición.
+    - Outputs de validación: typecheck, lint, vitest, delivery gate.
+    - Link al PR.
+    Si la llamada falla o no retorna confirmación: reintentar una vez. Si sigue fallando: reportar el bloqueo al humano y no mover a Done hasta resolverlo.
+12. Mover issue a `Done` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
+13. Emitir `SHIP completado — PR #{número} abierto, listo para merge manual.`
+
+**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los archivos `workflow/review-history.jsonl` y `workflow/status.json` se actualizan en la **rama de feature** (no en main), a diferencia del flujo BUILD+REVIEW.
+
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/status.json` y `review-history.jsonl` actualizados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `Done` (paso 12).
+
+---
+
+## `/wf-review-ships [issue-ids]` o `wf-review-ships [issue-ids]` — REVIEW-SHIPS
+
+**Objetivo:** revisar la calidad de varios PRs abiertos por wf-ship en paralelo. No hace merge a main. Solo quality check y comentario en Linear.
+
+**Estado Linear:** sin cambios de estado — solo se deja comentario de revisión en cada issue.
+
+**Resolución de issues:**
+- Con argumento (`/wf-review-ships ODE-246,ODE-247`): usar los issues indicados (separados por coma).
+- Con `--branch <nombre>`: todos los issues comparten un único PR abierto desde esa rama. El `--branch` debe coincidir con el que se usó en `wf-ship`.
+
+**Contexto a cargar:**
+1. El Issue Brief de cada ID desde Linear.
+2. El diff del PR correspondiente (`gh pr diff`).
+3. `.agents/skills/skill-code-review/SKILL.md`.
+4. Si algún brief tiene `Performance Contract` requerido: artefactos de performance del PR.
+5. Si algún brief tiene `Architecture Contract`: el contrato del brief.
+
+**Localizar el PR:**
+
+Con `--branch {nombre}`:
+```bash
+gh pr list --head {nombre} --state open --json number,title,url
+```
+Si no hay PR abierto: error, reportar y detener.
+
+Sin `--branch` (un PR por issue):
+```bash
+gh pr list --state open --json number,title,body,headRefName | \
+  jq '.[] | select(.body | contains("{ID}"))'
+```
+Si no hay PR para un issue: marcar `SIN PR — skipped` y continuar con los demás.
+
+**Modos de revisión:**
+
+**Sin `--branch`** — cada issue tiene su propio PR. El diff de cada PR cubre exclusivamente ese issue. Revisar cada PR de forma independiente.
+
+**Con `--branch`** — todos los issues comparten un único PR y un único diff acumulado. En este caso:
+- El diff completo cubre múltiples issues; no se puede aislar por archivo.
+- Aislar los commits de cada issue por su etiqueta:
+  ```bash
+  git log origin/{branch}..HEAD --oneline --grep="\[{ID}\]"
+  ```
+- Revisar cada issue contra los commits etiquetados con su ID. Si un commit no tiene etiqueta de ningún issue del grupo, marcarlo como `commit sin trazabilidad` en el Context Report.
+- Los gates de calidad (`typecheck`, `lint`, `vitest`, `delivery gate` con `GITHUB_BASE_REF=origin/{branch}`) se corren una sola vez para el PR completo y aplican a todos los issues.
+
+**Secuencia:**
+1. Obtener briefs y diffs en paralelo (un agente por issue cuando sea posible).
+2. Para cada issue, contrastar sus commits (o el diff completo si no hay `--branch`) con su brief:
+   - Correctness: ¿los commits del issue implementan lo que el brief pide?
+   - Seguridad: aplica la misma política que wf-review — cualquier finding es bloqueante.
+   - Performance Contract: si es `required`, verificar que hay evidencia adjunta en el PR.
+   - Architecture Contract: verificar que el diff respeta `Layer`, `Runtime scope`, `Owner` e `Invariants`.
+3. Emitir resultado por issue:
+   - `SHIP REVIEW APROBADO [ODE-XXX]` — sin hallazgos bloqueantes.
+   - `SHIP REVIEW CON OBSERVACIONES [ODE-XXX]` — hallazgos no bloqueantes, PR puede mergearse.
+   - `SHIP REVIEW RECHAZADO [ODE-XXX]` — hallazgos bloqueantes (listar con patch sugerido inline).
+4. Dejar comentario en cada issue de Linear con el resultado:
+   ```
+   GateResult: PASS | FAIL
+     - typecheck / lint / vitest / delivery gate: ✓ | ✗
+     - Performance Contract: cumplido | no requerido | falta evidencia
+     - Architecture Contract: cumplido | no aplica | violación detectada
+
+   QualityScore: <calidad técnica del diff>
+
+   ProcessInsights:
+     - Hallazgos bloqueantes: <lista o "ninguno">
+     - Hallazgos no bloqueantes: <lista o "ninguno">
+     - Recomendaciones para el brief/docs: <o "ninguna">
+
+   Resultado: SHIP REVIEW APROBADO | CON OBSERVACIONES | RECHAZADO [ODE-XXX]
+   ```
+5. Emitir resumen consolidado:
+   ```
+   wf-review-ships completado
+   ──────────────────────────────────────────
+   ODE-246  APROBADO       — sin hallazgos
+   ODE-247  OBSERVACIONES  — 1 finding no bloqueante (ver Linear)
+   ODE-248  RECHAZADO      — 2 findings bloqueantes (ver Linear)
+   ──────────────────────────────────────────
+   Listos para merge manual : ODE-246, ODE-247
+   Requieren fix            : ODE-248
+   ```
+
+**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`.
+
+**Política de security findings:** aplica la misma política que wf-review — cualquier finding de seguridad es bloqueante desde el primer review, independientemente del dominio.
+
+**Gate de salida:** comentario de revisión dejado en cada issue de Linear + resumen consolidado emitido.
 
 ---
 

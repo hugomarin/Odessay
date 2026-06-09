@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { getAssetService } from "@/lib/services/asset-service-factory"
 
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]
 const MAX_SIZE = 5 * 1024 * 1024
@@ -67,20 +68,18 @@ export function InsertImageModal({ open, writingId, onOpenChange, onConfirm }: I
     setUploading(true)
     setError(null)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("alt", alt)
-
-      const res = await fetch(`/api/writings/${writingId}/images`, {
-        method: "POST",
-        body: formData,
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      const result = await getAssetService().uploadImageAsset({
+        writingId,
+        fileName: file.name,
+        contentType: file.type,
+        sizeBytes: file.size,
+        bytes,
+        alt: alt.trim() || null,
       })
 
-      const result = await res.json()
-
-      if (!res.ok || result.error) {
-        setError(result.error?.message || "Failed to upload image. Please try again.")
-        setUploading(false)
+      if (result.error) {
+        setError(result.error.message || "Failed to upload image. Please try again.")
         return
       }
 

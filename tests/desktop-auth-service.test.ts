@@ -492,4 +492,71 @@ describe("desktopAuthService", () => {
     verifyCurrentPasswordSpy.mockRestore()
     vi.unstubAllGlobals()
   })
+
+  it("updatePassword rejects missing currentPassword without calling updateUser", async () => {
+    const fetchSpy = vi.fn()
+    const verifyCurrentPasswordSpy = vi
+      .spyOn(accountSettings, "verifyCurrentPassword")
+      .mockResolvedValue(true)
+    vi.stubGlobal("fetch", fetchSpy)
+    supabaseAuthMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          new_email: null,
+          email_confirmed_at: "2026-05-01T00:00:00.000Z",
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+
+    const result = await desktopAuthService.updatePassword({
+      newPassword: "new-secret-123",
+    } as { currentPassword?: string; newPassword: string })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(verifyCurrentPasswordSpy).not.toHaveBeenCalled()
+    expect(supabaseAuthMock.updateUser).not.toHaveBeenCalled()
+    expect(result.error?.code).toBe("INVALID_INPUT")
+    expect(result.error?.message).toBe("Current password is required.")
+
+    verifyCurrentPasswordSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it("updatePassword rejects empty currentPassword without calling updateUser", async () => {
+    const fetchSpy = vi.fn()
+    const verifyCurrentPasswordSpy = vi
+      .spyOn(accountSettings, "verifyCurrentPassword")
+      .mockResolvedValue(true)
+    vi.stubGlobal("fetch", fetchSpy)
+    supabaseAuthMock.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-1",
+          email: "writer@example.com",
+          new_email: null,
+          email_confirmed_at: "2026-05-01T00:00:00.000Z",
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+
+    const result = await desktopAuthService.updatePassword({
+      currentPassword: "   ",
+      newPassword: "new-secret-123",
+    })
+
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(verifyCurrentPasswordSpy).not.toHaveBeenCalled()
+    expect(supabaseAuthMock.updateUser).not.toHaveBeenCalled()
+    expect(result.error?.code).toBe("INVALID_INPUT")
+    expect(result.error?.message).toBe("Current password is required.")
+
+    verifyCurrentPasswordSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
 })

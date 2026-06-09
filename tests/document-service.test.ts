@@ -251,7 +251,7 @@ describe("webDocumentService", () => {
       expect(result.data).toEqual({
         writingId: "writing-export",
         format: "pdf",
-        fileName: "Export Me.pdf",
+        fileName: "Export-Me.pdf",
         mimeType: "application/pdf",
         bytes: new Uint8Array([1, 2, 3, 4]),
       })

@@ -77,7 +77,7 @@ vi.mock("@/lib/services/web-document-service", () => ({
 
 vi.mock("@tauri-apps/api/path", () => ({
   appConfigDir: vi.fn(async () => "/tmp/config"),
-  documentDir: vi.fn(async () => "/tmp/documents"),
+  appDataDir: vi.fn(async () => "/tmp/app-data"),
   join: mocks.joinMock,
 }))
 
@@ -149,6 +149,85 @@ describe("document-service-factory", () => {
       error: null,
     })
     mocks.migrateMock.mockResolvedValue({ migratedCount: 0, skippedCount: 0 })
+  })
+
+  it("uses app data storage when no desktop writings directory is configured", async () => {
+    mocks.getDesktopSettingsMock.mockResolvedValue({ data: {}, error: null })
+
+    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+    await createDesktopDraft({ title: "Internal" })
+
+    expect(mocks.updateDesktopSettingsMock).toHaveBeenCalledWith({
+      writingsDir: "/tmp/app-data/Writings",
+    })
+  })
+
+  it("moves automatic storage away from macOS protected Downloads", async () => {
+    mocks.getDesktopSettingsMock.mockResolvedValue({
+      data: { writingsDir: "/Users/hugo/Downloads/Odessay" },
+      error: null,
+    })
+
+    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+    await createDesktopDraft({ title: "Internal" })
+
+    expect(mocks.updateDesktopSettingsMock).toHaveBeenCalledWith({
+      writingsDir: "/tmp/app-data/Writings",
+    })
+  })
+
+  it("re-homes protected canonical paths without reading the protected folder", async () => {
+    mocks.getAllMock.mockResolvedValue([
+      {
+        id: "writing-protected",
+        author_id: null,
+        title: "Protected",
+        canonical_path: "/Users/hugo/Downloads/Protected.md",
+        body_json: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Cached body" }] }] },
+        body_text: "Cached body",
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parent_id: null,
+        correspondence_id: null,
+        version: 1,
+        sync_status: "synced",
+        lifecycle: "local-only",
+        deleted_at: null,
+        created_at: "2026-06-04T00:00:00.000Z",
+        updated_at: "2026-06-04T00:00:00.000Z",
+        local_updated_at: 1,
+      },
+    ])
+    mocks.createDraftMock.mockResolvedValueOnce({
+      data: {
+        path: "/tmp/app-data/Writings/protected.md",
+        writing: {},
+      },
+      error: null,
+    })
+
+    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+    await createDesktopDraft({ title: "After repair" })
+
+    expect(mocks.openWritingMock).not.toHaveBeenCalledWith("/Users/hugo/Downloads/Protected.md")
+    expect(mocks.saveMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "writing-protected",
+        canonical_path: "/tmp/app-data/Writings/protected.md",
+      }),
+    )
+  })
+
+  it("does not directly open protected macOS paths without a local mapping", async () => {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+
+    const result = await service.openWriting("/Users/hugo/Downloads/old.md")
+
+    expect(result.data).toBeNull()
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(mocks.openWritingMock).not.toHaveBeenCalledWith("/Users/hugo/Downloads/old.md")
   })
 
   it("retries migration after an initial failure instead of caching a rejected promise forever", async () => {

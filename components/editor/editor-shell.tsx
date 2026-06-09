@@ -104,7 +104,7 @@ import {
   parseCorrectionBlockPosition,
   persistCorrectionBlockRemotely,
 } from "@/lib/corrections/persistence"
-import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
+import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   LocalCorrectionBlock,
   LocalWriting,
@@ -203,6 +203,23 @@ type CorrectionToastState = {
   phase: "running" | "complete"
   completed: number
   total: number
+}
+
+type ExternalFileNotice =
+  | { kind: "moved"; path: string | null }
+  | { kind: "deleted"; path: string | null }
+
+function replaceEditorHistory(nextHref: string) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`
+  if (currentHref === nextHref) {
+    return
+  }
+
+  window.history.replaceState(null, "", nextHref)
 }
 
 const NotesPanel = lazy(() =>
@@ -309,6 +326,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
+  const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
   const [correctionsEnabled, setCorrectionsEnabled] = useState(true)
   const [showCorrections, setShowCorrections] = useState(true)
 
@@ -340,6 +358,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
+  const currentCanonicalPathRef = useRef<string | null>(null)
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const forceNewWritingRequestedRef = useRef(false)
@@ -562,7 +581,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         if (!routeWritingId && !navigatedToDraftRef.current) {
           navigatedToDraftRef.current = true
           if (isPerfHarness()) {
-            window.history.replaceState(null, "", `/write/${nextId}`)
+            replaceEditorHistory(`/write/${nextId}`)
           } else if (!isDesktopRuntime()) {
             router.replace(`/write/${nextId}`)
           }
@@ -963,7 +982,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             slug: activeTab.slug,
           })
           if (isPerfHarness()) {
-            window.history.replaceState(null, "", nextHref)
+            replaceEditorHistory(nextHref)
           } else if (!isDesktopRuntime()) {
             router.replace(nextHref)
           }
@@ -1064,7 +1083,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       lifecycleRef.current = "local-only"
       navigatedToDraftRef.current = true
       if (isPerfHarness()) {
-        window.history.replaceState(null, "", `/write/${currentWritingIdRef.current ?? nextId}`)
+        replaceEditorHistory(`/write/${currentWritingIdRef.current ?? nextId}`)
       } else if (!isDesktopRuntime()) {
         router.replace(`/write/${currentWritingIdRef.current ?? nextId}`)
       }
@@ -1076,6 +1095,56 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   useEffect(() => {
     setSidebarMode("collapsed")
   }, [])
+
+  useEffect(() => {
+    if (!isDesktopRuntime() || !currentWritingId) {
+      currentCanonicalPathRef.current = null
+      setExternalFileNotice(null)
+      return
+    }
+
+    let cancelled = false
+
+    const syncCurrentWritingState = async () => {
+      const localWriting = await localDB.writings.get(currentWritingId)
+      if (cancelled || !localWriting) {
+        return
+      }
+
+      const nextCanonicalPath = localWriting.canonical_path ?? null
+      const previousCanonicalPath = currentCanonicalPathRef.current
+
+      if (localWriting.sync_status === "deleted" || localWriting.deleted_at) {
+        currentCanonicalPathRef.current = nextCanonicalPath
+        setExternalFileNotice({ kind: "deleted", path: nextCanonicalPath })
+        setSyncStatus("saved-local")
+        return
+      }
+
+      if (
+        previousCanonicalPath &&
+        nextCanonicalPath &&
+        previousCanonicalPath !== nextCanonicalPath
+      ) {
+        currentCanonicalPathRef.current = nextCanonicalPath
+        setExternalFileNotice({ kind: "moved", path: nextCanonicalPath })
+        return
+      }
+
+      currentCanonicalPathRef.current = nextCanonicalPath
+      setExternalFileNotice(null)
+    }
+
+    void syncCurrentWritingState()
+    const unsubscribe = subscribeToLocalDBChanges(() => {
+      void syncCurrentWritingState()
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [currentWritingId])
 
   useEffect(() => {
     document.body.classList.toggle("od-editor-focus-mode", isFocusMode)
@@ -1112,6 +1181,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setWritingSlug(null)
       setLifecycle("local-only")
       setSyncStatus("saved")
+      setExternalFileNotice(null)
       setPersistedCorrectionBlocks([])
       applyCorrectionSuggestionUpdate(() => [], { immediate: true })
       titleRef.current = UNTITLED_WRITING_TITLE
@@ -1120,6 +1190,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       createdAtRef.current = null
       writingSlugRef.current = null
       lifecycleRef.current = "local-only"
+      currentCanonicalPathRef.current = null
       window.requestAnimationFrame(() => {
         editor.commands.focus("start")
       })
@@ -1246,6 +1317,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         setWritingStatus(localWriting.status ?? "draft")
         setWritingVisibility(localWriting.visibility ?? "private")
         setLifecycle(localWriting.lifecycle ?? "local-only")
+        setExternalFileNotice(null)
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
             localWriting.sync_status,
@@ -1253,6 +1325,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
+        currentCanonicalPathRef.current = localWriting.canonical_path ?? null
         updateDerivedEditorState(editor)
 
         const activeTab =
@@ -1357,7 +1430,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         setWritingStatus("draft")
         setWritingVisibility("private")
         setSyncStatus("saved")
+        setExternalFileNotice(null)
         setBodyText("")
+        currentCanonicalPathRef.current = null
       }
 
       setHydrationWritingId(null)
@@ -3562,18 +3637,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         currentWritingIdRef.current = nextTab.writing_id
         setCurrentWritingId(nextTab.writing_id)
         setHydrationWritingId(nextTab.writing_id)
-        window.history.replaceState(
-          null,
-          "",
-          buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
-        )
+        replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
         return
       }
 
       currentWritingIdRef.current = null
       setCurrentWritingId(null)
       setHydrationWritingId(null)
-      window.history.replaceState(null, "", "/write")
+      replaceEditorHistory("/write")
     },
     [editorSession.tabs, persistCurrentWorkspaceViewState],
   )
@@ -3608,18 +3679,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         currentWritingIdRef.current = nextTab.writing_id
         setCurrentWritingId(nextTab.writing_id)
         setHydrationWritingId(nextTab.writing_id)
-        window.history.replaceState(
-          null,
-          "",
-          buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }),
-        )
+        replaceEditorHistory(buildWritingRouteHref("/write", { id: nextTab.writing_id, slug: nextTab.slug }))
         return
       }
 
       currentWritingIdRef.current = null
       setCurrentWritingId(null)
       setHydrationWritingId(null)
-      window.history.replaceState(null, "", "/write")
+      replaceEditorHistory("/write")
     },
     [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
   )
@@ -3682,7 +3749,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     setCurrentWritingId(nextWritingId)
     setHydrationWritingId(nextWritingId)
     if (!isDesktopRuntime()) {
-      window.history.replaceState(null, "", `/write/${nextWritingId}`)
+      replaceEditorHistory(`/write/${nextWritingId}`)
     }
 
     const blankDraftRecord: WritingRecord = {
@@ -3860,6 +3927,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (!writingId || !isDesktopRuntime()) return
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
     await relocateDesktopWriting(writingId, path)
+    currentCanonicalPathRef.current = path
+    setExternalFileNotice(null)
   }, [])
 
   useTauriEditorMenuEvents(handleRunAction)
@@ -3923,7 +3992,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       const blob = new Blob([result.data.bytes.buffer as ArrayBuffer], { type: result.data.mimeType })
-      downloadBlob(blob, `${exportFileBaseName}.${format}`)
+      downloadBlob(blob, result.data.fileName || `${exportFileBaseName}.${format}`)
     },
     [currentWritingId, downloadBlob, exportFileBaseName],
   )
@@ -4026,6 +4095,22 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             onRunAction={handleRunAction}
             isTabBarVisible={isTabBarVisible}
           />
+        ) : null}
+
+        {!isFocusMode && externalFileNotice ? (
+          <div className="border-b-[0.5px] border-border bg-muted/50 px-6 py-3 text-sm text-ink-3">
+            {externalFileNotice.kind === "moved" ? (
+              <span>
+                This file moved outside Odessay. The editor is now following the new path:
+                <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
+              </span>
+            ) : (
+              <span>
+                This file was removed outside Odessay. Your current content stays open here, but the
+                source file is no longer on disk.
+              </span>
+            )}
+          </div>
         ) : null}
 
         <div className="flex min-h-0 flex-1">

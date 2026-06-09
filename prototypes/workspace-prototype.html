@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Odessay Workspace Prototype</title>
+    <style>
+      :root {
+        --bg: #fbfaf8;
+        --surface: #ffffff;
+        --surface-muted: #f6f3ef;
+        --border: rgba(38, 33, 28, 0.12);
+        --border-strong: rgba(38, 33, 28, 0.18);
+        --ink: #2c241f;
+        --ink-muted: #6f655d;
+        --ink-soft: #978b81;
+        --accent: #b65f39;
+        --accent-soft: rgba(182, 95, 57, 0.08);
+        --shadow: 0 14px 40px rgba(52, 38, 28, 0.08);
+        --radius-xl: 24px;
+        --radius-lg: 18px;
+        --radius-md: 12px;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, "Times New Roman", serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: linear-gradient(180deg, #f8f6f3 0%, #fcfbf9 100%);
+        color: var(--ink);
+        font-family: var(--sans);
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        background: none;
+        color: inherit;
+        cursor: pointer;
+      }
+
+      .window {
+        width: min(1440px, calc(100vw - 32px));
+        min-height: calc(100vh - 32px);
+        margin: 16px auto;
+        background: var(--surface);
+        border: 0.5px solid var(--border);
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+      }
+
+      .titlebar {
+        height: 52px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        border-bottom: 0.5px solid var(--border);
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .traffic {
+        display: flex;
+        gap: 8px;
+      }
+
+      .traffic span {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        display: block;
+      }
+
+      .traffic span:nth-child(1) { background: #ff5f57; }
+      .traffic span:nth-child(2) { background: #febc2e; }
+      .traffic span:nth-child(3) { background: #28c840; }
+
+      .titlebar-title {
+        font-size: 14px;
+        color: var(--ink-muted);
+        font-weight: 600;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 286px minmax(0, 1fr);
+        min-height: calc(100vh - 84px);
+      }
+
+      .sidebar {
+        border-right: 0.5px solid var(--border);
+        background: linear-gradient(180deg, #fffdfb 0%, #fcfaf7 100%);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .logo {
+        padding: 22px 28px 20px;
+        font-family: var(--serif);
+        font-size: 28px;
+        line-height: 1;
+        letter-spacing: -0.03em;
+      }
+
+      .side-section {
+        padding: 8px 14px;
+      }
+
+      .side-link,
+      .recent-link {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        color: var(--ink-muted);
+        text-decoration: none;
+        transition: background 160ms ease, color 160ms ease;
+      }
+
+      .side-link:hover,
+      .recent-link:hover {
+        background: var(--surface-muted);
+        color: var(--ink);
+      }
+
+      .side-link.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      .side-icon {
+        width: 18px;
+        text-align: center;
+        opacity: 0.92;
+      }
+
+      .side-heading {
+        padding: 18px 28px 10px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+      }
+
+      .recent-list {
+        padding: 0 14px 24px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .user-bar {
+        margin-top: auto;
+        padding: 18px 18px 20px;
+        border-top: 0.5px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: #181412;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .user-meta {
+        min-width: 0;
+      }
+
+      .user-name {
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .user-handle {
+        font-size: 13px;
+        color: var(--ink-soft);
+      }
+
+      .main {
+        min-width: 0;
+        background: var(--bg);
+      }
+
+      .view {
+        display: none;
+        min-height: 100%;
+      }
+
+      .view.active {
+        display: block;
+      }
+
+      .page {
+        padding: 38px 40px 44px;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 24px;
+        padding-bottom: 24px;
+      }
+
+      .page-title {
+        font-family: var(--serif);
+        font-size: 44px;
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+        margin: 0;
+      }
+
+      .page-subtitle {
+        margin-top: 10px;
+        color: var(--ink-muted);
+        font-size: 17px;
+        line-height: 1.7;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .input,
+      .select,
+      .button,
+      .ghost-button {
+        height: 42px;
+        border-radius: 12px;
+        border: 0.5px solid var(--border);
+        background: var(--surface);
+      }
+
+      .input {
+        width: 280px;
+        padding: 0 14px;
+        color: var(--ink);
+      }
+
+      .select,
+      .ghost-button,
+      .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 15px;
+      }
+
+      .button {
+        background: var(--ink);
+        border-color: var(--ink);
+        color: #fff;
+        font-weight: 600;
+      }
+
+      .ghost-button {
+        color: var(--ink-muted);
+      }
+
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 22px;
+      }
+
+      .workspace-card {
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-xl);
+        background: var(--surface);
+        padding: 26px;
+        text-decoration: none;
+        color: inherit;
+        transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+      }
+
+      .workspace-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 34px rgba(49, 35, 25, 0.06);
+        border-color: var(--border-strong);
+      }
+
+      .workspace-card-top {
+        display: flex;
+        gap: 18px;
+        align-items: start;
+      }
+
+      .folder-badge {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        border: 0.5px solid var(--border);
+        background: var(--bg);
+        display: grid;
+        place-items: center;
+        color: var(--ink-muted);
+        font-size: 26px;
+      }
+
+      .workspace-name {
+        font-family: var(--serif);
+        font-size: 30px;
+        line-height: 1.05;
+        letter-spacing: -0.03em;
+      }
+
+      .workspace-path {
+        margin-top: 8px;
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+
+      .workspace-description {
+        margin-top: 18px;
+        color: var(--ink-muted);
+        line-height: 1.7;
+        max-width: 52ch;
+      }
+
+      .workspace-meta {
+        margin-top: 26px;
+        padding-top: 18px;
+        border-top: 0.5px solid var(--border);
+        display: flex;
+        gap: 18px;
+        color: var(--ink-soft);
+        font-size: 14px;
+        flex-wrap: wrap;
+      }
+
+      .detail-header {
+        border-bottom: 0.5px solid var(--border);
+        padding-bottom: 22px;
+      }
+
+      .detail-topline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+
+      .detail-title {
+        margin: 0;
+        font-family: var(--serif);
+        font-size: 42px;
+        line-height: 1.03;
+        letter-spacing: -0.04em;
+      }
+
+      .detail-path {
+        margin-top: 12px;
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+
+      .detail-tools {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .detail-toolbar {
+        margin-top: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 16px;
+      }
+
+      .detail-layout {
+        margin-top: 28px;
+        display: block;
+      }
+
+      .section-label {
+        margin: 0 0 12px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .list-card {
+        overflow: hidden;
+        border: 0.5px solid var(--border);
+        border-radius: 18px;
+        background: var(--surface);
+      }
+
+      .row {
+        display: grid;
+        gap: 16px;
+        align-items: center;
+        padding: 16px 18px;
+        border-top: 0.5px solid var(--border);
+        text-decoration: none;
+        color: inherit;
+      }
+
+      .row:first-child {
+        border-top: 0;
+      }
+
+      .row:hover {
+        background: #fcfaf7;
+      }
+
+      .row.selected {
+        background: var(--accent-soft);
+      }
+
+      .row-grid-folder {
+        grid-template-columns: minmax(0, 1fr) 120px 220px;
+      }
+
+      .row-grid-file {
+        grid-template-columns: minmax(0, 1fr) 90px 220px;
+      }
+
+      .row-main {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        min-width: 0;
+      }
+
+      .row-icon {
+        color: var(--ink-muted);
+        font-size: 18px;
+      }
+
+      .row-name {
+        font-size: 17px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .row-meta {
+        font-size: 14px;
+        color: var(--ink-soft);
+      }
+
+      .pinned-card {
+        margin-bottom: 28px;
+      }
+
+      .folder-note {
+        margin-bottom: 28px;
+        border: 0.5px solid var(--border);
+        border-radius: 16px;
+        background: var(--surface);
+        padding: 16px 18px;
+      }
+
+      .folder-note-label {
+        color: var(--ink-soft);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .folder-note-text {
+        margin-top: 8px;
+        color: var(--ink-muted);
+        font-size: 15px;
+        line-height: 1.7;
+      }
+
+      .pinned-badge {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--surface-muted);
+        color: var(--ink-soft);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .editor-header {
+        height: 58px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 0 20px;
+        border-bottom: 0.5px solid var(--border);
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .editor-header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+      }
+
+      .icon-button {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 10px;
+        color: var(--ink-muted);
+      }
+
+      .icon-button:hover {
+        background: var(--surface-muted);
+        color: var(--ink);
+      }
+
+      .editor-title {
+        min-width: 0;
+      }
+
+      .editor-title strong {
+        display: block;
+        font-size: 15px;
+      }
+
+      .editor-title span {
+        display: block;
+        font-size: 12px;
+        color: var(--ink-soft);
+      }
+
+      .editor-body {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 42px 40px 64px;
+      }
+
+      .breadcrumb {
+        color: var(--ink-soft);
+        font-size: 13px;
+      }
+
+      .editor-doc-title {
+        margin: 26px 0 0;
+        font-family: var(--serif);
+        font-size: 42px;
+        line-height: 1.03;
+        letter-spacing: -0.04em;
+      }
+
+      .editor-content {
+        margin-top: 32px;
+        color: var(--ink);
+        font-size: 21px;
+        line-height: 1.9;
+        white-space: pre-wrap;
+      }
+
+      .preview-panel {
+        display: none;
+        margin-top: 18px;
+        border: 0.5px solid var(--border);
+        border-radius: 18px;
+        background: var(--surface);
+        padding: 22px 22px 24px;
+      }
+
+      .preview-panel.active {
+        display: block;
+      }
+
+      .preview-label {
+        color: var(--ink-soft);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .preview-head {
+        margin-top: 10px;
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .preview-title {
+        font-family: var(--serif);
+        font-size: 28px;
+        line-height: 1.08;
+        letter-spacing: -0.03em;
+      }
+
+      .preview-meta {
+        margin-top: 6px;
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+
+      .preview-body {
+        margin-top: 16px;
+        color: var(--ink-muted);
+        font-size: 16px;
+        line-height: 1.8;
+        white-space: pre-wrap;
+      }
+
+      .preview-actions {
+        margin-top: 20px;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: none;
+        background: rgba(30, 24, 20, 0.26);
+        backdrop-filter: blur(3px);
+        padding: 24px;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .overlay.active {
+        display: flex;
+      }
+
+      .modal {
+        width: min(720px, 100%);
+        background: var(--surface);
+        border: 0.5px solid var(--border);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        padding: 42px;
+      }
+
+      .modal h2 {
+        margin: 0;
+        font-family: var(--serif);
+        font-size: 42px;
+        line-height: 1.04;
+        letter-spacing: -0.04em;
+      }
+
+      .modal p {
+        margin: 16px 0 0;
+        color: var(--ink-muted);
+        font-size: 17px;
+        line-height: 1.8;
+      }
+
+      .option-list {
+        margin-top: 28px;
+        display: grid;
+        gap: 14px;
+      }
+
+      .option {
+        border: 0.5px solid var(--border);
+        border-radius: 22px;
+        background: var(--bg);
+        padding: 24px;
+        display: flex;
+        gap: 18px;
+        align-items: center;
+      }
+
+      .option:hover {
+        background: #fcfaf7;
+      }
+
+      .option-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 18px;
+        border: 0.5px solid var(--border);
+        background: var(--surface);
+        display: grid;
+        place-items: center;
+        color: var(--ink-muted);
+        font-size: 26px;
+        flex: 0 0 auto;
+      }
+
+      .option-title {
+        font-size: 21px;
+        font-weight: 600;
+      }
+
+      .option-description {
+        margin-top: 6px;
+        color: var(--ink-muted);
+        line-height: 1.65;
+      }
+
+      .modal-back {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border-radius: 12px;
+        margin-bottom: 18px;
+        color: var(--ink-muted);
+      }
+
+      .modal-back:hover {
+        background: var(--surface-muted);
+        color: var(--ink);
+      }
+
+      .field {
+        margin-top: 28px;
+      }
+
+      .field label {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 15px;
+        font-weight: 600;
+      }
+
+      .field input,
+      .field textarea,
+      .field .picker {
+        width: 100%;
+        border: 0.5px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg);
+        padding: 16px 18px;
+      }
+
+      .field textarea {
+        min-height: 126px;
+        resize: vertical;
+      }
+
+      .picker {
+        color: var(--ink-soft);
+      }
+
+      .modal-footer {
+        margin-top: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .modal-footnote {
+        color: var(--ink-soft);
+        font-size: 14px;
+      }
+
+      .modal-actions {
+        display: flex;
+        gap: 12px;
+      }
+
+      .secondary {
+        background: var(--surface);
+        color: var(--ink);
+      }
+
+      .disabled {
+        opacity: 0.48;
+        pointer-events: none;
+      }
+
+      @media (max-width: 1100px) {
+        .shell {
+          grid-template-columns: 86px minmax(0, 1fr);
+        }
+
+        .logo,
+        .side-link span,
+        .recent-list,
+        .side-heading,
+        .user-meta {
+          display: none;
+        }
+
+        .side-link {
+          justify-content: center;
+        }
+
+        .detail-layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 920px) {
+        .page,
+        .editor-body {
+          padding-left: 22px;
+          padding-right: 22px;
+        }
+
+        .workspace-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .page-header,
+        .detail-topline,
+        .detail-toolbar,
+        .modal-footer {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .header-actions,
+        .detail-tools,
+        .modal-actions {
+          width: 100%;
+        }
+
+        .input {
+          width: 100%;
+        }
+
+        .row-grid-folder,
+        .row-grid-file {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="window">
+      <div class="titlebar">
+        <div class="traffic"><span></span><span></span><span></span></div>
+        <div class="titlebar-title">Odessay Workspace Prototype</div>
+      </div>
+      <div class="shell">
+        <aside class="sidebar">
+          <div class="logo">odessay</div>
+          <div class="side-section">
+            <a class="side-link" href="#" data-nav="desk"><span class="side-icon">▦</span><span>Desk</span></a>
+            <a class="side-link active" href="#" data-nav="workspace"><span class="side-icon">◫</span><span>Workspace</span></a>
+            <a class="side-link" href="#" data-nav="collections"><span class="side-icon">▥</span><span>Collections</span></a>
+          </div>
+          <div class="side-heading">Recent workspaces</div>
+          <div class="recent-list" id="recent-list"></div>
+          <div class="user-bar">
+            <div class="avatar">HA</div>
+            <div class="user-meta">
+              <div class="user-name">Hugo A. Marin R.</div>
+              <div class="user-handle">@hugomarin</div>
+            </div>
+          </div>
+        </aside>
+        <main class="main">
+          <section class="view active" id="view-index">
+            <div class="page">
+              <div class="page-header">
+                <div>
+                  <h1 class="page-title">Workspace</h1>
+                  <div class="page-subtitle">Local folders that keep your writing in context.</div>
+                </div>
+                <div class="header-actions">
+                  <input class="input" id="workspace-search" placeholder="Search workspaces..." />
+                  <button class="select">Sort by Updated ▾</button>
+                  <button class="button" id="add-workspace-button">+ Add workspace</button>
+                </div>
+              </div>
+              <div class="workspace-grid" id="workspace-grid"></div>
+            </div>
+          </section>
+
+          <section class="view" id="view-detail">
+            <div class="page">
+              <div class="detail-header">
+                <div class="detail-topline">
+                  <div>
+                    <h1 class="detail-title" id="detail-title"></h1>
+                    <div class="detail-path" id="detail-path"></div>
+                  </div>
+                  <div class="detail-tools">
+                    <button class="button" id="new-file-button">+ New file</button>
+                  </div>
+                </div>
+                <div class="detail-toolbar">
+                  <input class="input" placeholder="Search files..." />
+                </div>
+              </div>
+              <div class="detail-layout">
+                <div class="pinned-card" id="pinned-container"></div>
+
+                <div class="folder-note">
+                  <div class="folder-note-label">Folder</div>
+                  <div class="folder-note-text" id="folder-note-text"></div>
+                </div>
+
+                <div>
+                  <div class="section-label">Files</div>
+                  <div class="list-card" id="files-list"></div>
+                  <div class="preview-panel" id="file-preview-panel">
+                    <div class="preview-label">Preview</div>
+                    <div class="preview-head">
+                      <div>
+                        <div class="preview-title" id="preview-title"></div>
+                        <div class="preview-meta" id="preview-meta"></div>
+                      </div>
+                    </div>
+                    <div class="preview-body" id="preview-body"></div>
+                    <div class="preview-actions">
+                      <button class="ghost-button secondary" id="preview-close-button">Close</button>
+                      <button class="button" id="preview-open-button">Open in editor</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="view" id="view-file">
+            <div class="editor-header">
+              <div class="editor-header-left">
+                <button class="icon-button" id="file-back-button">←</button>
+                <div class="editor-title">
+                  <strong id="file-header-title"></strong>
+                  <span id="file-header-workspace"></span>
+                </div>
+              </div>
+              <div class="titlebar-title">Saved</div>
+            </div>
+            <div class="editor-body">
+              <div class="breadcrumb" id="file-breadcrumb"></div>
+              <h1 class="editor-doc-title" id="file-title"></h1>
+              <div class="editor-content" id="file-content"></div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="overlay" id="modal-overlay">
+      <div class="modal" id="modal-root"></div>
+    </div>
+
+    <script>
+      const workspaces = [
+        {
+          slug: "writing-harness",
+          name: "Writing Harness",
+          path: "~/Documents/Workspace/Writing Harness",
+          description: "Core writing system, notes, and reference material.",
+          updatedAt: "Updated 2h ago",
+          fileCount: 12,
+          folderCount: 3,
+          pinnedFileId: "instructions-md",
+          folders: [
+            { id: "drafts", name: "drafts", itemCount: 8, updatedAt: "May 19, 2025 at 3:21 PM" },
+            { id: "references", name: "references", itemCount: 3, updatedAt: "May 18, 2025 at 11:02 AM" },
+            { id: "assets", name: "assets", itemCount: 1, updatedAt: "May 17, 2025 at 5:18 PM" }
+          ],
+          files: [
+            {
+              id: "instructions-md",
+              name: "instructions.md",
+              size: "1.4 KB",
+              updatedAt: "May 20, 2025 at 9:41 AM",
+              preview: "Pinned guidance for how this workspace should be used.",
+              pinned: true,
+              content:
+                "# Writing Harness\\n\\nUse these materials to generate clear, structured drafts.\\n\\n- Ground claims in the provided research.\\n- Prefer clarity over flourish.\\n- Keep outputs easy to revise into essays.\\n- Treat transcript excerpts as raw material, not final prose."
+            },
+            {
+              id: "brief-md",
+              name: "brief.md",
+              size: "2.1 KB",
+              updatedAt: "May 20, 2025 at 9:40 AM",
+              content:
+                "# Brief\\n\\nThis workspace collects source notes, transcripts, and draft fragments for the Writing Harness initiative.\\n\\n## Goal\\n\\nCreate a reliable loop for:\\n\\n1. gathering material\\n2. shaping arguments\\n3. drafting with context\\n4. exporting writing without losing source traceability"
+            },
+            {
+              id: "research-notes-md",
+              name: "research-notes.md",
+              size: "6.4 KB",
+              updatedAt: "May 20, 2025 at 9:38 AM",
+              content:
+                "# Research notes\\n\\n- Compare file-first tools vs cloud-native systems.\\n- Track moments where context is scattered across transcripts, notes, and drafts.\\n- Evaluate whether the workspace should privilege folders, recent files, or pinned guidance."
+            },
+            {
+              id: "transcript-session-3-md",
+              name: "transcript-session-3.md",
+              size: "12.7 KB",
+              updatedAt: "May 19, 2025 at 4:11 PM",
+              content:
+                "Sergio:\\n\\nAhi tambien me estaban diciendo por el otro lado...\\n\\nHugo:\\n\\nEs decir, hay contratacion y todo, pero yo lo que veo es que si puede cambiar mucho..."
+            },
+            {
+              id: "ideas-md",
+              name: "ideas.md",
+              size: "1.3 KB",
+              updatedAt: "May 18, 2025 at 10:47 AM",
+              content:
+                "# Ideas\\n\\n- Workspace as a folder hub, not a PM system.\\n- Pinned files instead of app-owned context objects.\\n- Search should privilege filenames before deep metadata."
+            },
+            {
+              id: "outline-md",
+              name: "outline.md",
+              size: "1.8 KB",
+              updatedAt: "May 17, 2025 at 6:03 PM",
+              content:
+                "# Outline\\n\\n## 1. Why file-based work matters\\n## 2. Where cloud tools create friction\\n## 3. How a workspace can keep writing in context"
+            },
+            {
+              id: "todo-md",
+              name: "todo.md",
+              size: "1.0 KB",
+              updatedAt: "May 14, 2025 at 9:16 AM",
+              content:
+                "# Todo\\n\\n- Prototype workspace index\\n- Prototype detail page\\n- Validate open-file flow into editor"
+            }
+          ]
+        },
+        {
+          slug: "market-notes",
+          name: "Market Notes",
+          path: "~/Documents/Workspace/Market Notes",
+          description: "Research, interviews, and market observations.",
+          updatedAt: "Updated 1d ago",
+          fileCount: 84,
+          folderCount: 5,
+          folders: [],
+          files: []
+        },
+        {
+          slug: "claude-transcripts",
+          name: "Claude Transcripts",
+          path: "~/Documents/Workspace/Claude Transcripts",
+          description: "Interviews and conversations with Claude.",
+          updatedAt: "Updated 2d ago",
+          fileCount: 63,
+          folderCount: 4,
+          folders: [],
+          files: []
+        },
+        {
+          slug: "odessay-docs",
+          name: "Odessay Docs",
+          path: "~/Documents/Workspace/Odessay Docs",
+          description: "Product docs, guides, and internal notes.",
+          updatedAt: "Updated 3d ago",
+          fileCount: 41,
+          folderCount: 6,
+          folders: [],
+          files: []
+        },
+        {
+          slug: "ai-readiness",
+          name: "AI Readiness",
+          path: "~/Documents/Workspace/AI Readiness",
+          description: "Strategy, frameworks, and implementation plans.",
+          updatedAt: "Updated 5d ago",
+          fileCount: 99,
+          folderCount: 7,
+          folders: [],
+          files: []
+        },
+        {
+          slug: "letters-drafts",
+          name: "Letters Drafts",
+          path: "~/Documents/Workspace/Letters Drafts",
+          description: "Personal letters, essays, and longform drafts.",
+          updatedAt: "Updated 6d ago",
+          fileCount: 28,
+          folderCount: 2,
+          folders: [],
+          files: []
+        }
+      ];
+
+      const state = {
+        workspaceSearch: "",
+        currentWorkspaceSlug: null,
+        currentFileId: null,
+        previewFileId: null
+      };
+
+      const views = {
+        index: document.getElementById("view-index"),
+        detail: document.getElementById("view-detail"),
+        file: document.getElementById("view-file")
+      };
+
+      function getWorkspace(slug) {
+        return workspaces.find((workspace) => workspace.slug === slug) || null;
+      }
+
+      function getFile(workspace, fileId) {
+        return workspace.files.find((file) => file.id === fileId) || null;
+      }
+
+      function showView(name) {
+        Object.entries(views).forEach(([key, node]) => {
+          node.classList.toggle("active", key === name);
+        });
+      }
+
+      function renderRecentList() {
+        const recent = document.getElementById("recent-list");
+        recent.innerHTML = "";
+        workspaces.slice(0, 5).forEach((workspace) => {
+          const link = document.createElement("a");
+          link.href = "#";
+          link.className = "recent-link";
+          link.textContent = workspace.name;
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            openWorkspace(workspace.slug);
+          });
+          recent.appendChild(link);
+        });
+      }
+
+      function renderWorkspaceGrid() {
+        const grid = document.getElementById("workspace-grid");
+        const query = state.workspaceSearch.trim().toLowerCase();
+        const visible = workspaces.filter((workspace) => {
+          if (!query) return true;
+          return [workspace.name, workspace.path, workspace.description].some((value) =>
+            String(value || "").toLowerCase().includes(query)
+          );
+        });
+
+        grid.innerHTML = "";
+
+        visible.forEach((workspace) => {
+          const card = document.createElement("a");
+          card.href = "#";
+          card.className = "workspace-card";
+          card.innerHTML = `
+            <div class="workspace-card-top">
+              <div class="folder-badge">⌂</div>
+              <div style="min-width:0; flex:1">
+                <div class="workspace-name">${workspace.name}</div>
+                <div class="workspace-path">${workspace.path}</div>
+                <div class="workspace-description">${workspace.description || ""}</div>
+              </div>
+            </div>
+            <div class="workspace-meta">
+              <span>${workspace.fileCount} files</span>
+              <span>${workspace.folderCount} folders</span>
+              <span>${workspace.updatedAt}</span>
+            </div>
+          `;
+          card.addEventListener("click", (event) => {
+            event.preventDefault();
+            openWorkspace(workspace.slug);
+          });
+          grid.appendChild(card);
+        });
+      }
+
+      function openWorkspace(slug) {
+        state.currentWorkspaceSlug = slug;
+        state.currentFileId = null;
+        state.previewFileId = null;
+        renderWorkspaceDetail();
+        showView("detail");
+      }
+
+      function renderWorkspaceDetail() {
+        const workspace = getWorkspace(state.currentWorkspaceSlug || "writing-harness");
+        document.getElementById("detail-title").textContent = workspace.name;
+        document.getElementById("detail-path").textContent = workspace.path;
+        const pinnedContainer = document.getElementById("pinned-container");
+        const pinnedFile = workspace.files.find((file) => file.pinned);
+        pinnedContainer.innerHTML = "";
+
+        if (pinnedFile) {
+          const label = document.createElement("div");
+          label.className = "section-label";
+          label.textContent = "Pinned";
+
+          const card = document.createElement("a");
+          card.href = "#";
+          card.className = "list-card";
+          card.innerHTML = `
+            <div class="row row-grid-file">
+              <div class="row-main">
+                <div class="row-icon">⋯</div>
+                <div class="row-name">${pinnedFile.name}</div>
+                <span class="pinned-badge">Pinned</span>
+              </div>
+              <div class="row-meta">Pinned file</div>
+              <div class="row-meta">${pinnedFile.updatedAt}</div>
+            </div>
+          `;
+          card.addEventListener("click", (event) => {
+            event.preventDefault();
+            openFile(workspace.slug, pinnedFile.id);
+          });
+          pinnedContainer.appendChild(label);
+          pinnedContainer.appendChild(card);
+        }
+
+        document.getElementById("folder-note-text").textContent =
+          workspace.folderCount > 0
+            ? `This workspace is linked to a local folder. Odessay focuses on the markdown files inside it. ${workspace.folderCount} subfolders exist in the source folder.`
+            : "This workspace is linked to a local folder. Odessay focuses on the markdown files inside it.";
+
+        const filesList = document.getElementById("files-list");
+        filesList.innerHTML = "";
+        const regularFiles = workspace.files.filter((file) => !file.pinned);
+        if (regularFiles.length === 0) {
+          filesList.innerHTML = `<div class="row"><div class="row-meta">No markdown files yet.</div></div>`;
+        } else {
+          regularFiles.forEach((file) => {
+            const row = document.createElement("a");
+            row.href = "#";
+            row.className = "row row-grid-file";
+            row.innerHTML = `
+              <div class="row-main">
+                <div class="row-icon">≣</div>
+                <div class="row-name">${file.name}</div>
+              </div>
+              <div class="row-meta">${file.size}</div>
+              <div class="row-meta">${file.updatedAt}</div>
+            `;
+            row.addEventListener("click", (event) => {
+              event.preventDefault();
+              state.previewFileId = file.id;
+              renderFilePreview(workspace, file.id);
+            });
+            filesList.appendChild(row);
+          });
+        }
+
+        renderFilePreview(workspace, state.previewFileId);
+      }
+
+      function renderFilePreview(workspace, fileId) {
+        const panel = document.getElementById("file-preview-panel");
+        const rows = document.querySelectorAll("#files-list .row");
+        rows.forEach((row) => row.classList.remove("selected"));
+
+        if (!fileId) {
+          panel.classList.remove("active");
+          return;
+        }
+
+        const file = getFile(workspace, fileId);
+        if (!file) {
+          panel.classList.remove("active");
+          return;
+        }
+
+        panel.classList.add("active");
+        document.getElementById("preview-title").textContent = file.name.replace(/\.md$/, "");
+        document.getElementById("preview-meta").textContent = `${file.size} · ${file.updatedAt}`;
+        document.getElementById("preview-body").textContent = file.content || "";
+
+        const fileRows = Array.from(document.querySelectorAll("#files-list .row"));
+        const activeRow = fileRows.find((row) => row.textContent.includes(file.name));
+        if (activeRow) {
+          activeRow.classList.add("selected");
+        }
+
+        document.getElementById("preview-open-button").onclick = () => openFile(workspace.slug, file.id);
+        document.getElementById("preview-close-button").onclick = () => {
+          state.previewFileId = null;
+          renderFilePreview(workspace, null);
+        };
+      }
+
+      function openFile(workspaceSlug, fileId) {
+        state.currentWorkspaceSlug = workspaceSlug;
+        state.currentFileId = fileId;
+        const workspace = getWorkspace(workspaceSlug);
+        const file = getFile(workspace, fileId);
+
+        document.getElementById("file-header-title").textContent = file.name;
+        document.getElementById("file-header-workspace").textContent = workspace.name;
+        document.getElementById("file-breadcrumb").textContent = `Workspace / ${workspace.name} / ${file.name}`;
+        document.getElementById("file-title").textContent = file.name.replace(/\.md$/, "");
+        document.getElementById("file-content").textContent = file.content || "";
+
+        showView("file");
+      }
+
+      function closeModal() {
+        document.getElementById("modal-overlay").classList.remove("active");
+      }
+
+      function openModal(step) {
+        const root = document.getElementById("modal-root");
+        document.getElementById("modal-overlay").classList.add("active");
+
+        if (step === "chooser") {
+          root.innerHTML = `
+            <h2>Add a workspace</h2>
+            <p>Work with a folder you already use, or create a fresh one for a new writing context.</p>
+            <div class="option-list">
+              <button class="option" data-step="existing">
+                <div class="option-icon">⌂</div>
+                <div>
+                  <div class="option-title">Use an existing folder</div>
+                  <div class="option-description">Open a folder you already work from.</div>
+                </div>
+              </button>
+              <button class="option" data-step="scratch">
+                <div class="option-icon">＋</div>
+                <div>
+                  <div class="option-title">Create from scratch</div>
+                  <div class="option-description">Create a new folder for a workspace.</div>
+                </div>
+              </button>
+            </div>
+          `;
+
+          root.querySelectorAll("[data-step]").forEach((button) => {
+            button.addEventListener("click", () => openModal(button.getAttribute("data-step")));
+          });
+          return;
+        }
+
+        if (step === "existing") {
+          root.innerHTML = `
+            <button class="modal-back" id="modal-back">←</button>
+            <h2>Use an existing folder</h2>
+            <p>Pick a folder and Odessay will treat its files as a writing workspace.</p>
+            <div class="field">
+              <label>Choose folder</label>
+              <div class="picker">Select a folder...</div>
+            </div>
+            <div class="modal-footer">
+              <div class="modal-footnote">This adds the folder to Odessay without moving its files.</div>
+              <div class="modal-actions">
+                <button class="ghost-button secondary" id="modal-cancel">Cancel</button>
+                <button class="button disabled">Add workspace</button>
+              </div>
+            </div>
+          `;
+        } else {
+          root.innerHTML = `
+            <button class="modal-back" id="modal-back">←</button>
+            <h2>Create a workspace</h2>
+            <p>Create a new folder and start a clean writing context from scratch.</p>
+            <div class="field">
+              <label>Workspace name</label>
+              <input placeholder="Workspace name" />
+            </div>
+            <div class="field">
+              <label>Notes</label>
+              <textarea placeholder="Optional notes about what this workspace is for."></textarea>
+            </div>
+            <div class="field">
+              <label>Choose location</label>
+              <div class="picker">~/Documents/Workspace</div>
+            </div>
+            <div class="modal-footer">
+              <div class="modal-footnote"></div>
+              <div class="modal-actions">
+                <button class="ghost-button secondary" id="modal-cancel">Cancel</button>
+                <button class="button disabled">Create workspace</button>
+              </div>
+            </div>
+          `;
+        }
+
+        document.getElementById("modal-back").addEventListener("click", () => openModal("chooser"));
+        document.getElementById("modal-cancel").addEventListener("click", closeModal);
+      }
+
+      document.getElementById("workspace-search").addEventListener("input", (event) => {
+        state.workspaceSearch = event.target.value;
+        renderWorkspaceGrid();
+      });
+
+      document.getElementById("add-workspace-button").addEventListener("click", () => openModal("chooser"));
+      document.getElementById("new-file-button").addEventListener("click", () => openModal("scratch"));
+      document.getElementById("file-back-button").addEventListener("click", () => openWorkspace(state.currentWorkspaceSlug));
+      document.getElementById("modal-overlay").addEventListener("click", (event) => {
+        if (event.target.id === "modal-overlay") {
+          closeModal();
+        }
+      });
+
+      renderRecentList();
+      renderWorkspaceGrid();
+    </script>
+  </body>
+</html>

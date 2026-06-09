@@ -9,6 +9,7 @@ import {
   tauriSettingsRead,
   tauriSettingsWrite,
 } from "@/lib/services/desktop/tauri-commands"
+import type { WorkspaceLayout, WorkspaceRecord } from "@/lib/workspace/types"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -24,6 +25,8 @@ export type DesktopSettings = {
   editorLineHeight?: number
   sidebarOpen?: boolean
   lastActiveWritingId?: string | null
+  workspaces?: WorkspaceRecord[]
+  workspaceLayout?: WorkspaceLayout
 } & UserSettings
 
 const SETTINGS_KEY = "desktop_settings_v1"

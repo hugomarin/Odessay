@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capabilities for Odessay desktop. Scope is limited to the user's Documents directory for minimal filesystem access.",
+  "description": "Default capabilities for Odessay desktop. Automatic document storage uses app data; explicit user-selected files remain available through dialogs.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -10,6 +10,7 @@
       "identifier": "fs:default",
       "allow": [{ "path": "$DOCUMENT/**" }]
     },
+    "fs:allow-watch",
     "dialog:allow-open",
     "dialog:allow-save"
   ]
