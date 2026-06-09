@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { GET, PUT } from "@/app/api/writings/[id]/collections/route"
 
+const getCurrentUserFromRequestMock = vi.hoisted(() => vi.fn())
+
 const supabaseMock = vi.hoisted(() => ({
-  getUser: vi.fn(),
   rpc: vi.fn(),
   from: vi.fn(() => ({
     select: vi.fn(() => ({
@@ -13,9 +14,12 @@ const supabaseMock = vi.hoisted(() => ({
   })),
 }))
 
+vi.mock("@/lib/supabase/request-auth", () => ({
+  getCurrentUserFromRequest: getCurrentUserFromRequestMock,
+}))
+
 vi.mock("@/lib/supabase/server", () => ({
   createClient: vi.fn(async () => ({
-    auth: supabaseMock,
     rpc: supabaseMock.rpc,
     from: supabaseMock.from,
   })),
@@ -39,14 +43,12 @@ const makeContext = (id: string) => ({
 
 describe("GET /api/writings/[id]/collections", () => {
   beforeEach(() => {
-    supabaseMock.getUser.mockReset()
+    getCurrentUserFromRequestMock.mockReset()
     supabaseMock.from.mockReset()
   })
 
   it("returns 401 when there is no active session", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: null },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: null })
 
     const response = await GET(
       new Request(`http://localhost/api/writings/${WRITING_ID}/collections`),
@@ -62,9 +64,7 @@ describe("GET /api/writings/[id]/collections", () => {
   })
 
   it("returns writing collections for the authenticated user", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     const eqInnerMock = vi.fn(() => ({
       data: [{ collection_id: "col-1", added_at: "2026-01-01T00:00:00.000Z" }],
@@ -99,14 +99,12 @@ describe("GET /api/writings/[id]/collections", () => {
 
 describe("PUT /api/writings/[id]/collections", () => {
   beforeEach(() => {
-    supabaseMock.getUser.mockReset()
+    getCurrentUserFromRequestMock.mockReset()
     supabaseMock.rpc.mockReset()
   })
 
   it("returns 401 when there is no active session", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: null },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: null })
 
     const response = await PUT(
       makeRequest({ collection_ids: [COL_ID_1], updated_at: "2026-01-01T00:00:00.000Z" }),
@@ -122,9 +120,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("returns 400 for invalid input", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     const response = await PUT(
       makeRequest({ collection_ids: "not-an-array" }),
@@ -137,9 +133,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("returns 404 when the writing does not exist (PT404)", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     supabaseMock.rpc.mockResolvedValue({
       data: null,
@@ -160,9 +154,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("returns 403 when a collection does not belong to the user (PT403)", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     supabaseMock.rpc.mockResolvedValue({
       data: null,
@@ -183,9 +175,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("returns 200 and replaces collection membership on success", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     supabaseMock.rpc.mockResolvedValue({
       data: null,
@@ -213,9 +203,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("deduplicates collection ids before calling rpc", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     supabaseMock.rpc.mockResolvedValue({
       data: null,
@@ -237,9 +225,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("returns 500 for unexpected DB errors", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     supabaseMock.rpc.mockResolvedValue({
       data: null,
@@ -257,9 +243,7 @@ describe("PUT /api/writings/[id]/collections", () => {
   })
 
   it("removes all collections when collection_ids is empty", async () => {
-    supabaseMock.getUser.mockResolvedValue({
-      data: { user: { id: USER_ID } },
-    })
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: USER_ID })
 
     supabaseMock.rpc.mockResolvedValue({
       data: null,

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createWebSharingService } from "@/lib/services/web-sharing-service"
 import { parseSharePayload } from "@/lib/sharing/writing-shares"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -12,17 +12,9 @@ const shareBodySchema = z.object({ shared_with_id: z.string().uuid() })
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
 
-const getCurrentUserId = async () => {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user?.id ?? null
-}
-
 // GET /api/writings/[id]/shares — list users with access (author only)
-export async function GET(_req: Request, context: RouteContext) {
-  const userId = await getCurrentUserId()
+export async function GET(req: Request, context: RouteContext) {
+  const { userId } = await getCurrentUserFromRequest(req)
   if (!userId) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const params = await context.params
@@ -42,7 +34,7 @@ export async function GET(_req: Request, context: RouteContext) {
 
 // POST /api/writings/[id]/shares — share with a user
 export async function POST(req: Request, context: RouteContext) {
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(req)
   if (!userId) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const params = await context.params
@@ -84,7 +76,7 @@ export async function POST(req: Request, context: RouteContext) {
 
 // DELETE /api/writings/[id]/shares — revoke access for a user
 export async function DELETE(req: Request, context: RouteContext) {
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(req)
   if (!userId) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const params = await context.params

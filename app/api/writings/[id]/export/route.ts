@@ -5,7 +5,7 @@ import { buildWritingExportDocument, getExportFileBaseName } from "@/lib/export/
 import { renderWritingToDocxBuffer } from "@/lib/export/to-docx"
 import { renderWritingToPdfBuffer } from "@/lib/export/to-pdf"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -17,15 +17,6 @@ const formatSchema = z.enum(["pdf", "docx"])
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
-
-const getCurrentUserId = async () => {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  return user?.id ?? null
-}
 
 const getRequestedFormat = (request: Request) => {
   const { searchParams } = new URL(request.url)
@@ -77,7 +68,7 @@ const getDisplayTitle = (title: string | null, bodyText: string | null, writingI
 }
 
 export async function GET(request: Request, context: RouteContext) {
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(request)
   if (!userId) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const params = await context.params

@@ -1,24 +1,16 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createWebSharingService } from "@/lib/services/web-sharing-service"
-import { createClient } from "@/lib/supabase/server"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
 const MAX_IDS = 50
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
 
-const getCurrentUserId = async () => {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user?.id ?? null
-}
-
 // GET /api/writings/shares?ids=uuid1,uuid2,... — batch list shares for multiple writings
 export async function GET(req: Request) {
-  const userId = await getCurrentUserId()
+  const { userId } = await getCurrentUserFromRequest(req)
   if (!userId) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const { searchParams } = new URL(req.url)
