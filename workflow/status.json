@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(workspace): cancel async watcher setup on unmount to prevent OS-level leak. In WorkspaceIndexPrototype and WorkspaceDetailPrototype, after stopWatching is assigned inside the Promise callback, check cancelled flag and call stopWatching() immediately if the component already unmounted. Applies to both watchWorkspaces (index) and watchWorkspace (detail). [ODE-253]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-253",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-253/fix-workspace-watcher-leak-when-useeffect-cleanup-runs-before-setup",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/240",
+      "commit": "ad95411",
+      "date": "2026-06-09",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 679 tests PASS. Delivery gate PASS. Performance Contract: reactive fan-out required — code review sufficient for lifecycle fix."
+    },
+    {
       "what": "fix(desktop): restore image upload in DesktopAssetService and correct boundary test. Updated allowedImports in desktop-adapter-boundary.test.ts to permit @/lib/supabase/desktop-client (JWT direct, no cookies/SSR) and all other legitimate desktop adapter dependencies. Fixed false positive on DOCX MIME type string containing 'document.'. Replaced UNAVAILABLE test in desktop-asset-service.test.ts with full Supabase mock coverage (auth, storage upload, DB insert, signed URL, error handling, cleanup). [ODE-260]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-260",
