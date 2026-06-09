@@ -28,13 +28,26 @@ const forbiddenGlobalPatterns = [
 
 const allowedImports = new Set([
   "@tauri-apps/api/core",
+  "@tauri-apps/api/path",
+  "@tauri-apps/plugin-dialog",
   "@/lib/runtime/detect",
   "@/lib/services/contracts/document-service",
   "@/lib/services/contracts/asset-service",
   "@/lib/services/contracts/settings-service",
   "@/lib/services/contracts/service-types",
   "@/lib/services/desktop/tauri-commands",
+  "@/lib/services/desktop/tauri-fs-watch",
   "@/lib/services/desktop/local-index-service",
+  "@/lib/services/desktop/desktop-settings-service",
+  "@/lib/services/document-service-factory",
+  // Desktop-only: this module uses @supabase/supabase-js (JWT auth, no cookies/SSR)
+  "@/lib/supabase/desktop-client",
+  "@/lib/workspace/types",
+  "@/lib/local-db",
+  "@/lib/editor/document-serialization",
+  "@/lib/export/to-docx",
+  "@/lib/export/to-pdf",
+  "@/lib/export/writing-export",
 ])
 
 describe("desktop adapter boundary compliance", () => {
