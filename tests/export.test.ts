@@ -156,7 +156,7 @@ describe("export helpers", () => {
           attrs: { src: "https://example.com/image.png", alt: "Diagram" },
         },
       ],
-    })).toBe("![Diagram](https\\://example\\.com/image\\.png)")
+    })).toBe("![Diagram](https://example.com/image.png)")
   })
 
   it("shares export styles between PDF and DOCX (DRY)", () => {

@@ -364,7 +364,7 @@ const renderInlineRunToMarkdown = (run: WritingExportInline) => {
   const escaped = escapeMarkdownText(run.text)
 
   if (run.linkHref) {
-    return `[${escaped}](${escapeMarkdownText(run.linkHref)})`
+    return `[${escaped}](${run.linkHref})`
   }
 
   if (run.code) {
@@ -445,7 +445,7 @@ const renderBlockToMarkdown = (block: WritingExportBlock) => {
       return [formatRow(rows[0]), separator, ...rows.slice(1).map(formatRow)].join("\n")
     }
     case "image":
-      return `![${escapeMarkdownText(block.image.alt ?? "")}](${escapeMarkdownText(block.image.src)})`
+      return `![${escapeMarkdownText(block.image.alt ?? "")}](${block.image.src})`
     default:
       return ""
   }
