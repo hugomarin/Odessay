@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(api): migrate /api/writings/* routes to Bearer-token auth (getCurrentUserFromRequest). Replaced local cookie-only getCurrentUserId() with getCurrentUserFromRequest(request) in all 7 writings routes. Desktop sync worker can now authenticate via Bearer token. Web cookie auth continues to work. [ODE-249]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-249",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-249/migrate-apiwritings-routes-to-bearer-token-auth",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/234",
+      "commit": "425a721",
+      "date": "2026-06-08",
+      "notes": "Shipped via /wf-ship ODE-249 on branch codex/ode-250-add-cors-headers-to-all-error-responses-in. Typecheck PASS. Lint PASS (pre-existing warnings only). 667 tests PASS, 4 pre-existing failures. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(cors): add CORS headers to all error responses in corrections/hydrate and corrections/persist. All error paths (401, 400, 403, 404, 500) and the delete-only 200 path now wrap responses with withCorsHeaders(..., request) so the desktop client receives structured JSON instead of opaque CORS blocks. [ODE-250]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-250",
