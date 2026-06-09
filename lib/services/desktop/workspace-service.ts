@@ -1,6 +1,6 @@
 "use client"
 
-import { appConfigDir } from "@tauri-apps/api/path"
+import { appConfigDir, join } from "@tauri-apps/api/path"
 import { open } from "@tauri-apps/plugin-dialog"
 import { localDB } from "@/lib/local-db"
 import { getDocumentService } from "@/lib/services/document-service-factory"
@@ -290,15 +290,16 @@ export class DesktopWorkspaceService {
       throw new Error("File name is required")
     }
 
+    const expectedPath = await join(workspace.rootPath, normalizedName)
     await tauriCreateFile(workspace.rootPath, normalizedName)
     const refreshed = await this.getWorkspace(workspace.slug)
     if (!refreshed) {
       throw new Error("Workspace not found after creating file")
     }
 
-    const file = refreshed.files.find((candidate) => candidate.name === normalizedName)
+    const file = refreshed.files.find((candidate) => candidate.path === expectedPath)
     if (!file) {
-      throw new Error("New file was not found after refresh")
+      throw new Error(`New file was not found after refresh: ${expectedPath}`)
     }
 
     return file
