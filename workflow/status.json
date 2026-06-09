@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(security): sanitize workspace_create name parameter to prevent path traversal. Validates name rejects /, \\, and .. sequences. Validates parent_path resolves to existing directory via canonicalize(). workspace_sync canonicalizes root_path before all operations. Defense-in-depth complement to ODE-246. [ODE-252]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-252",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-252/sanitize-workspace-create-name-parameter-to-prevent-path-traversal",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/230",
+      "commit": "d452f0b",
+      "date": "2026-06-08",
+      "notes": "Shipped via /wf-ship ODE-252 --branch codex/ode-246-restrict-filesystem-scope. Code changes already implemented in ODE-246 commit d452f0b. Typecheck PASS. Lint PASS (pre-existing warnings only). 666 tests PASS, 4 pre-existing failures. Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(security): restrict Tauri filesystem capability from $HOME/** to $DOCUMENT/**. Added path traversal validation in workspace_create (rejects .., /, \\ in parent_path and name; canonicalizes parent before join). Added canonicalize() in workspace_sync before traversal to prevent symlink escape. [ODE-246]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-246",
