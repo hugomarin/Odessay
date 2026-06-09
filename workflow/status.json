@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): await onSaveComplete in useTauriMenuEvents to prevent stale canonical path. Nested try/catch around onSaveCompleteRef.current?.(finalPath) ensures isWritingRef stays true until DB update commits. [ODE-255]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-255",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-255/await-onsavecomplete-callback-in-usetaurimenuevents-to-prevent-stale",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/237",
+      "commit": "4dd6051",
+      "date": "2026-06-09",
+      "notes": "Shipped via /wf-ship ODE-255. Typecheck PASS. Lint PASS (pre-existing warnings only). 667 tests PASS, 4 pre-existing failures (desktop-adapter-boundary x3, desktop-asset-service x1). Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(export): add 10s AbortController timeout to imageBlockToDocx so DOCX export never hangs on unresponsive image servers. Falls back to alt-text + URL paragraph on timeout or fetch failure. [ODE-257]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-257",
