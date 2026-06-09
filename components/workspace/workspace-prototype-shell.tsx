@@ -302,6 +302,9 @@ function DesktopWorkspaceIndex() {
           }
         },
       )
+      if (cancelled && stopWatching) {
+        void stopWatching()
+      }
     })
 
     return () => {
@@ -717,6 +720,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             void loadWorkspace()
           }
         })
+        if (cancelled && stopWatching) {
+          void stopWatching()
+        }
       })
       .catch((error) => {
         console.warn("[workspace] file watcher setup failed:", error)
