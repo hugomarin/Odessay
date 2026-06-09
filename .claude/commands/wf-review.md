@@ -13,3 +13,4 @@ Revisa un issue de Linear siguiendo el protocolo REVIEW de Odessay.
 5. Ejecutar REVIEW end-to-end: validar gates, revisar PR, aprobar o rechazar, y actualizar Linear.
 6. Al aprobar, incluir el marker obligatorio `REVIEW APROBADO`.
 7. Al rechazar, incluir el marker obligatorio `REVIEW RECHAZADO`.
+
