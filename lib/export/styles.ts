@@ -22,6 +22,7 @@ export const FONT_FAMILY_CODE_FALLBACK = "Courier"
 export const FONT_FAMILY_CODE_DOCX = "Roboto Mono"
 export const FONT_FAMILY_CODE_DOCX_FALLBACK = "Consolas"
 export const FONT_PATH_CODE = "/fonts/roboto-mono/RobotoMono-Regular.ttf"
+export const FONT_PATH_CODE_TAURI = "http://tauri.localhost/fonts/roboto-mono/RobotoMono-Regular.ttf"
 
 export const FONT_SIZE_BODY_PT = 11
 export const FONT_SIZE_BODY_PDF = 11
