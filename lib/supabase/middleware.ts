@@ -67,12 +67,6 @@ export const updateSession = async (request: NextRequest) => {
     return NextResponse.redirect(redirectUrl)
   }
 
-  if (pathname.startsWith("/api")) {
-    return NextResponse.next({
-      request,
-    })
-  }
-
   if (pathname.startsWith("/perf")) {
     return NextResponse.next({
       request,

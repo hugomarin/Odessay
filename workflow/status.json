@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "Fix Supabase middleware dropping session refresh for /api routes. Removed early return on /api paths in lib/supabase/middleware.ts so createServerClient runs and can refresh expired access tokens via the refresh token. API routes using Bearer token auth (getCurrentUserFromRequest) are unaffected — they validate tokens independently. Added 5 regression tests in tests/supabase-middleware.test.ts covering createServerClient invocation, no-redirect for unauthenticated /api requests, cookie refresh on /api routes, and preserved private-route redirect behavior. [ODE-256]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-256",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-256/fix-supabase-middleware-dropping-session-refresh-for-api-routes",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/238",
+      "commit": "7c9216d",
+      "date": "2026-06-09",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 9/9 middleware tests PASS. Full suite: 672 PASS, 4 pre-existing failures (desktop-asset-service env missing). Delivery gate PASS. Performance Contract: not required."
+    },
+    {
       "what": "fix(export): add 10s AbortController timeout to imageBlockToDocx so DOCX export never hangs on unresponsive image servers. Falls back to alt-text + URL paragraph on timeout or fetch failure. [ODE-257]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-257",
