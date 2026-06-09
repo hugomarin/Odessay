@@ -479,7 +479,7 @@ export class FilesystemDocumentService implements DocumentService {
         mimeType:
           input.format === "pdf"
             ? "application/pdf"
-            : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            : "application/vnd.openxmlformats-officedocument" + ".wordprocessingml.document",
         bytes,
       })
     } catch (e) {
