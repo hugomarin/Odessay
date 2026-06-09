@@ -91,7 +91,11 @@ export function useTauriMenuEvents({ onOpenFile, onNewFile, onGetSaveContent, on
         const { invoke } = await import("@tauri-apps/api/core")
         await invoke("write_file", { path: finalPath, content: payload.content })
         lastSavePathRef.current = finalPath
-        onSaveCompleteRef.current?.(finalPath)
+        try {
+          await onSaveCompleteRef.current?.(finalPath)
+        } catch (err) {
+          console.error("onSaveComplete failed:", err)
+        }
       } catch (err) {
         console.error("write_file failed:", err)
       } finally {
