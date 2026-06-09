@@ -47,6 +47,12 @@ struct WorkspaceIndexEntry {
     size: u64,
 }
 
+/// Return true if any path component is exactly "..".
+fn has_path_traversal(path: &str) -> bool {
+    path.split(|c: char| c == '/' || c == '\\')
+        .any(|component| component == "..")
+}
+
 #[tauri::command]
 pub fn workspace_create(parent_path: String, name: String) -> Result<String, String> {
     let trimmed_name = name.trim();
@@ -54,7 +60,28 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
         return Err("workspace_create: name is required".to_string());
     }
 
-    let target = Path::new(&parent_path).join(trimmed_name);
+    // Reject path traversal in parent_path
+    if has_path_traversal(&parent_path) {
+        return Err(
+            "workspace_create: parent_path contains invalid path component '..'".to_string(),
+        );
+    }
+
+    // Reject path traversal or separator characters in name
+    if has_path_traversal(trimmed_name)
+        || trimmed_name.contains('/')
+        || trimmed_name.contains('\\')
+    {
+        return Err("workspace_create: name contains invalid characters".to_string());
+    }
+
+    let parent = Path::new(&parent_path);
+    let canonical_parent = parent
+        .canonicalize()
+        .map_err(|e| format!("workspace_create: invalid parent_path: {e}"))?;
+
+    let target = canonical_parent.join(trimmed_name);
+
     if target.exists() {
         return Err(format!(
             "workspace_create: folder already exists: {}",
@@ -62,7 +89,8 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
         ));
     }
 
-    fs::create_dir_all(&target).map_err(|e| format!("workspace_create create_dir_all: {e}"))?;
+    fs::create_dir_all(&target)
+        .map_err(|e| format!("workspace_create create_dir_all: {e}"))?;
     Ok(target.to_string_lossy().to_string())
 }
 
@@ -79,15 +107,20 @@ pub fn workspace_sync(root_path: String) -> Result<WorkspaceSnapshot, String> {
         return Err(format!("workspace_sync: not a folder: {}", root.display()));
     }
 
-    let odyssey_dir = root.join(".odyssey");
-    fs::create_dir_all(&odyssey_dir).map_err(|e| format!("workspace_sync create_dir_all: {e}"))?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("workspace_sync: failed to canonicalize root_path: {e}"))?;
+
+    let odyssey_dir = canonical_root.join(".odyssey");
+    fs::create_dir_all(&odyssey_dir)
+        .map_err(|e| format!("workspace_sync create_dir_all: {e}"))?;
 
     let index_path = odyssey_dir.join("index.json");
     let existing_index = read_workspace_index(&index_path)?;
 
     let mut files = Vec::new();
     let mut folder_count = 0usize;
-    visit_workspace(root, root, &mut files, &mut folder_count)?;
+    visit_workspace(&canonical_root, &canonical_root, &mut files, &mut folder_count)?;
 
     let mut files_with_ids = Vec::new();
     let mut next_index = WorkspaceIndexDocument {
@@ -136,7 +169,7 @@ pub fn workspace_sync(root_path: String) -> Result<WorkspaceSnapshot, String> {
 
     files_with_ids.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
     let updated_at = files_with_ids.first().map(|file| file.modified_at);
-    let name = root
+    let name = canonical_root
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("Workspace")
