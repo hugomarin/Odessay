@@ -361,6 +361,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const currentCanonicalPathRef = useRef<string | null>(null)
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
+  const desktopWebHandoffAppliedRef = useRef(false)
   const forceNewWritingRequestedRef = useRef(false)
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
@@ -406,6 +407,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     () => createCorrectionSuggestionBatcher(setAutomaticCorrectionSuggestions),
     [],
   )
+
+  useEffect(() => {
+    if (desktopWebHandoffAppliedRef.current || typeof window === "undefined") {
+      return
+    }
+
+    const params = new URLSearchParams(window.location.search)
+    const isDesktopHandoff = params.get("desktop") === "1"
+    const action = params.get("action")
+
+    if (isDesktopHandoff && (action === "publish" || action === "share")) {
+      desktopWebHandoffAppliedRef.current = true
+      setActivePanel("properties")
+    }
+  }, [])
 
   const updateDerivedEditorState = useCallback((editorInstance: Editor) => {
     setBodyText(editorInstance.getText())

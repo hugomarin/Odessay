@@ -11,6 +11,7 @@ Referencias:
 - `workflow/context/features/odessay-desktop-app.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
+- `workflow/context/features/odessay-runtime-coexistence-policy.md`
 - `workflow/context/features/odessay-prosemirror-tiptap.md`
 - `workflow/context/core/odessay-stack.md`
 - `.agents/skills/skill-architecture/SKILL.md`
@@ -45,6 +46,7 @@ Referencias:
   - qué funciona offline
   - qué depende de login
   - qué se sincroniza y cómo
+- La política declara que desktop es filesystem-first y que publishing/sharing son web-only paths en esta etapa, con salida explícita desde desktop al web equivalente.
 - El producto ya puede explicarse como una sola plataforma con más de una superficie.
 
 ## 5) Promesa percibida por el usuario en esta fase
