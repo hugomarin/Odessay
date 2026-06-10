@@ -2700,7 +2700,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           const hasAnnotation = annotationRanges.some(
             (ar) =>
               (ar.from >= range.from && ar.to <= range.to) || // annotation inside highlight
-              ar.from === range.to, // annotation immediately after highlight (==text==[@1: ...])
+              (ar.from >= range.from && ar.from <= range.to + 1), // annotation immediately after highlight (==text==[@1: ...]); tolerate ±1 position drift between JSON and HTML load paths
           )
 
           if (!hasAnnotation) {
