@@ -2700,13 +2700,16 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           const hasAnnotation = annotationRanges.some(
             (ar) =>
               (ar.from >= range.from && ar.to <= range.to) || // annotation inside highlight
-              ar.from === range.to, // annotation immediately after highlight (==text==[@1: ...])
+              (ar.from >= range.from && ar.from <= range.to + 1), // annotation immediately after highlight (==text==[@1: ...]); tolerate ±1 position drift between JSON and HTML load paths
           )
 
           if (!hasAnnotation) {
+            const maxAnnotationHighlightIndex = annotations
+              .filter((a) => a.type === "highlight")
+              .reduce((max, a) => Math.max(max, a.index), 0)
             highlights.push({
               type: "highlight",
-              index: highlights.length + 1,
+              index: maxAnnotationHighlightIndex + highlights.length + 1,
               text: "",
               id: `highlight:${highlights.length}`,
               anchor_text: editor.state.doc.textBetween(range.from, range.to),
@@ -2720,7 +2723,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return [...annotations, ...highlights]
     }
 
-    return getMarkdownFootnotes(markdownValue).filter((f) => f.type === "footnote")
+    return getMarkdownFootnotes(markdownValue)
   }, [editor, markdownValue, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
