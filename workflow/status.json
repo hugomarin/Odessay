@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-09",
+  "last_updated": "2026-06-10",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -45,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "test(parity): add canonical Markdown cross-runtime parity harness. Adds npm run test:parity, fixtures, parser parity shared serialization vs DesktopDocumentEngine, server/client render parity, structural goldens, and semantic footnote render coverage. [ODE-226]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-226",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-226/build-canonical-markdown-cross-runtime-parity-harness",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/243",
+      "commit": "0eac02f",
+      "date": "2026-06-10",
+      "notes": "Score: 9.0/10. GateResult PASS. Typecheck PASS, lint PASS with pre-existing warnings, test:parity PASS (11), npm test PASS (690), ops:status:drift:strict PASS after ODE-248 backfill, ops:delivery:gate PASS, GitHub Actions Traceability Gates PASS. Performance Contract not required. Architecture Contract compliant."
+    },
     {
       "what": "fix(auth): surface signOut server-revocation failure on timeout. Desktop signOut now reports incomplete server revocation instead of returning ok(null) on timeout, while still clearing local session state. [ODE-248]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
