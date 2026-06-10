@@ -46,6 +46,16 @@
   },
   "built": [
     {
+      "what": "fix(auth): surface signOut server-revocation failure on timeout. Desktop signOut now reports incomplete server revocation instead of returning ok(null) on timeout, while still clearing local session state. [ODE-248]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-248",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-248/surface-signout-server-revocation-failure-do-not-return-oknull-on",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/231",
+      "commit": "e98743d",
+      "date": "2026-06-09",
+      "notes": "Traceability backfill during ODE-226 review. ODE-248 was already Done in Linear and merged in PR #231, but was missing from workflow/status.json, causing ops:status:drift:strict to fail unrelated PR gates."
+    },
+    {
       "what": "fix(desktop): match created file by path instead of name in createFile. Compute expectedPath with join(workspace.rootPath, normalizedName) before creation, then match against candidate.path in the refreshed snapshot. Prevents false match when a workspace contains a file with the same name in a subdirectory (e.g. docs/notes.md vs root notes.md). [ODE-254]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "issue": "ODE-254",
