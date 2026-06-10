@@ -9,6 +9,7 @@ import {
   buildAiAnnotationCopy,
   extractStandaloneHighlights,
   extractWritingAnnotationNodes,
+  normalizeMarkdownFootnotes,
 } from "@/lib/editor/footnote-extension"
 import { AnnotationReferenceNode } from "@/lib/editor/footnote-node"
 import {
@@ -84,6 +85,19 @@ describe("highlight annotation", () => {
         { type: "highlight", index: 1, text: "Highlight note" },
         { type: "ai", index: 1, text: "AI note" },
         { type: "footnote", index: 1, text: "Footnote" },
+      ])
+    })
+
+    it("normalizeMarkdownFootnotes renumbers [@hN:] highlight annotations by occurrence order", () => {
+      const markdown = "Body[@h3: third][@h1: first][@h2: second]"
+      const normalized = normalizeMarkdownFootnotes(markdown)
+      // Order-based renumbering: first occurrence becomes h1, second h2, third h3
+      expect(normalized).toBe("Body[@h1: third][@h2: first][@h3: second]")
+      const footnotes = getMarkdownFootnotes(normalized)
+      expect(footnotes.map((f) => ({ type: f.type, index: f.index, text: f.text }))).toEqual([
+        { type: "highlight", index: 1, text: "third" },
+        { type: "highlight", index: 2, text: "first" },
+        { type: "highlight", index: 3, text: "second" },
       ])
     })
 
