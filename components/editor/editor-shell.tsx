@@ -2723,7 +2723,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return [...annotations, ...highlights]
     }
 
-    return getMarkdownFootnotes(markdownValue).filter((f) => f.type === "footnote")
+    return getMarkdownFootnotes(markdownValue)
   }, [editor, markdownValue, mode, richFootnoteRevision, version])
   const textMetrics = useMemo(() => calculateTextMetrics(bodyText), [bodyText])
   const selectionMetrics = useEditorSelection(editor, mode, markdownSelectionState)
