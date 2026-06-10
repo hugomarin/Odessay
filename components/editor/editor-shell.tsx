@@ -2704,9 +2704,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           )
 
           if (!hasAnnotation) {
+            const maxAnnotationHighlightIndex = annotations
+              .filter((a) => a.type === "highlight")
+              .reduce((max, a) => Math.max(max, a.index), 0)
             highlights.push({
               type: "highlight",
-              index: highlights.length + 1,
+              index: maxAnnotationHighlightIndex + highlights.length + 1,
               text: "",
               id: `highlight:${highlights.length}`,
               anchor_text: editor.state.doc.textBetween(range.from, range.to),
