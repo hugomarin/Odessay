@@ -2007,6 +2007,15 @@
       "date": "2026-06-08",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Fix: escapeMarkdownText no longer applied to image src and link href in markdown export. URLs are now used verbatim. Test updated. Typecheck PASS. Lint PASS (pre-existing warnings). 14/14 export tests PASS. 4 unrelated pre-existing failures in desktop-adapter-boundary and desktop-asset-service."
+    },
+    {
+      "issue": "ODE-261",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-261/fix-notes-panel-bugs-count-drift-on-mode-switch-draft-overwrite",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/245",
+      "commit": "03989d3",
+      "date": "2026-06-10",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Score: 9.5/10. Performance Contract: required (Interaction latency verified: benchmark avg 0.010ms p95 0.015ms; CI gate PASS). GateResult PASS. Four Notes-panel bugs fixed: hasAnnotation position tolerance for JSON/HTML drift (Bug A), unique standalone highlight indices (Bug B), markdown mode shows all annotation types (Bug C), collectInlineReferences classifies [@hN:] as highlight (Bug D)."
     }
   ]
 }
