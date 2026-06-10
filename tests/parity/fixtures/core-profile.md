@@ -31,4 +31,4 @@ const runtime = "shared-core"
 
 ![Diagram](https://example.com/diagram.png)
 
-Footnote reference [^1: Footnote body with **bold** text.]
+Footnote reference [^1: Footnote body text.]
