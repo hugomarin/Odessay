@@ -16,7 +16,7 @@ describe("text metrics", () => {
     const text = "Hello world. This is Artifact Studio!"
 
     expect(calculateTextMetrics(text)).toEqual({
-      words: 5,
+      words: 6,
       characters: text.length,
       sentences: 2,
       readingTimeMinutes: 1,
