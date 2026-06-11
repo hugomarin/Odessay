@@ -295,7 +295,7 @@ class DesktopDocumentService implements DocumentService {
         existingByCanonicalPath?.canonical_path
 
       if (!mappedCanonicalPath && isProtectedCanonicalPath(writingId)) {
-        return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Odessay copy.")
+        return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Artifact Studio copy.")
       }
 
       const canonicalPath = mappedCanonicalPath ?? writingId
