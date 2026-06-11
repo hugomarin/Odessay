@@ -77,7 +77,8 @@ const collectInlineReferences = (markdown: string, definitions: Map<number, stri
 
     if (match[4]) {
       refs.push({
-        type: match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : "ai",
+        type:
+          match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : match[3] === "h" ? "highlight" : "ai",
         index: Number(match[4]),
       })
       continue

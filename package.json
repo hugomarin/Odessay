@@ -18,6 +18,7 @@
     "ops:perf:gate": "node scripts/check-performance-gate.mjs",
     "ops:workflow:validate": "node scripts/validate-workflow-json.mjs",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
+    "test:parity": "node scripts/run-parity-tests.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",
     "tauri:dev": "tauri dev",

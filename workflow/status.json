@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-09",
+  "last_updated": "2026-06-10",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -45,6 +45,26 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "test(parity): add canonical Markdown cross-runtime parity harness. Adds npm run test:parity, fixtures, parser parity shared serialization vs DesktopDocumentEngine, server/client render parity, structural goldens, and semantic footnote render coverage. [ODE-226]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-226",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-226/build-canonical-markdown-cross-runtime-parity-harness",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/243",
+      "commit": "0eac02f",
+      "date": "2026-06-10",
+      "notes": "Score: 9.0/10. GateResult PASS. Typecheck PASS, lint PASS with pre-existing warnings, test:parity PASS (11), npm test PASS (690), ops:status:drift:strict PASS after ODE-248 backfill, ops:delivery:gate PASS, GitHub Actions Traceability Gates PASS. Performance Contract not required. Architecture Contract compliant."
+    },
+    {
+      "what": "fix(auth): surface signOut server-revocation failure on timeout. Desktop signOut now reports incomplete server revocation instead of returning ok(null) on timeout, while still clearing local session state. [ODE-248]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-248",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-248/surface-signout-server-revocation-failure-do-not-return-oknull-on",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/231",
+      "commit": "e98743d",
+      "date": "2026-06-09",
+      "notes": "Traceability backfill during ODE-226 review. ODE-248 was already Done in Linear and merged in PR #231, but was missing from workflow/status.json, causing ops:status:drift:strict to fail unrelated PR gates."
+    },
     {
       "what": "fix(desktop): match created file by path instead of name in createFile. Compute expectedPath with join(workspace.rootPath, normalizedName) before creation, then match against candidate.path in the refreshed snapshot. Prevents false match when a workspace contains a file with the same name in a subdirectory (e.g. docs/notes.md vs root notes.md). [ODE-254]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
@@ -1987,6 +2007,15 @@
       "date": "2026-06-08",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Fix: escapeMarkdownText no longer applied to image src and link href in markdown export. URLs are now used verbatim. Test updated. Typecheck PASS. Lint PASS (pre-existing warnings). 14/14 export tests PASS. 4 unrelated pre-existing failures in desktop-adapter-boundary and desktop-asset-service."
+    },
+    {
+      "issue": "ODE-261",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-261/fix-notes-panel-bugs-count-drift-on-mode-switch-draft-overwrite",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/245",
+      "commit": "03989d3",
+      "date": "2026-06-10",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Score: 9.5/10. Performance Contract: required (Interaction latency verified: benchmark avg 0.010ms p95 0.015ms; CI gate PASS). GateResult PASS. Four Notes-panel bugs fixed: hasAnnotation position tolerance for JSON/HTML drift (Bug A), unique standalone highlight indices (Bug B), markdown mode shows all annotation types (Bug C), collectInlineReferences classifies [@hN:] as highlight (Bug D)."
     }
   ]
 }
