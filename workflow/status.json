@@ -2035,6 +2035,15 @@
       "date": "2026-06-10",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Score: 9.25/10. Performance Contract: not required (no toca critical path de interacción). GateResult PASS. Política operativa de coexistencia web/desktop documentada explícitamente (filesystem-first, offline behavior, login dependencies, sync order, publishing/sharing web-only path). UI desktop con botones Publish on web y Share with link que abren browser con validación http/https. Tauri plugin-shell registrado con shell:allow-open capability. Web UI preserva flujo original."
+    },
+    {
+      "issue": "ODE-224",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-224",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/247",
+      "commit": "a67d4e0",
+      "date": "2026-06-11",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Score: 10/10 (round 3). Tauri auto-updater with GitHub Releases: plugin-updater + plugin-process Rust init, process:allow-relaunch capability, minisign signing, static latest.json endpoint, GitHub Actions release workflow, sidebar update banner with explicit consent."
     }
   ]
 }
