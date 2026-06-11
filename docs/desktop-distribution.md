@@ -227,26 +227,28 @@ Odessay desktop includes a built-in auto-updater that checks GitHub Releases for
 
 ### Release artifacts
 
-After `npm run desktop:release`, `dist/releases/` contains three files per release:
+After `npm run desktop:release`, `dist/releases/` contains four files per release:
 
 ```
 Odessay-{version}-aarch64.dmg                 # First-install DMG
 Odessay_{version}_aarch64.app.tar.gz          # Auto-updater archive
-Odessay_{version}_aarch64.app.tar.gz.sig      # Ed25519 signature
+Odessay_{version}_aarch64.app.tar.gz.sig      # Minisign signature
+latest.json                                   # Tauri updater manifest
 ```
 
-All three must be uploaded to the GitHub release for the updater to function.
+All four must be uploaded to the GitHub release for the updater to function.
 
 ### Signing key management
 
 **Private key — never committed.**
 
-- Generate a keypair once:
+- Generate a keypair once with the Tauri CLI:
   ```bash
-  node -e "const crypto=require('crypto');const kp=crypto.generateKeyPairSync('ed25519');console.log('PUBLIC:', kp.publicKey.export({type:'spki',format:'der'}).slice(-32).toString('base64'));console.log('PRIVATE PEM:');console.log(kp.privateKey.export({type:'pkcs8',format:'pem'}));"
+  npx tauri signer generate --write-keys ./updater-key
   ```
-- Paste the **public key** into `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
-- Store the **private key** in your password manager and CI secrets (`TAURI_SIGNING_PRIVATE_KEY`).
+- The command prints the public key and writes `./updater-key` (private) and `./updater-key.pub` (public).
+- Paste the **public key** (second line of `updater-key.pub`) into `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
+- Store the **private key** in your password manager and CI secrets (`TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`).
 - If the private key is lost, generate a new pair and update the public key in a new app release. Older app versions will reject updates signed with the new key, so users on those versions must reinstall from the DMG.
 
 ### Creating a GitHub release

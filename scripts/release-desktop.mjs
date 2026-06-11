@@ -10,12 +10,13 @@
  *   dist/releases/Odessay-{version}-aarch64.dmg
  *   dist/releases/Odessay_{version}_aarch64.app.tar.gz
  *   dist/releases/Odessay_{version}_aarch64.app.tar.gz.sig
+ *   dist/releases/latest.json
  *
  * Fails fast if package.json and src-tauri/tauri.conf.json versions differ.
  * Code signing is intentionally out of scope — see docs/desktop-distribution.md.
- * Updater signing requires TAURI_SIGNING_PRIVATE_KEY in env.
+ * Updater signing requires TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH in env.
  */
-import { readFileSync, mkdirSync, copyFileSync, existsSync, readdirSync } from "node:fs"
+import { readFileSync, mkdirSync, copyFileSync, existsSync, readdirSync, writeFileSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -23,6 +24,7 @@ import { fileURLToPath } from "node:url"
 const RELEASES_DIR = "dist/releases"
 const DMG_BUNDLE_DIR = "src-tauri/target/release/bundle/dmg"
 const APP_BUNDLE_DIR = "src-tauri/target/release/bundle/macos"
+const GITHUB_REPO = "hugomarin/Odessay"
 
 /**
  * Checks whether package.json and tauri.conf.json declare the same version.
@@ -143,13 +145,17 @@ function main() {
   }
 
   // 7. Sign the updater archive
-  const hasSigningKey = Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY)
+  const hasSigningKey = Boolean(
+    process.env.TAURI_SIGNING_PRIVATE_KEY || process.env.TAURI_SIGNING_PRIVATE_KEY_PATH
+  )
+  let signature = null
   if (hasSigningKey) {
     try {
       execSync(`node scripts/sign-update-manifest.mjs "${updaterPath}"`, {
         stdio: "inherit",
         cwd: root,
       })
+      signature = readFileSync(`${updaterPath}.sig`, "utf-8").trim()
       console.log(`[desktop:release] ✓ Updater archive signed.`)
     } catch (err) {
       console.error("[desktop:release] Signing failed — see output above.")
@@ -164,17 +170,34 @@ function main() {
     )
   }
 
+  // 8. Generate latest.json manifest in Tauri updater format
+  const tag = `app-v${version}`
+  const updaterUrl = `https://github.com/${GITHUB_REPO}/releases/download/${tag}/${updaterName}`
+  const latestJson = {
+    version,
+    notes: `Odessay Desktop ${version}`,
+    pub_date: new Date().toISOString(),
+    url: updaterUrl,
+    signature,
+  }
+  const latestJsonPath = join(root, RELEASES_DIR, "latest.json")
+  writeFileSync(latestJsonPath, JSON.stringify(latestJson, null, 2) + "\n", "utf-8")
+  console.log(`[desktop:release] ✓ Update manifest ready: ${resolve(latestJsonPath)}`)
+
   console.log(`\n[desktop:release] Release artifacts in ${resolve(join(root, RELEASES_DIR))}:`)
   console.log(`  • ${dmgName}`)
   console.log(`  • ${updaterName}`)
   if (hasSigningKey) {
     console.log(`  • ${updaterName}.sig`)
   }
+  console.log(`  • latest.json`)
   console.log(
     `\n[desktop:release] Next steps:` +
-      `\n  1. Create a GitHub release at https://github.com/hugomarin/Odessay/releases` +
+      `\n  1. Create a GitHub release with tag "${tag}".` +
       `\n  2. Upload all artifacts above to the release.` +
-      `\n  3. See docs/desktop-distribution.md for rollback and signing policy.`
+      `\n  3. The app will find latest.json at:` +
+      `\n     https://github.com/${GITHUB_REPO}/releases/latest/download/latest.json` +
+      `\n  4. See docs/desktop-distribution.md for rollback and signing policy.`
   )
 }
 
