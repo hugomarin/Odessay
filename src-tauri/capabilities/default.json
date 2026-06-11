@@ -15,6 +15,6 @@
     "dialog:allow-open",
     "dialog:allow-save",
     "updater:default",
-    "process:allow-relaunch"
+    "process:allow-restart"
   ]
 }
