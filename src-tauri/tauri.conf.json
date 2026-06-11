@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Odessay",
-  "version": "0.1.0",
+  "productName": "Artifact Studio",
+  "version": "0.1.1",
   "identifier": "com.z9ne.odessay",
   "build": {
     "frontendDist": "../dist",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Odessay",
+        "title": "",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
@@ -30,7 +30,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "RWQUROqmRzUQ4ndYx56+g+93wU8MW0ug1iNDuBrNgpVCYj6SS9UeVyXQ",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyMTAzNTQ3QTZFQTQ0MTQKUldRVVJPcW1SelVRNG5kWXg1NitnKzkzd1U4TVcwdWcxaU5EdUJyTmdwVkNZajZTUzlVZVZ5WFEK",
       "endpoints": [
         "https://github.com/hugomarin/Odessay/releases/latest/download/latest.json"
       ],

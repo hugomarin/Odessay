@@ -137,6 +137,7 @@ function main() {
     execSync(`tar -czf "${updaterPath}" -C "${join(root, APP_BUNDLE_DIR)}" "${appBundle.split("/").pop()}"`, {
       stdio: "inherit",
       cwd: root,
+      env: { ...process.env, COPYFILE_DISABLE: "1" },
     })
     console.log(`[desktop:release] ✓ Updater archive ready: ${resolve(updaterPath)}`)
   } catch (err) {
