@@ -248,7 +248,7 @@ All four must be uploaded to the GitHub release for the updater to function.
   ```
 - The command prints the public key and writes `./updater-key` (private) and `./updater-key.pub` (public).
 - Paste the **public key** (second line of `updater-key.pub`) into `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
-- Store the **private key** in your password manager and CI secrets (`TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`).
+- Store the **private key** in your password manager and CI secrets (`TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`). A good local location on macOS is `~/.config/odessay/updater/odessay-updater-key` with `chmod 600`.
 - If the private key is lost, generate a new pair and update the public key in a new app release. Older app versions will reject updates signed with the new key, so users on those versions must reinstall from the DMG.
 
 ### Creating a GitHub release
