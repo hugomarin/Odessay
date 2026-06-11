@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -123,16 +123,21 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     toggleSidebarMode()
   }
 
+  const updateCheckStartedRef = useRef(false)
+
   useEffect(() => {
-    let dismissed = false
+    if (updateCheckStartedRef.current) return
+    updateCheckStartedRef.current = true
+
     checkForUpdate().then((result) => {
-      if (!dismissed && result.kind === "available") {
+      if (result.kind === "error") {
+        console.error("[update] check failed:", result.message)
+        return
+      }
+      if (result.kind === "available") {
         setUpdateState(result)
       }
     })
-    return () => {
-      dismissed = true
-    }
   }, [])
 
   const handleInstallUpdate = async () => {
@@ -140,7 +145,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     setInstalling(true)
     try {
       await installUpdate(updateState.update)
-    } catch {
+    } catch (err) {
+      console.error("[update] install failed:", err)
       setInstalling(false)
     }
   }
