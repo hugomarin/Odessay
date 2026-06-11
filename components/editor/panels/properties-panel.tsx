@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Clipboard,
   Download,
+  ExternalLink,
   FileText,
   FileType,
   RefreshCw,
@@ -14,6 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { EditorSpellcheckPreference } from "@/lib/editor/spellcheck"
 import type { TextMetrics } from "@/lib/editor/text-metrics"
 import type { WritingLifecycle, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import { buildWebWritingActionUrl, openExternalUrl, type WebWritingAction } from "@/lib/runtime/external-link"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import { createBrowserSharingService } from "@/lib/services/web-sharing-service"
 import { cn } from "@/lib/utils"
 import { WritingStatusPicker } from "@/components/writings/writing-status-picker"
@@ -175,6 +178,8 @@ export function PropertiesPanel({
   const [shareError, setShareError] = useState<string | null>(null)
   const [exportFeedback, setExportFeedback] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [externalLinkError, setExternalLinkError] = useState<string | null>(null)
+  const [openingExternalAction, setOpeningExternalAction] = useState<WebWritingAction | null>(null)
   const [isExportingMarkdown, setIsExportingMarkdown] = useState(false)
   const [isExportingPdf, setIsExportingPdf] = useState(false)
   const [isExportingDocx, setIsExportingDocx] = useState(false)
@@ -182,6 +187,7 @@ export function PropertiesPanel({
   const { settings } = useUserSettingsContext()
   const sharingService = useMemo(() => createBrowserSharingService(), [])
   const enabledStatuses = STATUS_OPTIONS.filter((s) => !settings.disabledStatuses.includes(s))
+  const isDesktop = isTauriRuntime()
 
   const hasRemoteWriting = Boolean(writingId) && lifecycle === "server-confirmed"
   const spellcheckEnabled = spellcheckPreference !== "off"
@@ -293,6 +299,33 @@ export function PropertiesPanel({
     [onVisibilityChange, visibility],
   )
 
+  const handleOpenWebAction = useCallback(
+    async (action: WebWritingAction) => {
+      if (!writingId) {
+        setExternalLinkError("This writing needs an id before it can open on web.")
+        return
+      }
+
+      const url = buildWebWritingActionUrl({ writingId, action })
+      if (!url) {
+        setExternalLinkError("NEXT_PUBLIC_APP_URL is not configured for web handoff.")
+        return
+      }
+
+      setOpeningExternalAction(action)
+      setExternalLinkError(null)
+
+      try {
+        await openExternalUrl(url)
+      } catch (error) {
+        setExternalLinkError(error instanceof Error ? error.message : "Failed to open web browser.")
+      } finally {
+        setOpeningExternalAction(null)
+      }
+    },
+    [writingId],
+  )
+
   const handleExport = useCallback(
     async (format: ExportFormat) => {
       setExportOpen(false)
@@ -364,14 +397,51 @@ export function PropertiesPanel({
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Sharing</p>
           <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
-            {hasRemoteWriting && writingId ? (
+            {isDesktop ? (
+              <div className="space-y-3 px-3 py-[11px]">
+                <div>
+                  <p className="text-[12px] font-medium text-ink-2">Web publishing</p>
+                  <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">
+                    The document stays saved locally. Publishing and link sharing continue on web.
+                  </p>
+                </div>
+                {!hasRemoteWriting ? (
+                  <p className="rounded-[6px] border-[0.5px] border-dashed border-[hsl(22_28%_78%)] bg-[hsl(22_40%_97%)] px-[10px] py-2 text-[11px] leading-[1.45] text-ink-4">
+                    {remoteFeatureMessage}
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-1 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleOpenWebAction("publish")}
+                    disabled={!hasRemoteWriting || openingExternalAction !== null}
+                    className="inline-flex h-8 w-full items-center justify-center gap-[6px] rounded-[6px] border-[0.5px] border-ink bg-ink px-[10px] text-[11px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ExternalLink className="h-[11px] w-[11px]" strokeWidth={1.5} />
+                    {openingExternalAction === "publish" ? "Opening..." : "Publish on web"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleOpenWebAction("share")}
+                    disabled={!hasRemoteWriting || openingExternalAction !== null}
+                    className="inline-flex h-8 w-full items-center justify-center gap-[6px] rounded-[6px] border-[0.5px] border-border bg-bg px-[10px] text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ExternalLink className="h-[11px] w-[11px]" strokeWidth={1.5} />
+                    {openingExternalAction === "share" ? "Opening..." : "Share with link"}
+                  </button>
+                </div>
+                {externalLinkError ? (
+                  <p className="text-[11px] text-[hsl(0,72%,45%)]">{externalLinkError}</p>
+                ) : null}
+              </div>
+            ) : hasRemoteWriting && writingId ? (
               <WritingSharesSection
                 writingId={writingId}
                 onSharesStateChange={handleSharesStateChange}
               />
             ) : null}
 
-            <div className="px-3 py-[11px]">
+            {!isDesktop ? <div className="px-3 py-[11px]">
               <div className="mb-2">
                 <p className="text-[12px] font-medium text-ink-2">Preview link</p>
                 <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">
@@ -434,7 +504,7 @@ export function PropertiesPanel({
 
               {isLoadingShareLink ? <p className="mt-2 text-[11px] text-ink-4">Loading preview link…</p> : null}
               {shareError ? <p className="mt-2 text-[11px] text-[hsl(0,72%,45%)]">{shareError}</p> : null}
-            </div>
+            </div> : null}
           </div>
         </section>
 

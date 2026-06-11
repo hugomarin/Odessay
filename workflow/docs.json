@@ -117,6 +117,13 @@
       "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
     },
     {
+      "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",
+      "type": "feature",
+      "scope": "runtime-coexistence-policy",
+      "state": "fase-7-operational-policy",
+      "description": "Política operativa de coexistencia web/desktop para Fase 7: desktop filesystem-first, qué funciona offline, qué depende de login, orden de sync, releases/versionado y decisión explícita de publishing/sharing como web-only path con handoff desde desktop."
+    },
+    {
       "path": "workflow/context/features/odessay-fase4-runtime-contract-audit.md",
       "type": "feature",
       "scope": "fase-4-post-remediation-audit",

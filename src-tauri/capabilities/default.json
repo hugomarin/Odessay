@@ -11,6 +11,7 @@
       "allow": [{ "path": "$DOCUMENT/**" }]
     },
     "fs:allow-watch",
+    "shell:allow-open",
     "dialog:allow-open",
     "dialog:allow-save"
   ]
