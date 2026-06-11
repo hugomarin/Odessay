@@ -2016,6 +2016,15 @@
       "date": "2026-06-10",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Score: 9.5/10. Performance Contract: required (Interaction latency verified: benchmark avg 0.010ms p95 0.015ms; CI gate PASS). GateResult PASS. Four Notes-panel bugs fixed: hasAnnotation position tolerance for JSON/HTML drift (Bug A), unique standalone highlight indices (Bug B), markdown mode shows all annotation types (Bug C), collectInlineReferences classifies [@hN:] as highlight (Bug D)."
+    },
+    {
+      "issue": "ODE-227",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-227/document-operational-coexistence-policy-with-publishing-and-sharing-as",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/244",
+      "commit": "81bb788",
+      "date": "2026-06-10",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Score: 9.25/10. Performance Contract: not required (no toca critical path de interacción). GateResult PASS. Política operativa de coexistencia web/desktop documentada explícitamente (filesystem-first, offline behavior, login dependencies, sync order, publishing/sharing web-only path). UI desktop con botones Publish on web y Share with link que abren browser con validación http/https. Tauri plugin-shell registrado con shell:allow-open capability. Web UI preserva flujo original."
     }
   ]
 }
