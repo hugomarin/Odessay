@@ -574,13 +574,16 @@ const getEditorSession = async (id: string) =>
     return (session as LocalEditorSession | undefined) ?? null;
   });
 
+const safeCreatedAtCompare = (left: string | undefined, right: string | undefined): number =>
+  (left ?? "").localeCompare(right ?? "");
+
 const getCorrectionBlocksByWriting = async (writingId: string) =>
   withStore(LOCAL_DB_STORES.correctionBlocks, "readonly", async (store) => {
     const blocks = (await runRequest(
       store.index("by-writing-id").getAll(IDBKeyRange.only(writingId)),
     )) as LocalCorrectionBlock[];
 
-    return blocks.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    return blocks.sort((left, right) => safeCreatedAtCompare(left.createdAt, right.createdAt));
   });
 
 const deleteCorrectionBlock = async (id: string) => {
@@ -634,16 +637,16 @@ const evictOldestCorrectionWriting = async (maxWritings: number) => {
 
     if (!existing) {
       writingMeta.set(block.writingId, {
-        oldestCreatedAt: block.createdAt,
+        oldestCreatedAt: block.createdAt ?? "",
         blockIds: [block.id],
       });
       continue;
     }
 
     existing.oldestCreatedAt =
-      existing.oldestCreatedAt.localeCompare(block.createdAt) <= 0
+      safeCreatedAtCompare(existing.oldestCreatedAt, block.createdAt) <= 0
         ? existing.oldestCreatedAt
-        : block.createdAt;
+        : (block.createdAt ?? "");
     existing.blockIds.push(block.id);
   }
 
