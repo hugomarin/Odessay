@@ -24,7 +24,7 @@ pub fn run() {
 
             let settings =
                 MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
-            let app_menu = SubmenuBuilder::new(app, "Odessay")
+            let app_menu = SubmenuBuilder::new(app, "Artifact Studio")
                 .about(None)
                 .separator()
                 .item(&settings)
