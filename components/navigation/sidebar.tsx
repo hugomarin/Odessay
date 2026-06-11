@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
-import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Layers3, LayoutGrid, PanelLeftDashed, Plus, Search, Download, X } from "lucide-react"
@@ -224,9 +223,9 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 "overflow-hidden transition-[width,opacity] duration-[300ms] ease-layout",
                 isIconOnly ? "w-0 opacity-0" : "w-[92px] opacity-100",
               )}
-              aria-label="Odessay"
+              aria-label="Artifact Studio"
             >
-              <Image src="/odessay-logo.svg" alt="Odessay" width={92} height={30} className="h-[30px] w-auto max-w-none" />
+              <span className="font-sans text-[15px] font-bold tracking-tight text-foreground whitespace-nowrap">Artifact Studio</span>
             </Link>
 
             <ActionTooltip
