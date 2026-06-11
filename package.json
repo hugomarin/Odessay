@@ -25,7 +25,8 @@
     "tauri:build": "tauri build",
     "desktop:release": "node scripts/release-desktop.mjs",
     "desktop:release:prod": "NEXT_PUBLIC_APP_URL=https://odessay.vercel.app node scripts/release-desktop.mjs",
-    "desktop:release:local": "node scripts/release-desktop.mjs --allow-localhost"
+    "desktop:release:local": "node scripts/release-desktop.mjs --allow-localhost",
+    "validate:desktop": "node scripts/validate-desktop-bundle.mjs"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
