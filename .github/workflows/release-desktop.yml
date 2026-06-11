@@ -1,0 +1,101 @@
+name: Release Desktop
+
+# Builds and signs the Odessay desktop app, then uploads the DMG,
+# updater archive, signature, and latest.json manifest to a GitHub release.
+#
+# Required repository secrets:
+#   TAURI_SIGNING_PRIVATE_KEY            - minisign private key content
+#   NEXT_PUBLIC_SUPABASE_URL             - Supabase project URL
+#   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY - Supabase publishable key
+#
+# Optional repository variables:
+#   NEXT_PUBLIC_APP_URL                  - defaults to https://odessay.vercel.app
+
+on:
+  push:
+    tags:
+      - "app-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Git tag for this release (e.g. app-v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-desktop:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify version alignment
+        run: node -e "
+          const pkg = require('./package.json');
+          const tauri = require('./src-tauri/tauri.conf.json');
+          if (pkg.version !== tauri.version) {
+            console.error('Version drift:', pkg.version, 'vs', tauri.version);
+            process.exit(1);
+          }
+          console.log('Version:', pkg.version);
+        "
+
+      - name: Resolve release tag
+        id: resolve-tag
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and sign release
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'https://odessay.vercel.app' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY }}
+        run: npm run desktop:release:prod:signed
+
+      - name: Upload to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.resolve-tag.outputs.tag }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+
+          # Create the release if it does not exist yet.
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --title "Odessay Desktop v${VERSION}" \
+              --notes "Odessay Desktop v${VERSION}"
+          fi
+
+          # Upload all release artifacts.
+          gh release upload "$RELEASE_TAG" dist/releases/* --clobber
+
+      - name: Summary
+        run: |
+          echo "## Desktop release artifacts" >> "$GITHUB_STEP_SUMMARY"
+          ls -1 dist/releases/ | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
