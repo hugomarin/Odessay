@@ -211,3 +211,81 @@ cp docs/desktop-distribution.md "evidence/ode-225-smoke-$(date +%Y-%m-%d).md"
 ```
 
 Fill in the results, then attach the file to the release notes or Linear issue.
+
+---
+
+## Auto-updater (Tauri updater + GitHub Releases)
+
+Odessay desktop includes a built-in auto-updater that checks GitHub Releases for newer versions. The updater uses Tauri's official updater plugin with an Ed25519 signature verification.
+
+### How it works
+
+1. On launch, the app queries `https://api.github.com/repos/hugomarin/Odessay/releases/latest`.
+2. If a newer version exists, the sidebar shows an **Install Update** banner.
+3. The user must explicitly click **Install Update** — updates never install without consent.
+4. The app downloads the signed `.app.tar.gz`, verifies the Ed25519 signature against the embedded public key, replaces the app bundle, and relaunches.
+
+### Release artifacts
+
+After `npm run desktop:release`, `dist/releases/` contains four files per release:
+
+```
+Odessay-{version}-aarch64.dmg                 # First-install DMG
+Odessay_{version}_aarch64.app.tar.gz          # Auto-updater archive
+Odessay_{version}_aarch64.app.tar.gz.sig      # Minisign signature
+latest.json                                   # Tauri updater manifest
+```
+
+All four must be uploaded to the GitHub release for the updater to function.
+
+### Signing key management
+
+**Private key — never committed.**
+
+- Generate a keypair once with the Tauri CLI:
+  ```bash
+  npx tauri signer generate --write-keys ./updater-key
+  ```
+- The command prints the public key and writes `./updater-key` (private) and `./updater-key.pub` (public).
+- Paste the **public key** (second line of `updater-key.pub`) into `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
+- Store the **private key** in your password manager and CI secrets (`TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`). A good local location on macOS is `~/.config/odessay/updater/odessay-updater-key` with `chmod 600`.
+- If the private key is lost, generate a new pair and update the public key in a new app release. Older app versions will reject updates signed with the new key, so users on those versions must reinstall from the DMG.
+
+### Creating a GitHub release
+
+1. Bump version in `package.json` and `src-tauri/tauri.conf.json`.
+2. Run `npm run desktop:release`.
+3. Go to [GitHub Releases](https://github.com/hugomarin/Odessay/releases) → **Draft a new release**.
+4. Tag: `app-v{version}` (e.g., `app-v0.2.0`).
+5. Title: `Odessay Desktop v{version}`.
+6. Upload the three artifacts from `dist/releases/`.
+7. Publish the release.
+
+The updater checks the **latest** release; pre-releases are ignored unless explicitly configured.
+
+### Rollback policy
+
+If a release is broken:
+
+1. **Do not delete the release** — deleting breaks users who are mid-download.
+2. Edit the release, mark it as a **pre-release**, and publish a newer fixed release.
+3. The app will skip the broken pre-release and install the next stable one.
+4. For urgent rollbacks, publish a new release with a higher patch version (e.g., `0.2.1`) containing the previous known-good code.
+
+### Troubleshooting updater failures
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| "Update check timed out" | GitHub API rate limit or offline | Retry later; check network |
+| "Signature verification failed" | Wrong private key used for signing | Ensure `TAURI_SIGNING_PRIVATE_KEY` matches the public key in `tauri.conf.json` |
+| No update banner appears | Version not bumped or release not published | Verify tag exists and is the latest release |
+| Download stuck | Large archive or slow connection | Wait; the updater has a 30s timeout |
+
+### CI integration (future)
+
+When GitHub Actions is added for desktop builds:
+
+- Set `TAURI_SIGNING_PRIVATE_KEY` as an encrypted repository secret.
+- Run `npm run desktop:release` in the workflow.
+- Upload artifacts to the release automatically with `gh release upload`.
+- This eliminates manual artifact handling.

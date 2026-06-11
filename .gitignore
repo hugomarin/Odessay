@@ -62,3 +62,9 @@ src-tauri/gen/
 
 # Supabase
 supabase/.temp/
+
+# Updater signing keys and generated signatures
+odessay-updater-key
+odessay-updater-key.pub
+*.sig
+latest.json

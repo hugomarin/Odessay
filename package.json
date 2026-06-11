@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "desktop:release:signed": "node scripts/release-desktop-signed.mjs",
+    "desktop:release:prod:signed": "NEXT_PUBLIC_APP_URL=https://odessay.vercel.app node scripts/release-desktop-signed.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -41,7 +43,9 @@
     "@supabase/supabase-js": "^2.105.4",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "@tiptap/core": "^3.20.4",
     "@tiptap/extension-blockquote": "^3.20.4",
     "@tiptap/extension-bold": "^3.20.4",

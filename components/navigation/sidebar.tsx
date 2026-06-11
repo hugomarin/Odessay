@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Layers3, LayoutGrid, PanelLeftDashed, Plus, Search } from "lucide-react"
+import { Layers3, LayoutGrid, PanelLeftDashed, Plus, Search, Download, X } from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
@@ -19,6 +19,12 @@ import {
 } from "@/lib/stores/ui-shell-store"
 import { type SidebarMode } from "@/lib/stores/ui-shell-state"
 import { cn } from "@/lib/utils"
+import {
+  checkForUpdate,
+  installUpdate,
+  formatUpdateLabel,
+  type UpdateCheckResult,
+} from "@/lib/desktop/update-checker"
 
 type SidebarProps = Readonly<{
   children: React.ReactNode
@@ -110,9 +116,43 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   const userDisplayName = user.displayName ?? user.email?.split("@")[0] ?? "Writer"
   const userUsername = user.username ?? "profile"
   const [searchOpen, setSearchOpen] = useState(false)
+  const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null)
+  const [installing, setInstalling] = useState(false)
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()
+  }
+
+  const updateCheckStartedRef = useRef(false)
+
+  useEffect(() => {
+    if (updateCheckStartedRef.current) return
+    updateCheckStartedRef.current = true
+
+    checkForUpdate().then((result) => {
+      if (result.kind === "error") {
+        console.error("[update] check failed:", result.message)
+        return
+      }
+      if (result.kind === "available") {
+        setUpdateState(result)
+      }
+    })
+  }, [])
+
+  const handleInstallUpdate = async () => {
+    if (updateState?.kind !== "available") return
+    setInstalling(true)
+    try {
+      await installUpdate(updateState.update)
+    } catch (err) {
+      console.error("[update] install failed:", err)
+      setInstalling(false)
+    }
+  }
+
+  const handleDismissUpdate = () => {
+    setUpdateState(null)
   }
 
   useEffect(() => {
@@ -306,6 +346,58 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
 
             <SidebarRecentWritings collapsed={isIconOnly} />
           </div>
+
+          {updateState?.kind === "available" && !isIconOnly && (
+            <div
+              data-section="sidebar-update-banner"
+              data-testid="sidebar-update-banner"
+              className="mx-2 mb-2 rounded-lg border border-border bg-muted px-3 py-2.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium text-ink">
+                    {formatUpdateLabel(updateState.update)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-ink-3">
+                    Restart to apply the update.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDismissUpdate}
+                  className="shrink-0 text-ink-3 hover:text-ink"
+                  aria-label="Dismiss update"
+                >
+                  <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleInstallUpdate}
+                disabled={installing}
+                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-medium text-bg hover:bg-ink-2 disabled:opacity-50"
+              >
+                <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
+                {installing ? "Installing…" : "Install Update"}
+              </button>
+            </div>
+          )}
+
+          {updateState?.kind === "available" && isIconOnly && (
+            <div className="flex justify-center pb-2">
+              <ActionTooltip label={formatUpdateLabel(updateState.update)} side="right">
+                <button
+                  type="button"
+                  onClick={handleInstallUpdate}
+                  disabled={installing}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-bg hover:bg-ink-2 disabled:opacity-50"
+                  aria-label="Install update"
+                >
+                  <Download className="h-4 w-4" strokeWidth={1.5} />
+                </button>
+              </ActionTooltip>
+            </div>
+          )}
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
           </nav>
