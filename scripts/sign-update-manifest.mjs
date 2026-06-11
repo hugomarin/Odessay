@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 /**
- * Signs an update archive for the Tauri updater.
+ * Signs an update archive for the Tauri updater using `tauri signer sign`.
  *
  * Usage:
  *   node scripts/sign-update-manifest.mjs <path-to-archive>
  *
  * Environment:
- *   TAURI_SIGNING_PRIVATE_KEY — Ed25519 private key in PKCS8 PEM format
- *                               or base64-encoded raw private key.
+ *   TAURI_SIGNING_PRIVATE_KEY     — minisign private key string (base64 content)
+ *   TAURI_SIGNING_PRIVATE_KEY_PATH — path to minisign private key file
  *
  * Output:
- *   <path-to-archive>.sig — base64-encoded Ed25519 signature
+ *   <path-to-archive>.sig — base64-encoded minisign signature
  *
  * The public key embedded in the app (tauri.conf.json) verifies this
  * signature when the updater downloads a new release.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs"
-import { sign } from "node:crypto"
+import { execFileSync } from "node:child_process"
 import { resolve } from "node:path"
 
 function main() {
@@ -31,42 +31,42 @@ function main() {
     process.exit(1)
   }
 
-  const privateKey = process.env.TAURI_SIGNING_PRIVATE_KEY
-  if (!privateKey) {
+  const hasKey = Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY || process.env.TAURI_SIGNING_PRIVATE_KEY_PATH)
+  if (!hasKey) {
     console.error(
-      "TAURI_SIGNING_PRIVATE_KEY is not set.\n" +
-        "  Generate a keypair and keep the private key in your CI secrets or local env.\n" +
+      "TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH is not set.\n" +
+        "  Generate a keypair with `npx tauri signer generate` and keep the private key secret.\n" +
         "  The public key must be set in src-tauri/tauri.conf.json updater.pubkey."
     )
     process.exit(1)
   }
 
-  const archive = readFileSync(archivePath)
-
-  // Support both PEM and base64 raw key formats
-  let keyInput
-  if (privateKey.includes("BEGIN PRIVATE KEY")) {
-    keyInput = privateKey
+  // Run `tauri signer sign` to produce a minisign-compatible signature.
+  // The CLI prints the public signature (base64 of the .sig file) to stdout.
+  const args = ["tauri", "signer", "sign", "--password", ""]
+  if (process.env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
+    args.push("--private-key-path", process.env.TAURI_SIGNING_PRIVATE_KEY_PATH)
   } else {
-    // Try to decode as base64 and see if it's PEM inside
-    const decoded = Buffer.from(privateKey, "base64").toString("utf-8")
-    if (decoded.includes("BEGIN PRIVATE KEY")) {
-      keyInput = decoded
-    } else {
-      // Assume base64-encoded raw private key bytes
-      keyInput = Buffer.from(privateKey, "base64")
-    }
+    args.push("--private-key", process.env.TAURI_SIGNING_PRIVATE_KEY)
+  }
+  args.push(archivePath)
+
+  const output = execFileSync("npx", args, { encoding: "utf-8", stdio: ["pipe", "pipe", "inherit"] })
+
+  // The CLI outputs the base64 signature after "Public signature:".
+  const marker = "Public signature:\n"
+  const markerIndex = output.indexOf(marker)
+  if (markerIndex === -1) {
+    console.error("[sign-update] Could not parse signature from tauri signer sign output.")
+    process.exit(1)
   }
 
-  const signature = sign(null, archive, keyInput)
-
+  const sigB64 = output.slice(markerIndex + marker.length).trim()
   const sigPath = `${archivePath}.sig`
-  const sigB64 = signature.toString("base64")
   writeFileSync(sigPath, sigB64, "utf-8")
 
   console.log(`[sign-update] ✓ Signature written: ${resolve(sigPath)}`)
   console.log(`[sign-update]   Archive: ${resolve(archivePath)}`)
-  console.log(`[sign-update]   Sig length: ${signature.length} bytes`)
 }
 
 main()
