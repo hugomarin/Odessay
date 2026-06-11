@@ -18,7 +18,7 @@ import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
-import { execSync } from "node:child_process"
+import { spawnSync } from "node:child_process"
 
 const DEFAULT_KEY_PATH = join(homedir(), ".config/odessay/updater/odessay-updater-key")
 
@@ -55,12 +55,19 @@ function main() {
     console.log(`[release-desktop-signed] Using signing key: ${keyPath}`)
   }
 
-  const args = process.argv.slice(2)
-  execSync(`node scripts/release-desktop.mjs ${args.join(" ")}`, {
+  const args = ["scripts/release-desktop.mjs", ...process.argv.slice(2)]
+  const result = spawnSync("node", args, {
     stdio: "inherit",
     env,
     cwd: process.cwd(),
+    shell: false,
   })
+
+  if (result.error) {
+    console.error("[release-desktop-signed] Failed to start release script:", result.error)
+    process.exit(1)
+  }
+  process.exit(result.status ?? 0)
 }
 
 main()
