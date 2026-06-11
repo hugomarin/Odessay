@@ -30,9 +30,9 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "RbKWI5ponDvo0Z6u2ZYyaisekK3Gcep+Z0d9dsW66+M=",
+      "pubkey": "RWQUROqmRzUQ4ndYx56+g+93wU8MW0ug1iNDuBrNgpVCYj6SS9UeVyXQ",
       "endpoints": [
-        "https://api.github.com/repos/hugomarin/Odessay/releases/latest"
+        "https://github.com/hugomarin/Odessay/releases/latest/download/latest.json"
       ],
       "dialog": false
     }
