@@ -194,4 +194,28 @@ describe("localDB", () => {
     expect(await localDB.correctionBlocks.getByWriting("writing-a")).toEqual([]);
     expect(await localDB.correctionBlocks.getByWriting("writing-b")).toHaveLength(1);
   });
+
+  it("does not throw when correction blocks have undefined createdAt", async () => {
+    setLocalDBScope("corrections-undefined-user");
+
+    const blockWithUndefinedCreatedAt = {
+      ...createCorrectionBlock(
+        "auto-correction:writing-c:blk-c",
+        "writing-c",
+        "2026-05-21T00:00:00.000Z",
+      ),
+      createdAt: undefined as unknown as string,
+    };
+    const blockWithDefinedCreatedAt = createCorrectionBlock(
+      "auto-correction:writing-d:blk-d",
+      "writing-d",
+      "2026-05-22T00:00:00.000Z",
+    );
+
+    await expect(
+      localDB.correctionBlocks.saveMany([blockWithUndefinedCreatedAt, blockWithDefinedCreatedAt]),
+    ).resolves.not.toThrow();
+    await expect(localDB.correctionBlocks.getByWriting("writing-c")).resolves.not.toThrow();
+    await expect(localDB.correctionBlocks.evictOldestWriting(1)).resolves.not.toThrow();
+  });
 });
