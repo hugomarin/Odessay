@@ -2044,6 +2044,15 @@
       "date": "2026-06-11",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
       "notes": "Score: 10/10 (round 3). Tauri auto-updater with GitHub Releases: plugin-updater + plugin-process Rust init, process:allow-relaunch capability, minisign signing, static latest.json endpoint, GitHub Actions release workflow, sidebar update banner with explicit consent."
+    },
+    {
+      "issue": "ODE-236",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-236",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/248",
+      "commit": "0d0d35a",
+      "date": "2026-06-11",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "notes": "Score: 9.75/10. Guard correction block createdAt against undefined: safeCreatedAtCompare helper in lib/local-db/index.ts, regression test added. Polish fix — eliminates localeCompare hydration error in console."
     }
   ]
 }
