@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-10",
+  "last_updated": "2026-06-11",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -45,6 +45,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "test(desktop): add DMG parity validation suite for Fase 7 critical flows. 5 Vitest spec files (menus, file-io, auth-persistence, signout, ai-proxy) + validate-desktop-bundle.mjs static analyzer + docs/desktop-distribution.md smoke-test checklist (27 items) + package.json validate:desktop script. [ODE-225]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-225",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-225/build-dmg-parity-validation-suite-for-current-fase-7-critical-flows",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/246",
+      "commit": "99a13fc",
+      "date": "2026-06-11",
+      "notes": "Score: 9.0/10. GateResult PASS. CI traceability PASS, Vercel PASS, ops:delivery:gate PASS, tests 31/31 PASS. Performance Contract: not required (tooling de validación, sin runtime de producto). Architecture Contract: Layer=Adapter(validation harness), Runtime scope=desktop, Owner=backend. P3×4: fileURLToPath unused import (validate-desktop-bundle.mjs:137), CSP fallback uses bundle.macOS.entitlements (validate-desktop-bundle.mjs:325), $DOCUMENT assertion silently skipped si no hay permiso objeto (file-io.spec.ts:675), @supabase/ssr regex matchea comentarios (auth-persistence.spec.ts:601). Brief tenía 2 bloqueos antes del BUILD (reference docs faltantes + status.json en Files affected incorrectamente). Clean first-round approval."
+    },
     {
       "what": "test(parity): add canonical Markdown cross-runtime parity harness. Adds npm run test:parity, fixtures, parser parity shared serialization vs DesktopDocumentEngine, server/client render parity, structural goldens, and semantic footnote render coverage. [ODE-226]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
