@@ -16,7 +16,7 @@ import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { createClient } from "@/lib/supabase/client"
 
 const successMessage =
-  "If an Odessay account exists for that email, Supabase will send a recovery link."
+  "If an Artifact Studio account exists for that email, Supabase will send a recovery link."
 const sendErrorMessage =
   "We could not send a recovery link right now. Please wait a moment and try again."
 

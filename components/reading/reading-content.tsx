@@ -59,7 +59,7 @@ export function ReadingContent({
 }: ReadingContentProps) {
   const { bodyHtml } = renderWritingBodyHtml(bodyJson, bodyText)
 
-  const displayName = author?.displayName ?? author?.username ?? "Odessay author"
+  const displayName = author?.displayName ?? author?.username ?? "Artifact Studio author"
   const initials = getInitials(displayName)
   const hue = getAvatarHue(displayName)
   const relativeDate = formatRelativeDate(updatedAt)

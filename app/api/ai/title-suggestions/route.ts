@@ -42,7 +42,7 @@ async function requestTitleSuggestion(requestBody: z.infer<typeof requestSchema>
     headers: {
       "content-type": "application/json",
       "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "Odessay/1.0",
+      "user-agent": "ArtifactStudio/1.0",
     },
     body: JSON.stringify({
       model: config.model,

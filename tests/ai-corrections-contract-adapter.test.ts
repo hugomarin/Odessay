@@ -29,7 +29,7 @@ describe("AI corrections contract adapter", () => {
       uncertain: [
         {
           blockId: "block-c",
-          text: "Odessay",
+          text: "Artifact Studio",
           reason: "Product term.",
           possibleReplacement: null,
         },
@@ -62,7 +62,7 @@ describe("AI corrections contract adapter", () => {
         id: "uncertain-1",
         label: "Review uncertain text",
         detail: "Product term.",
-        target_text: "Odessay",
+        target_text: "Artifact Studio",
         status: "pending",
       },
     ]);

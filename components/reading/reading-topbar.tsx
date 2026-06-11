@@ -81,7 +81,7 @@ export function ReadingTopbar({
       >
         <div className="mx-auto flex h-full w-full max-w-[680px] items-center justify-between px-4 sm:px-6">
           <Link href={publicHeader?.logoHref ?? "/"} className="font-lora text-[17px] text-ink">
-            Odessay
+            Artifact Studio
           </Link>
 
           <div className="flex items-center gap-2">

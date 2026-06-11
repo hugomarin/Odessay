@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Linear CLI para Odessay — GraphQL directo
+ * Linear CLI para Artifact Studio — GraphQL directo
  * Script simple para interactuar con Linear desde skills del agente.
  *
  * Uso:

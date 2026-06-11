@@ -7,9 +7,9 @@
  *   npm run desktop:release
  *
  * Output:
- *   dist/releases/Odessay-{version}-aarch64.dmg
- *   dist/releases/Odessay_{version}_aarch64.app.tar.gz
- *   dist/releases/Odessay_{version}_aarch64.app.tar.gz.sig
+ *   dist/releases/ArtifactStudio-{version}-aarch64.dmg
+ *   dist/releases/ArtifactStudio_{version}_aarch64.app.tar.gz
+ *   dist/releases/ArtifactStudio_{version}_aarch64.app.tar.gz.sig
  *   dist/releases/latest.json
  *
  * Fails fast if package.json and src-tauri/tauri.conf.json versions differ.
@@ -86,7 +86,7 @@ function main() {
   }
 
   const { version } = drift
-  console.log(`[desktop:release] Building Odessay ${version}…`)
+  console.log(`[desktop:release] Building Artifact Studio ${version}…`)
   if (isLocalhost && allowLocalhost) {
     console.log(`[desktop:release] WARNING: DMG will connect to local dev server (${appUrl}). Do not distribute this build.`)
   }
@@ -113,7 +113,7 @@ function main() {
   // 5. Copy DMG to dist/releases/ with versioned name. Next static export rewrites
   // dist during the build, so create this directory only after tauri:build.
   mkdirSync(join(root, RELEASES_DIR), { recursive: true })
-  const dmgName = `Odessay-${version}-aarch64.dmg`
+  const dmgName = `ArtifactStudio-${version}-aarch64.dmg`
   const dmgPath = join(root, RELEASES_DIR, dmgName)
   copyFileSync(sourceDmg, dmgPath)
 
@@ -129,8 +129,8 @@ function main() {
     process.exit(1)
   }
 
-  // Tauri updater expects underscore naming: Odessay_0.1.0_aarch64.app.tar.gz
-  const updaterName = `Odessay_${version}_aarch64.app.tar.gz`
+  // Tauri updater expects underscore naming: ArtifactStudio_0.1.0_aarch64.app.tar.gz
+  const updaterName = `ArtifactStudio_${version}_aarch64.app.tar.gz`
   const updaterPath = join(root, RELEASES_DIR, updaterName)
 
   try {
@@ -176,7 +176,7 @@ function main() {
   const updaterUrl = `https://github.com/${GITHUB_REPO}/releases/download/${tag}/${updaterName}`
   const latestJson = {
     version,
-    notes: `Odessay Desktop ${version}`,
+    notes: `Artifact Studio ${version}`,
     pub_date: new Date().toISOString(),
     url: updaterUrl,
     signature,

@@ -36,7 +36,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!profile) {
     return {
-      title: "Odessay",
+      title: "Artifact Studio",
     }
   }
 
@@ -51,12 +51,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!writing) {
     return {
-      title: "Odessay",
+      title: "Artifact Studio",
     }
   }
 
-  const title = `${writing.title ?? "Untitled"} — ${profile.display_name} — Odessay`
-  const description = truncateOgDescription(writing.body_text, "Escritura epistolar en Odessay.")
+  const title = `${writing.title ?? "Untitled"} — ${profile.display_name} — Artifact Studio`
+  const description = truncateOgDescription(writing.body_text, "Escritura epistolar en Artifact Studio.")
 
   return {
     title,

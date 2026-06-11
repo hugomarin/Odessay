@@ -100,10 +100,10 @@ describe("localDB", () => {
     setLocalDBScope("canonical-path-user");
     await localDB.writings.save({
       ...createWriting("writing-canonical", 1),
-      canonical_path: "/Users/test/Odessay/letter.md",
+      canonical_path: "/Users/test/Artifact Studio/letter.md",
     });
 
-    const writing = await localDB.writings.getByCanonicalPath("/Users/test/Odessay/letter.md");
+    const writing = await localDB.writings.getByCanonicalPath("/Users/test/Artifact Studio/letter.md");
     expect(writing?.id).toBe("writing-canonical");
   });
 

@@ -4120,12 +4120,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           <div className="border-b-[0.5px] border-border bg-muted/50 px-6 py-3 text-sm text-ink-3">
             {externalFileNotice.kind === "moved" ? (
               <span>
-                This file moved outside Odessay. The editor is now following the new path:
+                This file moved outside Artifact Studio. The editor is now following the new path:
                 <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
               </span>
             ) : (
               <span>
-                This file was removed outside Odessay. Your current content stays open here, but the
+                This file was removed outside Artifact Studio. Your current content stays open here, but the
                 source file is no longer on disk.
               </span>
             )}

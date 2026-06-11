@@ -19,7 +19,7 @@ const lora = Lora({
 })
 
 export const metadata: Metadata = {
-  title: "Odessay",
+  title: "Artifact Studio",
   description: "A sanctuary for epistolary writing"
 }
 

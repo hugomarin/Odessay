@@ -66,5 +66,5 @@ export async function installUpdate(update: Update): Promise<void> {
  * Human-readable summary of an update.
  */
 export function formatUpdateLabel(update: Update): string {
-  return `Odessay ${update.version} is available`
+  return `Artifact Studio ${update.version} is available`
 }

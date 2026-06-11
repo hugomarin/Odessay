@@ -7,7 +7,7 @@ test.describe("editor selection metrics", () => {
 
     const editor = page.locator(".odessay-editor-content")
     await editor.click()
-    await editor.type("Hello world. This is Odessay!")
+    await editor.type("Hello world. This is Artifact Studio!")
 
     const metrics = page.getByTestId("editor-statusbar-metrics")
     await expect(metrics).toContainText("words")

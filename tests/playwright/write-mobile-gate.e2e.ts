@@ -5,11 +5,11 @@ test("write route shows a desktop-only gate on mobile", async ({ page }) => {
   await page.goto("/perf/write-harness")
 
   await expect(page.getByTestId("write-mobile-gate")).toBeVisible()
-  await expect(page.getByRole("link", { name: "Odessay" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Artifact Studio" })).toBeVisible()
   await expect(page.getByRole("link", { name: "Ir al desk" })).toBeVisible()
   await expect(
     page.getByText(
-      "La escritura en Odessay está pensada para pantalla grande. Abre Odessay en tu computadora para escribir.",
+      "La escritura en Artifact Studio está pensada para pantalla grande. Abre Artifact Studio en tu computadora para escribir.",
     ),
   ).toBeVisible()
 

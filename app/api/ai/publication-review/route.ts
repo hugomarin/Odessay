@@ -82,7 +82,7 @@ const parseModelJson = (text: string) => {
 
 const buildStrictJsonSystemPrompt = () =>
   [
-    "You are a JSON API for Odessay mechanical corrections.",
+    "You are a JSON API for Artifact Studio mechanical corrections.",
     "Your response must match the MechanicalCorrectionsResponse JSON schema.",
     "Return exactly one valid JSON object and nothing else.",
     "The first character of your response must be { and the last character must be }.",
@@ -158,7 +158,7 @@ async function callCorrectionsModel({
     headers: {
       "content-type": "application/json",
       "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "Odessay/1.0",
+      "user-agent": "ArtifactStudio/1.0",
     },
     body: JSON.stringify(requestBody),
   });
@@ -241,7 +241,7 @@ async function callCorrectionsModelStreaming({
     headers: {
       "content-type": "application/json",
       "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "Odessay/1.0",
+      "user-agent": "ArtifactStudio/1.0",
     },
     body: JSON.stringify(requestBody),
   });

@@ -14,7 +14,7 @@ export default function PublicAuthorPerfHarnessPage() {
     <section className="min-h-screen bg-bg">
       <header className="border-b-[0.5px] border-border">
         <div className="mx-auto flex h-[46px] w-full max-w-[720px] items-center justify-between px-5 sm:px-6">
-          <span className="font-lora text-[17px] text-ink">Odessay</span>
+          <span className="font-lora text-[17px] text-ink">Artifact Studio</span>
           <span className="text-[13px] font-medium text-ink-3">Desk</span>
         </div>
       </header>

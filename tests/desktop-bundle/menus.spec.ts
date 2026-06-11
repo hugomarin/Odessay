@@ -32,7 +32,7 @@ describe("desktop menus — static configuration", () => {
 
   it("lib.rs defines the expected top-level submenus", () => {
     const src = readLib()
-    expect(src).toContain('"Odessay"')   // App menu
+    expect(src).toContain('"Artifact Studio"')   // App menu
     expect(src).toContain('"File"')
     expect(src).toContain('"Edit"')
   })
@@ -56,12 +56,12 @@ describe("desktop menus — static configuration", () => {
     expect(src).toContain("CmdOrCtrl+Shift+S")
   })
 
-  it("tauri.conf.json has a single window labeled 'main' with title 'Odessay'", () => {
+  it("tauri.conf.json has a single window labeled 'main' with title 'Artifact Studio'", () => {
     const conf = readConf()
     const windows = conf?.app?.windows ?? []
     expect(windows.length).toBeGreaterThanOrEqual(1)
     const main = windows.find((w: { label: string }) => w.label === "main")
     expect(main).toBeDefined()
-    expect(main?.title).toBe("Odessay")
+    expect(main?.title).toBe("Artifact Studio")
   })
 })

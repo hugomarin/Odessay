@@ -14,7 +14,7 @@ export default function Home() {
             <div className="max-w-2xl space-y-8">
               <div className="space-y-5">
                 <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-[hsl(var(--ink-4))]">
-                  Odessay
+                  Artifact Studio
                 </p>
                 <div className="space-y-4">
                   <h1 className="max-w-3xl font-lora text-[46px] font-medium leading-[1.02] tracking-[-0.03em] text-foreground sm:text-[60px]">

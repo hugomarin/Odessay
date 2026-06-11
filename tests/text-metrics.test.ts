@@ -13,7 +13,7 @@ describe("text metrics", () => {
   })
 
   it("calculates words, characters, sentences, reading time and pages", () => {
-    const text = "Hello world. This is Odessay!"
+    const text = "Hello world. This is Artifact Studio!"
 
     expect(calculateTextMetrics(text)).toEqual({
       words: 5,

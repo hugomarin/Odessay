@@ -172,7 +172,7 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       <div className="mb-2">
         <p className="text-[12px] font-medium text-ink-2">People</p>
         <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">
-          Invite Odessay users to read or respond.
+          Invite Artifact Studio users to read or respond.
         </p>
       </div>
 

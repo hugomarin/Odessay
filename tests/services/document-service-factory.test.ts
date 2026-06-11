@@ -101,8 +101,8 @@ describe("document-service-factory", () => {
     mocks.joinMock.mockReset()
 
     mocks.joinMock.mockImplementation(async (...parts: string[]) => parts.join("/"))
-    mocks.getDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Odessay" }, error: null })
-    mocks.updateDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Odessay" }, error: null })
+    mocks.getDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Artifact Studio" }, error: null })
+    mocks.updateDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Artifact Studio" }, error: null })
     mocks.getMock.mockResolvedValue(null)
     mocks.getByCanonicalPathMock.mockResolvedValue(null)
     mocks.getAllMock.mockResolvedValue([])
@@ -111,9 +111,9 @@ describe("document-service-factory", () => {
     mocks.enqueueWritingDeleteMock.mockResolvedValue(undefined)
     mocks.createDraftMock.mockResolvedValue({
       data: {
-        path: "/tmp/documents/Odessay/untitled.md",
+        path: "/tmp/documents/Artifact Studio/untitled.md",
         writing: {
-          id: "/tmp/documents/Odessay/untitled.md",
+          id: "/tmp/documents/Artifact Studio/untitled.md",
           authorId: null,
           title: "Untitled writing",
           content: { markdown: "", richText: null, plainText: "", canonicalSource: "markdown" },
@@ -132,7 +132,7 @@ describe("document-service-factory", () => {
     })
     mocks.saveWritingMock.mockResolvedValue({
       data: {
-        id: "/tmp/documents/Odessay/untitled.md",
+        id: "/tmp/documents/Artifact Studio/untitled.md",
         authorId: null,
         title: "Untitled writing",
         content: { markdown: "# Untitled writing", richText: null, plainText: "Untitled writing", canonicalSource: "markdown" },
@@ -164,7 +164,7 @@ describe("document-service-factory", () => {
 
   it("moves automatic storage away from macOS protected Downloads", async () => {
     mocks.getDesktopSettingsMock.mockResolvedValue({
-      data: { writingsDir: "/Users/hugo/Downloads/Odessay" },
+      data: { writingsDir: "/Users/hugo/Downloads/Artifact Studio" },
       error: null,
     })
 

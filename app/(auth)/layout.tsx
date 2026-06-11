@@ -1,7 +1,7 @@
 import Link from "next/link"
 
 const manifestoExcerpt =
-  "Odessay is a sanctuary for slow writing. A place where each word can keep its weight, and the reply matters as much as the sending."
+  "Artifact Studio is a sanctuary for slow writing. A place where each word can keep its weight, and the reply matters as much as the sending."
 
 export default function AuthLayout({
   children,
@@ -13,7 +13,7 @@ export default function AuthLayout({
       <div className="flex min-h-screen flex-col bg-bg">
         <div className="px-8 py-7">
           <Link className="font-lora text-[17px] text-ink transition-colors hover:text-ink-2" href="/">
-            Odessay
+            Artifact Studio
           </Link>
         </div>
 

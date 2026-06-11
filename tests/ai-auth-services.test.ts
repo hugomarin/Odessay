@@ -79,7 +79,7 @@ describe("webAIService", () => {
               uncertain: [
                 {
                   blockId: "block-1",
-                  text: "Odessay",
+                  text: "Artifact Studio",
                   reason: "Brand term could be intentional.",
                   possibleReplacement: null,
                 },
@@ -118,7 +118,7 @@ describe("webAIService", () => {
       ],
       uncertain: [
         {
-          text: "Odessay",
+          text: "Artifact Studio",
         },
       ],
       usage: {

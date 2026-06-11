@@ -830,7 +830,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               {workspace.name}
             </h1>
             <p className="mt-3 max-w-[58ch] text-[16px] leading-7 text-ink-3">
-              This workspace is still registered in Odessay, but its local folder is unavailable right
+              This workspace is still registered in Artifact Studio, but its local folder is unavailable right
               now.
             </p>
             <div className="mt-4 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
@@ -858,7 +858,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 }}
               >
                 <Trash2 className="h-4 w-4" strokeWidth={1.5} />
-                Remove from Odessay
+                Remove from Artifact Studio
               </Button>
             </div>
           </div>
@@ -1154,7 +1154,7 @@ function WorkspaceActionsMenu({
           }}
         >
           <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.5} />
-          Remove from Odessay
+          Remove from Artifact Studio
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -1186,7 +1186,7 @@ function WorkspaceActionDialog({
                 Rename workspace
               </DialogTitle>
               <DialogDescription className="text-[16px] leading-7 text-ink-3">
-                Update the workspace label in Odessay. This does not rename the local folder.
+                Update the workspace label in Artifact Studio. This does not rename the local folder.
               </DialogDescription>
             </DialogHeader>
             <div className="mt-8">
@@ -1216,7 +1216,7 @@ function WorkspaceActionDialog({
                 Remove workspace
               </DialogTitle>
               <DialogDescription className="text-[16px] leading-7 text-ink-3">
-                Odessay will forget this workspace, but the local folder and its files stay untouched.
+                Artifact Studio will forget this workspace, but the local folder and its files stay untouched.
               </DialogDescription>
             </DialogHeader>
             <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
@@ -1227,7 +1227,7 @@ function WorkspaceActionDialog({
                 Cancel
               </Button>
               <Button type="button" disabled={isSubmitting} onClick={onConfirm}>
-                {isSubmitting ? "Removing..." : "Remove from Odessay"}
+                {isSubmitting ? "Removing..." : "Remove from Artifact Studio"}
               </Button>
             </DialogFooter>
           </div>
@@ -1415,7 +1415,7 @@ function UseExistingFolderStep({
           Use an existing folder
         </DialogTitle>
         <DialogDescription className="max-w-[580px] text-[17px] leading-8 text-ink-3">
-          Pick a folder and Odessay will treat its markdown files as a workspace.
+          Pick a folder and Artifact Studio will treat its markdown files as a workspace.
         </DialogDescription>
       </DialogHeader>
 

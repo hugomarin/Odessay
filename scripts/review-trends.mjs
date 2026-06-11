@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Review Trends — Dashboard de calidad de reviews para Odessay
+ * Review Trends — Dashboard de calidad de reviews para Artifact Studio
  *
  * Uso:
  *   node scripts/review-trends.mjs              ← últimos 10 reviews

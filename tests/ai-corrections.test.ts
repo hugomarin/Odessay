@@ -105,13 +105,13 @@ describe("AI corrections", () => {
         uncertain: [
           {
             blockId: "block-1",
-            text: "Odessay",
+            text: "Artifact Studio",
             reason: "Product term.",
             possibleReplacement: null,
           },
         ],
       },
-      [{ id: "block-1", hash: "blk-1", text: "Remove the the duplicated word in Odessay." }],
+      [{ id: "block-1", hash: "blk-1", text: "Remove the the duplicated word in Artifact Studio." }],
     );
 
     const legacy = adaptCanonicalCorrectionsToPublicationReview(canonical);
@@ -127,7 +127,7 @@ describe("AI corrections", () => {
       },
     ]);
     expect(legacy.suggestions[0]?.correction_fingerprint).toContain("block-1|duplication|the the|the");
-    expect(legacy.checklist[0]?.target_text).toBe("Odessay");
+    expect(legacy.checklist[0]?.target_text).toBe("Artifact Studio");
   });
 
   it("filters rejected correction memory without removing unrelated corrections", () => {

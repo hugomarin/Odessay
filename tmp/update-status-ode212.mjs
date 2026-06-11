@@ -19,7 +19,7 @@ const builtEntry = {
   phase: "Fase 6 — Desktop Local-First Runtime",
   issue: "ODE-212",
   linear_url: "https://linear.app/z9ne/issue/ODE-212/perf-budgets-anadir-grace-lte-del-20percent-sobre-fail-lte-en-metricas",
-  pr_url: "https://github.com/hugomarin/Odessay/pull/205",
+  pr_url: "https://github.com/hugomarin/Artifact Studio/pull/205",
   commit: "fc8c185",
   date: "2026-05-30",
   notes: "Score: 10/10. Zero code risk — config-only change to perf budgets. All validations: typecheck PASS, lint PASS (pre-existing warnings only), 580 tests PASS, delivery gate PASS, Vercel SUCCESS, traceability SUCCESS. Simulated keydown_p95=93ms → WARN (grace_lte=108), confirming acceptance criteria. Architecture Contract: not applicable (no runtime boundary touched). Performance Contract: not required (change reduces false-positive gate failures, does not alter runtime performance). Clean first-round approval."

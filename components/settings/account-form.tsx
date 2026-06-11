@@ -423,7 +423,7 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
                 id="settings-display-name"
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="How your name appears in Odessay"
+                placeholder="How your name appears in Artifact Studio"
                 className="h-[34px] rounded-[8px] border-[0.5px] px-3 text-[14px]"
               />
             </div>

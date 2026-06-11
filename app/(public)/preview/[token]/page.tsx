@@ -5,7 +5,7 @@ import { getPreviewWritingFromTestLink } from "@/lib/sharing/test-link-access"
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
-  title: "Odessay preview",
+  title: "Artifact Studio preview",
   robots: {
     index: false,
     follow: false,
@@ -56,12 +56,12 @@ export default async function PreviewPage({ params }: PreviewPageProps) {
     return (
       <ErrorState
         title="Preview temporarily unavailable"
-        description="Odessay could not load this writing right now. Retry in a moment."
+        description="Artifact Studio could not load this writing right now. Retry in a moment."
       />
     )
   }
 
-  const authorName = result.writing.author.displayName ?? result.writing.author.username ?? "Odessay author"
+  const authorName = result.writing.author.displayName ?? result.writing.author.username ?? "Artifact Studio author"
 
   return (
     <section id="preview-reading" data-page="preview-reading" className="min-h-screen bg-bg">

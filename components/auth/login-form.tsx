@@ -85,7 +85,7 @@ export function LoginForm() {
           <div className="space-y-2 rounded-[8px] border-[0.5px] border-border bg-muted px-3 py-3 text-[13px] text-ink-3">
             <p>Your account was created.</p>
             <p>We sent a confirmation link to {email || "your email address"}.</p>
-            <p>Use that link to activate your account and continue directly to Odessay.</p>
+            <p>Use that link to activate your account and continue directly to Artifact Studio.</p>
           </div>
         ) : null}
 

@@ -143,8 +143,8 @@ export const WORKSPACES: WorkspacePrototype[] = [
   },
   {
     slug: "odessay-docs",
-    name: "Odessay Docs",
-    path: "~/Documents/Workspace/Odessay Docs",
+    name: "Artifact Studio Docs",
+    path: "~/Documents/Workspace/Artifact Studio Docs",
     status: "ready",
     missingReason: null,
     description: "Product docs, guides, and internal notes.",

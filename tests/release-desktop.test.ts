@@ -17,7 +17,7 @@ function makePackageJson(version: string) {
 }
 
 function makeTauriConf(version: string) {
-  return Buffer.from(JSON.stringify({ productName: "Odessay", version }))
+  return Buffer.from(JSON.stringify({ productName: "Artifact Studio", version }))
 }
 
 describe("checkVersionDrift", () => {

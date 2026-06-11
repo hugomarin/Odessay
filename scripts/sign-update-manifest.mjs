@@ -61,7 +61,7 @@ function main() {
     process.exit(1)
   }
 
-  const sigB64 = output.slice(markerIndex + marker.length).trim()
+  const sigB64 = output.slice(markerIndex + marker.length).split("\n")[0].trim()
   const sigPath = `${archivePath}.sig`
   writeFileSync(sigPath, sigB64, "utf-8")
 

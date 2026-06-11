@@ -311,7 +311,7 @@ try {
   const xattr = execSync(`xattr -l "${mountedApp}" 2>/dev/null || true`, { encoding: "utf8" })
   if (xattr.includes("com.apple.quarantine")) {
     ok("Quarantine attribute present (expected for unsigned DMG)")
-    console.log(`    → Users must run: xattr -d com.apple.quarantine /Applications/Odessay.app`)
+    console.log(`    → Users must run: xattr -d com.apple.quarantine /Applications/Artifact Studio.app`)
   } else {
     ok("No quarantine attribute — app may already be trusted")
   }

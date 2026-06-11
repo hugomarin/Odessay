@@ -445,7 +445,7 @@ export function PropertiesPanel({
               <div className="mb-2">
                 <p className="text-[12px] font-medium text-ink-2">Preview link</p>
                 <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">
-                  Share with anyone — no Odessay account needed.
+                  Share with anyone — no Artifact Studio account needed.
                 </p>
               </div>
 

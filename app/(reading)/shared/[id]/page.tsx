@@ -65,7 +65,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const writing = await resolveSharedWriting(identifier)
 
   return {
-    title: writing?.title ? `${writing.title} — Odessay` : "Reading — Odessay",
+    title: writing?.title ? `${writing.title} — Artifact Studio` : "Reading — Artifact Studio",
   }
 }
 

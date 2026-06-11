@@ -18,11 +18,11 @@ export function MobileWriteNotice({ showDeskLink = true }: MobileWriteNoticeProp
           <div className="flex h-11 w-11 items-center justify-center rounded-full border-[0.5px] border-border bg-sb text-ink-2 shadow-float">
             <FileText strokeWidth={1.5} className="h-[18px] w-[18px]" />
           </div>
-          <span className="font-lora text-[18px] font-medium tracking-[-0.01em] text-ink">Odessay</span>
+          <span className="font-lora text-[18px] font-medium tracking-[-0.01em] text-ink">Artifact Studio</span>
         </Link>
 
         <p className="mt-8 font-lora text-[24px] italic leading-[1.3] tracking-[-0.01em] text-ink-3">
-          La escritura en Odessay está pensada para pantalla grande. Abre Odessay en tu computadora para escribir.
+          La escritura en Artifact Studio está pensada para pantalla grande. Abre Artifact Studio en tu computadora para escribir.
         </p>
 
         {showDeskLink ? (

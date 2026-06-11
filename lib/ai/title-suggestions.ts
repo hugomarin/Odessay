@@ -35,7 +35,7 @@ export const hasEnoughTitleSuggestionContent = (bodyText: string) =>
 
 export const buildTitleSuggestionSystemPrompt = () =>
   [
-    "You suggest concise, direct writing titles for Odessay.",
+    "You suggest concise, direct writing titles for Artifact Studio.",
     "Return only valid JSON matching {\"title\":\"...\"}.",
     "Do not include markdown fences, explanations, subtitles, or alternatives.",
     "Rules:",

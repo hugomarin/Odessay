@@ -52,18 +52,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
   if (!profile) {
     return {
-      title: "Odessay",
+      title: "Artifact Studio",
     }
   }
 
   const displayName = profile.display_name
-  const description = truncateOgDescription(profile.bio, "Escritura epistolar en Odessay.")
+  const description = truncateOgDescription(profile.bio, "Escritura epistolar en Artifact Studio.")
 
   return {
-    title: `${displayName} — Odessay`,
+    title: `${displayName} — Artifact Studio`,
     description,
     openGraph: {
-      title: `${displayName} — Odessay`,
+      title: `${displayName} — Artifact Studio`,
       description,
     },
   }
@@ -164,7 +164,7 @@ export default async function PublicAuthorPage({ params }: PageProps) {
       <header className="border-b-[0.5px] border-border">
         <div className="mx-auto flex h-[46px] w-full max-w-[720px] items-center justify-between px-6">
           <Link href="/" className="font-lora text-[17px] text-ink">
-            Odessay
+            Artifact Studio
           </Link>
           <Link href={user ? "/desk" : "/login"} className="text-[13px] font-medium text-ink-3 transition-colors hover:text-ink-2">
             {user ? "Desk" : "Log in"}
