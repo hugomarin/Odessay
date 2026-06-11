@@ -125,3 +125,89 @@ The single source of truth for the version is `package.json`. Before each releas
 ```
 
 `npm run desktop:release` enforces consistency and will fail if they differ.
+
+---
+
+## DMG validation
+
+### Automated checks
+
+Run the automated bundle validator after every `desktop:release`:
+
+```bash
+npm run validate:desktop
+```
+
+This validates:
+- DMG exists and mounts correctly
+- `.app` bundle structure (binary, resources, `Info.plist`)
+- Build-time version alignment (`package.json` ↔ `tauri.conf.json`)
+- CSP includes `ipc:` / `http://ipc.localhost` (required for Tauri IPC in the bundle)
+- `Cargo.toml` has `features = ["devtools"]` (Fase 7 requirement)
+- `NEXT_PUBLIC_APP_URL` is not localhost in release builds
+- Static export artifacts exist (`dist/index.html`)
+- No obvious baked-in server redirects that break in the DMG
+- Quarantine / code-signing state
+
+If automated checks pass, proceed to the manual smoke-test checklist below.
+
+### Semi-manual smoke-test checklist (Fase 7 critical flows)
+
+> **Scope note (ODE-225):** This is a minimal, semi-manual checklist designed for the Fase 7 MVP. A full automated Playwright/WebDriver suite over the Tauri WebView is intentionally post-MVP. Each item below should be executed against the **actual DMG** (`npm run desktop:release`), not `tauri dev`.
+>
+> Record results as: ✅ Pass / ❌ Fail / ⏭️ Skipped (with reason).
+
+#### Installation & launch
+1. **Mount DMG** — double-click `Odessay-{version}-aarch64.dmg`, drag to `/Applications`.
+2. **Gatekeeper bypass** — run `xattr -d com.apple.quarantine /Applications/Odessay.app`.
+3. **First launch** — open from `/Applications`. App starts without crash. Splash / loading state resolves within 5s.
+4. **DevTools** — right-click → Inspect (or `Cmd+Option+I`) opens DevTools (required for Fase 7 diagnostics).
+
+#### Auth & session persistence
+5. **Sign in** — complete OAuth/email flow. User lands in workspace.
+6. **Close and reopen** — `Cmd+Q`, relaunch app. Session is restored without re-prompting login.
+7. **Token invalidation recovery** — manually corrupt `~/Library/Application Support/com.odessay.app/secure.dat` (e.g., insert invalid JSON), relaunch. App detects invalid token, shows sign-in screen, and recovers cleanly after re-authentication.
+8. **Sign out** — use in-app Sign Out. Token file is removed. App returns to auth screen. No hang or freeze.
+
+#### Local file I/O (offline-first)
+9. **Create writing** — create a new document, add Markdown content (headings, bold, list, code block). Save.
+10. **Close and reopen** — `Cmd+Q`, relaunch. The new writing appears in recents and opens with content intact.
+11. **Edit in Source mode** — switch to Source mode, edit raw `.md`, switch back to Rich mode. Changes are preserved.
+12. **Open existing `.md` file** — use File → Open (or `Cmd+O`) to open a `.md` from the filesystem. Content renders correctly.
+13. **Offline save** — disconnect Wi-Fi, edit a document, save. No error dialogs. Reconnect Wi-Fi; sync resumes without data loss.
+
+#### Sync & web parity
+14. **Sync to web** — with network on, edit a document in desktop. Open the same document in web. Content matches.
+15. **Sync from web** — edit in web, refresh desktop. Changes appear in desktop.
+16. **Correspondence / collections** — if correspondence features are active, verify that desktop and web show consistent collection trees.
+
+#### AI capabilities (desktop → web AI proxy)
+17. **AI title suggestions** — open a document, request AI title suggestions. Response arrives within 10s.
+18. **AI publication review** — run publication review on a document. No "network error" due to missing auth token in desktop context.
+
+#### Native menus & shortcuts
+19. **App menu** — Odessay menu shows version and native items (Hide, Quit).
+20. **File menu** — New, Open, Save, Save As work as expected.
+21. **Edit menu** — Undo, Redo, Cut, Copy, Paste work in the editor.
+22. **View menu** — Toggle Rich/Source mode, Toggle Sidebar.
+23. **Window menu** — Minimize, Full Screen, Close window.
+24. **Keyboard shortcuts** — `Cmd+N`, `Cmd+O`, `Cmd+S`, `Cmd+Shift+S`, `Cmd+Z`, `Cmd+Shift+Z`, `Cmd+,` (Settings) respond correctly.
+
+#### Settings
+25. **Settings persistence** — change a setting (e.g., font size), close app, reopen. Setting is restored.
+26. **Settings parity** — desktop settings reflect the same options as web settings where applicable.
+
+#### Cleanup
+27. **Uninstall** — drag `Odessay.app` from `/Applications` to Trash. No residual background processes.
+
+---
+
+### Recording results
+
+Create a dated copy of this checklist for each validation run:
+
+```bash
+cp docs/desktop-distribution.md "evidence/ode-225-smoke-$(date +%Y-%m-%d).md"
+```
+
+Fill in the results, then attach the file to the release notes or Linear issue.
