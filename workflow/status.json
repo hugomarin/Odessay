@@ -23,9 +23,10 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 6 — Desktop Local-First Runtime",
-    "linear_project": "https://linear.app/z9ne/project/fase-6-desktop-local-first-runtime-c4b2c0e833ae",
-    "roadmap_ref": "workflow/define/roadmap.md"
+    "name": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+    "linear_project": "https://linear.app/z9ne/project/fase-7-capacidades-remotas-y-paridad-webdesktop-392ee7ac",
+    "roadmap_ref": "workflow/define/roadmap.md",
+    "notes": "Fase 7 cerrada con ODE-228 (closure audit). active_phase actualizado post-merge REVIEW ODE-228 (2026-06-11). Próxima fase pendiente de wf-define."
   },
   "phase_plan": {
     "phase": "Fase 6 — Desktop Local-First Runtime",
@@ -45,6 +46,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "docs(audit): Fase 7 closure report with cross-runtime evidence. workflow/define/fase-7-closure-report.md — 7 DoD blocks all PASS. Filesystem-first confirmed: FilesystemDocumentService + DesktopDocumentEngine + canonical Markdown serializer. 727/727 tests PASS, test:parity 11/11 PASS, validate:desktop PASS, desktop:release:prod PASS — DMG ArtifactStudio-0.1.1-aarch64.dmg. Aligns Tauri app menu and window title with Artifact Studio. [ODE-228]",
+      "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
+      "issue": "ODE-228",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-228/run-fase-7-closure-audit-with-current-cross-runtime-evidence",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/249",
+      "commit": "8da427a",
+      "date": "2026-06-11",
+      "notes": "Score: 9.8/10. GateResult PASS. CI traceability PASS, Vercel PASS, ops:delivery:gate PASS. Performance Contract: not required (closure audit, no runtime de interacción). Architecture Contract COMPLIANT: Layer=Domain, Runtime=shared-core+web+desktop, Owner=architecture-first. P3×1: Files affected omitió 3 harness alignment files — accepted. First-round clean approval. Gate final de Fase 7."
+    },
     {
       "what": "test(desktop): add DMG parity validation suite for Fase 7 critical flows. 5 Vitest spec files (menus, file-io, auth-persistence, signout, ai-proxy) + validate-desktop-bundle.mjs static analyzer + docs/desktop-distribution.md smoke-test checklist (27 items) + package.json validate:desktop script. [ODE-225]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
