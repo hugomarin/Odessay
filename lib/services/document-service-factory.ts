@@ -294,14 +294,19 @@ class DesktopDocumentService implements DocumentService {
         existing?.canonical_path ??
         existingByCanonicalPath?.canonical_path
 
-      if (!mappedCanonicalPath && isProtectedCanonicalPath(writingId)) {
-        return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Artifact Studio copy.")
-      }
+      // When a path is protected (~/Desktop, ~/Documents, ~/Downloads) and not yet in the
+      // local DB, try reading it anyway — workspace files have explicit Tauri permission
+      // granted by the user via the folder picker. If the read fails, then we know the
+      // app truly has no access and can show the helpful recovery message.
+      const isFirstAccessToProtectedPath = !mappedCanonicalPath && isProtectedCanonicalPath(writingId)
 
       const canonicalPath = mappedCanonicalPath ?? writingId
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 
       if (fileResult.error || !fileResult.data) {
+        if (isFirstAccessToProtectedPath) {
+          return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Odessay copy.")
+        }
         return err("NOT_FOUND", fileResult.error?.message ?? `Writing ${writingId} not found`)
       }
 

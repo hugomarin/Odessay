@@ -164,7 +164,10 @@ export function useVoiceRecorder() {
       recorder.onstop = () => {
         const elapsedSeconds =
           startedAtRef.current === null ? 0 : Math.min(MAX_DURATION_SECONDS, Math.floor((Date.now() - startedAtRef.current) / 1000))
-        const nextBlob = chunksRef.current.length > 0 ? new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" }) : null
+        // Strip codec specifier (e.g. "audio/mp4;codecs=mp4a.40.2") — WKWebView rejects
+        // MIME types with semicolons when building FormData multipart boundaries.
+        const mimeType = (recorder.mimeType || "audio/webm").split(";")[0].trim()
+        const nextBlob = chunksRef.current.length > 0 ? new Blob(chunksRef.current, { type: mimeType }) : null
         const finishMode = finishModeRef.current
 
         mediaRecorderRef.current = null

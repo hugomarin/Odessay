@@ -44,7 +44,8 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     setIsSubmittingVoice(true)
 
     const formData = new FormData()
-    formData.set("audio", blob, "voice-note.webm")
+    const audioExt = blob.type.includes("mp4") ? "mp4" : "webm"
+    formData.set("audio", blob, `voice-note.${audioExt}`)
 
     fetch("/api/margins/transcribe", { method: "POST", body: formData })
       .then((res) => res.json())
@@ -95,7 +96,8 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
 
     try {
       const formData = new FormData()
-      formData.set("audio", blob, "voice-note.webm")
+      const audioExt = blob.type.includes("mp4") ? "mp4" : "webm"
+      formData.set("audio", blob, `voice-note.${audioExt}`)
 
       const response = await fetch("/api/margins/transcribe", {
         method: "POST",

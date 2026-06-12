@@ -979,79 +979,56 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             {visibleFiles.length === 0 ? (
               <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
                 {workspace.fileCount === 0
-                  ? "This workspace does not have any .md or .txt files yet. Create one to start working from this local folder."
+                  ? "This workspace does not have any .md files yet. Create one to start working from this local folder."
                   : "No files match your search."}
               </div>
             ) : (
-              <div className="overflow-hidden rounded-[16px] border-[0.5px] border-border bg-sb">
-                <table className="w-full table-fixed border-collapse">
-                  <colgroup>
-                    <col />
-                    <col className="w-[90px]" />
-                    <col className="w-[160px]" />
-                    <col className="w-[52px]" />
-                  </colgroup>
-                  <tbody>
-                    {visibleFiles.map((file) => (
-                      <tr
-                        key={file.id}
-                        role="link"
-                        tabIndex={0}
-                        aria-label={`Open ${file.name} in editor`}
-                        onClick={() => void openInEditor(file)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault()
-                            void openInEditor(file)
-                          }
-                        }}
-                        className="group cursor-pointer bg-sb transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 [&:not(:first-child)]:border-t-[0.5px] [&:not(:first-child)]:border-border"
-                      >
-                        <td className="py-[18px] pl-5 pr-5 align-top md:align-middle">
-                          <div
-                            style={{
-                              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-                              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
-                            }}
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
-                              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
-                                {file.name}
-                              </p>
-                            </div>
-                            {fileSecondaryLabel(file) !== "Root folder" ? (
-                              <p className="truncate pl-[22px] pt-1 text-[12px] text-ink-3">
-                                {fileSecondaryLabel(file)}
-                              </p>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
-                          <span className="whitespace-nowrap">{formatFileSize(file.size)}</span>
-                        </td>
-                        <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
-                          <span className="whitespace-nowrap">{formatFileTimestamp(file.modifiedAt)}</span>
-                        </td>
-                        <td className="py-[18px] pl-0 pr-4 align-top md:align-middle">
-                          <div className="flex items-center justify-end">
-                            <button
-                              type="button"
-                              aria-label={`Open ${file.name} in editor`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void openInEditor(file)
-                              }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                            >
-                              <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="border-t-[0.5px] border-border">
+                {visibleFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Open ${file.name} in editor`}
+                    onClick={() => void openInEditor(file)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault()
+                        void openInEditor(file)
+                      }
+                    }}
+                    className="group flex min-h-[68px] cursor-pointer items-center gap-3 border-b-[0.5px] border-border px-6 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 last:border-b-0"
+                  >
+                    <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+
+                    <div className="min-w-0 flex-1 py-[13px]">
+                      <p className="truncate text-[15px] font-medium leading-[1.35] text-ink">
+                        {file.name}
+                      </p>
+                      {fileSecondaryLabel(file) !== "Root folder" ? (
+                        <p className="truncate pt-[3px] text-[12px] leading-[1.4] text-ink-3">
+                          {fileSecondaryLabel(file)}
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <span className="shrink-0 whitespace-nowrap text-[12px] text-ink-4">
+                      {formatFileTimestamp(file.modifiedAt)}
+                    </span>
+
+                    <button
+                      type="button"
+                      aria-label={`Open ${file.name} in editor`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void openInEditor(file)
+                      }}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                    >
+                      <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </section>
