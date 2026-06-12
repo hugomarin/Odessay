@@ -304,10 +304,15 @@ class DesktopDocumentService implements DocumentService {
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 
       if (fileResult.error || !fileResult.data) {
-        if (isFirstAccessToProtectedPath) {
+        // Show the recovery message when the path is protected AND the failure looks like
+        // a permission denial (EPERM/EACCES from the sandbox). Also covers the case where
+        // a previous open succeeded but rehome failed — canonical_path is still protected.
+        const msg = fileResult.error?.message ?? ""
+        const isPermissionError = /os error (1|13)\b/.test(msg)
+        if ((isFirstAccessToProtectedPath && isPermissionError) || isProtectedCanonicalPath(canonicalPath)) {
           return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Odessay copy.")
         }
-        return err("NOT_FOUND", fileResult.error?.message ?? `Writing ${writingId} not found`)
+        return err("NOT_FOUND", msg || `Writing ${writingId} not found`)
       }
 
       const parsed = desktopDocumentEngine.parseSourceDocument(fileResult.data.content.markdown ?? "")

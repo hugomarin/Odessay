@@ -979,7 +979,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             {visibleFiles.length === 0 ? (
               <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
                 {workspace.fileCount === 0
-                  ? "This workspace does not have any .md files yet. Create one to start working from this local folder."
+                  ? "This workspace does not have any .md or .txt files yet. Create one to start working from this local folder."
                   : "No files match your search."}
               </div>
             ) : (
