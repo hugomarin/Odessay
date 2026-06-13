@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-11",
+  "last_updated": "2026-06-12",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -23,10 +23,10 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
-    "linear_project": "https://linear.app/z9ne/project/fase-7-capacidades-remotas-y-paridad-webdesktop-392ee7ac",
+    "name": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+    "linear_project": "https://linear.app/z9ne/project/fase-8-biblioteca-preview-y-calidad-de-producto-7b2ee7ac",
     "roadmap_ref": "workflow/define/roadmap.md",
-    "notes": "Fase 7 cerrada con ODE-228 (closure audit). active_phase actualizado post-merge REVIEW ODE-228 (2026-06-11). Próxima fase pendiente de wf-define."
+    "notes": "Fase 8 activa con ODE-262. Roadmap y DoD formales pendientes de wf-define."
   },
   "phase_plan": {
     "phase": "Fase 6 — Desktop Local-First Runtime",
@@ -46,6 +46,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(db): add content_updated_at and metadata_updated_at to writings table. SQL migration with backfill + triggers; update replace_writing_collections RPC to bump metadata_updated_at; update TypeScript types (WritingRecord, WritingSummary, LocalWriting, RemoteWritingPayload); update web document service save path to set/preserve content_updated_at; update editor shell to pass contentUpdatedAt; bump IndexedDB to v13 with backfill migration; update API routes to accept/return new fields; add document-service tests. [ODE-262]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-262",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-262/add-contentupdatedat-and-metadataupdatedat-to-writings-table",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/251",
+      "commit": "4a394a5",
+      "date": "2026-06-12",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 730 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Architecture Contract: Database migration + Adapter(desktop) IDB save path. Context Gaps Detected: yes — brief cited lib/types/writing.ts which does not exist; actual types live in lib/local-db/schema.ts and lib/services/contracts/document-service.ts."
+    },
     {
       "what": "docs(audit): Fase 7 closure report with cross-runtime evidence. workflow/define/fase-7-closure-report.md — 7 DoD blocks all PASS. Filesystem-first confirmed: FilesystemDocumentService + DesktopDocumentEngine + canonical Markdown serializer. 727/727 tests PASS, test:parity 11/11 PASS, validate:desktop PASS, desktop:release:prod PASS — DMG ArtifactStudio-0.1.1-aarch64.dmg. Aligns Tauri app menu and window title with Artifact Studio. [ODE-228]",
       "phase": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
