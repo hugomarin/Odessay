@@ -19,6 +19,7 @@ import {
   TriangleAlert,
   Trash2,
 } from "lucide-react"
+import { FolderTreePicker } from "@/components/workspace/folder-tree-picker"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -38,12 +39,18 @@ import {
 import { Input } from "@/components/ui/input"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { getDesktopWorkspaceService } from "@/lib/services/desktop/workspace-service"
+import {
+  buildDefaultWorkspaceSelection,
+  buildWorkspaceFolderTree,
+  compressWorkspaceSelection,
+  type WorkspaceFolderTreeNode,
+} from "@/lib/workspace/folder-tree"
 import type { WorkspaceDetail, WorkspaceFile, WorkspaceLayout, WorkspaceSummary } from "@/lib/workspace/types"
 import { getWorkspaceBySlug, getWorkspaceFile, WORKSPACES } from "@/lib/workspace-prototype/data"
 import { buildWorkspaceFileHref, buildWorkspaceHref } from "@/lib/workspace/workspace-route"
 import { cn } from "@/lib/utils"
 
-type AddWorkspaceStep = "chooser" | "existing" | "scratch"
+type AddWorkspaceStep = "chooser" | "existing" | "existingSelection" | "scratch"
 
 type WorkspaceActionState =
   | { type: "rename"; workspace: WorkspaceSummary | WorkspaceDetail }
@@ -256,6 +263,9 @@ function DesktopWorkspaceIndex() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [workspaceAction, setWorkspaceAction] = useState<WorkspaceActionState>(null)
   const [workspaceActionValue, setWorkspaceActionValue] = useState("")
+  const [pendingWorkspaceRootPath, setPendingWorkspaceRootPath] = useState<string | null>(null)
+  const [pendingWorkspaceTree, setPendingWorkspaceTree] = useState<WorkspaceFolderTreeNode[]>([])
+  const [selectedWorkspaceFiles, setSelectedWorkspaceFiles] = useState<Set<string>>(new Set())
 
   const loadIndex = async () => {
     setIsLoading(true)
@@ -295,7 +305,7 @@ function DesktopWorkspaceIndex() {
 
     void getDesktopWorkspaceService().then(async (service) => {
       stopWatching = await service.watchWorkspaces(
-        readyWorkspaces.map((workspace) => workspace.rootPath),
+        readyWorkspaces,
         () => {
           if (!cancelled) {
             void loadIndex()
@@ -328,7 +338,44 @@ function DesktopWorkspaceIndex() {
 
     try {
       const service = await getDesktopWorkspaceService()
-      const workspace = await service.addExistingWorkspace()
+      const rootPath = await service.pickExistingWorkspaceRoot()
+      if (!rootPath) {
+        return
+      }
+
+      const snapshot = await service.inspectWorkspace(rootPath)
+      const tree = buildWorkspaceFolderTree(snapshot.files)
+      setPendingWorkspaceRootPath(rootPath)
+      setPendingWorkspaceTree(tree)
+      setSelectedWorkspaceFiles(buildDefaultWorkspaceSelection(snapshot.files))
+      setStep("existingSelection")
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to add workspace")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleConfirmExistingWorkspace = async () => {
+    if (!pendingWorkspaceRootPath) {
+      return
+    }
+
+    const selectedPaths = compressWorkspaceSelection(pendingWorkspaceTree, selectedWorkspaceFiles)
+    if (!selectedPaths.length) {
+      setErrorMessage("Select at least one markdown file or folder to include.")
+      return
+    }
+
+    setIsSubmitting(true)
+    setErrorMessage(null)
+
+    try {
+      const service = await getDesktopWorkspaceService()
+      const workspace = await service.addExistingWorkspaceWithSelection(
+        pendingWorkspaceRootPath,
+        selectedPaths,
+      )
       if (!workspace) {
         return
       }
@@ -336,6 +383,9 @@ function DesktopWorkspaceIndex() {
       await loadIndex()
       setIsDialogOpen(false)
       setStep("chooser")
+      setPendingWorkspaceRootPath(null)
+      setPendingWorkspaceTree([])
+      setSelectedWorkspaceFiles(new Set())
       router.push(buildWorkspaceHref({ slug: workspace.slug }))
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to add workspace")
@@ -397,6 +447,11 @@ function DesktopWorkspaceIndex() {
       setIsSubmitting(false)
     }
   }
+
+  const pendingWorkspaceFileCount = useMemo(
+    () => pendingWorkspaceTree.reduce((total, node) => total + node.fileCount, 0),
+    [pendingWorkspaceTree],
+  )
 
   return (
     <>
@@ -610,6 +665,10 @@ function DesktopWorkspaceIndex() {
           if (!nextOpen) {
             setStep("chooser")
             setNewWorkspaceName("")
+            setPendingWorkspaceRootPath(null)
+            setPendingWorkspaceTree([])
+            setSelectedWorkspaceFiles(new Set())
+            setErrorMessage(null)
           }
         }}
       >
@@ -623,6 +682,19 @@ function DesktopWorkspaceIndex() {
               errorMessage={errorMessage}
               onBack={() => setStep("chooser")}
               onSelect={handleAddExistingWorkspace}
+            />
+          ) : null}
+          {step === "existingSelection" ? (
+            <ConfirmWorkspaceSelectionStep
+              rootPath={pendingWorkspaceRootPath}
+              tree={pendingWorkspaceTree}
+              selectedFiles={selectedWorkspaceFiles}
+              fileCount={pendingWorkspaceFileCount}
+              isSubmitting={isSubmitting}
+              errorMessage={errorMessage}
+              onBack={() => setStep("existing")}
+              onChange={setSelectedWorkspaceFiles}
+              onConfirm={handleConfirmExistingWorkspace}
             />
           ) : null}
           {step === "scratch" ? (
@@ -703,10 +775,10 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     return workspace ? pickPinnedFile(workspace.files) : null
   }, [workspace])
 
-  const watchedRootPath = workspace?.status === "ready" ? workspace.rootPath : null
+  const watchedWorkspace = workspace?.status === "ready" ? workspace : null
 
   useEffect(() => {
-    if (!watchedRootPath) {
+    if (!watchedWorkspace) {
       return
     }
 
@@ -715,11 +787,15 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
     void getDesktopWorkspaceService()
       .then(async (service) => {
-        stopWatching = await service.watchWorkspace(watchedRootPath, () => {
+        stopWatching = await service.watchWorkspace(
+          watchedWorkspace.rootPath,
+          watchedWorkspace.selectedPaths,
+          () => {
           if (!cancelled) {
             void loadWorkspace()
           }
-        })
+          },
+        )
         if (cancelled && stopWatching) {
           void stopWatching()
         }
@@ -734,7 +810,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         void stopWatching()
       }
     }
-  }, [loadWorkspace, watchedRootPath])
+  }, [loadWorkspace, watchedWorkspace])
 
   useEffect(() => {
     const handleFocus = () => void loadWorkspace()
@@ -979,7 +1055,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             {visibleFiles.length === 0 ? (
               <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
                 {workspace.fileCount === 0
-                  ? "This workspace does not have any .md or .txt files yet. Create one to start working from this local folder."
+                  ? "This workspace does not have any .md or .mdx files yet. Create one to start working from this local folder."
                   : "No files match your search."}
               </div>
             ) : (
@@ -1509,8 +1585,86 @@ function CreateFromScratchStep({
   )
 }
 
+function ConfirmWorkspaceSelectionStep({
+  rootPath,
+  tree,
+  selectedFiles,
+  fileCount,
+  isSubmitting,
+  errorMessage,
+  onBack,
+  onChange,
+  onConfirm,
+}: {
+  rootPath: string | null
+  tree: WorkspaceFolderTreeNode[]
+  selectedFiles: ReadonlySet<string>
+  fileCount: number
+  isSubmitting: boolean
+  errorMessage: string | null
+  onBack: () => void
+  onChange: (nextSelectedFiles: Set<string>) => void
+  onConfirm: () => void
+}) {
+  const isLargeWorkspace = fileCount > 50
+
+  return (
+    <div className="p-12">
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-8 inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+      >
+        <ChevronLeft className="h-5 w-5" strokeWidth={1.5} />
+      </button>
+
+      <DialogHeader className="space-y-3 text-left">
+        <DialogTitle className="text-[42px] leading-[1.05] tracking-[-0.03em]">
+          Choose what to include
+        </DialogTitle>
+        <DialogDescription className="max-w-[620px] text-[17px] leading-8 text-ink-3">
+          {isLargeWorkspace
+            ? `${fileCount} markdown files found. Select which folders or files this workspace should watch.`
+            : "Review the markdown files in this folder and keep only the ones this workspace should watch."}
+        </DialogDescription>
+      </DialogHeader>
+
+      {rootPath ? (
+        <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
+          {rootPath}
+        </div>
+      ) : null}
+
+      <div className="mt-8">
+        <FolderTreePicker
+          tree={tree}
+          selectedFiles={selectedFiles}
+          onChange={onChange}
+          autoExpandAll={!isLargeWorkspace}
+        />
+      </div>
+
+      {errorMessage ? (
+        <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
+          {errorMessage}
+        </div>
+      ) : null}
+
+      <DialogFooter className="mt-12 flex-row items-center justify-end gap-3 sm:space-x-0">
+        <Button type="button" variant="outline" onClick={onBack}>
+          Back
+        </Button>
+        <Button type="button" disabled={isSubmitting || selectedFiles.size === 0} onClick={onConfirm}>
+          {isSubmitting ? "Connecting workspace..." : "Add workspace"}
+        </Button>
+      </DialogFooter>
+    </div>
+  )
+}
+
 function MockWorkspaceIndex() {
   const [searchQuery, setSearchQuery] = useState("")
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
 
   const visibleWorkspaces = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -1538,14 +1692,25 @@ function MockWorkspaceIndex() {
             </p>
           </div>
 
-          <div className="relative w-[280px]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search workspaces..."
-              className="h-10 rounded-[10px] pl-9"
-            />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsDialogOpen(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-[10px] border-[0.5px] border-border bg-transparent px-4 text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+            >
+              <Plus className="h-4 w-4" strokeWidth={1.5} />
+              Add workspace
+            </button>
+
+            <div className="relative w-[280px]">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
+              <Input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search workspaces..."
+                className="h-10 rounded-[10px] pl-9"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -1579,6 +1744,28 @@ function MockWorkspaceIndex() {
           ))}
         </div>
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-[520px] rounded-[24px]">
+          <DialogHeader className="text-left">
+            <DialogTitle className="text-[30px] leading-[1.1] tracking-[-0.03em]">
+              Add a workspace
+            </DialogTitle>
+            <DialogDescription className="text-[16px] leading-7 text-ink-3">
+              Adding a local folder requires the desktop app.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-[16px] border-[0.5px] border-border bg-bg px-4 py-4 text-sm leading-7 text-ink-3">
+            Workspace depends on filesystem access, watched folders, and local file events that the
+            web runtime cannot provide.
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setIsDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

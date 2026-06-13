@@ -23,6 +23,7 @@ export type DesktopWorkspaceSnapshot = {
   fileCount: number
   folderCount: number
   updatedAt: number | null
+  selectedPaths: string[]
   files: DesktopWorkspaceFile[]
 }
 
@@ -69,8 +70,11 @@ export async function tauriWorkspaceCreate(parentPath: string, name: string): Pr
   return invoke<string>("workspace_create", { parentPath, name })
 }
 
-export async function tauriWorkspaceSync(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
-  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath })
+export async function tauriWorkspaceSync(
+  rootPath: string,
+  selectedPaths?: string[],
+): Promise<DesktopWorkspaceSnapshot> {
+  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath, selectedPaths })
 }
 
 // ─── Local Index ──────────────────────────────────────────────────────────────

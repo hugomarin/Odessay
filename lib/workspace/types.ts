@@ -26,6 +26,7 @@ export type WorkspaceDetail = {
   slug: string
   name: string
   rootPath: string
+  selectedPaths: string[]
   source: WorkspaceSource
   status: WorkspaceStatus
   missingReason: string | null
