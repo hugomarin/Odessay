@@ -5,6 +5,7 @@ import { ChevronDown, Mic, Pause, Play, Trash2, X } from "lucide-react"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
+import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
 
 type PanelEntryType = AnnotationType | "highlight"
 
@@ -138,15 +139,8 @@ function VoiceRecorderInline({
       setIsSubmittingVoice(true)
       setVoiceError(null)
 
-      const formData = new FormData()
-      formData.set("audio", blob, "voice-note.webm")
-
-      fetch("/api/margins/transcribe", { method: "POST", body: formData })
-        .then((res) => res.json())
-        .then((payload: { data: { transcript?: string } | null; error: { message?: string } | null }) => {
-          if (payload.error) throw new Error(payload.error.message ?? "Transcription failed.")
-          const transcript = payload.data?.transcript?.trim() ?? ""
-          if (!transcript) throw new Error("No transcript was returned for this recording.")
+      transcribeVoiceNote(blob)
+        .then((transcript) => {
           onTranscript(transcript)
         })
         .catch((err: unknown) => {

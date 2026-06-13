@@ -5,6 +5,7 @@ import { Mic } from "lucide-react"
 import { VoiceRecorderControls } from "./voice-recorder-controls"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
+import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
 
 type AnnotationBubbleProps = {
   position: { x: number; y: number } | null
@@ -62,15 +63,8 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     setVoiceError(null)
     setIsSubmittingVoice(true)
 
-    const formData = new FormData()
-    formData.set("audio", blob, "voice-note.webm")
-
-    fetch("/api/margins/transcribe", { method: "POST", body: formData })
-      .then((res) => res.json())
-      .then((payload: { data: { transcript?: string } | null; error: { message?: string } | null }) => {
-        if (payload.error) throw new Error(payload.error.message ?? "Transcription failed.")
-        const transcript = payload.data?.transcript?.trim() ?? ""
-        if (!transcript) throw new Error("No transcript was returned for this recording.")
+    transcribeVoiceNote(blob)
+      .then((transcript) => {
         setNote(transcript)
         reset()
         requestAnimationFrame(() => textareaRef.current?.focus())
@@ -113,28 +107,7 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     setIsSubmittingVoice(true)
 
     try {
-      const formData = new FormData()
-      formData.set("audio", blob, "voice-note.webm")
-
-      const response = await fetch("/api/margins/transcribe", {
-        method: "POST",
-        body: formData,
-      })
-
-      const payload: {
-        data: { transcript?: string } | null
-        error: { message?: string } | null
-      } = await response.json()
-
-      if (!response.ok || payload.error) {
-        throw new Error(payload.error?.message ?? "Transcription failed.")
-      }
-
-      const transcript = payload.data?.transcript?.trim() ?? ""
-      if (!transcript) {
-        throw new Error("No transcript was returned for this recording.")
-      }
-
+      const transcript = await transcribeVoiceNote(blob)
       await onConfirm(transcript)
       reset()
     } catch (error) {
