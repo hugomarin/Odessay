@@ -17,6 +17,8 @@ const writingPayloadSchema = z.object({
   version: z.number().int().min(1),
   updated_at: z.string().datetime(),
   deleted_at: z.string().datetime().nullable().optional(),
+  content_updated_at: z.string().datetime().nullable().optional(),
+  metadata_updated_at: z.string().datetime().nullable().optional(),
 });
 
 const deletePayloadSchema = z.object({
@@ -49,7 +51,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { data, error } = await supabase
     .from("writings")
     .select(
-      "id, author_id, title, body_json, body_text, slug, status, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at",
+      "id, author_id, title, body_json, body_text, slug, status, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at, content_updated_at, metadata_updated_at",
     )
     .eq("id", id)
     .eq("author_id", userId)

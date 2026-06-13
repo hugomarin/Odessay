@@ -39,10 +39,12 @@ function localWritingToRecord(local: LocalWriting): WritingRecord {
     deletedAt: local.deleted_at ?? null,
     createdAt: local.created_at,
     updatedAt: local.updated_at,
+    contentUpdatedAt: local.content_updated_at ?? null,
+    metadataUpdatedAt: local.metadata_updated_at ?? null,
   }
 }
 
-function recordToLocalWriting(record: WritingRecord): LocalWriting {
+function recordToLocalWriting(record: WritingRecord, existing?: LocalWriting | null): LocalWriting {
   return {
     id: record.id,
     author_id: record.authorId,
@@ -60,6 +62,8 @@ function recordToLocalWriting(record: WritingRecord): LocalWriting {
     deleted_at: record.deletedAt,
     created_at: record.createdAt,
     updated_at: record.updatedAt,
+    content_updated_at: record.contentUpdatedAt ?? existing?.content_updated_at ?? record.updatedAt,
+    metadata_updated_at: record.metadataUpdatedAt ?? existing?.metadata_updated_at ?? record.updatedAt,
     local_updated_at: Date.now(),
   }
 }
@@ -84,21 +88,25 @@ export const webDocumentService: DocumentService = {
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     try {
       const locals = await localDB.writings.getAll({ includeDeleted: input?.includeDeleted })
-      const summaries: WritingSummary[] = locals.map((local) => ({
-        id: local.id,
-        authorId: local.author_id ?? null,
-        title: local.title ?? null,
-        slug: local.slug ?? null,
-        status: local.status,
-        visibility: local.visibility,
-        parentId: local.parent_id ?? null,
-        correspondenceId: local.correspondence_id ?? null,
-        version: local.version,
-        deletedAt: local.deleted_at ?? null,
-        createdAt: local.created_at,
-        updatedAt: local.updated_at,
-        excerpt: local.body_text?.slice(0, 200) ?? null,
-      }))
+      const summaries: WritingSummary[] = locals
+        .map((local) => ({
+          id: local.id,
+          authorId: local.author_id ?? null,
+          title: local.title ?? null,
+          slug: local.slug ?? null,
+          status: local.status,
+          visibility: local.visibility,
+          parentId: local.parent_id ?? null,
+          correspondenceId: local.correspondence_id ?? null,
+          version: local.version,
+          deletedAt: local.deleted_at ?? null,
+          createdAt: local.created_at,
+          updatedAt: local.updated_at,
+          contentUpdatedAt: local.content_updated_at ?? null,
+          metadataUpdatedAt: local.metadata_updated_at ?? null,
+          excerpt: local.body_text?.slice(0, 200) ?? null,
+        }))
+        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
       return ok(summaries)
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
@@ -135,7 +143,7 @@ export const webDocumentService: DocumentService = {
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const existing = await localDB.writings.get(input.writing.id)
-      const local = recordToLocalWriting(input.writing)
+      const local = recordToLocalWriting(input.writing, existing)
       if (existing) {
         local.lifecycle = existing.lifecycle
       }
@@ -162,6 +170,7 @@ export const webDocumentService: DocumentService = {
         ...local,
         title: input.title,
         updated_at: input.updatedAt,
+        content_updated_at: input.updatedAt,
         local_updated_at: Date.now(),
         sync_status: "pending",
       }

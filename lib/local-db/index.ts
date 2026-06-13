@@ -438,6 +438,35 @@ const openDatabase = () => {
         }
       }
 
+      if (oldVersion > 0 && oldVersion < 13 && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writings);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const writing = result.value as LocalWriting;
+
+            if (writing.content_updated_at == null || writing.metadata_updated_at == null) {
+              result.update({
+                ...writing,
+                content_updated_at: writing.content_updated_at ?? writing.updated_at,
+                metadata_updated_at: writing.metadata_updated_at ?? writing.updated_at,
+              });
+            }
+
+            result.continue();
+          };
+        }
+      }
+
       if (oldVersion > 0 && oldVersion < 10 && database.objectStoreNames.contains("publication-reviews")) {
         database.deleteObjectStore("publication-reviews");
       }

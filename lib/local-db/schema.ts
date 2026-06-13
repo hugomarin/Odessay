@@ -1,7 +1,7 @@
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 12;
+export const LOCAL_DB_VERSION = 13;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -38,6 +38,8 @@ export type LocalWriting = {
   deleted_at?: string | null;
   created_at: string;
   updated_at: string;
+  content_updated_at?: string | null;
+  metadata_updated_at?: string | null;
   local_updated_at: number;
 };
 
@@ -54,6 +56,8 @@ export type RemoteWritingPayload = {
   version: number;
   updated_at: string;
   deleted_at?: string | null;
+  content_updated_at?: string | null;
+  metadata_updated_at?: string | null;
 };
 
 export type LocalCollection = {

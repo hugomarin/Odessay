@@ -48,14 +48,29 @@ if (branch === "main" || branch === "HEAD") {
   fail(`Run this gate from an issue branch, current branch is "${branch}".`);
 }
 
-const issueMatch = branch.match(/ODE-\d+/i);
-if (!issueMatch) {
+function extractIssueIds(branchName) {
+  const singleMatch = branchName.match(/ODE-(\d+)/i);
+  if (!singleMatch) {
+    return [];
+  }
+
+  const startIndex = singleMatch.index ?? branchName.indexOf(singleMatch[0]);
+  const sequence = branchName.slice(startIndex);
+  const numbers = sequence
+    .replace(/^ODE-/i, "")
+    .split("-")
+    .map((part) => part.trim())
+    .filter((part) => /^\d+$/.test(part));
+
+  return Array.from(new Set(numbers.map((num) => `ODE-${num}`)));
+}
+
+const issueIds = extractIssueIds(branch);
+if (issueIds.length === 0) {
   fail(
     `Branch "${branch}" does not include an issue ID (expected ODE-XX in branch name).`,
   );
 }
-
-const issueId = issueMatch[0].toUpperCase();
 const baseRef = resolveBaseRef();
 const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
   encoding: "utf8",
@@ -69,13 +84,13 @@ const commitSubjects = execSync(`git log --pretty=%s ${mergeBase}..HEAD`, {
   .filter((line) => !line.startsWith("Merge "));
 
 const commitsWithoutIssue = commitSubjects.filter(
-  (subject) => !subject.includes(issueId),
+  (subject) => !issueIds.some((id) => subject.includes(id)),
 );
 
 if (commitsWithoutIssue.length > 0) {
   const listed = commitsWithoutIssue.map((subject) => `- ${subject}`).join("\n");
   fail(
-    `Commits in this branch must reference ${issueId}. Fix commit messages:\n${listed}`,
+    `Commits in this branch must reference one of ${issueIds.join(", ")}. Fix commit messages:\n${listed}`,
   );
 }
 
@@ -106,5 +121,5 @@ if (perfTracePath) {
 }
 
 console.log(
-  `[ops:delivery:gate] OK - ${issueId} has branch, commit traceability, and status.json entry.`,
+  `[ops:delivery:gate] OK - ${issueIds.join(", ")} have branch, commit traceability, and status.json entry.`,
 );

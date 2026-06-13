@@ -627,6 +627,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         deletedAt: null,
         createdAt: baseCreatedAt,
         updatedAt: nowIso,
+        contentUpdatedAt: nowIso,
+        metadataUpdatedAt: nowIso,
       }
 
       try {
@@ -1058,6 +1060,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
               deletedAt: null,
               createdAt: nowIso,
               updatedAt: nowIso,
+              contentUpdatedAt: nowIso,
+              metadataUpdatedAt: nowIso,
             },
           })
           currentWritingIdRef.current = nextId
@@ -3790,6 +3794,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       deletedAt: null,
       createdAt: nowIso,
       updatedAt: nowIso,
+      contentUpdatedAt: nowIso,
+      metadataUpdatedAt: nowIso,
     }
 
     if (isActiveDraft) {
@@ -3903,6 +3909,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         deletedAt: null,
         createdAt: nowIso,
         updatedAt: nowIso,
+        contentUpdatedAt: nowIso,
+        metadataUpdatedAt: nowIso,
       }
 
       try {
