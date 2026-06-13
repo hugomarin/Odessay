@@ -26,6 +26,7 @@ Si no hay una respuesta clara, el PR necesita más trabajo.
 Cada PR debe incluir:
 
 - **Título:** `feat: {descripción corta}` o `fix: {descripción corta}`
+  - PRs batch: `batch(<nombre>): ODE-X, ODE-Y, ...` — se actualiza acumulativamente con cada issue del lote
 - **Issue:** Referencia al issue de Linear que resuelve
 - **Qué se hizo:** Descripción breve de los cambios
 - **Cómo testear:** Pasos para verificar que funciona

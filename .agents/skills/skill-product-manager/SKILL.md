@@ -544,6 +544,8 @@ Sigue la estructura de descripción definida en este documento. Todo issue debe 
 
 [LLM] Antes de empezar: verifica que todas las dependencias están en Done. Lee los Reference docs indicados en el issue. Crea el branch desde main con el formato `codex/{issue-id}-{descripcion-corta}` o `feat/{issue-id}-{descripcion-corta}` o `fix/{issue-id}-{descripcion-corta}`. Si la rama actual es `main`, no commitees ahí: cambia primero al branch de trabajo. Mueve el issue a In Progress.
 
+Si el issue pertenece a un batch (`/wf-ship ODE-XX --batch <nombre>`): usar la rama compartida `codex/batch-<nombre>`. Si no existe, crearla; si ya existe, switch a ella. El PR es acumulativo: título `batch(<nombre>): ODE-X, ODE-Y, ...` actualizado con cada issue del lote.
+
 Durante la ejecución: commits atómicos con ID del issue en el mensaje. Push al branch remoto al terminar cada subtarea significativa.
 
 Al terminar: ejecuta las validaciones definidas en la sección Validation. Solo cuando todas las validaciones pasan, mueve el issue a In Review y abre el PR.
