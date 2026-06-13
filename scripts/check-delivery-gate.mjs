@@ -48,16 +48,29 @@ if (branch === "main" || branch === "HEAD") {
   fail(`Run this gate from an issue branch, current branch is "${branch}".`);
 }
 
-const issueMatches = Array.from(branch.matchAll(/ODE-\d+/gi)).map((match) =>
-  match[0].toUpperCase(),
-);
-if (issueMatches.length === 0) {
+function extractIssueIds(branchName) {
+  const singleMatch = branchName.match(/ODE-(\d+)/i);
+  if (!singleMatch) {
+    return [];
+  }
+
+  const startIndex = singleMatch.index ?? branchName.indexOf(singleMatch[0]);
+  const sequence = branchName.slice(startIndex);
+  const numbers = sequence
+    .replace(/^ODE-/i, "")
+    .split("-")
+    .map((part) => part.trim())
+    .filter((part) => /^\d+$/.test(part));
+
+  return Array.from(new Set(numbers.map((num) => `ODE-${num}`)));
+}
+
+const issueIds = extractIssueIds(branch);
+if (issueIds.length === 0) {
   fail(
     `Branch "${branch}" does not include an issue ID (expected ODE-XX in branch name).`,
   );
 }
-
-const issueIds = Array.from(new Set(issueMatches));
 const baseRef = resolveBaseRef();
 const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
   encoding: "utf8",
