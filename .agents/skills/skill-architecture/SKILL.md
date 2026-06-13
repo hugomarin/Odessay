@@ -36,6 +36,10 @@ Actívalo si el prompt, issue o diff toca cualquiera de estas señales:
 - `body_json` vs Markdown
 - boundaries entre UI y servicios
 - refactors que cruzan frontend/backend/database
+- workspace filesystem (folder watcher, `selectedPaths`, `.odessay/index.json`)
+- `capabilities.json` (Tauri — declaración de permisos de filesystem)
+- Studio session state (Zustand session-scoped slice)
+- web vs desktop parity en cualquier feature nueva
 
 Si la tarea cruza capas y no sabes si pertenece a frontend, backend o database, este skill aplica por default.
 
@@ -316,6 +320,44 @@ Acción:
 - privilegiar la secuencia desktop
 - dejar explícita la contradicción documental
 - no “promediar” dos arquitecturas incompatibles
+
+---
+
+## Patrones de runtime split documentados
+
+Estos patrones son features donde la bifurcación web/desktop es intencional y debe preservarse.
+
+### Workspace filesystem
+
+El módulo Workspace tiene capacidades distintas según el runtime:
+
+| Capacidad | Web | Desktop (Tauri) |
+|---|---|---|
+| Añadir carpeta del sistema | ✗ no disponible | ✓ Tauri `dialog.open` |
+| Árbol de selección granular (`FolderTreePicker`) | ✗ no disponible | ✓ Tauri filesystem API |
+| Watch en tiempo real | ✗ no disponible | ✓ `src-tauri/src/workspace.rs` |
+| Persistencia de `selectedPaths` | — | `.odessay/index.json` (local, en la carpeta del workspace) |
+
+Reglas de boundary:
+- `components/workspace/WorkspaceFolderTreePicker.tsx` solo se renderiza si `isTauriRuntime() === true`. En web, mostrar mensaje informativo, no el picker.
+- `src-tauri/src/workspace.rs` es el Rust command owner. Ninguna lógica de filesystem vive en TS del frontend.
+- `capabilities.json` declara todos los permisos de filesystem. Si un issue expande capacidades del workspace, el cambio en `capabilities.json` es requisito previo, no secundario.
+- `.odessay/index.json` es configuración local del workspace, no synced a Supabase. Layer: `Adapter(desktop)`.
+
+### Studio session state (Zustand — tercer slice aprobado)
+
+Studio necesita retener qué artifacts están abiertos cuando el usuario navega a otra sección y vuelve. El estado debe sobrevivir la desmontada del componente sin persistir en servidor.
+
+Clasificación:
+- Layer: `Application` (estado de sesión de módulo, no de documento)
+- Runtime scope: `shared` (aplica en web y desktop)
+- Owner: `frontend`
+- Store: `store/studio-session.ts` — el único Zustand slice fuera de sync y AI que está aprobado
+- No persistir en `localStorage` ni en Supabase. La sesión vive mientras la app esté abierta. Al cerrar/refrescar, Studio inicia vacío.
+
+### Regla: capabilities.json como contrato de arquitectura
+
+Cualquier issue que expanda permisos de filesystem (nuevas rutas, nuevos patrones de acceso, nuevos comandos Tauri) **debe declarar explícitamente el cambio en `capabilities.json` en su Architecture Contract**. Este archivo es un contrato de seguridad, no configuración accidental.
 
 ---
 

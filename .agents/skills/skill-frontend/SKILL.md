@@ -73,7 +73,7 @@ Tailwind CSS — única herramienta de styling
 ShadCN/UI — componentes accesibles, personalizados solo en colores, tipografía, bordes y sombras vía tokens CSS
 TipTap — editor headless
 TanStack Query — server data, cache y loading states
-Zustand — sync state y AI state (solo estos dos slices)
+Zustand — sync state, AI state y Studio session (tres slices, declarados explícitamente — ver §Estado segmentado)
 Lucide React — iconografía (strokeWidth={1.5} siempre)
 Geist Sans + Lora — tipografía (ver skill-design.md)
 ```
@@ -207,8 +207,8 @@ const [writings, setWritings] = useState([])
 useEffect(() => { fetchWritings().then(setWritings) }, [])
 ```
 
-**Sync state y AI state — Zustand, dos slices separados**
-Son los únicos estados que se comparten entre componentes sin relación directa (editor ↔ statusbar para sync, editor ↔ panel AI para observaciones).
+**Sync state, AI state y Studio session — Zustand, tres slices separados**
+Son los únicos estados que se comparten entre componentes sin relación directa.
 
 ```ts
 // store/sync.ts
@@ -227,9 +227,17 @@ type AIState = {
   addObservation: (obs: Observation) => void
   dismissObservation: (id: string) => void
 }
+
+// store/studio-session.ts
+type StudioSessionState = {
+  openArtifactIds: string[]       // artifacts abiertos en Studio, orden de apertura
+  addArtifact: (id: string) => void
+  removeArtifact: (id: string) => void
+  clearSession: () => void
+}
 ```
 
-Zustand no se usa para nada más. Si aparece la tentación de agregar un tercer slice, revisar si TanStack Query o useState local resuelven el problema.
+Estos tres slices son los únicos válidos. El criterio para un nuevo slice es que el estado debe cruzar componentes sin relación directa Y la sesión no debe perderse al navegar entre módulos. Si la condición no se cumple, usar TanStack Query (server data) o useState local (UI state).
 
 ### Carga diferida — solo lo esencial en la primera carga
 
@@ -350,6 +358,7 @@ npm run ops:perf:gate -- --trace artifacts/perf/editor-after.json.gz --report ar
 - Parseos o transformaciones pesadas en el hilo principal dentro de handlers de input.
 - Cálculos de word count/derivados fuera de TipTap en cada tecla.
 - Ejecutar lógica AI síncrona en el camino de interacción del editor.
+- **Spell check evaluando en el mismo tick de escritura.** La evaluación ortográfica debe ocurrir con debounce ≥ 300ms. Evaluar por keystroke provoca subrayados sobre palabras en progreso y bloqueos de estado donde la marca no se limpia.
 - Introducir dependencias de UI pesadas sin presupuesto de impacto medido.
 - **Await de datos remotos antes de renderizar datos de `localDB`.** La vista debe mostrar lo que tiene localmente de inmediato; el enriquecimiento remoto (shares, metadata, estado de sync) ocurre en background.
 - **N+1 fetches en el path de carga inicial de una vista.** Cada item de una lista no debe disparar su propia petición remota. Enriquecer en batch o en background, nunca secuencialmente durante el primer render.
@@ -606,6 +615,40 @@ Cada módulo de UI se envuelve en un `<section>` con `id` y `data-page`. Cada su
 </section>
 ```
 
+**Workspace (`/workspace`):**
+
+```tsx
+<section id="workspace" data-page="workspace">
+  <div id="workspace-topbar"         data-section="workspace-topbar"         data-testid="workspace-topbar"         className="WorkspaceTopbar" />
+  <div id="workspace-list"           data-section="workspace-list"           data-testid="workspace-list"           className="WorkspaceList" />
+  <div id="workspace-detail"         data-section="workspace-detail"         data-testid="workspace-detail"         className="WorkspaceDetail" />
+  <div id="workspace-detail-table"   data-section="workspace-detail-table"   data-testid="workspace-detail-table"   className="WorkspaceDetailTable" />
+</section>
+```
+
+**Studio (`/studio`):**
+
+```tsx
+<section id="studio" data-page="studio">
+  <div id="studio-topbar"            data-section="studio-topbar"            data-testid="studio-topbar"            className="StudioTopbar" />
+  <div id="studio-artifact-list"     data-section="studio-artifact-list"     data-testid="studio-artifact-list"     className="StudioArtifactList" />
+  <div id="studio-empty"             data-section="studio-empty"             data-testid="studio-empty"             className="StudioEmpty" />
+</section>
+```
+
+**Preview modal (global, sobre cualquier vista):**
+
+```tsx
+<div id="preview-modal" data-section="preview-modal" className="PreviewModal">
+  <div id="preview-overlay"          data-section="preview-overlay"          className="PreviewOverlay" />
+  <div id="preview-header"           data-section="preview-header"           className="PreviewHeader" />
+  <div id="preview-content"          data-section="preview-content"          className="PreviewContent" />
+  <div id="preview-properties"       data-section="preview-properties"       className="PreviewProperties" />
+</div>
+```
+
+El Preview modal usa glass overlay: `backdrop-filter: blur(18px) saturate(1.15)` con fondo blanco semitransparente. Es el único lugar en la app donde se usa `backdrop-filter`. No replicar este patrón en otros modales — los demás usan overlay sólido estándar de ShadCN.
+
 ### Naming convention
 
 Las clases BEM son para identificación semántica, no para styling. El styling va en Tailwind.
@@ -697,7 +740,25 @@ components/
     EditorPanelNotes.tsx
     EditorPanelAI.tsx
     EditorPanelProperties.tsx
-  ui/                       ← ShadCN (no tocar)
+  workspace/
+    WorkspaceTopbar.tsx
+    WorkspaceList.tsx
+    WorkspaceCard.tsx
+    WorkspaceDetail.tsx
+    WorkspaceFolderTreePicker.tsx   ← desktop-only (envuelto con isTauriRuntime())
+  studio/
+    StudioTopbar.tsx
+    StudioArtifactList.tsx
+    StudioEmpty.tsx
+  preview/
+    PreviewModal.tsx               ← glass overlay, "use client"
+    PreviewHeader.tsx
+    PreviewContent.tsx
+    PreviewProperties.tsx
+  shared/                          ← componentes compartidos entre vistas
+    ArtifactTable.tsx              ← tabla configurable (Desk + Workspace + Studio)
+    WritingStatusBadge.tsx         ← badge de status (compact + full variants)
+  ui/                              ← ShadCN (no tocar)
 ```
 
 ### Reglas de componentes
@@ -743,7 +804,7 @@ Auto-save local: inmediato. Sync remoto: debounce 1500ms. Sin indicador agresivo
 
 **Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta), `Strike` (fuera del subconjunto epistolar). No agregar sin revisar `odessay-editor.md`.
 
-Shortcuts: `⌘B`, `⌘I`, `⌘K`, `⌘⌥1/2/3`, `⌘⇧F`. Sin toolbar flotante al seleccionar.
+Shortcuts: el mapa canónico vive en `lib/editor/shortcuts.ts`. Es la única fuente de verdad — el menú nativo de Tauri y la UI de ayuda deben leer de ahí. No hardcodear shortcuts en componentes individuales. Shortcuts actuales: `⌘B`, `⌘I`, `⌘K`, `⌘⌥1/2/3`, `⌘⇧F`. Sin toolbar flotante al seleccionar.
 
 ---
 
@@ -810,6 +871,9 @@ Mensajes por vista:
 | `/correspondences` sin hilos | "Your correspondences will appear here." | — |
 | `/shared` sin compartidos | "Nothing has been shared with you yet." | — |
 | Collection vacía | "This collection has no writings yet." | "Add writings" |
+| `/studio` sin artifacts abiertos | "Nothing open. Choose an artifact to work on." | "Open artifact" + "New artifact" |
+| `/workspace` sin workspaces | "Add a folder from your computer to start." | "Add workspace" |
+| Workspace detail sin archivos | "No files found in this folder." | — |
 
 ### Errores — Toast
 

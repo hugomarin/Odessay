@@ -104,6 +104,9 @@ type WritingListItem = Pick<
   "id" | "title" | "slug" | "status" | "visibility"
     | "parent_id" | "correspondence_id" | "version"
     | "deleted_at" | "created_at" | "updated_at"
+    | "content_updated_at"    // para ordenar Recent Writings — actualiza solo con cambios editoriales
+    | "metadata_updated_at"   // para audit/metadata; cambiar status/tags no afecta content_updated_at
+    | "artifact_type"         // general | agent | skill | prompt | template | status
 >
 // El cliente que necesite el body de un writing concreto llama GET /api/writings/:id
 
@@ -313,6 +316,15 @@ El auto-save es local-first. Secuencia invariable: guardar en base local (inmedi
 El endpoint de sync es idempotente. Estrategia de conflictos: **last-write-wins silencioso** — no se bloquean escrituras, no hay UI de resolución. El campo `version` se incrementa como auditoría, no como control de concurrencia.
 
 **Spec completa de sync:** `workflow/context/features/odessay-sync.md` — interfaces TypeScript, flujo de auto-save, estados del statusbar, observabilidad.
+
+### Desktop sync — reglas invariables
+
+Estas reglas aplican a cualquier código de sync que se ejecute en el runtime desktop (Tauri):
+
+- **Nunca `upsert`**. Usar `INSERT` o `UPDATE` explícito según el estado conocido. `upsert` con RLS activo en la tabla `writings` produce error 42501 en casos de escritura concurrente.
+- **Nunca `return=representation`** en el header de las requests a Supabase desde el path desktop. Usar solo el código de respuesta HTTP como confirmación de éxito.
+- `lib/local-db/writings.ts` (IndexedDB) es un índice derivado, no fuente de verdad. La fuente canónica es el archivo `.md` en disco + Supabase. Si hay discrepancia, el archivo `.md` gana.
+- `lib/local-db/writings.ts` **no puede importarse desde código web**. Cualquier import desde fuera del runtime Tauri es un bug de boundary.
 
 ## Observabilidad
 
