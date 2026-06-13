@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-12",
+  "last_updated": "2026-06-13",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -46,6 +46,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "fix(desk,sharing): correct Shared with Me counter by using writing_shares and loading it eagerly. Updated listIncomingShares() in lib/services/web-sharing-service.ts to exclude writings authored by the current user; eagerly load shared writings on Desk mount in app/(app)/desk/page.tsx so the tab counter is accurate before the user opens the shared view. [ODE-263]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-263",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-263/fix-shared-with-me-counter-in-desk",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/251",
+      "commit": "67957d2",
+      "date": "2026-06-12",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 730 tests PASS. ops:delivery:gate PASS with batch base ref origin/codex/batch-ODE-262-263-264. Performance Contract: not required. Context Gaps Detected: no. Delivery gate script updated to support batch branch names (ODE-262-263-264)."
+    },
     {
       "what": "feat(db): add content_updated_at and metadata_updated_at to writings table. SQL migration with backfill + triggers; update replace_writing_collections RPC to bump metadata_updated_at; update TypeScript types (WritingRecord, WritingSummary, LocalWriting, RemoteWritingPayload); update web document service save path to set/preserve content_updated_at; update editor shell to pass contentUpdatedAt; bump IndexedDB to v13 with backfill migration; update API routes to accept/return new fields; add document-service tests. [ODE-262]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
