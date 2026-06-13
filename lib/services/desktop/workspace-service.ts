@@ -53,6 +53,7 @@ function formatWorkspaceFromSnapshot(
     slug: record.slug,
     name: record.name,
     rootPath: record.rootPath,
+    selectedPaths: snapshot.selectedPaths,
     source: record.source,
     status: "ready",
     missingReason: null,
@@ -82,6 +83,7 @@ function formatMissingWorkspace(
     slug: record.slug,
     name: record.name,
     rootPath: record.rootPath,
+    selectedPaths: [],
     source: record.source,
     status,
     missingReason: reason,
@@ -134,6 +136,15 @@ async function reconcileWorkspaceSnapshot(
 export class DesktopWorkspaceService {
   constructor(private readonly settingsService: DesktopSettingsService) {}
 
+  async pickExistingWorkspaceRoot(): Promise<string | null> {
+    const selected = await open({ directory: true, multiple: false })
+    return selected && typeof selected === "string" ? selected : null
+  }
+
+  async inspectWorkspace(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
+    return tauriWorkspaceSync(rootPath)
+  }
+
   private async readRecords(): Promise<WorkspaceRecord[]> {
     const result = await this.settingsService.getDesktopSettings()
     const workspaces = result.data?.workspaces ?? []
@@ -181,6 +192,7 @@ export class DesktopWorkspaceService {
         slug: workspace.slug,
         name: workspace.name,
         rootPath: workspace.rootPath,
+        selectedPaths: workspace.selectedPaths,
         source: workspace.source,
         status: workspace.status,
         missingReason: workspace.missingReason,
@@ -209,12 +221,19 @@ export class DesktopWorkspaceService {
   }
 
   async addExistingWorkspace(): Promise<WorkspaceRecord | null> {
-    const selected = await open({ directory: true, multiple: false })
-    if (!selected || typeof selected !== "string") {
+    const rootPath = await this.pickExistingWorkspaceRoot()
+    if (!rootPath) {
       return null
     }
 
-    return this.registerWorkspace(selected, "existing-folder")
+    return this.registerWorkspace(rootPath, "existing-folder")
+  }
+
+  async addExistingWorkspaceWithSelection(
+    rootPath: string,
+    selectedPaths: string[],
+  ): Promise<WorkspaceRecord | null> {
+    return this.registerWorkspace(rootPath, "existing-folder", undefined, selectedPaths)
   }
 
   async createWorkspace(name: string): Promise<WorkspaceRecord | null> {
@@ -231,10 +250,11 @@ export class DesktopWorkspaceService {
     rootPath: string,
     source: WorkspaceRecord["source"],
     explicitName?: string,
+    selectedPaths?: string[],
   ): Promise<WorkspaceRecord> {
     const records = await this.readRecords()
     const existing = records.find((record) => record.rootPath === rootPath)
-    const snapshot = await tauriWorkspaceSync(rootPath)
+    const snapshot = await tauriWorkspaceSync(rootPath, selectedPaths)
 
     if (existing) {
       return existing
@@ -340,7 +360,11 @@ export class DesktopWorkspaceService {
     await this.writeRecords(nextRecords)
   }
 
-  async watchWorkspace(rootPath: string, onChange: () => void): Promise<UnwatchFn> {
+  async watchWorkspace(
+    rootPath: string,
+    selectedPaths: string[],
+    onChange: () => void,
+  ): Promise<UnwatchFn> {
     let previousSnapshot: DesktopWorkspaceSnapshot | null = null
     let reconcilePromise = Promise.resolve()
 
@@ -350,10 +374,12 @@ export class DesktopWorkspaceService {
       previousSnapshot = null
     }
 
-    console.log("[workspace:watch] starting watcher for", rootPath)
+    const watchedPaths = await resolveWorkspaceWatchPaths(rootPath, selectedPaths)
+
+    console.log("[workspace:watch] starting watcher for", watchedPaths)
 
     return watchFsPaths(
-      [rootPath],
+      watchedPaths,
       (event) => {
         if (shouldIgnoreWorkspaceWatchEvent(event)) {
           console.log("[workspace:watch] ignored event", event.type, event.paths)
@@ -386,13 +412,23 @@ export class DesktopWorkspaceService {
     )
   }
 
-  async watchWorkspaces(rootPaths: string[], onChange: () => void): Promise<UnwatchFn> {
-    const uniquePaths = Array.from(new Set(rootPaths.filter(Boolean)))
+  async watchWorkspaces(
+    workspaces: Array<Pick<WorkspaceSummary, "rootPath" | "selectedPaths">>,
+    onChange: () => void,
+  ): Promise<UnwatchFn> {
+    const uniqueWorkspaces = Array.from(
+      new Map(
+        workspaces
+          .filter((workspace) => workspace.rootPath)
+          .map((workspace) => [workspace.rootPath, workspace]),
+      ).values(),
+    )
+    const rootPaths = uniqueWorkspaces.map((workspace) => workspace.rootPath)
     const snapshotByRoot = new Map<string, DesktopWorkspaceSnapshot | null>()
     let reconcilePromise = Promise.resolve()
 
     await Promise.all(
-      uniquePaths.map(async (rootPath) => {
+      rootPaths.map(async (rootPath) => {
         try {
           snapshotByRoot.set(rootPath, await tauriWorkspaceSync(rootPath))
         } catch {
@@ -401,8 +437,16 @@ export class DesktopWorkspaceService {
       }),
     )
 
+    const watchedPaths = (
+      await Promise.all(
+        uniqueWorkspaces.map((workspace) =>
+          resolveWorkspaceWatchPaths(workspace.rootPath, workspace.selectedPaths),
+        ),
+      )
+    ).flat()
+
     return watchFsPaths(
-      uniquePaths,
+      Array.from(new Set(watchedPaths)),
       (event) => {
         if (shouldIgnoreWorkspaceWatchEvent(event)) {
           return
@@ -411,7 +455,7 @@ export class DesktopWorkspaceService {
         reconcilePromise = reconcilePromise
           .catch(() => undefined)
           .then(async () => {
-            const changedRoots = uniquePaths.filter((rootPath) =>
+            const changedRoots = rootPaths.filter((rootPath) =>
               event.paths.some((path) => path === rootPath || path.startsWith(`${rootPath}/`)),
             )
 
@@ -440,6 +484,15 @@ export class DesktopWorkspaceService {
       { recursive: true, delayMs: 700 },
     )
   }
+}
+
+async function resolveWorkspaceWatchPaths(rootPath: string, selectedPaths: string[]) {
+  if (!selectedPaths.length) {
+    return [rootPath]
+  }
+
+  const watchedPaths = await Promise.all(selectedPaths.map((selectedPath) => join(rootPath, selectedPath)))
+  return Array.from(new Set(watchedPaths))
 }
 
 function shouldIgnoreWorkspaceWatchEvent(event: TauriWatchEvent) {

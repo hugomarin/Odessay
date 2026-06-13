@@ -117,6 +117,13 @@
       "description": "Plan técnico de migración a la arquitectura desktop/multi-runtime: fases, dependencias, entregables, riesgos, gates y orden recomendado de refactors antes de tocar shell desktop."
     },
     {
+      "path": "workflow/context/features/odessay-workspace.md",
+      "type": "feature",
+      "scope": "workspace-runtime-contract",
+      "state": "desktop-first-runtime-map",
+      "description": "Contrato normativo de Workspace por runtime: qué capacidades existen en desktop, qué comportamiento debe mostrar web ante limitaciones de filesystem local, y cómo persiste `selectedPaths` en `.odyssey/index.json`."
+    },
+    {
       "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",
       "type": "feature",
       "scope": "runtime-coexistence-policy",
@@ -168,6 +175,11 @@
       "path": "workflow/workflow.md",
       "type": "ops",
       "description": "Protocolo completo de comandos /wf-*: /wf-define (planificar fase con Diálogo de Alineación + DoD), /wf-build (implementar issue), /wf-review (validar PR y actualizar status.json), /wf-debrief (capturar observaciones post-entrega), /wf-update-docs (sincronizar inventario), /wf-decision (registrar decisión en decisions.json), /wf-audit (verificar calidad de issues contra DoD). Define contexto por etapa, gates, fallback sin argumentos, frontera humano/agente y protocolo de handoff."
+    },
+    {
+      "path": "docs/keyboard-shortcuts.md",
+      "type": "ops",
+      "description": "Auditoría y referencia operativa de shortcuts por runtime (web vs desktop), incluyendo colisiones evitadas, equivalencia con el menú nativo y punto de descubrimiento en la UI del editor."
     },
     {
       "path": "workflow/status.json",

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
@@ -29,12 +29,16 @@ pub struct WorkspaceSnapshot {
     pub folder_count: usize,
     #[serde(rename = "updatedAt")]
     pub updated_at: Option<u64>,
+    #[serde(rename = "selectedPaths")]
+    pub selected_paths: Vec<String>,
     pub files: Vec<WorkspaceFileSnapshot>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct WorkspaceIndexDocument {
     version: u8,
+    #[serde(rename = "selectedPaths", default)]
+    selected_paths: Vec<String>,
     files: HashMap<String, WorkspaceIndexEntry>,
 }
 
@@ -51,6 +55,98 @@ struct WorkspaceIndexEntry {
 fn has_path_traversal(path: &str) -> bool {
     path.split(|c: char| c == '/' || c == '\\')
         .any(|component| component == "..")
+}
+
+fn normalize_selected_paths(selected_paths: Vec<String>) -> Result<Vec<String>, String> {
+    let mut normalized = Vec::new();
+
+    for selected_path in selected_paths {
+        let trimmed = selected_path.trim().replace('\\', "/");
+        let cleaned = trimmed.trim_matches('/').to_string();
+
+        if cleaned.is_empty() {
+            continue;
+        }
+
+        if has_path_traversal(&cleaned) {
+            return Err(format!(
+                "workspace_sync: selectedPaths contains invalid path component '..': {}",
+                selected_path
+            ));
+        }
+
+        if !normalized.iter().any(|existing| existing == &cleaned) {
+            normalized.push(cleaned);
+        }
+    }
+
+    normalized.sort();
+    Ok(normalized)
+}
+
+fn should_ignore_entry(name: &str, is_dir: bool) -> bool {
+    // Internal/system directories are always skipped, regardless of dot-prefix.
+    if name == ".odyssey" || name == ".git" || name == "node_modules" {
+        return true;
+    }
+
+    if is_dir {
+        // Hidden directories (e.g. ".agents") are kept: they often hold markdown
+        // the user wants to track. Only the explicit denylist above is excluded.
+        return false;
+    }
+
+    // Files: skip hidden dotfiles (e.g. ".DS_Store") and temp files.
+    if name.starts_with('.') {
+        return true;
+    }
+
+    if name.ends_with(".tmp") {
+        return true;
+    }
+
+    false
+}
+
+fn is_markdown_file(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("md") | Some("mdx")
+    )
+}
+
+fn matches_selected_paths(relative_path: &str, selected_paths: &[String]) -> bool {
+    if selected_paths.is_empty() {
+        return true;
+    }
+
+    selected_paths.iter().any(|selected_path| {
+        relative_path == selected_path || relative_path.starts_with(&format!("{selected_path}/"))
+    })
+}
+
+fn count_included_folders(files: &[WorkspaceFileSnapshot]) -> usize {
+    let mut folders = HashSet::new();
+
+    for file in files {
+        let mut current = String::new();
+        let mut segments = file.relative_path.split('/').collect::<Vec<_>>();
+        segments.pop();
+
+        for segment in segments {
+            current = if current.is_empty() {
+                segment.to_string()
+            } else {
+                format!("{current}/{}", segment)
+            };
+            folders.insert(current.clone());
+        }
+    }
+
+    folders.len()
 }
 
 #[tauri::command]
@@ -95,7 +191,10 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
 }
 
 #[tauri::command]
-pub fn workspace_sync(root_path: String) -> Result<WorkspaceSnapshot, String> {
+pub fn workspace_sync(
+    root_path: String,
+    selected_paths: Option<Vec<String>>,
+) -> Result<WorkspaceSnapshot, String> {
     let root = Path::new(&root_path);
     if !root.exists() {
         return Err(format!(
@@ -117,14 +216,21 @@ pub fn workspace_sync(root_path: String) -> Result<WorkspaceSnapshot, String> {
 
     let index_path = odyssey_dir.join("index.json");
     let existing_index = read_workspace_index(&index_path)?;
+    let effective_selected_paths = match selected_paths {
+        Some(selected_paths) => normalize_selected_paths(selected_paths)?,
+        None => normalize_selected_paths(existing_index.selected_paths.clone())?,
+    };
 
     let mut files = Vec::new();
     let mut folder_count = 0usize;
     visit_workspace(&canonical_root, &canonical_root, &mut files, &mut folder_count)?;
+    files.retain(|file| matches_selected_paths(&file.relative_path, &effective_selected_paths));
+    folder_count = count_included_folders(&files);
 
     let mut files_with_ids = Vec::new();
     let mut next_index = WorkspaceIndexDocument {
         version: 1,
+        selected_paths: effective_selected_paths.clone(),
         files: HashMap::new(),
     };
     let mut existing_by_inode = HashMap::new();
@@ -181,6 +287,7 @@ pub fn workspace_sync(root_path: String) -> Result<WorkspaceSnapshot, String> {
         file_count: files_with_ids.len(),
         folder_count,
         updated_at,
+        selected_paths: effective_selected_paths,
         files: files_with_ids,
     })
 }
@@ -189,6 +296,7 @@ fn read_workspace_index(index_path: &Path) -> Result<WorkspaceIndexDocument, Str
     if !index_path.exists() {
         return Ok(WorkspaceIndexDocument {
             version: 1,
+            selected_paths: Vec::new(),
             files: HashMap::new(),
         });
     }
@@ -212,14 +320,13 @@ fn visit_workspace(
         let path = entry.path();
         let file_name = entry.file_name();
         let name = file_name.to_string_lossy();
-
-        if name == ".odyssey" {
-            continue;
-        }
-
         let metadata = entry
             .metadata()
             .map_err(|e| format!("workspace_sync metadata: {e}"))?;
+
+        if should_ignore_entry(&name, metadata.is_dir()) {
+            continue;
+        }
 
         if metadata.is_dir() {
             *folder_count += 1;
@@ -227,12 +334,7 @@ fn visit_workspace(
             continue;
         }
 
-        let extension = path
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(|value| value.to_ascii_lowercase());
-
-        if extension.as_deref() != Some("md") && extension.as_deref() != Some("txt") {
+        if !is_markdown_file(&path) {
             continue;
         }
 

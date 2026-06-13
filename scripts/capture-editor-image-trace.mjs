@@ -141,7 +141,9 @@ async function runMeasuredScenario(page, targetUrl) {
     await page.getByLabel("Find text").press("Enter");
   }
 
-  await page.keyboard.press(`${commandKey}+H`);
+  await page.keyboard.press(
+    process.platform === "darwin" ? `${commandKey}+Alt+F` : `${commandKey}+Alt+F`,
+  );
   await page.getByLabel("Replace text").fill("omega beta");
   page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "Replace all" }).click({ force: true });

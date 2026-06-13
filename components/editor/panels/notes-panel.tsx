@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, Mic, Trash2, X } from "lucide-react"
+import { ChevronDown, Mic, Pause, Play, Trash2, X } from "lucide-react"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
+import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
 
 type PanelEntryType = AnnotationType | "highlight"
 
@@ -102,7 +103,20 @@ function VoiceRecorderInline({
   onTranscript: (text: string) => void
   onCancel: () => void
 }) {
-  const { state, start, stop, reset, blob, waveformData, duration, permissionDenied, isSupported } =
+  const {
+    state,
+    start,
+    stop,
+    pause,
+    resume,
+    reset,
+    blob,
+    waveformData,
+    duration,
+    permissionDenied,
+    isSupported,
+    errorMessage,
+  } =
     useVoiceRecorder()
   const [isSubmittingVoice, setIsSubmittingVoice] = useState(false)
   const [voiceError, setVoiceError] = useState<string | null>(null)
@@ -114,20 +128,19 @@ function VoiceRecorderInline({
   }, [])
 
   useEffect(() => {
+    if (errorMessage) {
+      setVoiceError(errorMessage)
+    }
+  }, [errorMessage])
+
+  useEffect(() => {
     if (blob && blob !== prevBlobRef.current && !isSubmittingVoice) {
       prevBlobRef.current = blob
       setIsSubmittingVoice(true)
       setVoiceError(null)
 
-      const formData = new FormData()
-      formData.set("audio", blob, "voice-note.webm")
-
-      fetch("/api/margins/transcribe", { method: "POST", body: formData })
-        .then((res) => res.json())
-        .then((payload: { data: { transcript?: string } | null; error: { message?: string } | null }) => {
-          if (payload.error) throw new Error(payload.error.message ?? "Transcription failed.")
-          const transcript = payload.data?.transcript?.trim() ?? ""
-          if (!transcript) throw new Error("No transcript was returned for this recording.")
+      transcribeVoiceNote(blob)
+        .then((transcript) => {
           onTranscript(transcript)
         })
         .catch((err: unknown) => {
@@ -182,6 +195,23 @@ function VoiceRecorderInline({
         <span className="font-mono text-[11px] text-ink-3 tabular-nums">
           {Math.floor(duration / 60)}:{String(duration % 60).padStart(2, "0")}
         </span>
+        <button
+          type="button"
+          onClick={state === "paused" ? resume : pause}
+          className="rounded-[6px] bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
+        >
+          {state === "paused" ? (
+            <span className="inline-flex items-center gap-1">
+              <Play className="h-3 w-3" strokeWidth={1.5} />
+              Resume
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1">
+              <Pause className="h-3 w-3" strokeWidth={1.5} />
+              Pause
+            </span>
+          )}
+        </button>
         <button
           type="button"
           onClick={stop}
@@ -355,14 +385,6 @@ export function NotesPanel({
                   }
                 }
 
-                const handleConvertToAi = () => {
-                  if (isStandalone && onConvertHighlightToAi) {
-                    onConvertHighlightToAi(annotation.anchor_text ?? "", draft, annotation.anchor_start, annotation.anchor_end)
-                  } else if (isHighlight && onUpdateAnnotationType) {
-                    onUpdateAnnotationType("highlight", annotation.index, "ai")
-                  }
-                }
-
                 const isExpanded = expandedKeys.has(key)
                 const THREE_LINES_PX = 54 // 13px × 1.375 leading × 3
                 const needsToggle = draft.length > 100 || draft.split("\n").length > 3
@@ -414,7 +436,11 @@ export function NotesPanel({
                             onClick={() =>
                               setExpandedKeys((prev) => {
                                 const next = new Set(prev)
-                                isExpanded ? next.delete(key) : next.add(key)
+                                if (isExpanded) {
+                                  next.delete(key)
+                                } else {
+                                  next.add(key)
+                                }
                                 return next
                               })
                             }

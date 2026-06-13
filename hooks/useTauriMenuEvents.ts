@@ -3,19 +3,62 @@
 import { useEffect, useRef } from "react"
 import { listen } from "@tauri-apps/api/event"
 import { open, save } from "@tauri-apps/plugin-dialog"
+import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
 type Handlers = {
   onOpenFile: (path: string, content: string) => void
   onNewFile: (path: string) => void
+  onEditorAction?: (action: EditorShortcutAction) => void
   onGetSaveContent?: () => { content: string; defaultName: string } | null
   onSaveComplete?: (path: string) => Promise<void> | void
   documentKey?: string | null
 }
 
-export function useTauriMenuEvents({ onOpenFile, onNewFile, onGetSaveContent, onSaveComplete, documentKey }: Handlers) {
+const EDITOR_MENU_ACTION_IDS: EditorShortcutAction[] = [
+  "bold",
+  "italic",
+  "strike",
+  "highlight",
+  "inlineCode",
+  "codeBlock",
+  "link",
+  "footnote",
+  "paragraph",
+  "heading1",
+  "heading2",
+  "heading3",
+  "blockquote",
+  "bulletList",
+  "orderedList",
+  "focusMode",
+  "shortcutHelp",
+  "settings",
+  "table",
+  "image",
+  "find",
+  "replace",
+  "clearStyles",
+  "horizontalRule",
+  "copyAsMarkdown",
+  "copyAsHtml",
+  "date",
+  "toggleSidebar",
+  "toggleTopbar",
+  "toggleTabBar",
+]
+
+export function useTauriMenuEvents({
+  onOpenFile,
+  onNewFile,
+  onEditorAction,
+  onGetSaveContent,
+  onSaveComplete,
+  documentKey,
+}: Handlers) {
   const onOpenFileRef = useRef(onOpenFile)
   const onNewFileRef = useRef(onNewFile)
+  const onEditorActionRef = useRef(onEditorAction)
   const onGetSaveContentRef = useRef(onGetSaveContent)
   const onSaveCompleteRef = useRef(onSaveComplete)
   const lastSavePathRef = useRef<string | null>(null)
@@ -23,6 +66,7 @@ export function useTauriMenuEvents({ onOpenFile, onNewFile, onGetSaveContent, on
 
   useEffect(() => { onOpenFileRef.current = onOpenFile }, [onOpenFile])
   useEffect(() => { onNewFileRef.current = onNewFile }, [onNewFile])
+  useEffect(() => { onEditorActionRef.current = onEditorAction }, [onEditorAction])
   useEffect(() => { onGetSaveContentRef.current = onGetSaveContent }, [onGetSaveContent])
   useEffect(() => { onSaveCompleteRef.current = onSaveComplete }, [onSaveComplete])
   useEffect(() => { lastSavePathRef.current = null }, [documentKey])
@@ -63,6 +107,15 @@ export function useTauriMenuEvents({ onOpenFile, onNewFile, onGetSaveContent, on
       if (cancelled) { ul(); return }
       unlisteners.push(ul)
     })
+
+    for (const action of EDITOR_MENU_ACTION_IDS) {
+      listen(`menu:${action}`, () => {
+        onEditorActionRef.current?.(action)
+      }).then((ul) => {
+        if (cancelled) { ul(); return }
+        unlisteners.push(ul)
+      })
+    }
 
     async function writeDocumentToDisk(forcePicker: boolean) {
       if (isWritingRef.current) return

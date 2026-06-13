@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { appendWaveformSample, calculateWaveformRms } from "@/hooks/useVoiceRecorder"
+import {
+  appendWaveformSample,
+  calculateWaveformRms,
+  getPreferredRecorderMimeType,
+} from "@/hooks/useVoiceRecorder"
 import { buildWaveformBars, formatVoiceRecorderDuration } from "@/components/reading/margins/voice-recorder-controls"
 
 describe("voice recorder helpers", () => {
@@ -25,5 +29,18 @@ describe("voice recorder helpers", () => {
   it("pads waveform bars to a fixed-length history for rendering", () => {
     expect(buildWaveformBars([0.2, 0.4], 4)).toEqual([0, 0, 0.2, 0.4])
     expect(buildWaveformBars([0.1, 0.2, 0.3, 0.4, 0.5], 3)).toEqual([0.3, 0.4, 0.5])
+  })
+
+  it("picks the first supported recorder mime type", () => {
+    const originalMediaRecorder = globalThis.MediaRecorder
+
+    // @ts-expect-error test stub
+    globalThis.MediaRecorder = {
+      isTypeSupported: (value: string) => value === "audio/mp4",
+    }
+
+    expect(getPreferredRecorderMimeType()).toBe("audio/mp4")
+
+    globalThis.MediaRecorder = originalMediaRecorder
   })
 })

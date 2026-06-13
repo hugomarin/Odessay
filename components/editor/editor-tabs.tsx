@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { EditorTabItem } from "@/components/editor/editor-tab-item";
+import { getEditorShortcutLabel } from "@/lib/editor/shortcuts";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
 
 type EditorTabsProps = {
@@ -74,7 +75,7 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenam
             />
           ))}
 
-          <ActionTooltip label="New writing" side="bottom">
+          <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="bottom">
             <button
               type="button"
               onClick={onNewTab}

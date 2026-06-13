@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-export type VoiceRecorderState = "idle" | "requesting" | "recording" | "stopped"
+export type VoiceRecorderState = "idle" | "requesting" | "recording" | "paused" | "stopped"
 
 const SAMPLE_INTERVAL_MS = 100
 const MAX_DURATION_SECONDS = 120
@@ -29,8 +29,26 @@ export function appendWaveformSample(history: number[], sample: number, limit = 
   return nextHistory
 }
 
+const PREFERRED_RECORDER_MIME_TYPES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/mp4;codecs=mp4a.40.2",
+]
+
 function isPermissionDeniedError(error: unknown) {
   return error instanceof DOMException && error.name === "NotAllowedError"
+}
+
+export function getPreferredRecorderMimeType() {
+  if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
+    return ""
+  }
+
+  return (
+    PREFERRED_RECORDER_MIME_TYPES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ??
+    ""
+  )
 }
 
 export function useVoiceRecorder() {
@@ -40,6 +58,7 @@ export function useVoiceRecorder() {
   const [duration, setDuration] = useState(0)
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [isSupported, setIsSupported] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
@@ -102,17 +121,34 @@ export function useVoiceRecorder() {
       setBlob(null)
       setWaveformData([])
       setDuration(0)
+      setErrorMessage(null)
     }
   }, [releaseMediaResources])
 
   const stop = useCallback(() => {
     const recorder = mediaRecorderRef.current
-    if (!recorder || recorder.state !== "recording") return
+    if (!recorder || (recorder.state !== "recording" && recorder.state !== "paused")) return
 
     finishModeRef.current = "stopped"
     clearTimers()
     recorder.stop()
   }, [clearTimers])
+
+  const pause = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state !== "recording") return
+
+    recorder.pause()
+    setState("paused")
+  }, [])
+
+  const resume = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (!recorder || recorder.state !== "paused") return
+
+    recorder.resume()
+    setState("recording")
+  }, [])
 
   const start = useCallback(async () => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return
@@ -125,6 +161,7 @@ export function useVoiceRecorder() {
 
     setIsSupported(true)
     setPermissionDenied(false)
+    setErrorMessage(null)
     setState("requesting")
     setBlob(null)
     setWaveformData([])
@@ -139,7 +176,20 @@ export function useVoiceRecorder() {
         return
       }
 
-      const audioContext = new AudioContext()
+      const AudioContextCtor =
+        window.AudioContext ??
+        (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!AudioContextCtor) {
+        setIsSupported(false)
+        setState("idle")
+        setErrorMessage("Audio capture is not available in this runtime.")
+        for (const track of stream.getTracks()) {
+          track.stop()
+        }
+        return
+      }
+
+      const audioContext = new AudioContextCtor()
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 2048
       analyser.smoothingTimeConstant = 0.85
@@ -147,7 +197,10 @@ export function useVoiceRecorder() {
       const source = audioContext.createMediaStreamSource(stream)
       source.connect(analyser)
 
-      const recorder = new MediaRecorder(stream)
+      const preferredMimeType = getPreferredRecorderMimeType()
+      const recorder = preferredMimeType
+        ? new MediaRecorder(stream, { mimeType: preferredMimeType })
+        : new MediaRecorder(stream)
 
       audioContextRef.current = audioContext
       analyserRef.current = analyser
@@ -186,6 +239,36 @@ export function useVoiceRecorder() {
         setState("idle")
       }
 
+      recorder.onpause = () => {
+        if (mountedRef.current) {
+          setState("paused")
+        }
+      }
+
+      recorder.onresume = () => {
+        if (mountedRef.current) {
+          setState("recording")
+        }
+      }
+
+      recorder.onerror = (event) => {
+        releaseMediaResources()
+        mediaRecorderRef.current = null
+        chunksRef.current = []
+
+        if (!mountedRef.current) {
+          return
+        }
+
+        setState("idle")
+        setBlob(null)
+        setWaveformData([])
+        setDuration(0)
+        setErrorMessage(
+          event.error?.message ?? "Recording failed in this desktop runtime. Try again.",
+        )
+      }
+
       recorder.start()
       setState("recording")
 
@@ -214,10 +297,15 @@ export function useVoiceRecorder() {
 
       if (isPermissionDeniedError(error)) {
         setPermissionDenied(true)
+        setErrorMessage("Microphone permission was denied.")
         return
       }
 
-      console.error("[voice-recorder:start]", error)
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Audio capture could not start in this runtime.",
+      )
     }
   }, [releaseMediaResources, stop])
 
@@ -260,11 +348,14 @@ export function useVoiceRecorder() {
     state,
     start,
     stop,
+    pause,
+    resume,
     reset,
     blob,
     waveformData,
     duration,
     permissionDenied,
     isSupported,
+    errorMessage,
   }
 }

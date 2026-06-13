@@ -1,6 +1,6 @@
 "use client"
 
-import { ArrowUp, LoaderCircle, Square, X } from "lucide-react"
+import { ArrowUp, LoaderCircle, Pause, Play, Square, X } from "lucide-react"
 import type { VoiceRecorderState } from "@/hooks/useVoiceRecorder"
 
 const WAVEFORM_BAR_COUNT = 20
@@ -25,6 +25,8 @@ type VoiceRecorderControlsProps = {
   isSubmitting: boolean
   errorMessage?: string | null
   hideSubmit?: boolean
+  onPause: () => void
+  onResume: () => void
   onStop: () => void
   onSubmit: () => void
   onDiscard: () => void
@@ -37,12 +39,15 @@ export function VoiceRecorderControls({
   isSubmitting,
   errorMessage = null,
   hideSubmit = false,
+  onPause,
+  onResume,
   onStop,
   onSubmit,
   onDiscard,
 }: VoiceRecorderControlsProps) {
   const bars = buildWaveformBars(waveformData)
   const canSubmit = state === "stopped" && !isSubmitting
+  const canStop = state === "recording" || state === "paused"
 
   return (
     <div className="flex flex-col gap-4">
@@ -69,7 +74,11 @@ export function VoiceRecorderControls({
             {state === "requesting" ? "Microphone" : "Voice note"}
           </span>
           <span className="font-sans text-[13px] text-ink-2">
-            {state === "requesting" ? "Allow microphone access…" : formatVoiceRecorderDuration(duration)}
+            {state === "requesting"
+              ? "Allow microphone access…"
+              : state === "paused"
+                ? `Paused at ${formatVoiceRecorderDuration(duration)}`
+                : formatVoiceRecorderDuration(duration)}
           </span>
         </div>
 
@@ -83,12 +92,32 @@ export function VoiceRecorderControls({
             <X className="h-4 w-4" strokeWidth={1.5} />
           </button>
 
+          {state === "recording" ? (
+            <button
+              type="button"
+              onClick={onPause}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors hover:bg-muted"
+              aria-label="Pause recording"
+            >
+              <Pause className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          ) : state === "paused" ? (
+            <button
+              type="button"
+              onClick={onResume}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors hover:bg-muted"
+              aria-label="Resume recording"
+            >
+              <Play className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          ) : null}
+
           <button
             type="button"
             onClick={onStop}
-            disabled={state !== "recording"}
+            disabled={!canStop}
             className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-            style={state === "recording" ? { background: "#ef4444", color: "#fff" } : { border: "0.5px solid var(--border)", color: "var(--ink)" }}
+            style={canStop ? { background: "#ef4444", color: "#fff" } : { border: "0.5px solid var(--border)", color: "var(--ink)" }}
             aria-label="Stop recording"
           >
             <Square className="h-3.5 w-3.5 fill-current" strokeWidth={1.5} />

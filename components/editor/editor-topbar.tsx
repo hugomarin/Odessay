@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Code2,
   Expand,
+  Keyboard,
   Italic,
   Link,
   List,
@@ -57,6 +58,7 @@ type EditorTopbarProps = {
   onRenameTab: (tabId: string) => void
   onNewTab: () => void
   onToggleFocusMode: () => void
+  onOpenShortcutHelp: () => void
   onTogglePanel: (panel: "notes" | "properties" | "publication") => void
   onRunAction: RunEditorAction
   isTabBarVisible?: boolean
@@ -202,6 +204,7 @@ export function EditorTopbar({
   onRenameTab,
   onNewTab,
   onToggleFocusMode,
+  onOpenShortcutHelp,
   onTogglePanel,
   onRunAction,
   isTabBarVisible = true,
@@ -539,7 +542,26 @@ export function EditorTopbar({
             </button>
           </ActionTooltip>
 
-          <ActionTooltip label="Properties panel" side="bottom">
+          <ActionTooltip
+            label="Keyboard shortcuts"
+            shortcut={getEditorShortcutLabel("shortcutHelp")}
+            side="bottom"
+          >
+            <button
+              type="button"
+              onClick={onOpenShortcutHelp}
+              className={getTopbarIconButtonClass(false)}
+              aria-label="Keyboard shortcuts"
+            >
+              <Keyboard className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+            </button>
+          </ActionTooltip>
+
+          <ActionTooltip
+            label="Properties panel"
+            shortcut={getEditorShortcutLabel("documentProperties")}
+            side="bottom"
+          >
             <button
               type="button"
               onClick={() => onTogglePanel("properties")}
@@ -551,12 +573,16 @@ export function EditorTopbar({
             </button>
           </ActionTooltip>
 
-          <ActionTooltip label="Correcciones" side="bottom">
+          <ActionTooltip
+            label="Corrections"
+            shortcut={getEditorShortcutLabel("corrections")}
+            side="bottom"
+          >
             <button
               type="button"
               onClick={() => onTogglePanel("publication")}
               className={getTopbarIconButtonClass(isPublicationModeEnabled || activePanel === "publication")}
-              aria-label="Correcciones"
+              aria-label="Corrections"
               aria-pressed={isPublicationModeEnabled || activePanel === "publication"}
             >
               <SpellCheck className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />

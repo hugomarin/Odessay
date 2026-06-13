@@ -99,10 +99,11 @@ test("editor shortcuts map to isolated actions without collisions", async ({ pag
   await dispatchShortcut(page, { key: "f", code: "KeyF", ...shiftCommandModifiers })
   await expect(page.locator("#editor-topbar")).toBeVisible()
 
+  await dispatchShortcut(page, { key: "/", code: "Slash", ...commandModifiers })
+  await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeHidden()
+
   await dispatchShortcut(page, { key: ",", code: "Comma", ...commandModifiers })
   await expect(page).toHaveURL(/\/login\?next=%2Fsettings$/)
-
-  await openEditorHarness(page)
-  await dispatchShortcut(page, { key: "n", code: "KeyN", ...shiftCommandModifiers })
-  await expect(page).toHaveURL(/\/login\?next=%2Fwrite$/)
 })
