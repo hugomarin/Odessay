@@ -47,6 +47,26 @@
   },
   "built": [
     {
+      "what": "feat(artifacts): add artifact_type to writings and expose Artifact Type selector in editor properties. Adds Supabase migration, ArtifactType contract/defaults, localDB v14 backfill, API/sync/document-service propagation, and properties panel dropdown with persistence. [ODE-273] [ODE-275]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-273",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-273/add-artifacttype-field-to-artifact-model",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/255",
+      "commit": "d07db1d",
+      "date": "2026-06-13",
+      "notes": "Shipped with ODE-275 on shared branch codex/artifact-status-ODE-273-ODE-275. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Context Gaps Detected: yes — referenced ArtifactType proposal doc and lib/types/writing.ts do not exist in this worktree."
+    },
+    {
+      "what": "feat(artifacts): add artifact_type to writings and expose Artifact Type selector in editor properties. Adds Supabase migration, ArtifactType contract/defaults, localDB v14 backfill, API/sync/document-service propagation, and properties panel dropdown with persistence. [ODE-273] [ODE-275]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-275",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-275/add-artifact-type-selector-to-properties-panel",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/255",
+      "commit": "d07db1d",
+      "date": "2026-06-13",
+      "notes": "Shipped with ODE-273 on shared branch codex/artifact-status-ODE-273-ODE-275. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required — properties selector is not a write hot path. Context Gaps Detected: yes — referenced ArtifactType proposal doc does not exist in this worktree."
+    },
+    {
       "what": "feat(editor): runtime-aware keyboard shortcut audit and remap. Replace now uses Cmd/Ctrl+Alt+F to avoid browser/system collisions, desktop menu emits editor actions directly, the editor exposes a visible shortcut-help dialog, and docs/keyboard-shortcuts.md documents the runtime matrix. Updated perf capture scripts and editor shortcut contract docs. [ODE-268]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-268",
