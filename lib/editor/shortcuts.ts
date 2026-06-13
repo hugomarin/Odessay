@@ -18,6 +18,7 @@ export type EditorShortcutAction =
   | "bulletList"
   | "orderedList"
   | "focusMode"
+  | "shortcutHelp"
   | "newWriting"
   | "settings"
   | "table"
@@ -59,12 +60,13 @@ const EDITOR_SHORTCUT_LABELS: Record<EditorShortcutAction, ShortcutDisplay> = {
   bulletList: { mac: "⌘⇧L", windows: "Ctrl+Shift+L" },
   orderedList: { mac: "⌘⇧O", windows: "Ctrl+Shift+O" },
   focusMode: { mac: "⌘⇧F", windows: "Ctrl+Shift+F" },
-  newWriting: { mac: "⌘⇧N", windows: "Ctrl+Shift+N" },
+  shortcutHelp: { mac: "⌘/", windows: "Ctrl+/" },
+  newWriting: { mac: "⌘N", windows: "Ctrl+N" },
   settings: { mac: "⌘,", windows: "Ctrl+," },
   table: { mac: "⌘⇧T", windows: "Ctrl+Shift+T" },
   image: { mac: "⌘⇧I", windows: "Ctrl+Shift+I" },
   find: { mac: "⌘F", windows: "Ctrl+F" },
-  replace: { mac: "⌘H", windows: "Ctrl+H" },
+  replace: { mac: "⌘⌥F", windows: "Ctrl+Alt+F" },
   clearStyles: { mac: "", windows: "" },
   horizontalRule: { mac: "⌘⇧-", windows: "Ctrl+Shift+-" },
   copyAsMarkdown: { mac: "", windows: "" },
@@ -169,12 +171,7 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "find"
   }
 
-  // In desktop, ⌘H is reserved by macOS (Hide Window). Replace uses ⌘⌥F instead.
-  if (isDesktopRuntime()) {
-    if (matches(event, "f", { alt: true, code: "KeyF" })) {
-      return "replace"
-    }
-  } else if (matches(event, "h", { code: "KeyH" })) {
+  if (matches(event, "f", { alt: true, code: "KeyF" })) {
     return "replace"
   }
 
@@ -182,7 +179,11 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
     return "focusMode"
   }
 
-  if (matches(event, "n", { shift: true, code: "KeyN" })) {
+  if (matches(event, "/", { code: "Slash" })) {
+    return "shortcutHelp"
+  }
+
+  if (isDesktopRuntime() && matches(event, "n", { code: "KeyN" })) {
     return "newWriting"
   }
 
@@ -194,8 +195,54 @@ export const getEditorShortcutAction = (event: KeyboardLikeEvent): EditorShortcu
 }
 
 export const getEditorShortcutLabel = (action: EditorShortcutAction): string | null => {
-  if (action === "replace" && isDesktopRuntime()) {
-    return "⌘⌥F"
-  }
   return getShortcutForPlatform(EDITOR_SHORTCUT_LABELS[action])
 }
+
+export type ShortcutHelpItem = {
+  action: EditorShortcutAction
+  availability: "both" | "desktop" | "web"
+  description: string
+}
+
+export type ShortcutHelpSection = {
+  title: string
+  items: ShortcutHelpItem[]
+}
+
+export const EDITOR_SHORTCUT_HELP_SECTIONS: ShortcutHelpSection[] = [
+  {
+    title: "Format",
+    items: [
+      { action: "bold", availability: "both", description: "Bold selection" },
+      { action: "italic", availability: "both", description: "Italic selection" },
+      { action: "strike", availability: "both", description: "Strike through text" },
+      { action: "highlight", availability: "both", description: "Highlight selection" },
+      { action: "inlineCode", availability: "both", description: "Inline code" },
+      { action: "codeBlock", availability: "both", description: "Code block" },
+      { action: "link", availability: "both", description: "Insert link" },
+    ],
+  },
+  {
+    title: "Structure",
+    items: [
+      { action: "paragraph", availability: "both", description: "Body paragraph" },
+      { action: "heading1", availability: "both", description: "Heading 1" },
+      { action: "heading2", availability: "both", description: "Heading 2" },
+      { action: "heading3", availability: "both", description: "Heading 3" },
+      { action: "blockquote", availability: "both", description: "Blockquote" },
+      { action: "bulletList", availability: "both", description: "Bulleted list" },
+      { action: "orderedList", availability: "both", description: "Numbered list" },
+    ],
+  },
+  {
+    title: "Editor",
+    items: [
+      { action: "find", availability: "both", description: "Find in current writing" },
+      { action: "replace", availability: "both", description: "Replace in current writing" },
+      { action: "focusMode", availability: "both", description: "Toggle focus mode" },
+      { action: "shortcutHelp", availability: "both", description: "Open shortcut help" },
+      { action: "newWriting", availability: "desktop", description: "Create a new writing tab" },
+      { action: "settings", availability: "both", description: "Open settings" },
+    ],
+  },
+]

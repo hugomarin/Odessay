@@ -37,7 +37,8 @@ pub fn run() {
                 .quit()
                 .build()?;
 
-            let new_file = MenuItem::with_id(app, "new-file", "New File", true, None::<&str>)?;
+            let new_file =
+                MenuItem::with_id(app, "new-file", "New File", true, Some("CmdOrCtrl+N"))?;
             let open_file =
                 MenuItem::with_id(app, "open-file", "Open File...", true, Some("CmdOrCtrl+O"))?;
             let save_to_disk = MenuItem::with_id(
@@ -56,6 +57,13 @@ pub fn run() {
                 .build()?;
 
             let find = MenuItem::with_id(app, "find", "Find", true, Some("CmdOrCtrl+F"))?;
+            let replace = MenuItem::with_id(
+                app,
+                "replace",
+                "Replace",
+                true,
+                Some("CmdOrCtrl+Alt+F"),
+            )?;
             let copy_md = MenuItem::with_id(
                 app,
                 "copyAsMarkdown",
@@ -75,6 +83,7 @@ pub fn run() {
                 .select_all()
                 .separator()
                 .item(&find)
+                .item(&replace)
                 .separator()
                 .item(&copy_md)
                 .item(&copy_html)
@@ -219,6 +228,13 @@ pub fn run() {
                 true,
                 Some("Alt+CmdOrCtrl+I"),
             )?;
+            let shortcut_help = MenuItem::with_id(
+                app,
+                "shortcutHelp",
+                "Keyboard Shortcuts",
+                true,
+                Some("CmdOrCtrl+/"),
+            )?;
 
             let view_menu = SubmenuBuilder::new(app, "View")
                 .item(&focus_mode)
@@ -230,6 +246,10 @@ pub fn run() {
                 .item(&devtools)
                 .separator()
                 .fullscreen()
+                .build()?;
+
+            let help_menu = SubmenuBuilder::new(app, "Help")
+                .item(&shortcut_help)
                 .build()?;
 
             let window_menu = SubmenuBuilder::new(app, "Window")
@@ -246,6 +266,7 @@ pub fn run() {
                     &format_menu,
                     &view_menu,
                     &window_menu,
+                    &help_menu,
                 ])
                 .build()?;
 

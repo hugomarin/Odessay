@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Code2,
   Expand,
+  Keyboard,
   Italic,
   Link,
   List,
@@ -57,6 +58,7 @@ type EditorTopbarProps = {
   onRenameTab: (tabId: string) => void
   onNewTab: () => void
   onToggleFocusMode: () => void
+  onOpenShortcutHelp: () => void
   onTogglePanel: (panel: "notes" | "properties" | "publication") => void
   onRunAction: RunEditorAction
   isTabBarVisible?: boolean
@@ -202,6 +204,7 @@ export function EditorTopbar({
   onRenameTab,
   onNewTab,
   onToggleFocusMode,
+  onOpenShortcutHelp,
   onTogglePanel,
   onRunAction,
   isTabBarVisible = true,
@@ -536,6 +539,21 @@ export function EditorTopbar({
               ) : (
                 <Expand className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
               )}
+            </button>
+          </ActionTooltip>
+
+          <ActionTooltip
+            label="Keyboard shortcuts"
+            shortcut={getEditorShortcutLabel("shortcutHelp")}
+            side="bottom"
+          >
+            <button
+              type="button"
+              onClick={onOpenShortcutHelp}
+              className={getTopbarIconButtonClass(false)}
+              aria-label="Keyboard shortcuts"
+            >
+              <Keyboard className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
             </button>
           </ActionTooltip>
 

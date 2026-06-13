@@ -205,7 +205,17 @@ El editor no muestra toolbar flotante al seleccionar texto — decisión deliber
 | Acción | Mac | Windows/Linux |
 |--------|-----|---------------|
 | Focus mode | `⌘⇧F` | `Ctrl+Shift+F` |
+| Shortcut help | `⌘/` | `Ctrl+/` |
 | Salir de focus mode | `Escape` | `Escape` |
+
+### Find / Replace
+
+| Acción | Mac | Windows/Linux |
+|--------|-----|---------------|
+| Buscar | `⌘F` | `Ctrl+F` |
+| Reemplazar | `⌘⌥F` | `Ctrl+Alt+F` |
+
+`⌘H` no se usa para Replace: en macOS colisiona con Hide y no es un contrato estable entre desktop y browser runtimes.
 
 ### Markdown shortcuts (TipTap nativo)
 

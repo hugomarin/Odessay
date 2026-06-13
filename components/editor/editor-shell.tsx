@@ -15,6 +15,7 @@ import {
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
 import { EditorFindReplace } from "@/components/editor/editor-find-replace"
+import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
@@ -340,6 +341,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [isTopbarVisible, setIsTopbarVisible] = useState(true)
   const [isTabBarVisible, setIsTabBarVisible] = useState(true)
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
+  const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false)
   const [findQuery, setFindQuery] = useState("")
   const [replaceValue, setReplaceValue] = useState("")
   const [findCaseSensitive, setFindCaseSensitive] = useState(false)
@@ -1729,6 +1731,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             return true
           case "focusMode":
             setIsFocusMode((currentState) => !currentState)
+            return true
+          case "shortcutHelp":
+            setIsShortcutHelpOpen(true)
             return true
           case "newWriting":
             if (isDesktopRuntime()) {
@@ -3988,6 +3993,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   useTauriMenuEvents({
     onOpenFile: handleMenuOpenFile,
     onNewFile: handleMenuNewFile,
+    onEditorAction: (action) => handleRunAction(action),
     onGetSaveContent: handleGetSaveContent,
     onSaveComplete: handleSaveComplete,
     documentKey: currentWritingId,
@@ -4116,6 +4122,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             onRenameTab={handleRenameWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
+            onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
             }}
@@ -4404,6 +4411,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           </Suspense>
         ) : null}
       </div>
+
+      <EditorShortcutsDialog
+        open={isShortcutHelpOpen}
+        onOpenChange={setIsShortcutHelpOpen}
+      />
 
       {correctionToast ? (
         <div
