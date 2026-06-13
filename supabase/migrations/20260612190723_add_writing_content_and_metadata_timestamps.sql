@@ -1,6 +1,6 @@
 -- Add content_updated_at and metadata_updated_at to writings
 --
--- content_updated_at tracks real editorial work: title, body, body_json, body_text.
+-- content_updated_at tracks real editorial work: title, body_json, body_text.
 -- metadata_updated_at tracks status, visibility, version changes.
 -- Both start as copies of updated_at so existing rows keep a stable baseline.
 
@@ -37,7 +37,6 @@ returns trigger as $$
 begin
   if (
     old.title is distinct from new.title
-    or old.body is distinct from new.body
     or old.body_json is distinct from new.body_json
     or old.body_text is distinct from new.body_text
   ) then
