@@ -21,6 +21,8 @@ const makeLocalWriting = (overrides: Partial<LocalWriting> = {}): LocalWriting =
   deleted_at: null,
   created_at: "2026-01-01T00:00:00.000Z",
   updated_at: "2026-01-02T00:00:00.000Z",
+  content_updated_at: "2026-01-02T00:00:00.000Z",
+  metadata_updated_at: "2026-01-02T00:00:00.000Z",
   local_updated_at: 1735689600000,
   ...overrides,
 })
@@ -111,6 +113,84 @@ describe("webDocumentService", () => {
       const local = await localDB.writings.get("writing-lifecycle")
       expect(local?.lifecycle).toBe("server-confirmed")
       expect(local?.sync_status).toBe("pending")
+    })
+
+    it("sets content_updated_at when contentUpdatedAt is provided", async () => {
+      const existing = makeLocalWriting({
+        id: "writing-content-ts",
+        content_updated_at: "2026-01-01T00:00:00.000Z",
+        metadata_updated_at: "2026-01-01T00:00:00.000Z",
+      })
+      await localDB.writings.save(existing)
+
+      const result = await webDocumentService.saveWriting({
+        writing: {
+          id: "writing-content-ts",
+          authorId: null,
+          title: "Updated Title",
+          content: {
+            richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Updated body" }] }] },
+            markdown: null,
+            plainText: "Updated body",
+            canonicalSource: "rich-text",
+          },
+          slug: null,
+          status: "draft",
+          visibility: "private",
+          parentId: null,
+          correspondenceId: null,
+          version: 2,
+          deletedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          contentUpdatedAt: "2026-01-02T00:00:00.000Z",
+        },
+      })
+
+      expect(result.error).toBeNull()
+
+      const local = await localDB.writings.get("writing-content-ts")
+      expect(local?.content_updated_at).toBe("2026-01-02T00:00:00.000Z")
+      expect(local?.metadata_updated_at).toBe("2026-01-01T00:00:00.000Z")
+    })
+
+    it("preserves content_updated_at when contentUpdatedAt is omitted", async () => {
+      const existing = makeLocalWriting({
+        id: "writing-metadata-only",
+        content_updated_at: "2026-01-01T00:00:00.000Z",
+        metadata_updated_at: "2026-01-01T00:00:00.000Z",
+      })
+      await localDB.writings.save(existing)
+
+      const result = await webDocumentService.saveWriting({
+        writing: {
+          id: "writing-metadata-only",
+          authorId: null,
+          title: "Existing Title",
+          content: {
+            richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Existing body" }] }] },
+            markdown: null,
+            plainText: "Existing body",
+            canonicalSource: "rich-text",
+          },
+          slug: null,
+          status: "done",
+          visibility: "public",
+          parentId: null,
+          correspondenceId: null,
+          version: 2,
+          deletedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-02T00:00:00.000Z",
+          metadataUpdatedAt: "2026-01-02T00:00:00.000Z",
+        },
+      })
+
+      expect(result.error).toBeNull()
+
+      const local = await localDB.writings.get("writing-metadata-only")
+      expect(local?.content_updated_at).toBe("2026-01-01T00:00:00.000Z")
+      expect(local?.metadata_updated_at).toBe("2026-01-02T00:00:00.000Z")
     })
   })
 
@@ -210,6 +290,27 @@ describe("webDocumentService", () => {
       const reloaded = await localDB.writings.get("writing-1")
       expect(reloaded?.title).toBe("Renamed Title")
       expect(reloaded?.sync_status).toBe("pending")
+    })
+
+    it("updates content_updated_at for a title change", async () => {
+      const local = makeLocalWriting({
+        id: "writing-rename-ts",
+        content_updated_at: "2026-01-01T00:00:00.000Z",
+        metadata_updated_at: "2026-01-01T00:00:00.000Z",
+      })
+      await localDB.writings.save(local)
+
+      const result = await webDocumentService.renameWriting({
+        writingId: "writing-rename-ts",
+        title: "Renamed Title",
+        updatedAt: "2026-01-03T00:00:00.000Z",
+      })
+
+      expect(result.error).toBeNull()
+
+      const reloaded = await localDB.writings.get("writing-rename-ts")
+      expect(reloaded?.content_updated_at).toBe("2026-01-03T00:00:00.000Z")
+      expect(reloaded?.metadata_updated_at).toBe("2026-01-01T00:00:00.000Z")
     })
 
     it("returns NOT_FOUND for missing writing", async () => {

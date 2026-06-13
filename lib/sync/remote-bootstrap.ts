@@ -21,6 +21,8 @@ export type RemoteWritingListRecord = {
   deleted_at: string | null
   created_at: string
   updated_at: string
+  content_updated_at?: string | null
+  metadata_updated_at?: string | null
 }
 
 export type RemoteWritingRecord = RemoteWritingListRecord & {
@@ -117,6 +119,8 @@ export const mapRemoteWritingToLocal = (
     deleted_at: remoteWriting.deleted_at ?? null,
     created_at: remoteWriting.created_at,
     updated_at: remoteWriting.updated_at,
+    content_updated_at: remoteWriting.content_updated_at ?? remoteWriting.updated_at,
+    metadata_updated_at: remoteWriting.metadata_updated_at ?? remoteWriting.updated_at,
     local_updated_at: updatedAtMs || Date.now(),
   }
 }

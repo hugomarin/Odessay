@@ -32,6 +32,8 @@ export type WritingRecord = {
   deletedAt: string | null
   createdAt: string
   updatedAt: string
+  contentUpdatedAt?: string | null
+  metadataUpdatedAt?: string | null
 }
 
 export type WritingSummary = Omit<WritingRecord, "content"> & {

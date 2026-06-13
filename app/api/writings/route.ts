@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase
     .from("writings")
     .select(
-      "id, author_id, title, slug, status, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at",
+      "id, author_id, title, slug, status, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at, content_updated_at, metadata_updated_at",
     )
     .eq("author_id", userId)
     .order("updated_at", { ascending: false })

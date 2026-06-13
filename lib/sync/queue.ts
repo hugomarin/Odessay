@@ -30,6 +30,8 @@ const toRemotePayload = (writing: LocalWriting): RemoteWritingPayload => ({
   version: writing.version,
   updated_at: writing.updated_at,
   deleted_at: writing.deleted_at ?? null,
+  content_updated_at: writing.content_updated_at ?? null,
+  metadata_updated_at: writing.metadata_updated_at ?? null,
 });
 
 export const enqueueMutation = async (

@@ -39,10 +39,12 @@ function localWritingToRecord(local: LocalWriting): WritingRecord {
     deletedAt: local.deleted_at ?? null,
     createdAt: local.created_at,
     updatedAt: local.updated_at,
+    contentUpdatedAt: local.content_updated_at ?? null,
+    metadataUpdatedAt: local.metadata_updated_at ?? null,
   }
 }
 
-function recordToLocalWriting(record: WritingRecord): LocalWriting {
+function recordToLocalWriting(record: WritingRecord, existing?: LocalWriting | null): LocalWriting {
   return {
     id: record.id,
     author_id: record.authorId,
@@ -60,6 +62,8 @@ function recordToLocalWriting(record: WritingRecord): LocalWriting {
     deleted_at: record.deletedAt,
     created_at: record.createdAt,
     updated_at: record.updatedAt,
+    content_updated_at: record.contentUpdatedAt ?? existing?.content_updated_at ?? record.updatedAt,
+    metadata_updated_at: record.metadataUpdatedAt ?? existing?.metadata_updated_at ?? record.updatedAt,
     local_updated_at: Date.now(),
   }
 }
@@ -97,6 +101,8 @@ export const webDocumentService: DocumentService = {
         deletedAt: local.deleted_at ?? null,
         createdAt: local.created_at,
         updatedAt: local.updated_at,
+        contentUpdatedAt: local.content_updated_at ?? null,
+        metadataUpdatedAt: local.metadata_updated_at ?? null,
         excerpt: local.body_text?.slice(0, 200) ?? null,
       }))
       return ok(summaries)
@@ -135,7 +141,7 @@ export const webDocumentService: DocumentService = {
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const existing = await localDB.writings.get(input.writing.id)
-      const local = recordToLocalWriting(input.writing)
+      const local = recordToLocalWriting(input.writing, existing)
       if (existing) {
         local.lifecycle = existing.lifecycle
       }
@@ -162,6 +168,7 @@ export const webDocumentService: DocumentService = {
         ...local,
         title: input.title,
         updated_at: input.updatedAt,
+        content_updated_at: input.updatedAt,
         local_updated_at: Date.now(),
         sync_status: "pending",
       }
