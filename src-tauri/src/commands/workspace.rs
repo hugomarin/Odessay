@@ -85,15 +85,23 @@ fn normalize_selected_paths(selected_paths: Vec<String>) -> Result<Vec<String>, 
 }
 
 fn should_ignore_entry(name: &str, is_dir: bool) -> bool {
+    // Internal/system directories are always skipped, regardless of dot-prefix.
     if name == ".odyssey" || name == ".git" || name == "node_modules" {
         return true;
     }
 
+    if is_dir {
+        // Hidden directories (e.g. ".agents") are kept: they often hold markdown
+        // the user wants to track. Only the explicit denylist above is excluded.
+        return false;
+    }
+
+    // Files: skip hidden dotfiles (e.g. ".DS_Store") and temp files.
     if name.starts_with('.') {
         return true;
     }
 
-    if !is_dir && name.ends_with(".tmp") {
+    if name.ends_with(".tmp") {
         return true;
     }
 
