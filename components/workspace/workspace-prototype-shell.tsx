@@ -46,8 +46,7 @@ import {
   type WorkspaceFolderTreeNode,
 } from "@/lib/workspace/folder-tree"
 import type { WorkspaceDetail, WorkspaceFile, WorkspaceLayout, WorkspaceSummary } from "@/lib/workspace/types"
-import { getWorkspaceBySlug, getWorkspaceFile, WORKSPACES } from "@/lib/workspace-prototype/data"
-import { buildWorkspaceFileHref, buildWorkspaceHref } from "@/lib/workspace/workspace-route"
+import { buildWorkspaceHref } from "@/lib/workspace/workspace-route"
 import { cn } from "@/lib/utils"
 
 type AddWorkspaceStep = "chooser" | "existing" | "existingSelection" | "scratch"
@@ -183,7 +182,7 @@ export function WorkspaceIndexPrototype() {
   }
 
   if (!isDesktopRuntime()) {
-    return <MockWorkspaceIndex />
+    return <WorkspaceWebUnavailable />
   }
 
   return <DesktopWorkspaceIndex />
@@ -205,7 +204,7 @@ export function WorkspaceDetailPrototype({
   }
 
   if (!isDesktopRuntime()) {
-    return <MockWorkspaceDetail workspaceSlug={workspaceSlug} />
+    return <WorkspaceWebUnavailable />
   }
 
   return <DesktopWorkspaceDetail workspaceSlug={workspaceSlug} />
@@ -229,7 +228,7 @@ export function WorkspaceFilePrototype({
   }
 
   if (!isDesktopRuntime()) {
-    return <MockWorkspaceFile workspaceSlug={workspaceSlug} fileId={fileId} />
+    return <WorkspaceWebUnavailable />
   }
 
   return <DesktopWorkspaceFile workspaceSlug={workspaceSlug} fileId={fileId} />
@@ -1662,189 +1661,19 @@ function ConfirmWorkspaceSelectionStep({
   )
 }
 
-function MockWorkspaceIndex() {
-  const [searchQuery, setSearchQuery] = useState("")
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-
-  const visibleWorkspaces = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase()
-    if (!normalizedQuery) {
-      return WORKSPACES
-    }
-
-    return WORKSPACES.filter((workspace) => {
-      return [workspace.name, workspace.path, workspace.description]
-        .filter(Boolean)
-        .some((value) => value?.toLowerCase().includes(normalizedQuery))
-    })
-  }, [searchQuery])
-
+function WorkspaceWebUnavailable() {
   return (
-    <div className="flex min-h-full flex-col bg-bg">
-      <div className="border-b-[0.5px] border-border px-10 pb-8 pt-10">
-        <div className="flex items-start justify-between gap-6">
-          <div className="max-w-[620px]">
-            <h1 className="font-lora text-[48px] leading-[1.05] tracking-[-0.03em] text-ink">
-              Workspace
-            </h1>
-            <p className="mt-3 text-[17px] leading-7 text-ink-3">
-              Local folders that keep your writing in context.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setIsDialogOpen(true)}
-              className="inline-flex h-10 items-center gap-2 rounded-[10px] border-[0.5px] border-border bg-transparent px-4 text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.5} />
-              Add workspace
-            </button>
-
-            <div className="relative w-[280px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-4" />
-              <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search workspaces..."
-                className="h-10 rounded-[10px] pl-9"
-              />
-            </div>
-          </div>
-        </div>
+    <div className="flex min-h-full flex-col items-center justify-center bg-bg px-10 py-24 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-[18px] border-[0.5px] border-border bg-sb text-ink-3">
+        <Folder className="h-8 w-8" strokeWidth={1.5} />
       </div>
-
-      <div className="px-10 py-8">
-        <div className="grid grid-cols-2 gap-6">
-          {visibleWorkspaces.map((workspace) => (
-            <Link
-              key={workspace.slug}
-              href={buildWorkspaceHref({ slug: workspace.slug })}
-              className="rounded-[20px] border-[0.5px] border-border bg-sb p-6 transition-colors hover:bg-muted/40"
-            >
-              <div className="flex items-start gap-5">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[14px] border-[0.5px] border-border bg-bg text-ink-2">
-                  <Folder className="h-7 w-7" strokeWidth={1.5} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-lora text-[20px] leading-tight tracking-[-0.02em] text-ink">
-                    {workspace.name}
-                  </h2>
-                  <p className="mt-1 truncate text-sm text-ink-4">{workspace.path}</p>
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center gap-5 border-t-[0.5px] border-border pt-5 text-sm text-ink-4">
-                <span>{workspace.fileCount} files</span>
-                <span>{workspace.folderCount} folders</span>
-                <span>{workspace.updatedAt}</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-[520px] rounded-[24px]">
-          <DialogHeader className="text-left">
-            <DialogTitle className="text-[30px] leading-[1.1] tracking-[-0.03em]">
-              Add a workspace
-            </DialogTitle>
-            <DialogDescription className="text-[16px] leading-7 text-ink-3">
-              Adding a local folder requires the desktop app.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-[16px] border-[0.5px] border-border bg-bg px-4 py-4 text-sm leading-7 text-ink-3">
-            Workspace depends on filesystem access, watched folders, and local file events that the
-            web runtime cannot provide.
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={() => setIsDialogOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  )
-}
-
-function MockWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
-  const workspace = getWorkspaceBySlug(workspaceSlug) ?? WORKSPACES[0]
-  const pinnedFile = workspace.files.find((file) => file.id === workspace.pinnedFileId)
-
-  return (
-    <div className="min-h-full bg-bg px-10 py-10">
-      <div className="flex items-start justify-between gap-8 border-b-[0.5px] border-border pb-6">
-        <div className="min-w-0">
-          <h1 className="font-lora text-[44px] leading-[1.05] tracking-[-0.03em] text-ink">
-            {workspace.name}
-          </h1>
-          <div className="mt-3 flex items-center gap-2 text-sm text-ink-4">
-            <Folder className="h-4 w-4" strokeWidth={1.5} />
-            <span>{workspace.path}</span>
-          </div>
-        </div>
-      </div>
-
-      {pinnedFile ? (
-        <section className="mt-8">
-          <div className="mb-3 text-[12px] font-medium uppercase tracking-[0.12em] text-ink-4">
-            Pinned
-          </div>
-          <Link
-            href={buildWorkspaceFileHref({ slug: workspace.slug, fileId: pinnedFile.id })}
-            className="flex items-center gap-4 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 transition-colors hover:bg-muted/40"
-          >
-            <FileText className="h-5 w-5 shrink-0 text-ink-2" strokeWidth={1.5} />
-            <div className="min-w-0 flex-1">
-              <span className="text-[17px] text-ink">{pinnedFile.name}</span>
-            </div>
-          </Link>
-        </section>
-      ) : null}
-    </div>
-  )
-}
-
-function MockWorkspaceFile({
-  workspaceSlug,
-  fileId,
-}: {
-  workspaceSlug: string
-  fileId: string
-}) {
-  const workspace = getWorkspaceBySlug(workspaceSlug) ?? WORKSPACES[0]
-  const file = getWorkspaceFile(workspaceSlug, fileId) ?? workspace.files[0]
-
-  return (
-    <div className="flex min-h-full flex-col bg-bg">
-      <div className="flex h-[60px] items-center justify-between border-b-[0.5px] border-border px-6">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link
-            href={buildWorkspaceHref({ slug: workspace.slug })}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
-          >
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
-          </Link>
-          <div className="min-w-0">
-            <div className="truncate text-[15px] font-medium text-ink">{file.name}</div>
-            <div className="truncate text-xs text-ink-4">{workspace.name}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto w-full max-w-[980px] flex-1 px-10 py-14">
-        <article className="prose prose-neutral max-w-none">
-          <h1 className="font-lora text-[40px] font-medium leading-[1.08] tracking-[-0.03em] text-ink">
-            {file.name.replace(/\.md$/, "")}
-          </h1>
-          <div className="mt-10 whitespace-pre-wrap text-[20px] leading-[2.05rem] text-ink">
-            {file.content}
-          </div>
-        </article>
-      </div>
+      <h1 className="mt-8 font-lora text-[32px] leading-tight tracking-[-0.03em] text-ink">
+        Workspace is desktop-only
+      </h1>
+      <p className="mx-auto mt-3 max-w-[46ch] text-[16px] leading-7 text-ink-3">
+        Workspaces keep local folders in context using filesystem access and watched
+        folders that the web app cannot provide. Open Artifact Studio on desktop to use them.
+      </p>
     </div>
   )
 }
