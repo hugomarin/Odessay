@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-11",
+  "last_updated": "2026-06-12",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -23,27 +23,25 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 7 — Capacidades Remotas y Paridad Web/Desktop",
-    "linear_project": "https://linear.app/z9ne/project/fase-7-capacidades-remotas-y-paridad-webdesktop-392ee7ac",
+    "name": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+    "linear_project": "https://linear.app/z9ne/project/fase-8-biblioteca-preview-y-calidad-de-producto-d051350ea9a2",
     "roadmap_ref": "workflow/define/roadmap.md",
-    "notes": "Fase 7 cerrada con ODE-228 (closure audit). active_phase actualizado post-merge REVIEW ODE-228 (2026-06-11). Próxima fase pendiente de wf-define."
+    "definition_of_done": "workflow/define/dod-fase-8.md",
+    "notes": "Fase 7 cerrada con ODE-228 (2026-06-11). wf-define Fase 8 ejecutado 2026-06-12. 30 issues creados ODE-262–291."
   },
   "phase_plan": {
-    "phase": "Fase 6 — Desktop Local-First Runtime",
+    "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
     "source_of_truth": "workflow/define/roadmap.md",
-    "definition_of_done": "workflow/define/dod-fase-6.md",
-    "linear_project": "https://linear.app/z9ne/project/fase-6-desktop-local-first-runtime-c4b2c0e833ae",
+    "definition_of_done": "workflow/define/dod-fase-8.md",
+    "linear_project": "https://linear.app/z9ne/project/fase-8-biblioteca-preview-y-calidad-de-producto-d051350ea9a2",
     "linear_issues": [
-      "ODE-207",
-      "ODE-208",
-      "ODE-209",
-      "ODE-210",
-      "ODE-211",
-      "ODE-212",
-      "ODE-213",
-      "ODE-214"
+      "ODE-262", "ODE-263", "ODE-264", "ODE-265", "ODE-266", "ODE-267", "ODE-268",
+      "ODE-269", "ODE-270", "ODE-271", "ODE-272", "ODE-273", "ODE-274", "ODE-275",
+      "ODE-276", "ODE-277", "ODE-278", "ODE-279", "ODE-280",
+      "ODE-281", "ODE-282", "ODE-283", "ODE-284", "ODE-285", "ODE-289", "ODE-290",
+      "ODE-286", "ODE-287", "ODE-288", "ODE-291"
     ],
-    "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
+    "notes": "wf-define ejecutado 2026-06-12. 30 issues creados: P0 ODE-262–268 (bugs/estabilidad), P1 ODE-269–275 (UI visible), P2 ODE-276–280 (Preview funcional), P3 ODE-281–285+289–290 (organización y componentes), P4 ODE-286–288+291 (profundidad)."
   },
   "built": [
     {
