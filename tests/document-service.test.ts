@@ -391,9 +391,13 @@ describe("webDocumentService", () => {
   })
 
   describe("listWritings", () => {
-    it("returns summaries ordered by local update time", async () => {
-      await localDB.writings.save(makeLocalWriting({ id: "a", title: "First", local_updated_at: 1000 }))
-      await localDB.writings.save(makeLocalWriting({ id: "b", title: "Second", local_updated_at: 2000 }))
+    it("returns summaries ordered by created_at DESC", async () => {
+      await localDB.writings.save(
+        makeLocalWriting({ id: "a", title: "First", created_at: "2026-01-01T00:00:00.000Z" }),
+      )
+      await localDB.writings.save(
+        makeLocalWriting({ id: "b", title: "Second", created_at: "2026-01-02T00:00:00.000Z" }),
+      )
 
       const result = await webDocumentService.listWritings()
 

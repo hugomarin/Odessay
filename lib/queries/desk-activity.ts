@@ -68,6 +68,7 @@ type WritingMeta = {
   title: string
   excerpt: string
   bodyText: string
+  createdAt: Date
   updatedAt: Date
   wordCount: number
   isCorrespondence: boolean
@@ -166,6 +167,7 @@ const buildMetas = (
     .map((writing) => {
       const updatedAtRaw = writing.updated_at || writing.created_at
       const updatedAt = toDate(updatedAtRaw)
+      const createdAt = toDate(writing.created_at)
       const authorId = writing.author_id ?? null
       const isReceived = Boolean(userId && authorId && authorId !== userId)
 
@@ -175,6 +177,7 @@ const buildMetas = (
         title: buildTitle(writing.title),
         excerpt: buildExcerpt(writing.body_text),
         bodyText: writing.body_text,
+        createdAt,
         updatedAt,
         wordCount: buildWordCount(writing.body_text),
         isCorrespondence: Boolean(
@@ -189,7 +192,7 @@ const buildMetas = (
         recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
       }
     })
-    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
 }
 
 const applyFilter = (writings: WritingMeta[], filter: DeskActivityFilter) => {
@@ -287,19 +290,19 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
       stateLabel: statusState.stateLabel,
       stateTone: statusState.stateTone,
       recipientPreviews: writing.recipientPreviews,
-      dateLabel: buildDateLabel(writing.updatedAt, now),
+      dateLabel: buildDateLabel(writing.createdAt, now),
       isNew: writing.isReceived,
       destinationHref: writing.isReceived
         ? null
         : buildWritingRouteHref("/write", { id: writing.id, slug: writing.slug }),
     }
 
-    if (writing.updatedAt.toDateString() === now.toDateString()) {
+    if (writing.createdAt.toDateString() === now.toDateString()) {
       groups[0].rows.push(row)
       continue
     }
 
-    if (now.getTime() - writing.updatedAt.getTime() < WEEK_IN_MS) {
+    if (now.getTime() - writing.createdAt.getTime() < WEEK_IN_MS) {
       groups[1].rows.push(row)
       continue
     }

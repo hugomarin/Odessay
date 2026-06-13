@@ -31,6 +31,7 @@ describe("buildDeskActivitySummary", () => {
       title: "Today draft",
       slug: "today-draft",
       body_text: "hello world from today",
+      created_at: "2026-03-19T11:00:00.000Z",
       updated_at: "2026-03-19T11:00:00.000Z",
       local_updated_at: 5,
       status: "draft",
@@ -40,6 +41,7 @@ describe("buildDeskActivitySummary", () => {
       id: "corr-week",
       title: "Weekly correspondence",
       body_text: "weekly correspondence content",
+      created_at: "2026-03-17T11:00:00.000Z",
       updated_at: "2026-03-17T11:00:00.000Z",
       local_updated_at: 4,
       status: "done",
@@ -49,6 +51,7 @@ describe("buildDeskActivitySummary", () => {
       id: "reply-earlier",
       title: "Earlier reply",
       body_text: "earlier reply content",
+      created_at: "2026-02-25T10:00:00.000Z",
       updated_at: "2026-02-25T10:00:00.000Z",
       local_updated_at: 3,
       status: "done",
@@ -60,6 +63,7 @@ describe("buildDeskActivitySummary", () => {
       id: "deleted-item",
       title: "Deleted draft",
       body_text: "deleted",
+      created_at: "2026-03-19T10:00:00.000Z",
       updated_at: "2026-03-19T10:00:00.000Z",
       local_updated_at: 6,
       sync_status: "deleted",
@@ -251,5 +255,36 @@ describe("buildDeskActivitySummary", () => {
     expect(summary.total).toBe(0)
     expect(summary.groups).toEqual([])
     expect(summary.heroDrafts.length).toBeGreaterThan(0)
+  })
+
+  it("keeps main list order stable when a writing's metadata changes", () => {
+    const before = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+    })
+
+    const titlesBefore = before.groups.flatMap((group) => group.rows).map((row) => row.title)
+    expect(titlesBefore).toEqual(["Today draft", "Weekly correspondence", "Earlier reply"])
+
+    const changed = writings.map((writing) =>
+      writing.id === "reply-earlier"
+        ? {
+            ...writing,
+            status: "in_review" as const,
+            updated_at: "2026-03-19T12:00:00.000Z",
+            local_updated_at: 10,
+          }
+        : writing,
+    )
+
+    const after = buildDeskActivitySummary(changed, {
+      filter: "all",
+      userId: "user-1",
+      now,
+    })
+
+    const titlesAfter = after.groups.flatMap((group) => group.rows).map((row) => row.title)
+    expect(titlesAfter).toEqual(["Today draft", "Weekly correspondence", "Earlier reply"])
   })
 })

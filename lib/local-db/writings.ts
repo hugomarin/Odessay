@@ -1,9 +1,9 @@
 import type { LocalWriting, WritingListFilters } from "@/lib/local-db/schema";
 
-const byNewestLocalUpdate = (left: LocalWriting, right: LocalWriting) =>
-  right.local_updated_at - left.local_updated_at;
+const byNewestCreatedAt = (left: LocalWriting, right: LocalWriting) =>
+  new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
 
-export const sortWritings = (writings: LocalWriting[]) => writings.sort(byNewestLocalUpdate);
+export const sortWritings = (writings: LocalWriting[]) => writings.sort(byNewestCreatedAt);
 
 export const filterWritings = (
   writings: LocalWriting[],
