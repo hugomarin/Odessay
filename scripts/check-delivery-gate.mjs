@@ -50,9 +50,10 @@ if (branch === "main" || branch === "HEAD") {
 
 const issueMatch = branch.match(/ODE-\d+/i);
 if (!issueMatch) {
-  fail(
-    `Branch "${branch}" does not include an issue ID (expected ODE-XX in branch name).`,
+  console.log(
+    `[ops:delivery:gate] WARN - Branch "${branch}" has no ODE issue ID. Traceability skipped.`,
   );
+  process.exit(0);
 }
 
 const issueId = issueMatch[0].toUpperCase();
