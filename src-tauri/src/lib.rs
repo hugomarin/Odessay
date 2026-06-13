@@ -37,8 +37,10 @@ pub fn run() {
                 .quit()
                 .build()?;
 
+            // ⌘N is reserved for "New writing" (handled in the webview). The
+            // on-disk "New File" flow moves to ⌘⌥N so ⌘N reaches the webview.
             let new_file =
-                MenuItem::with_id(app, "new-file", "New File", true, Some("CmdOrCtrl+N"))?;
+                MenuItem::with_id(app, "new-file", "New File", true, Some("CmdOrCtrl+Alt+N"))?;
             let open_file =
                 MenuItem::with_id(app, "open-file", "Open File...", true, Some("CmdOrCtrl+O"))?;
             let save_to_disk = MenuItem::with_id(
@@ -94,44 +96,44 @@ pub fn run() {
                 "heading1",
                 "Heading 1",
                 true,
-                Some("CmdOrCtrl+Shift+1"),
+                Some("CmdOrCtrl+1"),
             )?;
             let heading2 = MenuItem::with_id(
                 app,
                 "heading2",
                 "Heading 2",
                 true,
-                Some("CmdOrCtrl+Shift+2"),
+                Some("CmdOrCtrl+2"),
             )?;
             let heading3 = MenuItem::with_id(
                 app,
                 "heading3",
                 "Heading 3",
                 true,
-                Some("CmdOrCtrl+Shift+9"),
+                Some("CmdOrCtrl+3"),
             )?;
             let paragraph =
-                MenuItem::with_id(app, "paragraph", "Body", true, Some("CmdOrCtrl+Shift+0"))?;
+                MenuItem::with_id(app, "paragraph", "Body", true, Some("CmdOrCtrl+0"))?;
             let blockquote = MenuItem::with_id(
                 app,
                 "blockquote",
                 "Blockquote",
                 true,
-                Some("CmdOrCtrl+Shift+6"),
+                Some("CmdOrCtrl+Shift+B"),
             )?;
             let bullet_list = MenuItem::with_id(
                 app,
                 "bulletList",
                 "Bullet List",
                 true,
-                Some("CmdOrCtrl+Shift+L"),
+                Some("CmdOrCtrl+L"),
             )?;
             let ordered_list = MenuItem::with_id(
                 app,
                 "orderedList",
                 "Ordered List",
                 true,
-                Some("CmdOrCtrl+Shift+O"),
+                Some("CmdOrCtrl+Shift+L"),
             )?;
             let bold = MenuItem::with_id(app, "bold", "Bold", true, Some("CmdOrCtrl+B"))?;
             let italic = MenuItem::with_id(app, "italic", "Italic", true, Some("CmdOrCtrl+I"))?;
@@ -150,15 +152,15 @@ pub fn run() {
                 Some("CmdOrCtrl+Shift+H"),
             )?;
             let inline_code =
-                MenuItem::with_id(app, "inlineCode", "Code", true, Some("CmdOrCtrl+Shift+C"))?;
+                MenuItem::with_id(app, "inlineCode", "Code", true, Some("CmdOrCtrl+E"))?;
             let code_block = MenuItem::with_id(
                 app,
                 "codeBlock",
                 "Code Block",
                 true,
-                Some("CmdOrCtrl+Shift+D"),
+                Some("CmdOrCtrl+Shift+E"),
             )?;
-            let link = MenuItem::with_id(app, "link", "Add Link", true, Some("CmdOrCtrl+K"))?;
+            let link = MenuItem::with_id(app, "link", "Add Link", true, Some("CmdOrCtrl+Shift+K"))?;
             let footnote = MenuItem::with_id(
                 app,
                 "footnote",
@@ -167,7 +169,7 @@ pub fn run() {
                 Some("CmdOrCtrl+Shift+A"),
             )?;
             let table =
-                MenuItem::with_id(app, "table", "Add Table", true, Some("CmdOrCtrl+Shift+T"))?;
+                MenuItem::with_id(app, "table", "Add Table", true, Some("CmdOrCtrl+T"))?;
             let image =
                 MenuItem::with_id(app, "image", "Add Image", true, Some("CmdOrCtrl+Shift+I"))?;
             let clear_styles =

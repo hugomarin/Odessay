@@ -10,6 +10,7 @@ import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { getShortcutForPlatform, type ShortcutDisplay } from "@/lib/keyboard-shortcuts"
 import {
   initializeUiShellStore,
@@ -64,14 +65,25 @@ function SquareLibraryIcon({ className }: { className?: string }) {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/desk", label: "Desk", icon: LayoutGrid, section: "sidebar-nav-desk" },
-  { href: "/workspace", label: "Workspace", icon: Layers3, section: "sidebar-nav-workspace" },
+  {
+    href: "/desk",
+    label: "Desk",
+    icon: LayoutGrid,
+    section: "sidebar-nav-desk",
+    shortcut: { mac: "⌘⌥1", windows: "Ctrl+Alt+1" },
+  },
+  {
+    href: "/workspace",
+    label: "Workspace",
+    icon: Layers3,
+    section: "sidebar-nav-workspace",
+    shortcut: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
+  },
   {
     href: "/collections",
     label: "Collections",
     icon: SquareLibraryIcon,
     section: "sidebar-nav-collections",
-    shortcut: { mac: "⌘⇧K", windows: "Ctrl+Shift+K" },
   },
 ]
 
@@ -117,6 +129,21 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   const [searchOpen, setSearchOpen] = useState(false)
   const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null)
   const [installing, setInstalling] = useState(false)
+
+  // Workspace is a desktop-only feature (local filesystem access). Hide its nav
+  // entry on web. Gated behind `mounted` so the first client render matches the
+  // SSR/SSG output (runtime detection only resolves after hydration on desktop).
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const navItems = useMemo(() => {
+    if (mounted && isDesktopRuntime()) {
+      return NAV_ITEMS
+    }
+    return NAV_ITEMS.filter((item) => item.href !== "/workspace")
+  }, [mounted])
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()
@@ -181,9 +208,28 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
         return
       }
 
-      if (action === "link") {
+      if (action === "search") {
         event.preventDefault()
-        window.location.href = "/collections"
+        setSearchOpen(true)
+        return
+      }
+
+      if (action === "goDesk") {
+        event.preventDefault()
+        window.location.href = "/desk"
+        return
+      }
+
+      if (action === "goWorkspace") {
+        event.preventDefault()
+        window.location.href = "/workspace"
+        return
+      }
+
+      if (action === "goStudio") {
+        event.preventDefault()
+        window.location.href = "/studio"
+        return
       }
     }
 
@@ -192,6 +238,14 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     return () => {
       window.removeEventListener("keydown", onWindowKeyDown)
     }
+  }, [])
+
+  // The editor shell (on /write) cannot reach this modal directly, so it asks
+  // for search via a window event. This also lets any surface open search.
+  useEffect(() => {
+    const openSearch = () => setSearchOpen(true)
+    window.addEventListener("odessay:open-search", openSearch)
+    return () => window.removeEventListener("odessay:open-search", openSearch)
   }, [])
 
   return (
@@ -305,7 +359,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             className="SidebarNav flex-1 overflow-y-auto px-2 pb-2 pt-4"
           >
             <div className="space-y-2">
-              {NAV_ITEMS.map((item) => {
+              {navItems.map((item) => {
                 const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                 const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
 

@@ -3,6 +3,7 @@
 import { memo } from "react"
 import { AlignLeft } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
+import { getEditorShortcutLabel } from "@/lib/editor/shortcuts"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import type { EditorSaveState } from "@/components/editor/save-state"
@@ -98,7 +99,7 @@ function StatusBarInner({
           >
             {metricsLabel}
           </span>
-          <ActionTooltip label="Notes panel" side="top">
+          <ActionTooltip label="Notes panel" shortcut={getEditorShortcutLabel("addNote")} side="top">
             <button
               type="button"
               onClick={onToggleNotesPanel}

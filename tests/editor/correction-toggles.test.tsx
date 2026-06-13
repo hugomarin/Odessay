@@ -27,8 +27,8 @@ describe("CorrectionsPanel toggles", () => {
       }),
     )
 
-    expect(html).toContain("Correcciones activas")
-    expect(html).toContain("Mostrar correcciones")
+    expect(html).toContain("Active corrections")
+    expect(html).toContain("Show corrections")
   })
 
   it("renders with toggles disabled when props are false", () => {
@@ -48,7 +48,7 @@ describe("CorrectionsPanel toggles", () => {
       }),
     )
 
-    expect(html).toContain("Correcciones activas")
-    expect(html).toContain("Mostrar correcciones")
+    expect(html).toContain("Active corrections")
+    expect(html).toContain("Show corrections")
   })
 })

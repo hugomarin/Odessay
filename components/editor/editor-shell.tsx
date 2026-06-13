@@ -366,6 +366,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const desktopWebHandoffAppliedRef = useRef(false)
   const forceNewWritingRequestedRef = useRef(false)
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
+  const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
   const markdownTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -1744,6 +1745,34 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             return true
           case "settings":
             router.push("/settings")
+            return true
+          case "goDesk":
+            router.push("/desk")
+            return true
+          case "goWorkspace":
+            router.push("/workspace")
+            return true
+          case "goStudio":
+            router.push("/studio")
+            return true
+          case "search":
+            window.dispatchEvent(new CustomEvent("odessay:open-search"))
+            return true
+          case "nextTab":
+            selectAdjacentTabRef.current?.(1)
+            return true
+          case "prevTab":
+            selectAdjacentTabRef.current?.(-1)
+            return true
+          case "documentProperties":
+            setActivePanel((current) => (current === "properties" ? null : "properties"))
+            return true
+          case "corrections":
+            setActivePanel((current) => (current === "publication" ? null : "publication"))
+            return true
+          case "addNote":
+          case "voiceNote":
+            setActivePanel("notes")
             return true
           case "toggleSidebar":
             toggleSidebarMode()
@@ -3775,8 +3804,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     // synchronously so persistEditorSnapshot never races against it.
     currentWritingIdRef.current = nextWritingId
     setCurrentWritingId(nextWritingId)
-    setHydrationWritingId(nextWritingId)
+    // In desktop the real draft id comes from createDesktopDraft below. Setting
+    // hydration to this placeholder id triggers openWriting against a file that
+    // does not exist yet (NOT_FOUND). Web keeps nextWritingId as the final id.
     if (!isDesktopRuntime()) {
+      setHydrationWritingId(nextWritingId)
       replaceEditorHistory(`/write/${nextWritingId}`)
     }
 
@@ -3875,6 +3907,22 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     })
   }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
+
+  selectAdjacentTabRef.current = (direction) => {
+    const tabs = editorSession.tabs
+    if (tabs.length <= 1) {
+      return
+    }
+
+    const activeId = editorSession.active_tab_id ?? currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
+    const currentIndex = tabs.findIndex((tab) => tab.id === activeId)
+    const baseIndex = currentIndex < 0 ? 0 : currentIndex
+    const nextTab = tabs[(baseIndex + direction + tabs.length) % tabs.length]
+
+    if (nextTab && nextTab.id !== activeId) {
+      handleSelectWorkspaceTab(nextTab.id)
+    }
+  }
 
   useEffect(() => {
     if (!forceNewWriting || !sessionLoaded || forceNewWritingRequestedRef.current) {

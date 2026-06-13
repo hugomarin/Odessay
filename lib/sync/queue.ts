@@ -30,8 +30,11 @@ const toRemotePayload = (writing: LocalWriting): RemoteWritingPayload => ({
   version: writing.version,
   updated_at: writing.updated_at,
   deleted_at: writing.deleted_at ?? null,
-  content_updated_at: writing.content_updated_at ?? null,
-  metadata_updated_at: writing.metadata_updated_at ?? null,
+  // These columns are NOT NULL in the writings table. A brand-new draft may not
+  // have them set yet, so fall back to updated_at (matching remote-bootstrap and
+  // the local-db backfill) instead of sending null.
+  content_updated_at: writing.content_updated_at ?? writing.updated_at,
+  metadata_updated_at: writing.metadata_updated_at ?? writing.updated_at,
 });
 
 export const enqueueMutation = async (

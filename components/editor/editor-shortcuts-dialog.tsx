@@ -28,7 +28,7 @@ export function EditorShortcutsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[760px] rounded-[24px] border-[0.5px] border-border bg-sb p-0">
+      <DialogContent className="max-h-[85vh] max-w-[760px] overflow-y-auto rounded-[24px] border-[0.5px] border-border bg-sb p-0">
         <div className="px-8 py-7">
           <DialogHeader className="space-y-3 text-left">
             <DialogTitle className="text-[34px] leading-[1.05] tracking-[-0.03em]">

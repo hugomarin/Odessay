@@ -557,7 +557,11 @@ export function EditorTopbar({
             </button>
           </ActionTooltip>
 
-          <ActionTooltip label="Properties panel" side="bottom">
+          <ActionTooltip
+            label="Properties panel"
+            shortcut={getEditorShortcutLabel("documentProperties")}
+            side="bottom"
+          >
             <button
               type="button"
               onClick={() => onTogglePanel("properties")}
@@ -569,12 +573,16 @@ export function EditorTopbar({
             </button>
           </ActionTooltip>
 
-          <ActionTooltip label="Correcciones" side="bottom">
+          <ActionTooltip
+            label="Corrections"
+            shortcut={getEditorShortcutLabel("corrections")}
+            side="bottom"
+          >
             <button
               type="button"
               onClick={() => onTogglePanel("publication")}
               className={getTopbarIconButtonClass(isPublicationModeEnabled || activePanel === "publication")}
-              aria-label="Correcciones"
+              aria-label="Corrections"
               aria-pressed={isPublicationModeEnabled || activePanel === "publication"}
             >
               <SpellCheck className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />

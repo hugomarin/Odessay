@@ -65,7 +65,7 @@ export function CorrectionsPanel({
     >
       <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
         <div className="flex items-center gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Correcciones</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Corrections</p>
           {hasPending ? (
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[hsl(22,55%,92%)] px-1.5 text-[10px] font-medium text-cursor">
               {visibleSuggestions.length}
@@ -89,16 +89,16 @@ export function CorrectionsPanel({
               htmlFor="corrections-enabled-switch"
               className="block text-[12px] font-medium text-ink"
             >
-              Correcciones activas
+              Active corrections
             </label>
-            <p className="text-[11px] text-ink-4">Analiza bloques nuevos automáticamente.</p>
+            <p className="text-[11px] text-ink-4">Analyzes new blocks automatically.</p>
           </div>
           <button
             id="corrections-enabled-switch"
             type="button"
             role="switch"
             aria-checked={correctionsEnabled}
-            aria-label="Activar correcciones automáticas"
+            aria-label="Enable automatic corrections"
             onClick={() => onCorrectionsEnabledChange(!correctionsEnabled)}
             className={cn(
               "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
@@ -121,16 +121,16 @@ export function CorrectionsPanel({
               htmlFor="corrections-visible-switch"
               className="block text-[12px] font-medium text-ink"
             >
-              Mostrar correcciones
+              Show corrections
             </label>
-            <p className="text-[11px] text-ink-4">Muestra las marcas inline dentro del documento.</p>
+            <p className="text-[11px] text-ink-4">Shows inline marks within the document.</p>
           </div>
           <button
             id="corrections-visible-switch"
             type="button"
             role="switch"
             aria-checked={showCorrections}
-            aria-label="Mostrar correcciones en el documento"
+            aria-label="Show corrections in the document"
             onClick={() => onShowCorrectionsChange(!showCorrections)}
             className={cn(
               "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
@@ -155,7 +155,7 @@ export function CorrectionsPanel({
             onClick={() => onAcceptAll()}
             className="text-[11px] text-ink-3 transition-colors hover:text-ink"
           >
-            Aceptar todos
+            Accept all
           </button>
           <span className="text-[11px] text-ink-4">·</span>
           <button
@@ -163,7 +163,7 @@ export function CorrectionsPanel({
             onClick={() => onRejectAll()}
             className="text-[11px] text-ink-3 transition-colors hover:text-ink"
           >
-            Rechazar todos
+            Reject all
           </button>
         </div>
       ) : null}
@@ -171,7 +171,7 @@ export function CorrectionsPanel({
       <div className="p-2">
         {visibleSuggestions.length === 0 ? (
           <p className="px-2 py-3 text-[11px] text-ink-4">
-            No hay correcciones pendientes.
+            No pending corrections.
           </p>
         ) : (
           <ul className="space-y-px">
@@ -204,8 +204,8 @@ export function CorrectionsPanel({
                         for (const id of ids) onRejectSuggestion(id);
                         onAcceptSuggestion(suggestion);
                       }}
-                      aria-label={isStale ? "Recalculando…" : "Aceptar"}
-                      title={isStale ? "Recalculando…" : "Aceptar"}
+                      aria-label={isStale ? "Recalculating…" : "Accept"}
+                      title={isStale ? "Recalculating…" : "Accept"}
                       disabled={isStale}
                       className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
                     >
@@ -214,8 +214,8 @@ export function CorrectionsPanel({
                     <button
                       type="button"
                       onClick={() => { for (const id of ids) onRejectSuggestion(id); }}
-                      aria-label="Rechazar"
-                      title="Rechazar"
+                      aria-label="Reject"
+                      title="Reject"
                       className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
                     >
                       <X className="h-3.5 w-3.5" strokeWidth={1.5} />
