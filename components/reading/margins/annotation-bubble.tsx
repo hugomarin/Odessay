@@ -21,7 +21,20 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { state, start, stop, reset, blob, waveformData, duration, permissionDenied, isSupported } = useVoiceRecorder()
+  const {
+    state,
+    start,
+    stop,
+    pause,
+    resume,
+    reset,
+    blob,
+    waveformData,
+    duration,
+    permissionDenied,
+    isSupported,
+    errorMessage,
+  } = useVoiceRecorder()
   const supportsVoice = type === "personal" || type === "ai"
   const isVoiceMode = supportsVoice && state !== "idle"
 
@@ -35,6 +48,12 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
   }, [position, reset])
+
+  useEffect(() => {
+    if (errorMessage) {
+      setVoiceError(errorMessage)
+    }
+  }, [errorMessage])
 
   // For AI type: auto-transcribe when recording stops and load text into textarea
   useEffect(() => {
@@ -181,6 +200,8 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
           isSubmitting={isSubmittingVoice}
           errorMessage={voiceError}
           hideSubmit={type === "ai"}
+          onPause={pause}
+          onResume={resume}
           onStop={stop}
           onSubmit={() => {
             void handleVoiceSubmit()
