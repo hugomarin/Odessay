@@ -13,6 +13,7 @@ import {
   mergeEditorTabViewState,
 } from "@/lib/local-db/editor-sessions";
 import { emitEditorSessionChange, readEditorSession, writeEditorSession } from "@/lib/editor/session-persistence";
+import { syncStudioSessionFromEditorTabs } from "@/lib/stores/studio-session-store";
 import type {
   EditorTabSaveState,
   LocalEditorRecentWriting,
@@ -94,6 +95,7 @@ const setSessionState = (
       updated_at: Date.now(),
     },
   };
+  syncStudioSessionFromEditorTabs(state.session.tabs, state.session.active_tab_id);
   emitChange();
 
   if (options?.persist !== false) {
