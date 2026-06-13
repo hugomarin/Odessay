@@ -280,6 +280,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 **Resolución de issue:**
 - Con argumento (`/wf-ship ODE-22`): usar el issue indicado.
+- Con `--batch <nombre>` (`/wf-ship ODE-22 --batch fase8-ui`): el issue pertenece a un batch. La rama compartida es `codex/batch-<nombre>`; el PR tiene título `batch(<nombre>): ODE-X` que se actualiza acumulativamente con cada issue del lote.
 - Con `--branch <nombre>` (`/wf-ship ODE-22 --branch codex/ode-245-foo`): trabajar sobre esa rama existente en lugar de crear una nueva.
 
 **Contexto a cargar:**
@@ -293,9 +294,12 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 **Setup**
 1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones que realmente toca el issue.
 2. Resolver la rama de trabajo:
+   - Si se pasó `--batch <nombre>`: usar `codex/batch-<nombre>`.
+     - Si la rama no existe: `git switch -c codex/batch-<nombre>`.
+     - Si ya existe: `git switch codex/batch-<nombre>`.
    - Si se pasó `--branch <nombre>`: `git switch <nombre>` — la rama ya existe, no crear nada.
-   - Si no se pasó `--branch` y la rama actual no es `main`: trabajar en la rama actual.
-   - Si no se pasó `--branch` y la rama actual es `main`: `git switch -c codex/{issue-id}-{descripcion}` antes de cualquier edición.
+   - Si no se pasó ninguno y la rama actual no es `main`: trabajar en la rama actual.
+   - Si no se pasó ninguno y la rama actual es `main`: `git switch -c codex/{issue-id}-{descripcion}` antes de cualquier edición.
 3. Mover issue a `In Progress` en Linear.
 4. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
 
@@ -305,17 +309,41 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 **Validación**
 6. `npm run typecheck` + `npm run lint` + `npx vitest run`. Si Performance Contract es `required`, generar la evidencia indicada en el brief. Guardar outputs.
 7. Ejecutar el delivery gate con el base ref correcto:
-   - **Sin `--branch`** (rama propia del issue): `npm run ops:delivery:gate`
-   - **Con `--branch`** (rama compartida con otros issues): `GITHUB_BASE_REF=origin/{branch} npm run ops:delivery:gate`
-   El base ref `origin/{branch}` limita el gate a los commits nuevos de este issue, excluyendo commits anteriores de la rama que pertenecen a otros issues. Debe terminar en verde.
+   - **Sin `--batch` ni `--branch`** (rama propia del issue): `npm run ops:delivery:gate`
+   - **Con `--batch` o `--branch`** (rama compartida con otros issues): `GITHUB_BASE_REF=origin/{rama} npm run ops:delivery:gate`
+   El base ref limita el gate a los commits nuevos de este issue, excluyendo commits anteriores de la rama que pertenecen a otros issues. Debe terminar en verde.
 
 **Entrega**
 8. `git push -u origin {rama}`. Luego verificar si ya existe un PR abierto para esta rama:
    ```bash
-   gh pr list --head {rama} --state open --json number,body
+   gh pr list --head {rama} --state open --json number,title,body
    ```
-   - **Si ya existe PR**: agregar este issue al body existente con `gh pr edit {número} --body "..."`. No crear un PR nuevo.
-   - **Si no existe PR**: crear PR con body completo (links a todos los issues del branch, qué se hizo, cómo testear, outputs del paso 6).
+   - **Si ya existe PR (modo `--batch` o rama compartida)**:
+     1. Leer título actual: `gh pr view {número} --json title`.
+     2. Construir nuevo título agregando el ID: `batch(<nombre>): ODE-X, ODE-Y, {ISSUE-ID}`.
+     3. Appendear sección de este issue al body existente (formato abajo).
+     4. `gh pr edit {número} --title "<nuevo-título>" --body "<body-acumulado>"`.
+   - **Si no existe PR**:
+     - Con `--batch`: título inicial `batch(<nombre>): {ISSUE-ID}`.
+     - Sin `--batch`: título descriptivo del issue.
+     - Body con la sección de este issue (formato abajo).
+
+   **Formato de body (batch):**
+   ```markdown
+   ## Issues
+   - {ISSUE-ID}: [título] — <link Linear>
+
+   ## {ISSUE-ID} — Qué se hizo
+   <descripción de los cambios>
+
+   ## {ISSUE-ID} — Cómo testear
+   <pasos de verificación>
+
+   ## {ISSUE-ID} — Validación
+   <outputs de typecheck, lint, vitest, delivery gate>
+   ```
+   Cada `wf-ship` appenda su bloque `## {ISSUE-ID}` y agrega una línea al listado `## Issues`.
+
    Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`.
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`.
 10. Actualizar `workflow/status.json` y `workflow/review-history.jsonl` en la **rama de feature** (no en main):
@@ -353,6 +381,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 **Resolución de issues:**
 - Con argumento (`/wf-review-ships ODE-246,ODE-247`): usar los issues indicados (separados por coma).
+- Con `--batch <nombre>` (`/wf-review-ships ODE-246,ODE-247 --batch fase8-ui`): equivale a `--branch codex/batch-<nombre>`. Usar cuando el batch fue creado con `wf-ship --batch`.
 - Con `--branch <nombre>`: todos los issues comparten un único PR abierto desde esa rama. El `--branch` debe coincidir con el que se usó en `wf-ship`.
 
 **Contexto a cargar:**
@@ -364,13 +393,15 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 
 **Localizar el PR:**
 
-Con `--branch {nombre}`:
+Con `--batch {nombre}`: resolver rama como `codex/batch-{nombre}` y continuar igual que `--branch`.
+
+Con `--batch {nombre}` o `--branch {nombre}`:
 ```bash
-gh pr list --head {nombre} --state open --json number,title,url
+gh pr list --head {rama} --state open --json number,title,url
 ```
 Si no hay PR abierto: error, reportar y detener.
 
-Sin `--branch` (un PR por issue):
+Sin `--batch` ni `--branch` (un PR por issue):
 ```bash
 gh pr list --state open --json number,title,body,headRefName | \
   jq '.[] | select(.body | contains("{ID}"))'
@@ -379,16 +410,16 @@ Si no hay PR para un issue: marcar `SIN PR — skipped` y continuar con los dem�
 
 **Modos de revisión:**
 
-**Sin `--branch`** — cada issue tiene su propio PR. El diff de cada PR cubre exclusivamente ese issue. Revisar cada PR de forma independiente.
+**Sin `--batch` ni `--branch`** — cada issue tiene su propio PR. El diff de cada PR cubre exclusivamente ese issue. Revisar cada PR de forma independiente.
 
-**Con `--branch`** — todos los issues comparten un único PR y un único diff acumulado. En este caso:
+**Con `--batch` o `--branch`** — todos los issues comparten un único PR y un único diff acumulado. En este caso:
 - El diff completo cubre múltiples issues; no se puede aislar por archivo.
 - Aislar los commits de cada issue por su etiqueta:
   ```bash
   git log origin/{branch}..HEAD --oneline --grep="\[{ID}\]"
   ```
 - Revisar cada issue contra los commits etiquetados con su ID. Si un commit no tiene etiqueta de ningún issue del grupo, marcarlo como `commit sin trazabilidad` en el Context Report.
-- Los gates de calidad (`typecheck`, `lint`, `vitest`, `delivery gate` con `GITHUB_BASE_REF=origin/{branch}`) se corren una sola vez para el PR completo y aplican a todos los issues.
+- Los gates de calidad (`typecheck`, `lint`, `vitest`, `delivery gate` con `GITHUB_BASE_REF=origin/{rama}`) se corren una sola vez para el PR completo y aplican a todos los issues.
 
 **Secuencia:**
 1. Obtener briefs y diffs en paralelo (un agente por issue cuando sea posible).
