@@ -47,6 +47,26 @@
   },
   "built": [
     {
+      "what": "feat(studio): add Studio as a sidebar destination with an authenticated /studio surface, empty state, Open artifact search picker action, New artifact creation link, and active sidebar state for editor routes. [ODE-274]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-274",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-274/add-studio-to-sidebar-navigation-with-empty-state",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/254",
+      "commit": "babda09",
+      "date": "2026-06-13",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 739/741 tests PASS with 2 pre-existing desktop-adapter-boundary failures in lib/services/desktop/desktop-sharing-service.ts. Browser QA PASS for /studio empty state and Open artifact search modal. ops:delivery:gate PASS. Performance Contract: not required. Context Gaps Detected: yes — brief referenced workflow/new features/Odessay-Propuesta-Studio-y-ArtifactType.md, which does not exist in repo."
+    },
+    {
+      "what": "feat(studio): preserve open Studio artifacts across navigation with a session-only in-memory store synchronized from editor tabs, without server, localStorage, or IndexedDB persistence. [ODE-287]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-287",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-287/studio-preserve-open-artifacts-across-navigation-session-state",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/254",
+      "commit": "babda09",
+      "date": "2026-06-13",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 739/741 tests PASS with 2 pre-existing desktop-adapter-boundary failures in lib/services/desktop/desktop-sharing-service.ts. Added tests/studio-session-store.test.ts. ops:delivery:gate PASS. Performance Contract: not required — in-memory UI state only. Context Gaps Detected: yes — brief referenced workflow/new features/Odessay-Propuesta-Studio-y-ArtifactType.md, which does not exist in repo."
+    },
+    {
       "what": "feat(editor): runtime-aware keyboard shortcut audit and remap. Replace now uses Cmd/Ctrl+Alt+F to avoid browser/system collisions, desktop menu emits editor actions directly, the editor exposes a visible shortcut-help dialog, and docs/keyboard-shortcuts.md documents the runtime matrix. Updated perf capture scripts and editor shortcut contract docs. [ODE-268]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-268",
