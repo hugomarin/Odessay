@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
@@ -54,6 +55,15 @@ function groupSharedItems(items: SharedWritingListItem[]) {
 export function SharedWithMeList({ items, isLoading = false, error = null }: SharedWithMeListProps) {
   const router = useRouter()
   const groupedItems = groupSharedItems(items)
+  // Desktop has no shared reading route (the reading view is a dynamic
+  // server route, absent from the static export). Show the list, but don't
+  // wire up navigation that would just bounce back to the Desk.
+  const canOpen = !isTauriRuntime()
+
+  const openWriting = (item: SharedWritingListItem) => {
+    if (!canOpen) return
+    router.push(buildWritingRouteHref("/shared", item))
+  }
 
   return (
     <section
@@ -100,21 +110,25 @@ export function SharedWithMeList({ items, isLoading = false, error = null }: Sha
                       <tr
                         key={item.id}
                         data-testid="desk-shared-writing-item"
-                        role="link"
-                        tabIndex={0}
-                        aria-label={`Open shared writing ${item.title ?? "Untitled"}`}
+                        role={canOpen ? "link" : undefined}
+                        tabIndex={canOpen ? 0 : undefined}
+                        aria-label={canOpen ? `Open shared writing ${item.title ?? "Untitled"}` : undefined}
                         className={cn(
-                          "group cursor-pointer border-b-[0.5px] border-border transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+                          "group border-b-[0.5px] border-border transition-colors",
+                          canOpen &&
+                            "cursor-pointer hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
                         )}
-                        onClick={() => {
-                          router.push(buildWritingRouteHref("/shared", item))
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault()
-                            router.push(buildWritingRouteHref("/shared", item))
-                          }
-                        }}
+                        onClick={canOpen ? () => openWriting(item) : undefined}
+                        onKeyDown={
+                          canOpen
+                            ? (event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault()
+                                  openWriting(item)
+                                }
+                              }
+                            : undefined
+                        }
                       >
                         <td className="px-9 py-[18px] align-top md:align-middle">
                           <div

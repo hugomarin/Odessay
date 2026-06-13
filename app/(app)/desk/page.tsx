@@ -32,7 +32,8 @@ import {
   buildDeskActivitySummary,
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
-import { createBrowserSharingService, type RecipientPreview } from "@/lib/services/web-sharing-service"
+import { createSharingService } from "@/lib/services/sharing-service-factory"
+import { type RecipientPreview } from "@/lib/services/web-sharing-service"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncService } from "@/lib/sync"
@@ -81,7 +82,7 @@ export default function DeskPage() {
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
-  const sharingService = useMemo(() => createBrowserSharingService(), [])
+  const sharingService = useMemo(() => createSharingService(), [])
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
 
@@ -337,7 +338,8 @@ export default function DeskPage() {
   }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadSharedWritings])
 
   // Eagerly load the shared-with-me count so the tab counter is accurate even
-  // when the user has not yet opened the shared view.
+  // when the user has not yet opened the shared view. The runtime-specific
+  // sharing service (web fetch vs. desktop Supabase) is selected by the factory.
   useEffect(() => {
     void loadSharedWritings()
   }, [loadSharedWritings])
