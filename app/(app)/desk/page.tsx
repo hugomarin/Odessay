@@ -335,6 +335,13 @@ export default function DeskPage() {
       window.removeEventListener("online", handleRefresh)
     }
   }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadSharedWritings])
+
+  // Eagerly load the shared-with-me count so the tab counter is accurate even
+  // when the user has not yet opened the shared view.
+  useEffect(() => {
+    void loadSharedWritings()
+  }, [loadSharedWritings])
+
   const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
   const writingById = useMemo(() => {
     return new Map(rawWritings.map((writing) => [writing.id, writing]))
