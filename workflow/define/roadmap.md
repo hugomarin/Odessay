@@ -441,6 +441,52 @@ Referencia: `workflow/new features/watched-folders.md`, `workflow/context/featur
 
 ---
 
+## Fase 8 — Biblioteca, Preview y Calidad de Producto
+
+Al terminar esta fase: Desk funciona como biblioteca estable y navegable donde los writings no se mueven por cambios de metadata. Preview es una estación de inspección funcional desde la que el usuario puede exportar, compartir, eliminar y clasificar sin abrir el editor. Studio es el acceso directo al editor desde el sidebar. Artifact Type clasifica la biblioteca semánticamente. Workspace es visualmente consistente con Desk y permite selección granular de archivos al añadir carpetas. La captura de audio, los shortcuts y la corrección ortográfica funcionan sin fricciones.
+
+---
+
+**Hito**
+La biblioteca editorial es estable, clasificable y navegable. El editor es de calidad de producción.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- `contentUpdatedAt` y `metadataUpdatedAt` existen y se usan correctamente; la lista principal no se reordena por cambios de metadata
+- "Shared with Me" muestra el conteo correcto
+- `WritingStatusBadge` es un único componente usado en toda la app
+- Preview tiene overlay glass, acciones rápidas, navegación dentro del set visible y panel de propiedades mejorado
+- Studio es accesible desde el sidebar y retiene artifacts abiertos en sesión
+- `artifactType` existe en el modelo con default `general` y tiene selector en el panel de propiedades
+- La UI de Workspace permite selección granular de carpetas/archivos; el diseño es zero delta con Desk
+- `<ArtifactTable />` es un componente compartido usado en Desk y Workspace
+- La captura de audio funciona sin errores en desktop
+- Los shortcuts existentes están corregidos/remapeados; los nuevos no tienen colisiones
+- El spell check no bloquea palabras de forma inesperada
+
+**Temas que entran en esta fase**
+
+- Timestamps editoriales separados (`contentUpdatedAt` / `metadataUpdatedAt`)
+- Estabilización de la biblioteca: ordenamiento por `createdAt`, Group by, filtros de fecha
+- Preview como Document Quick View: acciones rápidas, panel de propiedades, navegación
+- Studio: ítem de sidebar con retención de sesión
+- Artifact Type: campo en DB, selector en propiedades, filtro en Desk
+- Workspace: selección granular de archivos, auditoría web vs desktop, diseño zero delta
+- `<ArtifactTable />`: componente compartido para Desk y Workspace
+- Audio capture: corrección de errores en desktop
+- Keyboard shortcuts: corrección y remapeo para desktop
+- Spell check: corrección de experiencia en editor
+
+**Temas que no son objetivo de esta fase**
+
+- Correspondencias y threads (Horizonte Posterior)
+- Anotaciones editables desde Preview (sólo visualización en esta fase)
+- Sincronización cross-device de sesión de Studio
+
+Referencia: `workflow/new features/Odessay-Propuesta-de-mejoras-para-Desk.md`, `workflow/new features/Odessay-Propuesta-de-mejoras-para-Preview-Modal.md`, `workflow/new features/Odessay-Propuesta-Studio-y-ArtifactType.md`, `workflow/new features/Odessay-Propuesta-Workspace-UI-y-Tabla-Documentos.md`, `workflow/define/dod-fase-8.md`.
+
+---
+
 ## Horizonte Posterior — Iniciativas Diferidas
 
 Estas líneas no desaparecen del producto, pero salen del critical path mientras se construye la plataforma multi-runtime.
