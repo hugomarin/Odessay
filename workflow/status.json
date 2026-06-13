@@ -46,6 +46,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+{
+      "what": "feat(desk): stabilize main writing list sort by created_at DESC. Changed IndexedDB writings list sort from local_updated_at to created_at DESC in lib/local-db/writings.ts. Changed webDocumentService.listWritings() to sort summaries by created_at DESC. Changed Desk activity summary buildMetas/buildGroups to sort and group the main list by created_at DESC instead of updated_at DESC, so changing status/tags/collections/visibility/sharing no longer moves a writing's position. Added regression test proving metadata changes do not reorder the list. Updated tests/desk-activity.test.ts and tests/document-service.test.ts to reflect the new contract. Refined scripts/check-delivery-gate.mjs batch branch issue extraction. [ODE-264]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-264",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-264/stabilize-main-writing-list-sort-by-createdat-by-default",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/251",
+      "commit": "0437374",
+      "date": "2026-06-12",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing warnings only). 730 tests PASS. ops:delivery:gate PASS (ODE-262, ODE-263, ODE-264 traceability). Performance Contract: not required. Architecture Contract: Layer=Application (web-document-service, desk-activity) + Adapter(desktop) (IDB sort path), Runtime scope=web+desktop, Owner=backend, Invariants respected (lib/local-db/writings.ts not imported from web code; IDB sort consistent with Supabase query). Context Gaps Detected: no."
+    },
     {
       "what": "fix(desk,sharing): correct Shared with Me counter by using writing_shares and loading it eagerly. Updated listIncomingShares() in lib/services/web-sharing-service.ts to exclude writings authored by the current user; eagerly load shared writings on Desk mount in app/(app)/desk/page.tsx so the tab counter is accurate before the user opens the shared view. [ODE-263]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
