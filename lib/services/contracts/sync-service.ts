@@ -8,6 +8,7 @@ import {
 export type SyncEntityKind = "writing" | "collection" | "writing-collections" | "correction-block"
 export type SyncOperation = "upsert" | "delete" | "set"
 export type SyncStatus = "idle" | "pending" | "syncing" | "synced" | "failed" | "offline"
+export type SyncableArtifactType = "general" | "agent" | "skill" | "prompt" | "template" | "status"
 
 export type SyncableWritingPayload = {
   title: string | null
@@ -15,6 +16,7 @@ export type SyncableWritingPayload = {
   bodyJson: Record<string, unknown> | null
   slug: string | null
   status: string
+  artifactType: SyncableArtifactType
   visibility: "private" | "shared" | "public"
   parentId: string | null
   correspondenceId: string | null

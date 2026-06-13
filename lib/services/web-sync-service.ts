@@ -47,6 +47,7 @@ const mapWritingPayload = (
   body_text: payload.bodyText,
   slug: payload.slug,
   status: payload.status as WritingStatus,
+  artifact_type: payload.artifactType,
   visibility: payload.visibility as WritingVisibility,
   parent_id: payload.parentId,
   correspondence_id: payload.correspondenceId,

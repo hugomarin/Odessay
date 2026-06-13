@@ -107,6 +107,7 @@ import {
 } from "@/lib/corrections/persistence"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
+  ArtifactType,
   LocalCorrectionBlock,
   LocalWriting,
   PublicationSuggestion,
@@ -192,6 +193,7 @@ type EditorPanel = "notes" | "properties" | "publication" | null
 type PersistSnapshotOverrides = {
   title?: string
   status?: WritingStatus
+  artifactType?: ArtifactType
   visibility?: WritingVisibility
 }
 
@@ -318,6 +320,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [createdAt, setCreatedAt] = useState<string | null>(null)
   const [writingSlug, setWritingSlug] = useState<string | null>(null)
   const [writingStatus, setWritingStatus] = useState<WritingStatus>("draft")
+  const [artifactType, setArtifactType] = useState<ArtifactType>("general")
   const [writingVisibility, setWritingVisibility] = useState<WritingVisibility>("private")
   const [lifecycle, setLifecycle] = useState<WritingLifecycle>("local-only")
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
@@ -356,6 +359,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const createdAtRef = useRef<string | null>(createdAt)
   const writingSlugRef = useRef<string | null>(null)
   const statusRef = useRef<WritingStatus>(writingStatus)
+  const artifactTypeRef = useRef<ArtifactType>(artifactType)
   const visibilityRef = useRef<WritingVisibility>(writingVisibility)
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
@@ -623,6 +627,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         },
         slug: null,
         status: overrides?.status ?? statusRef.current,
+        artifactType: overrides?.artifactType ?? artifactTypeRef.current,
         visibility: overrides?.visibility ?? visibilityRef.current,
         parentId: null,
         correspondenceId: null,
@@ -958,6 +963,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [writingStatus])
 
   useEffect(() => {
+    artifactTypeRef.current = artifactType
+  }, [artifactType])
+
+  useEffect(() => {
     visibilityRef.current = writingVisibility
   }, [writingVisibility])
 
@@ -1056,6 +1065,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
               },
               slug: null,
               status: "draft",
+              artifactType: "general",
               visibility: "private",
               parentId: null,
               correspondenceId: null,
@@ -1094,6 +1104,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setCreatedAt(nowIso)
       setWritingSlug(null)
       setWritingStatus("draft")
+      setArtifactType("general")
       setWritingVisibility("private")
       setLifecycle("local-only")
       setSyncStatus("saved-local")
@@ -1102,6 +1113,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       versionRef.current = 1
       writingSlugRef.current = null
       statusRef.current = "draft"
+      artifactTypeRef.current = "general"
       visibilityRef.current = "private"
       lifecycleRef.current = "local-only"
       navigatedToDraftRef.current = true
@@ -1195,6 +1207,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       isApplyingContentRef.current = false
       updateDerivedEditorState(editor)
       setWritingStatus("draft")
+      setArtifactType("general")
       setWritingVisibility("private")
       setTitle(UNTITLED_WRITING_TITLE)
       setHasExplicitTitle(false)
@@ -1338,6 +1351,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         setCreatedAt(localWriting.created_at)
         setWritingSlug(localWriting.slug ?? null)
         setWritingStatus(localWriting.status ?? "draft")
+        setArtifactType(localWriting.artifact_type ?? "general")
         setWritingVisibility(localWriting.visibility ?? "private")
         setLifecycle(localWriting.lifecycle ?? "local-only")
         setExternalFileNotice(null)
@@ -1451,6 +1465,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         setCreatedAt(null)
         setWritingSlug(null)
         setWritingStatus("draft")
+        setArtifactType("general")
         setWritingVisibility("private")
         setSyncStatus("saved")
         setExternalFileNotice(null)
@@ -3824,6 +3839,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       },
       slug: null,
       status: "draft",
+      artifactType: "general",
       visibility: "private",
       parentId: null,
       correspondenceId: null,
@@ -3955,6 +3971,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         },
         slug: null,
         status: "draft",
+        artifactType: "general",
         visibility: "private",
         parentId: null,
         correspondenceId: null,
@@ -4392,6 +4409,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 writingId={currentWritingId}
                 lifecycle={lifecycle}
                 status={writingStatus}
+                artifactType={artifactType}
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 spellcheckPreference={spellcheckPreference}
@@ -4407,6 +4425,22 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
                   setWritingStatus(nextStatus)
                   void applyPanelMetaChange(editor, { status: nextStatus }, {
+                    persistSnapshot: (overrides) => {
+                      if (!editor) {
+                        return
+                      }
+
+                      void persistEditorSnapshot(editor, overrides)
+                    },
+                  })
+                }}
+                onArtifactTypeChange={(nextArtifactType) => {
+                  if (nextArtifactType === artifactType) {
+                    return
+                  }
+
+                  setArtifactType(nextArtifactType)
+                  void applyPanelMetaChange(editor, { artifactType: nextArtifactType }, {
                     persistSnapshot: (overrides) => {
                       if (!editor) {
                         return

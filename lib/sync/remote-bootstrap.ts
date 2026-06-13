@@ -1,5 +1,6 @@
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
 import { normalizeWritingStatus } from "@/lib/writings/status"
 
 type ApiEnvelope<T> = {
@@ -13,6 +14,7 @@ export type RemoteWritingListRecord = {
   title: string | null
   slug: string | null
   status: WritingStatus | "finished" | null
+  artifact_type?: ArtifactType | string | null
   visibility: WritingVisibility | null
   parent_id: string | null
   correspondence_id: string | null
@@ -110,6 +112,7 @@ export const mapRemoteWritingToLocal = (
       : (existingLocalWriting?.body_text ?? ""),
     slug: remoteWriting.slug ?? null,
     status: normalizeWritingStatus(remoteWriting.status),
+    artifact_type: normalizeArtifactType(remoteWriting.artifact_type),
     visibility: normalizeVisibility(remoteWriting.visibility),
     parent_id: remoteWriting.parent_id ?? null,
     correspondence_id: remoteWriting.correspondence_id ?? null,

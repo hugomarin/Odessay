@@ -114,6 +114,7 @@ function makeWritingRecord(overrides: Partial<WritingRecord> = {}): WritingRecor
     },
     slug: null,
     status: "draft",
+    artifactType: "general",
     visibility: "private",
     parentId: null,
     correspondenceId: null,

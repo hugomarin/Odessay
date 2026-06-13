@@ -108,6 +108,7 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 | body_text | text | not null, default '' | Texto plano derivado de `body_json`. Para búsqueda full-text y contexto AI. Nunca editado directamente |
 | slug | text | nullable, unique por author_id | Generado del título. Usado solo en la URL pública `/{username}/{slug}`. Internamente se opera con `id` |
 | status | text | not null, default 'draft' | `new`, `exploring`, `draft`, `done` |
+| artifact_type | text | not null, default 'general' | Clasificación funcional del artifact: `general`, `agent`, `skill`, `prompt`, `template`, `status` |
 | visibility | text | not null, default 'private' | `private`, `shared`, `public` |
 | parent_id | uuid | FK → writings, nullable | El writing al que responde. Null = raíz |
 | correspondence_id | uuid | FK → correspondences, nullable | La correspondencia a la que pertenece. Null si no tiene respuestas aún |

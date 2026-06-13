@@ -1,4 +1,4 @@
-import type { WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import type { ArtifactType, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 
 type MarkdownEditor = {
   commands: {
@@ -8,6 +8,7 @@ type MarkdownEditor = {
 
 type SnapshotOverrides = {
   status?: WritingStatus
+  artifactType?: ArtifactType
   visibility?: WritingVisibility
 }
 

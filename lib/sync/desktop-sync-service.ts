@@ -51,7 +51,7 @@ type RemoteWritingCollectionRecord = {
 }
 
 const WRITING_SELECT =
-  "id, author_id, title, slug, status, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, body_json, body_text"
+  "id, author_id, title, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, body_json, body_text"
 const COLLECTION_SELECT = "id, owner_id, name, description, visibility, created_at, updated_at"
 const DESKTOP_FLUSH_DEBOUNCE_MS = 1500
 

@@ -15,6 +15,7 @@ import {
   type WritingLifecycle,
   type WritingListFilters,
 } from "@/lib/local-db/schema";
+import { normalizeArtifactType } from "@/lib/writings/artifact-type";
 import { normalizeWritingStatus } from "@/lib/writings/status";
 import { filterWritings, sortWritings } from "@/lib/local-db/writings";
 
@@ -467,6 +468,66 @@ const openDatabase = () => {
         }
       }
 
+      if (oldVersion > 0 && oldVersion < 14) {
+        const transaction = request.transaction;
+
+        if (transaction && database.objectStoreNames.contains(LOCAL_DB_STORES.writings)) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.writings);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const writing = result.value as LocalWriting;
+            const artifactType = normalizeArtifactType(writing.artifact_type);
+
+            if (writing.artifact_type !== artifactType) {
+              result.update({
+                ...writing,
+                artifact_type: artifactType,
+              });
+            }
+
+            result.continue();
+          };
+        }
+
+        if (transaction && database.objectStoreNames.contains(LOCAL_DB_STORES.syncMutations)) {
+          const store = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
+          const cursor = store.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const mutation = result.value as SyncMutation;
+
+            if (mutation.entity_kind === "writing") {
+              const artifactType = normalizeArtifactType(mutation.payload.artifact_type);
+
+              if (mutation.payload.artifact_type !== artifactType) {
+                result.update({
+                  ...mutation,
+                  payload: {
+                    ...mutation.payload,
+                    artifact_type: artifactType,
+                  },
+                });
+              }
+            }
+
+            result.continue();
+          };
+        }
+      }
+
       if (oldVersion > 0 && oldVersion < 10 && database.objectStoreNames.contains("publication-reviews")) {
         database.deleteObjectStore("publication-reviews");
       }
@@ -525,7 +586,10 @@ const withStore = async <T>(
 
 const saveWriting = async (writing: LocalWriting) => {
   await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
-    await runRequest(store.put(writing));
+    await runRequest(store.put({
+      ...writing,
+      artifact_type: normalizeArtifactType(writing.artifact_type),
+    }));
   });
   emitLocalDBChange();
 };
@@ -533,19 +597,35 @@ const saveWriting = async (writing: LocalWriting) => {
 const getWriting = async (id: string) =>
   withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
     const writing = await runRequest(store.get(id));
-    return (writing as LocalWriting | undefined) ?? null;
+    return writing
+      ? {
+          ...(writing as LocalWriting),
+          artifact_type: normalizeArtifactType((writing as LocalWriting).artifact_type),
+        }
+      : null;
   });
 
 const getWritingByCanonicalPath = async (canonicalPath: string) =>
   withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
     const writing = await runRequest(store.index("by-canonical-path").get(canonicalPath));
-    return (writing as LocalWriting | undefined) ?? null;
+    return writing
+      ? {
+          ...(writing as LocalWriting),
+          artifact_type: normalizeArtifactType((writing as LocalWriting).artifact_type),
+        }
+      : null;
   });
 
 const getAllWritings = async (filters?: WritingListFilters) =>
   withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
     const writings = (await runRequest(store.getAll())) as LocalWriting[];
-    return sortWritings(filterWritings(writings, filters));
+    return sortWritings(filterWritings(
+      writings.map((writing) => ({
+        ...writing,
+        artifact_type: normalizeArtifactType(writing.artifact_type),
+      })),
+      filters,
+    ));
   });
 
 const softDeleteWriting = async (id: string) => {
