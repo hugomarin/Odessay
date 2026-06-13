@@ -22,7 +22,7 @@ export type RecipientPreview = {
   displayName: string
 }
 
-type BrowserSharingService = SharingService & {
+export type BrowserSharingService = SharingService & {
   listRecipientPreviews(writingIds: string[]): Promise<ServiceResponse<Record<string, RecipientPreview[]>>>
 }
 
