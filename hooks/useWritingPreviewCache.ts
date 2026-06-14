@@ -4,6 +4,11 @@ import { useCallback, useRef } from "react"
 import type { JSONContent } from "@tiptap/core"
 import { localDB } from "@/lib/local-db"
 import { renderWritingBodyHtml } from "@/lib/reading/render-body-html-client"
+import {
+  extractWritingAnnotationNodes,
+  type WritingAnnotationNode,
+} from "@/lib/editor/footnote-extension"
+import type { WritingLifecycle, WritingVisibility } from "@/lib/local-db/schema"
 import type { WritingStatus } from "@/lib/writings/status"
 
 export type CachedWritingPreview = {
@@ -13,11 +18,22 @@ export type CachedWritingPreview = {
   bodyText: string
   status: WritingStatus
   updatedAt: string
+  createdAt: string
+  contentUpdatedAt: string
+  wordCount: number
+  annotations: WritingAnnotationNode[]
+  lifecycle: WritingLifecycle
+  visibility: WritingVisibility
 }
 
 const buildTitle = (value: string | null | undefined) => {
   const trimmed = value?.trim()
   return trimmed?.length ? trimmed : "Untitled writing"
+}
+
+const buildWordCount = (bodyText: string) => {
+  const trimmed = bodyText.trim()
+  return trimmed ? trimmed.split(/\s+/).length : 0
 }
 
 export function useWritingPreviewCache() {
@@ -36,14 +52,22 @@ export function useWritingPreviewCache() {
       return null
     }
 
-    const { bodyHtml } = renderWritingBodyHtml(writing.body_json as JSONContent, writing.body_text)
+    const bodyJson = writing.body_json as JSONContent
+    const { bodyHtml } = renderWritingBodyHtml(bodyJson, writing.body_text)
+    const updatedAt = writing.updated_at || writing.created_at
     const preview: CachedWritingPreview = {
       id: writing.id,
       title: buildTitle(writing.title),
       bodyHtml,
       bodyText: writing.body_text,
       status: writing.status,
-      updatedAt: writing.updated_at || writing.created_at,
+      updatedAt,
+      createdAt: writing.created_at,
+      contentUpdatedAt: writing.content_updated_at || updatedAt,
+      wordCount: buildWordCount(writing.body_text),
+      annotations: extractWritingAnnotationNodes(bodyJson),
+      lifecycle: writing.lifecycle,
+      visibility: writing.visibility,
     }
 
     cache.current.set(id, preview)

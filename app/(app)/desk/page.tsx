@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Plus, Upload } from "lucide-react"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
@@ -37,7 +38,9 @@ import { type RecipientPreview } from "@/lib/services/web-sharing-service"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncService } from "@/lib/sync"
+import { getDocumentService } from "@/lib/services/document-service-factory"
 import { isTauriRuntime } from "@/lib/runtime/detect"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
@@ -83,6 +86,7 @@ export default function DeskPage() {
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
   const sharingService = useMemo(() => createSharingService(), [])
+  const router = useRouter()
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
 
@@ -600,6 +604,63 @@ export default function DeskPage() {
     downloadBlob(blob, payload.filename)
   }, [getWritingMarkdownPayload])
 
+  const exportWritingDocument = useCallback(async (writingId: string, format: "pdf" | "docx") => {
+    const service = await getDocumentService()
+    const result = await service.exportWriting({ writingId, format })
+    if (result.error || !result.data) {
+      throw new Error(result.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
+    }
+
+    const artifact = result.data
+    const blob = new Blob([artifact.bytes.buffer as ArrayBuffer], { type: artifact.mimeType })
+    downloadBlob(blob, artifact.fileName)
+  }, [])
+
+  const shareWritingFromPreview = useCallback(
+    async (writingId: string) => {
+      const existing = await sharingService.getPreviewLink(writingId)
+      if (existing.error) {
+        return { ok: false, message: existing.error.message }
+      }
+
+      let link = existing.data?.active ? existing.data.link : null
+      if (!link) {
+        const rotated = await sharingService.rotatePreviewLink(writingId)
+        if (rotated.error || !rotated.data?.link) {
+          return {
+            ok: false,
+            message: rotated.error?.message ?? "Sharing becomes available after the first sync.",
+          }
+        }
+        link = rotated.data.link
+      }
+
+      const copied = await copyTextWithFallback(link)
+      return copied
+        ? { ok: true, message: "Share link copied to clipboard." }
+        : { ok: false, message: "Couldn't copy the link. Open the editor to share." }
+    },
+    [sharingService],
+  )
+
+  const openFullWriting = useCallback(
+    (writingId: string) => {
+      const target = previewRows.find((candidate) => candidate.id === writingId)
+      const href = target?.destinationHref ?? buildWritingRouteHref("/write", { id: writingId, slug: null })
+      router.push(href)
+    },
+    [previewRows, router],
+  )
+
+  const deleteWritingFromPreview = useCallback(
+    async (writingId: string) => {
+      await enqueueWritingDelete(writingId)
+      await loadDeskActivity()
+      void loadRecipientPreviewsAsync()
+    },
+    [loadDeskActivity, loadRecipientPreviewsAsync],
+  )
+
   return (
     <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
       <div
@@ -786,6 +847,11 @@ export default function DeskPage() {
             onCreateCollection={createWritingCollection}
             onStatusChange={changeWritingStatus}
             onTitleChange={saveWritingTitleById}
+            onOpenFullWriting={openFullWriting}
+            onExportMarkdown={downloadWritingMarkdown}
+            onExportDocument={exportWritingDocument}
+            onShare={shareWritingFromPreview}
+            onDelete={deleteWritingFromPreview}
           />
         </>
       ) : (
