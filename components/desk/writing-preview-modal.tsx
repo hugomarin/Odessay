@@ -1,7 +1,20 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, ArrowRight, ChevronDown, Tag, X } from "lucide-react"
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronDown,
+  Download,
+  ExternalLink,
+  FileText,
+  FileType,
+  MoreHorizontal,
+  Share2,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import {
   Dialog,
@@ -11,6 +24,8 @@ import {
 } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { WritingContentFrame } from "@/components/reading/writing-content-frame"
+import { AnnotationsPreview } from "@/components/preview/annotations-preview"
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { useWritingPreviewCache, type CachedWritingPreview } from "@/hooks/useWritingPreviewCache"
 import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
@@ -18,6 +33,13 @@ import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from
 import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
+
+export type PreviewExportFormat = "pdf" | "docx"
+
+export type PreviewShareResult = {
+  ok: boolean
+  message: string
+}
 
 type WritingPreviewModalProps = {
   open: boolean
@@ -31,9 +53,41 @@ type WritingPreviewModalProps = {
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
   onTitleChange?: (writingId: string, title: string) => Promise<void>
+  onOpenFullWriting?: (writingId: string) => void
+  onExportMarkdown?: (writingId: string) => Promise<void> | void
+  onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<void>
+  onShare?: (writingId: string) => Promise<PreviewShareResult>
+  onDelete?: (writingId: string) => Promise<void>
 }
 
 const PREFETCH_OFFSETS = [1, -1, 2, -2]
+
+const formatMetadataDate = (value: string | null | undefined) => {
+  if (!value) {
+    return "—"
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return "—"
+  }
+
+  const sameYear = date.getFullYear() === new Date().getFullYear()
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  }).format(date)
+}
+
+const isEditableTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  const tag = target.tagName
+  return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable
+}
 
 export function WritingPreviewModal({
   open,
@@ -47,12 +101,23 @@ export function WritingPreviewModal({
   onCreateCollection,
   onStatusChange,
   onTitleChange,
+  onOpenFullWriting,
+  onExportMarkdown,
+  onExportDocument,
+  onShare,
+  onDelete,
 }: WritingPreviewModalProps) {
   const { fetchPreview, getCachedPreview, prefetchPreview, retainOnly, clear, updatePreviewTitle } = useWritingPreviewCache()
   const [preview, setPreview] = useState<CachedWritingPreview | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [titleDraft, setTitleDraft] = useState("")
   const [statusOpen, setStatusOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [actionFeedback, setActionFeedback] = useState<{ tone: "ok" | "error"; message: string } | null>(null)
+  const [isSharing, setIsSharing] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState<"markdown" | PreviewExportFormat | null>(null)
   const loadIdRef = useRef(0)
   const titleDraftRef = useRef("")
   const { settings } = useUserSettingsContext()
@@ -63,6 +128,8 @@ export function WritingPreviewModal({
   const row = currentIndex === null ? null : rows[currentIndex] ?? null
   const canGoPrevious = currentIndex !== null && currentIndex > 0
   const canGoNext = currentIndex !== null && currentIndex < rows.length - 1
+  const hasRemoteWriting = preview?.lifecycle === "server-confirmed"
+  const annotations = useMemo(() => preview?.annotations ?? [], [preview])
 
   const selectedCollectionIds = useMemo(
     () => (row ? collectionIdsByWritingId[row.id] ?? [] : []),
@@ -111,6 +178,83 @@ export function WritingPreviewModal({
     titleDraftRef.current = nextTitle
   }, [onTitleChange, preview?.title, row, titleDraft, updatePreviewTitle])
 
+  const handleOpenFullWriting = useCallback(() => {
+    if (!row) {
+      return
+    }
+    onOpenFullWriting?.(row.id)
+  }, [onOpenFullWriting, row])
+
+  const handleExportMarkdown = useCallback(async () => {
+    if (!row || !onExportMarkdown) {
+      return
+    }
+    setExportOpen(false)
+    setActionFeedback(null)
+    setExportingFormat("markdown")
+    try {
+      await onExportMarkdown(row.id)
+      setActionFeedback({ tone: "ok", message: "Markdown exported." })
+    } catch (error) {
+      setActionFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Failed to export Markdown.",
+      })
+    } finally {
+      setExportingFormat(null)
+    }
+  }, [onExportMarkdown, row])
+
+  const handleExportDocument = useCallback(
+    async (format: PreviewExportFormat) => {
+      if (!row || !onExportDocument) {
+        return
+      }
+      setExportOpen(false)
+      setActionFeedback(null)
+      setExportingFormat(format)
+      try {
+        await onExportDocument(row.id, format)
+        setActionFeedback({ tone: "ok", message: `${format.toUpperCase()} exported.` })
+      } catch (error) {
+        setActionFeedback({
+          tone: "error",
+          message: error instanceof Error ? error.message : `Failed to export ${format.toUpperCase()}.`,
+        })
+      } finally {
+        setExportingFormat(null)
+      }
+    },
+    [onExportDocument, row],
+  )
+
+  const handleShare = useCallback(async () => {
+    if (!row || !onShare || isSharing) {
+      return
+    }
+    setActionFeedback(null)
+    setIsSharing(true)
+    try {
+      const result = await onShare(row.id)
+      setActionFeedback({ tone: result.ok ? "ok" : "error", message: result.message })
+    } catch (error) {
+      setActionFeedback({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Failed to share writing.",
+      })
+    } finally {
+      setIsSharing(false)
+    }
+  }, [isSharing, onShare, row])
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!row || !onDelete) {
+      return
+    }
+    await onDelete(row.id)
+    onOpenChange(false)
+  }, [onDelete, onOpenChange, row])
+
   useEffect(() => {
     if (!open || !row || currentIndex === null) {
       return
@@ -123,6 +267,7 @@ export function WritingPreviewModal({
     if (isNewWriting) {
       titleWritingIdRef.current = row.id
       titleEditingRef.current = false
+      setActionFeedback(null)
     }
 
     const cachedPreview = getCachedPreview(row.id)
@@ -179,6 +324,10 @@ export function WritingPreviewModal({
 
     setPreview(null)
     setIsLoading(false)
+    setActionFeedback(null)
+    setExportOpen(false)
+    setMoreOpen(false)
+    setDeleteOpen(false)
     clear()
   }, [clear, open])
 
@@ -188,6 +337,11 @@ export function WritingPreviewModal({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't hijack arrow keys while editing the title or interacting with inputs.
+      if (isEditableTarget(event.target)) {
+        return
+      }
+
       if (event.key === "ArrowLeft") {
         event.preventDefault()
         navigateBy(-1)
@@ -205,13 +359,17 @@ export function WritingPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent hideClose className="max-h-[88vh] max-w-[1040px] overflow-hidden p-0">
+      <DialogContent
+        hideClose
+        overlayClassName="bg-[rgba(255,255,255,0.62)] backdrop-blur-[18px] backdrop-saturate-[1.15]"
+        className="max-h-[88vh] max-w-[1040px] overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.72)] bg-[rgba(255,255,255,0.86)] p-0 shadow-[0_24px_80px_rgba(0,0,0,0.16),0_2px_12px_rgba(0,0,0,0.06)] backdrop-blur-[24px]"
+      >
         <DialogTitle className="sr-only">{preview?.title ?? row?.title ?? "Writing preview"}</DialogTitle>
         <DialogDescription className="sr-only">Read-only writing preview from Desk.</DialogDescription>
 
-        <div className="flex h-[min(760px,88vh)] min-h-0 flex-col bg-bg">
-          <div className="flex h-[50px] shrink-0 items-center justify-between border-b-[0.5px] border-border bg-sb px-4">
-            <div className="flex items-center gap-2">
+        <div className="flex h-[min(760px,88vh)] min-h-0 flex-col bg-bg/95">
+          <div className="flex h-[50px] shrink-0 items-center justify-between gap-3 border-b-[0.5px] border-border bg-sb/85 px-3">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => navigateBy(-1)}
@@ -231,17 +389,150 @@ export function WritingPreviewModal({
                 <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
               </button>
               {currentIndex !== null ? (
-                <span className="pl-2 text-[12px] text-ink-4">
+                <span className="pl-1.5 text-[12px] font-medium text-ink-3">
                   {currentIndex + 1} of {rows.length}
                 </span>
               ) : null}
+              <span className="pl-1.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-ink-4">Preview</span>
             </div>
 
-            <span className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">Preview</span>
+            <div className="flex items-center gap-1">
+              {onOpenFullWriting ? (
+                <button
+                  type="button"
+                  onClick={handleOpenFullWriting}
+                  className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                >
+                  <ExternalLink className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                  Open full writing
+                </button>
+              ) : null}
+
+              {onShare ? (
+                <button
+                  type="button"
+                  onClick={() => void handleShare()}
+                  disabled={isSharing}
+                  className="inline-flex h-8 items-center gap-[6px] rounded-[8px] px-[10px] text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                >
+                  <Share2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                  {isSharing ? "Sharing…" : "Share"}
+                </button>
+              ) : null}
+
+              {onExportMarkdown || onExportDocument ? (
+                <Popover open={exportOpen} onOpenChange={setExportOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-[6px] rounded-[8px] px-[10px] text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                    >
+                      <Download className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                      Export
+                      <ChevronDown
+                        className={cn("h-3 w-3 text-ink-4 transition-transform", exportOpen && "rotate-180")}
+                        strokeWidth={1.5}
+                      />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[224px] p-[5px]">
+                    {onExportMarkdown ? (
+                      <PreviewMenuItem
+                        icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
+                        label={exportingFormat === "markdown" ? "Exporting Markdown…" : "Markdown (.md)"}
+                        disabled={exportingFormat !== null}
+                        onSelect={() => void handleExportMarkdown()}
+                      />
+                    ) : null}
+                    {onExportDocument ? (
+                      <>
+                        <PreviewMenuItem
+                          icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
+                          label={exportingFormat === "pdf" ? "Exporting PDF…" : "PDF (.pdf)"}
+                          disabled={!hasRemoteWriting || exportingFormat !== null}
+                          onSelect={() => void handleExportDocument("pdf")}
+                        />
+                        <PreviewMenuItem
+                          icon={<FileType className="h-[13px] w-[13px]" strokeWidth={1.5} />}
+                          label={exportingFormat === "docx" ? "Exporting Word…" : "Word (.docx)"}
+                          disabled={!hasRemoteWriting || exportingFormat !== null}
+                          onSelect={() => void handleExportDocument("docx")}
+                        />
+                        {!hasRemoteWriting ? (
+                          <>
+                            <div className="my-1 h-px bg-border" />
+                            <p className="px-[10px] pb-1 pt-1 text-[10px] leading-[1.4] text-ink-4">
+                              Markdown is local. PDF and Word require a saved writing.
+                            </p>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+
+              {onDelete || onOpenFullWriting ? (
+                <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                      aria-label="More options"
+                    >
+                      <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[200px] p-[5px]">
+                    {onOpenFullWriting ? (
+                      <PreviewMenuItem
+                        icon={<ExternalLink className="h-[13px] w-[13px]" strokeWidth={1.5} />}
+                        label="Open full writing"
+                        onSelect={() => {
+                          setMoreOpen(false)
+                          handleOpenFullWriting()
+                        }}
+                      />
+                    ) : null}
+                    {onDelete ? (
+                      <PreviewMenuItem
+                        icon={<Trash2 className="h-[13px] w-[13px]" strokeWidth={1.5} />}
+                        label="Delete writing"
+                        destructive
+                        onSelect={() => {
+                          setMoreOpen(false)
+                          setDeleteOpen(true)
+                        }}
+                      />
+                    ) : null}
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                aria-label="Close preview"
+              >
+                <X className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            </div>
           </div>
 
+          {actionFeedback ? (
+            <div
+              className={cn(
+                "shrink-0 border-b-[0.5px] border-border px-4 py-1.5 text-[11px]",
+                actionFeedback.tone === "ok" ? "bg-sb/70 text-ink-3" : "bg-[hsl(0_60%_97%)] text-[hsl(0_72%_42%)]",
+              )}
+            >
+              {actionFeedback.message}
+            </div>
+          ) : null}
+
           <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_292px]">
-            <main className="min-h-0 overflow-y-auto">
+            <main className="min-h-0 overflow-y-auto bg-bg">
               <div className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-8 py-7">
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Title</p>
                 <input
@@ -292,20 +583,12 @@ export function WritingPreviewModal({
               )}
             </main>
 
-            <aside className="flex min-h-0 flex-col border-l-[0.5px] border-border bg-sb">
-              <div className="flex h-[50px] shrink-0 items-center justify-between border-b-[0.5px] border-border px-5">
+            <aside className="flex min-h-0 flex-col border-l-[0.5px] border-border bg-sb/90">
+              <div className="flex h-[50px] shrink-0 items-center border-b-[0.5px] border-border px-5">
                 <p className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-4">Properties</p>
-                <button
-                  type="button"
-                  onClick={() => onOpenChange(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                  aria-label="Close preview"
-                >
-                  <X className="h-4 w-4" strokeWidth={1.5} />
-                </button>
               </div>
 
-              <div className="space-y-7 overflow-y-auto px-5 py-6">
+              <div className="space-y-5 overflow-y-auto px-5 py-5">
                 <section className="space-y-2">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Status</p>
                   {row ? (
@@ -341,7 +624,7 @@ export function WritingPreviewModal({
                   <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Collections</p>
                   {row ? (
                     <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
-                      <div className="px-3 py-[11px]">
+                      <div className="px-3 py-[9px]">
                         <CollectionAssignmentMenu
                           collections={collectionOptions}
                           selectedIds={selectedCollectionIds}
@@ -362,7 +645,7 @@ export function WritingPreviewModal({
                         />
                       </div>
 
-                      <div className="border-t-[0.5px] border-border px-3 py-[11px]">
+                      <div className="border-t-[0.5px] border-border px-3 py-[9px]">
                         {selectedCollections.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {selectedCollections.map((collection) => (
@@ -381,12 +664,83 @@ export function WritingPreviewModal({
                     </div>
                   ) : null}
                 </section>
+
+                <section className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Metadata</p>
+                  <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
+                    <MetadataRow label="Created" value={formatMetadataDate(preview?.createdAt)} />
+                    <MetadataRow label="Last worked" value={formatMetadataDate(preview?.contentUpdatedAt)} />
+                    <MetadataRow
+                      label="Word count"
+                      value={preview ? preview.wordCount.toLocaleString() : "—"}
+                    />
+                    <MetadataRow
+                      label="Annotations"
+                      value={preview ? annotations.length.toLocaleString() : "—"}
+                    />
+                  </div>
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Annotations</p>
+                  <AnnotationsPreview annotations={annotations} onSeeAll={handleOpenFullWriting} />
+                </section>
               </div>
             </aside>
           </div>
         </div>
       </DialogContent>
+
+      <DeleteWritingDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title={preview?.title ?? row?.title}
+        onConfirm={() => {
+          void handleConfirmDelete()
+        }}
+      />
     </Dialog>
+  )
+}
+
+function PreviewMenuItem({
+  icon,
+  label,
+  onSelect,
+  disabled = false,
+  destructive = false,
+}: {
+  icon: React.ReactNode
+  label: string
+  onSelect: () => void
+  disabled?: boolean
+  destructive?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      disabled={disabled}
+      className={cn(
+        "flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted",
+        destructive && "text-[hsl(0_72%_42%)] hover:bg-[hsl(0_60%_97%)]",
+        disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
+      )}
+    >
+      <span className={cn("flex shrink-0 items-center text-ink-4", destructive && "text-[hsl(0_72%_42%)]")}>
+        {icon}
+      </span>
+      <span>{label}</span>
+    </button>
+  )
+}
+
+function MetadataRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b-[0.5px] border-border px-3 py-[7px] last:border-b-0">
+      <span className="text-[12px] text-ink-4">{label}</span>
+      <span className="text-[12px] font-medium text-ink-2">{value}</span>
+    </div>
   )
 }
 
