@@ -32,7 +32,7 @@ export function CollectionChips({
     <div className={cn("flex min-w-0 items-center gap-1", className)}>
       {visible.map((id) => {
         const collection = optionById.get(id)
-        const handleClick = (event: React.MouseEvent) => {
+        const handleClick = (event: React.MouseEvent | React.KeyboardEvent) => {
           event.preventDefault()
           event.stopPropagation()
           if (onSelect) {
@@ -42,15 +42,23 @@ export function CollectionChips({
           router.push(`/collections/${encodeURIComponent(id)}`)
         }
 
+        const handleKeyDown = (event: React.KeyboardEvent) => {
+          if (event.key === "Enter" || event.key === " ") {
+            handleClick(event)
+          }
+        }
+
         return (
-          <button
+          <span
             key={id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={handleClick}
-            className="inline-flex max-w-[90px] items-center rounded-[6px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-[7px] py-[2px] text-[10px] font-medium text-[hsl(28_22%_22%)] transition-colors hover:bg-[hsl(34_30%_88%)]"
+            onKeyDown={handleKeyDown}
+            className="inline-flex max-w-[90px] cursor-pointer items-center rounded-[6px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-[7px] py-[2px] text-[10px] font-medium text-[hsl(28_22%_22%)] transition-colors hover:bg-[hsl(34_30%_88%)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
           >
             <span className="truncate">{collection?.name ?? id}</span>
-          </button>
+          </span>
         )
       })}
       {overflow > 0 ? (

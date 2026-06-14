@@ -345,7 +345,11 @@ const normalizeQuery = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
 
-const applyClientFilters = (writings: WritingMeta[], clientFilter: DeskClientFilter): WritingMeta[] => {
+const applyClientFilters = (
+  writings: WritingMeta[],
+  clientFilter: DeskClientFilter,
+  now: Date,
+): WritingMeta[] => {
   const {
     searchQuery,
     selectedCollectionIds,
@@ -422,7 +426,6 @@ const applyClientFilters = (writings: WritingMeta[], clientFilter: DeskClientFil
     }
 
     if (createdDateFilter) {
-      const now = clientFilter.createdDateFilter ? new Date() : new Date()
       if (!matchesCreatedDateFilter(writing.createdAt, createdDateFilter, createdDateFrom, createdDateTo, now)) {
         return false
       }
@@ -575,7 +578,7 @@ export const buildDeskActivitySummary = (
   let filtered = applyFilter(allWritings, options.filter)
 
   if (options.clientFilter) {
-    filtered = applyClientFilters(filtered, options.clientFilter)
+    filtered = applyClientFilters(filtered, options.clientFilter, now)
   }
 
   const effectiveGroupBy = options.clientFilter?.groupBy ?? options.groupBy ?? "created-date"
