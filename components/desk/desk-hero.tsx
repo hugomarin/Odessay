@@ -1,14 +1,18 @@
 import Link from "next/link"
 import { Plus } from "lucide-react"
+import { CollectionChips } from "@/components/desk/collection-chips"
+import { WritingStatusBadge } from "@/components/desk/writing-status-badge"
+import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
 
 type DeskHeroProps = {
   drafts: DeskHeroDraft[]
+  collectionOptions: CollectionOption[]
 }
 
-export function DeskHero({ drafts }: DeskHeroProps) {
+export function DeskHero({ drafts, collectionOptions }: DeskHeroProps) {
   return (
     <div
       id="desk-hero"
@@ -17,7 +21,7 @@ export function DeskHero({ drafts }: DeskHeroProps) {
       className="DeskHero border-b-[0.5px] border-border bg-transparent px-9 py-7"
     >
       <div className="mb-4 flex items-center gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-4">Open drafts</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-4">Recent Writings</p>
       </div>
 
       <div className="flex gap-[10px] overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -33,16 +37,21 @@ export function DeskHero({ drafts }: DeskHeroProps) {
               draft.isActive && "border-cursor/35 shadow-float-md",
             )}
           >
-            <p className={cn(
-              "text-[10px] font-semibold uppercase tracking-[0.06em] text-ink-4",
-              draft.isActive && "text-cursor",
-            )}>
-              {draft.statusLabel}
-            </p>
+            <WritingStatusBadge
+              status={draft.status}
+              variant="compact"
+              className={cn("self-start", draft.isActive && "border-cursor/20")}
+            />
             <p className="line-clamp-2 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
             {draft.excerpt ? (
               <p className="line-clamp-2 text-[12px] leading-[1.55] text-ink-3">{draft.excerpt}</p>
             ) : null}
+            <CollectionChips
+              collectionIds={draft.collectionIds}
+              collectionOptions={collectionOptions}
+              limit={2}
+              className="mt-auto"
+            />
             <div className="mt-auto flex items-center justify-between border-t-[0.5px] border-border pt-2 text-[11px] text-ink-4">
               <span>{draft.updatedLabel}</span>
               <span>{draft.wordCount} words</span>
