@@ -94,9 +94,21 @@ export default function DeskPage() {
     searchQuery,
     selectedCollectionIds,
     selectedStatuses,
+    selectedArtifactTypes,
+    createdDateFilter,
+    createdDateFrom,
+    createdDateTo,
+    groupBy,
+    sortBy,
     setSearchQuery,
     toggleCollection,
     toggleStatus,
+    toggleArtifactType,
+    setCreatedDateFilter,
+    setCreatedDateFrom,
+    setCreatedDateTo,
+    setGroupBy,
+    setSortBy,
     clearFilters,
     hasActiveFilters,
     activeFilterCount,
@@ -190,11 +202,15 @@ export default function DeskPage() {
         filter: "all",
         userId: localScope === "anonymous" ? null : localScope,
         recipientPreviewsByWritingId: recipientPreviewsRef.current,
+        assignments: nextAssignments,
+        collectionOptions: buildCollectionOptions(nextCollections),
+        groupBy,
+        sortBy,
       }),
     )
     setCollections(nextCollections)
     setWritingCollections(nextAssignments)
-  }, [])
+  }, [groupBy, sortBy])
 
   const loadRecipientPreviewsAsync = useCallback(async () => {
     const localWritings = await localDB.writings.getAll()
@@ -374,10 +390,18 @@ export default function DeskPage() {
       filter: "all",
       userId: localScope === "anonymous" ? null : localScope,
       recipientPreviewsByWritingId,
+      assignments: writingCollections,
+      collectionOptions,
+      groupBy,
+      sortBy,
       clientFilter: {
         searchQuery,
         selectedCollectionIds,
         selectedStatuses,
+        selectedArtifactTypes,
+        createdDateFilter,
+        createdDateFrom,
+        createdDateTo,
         assignments: writingCollections,
       },
     })
@@ -389,7 +413,14 @@ export default function DeskPage() {
     searchQuery,
     selectedCollectionIds,
     selectedStatuses,
+    selectedArtifactTypes,
+    createdDateFilter,
+    createdDateFrom,
+    createdDateTo,
+    groupBy,
+    sortBy,
     writingCollections,
+    collectionOptions,
   ])
 
   const visibleWritingIds = useMemo(() => {
@@ -484,11 +515,13 @@ export default function DeskPage() {
       return
     }
 
+    const nowIso = new Date().toISOString()
     const updatedWriting: LocalWriting = {
       ...writing,
       status,
       version: writing.version + 1,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
+      metadata_updated_at: nowIso,
       local_updated_at: Date.now(),
     }
 
@@ -507,11 +540,13 @@ export default function DeskPage() {
         return
       }
 
+      const nowIso = new Date().toISOString()
       await enqueueWritingUpsert({
         ...writing,
         title: trimmedTitle,
         version: writing.version + 1,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
+        content_updated_at: nowIso,
         local_updated_at: Date.now(),
       })
       await loadDeskActivity()
@@ -659,7 +694,7 @@ export default function DeskPage() {
 
       {activeView === "mine" ? (
         <>
-          <DeskHero drafts={summary.heroDrafts} />
+          <DeskHero drafts={summary.heroDrafts} collectionOptions={collectionOptions} />
 
           <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-[14px] sm:px-9">
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
@@ -671,6 +706,18 @@ export default function DeskPage() {
                 onToggleCollection={toggleCollection}
                 selectedStatuses={selectedStatuses}
                 onToggleStatus={toggleStatus}
+                selectedArtifactTypes={selectedArtifactTypes}
+                onToggleArtifactType={toggleArtifactType}
+                createdDateFilter={createdDateFilter}
+                onCreatedDateFilterChange={setCreatedDateFilter}
+                createdDateFrom={createdDateFrom}
+                onCreatedDateFromChange={setCreatedDateFrom}
+                createdDateTo={createdDateTo}
+                onCreatedDateToChange={setCreatedDateTo}
+                groupBy={groupBy}
+                onGroupByChange={setGroupBy}
+                sortBy={sortBy}
+                onSortByChange={setSortBy}
                 collectionOptions={collectionOptions}
                 activeFilterCount={activeFilterCount}
                 hasActiveFilters={hasActiveFilters}

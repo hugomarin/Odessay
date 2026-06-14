@@ -1,18 +1,36 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
+import type {
+  DeskCreatedDateFilter,
+  DeskGroupBy,
+  DeskSortBy,
+} from "@/lib/queries/desk-activity"
 import type { WritingStatus } from "@/lib/writings/status"
 
 export type DeskFilterState = {
   searchQuery: string
   selectedCollectionIds: string[]
   selectedStatuses: WritingStatus[]
+  selectedArtifactTypes: ArtifactType[]
+  createdDateFilter: DeskCreatedDateFilter | null
+  createdDateFrom: string
+  createdDateTo: string
+  groupBy: DeskGroupBy
+  sortBy: DeskSortBy
 }
 
 export function useDeskFilters() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([])
   const [selectedStatuses, setSelectedStatuses] = useState<WritingStatus[]>([])
+  const [selectedArtifactTypes, setSelectedArtifactTypes] = useState<ArtifactType[]>([])
+  const [createdDateFilter, setCreatedDateFilter] = useState<DeskCreatedDateFilter | null>(null)
+  const [createdDateFrom, setCreatedDateFrom] = useState("")
+  const [createdDateTo, setCreatedDateTo] = useState("")
+  const [groupBy, setGroupBy] = useState<DeskGroupBy>("none")
+  const [sortBy, setSortBy] = useState<DeskSortBy>("created-at-desc")
 
   const toggleCollection = useCallback((id: string) => {
     setSelectedCollectionIds((prev) =>
@@ -26,10 +44,24 @@ export function useDeskFilters() {
     )
   }, [])
 
+  const toggleArtifactType = useCallback((artifactType: ArtifactType) => {
+    setSelectedArtifactTypes((prev) =>
+      prev.includes(artifactType)
+        ? prev.filter((t) => t !== artifactType)
+        : [...prev, artifactType],
+    )
+  }, [])
+
   const clearFilters = useCallback(() => {
     setSearchQuery("")
     setSelectedCollectionIds([])
     setSelectedStatuses([])
+    setSelectedArtifactTypes([])
+    setCreatedDateFilter(null)
+    setCreatedDateFrom("")
+    setCreatedDateTo("")
+    setGroupBy("none")
+    setSortBy("created-at-desc")
   }, [])
 
   const clearSearch = useCallback(() => {
@@ -44,25 +76,55 @@ export function useDeskFilters() {
     setSelectedStatuses([])
   }, [])
 
+  const clearArtifactTypes = useCallback(() => {
+    setSelectedArtifactTypes([])
+  }, [])
+
+  const clearCreatedDate = useCallback(() => {
+    setCreatedDateFilter(null)
+    setCreatedDateFrom("")
+    setCreatedDateTo("")
+  }, [])
+
   const hasActiveFilters =
-    searchQuery.length > 0 || selectedCollectionIds.length > 0 || selectedStatuses.length > 0
+    searchQuery.length > 0 ||
+    selectedCollectionIds.length > 0 ||
+    selectedStatuses.length > 0 ||
+    selectedArtifactTypes.length > 0 ||
+    createdDateFilter !== null
 
   const activeFilterCount =
     (searchQuery.length > 0 ? 1 : 0) +
     selectedCollectionIds.length +
-    selectedStatuses.length
+    selectedStatuses.length +
+    selectedArtifactTypes.length +
+    (createdDateFilter !== null ? 1 : 0)
 
   return {
     searchQuery,
     selectedCollectionIds,
     selectedStatuses,
+    selectedArtifactTypes,
+    createdDateFilter,
+    createdDateFrom,
+    createdDateTo,
+    groupBy,
+    sortBy,
     setSearchQuery,
     toggleCollection,
     toggleStatus,
+    toggleArtifactType,
+    setCreatedDateFilter,
+    setCreatedDateFrom,
+    setCreatedDateTo,
+    setGroupBy,
+    setSortBy,
     clearFilters,
     clearSearch,
     clearCollections,
     clearStatuses,
+    clearArtifactTypes,
+    clearCreatedDate,
     hasActiveFilters,
     activeFilterCount,
   }
