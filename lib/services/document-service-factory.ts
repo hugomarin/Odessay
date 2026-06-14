@@ -13,6 +13,7 @@ import type {
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { webDocumentService } from "@/lib/services/web-document-service"
@@ -86,6 +87,7 @@ function toCanonicalRecord(local: LocalWriting): WritingRecord {
     },
     slug: local.slug ?? null,
     status: local.status,
+    artifactType: normalizeArtifactType(local.artifact_type),
     visibility: local.visibility,
     parentId: local.parent_id ?? null,
     correspondenceId: local.correspondence_id ?? null,
@@ -106,6 +108,7 @@ function toLocalWriting(record: WritingRecord, canonicalPath: string): LocalWrit
     body_text: record.content.plainText,
     slug: record.slug,
     status: record.status,
+    artifact_type: record.artifactType,
     visibility: record.visibility,
     parent_id: record.parentId,
     correspondence_id: record.correspondenceId,
@@ -378,6 +381,7 @@ class DesktopDocumentService implements DocumentService {
         },
         slug: options.slug ?? null,
         status: options.status ?? "draft",
+        artifactType: "general",
         visibility: options.visibility ?? "private",
         parentId: null,
         correspondenceId: null,

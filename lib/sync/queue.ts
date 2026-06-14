@@ -1,5 +1,6 @@
 import { localDB } from "@/lib/local-db";
 import { createEntityKey } from "@/lib/local-db";
+import { normalizeArtifactType } from "@/lib/writings/artifact-type";
 import type {
   LocalCollection,
   LocalWriting,
@@ -24,6 +25,7 @@ const toRemotePayload = (writing: LocalWriting): RemoteWritingPayload => ({
   body_text: writing.body_text,
   slug: writing.slug ?? null,
   status: writing.status,
+  artifact_type: normalizeArtifactType(writing.artifact_type),
   visibility: writing.visibility,
   parent_id: writing.parent_id ?? null,
   correspondence_id: writing.correspondence_id ?? null,
