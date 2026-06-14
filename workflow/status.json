@@ -52,7 +52,7 @@
       "issue": "ODE-269",
       "linear_url": "https://linear.app/z9ne/issue/ODE-269/rename-open-drafts-to-recent-writings-and-use-contentupdatedat",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
-      "commit": "8a16fca",
+      "commit": "a6faacb",
       "date": "2026-06-13",
       "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
     },
@@ -62,7 +62,7 @@
       "issue": "ODE-271",
       "linear_url": "https://linear.app/z9ne/issue/ODE-271/add-writingstatusbadge-and-collection-chips-to-recent-writings-cards",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
-      "commit": "8a16fca",
+      "commit": "a6faacb",
       "date": "2026-06-13",
       "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Depends on ODE-269 and ODE-270; implemented WritingStatusBadge locally because ODE-270 was not in scope. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
     },
@@ -72,7 +72,7 @@
       "issue": "ODE-281",
       "linear_url": "https://linear.app/z9ne/issue/ODE-281/add-group-by-control-to-desk",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
-      "commit": "8a16fca",
+      "commit": "a6faacb",
       "date": "2026-06-13",
       "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
     },
@@ -82,7 +82,7 @@
       "issue": "ODE-282",
       "linear_url": "https://linear.app/z9ne/issue/ODE-282/add-created-date-filter-and-sort-support-to-desk",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
-      "commit": "8a16fca",
+      "commit": "a6faacb",
       "date": "2026-06-13",
       "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
     },
@@ -92,7 +92,7 @@
       "issue": "ODE-283",
       "linear_url": "https://linear.app/z9ne/issue/ODE-283/add-artifact-type-filter-to-desk",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
-      "commit": "8a16fca",
+      "commit": "a6faacb",
       "date": "2026-06-13",
       "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Context Gaps Detected: yes — referenced workflow/new features/Odessay-Propuesta-Studio-y-ArtifactType.md does not exist; used existing lib/writings/artifact-type.ts contract."
     },
