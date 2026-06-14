@@ -47,6 +47,56 @@
   },
   "built": [
     {
+      "what": "feat(desk): rename Open Drafts to Recent Writings and order by contentUpdatedAt. Updates desk-hero label, buildRecentWritings sort, and sets content_updated_at on title changes and metadata_updated_at on status changes.",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-269",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-269/rename-open-drafts-to-recent-writings-and-use-contentupdatedat",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
+      "commit": "8a16fca",
+      "date": "2026-06-13",
+      "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
+    },
+    {
+      "what": "feat(desk): add WritingStatusBadge and CollectionChips to Recent Writings cards. Introduces shared components and enriches hero cards with status badge, collection chips and word count.",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-271",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-271/add-writingstatusbadge-and-collection-chips-to-recent-writings-cards",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
+      "commit": "8a16fca",
+      "date": "2026-06-13",
+      "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Depends on ODE-269 and ODE-270; implemented WritingStatusBadge locally because ODE-270 was not in scope. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
+    },
+    {
+      "what": "feat(desk): add Group by control with options None, Status, Collection and Created date. Groups are visual only and preserve the active sort order.",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-281",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-281/add-group-by-control-to-desk",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
+      "commit": "8a16fca",
+      "date": "2026-06-13",
+      "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
+    },
+    {
+      "what": "feat(desk): add Created date filter (Today, Last 7 days, Last 30 days, This year, Custom range) and sort support (Newest first, Oldest first, Recently worked on).",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-282",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-282/add-created-date-filter-and-sort-support-to-desk",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
+      "commit": "8a16fca",
+      "date": "2026-06-13",
+      "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
+    },
+    {
+      "what": "feat(desk): add Artifact Type filter to Desk filter bar. Multi-select filter over the existing artifact_type field, compatible with Collection, Status and Created date filters.",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-283",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-283/add-artifact-type-filter-to-desk",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/256",
+      "commit": "8a16fca",
+      "date": "2026-06-13",
+      "notes": "Shipped on shared branch codex/product-desk-improvements-ODE-271-ODE-269-ODE-281-ODE-283. Typecheck PASS. Lint PASS. 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Context Gaps Detected: yes — referenced workflow/new features/Odessay-Propuesta-Studio-y-ArtifactType.md does not exist; used existing lib/writings/artifact-type.ts contract."
+    },
+    {
       "what": "feat(artifacts): add artifact_type to writings and expose Artifact Type selector in editor properties. Adds Supabase migration, ArtifactType contract/defaults, localDB v14 backfill, API/sync/document-service propagation, and properties panel dropdown with persistence. [ODE-273] [ODE-275]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-273",
