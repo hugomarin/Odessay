@@ -1,11 +1,23 @@
 import type { LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
-import { getWritingStatusLabel, isOpenWritingStatus, normalizeWritingStatus } from "@/lib/writings/status"
-import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
+import type { CollectionOption } from "@/lib/collections/collections"
+import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
+import {
+  getWritingStatusLabel,
+  normalizeWritingStatus,
+  WRITING_STATUS_VALUES,
+} from "@/lib/writings/status"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
 export type DeskStatusTone = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
+
+export type DeskGroupBy = "none" | "status" | "collection" | "created-date"
+
+export type DeskSortBy = "created-at-desc" | "created-at-asc" | "content-updated-at-desc"
+
+export type DeskCreatedDateFilter = "today" | "last-7" | "last-30" | "this-year" | "custom"
 
 export type DeskRecipientPreview = {
   username: string
@@ -17,10 +29,12 @@ export type DeskHeroDraft = {
   slug: string | null
   title: string
   excerpt: string
+  status: DeskStatusTone
   statusLabel: string
   updatedLabel: string
   wordCount: number
   isActive: boolean
+  collectionIds: string[]
 }
 
 export type DeskActivityRow = {
@@ -36,7 +50,7 @@ export type DeskActivityRow = {
 }
 
 export type DeskActivityGroup = {
-  label: "Today" | "This week" | "Earlier"
+  label: string
   rows: DeskActivityRow[]
 }
 
@@ -51,7 +65,13 @@ export type DeskClientFilter = {
   searchQuery?: string
   selectedCollectionIds?: string[]
   selectedStatuses?: string[]
+  selectedArtifactTypes?: ArtifactType[]
+  createdDateFilter?: DeskCreatedDateFilter | null
+  createdDateFrom?: string
+  createdDateTo?: string
   assignments?: LocalWritingCollection[]
+  groupBy?: DeskGroupBy
+  sortBy?: DeskSortBy
 }
 
 type BuildDeskActivityOptions = {
@@ -60,6 +80,10 @@ type BuildDeskActivityOptions = {
   now?: Date
   recipientPreviewsByWritingId?: Record<string, DeskRecipientPreview[]>
   clientFilter?: DeskClientFilter
+  groupBy?: DeskGroupBy
+  sortBy?: DeskSortBy
+  assignments?: LocalWritingCollection[]
+  collectionOptions?: CollectionOption[]
 }
 
 type WritingMeta = {
@@ -70,6 +94,8 @@ type WritingMeta = {
   bodyText: string
   createdAt: Date
   updatedAt: Date
+  contentUpdatedAt: Date
+  metadataUpdatedAt: Date
   wordCount: number
   isCorrespondence: boolean
   hasResponses: boolean
@@ -77,9 +103,12 @@ type WritingMeta = {
   status: LocalWriting["status"]
   visibility: LocalWriting["visibility"]
   recipientPreviews: DeskRecipientPreview[]
+  artifactType: ArtifactType
+  collectionIds: string[]
 }
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000
+const DAY_IN_MS = 24 * 60 * 60 * 1000
 
 const fallbackDate = new Date(0)
 
@@ -149,10 +178,103 @@ const buildStatusLabel = (
   }
 }
 
+const startOfDay = (date: Date) => {
+  const next = new Date(date)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+const endOfDay = (date: Date) => {
+  const next = new Date(date)
+  next.setHours(23, 59, 59, 999)
+  return next
+}
+
+const matchesCreatedDateFilter = (
+  createdAt: Date,
+  filter: DeskCreatedDateFilter | undefined,
+  from: string | undefined,
+  to: string | undefined,
+  now: Date,
+): boolean => {
+  if (!filter) {
+    return true
+  }
+
+  const created = createdAt.getTime()
+
+  switch (filter) {
+    case "today": {
+      return createdAt.toDateString() === now.toDateString()
+    }
+    case "last-7": {
+      return created >= startOfDay(new Date(now.getTime() - 7 * DAY_IN_MS)).getTime()
+    }
+    case "last-30": {
+      return created >= startOfDay(new Date(now.getTime() - 30 * DAY_IN_MS)).getTime()
+    }
+    case "this-year": {
+      return createdAt.getFullYear() === now.getFullYear()
+    }
+    case "custom": {
+      const fromDate = from ? new Date(from) : null
+      const toDate = to ? new Date(to) : null
+      if (fromDate && Number.isNaN(fromDate.getTime())) {
+        return true
+      }
+      if (toDate && Number.isNaN(toDate.getTime())) {
+        return true
+      }
+      if (fromDate && created < startOfDay(fromDate).getTime()) {
+        return false
+      }
+      if (toDate && created > endOfDay(toDate).getTime()) {
+        return false
+      }
+      return true
+    }
+    default:
+      return true
+  }
+}
+
+const buildAssignmentsByWritingId = (assignments: LocalWritingCollection[] | undefined) => {
+  const map = new Map<string, string[]>()
+  if (!assignments) {
+    return map
+  }
+
+  for (const assignment of assignments) {
+    const current = map.get(assignment.writing_id) ?? []
+    current.push(assignment.collection_id)
+    map.set(assignment.writing_id, current)
+  }
+
+  return map
+}
+
+const sortMetas = (metas: WritingMeta[], sortBy?: DeskSortBy): WritingMeta[] => {
+  const effectiveSort: DeskSortBy = sortBy ?? "created-at-desc"
+
+  return [...metas].sort((left, right) => {
+    switch (effectiveSort) {
+      case "created-at-asc":
+        return left.createdAt.getTime() - right.createdAt.getTime()
+      case "content-updated-at-desc":
+        return right.contentUpdatedAt.getTime() - left.contentUpdatedAt.getTime()
+      case "created-at-desc":
+      default:
+        return right.createdAt.getTime() - left.createdAt.getTime()
+    }
+  })
+}
+
 const buildMetas = (
   writings: LocalWriting[],
   userId?: string | null,
   recipientPreviewsByWritingId?: Record<string, DeskRecipientPreview[]>,
+  assignmentsByWritingId?: Map<string, string[]>,
+  sortBy?: DeskSortBy,
 ): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
   const childrenByParent = new Map<string, number>()
@@ -163,36 +285,42 @@ const buildMetas = (
     }
   }
 
-  return activeWritings
-    .map((writing) => {
-      const updatedAtRaw = writing.updated_at || writing.created_at
-      const updatedAt = toDate(updatedAtRaw)
-      const createdAt = toDate(writing.created_at)
-      const authorId = writing.author_id ?? null
-      const isReceived = Boolean(userId && authorId && authorId !== userId)
+  const metas = activeWritings.map((writing) => {
+    const updatedAtRaw = writing.updated_at || writing.created_at
+    const updatedAt = toDate(updatedAtRaw)
+    const createdAt = toDate(writing.created_at)
+    const contentUpdatedAt = toDate(writing.content_updated_at ?? writing.updated_at ?? writing.created_at)
+    const metadataUpdatedAt = toDate(writing.metadata_updated_at ?? writing.updated_at ?? writing.created_at)
+    const authorId = writing.author_id ?? null
+    const isReceived = Boolean(userId && authorId && authorId !== userId)
 
-      return {
-        id: writing.id,
-        slug: writing.slug ?? null,
-        title: buildTitle(writing.title),
-        excerpt: buildExcerpt(writing.body_text),
-        bodyText: writing.body_text,
-        createdAt,
-        updatedAt,
-        wordCount: buildWordCount(writing.body_text),
-        isCorrespondence: Boolean(
-          writing.correspondence_id ||
-            writing.parent_id ||
-            (childrenByParent.get(writing.id) ?? 0) > 0,
-        ),
-        hasResponses: (childrenByParent.get(writing.id) ?? 0) > 0,
-        isReceived,
-        status: writing.status,
-        visibility: writing.visibility,
-        recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
-      }
-    })
-    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+    return {
+      id: writing.id,
+      slug: writing.slug ?? null,
+      title: buildTitle(writing.title),
+      excerpt: buildExcerpt(writing.body_text),
+      bodyText: writing.body_text,
+      createdAt,
+      updatedAt,
+      contentUpdatedAt,
+      metadataUpdatedAt,
+      wordCount: buildWordCount(writing.body_text),
+      isCorrespondence: Boolean(
+        writing.correspondence_id ||
+          writing.parent_id ||
+          (childrenByParent.get(writing.id) ?? 0) > 0,
+      ),
+      hasResponses: (childrenByParent.get(writing.id) ?? 0) > 0,
+      isReceived,
+      status: writing.status,
+      visibility: writing.visibility,
+      recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
+      artifactType: normalizeArtifactType(writing.artifact_type),
+      collectionIds: assignmentsByWritingId?.get(writing.id) ?? [],
+    }
+  })
+
+  return sortMetas(metas, sortBy)
 }
 
 const applyFilter = (writings: WritingMeta[], filter: DeskActivityFilter) => {
@@ -217,10 +345,30 @@ const normalizeQuery = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
 
-const applyClientFilters = (writings: WritingMeta[], clientFilter: DeskClientFilter): WritingMeta[] => {
-  const { searchQuery, selectedCollectionIds, selectedStatuses, assignments } = clientFilter
+const applyClientFilters = (
+  writings: WritingMeta[],
+  clientFilter: DeskClientFilter,
+  now: Date,
+): WritingMeta[] => {
+  const {
+    searchQuery,
+    selectedCollectionIds,
+    selectedStatuses,
+    selectedArtifactTypes,
+    createdDateFilter,
+    createdDateFrom,
+    createdDateTo,
+    assignments,
+  } = clientFilter
 
-  if (!searchQuery && !selectedCollectionIds?.length && !selectedStatuses?.length) {
+  const hasAnyFilter =
+    searchQuery ||
+    selectedCollectionIds?.length ||
+    selectedStatuses?.length ||
+    selectedArtifactTypes?.length ||
+    createdDateFilter
+
+  if (!hasAnyFilter) {
     return writings
   }
 
@@ -258,9 +406,10 @@ const applyClientFilters = (writings: WritingMeta[], clientFilter: DeskClientFil
     }
 
     if (selectedCollectionSet.size > 0) {
-      const writingCollectionIds = assignmentsByWritingId.get(writing.id) ?? []
+      const writingCollectionIds = assignmentsByWritingId.get(writing.id) ?? writing.collectionIds
 
-      const hasRealCollection = selectedRealCollections.size > 0 &&
+      const hasRealCollection =
+        selectedRealCollections.size > 0 &&
         writingCollectionIds.some((id) => selectedRealCollections.has(id))
 
       const isUncategorized = hasUncategorized && writingCollectionIds.length === 0
@@ -270,11 +419,95 @@ const applyClientFilters = (writings: WritingMeta[], clientFilter: DeskClientFil
       }
     }
 
+    if (selectedArtifactTypes && selectedArtifactTypes.length > 0) {
+      if (!selectedArtifactTypes.includes(writing.artifactType)) {
+        return false
+      }
+    }
+
+    if (createdDateFilter) {
+      if (!matchesCreatedDateFilter(writing.createdAt, createdDateFilter, createdDateFrom, createdDateTo, now)) {
+        return false
+      }
+    }
+
     return true
   })
 }
 
-const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] => {
+const toActivityRow = (writing: WritingMeta, now: Date): DeskActivityRow => {
+  const statusState = buildStatusLabel(writing.status)
+  return {
+    id: writing.id,
+    title: writing.title,
+    excerpt: writing.excerpt,
+    stateLabel: statusState.stateLabel,
+    stateTone: statusState.stateTone,
+    recipientPreviews: writing.recipientPreviews,
+    dateLabel: buildDateLabel(writing.createdAt, now),
+    isNew: writing.isReceived,
+    destinationHref: writing.isReceived
+      ? null
+      : buildWritingRouteHref("/write", { id: writing.id, slug: writing.slug }),
+  }
+}
+
+const buildGroups = (
+  writings: WritingMeta[],
+  now: Date,
+  groupBy: DeskGroupBy = "created-date",
+  collectionOptions: CollectionOption[] = [],
+): DeskActivityGroup[] => {
+  if (groupBy === "none") {
+    return [
+      {
+        label: "",
+        rows: writings.map((writing) => toActivityRow(writing, now)),
+      },
+    ]
+  }
+
+  if (groupBy === "status") {
+    const groups = new Map<DeskStatusTone, DeskActivityRow[]>()
+    for (const writing of writings) {
+      const normalized = normalizeWritingStatus(writing.status)
+      const rows = groups.get(normalized) ?? []
+      rows.push(toActivityRow(writing, now))
+      groups.set(normalized, rows)
+    }
+
+    return WRITING_STATUS_VALUES.filter((status) => groups.has(status)).map((status) => ({
+      label: getWritingStatusLabel(status),
+      rows: groups.get(status) ?? [],
+    }))
+  }
+
+  if (groupBy === "collection") {
+    const optionById = new Map(collectionOptions.map((option) => [option.id, option]))
+    const groups = new Map<string, DeskActivityRow[]>()
+
+    for (const writing of writings) {
+      const primaryId = writing.collectionIds[0] ?? UNCATEGORIZED_COLLECTION_ID
+      const rows = groups.get(primaryId) ?? []
+      rows.push(toActivityRow(writing, now))
+      groups.set(primaryId, rows)
+    }
+
+    const entries = Array.from(groups.entries()).map(([id, rows]) => ({
+      id,
+      label: id === UNCATEGORIZED_COLLECTION_ID ? "No collection" : (optionById.get(id)?.name ?? id),
+      rows,
+    }))
+
+    entries.sort((left, right) => {
+      if (left.id === UNCATEGORIZED_COLLECTION_ID) return 1
+      if (right.id === UNCATEGORIZED_COLLECTION_ID) return -1
+      return left.label.localeCompare(right.label)
+    })
+
+    return entries
+  }
+
   const groups: DeskActivityGroup[] = [
     { label: "Today", rows: [] },
     { label: "This week", rows: [] },
@@ -282,20 +515,7 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
   ]
 
   for (const writing of writings) {
-    const statusState = buildStatusLabel(writing.status)
-    const row: DeskActivityRow = {
-      id: writing.id,
-      title: writing.title,
-      excerpt: writing.excerpt,
-      stateLabel: statusState.stateLabel,
-      stateTone: statusState.stateTone,
-      recipientPreviews: writing.recipientPreviews,
-      dateLabel: buildDateLabel(writing.createdAt, now),
-      isNew: writing.isReceived,
-      destinationHref: writing.isReceived
-        ? null
-        : buildWritingRouteHref("/write", { id: writing.id, slug: writing.slug }),
-    }
+    const row = toActivityRow(writing, now)
 
     if (writing.createdAt.toDateString() === now.toDateString()) {
       groups[0].rows.push(row)
@@ -313,19 +533,26 @@ const buildGroups = (writings: WritingMeta[], now: Date): DeskActivityGroup[] =>
   return groups.filter((group) => group.rows.length > 0)
 }
 
-const buildHeroDrafts = (writings: WritingMeta[], now: Date): DeskHeroDraft[] => {
-  const drafts = writings.filter((writing) => isOpenWritingStatus(writing.status)).slice(0, 8)
+const buildRecentWritings = (writings: WritingMeta[], now: Date): DeskHeroDraft[] => {
+  const recent = [...writings]
+    .sort((left, right) => right.contentUpdatedAt.getTime() - left.contentUpdatedAt.getTime())
+    .slice(0, 10)
 
-  return drafts.map((draft, index) => ({
-    id: draft.id,
-    slug: draft.slug,
-    title: draft.title,
-    excerpt: draft.excerpt,
-    statusLabel: getWritingStatusLabel(draft.status),
-    updatedLabel: buildDateLabel(draft.updatedAt, now),
-    wordCount: draft.wordCount,
-    isActive: index === 0,
-  }))
+  return recent.map((writing, index) => {
+    const statusState = buildStatusLabel(writing.status)
+    return {
+      id: writing.id,
+      slug: writing.slug,
+      title: writing.title,
+      excerpt: writing.excerpt,
+      status: statusState.stateTone,
+      statusLabel: statusState.stateLabel,
+      updatedLabel: buildDateLabel(writing.contentUpdatedAt, now),
+      wordCount: writing.wordCount,
+      isActive: index === 0,
+      collectionIds: writing.collectionIds,
+    }
+  })
 }
 
 const buildCounts = (writings: WritingMeta[]): Record<DeskActivityFilter, number> => ({
@@ -340,16 +567,26 @@ export const buildDeskActivitySummary = (
   options: BuildDeskActivityOptions,
 ): DeskActivitySummary => {
   const now = options.now ?? new Date()
-  const allWritings = buildMetas(writings, options.userId, options.recipientPreviewsByWritingId)
+  const assignmentsByWritingId = buildAssignmentsByWritingId(options.assignments)
+  const allWritings = buildMetas(
+    writings,
+    options.userId,
+    options.recipientPreviewsByWritingId,
+    assignmentsByWritingId,
+    options.sortBy,
+  )
   let filtered = applyFilter(allWritings, options.filter)
 
   if (options.clientFilter) {
-    filtered = applyClientFilters(filtered, options.clientFilter)
+    filtered = applyClientFilters(filtered, options.clientFilter, now)
   }
 
+  const effectiveGroupBy = options.clientFilter?.groupBy ?? options.groupBy ?? "created-date"
+  const effectiveSortBy = options.clientFilter?.sortBy ?? options.sortBy ?? "created-at-desc"
+
   return {
-    heroDrafts: buildHeroDrafts(allWritings, now),
-    groups: buildGroups(filtered, now),
+    heroDrafts: buildRecentWritings(allWritings, now),
+    groups: buildGroups(sortMetas(filtered, effectiveSortBy), now, effectiveGroupBy, options.collectionOptions),
     counts: buildCounts(allWritings),
     total: filtered.length,
   }
