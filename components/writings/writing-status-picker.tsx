@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
-import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { cn } from "@/lib/utils"
 
 type WritingStatusPickerProps = {

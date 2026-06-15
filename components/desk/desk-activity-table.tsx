@@ -16,7 +16,8 @@ import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/q
 import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
-import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { WRITING_STATUS_SURFACE_STYLES } from "@/components/ui/writing-status-badge"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
@@ -40,15 +41,7 @@ type DeskActivityTableProps = {
   hasSelection?: boolean
 }
 
-const STATUS_PILL_STYLES: Record<DeskStatusTone, string> = {
-  new: "bg-[hsl(220,40%,94%)] text-[hsl(220,45%,42%)]",
-  exploring: "bg-[hsl(35,50%,92%)] text-[hsl(35,50%,32%)]",
-  draft: "bg-muted text-ink-4",
-  in_review: "bg-[hsl(260,35%,94%)] text-[hsl(260,40%,40%)]",
-  done: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
-  archived: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
-  canceled: "bg-[hsl(0,30%,94%)] text-[hsl(0,35%,42%)]",
-}
+const STATUS_PILL_STYLES: Record<DeskStatusTone, string> = WRITING_STATUS_SURFACE_STYLES
 
 const buildInitials = (value: string) =>
   value

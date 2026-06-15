@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { Switch } from "@/components/ui/switch"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { bulkRemapStatusToDraft } from "@/lib/writings/bulk-remap"
