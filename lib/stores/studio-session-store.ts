@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react"
 import type { EditorTabSaveState, LocalEditorSessionTab } from "@/lib/local-db/schema"
+import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 export type StudioArtifact = {
   id: string
@@ -44,7 +45,12 @@ function getSnapshot() {
 }
 
 function getArtifactHref(tab: LocalEditorSessionTab) {
-  return tab.writing_id ? `/write/${tab.writing_id}` : "/write?new=1"
+  // Resolve the editor view URL via the shared helper so desktop (static export)
+  // gets /write?id=<uuid> while web keeps /write/<slug>. Hardcoding the path form
+  // here would fail with "Load failed" on hard navigation in the DMG.
+  return tab.writing_id
+    ? buildWritingRouteHref("/write", { id: tab.writing_id, slug: tab.slug })
+    : "/write?new=1"
 }
 
 function toStudioArtifact(tab: LocalEditorSessionTab): StudioArtifact {
