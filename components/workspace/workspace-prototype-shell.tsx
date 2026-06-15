@@ -1107,7 +1107,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   : "No files match your search."}
               </div>
             ) : (
-              <div className="overflow-hidden rounded-[16px] border-[0.5px] border-border bg-sb">
+              <div className="overflow-hidden">
                 <ArtifactTable
                   groups={[{ items: visibleFiles }]}
                   columns={fileColumns}
