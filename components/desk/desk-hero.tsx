@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { Plus } from "lucide-react"
 import { CollectionChips } from "@/components/desk/collection-chips"
-import { WritingStatusBadge } from "@/components/desk/writing-status-badge"
+import { WritingStatusBadge } from "@/components/ui/writing-status-badge"
 import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"

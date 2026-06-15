@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-13",
+  "last_updated": "2026-06-14",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -2287,6 +2287,42 @@
       "date": "2026-06-13",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Shipped via /wf-ship --branch codex/improvements-over-previewODE-272-ODE-277-ODE-280-ODE-278-ODE-276-ODE-279-ODE-286. Annotations preview section: count + up to 3 truncated previews with type chips, See all opens full writing, No annotations yet when empty. Extracted locally from body_json in the single preview fetch (no extra waterfall). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 739 tests PASS. ops:delivery:gate PASS. Performance Contract: not required."
+    },
+    {
+      "issue": "ODE-270",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-270",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/258",
+      "commit": "3a6f1e6",
+      "date": "2026-06-14",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "WritingStatusBadge + WritingStatusIcon canónicos en components/ui; WRITING_STATUS_SURFACE_STYLES compartido elimina duplicación de estilos; variantes compact|full + aria-label; importadores actualizados. Typecheck PASS. Lint PASS (solo warnings pre-existentes en editor-shell). 746 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Shipped via /wf-ship --branch unify-design-system-ODE-270-ODE-285-ODE-290-ODE-289."
+    },
+    {
+      "issue": "ODE-285",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-285",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/258",
+      "commit": "3a6f1e6",
+      "date": "2026-06-14",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "<ArtifactTable /> compartido en components/shared construido con divs flex (no <table>): artifact-table + row(memo) + card(memo) + builders de columnas estándar; modos list/grid; status usa WritingStatusBadge; onRowClick/onActionClick. Typecheck PASS. Lint PASS (solo warnings pre-existentes en editor-shell). 746 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Shipped via /wf-ship --branch unify-design-system-ODE-270-ODE-285-ODE-290-ODE-289."
+    },
+    {
+      "issue": "ODE-289",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-289",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/258",
+      "commit": "3a6f1e6",
+      "date": "2026-06-14",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "DeskActivityTable refactorizado como adaptador delgado sobre <ArtifactTable /> (filas flex); preserva selección, dropdown de estado, colecciones, destinatarios, rename/preview/copy/download/delete, agrupación, filas read-only y data-testid. Typecheck PASS. Lint PASS (solo warnings pre-existentes en editor-shell). 746 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Shipped via /wf-ship --branch unify-design-system-ODE-270-ODE-285-ODE-290-ODE-289."
+    },
+    {
+      "issue": "ODE-290",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-290",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/258",
+      "commit": "3a6f1e6",
+      "date": "2026-06-14",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Workspace detail migrado a <ArtifactTable /> (list, columnas title/date/actions); archivos FS sin registro DB con datos limitados según spec. Typecheck PASS. Lint PASS (solo warnings pre-existentes en editor-shell). 746 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Shipped via /wf-ship --branch unify-design-system-ODE-270-ODE-285-ODE-290-ODE-289."
     }
   ]
 }

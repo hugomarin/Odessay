@@ -6,7 +6,7 @@ import { CollectionAssignmentMenu } from "@/components/collections/collection-as
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
-import { WritingStatusIcon } from "@/components/desk/writing-status-icon"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
