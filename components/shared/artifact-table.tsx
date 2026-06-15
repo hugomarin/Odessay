@@ -32,6 +32,26 @@ export type ArtifactTableProps<T> = {
   gridClassName?: string
 }
 
+/**
+ * A row is navigable when an `onRowClick` is provided AND — if `getRowHref` is
+ * supplied — that row actually resolves to a destination. This lets a table mix
+ * navigable and read-only rows (e.g. Desk's received writings have no href).
+ */
+function resolveActivate<T>(
+  item: T,
+  href: string | null | undefined,
+  getRowHref: ((item: T) => string | null | undefined) | undefined,
+  onRowClick: ((item: T) => void) | undefined,
+): (() => void) | undefined {
+  if (!onRowClick) {
+    return undefined
+  }
+  if (getRowHref && !href) {
+    return undefined
+  }
+  return () => onRowClick(item)
+}
+
 export function ArtifactTable<T>({
   groups,
   columns,
@@ -77,17 +97,17 @@ export function ArtifactTable<T>({
             {mode === "grid" ? (
               <div className={cn(gridClassName, "px-1 py-2")}>
                 {group.items.map((item) => {
-                  const id = getRowId(item)
+                  const href = getRowHref?.(item)
                   return (
                     <ArtifactTableCard
-                      key={id}
+                      key={getRowId(item)}
                       item={item}
                       columns={columns}
-                      href={getRowHref?.(item)}
+                      href={href}
                       ariaLabel={getRowAriaLabel?.(item)}
                       isSelected={isRowSelected?.(item)}
                       leading={renderLeading?.(item)}
-                      onActivate={onRowClick ? () => onRowClick(item) : undefined}
+                      onActivate={resolveActivate(item, href, getRowHref, onRowClick)}
                     />
                   )
                 })}
@@ -95,17 +115,17 @@ export function ArtifactTable<T>({
             ) : (
               <div>
                 {group.items.map((item) => {
-                  const id = getRowId(item)
+                  const href = getRowHref?.(item)
                   return (
                     <ArtifactTableRow
-                      key={id}
+                      key={getRowId(item)}
                       item={item}
                       columns={columns}
-                      href={getRowHref?.(item)}
+                      href={href}
                       ariaLabel={getRowAriaLabel?.(item)}
                       isSelected={isRowSelected?.(item)}
                       leading={renderLeading?.(item)}
-                      onActivate={onRowClick ? () => onRowClick(item) : undefined}
+                      onActivate={resolveActivate(item, href, getRowHref, onRowClick)}
                     />
                   )
                 })}
