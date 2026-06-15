@@ -117,11 +117,13 @@ export function DeskActivityTable({
         data-testid="desk-activity-table"
         className="DeskActivityTable overflow-y-auto"
       >
-        {groups.map((group) => (
-          <div key={group.label}>
-            <div className="bg-sb px-9 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">{group.label}</p>
-            </div>
+        {groups.map((group, groupIndex) => (
+          <div key={group.label || `group-${groupIndex}`}>
+            {group.label && (
+              <div className="bg-sb px-9 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">{group.label}</p>
+              </div>
+            )}
 
             <table className="w-full table-fixed border-collapse">
               <colgroup>

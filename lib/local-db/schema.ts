@@ -1,7 +1,8 @@
+import type { ArtifactType } from "@/lib/writings/artifact-type";
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 13;
+export const LOCAL_DB_VERSION = 14;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -14,6 +15,7 @@ export const LOCAL_DB_STORES = {
 
 export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
 export type { WritingStatus } from "@/lib/writings/status";
+export type { ArtifactType } from "@/lib/writings/artifact-type";
 export type WritingVisibility = "private" | "shared" | "public";
 export type CollectionVisibility = "private" | "public";
 export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed";
@@ -29,6 +31,7 @@ export type LocalWriting = {
   body_text: string;
   slug?: string | null;
   status: WritingStatus;
+  artifact_type?: ArtifactType | null;
   visibility: WritingVisibility;
   parent_id?: string | null;
   correspondence_id?: string | null;
@@ -50,6 +53,7 @@ export type RemoteWritingPayload = {
   body_text: string;
   slug?: string | null;
   status: WritingStatus;
+  artifact_type: ArtifactType;
   visibility: WritingVisibility;
   parent_id?: string | null;
   correspondence_id?: string | null;

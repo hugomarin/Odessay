@@ -20,19 +20,23 @@ import { isTauriRuntime } from "@/lib/runtime/detect"
 import { createBrowserSharingService } from "@/lib/services/web-sharing-service"
 import { cn } from "@/lib/utils"
 import { WritingStatusPicker } from "@/components/writings/writing-status-picker"
+import { ArtifactTypeSelector } from "@/components/ui/artifact-type-selector"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { WritingCollectionsSection } from "./writing-collections-section"
 import { WritingSharesSection } from "./writing-shares-section"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 
 type PropertiesPanelProps = {
   writingId: string | null
   lifecycle: WritingLifecycle
   status: WritingStatus
+  artifactType: ArtifactType
   visibility: WritingVisibility
   metrics: TextMetrics
   spellcheckPreference: EditorSpellcheckPreference
   spellcheckLanguage: string
   onStatusChange: (next: WritingStatus) => void
+  onArtifactTypeChange: (next: ArtifactType) => void
   onVisibilityChange: (next: WritingVisibility) => void
   onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
   onExportMarkdown: () => Promise<void> | void
@@ -160,6 +164,7 @@ export function PropertiesPanel({
   writingId,
   lifecycle,
   status,
+  artifactType,
   visibility,
   metrics,
   spellcheckPreference,
@@ -168,6 +173,7 @@ export function PropertiesPanel({
   onExportPdf,
   onExportDocx,
   onStatusChange,
+  onArtifactTypeChange,
   onVisibilityChange,
   onSpellcheckPreferenceChange,
   onClose,
@@ -389,6 +395,14 @@ export function PropertiesPanel({
             value={status}
             onChange={onStatusChange}
             enabledStatuses={enabledStatuses}
+          />
+        </section>
+
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Artifact Type</p>
+          <ArtifactTypeSelector
+            value={artifactType}
+            onChange={onArtifactTypeChange}
           />
         </section>
 

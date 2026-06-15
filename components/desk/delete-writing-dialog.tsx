@@ -15,16 +15,25 @@ type DeleteWritingDialogProps = {
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   count?: number
+  title?: string
 }
 
-export function DeleteWritingDialog({ open, onOpenChange, onConfirm, count = 1 }: DeleteWritingDialogProps) {
+export function DeleteWritingDialog({ open, onOpenChange, onConfirm, count = 1, title }: DeleteWritingDialogProps) {
+  const displayTitle = title?.trim()
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>Delete {count === 1 ? "writing" : `${count} writings`}</DialogTitle>
+          <DialogTitle>
+            {displayTitle
+              ? `Delete “${displayTitle}”?`
+              : `Delete ${count === 1 ? "writing" : `${count} writings`}`}
+          </DialogTitle>
           <DialogDescription>
-            Are you sure you want to delete {count === 1 ? "this writing" : `these ${count} writings`}? This action cannot be undone.
+            {displayTitle
+              ? "This action can't be undone."
+              : `Are you sure you want to delete ${count === 1 ? "this writing" : `these ${count} writings`}? This action cannot be undone.`}
           </DialogDescription>
         </DialogHeader>
 

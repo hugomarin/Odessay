@@ -34,6 +34,7 @@ const allowedImports = new Set([
   "@/lib/services/contracts/document-service",
   "@/lib/services/contracts/asset-service",
   "@/lib/services/contracts/settings-service",
+  "@/lib/services/contracts/sharing-service",
   "@/lib/services/contracts/service-types",
   "@/lib/services/desktop/tauri-commands",
   "@/lib/services/desktop/tauri-fs-watch",

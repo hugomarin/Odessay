@@ -287,4 +287,131 @@ describe("buildDeskActivitySummary", () => {
     const titlesAfter = after.groups.flatMap((group) => group.rows).map((row) => row.title)
     expect(titlesAfter).toEqual(["Today draft", "Weekly correspondence", "Earlier reply"])
   })
+
+  it("filters by created date", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        createdDateFilter: "today",
+      },
+    })
+
+    expect(summary.total).toBe(1)
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Today draft")
+  })
+
+  it("filters by artifact type", () => {
+    const withArtifactTypes = writings.map((writing) =>
+      writing.id === "draft-today"
+        ? { ...writing, artifact_type: "agent" as const }
+        : { ...writing, artifact_type: "general" as const },
+    )
+
+    const summary = buildDeskActivitySummary(withArtifactTypes, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      clientFilter: {
+        selectedArtifactTypes: ["agent"],
+      },
+    })
+
+    expect(summary.total).toBe(1)
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Today draft")
+  })
+
+  it("groups by status", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "status",
+    })
+
+    const labels = summary.groups.map((group) => group.label)
+    expect(labels).toContain("Draft")
+    expect(labels).toContain("Done")
+    const doneGroup = summary.groups.find((group) => group.label === "Done")
+    expect(doneGroup?.rows.map((row) => row.title)).toEqual(["Weekly correspondence", "Earlier reply"])
+  })
+
+  it("groups by collection", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "collection",
+      assignments: [
+        { id: "a1", writing_id: "draft-today", collection_id: "coll-1", added_at: "2026-03-19T00:00:00.000Z", local_updated_at: 1 },
+        { id: "a2", writing_id: "corr-week", collection_id: "coll-2", added_at: "2026-03-17T00:00:00.000Z", local_updated_at: 1 },
+      ],
+      collectionOptions: [
+        { id: "coll-1", name: "Harness" },
+        { id: "coll-2", name: "AI" },
+      ],
+    })
+
+    const labels = summary.groups.map((group) => group.label)
+    expect(labels).toContain("Harness")
+    expect(labels).toContain("AI")
+    expect(labels).toContain("No collection")
+  })
+
+  it("sorts by content updated at descending", () => {
+    const withContentUpdates = writings.map((writing) => ({
+      ...writing,
+      content_updated_at:
+        writing.id === "reply-earlier"
+          ? "2026-03-19T14:00:00.000Z"
+          : writing.updated_at,
+    }))
+
+    const summary = buildDeskActivitySummary(withContentUpdates, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      sortBy: "content-updated-at-desc",
+    })
+
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Earlier reply")
+  })
+
+  it("sorts by created at ascending", () => {
+    const summary = buildDeskActivitySummary(writings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      sortBy: "created-at-asc",
+    })
+
+    const titles = summary.groups[0]?.rows.map((row) => row.title)
+    expect(titles).toEqual(["Earlier reply", "Weekly correspondence", "Today draft"])
+  })
+
+  it("combines filters, group-by and sort", () => {
+    const withMeta = writings.map((writing) => ({
+      ...writing,
+      artifact_type: writing.id === "draft-today" ? ("agent" as const) : ("general" as const),
+    }))
+
+    const summary = buildDeskActivitySummary(withMeta, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "status",
+      sortBy: "created-at-asc",
+      clientFilter: {
+        selectedArtifactTypes: ["agent"],
+        createdDateFilter: "today",
+      },
+    })
+
+    expect(summary.total).toBe(1)
+    expect(summary.groups[0]?.label).toBe("Draft")
+    expect(summary.groups[0]?.rows[0]?.title).toBe("Today draft")
+  })
 })

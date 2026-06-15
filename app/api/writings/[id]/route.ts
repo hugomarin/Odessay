@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { syncMarginsFromBodyJson } from "@/lib/margins/margins";
+import { ARTIFACT_TYPE_VALUES } from "@/lib/writings/artifact-type";
 import { normalizeWritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status";
 
 const writingPayloadSchema = z.object({
@@ -11,6 +12,7 @@ const writingPayloadSchema = z.object({
   body_text: z.string(),
   slug: z.string().nullable().optional(),
   status: z.enum([...WRITING_STATUS_VALUES, "finished"]).default("draft"),
+  artifact_type: z.enum(ARTIFACT_TYPE_VALUES).default("general"),
   visibility: z.enum(["private", "shared", "public"]).default("private"),
   parent_id: z.string().uuid().nullable().optional(),
   correspondence_id: z.string().uuid().nullable().optional(),
@@ -51,7 +53,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { data, error } = await supabase
     .from("writings")
     .select(
-      "id, author_id, title, body_json, body_text, slug, status, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at, content_updated_at, metadata_updated_at",
+      "id, author_id, title, body_json, body_text, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at, content_updated_at, metadata_updated_at",
     )
     .eq("id", id)
     .eq("author_id", userId)

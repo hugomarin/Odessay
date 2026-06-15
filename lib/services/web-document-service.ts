@@ -14,6 +14,7 @@ import type {
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 import { getExportFileBaseName } from "@/lib/export/writing-export"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { needsBodyHydration } from "@/lib/sync/remote-bootstrap"
@@ -32,6 +33,7 @@ function localWritingToRecord(local: LocalWriting): WritingRecord {
     },
     slug: local.slug ?? null,
     status: local.status,
+    artifactType: normalizeArtifactType(local.artifact_type),
     visibility: local.visibility,
     parentId: local.parent_id ?? null,
     correspondenceId: local.correspondence_id ?? null,
@@ -53,6 +55,7 @@ function recordToLocalWriting(record: WritingRecord, existing?: LocalWriting | n
     body_text: record.content.plainText,
     slug: record.slug,
     status: record.status,
+    artifact_type: record.artifactType,
     visibility: record.visibility,
     parent_id: record.parentId,
     correspondence_id: record.correspondenceId,
@@ -95,6 +98,7 @@ export const webDocumentService: DocumentService = {
           title: local.title ?? null,
           slug: local.slug ?? null,
           status: local.status,
+          artifactType: normalizeArtifactType(local.artifact_type),
           visibility: local.visibility,
           parentId: local.parent_id ?? null,
           correspondenceId: local.correspondence_id ?? null,

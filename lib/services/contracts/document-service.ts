@@ -8,6 +8,7 @@ import {
 
 export type WritingVisibility = "private" | "shared" | "public"
 export type CollectionVisibility = "private" | "public"
+export type ArtifactType = "general" | "agent" | "skill" | "prompt" | "template" | "status"
 export type DocumentCanonicalSource = "pending-document-contract" | "markdown" | "rich-text"
 export type RichDocumentState = Record<string, unknown>
 
@@ -25,6 +26,7 @@ export type WritingRecord = {
   content: WritingContentSnapshot
   slug: string | null
   status: WritingStatus
+  artifactType: ArtifactType
   visibility: WritingVisibility
   parentId: string | null
   correspondenceId: string | null

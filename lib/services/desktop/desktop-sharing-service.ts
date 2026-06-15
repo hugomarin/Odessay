@@ -1,13 +1,6 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
-
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
-import {
-  buildSharedWritingListItem,
-  type RawAuthorProfile,
-  type SharedWritingListItem,
-} from "@/lib/sharing/writing-shares"
+import type { SharedWritingListItem, SharingService } from "@/lib/services/contracts/sharing-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
-import type { BrowserSharingService, RecipientPreview } from "@/lib/services/web-sharing-service"
 
 // Desktop sharing service.
 //
@@ -30,6 +23,16 @@ import type { BrowserSharingService, RecipientPreview } from "@/lib/services/web
 // read methods below.
 
 const MAX_BATCH_SHARE_IDS = 50
+
+type DesktopSupabaseClient = ReturnType<typeof createDesktopClient>
+type RawAuthorProfile = { username: string; display_name: string } | null
+type RecipientPreview = {
+  username: string
+  displayName: string
+}
+type DesktopSharingService = SharingService & {
+  listRecipientPreviews(writingIds: string[]): Promise<ServiceResponse<Record<string, RecipientPreview[]>>>
+}
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -57,6 +60,30 @@ function normalizeProfile(
   return Array.isArray(rawProfile) ? rawProfile[0] ?? null : rawProfile
 }
 
+function buildExcerpt(bodyText: string, maxLen = 120): string {
+  const text = bodyText.trim()
+  if (text.length <= maxLen) return text
+  const cut = text.slice(0, maxLen)
+  const lastSpace = cut.lastIndexOf(" ")
+  return lastSpace > 0 ? `${cut.slice(0, lastSpace)}…` : `${cut}…`
+}
+
+function buildSharedWritingListItem(
+  writing: { id: string; title: string | null; slug: string | null; body_text: string; updated_at: string },
+  author: RawAuthorProfile,
+): SharedWritingListItem {
+  return {
+    id: writing.id,
+    title: writing.title,
+    slug: writing.slug,
+    excerpt: buildExcerpt(writing.body_text),
+    updatedAt: writing.updated_at,
+    author: author
+      ? { username: author.username, displayName: author.display_name }
+      : null,
+  }
+}
+
 type IncomingSharedWritingRow = {
   id: string
   title: string | null
@@ -67,14 +94,14 @@ type IncomingSharedWritingRow = {
   author_display_name: string | null
 }
 
-async function getUserId(supabase: SupabaseClient): Promise<string | null> {
+async function getUserId(supabase: DesktopSupabaseClient): Promise<string | null> {
   const {
     data: { user },
   } = await supabase.auth.getUser()
   return user?.id ?? null
 }
 
-export function createDesktopSharingService(): BrowserSharingService {
+export function createDesktopSharingService(): DesktopSharingService {
   const supabase = createDesktopClient()
 
   return {

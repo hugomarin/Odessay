@@ -38,6 +38,7 @@ const createMutation = (id: string, writingId: string, version: number): SyncMut
     },
     body_text: `Draft ${version}`,
     status: "draft",
+    artifact_type: "general",
     visibility: "private",
     version,
     updated_at: "2026-03-17T00:00:00.000Z",
