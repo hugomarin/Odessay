@@ -20,6 +20,8 @@ import {
   Trash2,
 } from "lucide-react"
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker"
+import { ArtifactTable } from "@/components/shared/artifact-table"
+import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -77,19 +79,6 @@ function formatFileTimestamp(timestamp: number) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(timestamp))
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) {
-    return `${bytes} B`
-  }
-
-  const kb = bytes / 1024
-  if (kb < 1024) {
-    return `${kb.toFixed(1)} KB`
-  }
-
-  return `${(kb / 1024).toFixed(1)} MB`
 }
 
 function fileSecondaryLabel(file: WorkspaceFile) {
@@ -817,17 +806,77 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     return () => window.removeEventListener("focus", handleFocus)
   }, [loadWorkspace])
 
-  const openInEditor = async (file: WorkspaceFile) => {
-    setErrorMessage(null)
+  const openInEditor = useCallback(
+    async (file: WorkspaceFile) => {
+      setErrorMessage(null)
 
-    try {
-      const service = await getDesktopWorkspaceService()
-      const writingId = await service.openFileInEditor(file.path)
-      router.push(`/write?id=${encodeURIComponent(writingId)}`)
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to open file")
-    }
-  }
+      try {
+        const service = await getDesktopWorkspaceService()
+        const writingId = await service.openFileInEditor(file.path)
+        router.push(`/write?id=${encodeURIComponent(writingId)}`)
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to open file")
+      }
+    },
+    [router],
+  )
+
+  const fileColumns = useMemo<ArtifactTableColumn<WorkspaceFile>[]>(
+    () => [
+      {
+        id: "title",
+        grow: true,
+        render: (file) => (
+          <div
+            style={{
+              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
+              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
+            }}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                {file.name}
+              </p>
+            </div>
+            {fileSecondaryLabel(file) !== "Root folder" ? (
+              <p className="truncate pl-[26px] pt-1 text-[12px] text-ink-3">{fileSecondaryLabel(file)}</p>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: "date",
+        width: "w-[160px]",
+        align: "end",
+        render: (file) => (
+          <span className="whitespace-nowrap text-[13px] text-ink-4">
+            {formatFileTimestamp(file.modifiedAt)}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        width: "w-[52px]",
+        align: "end",
+        render: (file) => (
+          <button
+            type="button"
+            aria-label={`Open ${file.name} in editor`}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              void openInEditor(file)
+            }}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+          >
+            <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
+          </button>
+        ),
+      },
+    ],
+    [openInEditor],
+  )
 
   const handleCreateFile = async () => {
     if (!workspace || !newFileName.trim()) {
@@ -1059,74 +1108,13 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
             ) : (
               <div className="overflow-hidden rounded-[16px] border-[0.5px] border-border bg-sb">
-                <table className="w-full table-fixed border-collapse">
-                  <colgroup>
-                    <col />
-                    <col className="w-[90px]" />
-                    <col className="w-[160px]" />
-                    <col className="w-[52px]" />
-                  </colgroup>
-                  <tbody>
-                    {visibleFiles.map((file) => (
-                      <tr
-                        key={file.id}
-                        role="link"
-                        tabIndex={0}
-                        aria-label={`Open ${file.name} in editor`}
-                        onClick={() => void openInEditor(file)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault()
-                            void openInEditor(file)
-                          }
-                        }}
-                        className="group cursor-pointer bg-sb transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 [&:not(:first-child)]:border-t-[0.5px] [&:not(:first-child)]:border-border"
-                      >
-                        <td className="py-[18px] pl-5 pr-5 align-top md:align-middle">
-                          <div
-                            style={{
-                              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-                              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
-                            }}
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
-                              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
-                                {file.name}
-                              </p>
-                            </div>
-                            {fileSecondaryLabel(file) !== "Root folder" ? (
-                              <p className="truncate pl-[22px] pt-1 text-[12px] text-ink-3">
-                                {fileSecondaryLabel(file)}
-                              </p>
-                            ) : null}
-                          </div>
-                        </td>
-                        <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
-                          <span className="whitespace-nowrap">{formatFileSize(file.size)}</span>
-                        </td>
-                        <td className="px-4 py-[18px] text-right align-top text-[13px] text-ink-4 md:align-middle">
-                          <span className="whitespace-nowrap">{formatFileTimestamp(file.modifiedAt)}</span>
-                        </td>
-                        <td className="py-[18px] pl-0 pr-4 align-top md:align-middle">
-                          <div className="flex items-center justify-end">
-                            <button
-                              type="button"
-                              aria-label={`Open ${file.name} in editor`}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void openInEditor(file)
-                              }}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                            >
-                              <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <ArtifactTable
+                  groups={[{ items: visibleFiles }]}
+                  columns={fileColumns}
+                  getRowId={(file) => file.id}
+                  getRowAriaLabel={(file) => `Open ${file.name} in editor`}
+                  onRowClick={(file) => void openInEditor(file)}
+                />
               </div>
             )}
           </section>
