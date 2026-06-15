@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Layers3, LayoutGrid, PanelLeftDashed, Plus, Search, Download, X } from "lucide-react"
+import { Layers3, LayoutGrid, PanelLeftDashed, PenLine, Plus, Search, Download, X } from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
@@ -78,6 +78,13 @@ const NAV_ITEMS: NavItem[] = [
     icon: Layers3,
     section: "sidebar-nav-workspace",
     shortcut: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
+  },
+  {
+    href: "/studio",
+    label: "Studio",
+    icon: PenLine,
+    section: "sidebar-nav-studio",
+    shortcut: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
   },
   {
     href: "/collections",
@@ -360,7 +367,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
           >
             <div className="space-y-2">
               {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+                const isStudioSurface = item.href === "/studio" && pathname.startsWith("/write")
+                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`) || isStudioSurface
                 const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
 
                 return (
