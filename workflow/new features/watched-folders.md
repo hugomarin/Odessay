@@ -2,6 +2,11 @@
 
 **Linear:** [ODE-245](https://linear.app/z9ne/issue/ODE-245)
 
+> **Reconciliación con el ADR de identidad (`workflow/context/core/odessay-adr-identidad.md`).** Este spec acertó en lo esencial (trackear en su lugar, no tocar frontmatter, índice con inode), pero el ADR **supersede** dos puntos:
+> - **Metadata NO va en un sidecar `meta.json` en disco** — va en el **registro de nube** (writing + espejo IndexedDB) (D4). En disco solo vive un **índice de binding delgado** (ruta + inode + content_hash + UUID), no metadata.
+> - **`content_hash` es objetivo/pendiente**, no estado actual: hoy el índice implementado solo guarda inode + size, y la nube no guarda hash (D6/D11). El UUID del índice debe ser el **mismo de la nube** (D5), no un `Uuid::new_v4` propio.
+> - Nombre de la carpeta: **`.odessay/`** (no `.odyssey`, D8).
+
 ## Resumen
 
 Nueva sección **Workspace** en el sidebar izquierdo (debajo de Desk) que permite agregar carpetas de proyectos del filesystem para que Odessay las vigile. Cada archivo `.md` o `.txt` dentro de esas carpetas puede tener metadata en base de datos (status, tipo, etiquetas) y opcionalmente sincronizarse a la nube para acceso web.
@@ -111,7 +116,7 @@ Vincula paths a UUIDs. Usa el `inode` del OS para detectar renombres.
 }
 ```
 
-### `meta.json` por documento
+### `meta.json` por documento  — ⚠️ SUPERSEDED por ADR D4 (la metadata vive en la nube, no en disco)
 
 ```json
 {
