@@ -125,13 +125,15 @@ Los márgenes compartidos no se convierten en un writing independiente en v1 —
 
 ## Contrato de sincronización de márgenes
 
-La relación entre nodos `annotationReference` en `body_json` y la tabla materializada `margins` debe ser explícita y verificable.
+La relación entre la notación de anotación inline en el documento y la tabla materializada `margins` debe ser explícita y verificable.
+
+> **Reconciliado con `workflow/context/core/odessay-adr-identidad.md` (D3).** La fuente de verdad del contenido anotado es el **documento canónico** (el `.md` con `==texto==[@n: comentario]` inline), no `body_json`. `body_json` es la copia de trabajo del editor. `margins` es el **payload en la nube**, atado al `id` estable de cada anotación.
 
 ### Invariantes
 
-1. **`body_json` es la fuente de verdad del contenido anotado.** Los nodos `annotationReference` en el documento TipTap definen qué anotaciones existen, dónde están y de qué tipo son.
-2. **`margins` es un índice materializado.** Su único propósito es permitir listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
-3. **Sincronización por `save`.** Cada `save` del writing extrae nodos `annotationReference` desde `body_json`, hace upsert por `id` en `margins`, y elimina las filas cuyo `id` ya no existe en el documento.
+1. **El documento canónico es la fuente de verdad del contenido anotado.** La notación inline (`==highlight==` define el rango, el marcador lleva el comentario) determina qué anotaciones existen, dónde están y de qué tipo son. El `anchor` (rango) se **deriva del span `==highlight==`** que precede al marcador — no se almacena aparte ni se pierde en el round-trip mientras `==..==` round-trippee.
+2. **`margins` es un payload/índice en la nube.** Su propósito es listar, filtrar y compartir anotaciones, y conservar el estado de colaboración (`resolved/shared/shared_at`) que NO vive en el documento. Reconstruible desde el documento salvo ese estado.
+3. **Sincronización por `save`.** Cada `save` extrae las anotaciones de la copia de trabajo, hace upsert por `id` en `margins`, y elimina las filas cuyo `id` ya no existe. **Riesgo bloqueante (D3):** como el `id` no se codifica inline y el round-trip lo regenera, hoy este paso **borra** el estado de colaboración de cada anotación en cada ciclo. Codificar el `id` estable inline es prerrequisito.
 4. **Transición de schema.** Durante una transición de schema de `margins`, el adapter debe soportar tanto el schema legacy (`note`) como el schema moderno (`type`, `text`, `archived`, `resolved`). El código debe detectar qué schema está activo y adaptar la query sin fallar.
 
 ### Reglas de schema transition

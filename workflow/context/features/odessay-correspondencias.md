@@ -144,7 +144,7 @@ Schema completo en `workflow/context/core/odessay-modelo-datos.md`. Las tablas r
 - `correspondence_id` — FK a correspondences (null si no pertenece a ninguna)
 - `parent_id` — FK al writing que responde (null si es el writing raíz)
 - `visibility` — debe ser `shared` o `public` para ser respondible por otros
-- `body_text` — texto plano extraído de body_json, fuente de verdad para anclajes de márgenes
+- `body_text` — texto plano **derivado** (de la copia de trabajo `body_json`, que a su vez deriva del `.md` canónico). No es fuente de verdad: los anclajes de márgenes se resuelven por el span `==highlight==` + el `id` estable inline de cada anotación (ver `odessay-adr-identidad.md` D1/D3 y `odessay-margenes.md`)
 
 ---
 

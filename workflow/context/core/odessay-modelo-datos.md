@@ -201,7 +201,7 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 
 ### margins
 
-Índice materializado de anotaciones embebidas en la representación rica del documento en el runtime web actual. La fuente de verdad del índice vive hoy en nodos TipTap `annotationReference`; esta tabla existe para listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
+Payload/índice de anotaciones en la nube. La **fuente de verdad del contenido anotado es el documento canónico** (el `.md` con `==texto==[@n:..]` inline; ver `odessay-adr-identidad.md` D3), no `body_json` (copia de trabajo) ni esta tabla. `margins` existe para listar, filtrar y compartir sin reparsear el documento, y para conservar el estado de colaboración (`shared/resolved/shared_at`) que no vive en el documento. Está atada al `id` estable de cada anotación.
 
 | Campo | Tipo | Constraints | Nota |
 |-------|------|-------------|------|
