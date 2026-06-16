@@ -5,6 +5,7 @@
 - **Decide:** Hugo (esta es la decisión que ningún skill/doc estaba facultado para tomar)
 - **Reemplaza:** el marco "de transición" que aplazaba la polaridad A1/A2/A3
 - **Gobernanza:** este ADR es la **fuente de verdad de la arquitectura de documento**. Los cuatro `odessay-desktop-*` y los skills de arquitectura/backend/database deben referenciarlo.
+- **Estado del corpus vs. código:** este ADR y los docs reconciliados son **normativos y van por delante del código**. D3 (id inline), D5 (UUID único), D6/D11 (`content_hash` en índice y nube), D7 (repliegue de `rehome`) describen el **destino**, no el runtime actual (hoy el código corre el modelo A+B). Leer los docs de feature como contrato objetivo, no como descripción del estado vigente; cada brecha doc↔código está marcada como trabajo bloqueante en §Consecuencias.
 
 ---
 

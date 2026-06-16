@@ -39,8 +39,7 @@ Antes de cualquier operación, lee `workflow/context/core/odessay-modelo-datos.m
 
 - `profiles` — Extiende auth.users. Username, display_name, bio.
 - `writings` — La unidad fundamental. Body en JSON (TipTap) + texto plano. Estado (draft/finished) y visibilidad (private/shared/public) como dimensiones independientes.
-  - En runtime web/cloud actual `body_json` sigue siendo persistencia remota operativa.
-  - En dirección desktop, eso no equivale al contrato documental canónico del producto.
+  - `body_json` es **copia de trabajo / persistencia remota** del contenido, no su autoridad: el contenido canónico es el `.md` (ADR D1). La nube guarda una **copia** del contenido más la metadata autoritativa (D10). El contrato es único entre runtimes; solo cambia el substrato (markdown en desktop, `body_json` persistido en web), no la autoridad.
 - `correspondences` — Identidad del diálogo. Se crea cuando un writing recibe su primera respuesta.
 - `collections` — Agrupaciones del autor. Un writing puede estar en múltiples collections.
 - `writing_collections` — Join table.

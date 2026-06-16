@@ -41,7 +41,7 @@
 
 ## Definición de "hecho" (auditable)
 - Ningún doc afirma "body_json/body_text es la fuente de verdad del contenido anotado/anclajes".
-- `grep -rn "odyssey" workflow/` → 0.
+- Ningún doc-contrato **enseña** `.odyssey` como el nombre correcto de la carpeta de marca (el normativo `odessay-workspace.md` quedó corregido; `watched-folders.md` dice explícitamente "no `.odyssey`"). Las menciones legítimas que **deben** subsistir: el ADR documentando el rename (D8), este plan, el corrections-log (registro histórico) y el filename del mockup `editor-tabs-odyssey-mockup.html`. El rename de `.odyssey` en **código** + carpetas reales es trabajo del plan de fases, no de esta pasada de docs.
 - `watched-folders.md` dice "metadata en la nube" y marca `content_hash` pendiente.
 - Cada `odessay-desktop-*` y los skills de F referencian el ADR.
 - El repliegue de `rehome` está documentado.
