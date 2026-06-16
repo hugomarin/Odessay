@@ -5,7 +5,7 @@ description: "Workflow de Product Manager para Odessay en Linear: definición de
 
 # Skill: Product Manager (Linear)
 
-Este skill tiene dos funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega.
+Este skill tiene tres funciones. Primera, definir cómo se escribe y ejecuta cada issue para que sea completamente ejecutable por un agente de código o legible por un humano sin ambigüedad. Segunda, establecer el proceso de orquestación: cómo se secuencian los issues, cómo se hace seguimiento, y cómo se valida la entrega. Tercera —y la que falla cuando un trabajo se ejecuta impecablemente y aun así sale mal— **garantizar que la definición sobre la que se construye el brief es verdadera** (reconciliada con el código, no solo internamente consistente) **y que el resultado entregado fue aceptado por el dueño** contra su intención. Sin la tercera función, las dos primeras producen ejecución perfecta de la cosa equivocada.
 
 El alcance específico del proyecto — fases e issues macro — vive en `workflow/define/roadmap.md`. Lee ese documento antes de crear issues.
 
@@ -55,6 +55,7 @@ La `Execution Trace` mínima debe declarar:
 - `Skills loaded`
 - `Specialist consults`
 - `Audit run`
+- `Definition check` — resultado de la verificación de definición (ver §Verificación de definición): `docs↔code↔linear = consistente` o `contradicción detectada (bloquea)`. No se puede cerrar una definición con este campo vacío.
 - `Artifacts created`
 - `Why`
 
@@ -93,6 +94,36 @@ Regla:
 - si un issue cambia arquitectura, contratos, runtime boundaries, documento canónico o secuencia de migración, el brief no puede quedarse solo con docs técnicos locales del feature; debe incluir el doc desktop correspondiente
 - si el prompt menciona desktop de forma estratégica y el PM no cita ninguno de estos docs, el brief está incompleto
 - si además el issue cruza frontend/backend/database, el PM debe usar `skill-architecture` para clasificar ownership y boundaries antes de cerrar el brief
+
+---
+
+## Verificación de definición — antes de escribir el brief
+
+El resto del skill da por hecho que los docs que el brief cita son verdaderos. **No lo asumas.** El modo de falla más caro de Odessay no es un brief ambiguo: es un brief perfecto construido sobre una definición stale, que BUILD ejecuta impecablemente y produce *la cosa equivocada con toda consistencia*. Antes de citar cualquier doc como contrato del issue, verifícalo.
+
+### Regla rectora: consistencia ≠ corrección
+
+Que un doc sea internamente coherente, o que coincida con otros docs, **no** lo hace correcto. Un error repetido en tres docs sigue siendo un error. La definición se valida contra **el código real** y **la intención del producto**, no contra "así estaba escrito".
+
+### Qué verificar (por cada doc que el brief va a citar como contrato)
+
+1. **docs ↔ code.** Las afirmaciones clave del doc que condicionan este issue, ¿siguen siendo ciertas en el código que describe? (Abre el archivo/función que el doc nombra y compáralo. No infieras desde el doc.) Ejemplo real: un doc decía "`body_json` es la fuente de verdad" mientras la dirección del producto era `.md` canónico — un brief que lo citara habría pedido lo contrario de lo correcto.
+2. **docs ↔ docs.** ¿El doc contradice a otro doc del corpus, o a un skill? Si dos fuentes se contradicen, **no promedies** ni elijas una por inercia.
+3. **docs ↔ Linear.** ¿El spec del issue en Linear contradice lo que dice el doc, o lo que hace el código?
+4. **¿El doc es normativo por delante del código?** Algunos docs describen el *destino*, no el runtime actual (p. ej. el corpus de identidad de documento reconciliado por su ADR). Si es así, el brief debe **marcar qué partes son destino vs. estado actual**, para que BUILD no implemente el destino prematuramente ni lea el doc como descripción del runtime vigente.
+
+### Qué hacer cuando hay contradicción
+
+Una contradicción detectada (docs↔code, docs↔docs, docs↔linear) es **bloqueante**, igual que un `Context Gap` por doc faltante. No se resuelve dentro del brief:
+
+- Escálala al dueño, o
+- abre una **reconciliación de contexto** formal antes de construir el brief (precedente: el ADR de identidad de documento `workflow/context/core/odessay-adr-identidad.md`, que cerró una polaridad que ningún skill estaba facultado para resolver).
+
+Marcar el brief como `needs-clarification` / `blocked` y declarar la contradicción es correcto. Construir el brief encima de la contradicción "porque el doc lo dice" es el error que esta sección existe para evitar.
+
+### Salida obligatoria
+
+El campo `Definition check` de la `Execution Trace` registra el resultado: `docs↔code↔linear = consistente` o `contradicción detectada (bloquea)` con la contradicción concreta. Un brief no está listo para DEFINE/BUILD con este campo vacío.
 
 ---
 
@@ -307,6 +338,25 @@ Approval rule:
 - Diff toca `lib/sync/*`, `lib/local-db/*` o `lib/collections/*` → fan-out `required`.
 - Diff toca `components/editor/**` o `app/(app)/write/**` → latencia `required`.
 
+## Visual / UX Contract
+
+Hay un Performance Contract de cinco dimensiones pero, históricamente, **ningún contrato visual** — y ese hueco dejó pasar superficies que funcionaban pero no se veían ni se comportaban como debían (p. ej. una tabla de Workspace que debía ser idéntica a la de Desk y salió con fondo, borde redondeado e ícono que Desk no tiene). "Se ve como X" no es aceptable como intención implícita: si no está escrito y es verificable, no se cumple.
+
+**Cuándo es `required`:** todo issue etiquetado `frontend`, o que toque `components/**`, `app/(app)/**/page.tsx`, o cualquier superficie visible al usuario. Como en el Performance Contract, marcar `not required` exige justificación; no es un default silencioso.
+
+```
+Visual / UX Contract:
+  Referencia visual:   [superficie existente que debe igualarse | anchor de design spec | screenshot adjunto]
+  Criterio de paridad: [enumerado y verificable — ej. "mismo fondo/borde/columnas/sin ícono que DeskActivityTable;
+                        misma densidad de fila; mismo empty state"]
+  Comportamiento:      [estados que deben coincidir — hover, selección, loading, vacío, error]
+  Fuera de alcance:    [diferencias intencionales permitidas, si las hay]
+Evidence required in PR:
+  - Screenshot lado-a-lado de la superficie nueva contra la referencia, por cada criterio de paridad.
+```
+
+**Regla.** Si el issue dice "igual que <otra superficie>", el criterio de paridad debe nombrar la superficie de referencia concreta (componente/archivo) y enumerar en qué dimensiones debe ser idéntica. "Igual que Desk" sin enumerar qué significa "igual" es exactamente la ambigüedad que produjo el mismatch.
+
 ## Reference docs
 Documentos del proyecto que el agente debe leer antes de implementar.
 Usar siempre paths completos desde la raíz del repo.
@@ -408,7 +458,12 @@ Si este gate falla, el issue no puede pasar a `In Review`.
 ### Validation
 [LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.
 
-**El owner de Odessay es no técnico.** El agente es el único responsable de la calidad del código. El humano no hace code review — confía en las validaciones del agente. Por eso el proof of work es obligatorio e irremplazable: es la única forma que tiene el humano de saber que el trabajo está bien hecho antes de aprobar el merge.
+**El owner de Odessay es no técnico — pero eso no lo saca de la aceptación.** Hay que separar dos cosas que antes estaban colapsadas:
+
+- **Calidad de código:** la valida el agente. El humano no hace code review; confía en el proof of work (typecheck/lint/tests + evidencia). Esto sigue igual.
+- **Aceptación del resultado:** la hace el humano. El dueño no técnico **sí** puede juzgar el *outcome* — si la tabla de Workspace se ve como la de Desk, si Studio lo manda al editor, si el flujo hace lo que el issue prometía. Confundir "no puede revisar código" con "no puede aceptar resultados" es lo que dejó shippear mismatches visibles: el agente auto-validaba el código y nadie con intención de producto miraba el resultado antes de Done.
+
+Por eso, para todo issue con comportamiento visible al usuario, el agente debe entregar —además del proof of work de código— un **demo de outcome** que el dueño pueda aceptar o rechazar (ver §Aceptación de resultado del dueño). El proof of work prueba que el código corre; el demo de outcome prueba que el resultado es el correcto. Son cosas distintas y se exigen las dos.
 
 **Checks obligatorios en todo issue:**
 ```bash
@@ -423,6 +478,16 @@ Pegar el output de estos tres comandos en la descripción del PR. Sin este outpu
 - Verifica que no hay errores en consola del browser durante el flujo.
 - Verifica estados de carga, errores y casos edge definidos en Requirements.
 - Pegar screenshot o log del resultado en el PR.
+
+**Si el issue tiene `Visual / UX Contract` required:**
+- Adjunta el screenshot lado-a-lado de la superficie nueva contra la referencia, por cada criterio de paridad declarado.
+- "No hay errores en consola" NO cubre paridad visual; un mismatch de fondo/borde/ícono/columnas pasa todos los checks técnicos. La comparación visual es el único check que lo atrapa.
+
+**Aceptación de resultado del dueño (issues con comportamiento visible al usuario):**
+- Antes de pedir el merge, el agente publica un **demo de outcome**: screenshots del estado final de cada Requirement, o un recording corto del flujo real, mostrando el resultado **contra la intención** que el issue declaró (no contra el código).
+- El demo se publica en el PR y se enlaza en el comentario de trazabilidad de Linear.
+- El dueño acepta o rechaza sobre el resultado. Un rechazo de outcome devuelve el issue a `In Progress`, igual que un review de código rechazado.
+- Este gate es independiente del proof of work de código: typecheck/lint/tests verdes no sustituyen la aceptación del resultado.
 
 **Si `Performance Contract` es requerido:**
 - Captura trace reproducible (`node scripts/capture-editor-trace.mjs` o comando equivalente declarado en el brief).
@@ -446,6 +511,8 @@ Ejemplo: El usuario puede crear un writing desde /write, escribir texto, y verif
 persiste al recargar la página. El auto-save no genera errores en consola. La persistencia
 observada coincide con el contrato del runtime que el issue declara explícitamente
 (por ejemplo: base local web actual, sync remoto, o write-path desktop).
+
+Para issues con comportamiento visible al usuario, Done exige además la **aceptación de resultado del dueño** sobre el demo de outcome (ver §Validation), no solo el merge. Un issue cuyo código corre pero cuyo resultado el dueño no aceptó NO está Done.
 
 ## Notes
 Contexto adicional, decisiones de diseño tomadas, edge cases conocidos, restricciones.
@@ -575,3 +642,9 @@ Un skill en Files affected es ruido. `.agents/skills/skill-design/SKILL.md (refe
 Un issue con checkpoint humano sin sección Handoff bloquea silenciosamente. Si el agente necesita que el humano cree un servicio externo o llene credenciales y no lo declara explícitamente, el agente intentará ejecutar contra un entorno inexistente y fallará sin diagnóstico claro. Cualquier issue que toque servicios externos (Supabase, Vercel, GitHub, APIs de terceros) necesita sección Handoff.
 
 Un issue que propone `router.push()` para estado interno contradice la arquitectura local-first. Si el issue describe tabs, filtros, o paneles que usan navegación de página para mostrar datos que ya están en `localDB`, debe ser reconsiderado. Ver `workflow/context/features/odessay-sync.md`.
+
+Un brief construido sobre un spec que contradice el código propaga el error con consistencia. Si el doc citado afirma algo que el código real ya no hace (o contradice a otro doc, o al spec de Linear), el brief hereda la mentira y BUILD ejecuta impecablemente la cosa equivocada. Consistencia ≠ corrección. Una contradicción detectada es bloqueante: se escala o se reconcilia el contexto primero (ver §Verificación de definición). No se promedia ni se elige una versión por inercia.
+
+Un issue de UI sin `Visual / UX Contract` está incompleto. "Se ve como Desk" no es una intención implícita que BUILD pueda adivinar y REVIEW pueda verificar. Sin referencia visual nombrada y criterio de paridad enumerado, el resultado pasa todos los checks técnicos y aun así no coincide. Ver §Visual / UX Contract.
+
+Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Aceptación de resultado del dueño.
