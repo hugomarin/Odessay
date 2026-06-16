@@ -188,7 +188,7 @@ Archivos reconciliados en esta ronda:
 
 - `features/odessay-anotaciones-ai.md`, `features/odessay-margenes.md`, `features/odessay-correspondencias.md`, `features/odessay-fase4-runtime-contract-audit.md`, `core/odessay-modelo-datos.md` (índice de anotaciones) → `body_json`/`body_text` dejan de ser verdad; modelo D3.
 - `features/odessay-workspace.md` → `.odyssey` → `.odessay` (typo de marca).
-- `new features/watched-folders.md` → metadata a la nube (no `meta.json` en disco); `content_hash` marcado como pendiente.
+- `core/odessay-watched-folders.md` → metadata a la nube (no `meta.json` en disco); `content_hash` marcado como pendiente.
 - los cuatro `odessay-desktop-*` y los skills `architecture/backend/database` → referencian el ADR.
 
 Motivo:

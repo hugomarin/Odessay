@@ -1,7 +1,7 @@
 # ODESSAY — Workspace
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace.
+Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace. El **spec de implementación** de carpetas vigiladas (índice de binding `.odessay/`, watcher, sync, snapshots) vive en `workflow/context/core/odessay-watched-folders.md`.
 
 Este documento fija el contrato actual de **Workspace** en Odessay: qué existe en desktop, qué no existe en web y cuál debe ser el comportamiento explícito de la UI cuando el runtime no puede ofrecer acceso al filesystem local.
 

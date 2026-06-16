@@ -48,6 +48,13 @@
       "state": "canonical-with-transition-notes",
       "description": "Flujos de usuario paso a paso (11 secciones): registrarse, escribir, publicar, leer, organizar, navegar el editor, responder, invitar y formatear. Depende de odessay-paginas.md para el mecanismo de respuesta."
     },
+    {
+      "path": "workflow/context/core/odessay-watched-folders.md",
+      "type": "core",
+      "scope": "workspace-desktop-filesystem-metadata",
+      "state": "spec-subordinado-al-adr-identidad",
+      "description": "Spec de Workspace / Watched Folders (ODE-245): carpetas vigiladas, índice de binding en .odessay/, watcher FSEvents, snapshots y sync. Subordinado al ADR de identidad (odessay-adr-identidad.md): la metadata vive en la nube no en meta.json (D4), content_hash es objetivo pendiente (D6/D11), carpeta .odessay no .odyssey (D8). Complementa el contrato de runtime de odessay-workspace.md."
+    },
 
     {
       "path": "workflow/context/features/odessay-editor.md",
