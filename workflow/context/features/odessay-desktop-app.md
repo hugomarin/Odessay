@@ -5,6 +5,11 @@ Lee `workflow/context/core/odessay-fundacional.md` para la visión, `workflow/co
 
 Este documento captura la **dirección objetivo** de Odessay como Desktop App. No describe el estado exacto del runtime web actual; describe la arquitectura y las decisiones que deben guiar la implementación desktop y la convergencia futura entre web y desktop.
 
+> **Fuente de verdad de la arquitectura de documento: `workflow/context/core/odessay-adr-identidad.md` (ADR).** Este documento se subordina al ADR en identidad, fuente de verdad y metadata. Precisiones que el ADR fija:
+> - La metadata (`id/slug/status/visibility/version`) **no va en el frontmatter del `.md`**: el `.md` es solo contenido; la metadata vive en el registro de nube + espejo IndexedDB (D4).
+> - **Archivos en su lugar:** se repliega `rehomeProtectedCanonicalPaths` (comportamiento de código que hoy mueve archivos de Documents/Desktop/Downloads a almacenamiento interno y contradice "trabajar sin moverlos"). El binding se mantiene por ruta + inode + content_hash (D6/D7).
+> - Identidad portable cross-máquina requiere guardar `content_hash` también en la nube (D11); la identidad es un solo UUID (cliente = nube, D5).
+
 Para implementación y secuenciación, este documento se complementa con:
 
 - `workflow/context/features/odessay-desktop-migration-diagnostic.md`

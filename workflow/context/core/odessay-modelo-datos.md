@@ -5,6 +5,8 @@ Lee `odessay-fundacional.md` para la visión y `odessay-stack.md` para las tecno
 
 Este documento describe principalmente el **modelo de datos remoto/cloud y el estado actual del runtime web**.
 
+> **En arquitectura de documento, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** este schema remoto es la **autoridad de la metadata** y guarda una **copia** del contenido; la verdad del contenido es el `.md` canónico (D1/D10). El registro de nube debe sumar `content_hash` para reconciliar archivos desnudos cross-máquina (D11).
+
 No define por sí solo el contrato documental futuro del producto. Para la estrategia desktop y el rol de `.md` como documento canónico, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`
