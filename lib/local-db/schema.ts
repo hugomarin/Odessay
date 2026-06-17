@@ -26,6 +26,11 @@ export type LocalWriting = {
   id: string;
   author_id?: string | null;
   title?: string | null;
+  /**
+   * Desktop materialization binding only. When present, the file at this path is
+   * the durable content substrate; when absent, the writing may still exist as a
+   * cloud/web record whose persisted body_json remains valid.
+   */
   canonical_path?: string | null;
   body_json: Record<string, unknown>;
   body_text: string;

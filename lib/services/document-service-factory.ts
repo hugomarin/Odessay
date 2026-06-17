@@ -75,6 +75,8 @@ function deriveDraftTitleFromPlainText(plainText: string, fallback: string) {
 }
 
 function toCanonicalRecord(local: LocalWriting): WritingRecord {
+  const hasMaterializedMarkdown = Boolean(local.canonical_path?.trim())
+
   return {
     id: local.id,
     authorId: local.author_id ?? null,
@@ -83,7 +85,7 @@ function toCanonicalRecord(local: LocalWriting): WritingRecord {
       richText: local.body_json,
       markdown: null,
       plainText: local.body_text,
-      canonicalSource: local.canonical_path ? "markdown" : "rich-text",
+      canonicalSource: hasMaterializedMarkdown ? "markdown" : "rich-text",
     },
     slug: local.slug ?? null,
     status: local.status,
@@ -289,6 +291,10 @@ class DesktopDocumentService implements DocumentService {
       const mappedCanonicalPath =
         existing?.canonical_path ??
         existingByCanonicalPath?.canonical_path
+
+      if (existing && !mappedCanonicalPath) {
+        return ok(toCanonicalRecord(existing))
+      }
 
       if (!mappedCanonicalPath && isProtectedCanonicalPath(writingId)) {
         return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Artifact Studio copy.")

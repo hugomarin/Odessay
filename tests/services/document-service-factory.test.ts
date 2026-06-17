@@ -337,7 +337,51 @@ version: 2
         status: "done",
         visibility: "public",
         version: 7,
+        body_text: "File body",
       }),
     )
+  })
+
+  it("opens cloud-only desktop records from body_json without treating the writing id as a file path", async () => {
+    mocks.getMock.mockResolvedValueOnce({
+      id: "cloud-only-writing",
+      author_id: "user-1",
+      title: "Cloud only",
+      canonical_path: null,
+      body_json: {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Persisted web body" }] }],
+      },
+      body_text: "Persisted web body",
+      slug: "cloud-only",
+      status: "draft",
+      visibility: "private",
+      parent_id: null,
+      correspondence_id: null,
+      version: 4,
+      sync_status: "synced",
+      lifecycle: "server-confirmed",
+      deleted_at: null,
+      created_at: "2026-06-01T00:00:00.000Z",
+      updated_at: "2026-06-02T00:00:00.000Z",
+      local_updated_at: 1,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting("cloud-only-writing")
+
+    expect(result.error).toBeNull()
+    expect(result.data).toMatchObject({
+      id: "cloud-only-writing",
+      title: "Cloud only",
+      content: {
+        plainText: "Persisted web body",
+        canonicalSource: "rich-text",
+      },
+    })
+    expect(mocks.getByCanonicalPathMock).toHaveBeenCalledWith("cloud-only-writing")
+    expect(mocks.openWritingMock).not.toHaveBeenCalled()
+    expect(mocks.saveMock).not.toHaveBeenCalled()
   })
 })
