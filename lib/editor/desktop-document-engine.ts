@@ -1,7 +1,6 @@
 import type { Editor, JSONContent } from "@tiptap/core"
 import {
   parseDocumentFileToSnapshot,
-  serializeDocumentFile,
   serializeDocumentToMarkdown,
   serializeEditorToMarkdown,
   type CanonicalDocumentFileSnapshot,
@@ -109,14 +108,19 @@ export class DesktopDocumentEngine {
   }
 
   /**
-   * Serialize a canonical source document with front-matter + markdown body.
+   * Serialize a canonical source document as markdown content only.
+   *
+   * The metadata parameter is accepted for legacy call sites, but Odessay
+   * metadata now lives in the cloud record + IndexedDB mirror, never in .md
+   * frontmatter.
    */
   serializeSourceDocument(
     bodyJson: JSONContent | null | undefined,
     metadata: CanonicalDocumentMetadata,
   ): DesktopSerializeResult {
     try {
-      const markdown = serializeDocumentFile(bodyJson, metadata)
+      void metadata
+      const markdown = serializeDocumentToMarkdown(bodyJson)
       return { success: true, markdown }
     } catch (error) {
       return {
@@ -159,18 +163,6 @@ export class DesktopDocumentEngine {
       return {
         ok: false,
         error: `Round-trip mismatch.\nOriginal:\n${normalizedOriginal}\nRound-trip:\n${normalizedRoundTrip}`,
-      }
-    }
-
-    if (parsedDocument.document.metadata || reparsedDocument.document.metadata) {
-      const normalizedOriginalMetadata = JSON.stringify(parsedDocument.document.metadata)
-      const normalizedRoundTripMetadata = JSON.stringify(reparsedDocument.document.metadata)
-
-      if (normalizedOriginalMetadata !== normalizedRoundTripMetadata) {
-        return {
-          ok: false,
-          error: `Front-matter mismatch.\nOriginal:\n${normalizedOriginalMetadata}\nRound-trip:\n${normalizedRoundTripMetadata}`,
-        }
       }
     }
 

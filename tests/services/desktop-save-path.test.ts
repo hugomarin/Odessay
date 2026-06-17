@@ -96,7 +96,8 @@ describe("desktop save path migration", () => {
     expect(result).toEqual({ migratedCount: 1, skippedCount: 1 })
     expect(createDraftMock).toHaveBeenCalledTimes(1)
     expect(saveWritingMock).toHaveBeenCalledTimes(1)
-    expect(saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).toContain("id: writing-1")
+    expect(saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("id: writing-1")
+    expect(saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("---")
     expect(saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).toContain("Hello desktop")
     expect(saveMock).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -260,5 +260,84 @@ describe("document-service-factory", () => {
     expect(result.error).toBeNull()
     expect(mocks.enqueueWritingUpsertMock).toHaveBeenCalledTimes(1)
     expect(mocks.saveWritingMock).toHaveBeenCalledTimes(1)
+    expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("---")
+    expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("id:")
+  })
+
+  it("uses IndexedDB metadata instead of legacy file frontmatter when opening desktop markdown", async () => {
+    mocks.getMock.mockResolvedValueOnce(null)
+    mocks.getByCanonicalPathMock.mockResolvedValueOnce({
+      id: "writing-from-index",
+      author_id: null,
+      title: "Indexed metadata",
+      canonical_path: "/tmp/documents/Artifact Studio/legacy.md",
+      body_json: { type: "doc", content: [] },
+      body_text: "",
+      slug: "indexed-slug",
+      status: "done",
+      visibility: "public",
+      parent_id: null,
+      correspondence_id: null,
+      version: 7,
+      sync_status: "synced",
+      lifecycle: "server-confirmed",
+      deleted_at: null,
+      created_at: "2026-06-01T00:00:00.000Z",
+      updated_at: "2026-06-02T00:00:00.000Z",
+      local_updated_at: 1,
+    })
+    mocks.openWritingMock.mockResolvedValueOnce({
+      data: {
+        id: "/tmp/documents/Artifact Studio/legacy.md",
+        authorId: null,
+        title: "File title",
+        content: {
+          markdown: `---
+id: legacy-frontmatter-id
+slug: legacy-slug
+status: draft
+visibility: private
+version: 2
+---
+
+# File body`,
+          richText: null,
+          plainText: "File body",
+          canonicalSource: "markdown",
+        },
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parentId: null,
+        correspondenceId: null,
+        version: 2,
+        deletedAt: null,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        updatedAt: "2026-06-04T00:00:00.000Z",
+      },
+      error: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting("/tmp/documents/Artifact Studio/legacy.md")
+
+    expect(result.error).toBeNull()
+    expect(result.data).toMatchObject({
+      id: "writing-from-index",
+      slug: "indexed-slug",
+      status: "done",
+      visibility: "public",
+      version: 7,
+    })
+    expect(mocks.saveMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "writing-from-index",
+        slug: "indexed-slug",
+        status: "done",
+        visibility: "public",
+        version: 7,
+      }),
+    )
   })
 })

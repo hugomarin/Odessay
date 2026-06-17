@@ -224,15 +224,7 @@ class DesktopDocumentService implements DocumentService {
 
   private buildCanonicalMarkdown(record: WritingRecord) {
     const bodyJson = (record.content.richText as Record<string, unknown> | null | undefined) ?? EMPTY_EDITOR_JSON
-    const serialization = desktopDocumentEngine.serializeSourceDocument(bodyJson, {
-      id: record.id,
-      slug: record.slug,
-      status: record.status,
-      visibility: record.visibility,
-      version: Math.max(1, record.version),
-      createdAt: record.createdAt,
-      updatedAt: record.updatedAt,
-    })
+    const serialization = desktopDocumentEngine.serializeBodyJson(bodyJson)
 
     if (!serialization.success) {
       throw new Error(serialization.error)
@@ -293,6 +285,7 @@ class DesktopDocumentService implements DocumentService {
       await this.ensureMigrated()
       const existing = await localDB.writings.get(writingId)
       const existingByCanonicalPath = await localDB.writings.getByCanonicalPath(writingId)
+      const existingRecord = existing ?? existingByCanonicalPath
       const mappedCanonicalPath =
         existing?.canonical_path ??
         existingByCanonicalPath?.canonical_path
@@ -313,27 +306,26 @@ class DesktopDocumentService implements DocumentService {
         return err("INVALID_INPUT", parsed.error)
       }
 
-      const metadata = parsed.document.metadata
       const canonicalId =
-        existing?.id ?? existingByCanonicalPath?.id ?? metadata?.id ?? writingId
+        existingRecord?.id ?? writingId
       const localWriting: LocalWriting = {
         id: canonicalId,
-        author_id: existing?.author_id ?? null,
-        title: existing?.title ?? fileResult.data.title,
+        author_id: existingRecord?.author_id ?? null,
+        title: existingRecord?.title ?? fileResult.data.title,
         canonical_path: canonicalPath,
         body_json: parsed.document.snapshot.bodyJson as Record<string, unknown>,
         body_text: parsed.document.snapshot.bodyText,
-        slug: metadata?.slug ?? existing?.slug ?? null,
-        status: metadata?.status ?? existing?.status ?? "draft",
-        visibility: metadata?.visibility ?? existing?.visibility ?? "private",
-        parent_id: existing?.parent_id ?? null,
-        correspondence_id: existing?.correspondence_id ?? null,
-        version: metadata?.version ?? existing?.version ?? 1,
-        sync_status: existing?.sync_status ?? "synced",
-        lifecycle: existing?.lifecycle ?? "local-only",
-        deleted_at: existing?.deleted_at ?? null,
-        created_at: metadata?.createdAt ?? existing?.created_at ?? fileResult.data.createdAt,
-        updated_at: metadata?.updatedAt ?? existing?.updated_at ?? fileResult.data.updatedAt,
+        slug: existingRecord?.slug ?? null,
+        status: existingRecord?.status ?? "draft",
+        visibility: existingRecord?.visibility ?? "private",
+        parent_id: existingRecord?.parent_id ?? null,
+        correspondence_id: existingRecord?.correspondence_id ?? null,
+        version: existingRecord?.version ?? 1,
+        sync_status: existingRecord?.sync_status ?? "synced",
+        lifecycle: existingRecord?.lifecycle ?? "local-only",
+        deleted_at: existingRecord?.deleted_at ?? null,
+        created_at: existingRecord?.created_at ?? fileResult.data.createdAt,
+        updated_at: existingRecord?.updated_at ?? fileResult.data.updatedAt,
         local_updated_at: Date.now(),
       }
 
@@ -586,15 +578,14 @@ export async function importDesktopWritingFile(
     return err("INVALID_INPUT", parsed.error)
   }
 
-  const metadata = parsed.document.metadata
   const title = deriveDraftTitleFromPlainText(parsed.document.snapshot.bodyText, "Imported writing")
 
   const result = await createDesktopDraft({
-    writingId: metadata?.id ?? createWritingId(),
+    writingId: createWritingId(),
     title,
-    slug: metadata?.slug ?? null,
-    status: metadata?.status ?? "draft",
-    visibility: metadata?.visibility ?? "private",
+    slug: null,
+    status: "draft",
+    visibility: "private",
     preferredPath: path,
     initialBodyJson: parsed.document.snapshot.bodyJson as Record<string, unknown>,
     initialBodyText: parsed.document.snapshot.bodyText,

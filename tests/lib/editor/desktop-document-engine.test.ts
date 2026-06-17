@@ -381,6 +381,32 @@ End ==third passage==[@h1|33333333-3333-4333-8333-333333333333: ].`
     })
   })
 
+  describe("serializeSourceDocument", () => {
+    it("serializes content only and ignores Odessay metadata frontmatter", () => {
+      const result = engine.serializeSourceDocument(
+        {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "Content only" }] }],
+        },
+        {
+          id: "writing-123",
+          slug: "content-only",
+          status: "draft",
+          visibility: "private",
+          version: 1,
+          createdAt: "2026-06-03T00:00:00.000Z",
+          updatedAt: "2026-06-03T00:00:00.000Z",
+        },
+      )
+
+      expect(result.success).toBe(true)
+      if (!result.success) return
+      expect(result.markdown).toBe("Content only")
+      expect(result.markdown).not.toContain("---")
+      expect(result.markdown).not.toContain("id: writing-123")
+    })
+  })
+
   describe("validateRoundTrip", () => {
     it("passes for a canonical source file with front-matter", () => {
       const markdown = `---

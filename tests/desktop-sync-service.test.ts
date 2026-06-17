@@ -335,10 +335,10 @@ Body from markdown truth.`)
     expect(writingsInsertMock).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "writing-1",
-        slug: "canonical-slug",
+        slug: null,
         body_text: "Canonical title\nBody from markdown truth.",
-        version: 4,
-        updated_at: "2026-06-03T00:00:00.000Z",
+        version: 2,
+        updated_at: "2026-06-02T00:00:00.000Z",
       }),
     )
   })

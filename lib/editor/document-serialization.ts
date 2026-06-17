@@ -57,17 +57,17 @@ const splitCanonicalDocumentSource = (
   }
 }
 
-const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetadata => {
+const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetadata | null => {
   const parsed = load(frontmatter)
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Canonical front-matter must be a YAML mapping.")
+    return null
   }
 
   const record = parsed as Record<string, unknown>
   const rawId = typeof record.id === "string" ? record.id.trim() : ""
   if (!rawId) {
-    throw new Error("Canonical front-matter requires a non-empty id.")
+    return null
   }
 
   const readIsoString = (value: unknown): string | undefined => {
@@ -164,17 +164,18 @@ export const serializeDocumentFile = (
   bodyJson: JSONContent | null | undefined,
   metadata: CanonicalDocumentMetadata,
 ): string => {
-  const markdown = serializeDocumentToMarkdown(bodyJson)
-  const frontmatter = serializeCanonicalFrontmatter(metadata)
-  return markdown ? `${frontmatter}\n\n${markdown}` : `${frontmatter}\n`
+  void metadata
+  return serializeDocumentToMarkdown(bodyJson)
 }
 
 export const parseDocumentFileToSnapshot = (source: string): CanonicalDocumentFileSnapshot => {
   const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
+  const metadata = frontmatter ? parseCanonicalFrontmatter(frontmatter) : null
+  const markdownSource = metadata ? markdown : source
 
   return {
-    metadata: frontmatter ? parseCanonicalFrontmatter(frontmatter) : null,
-    snapshot: parseMarkdownToSnapshot(markdown),
-    markdown: normalizeMarkdownForRoundTrip(markdown),
+    metadata,
+    snapshot: parseMarkdownToSnapshot(markdownSource),
+    markdown: normalizeMarkdownForRoundTrip(markdownSource),
   }
 }

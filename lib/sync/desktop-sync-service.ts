@@ -265,11 +265,6 @@ async function processWritingMutation(userId: string, mutation: Extract<SyncMuta
           ...canonicalPayload,
           body_json: parsed.document.snapshot.bodyJson as Record<string, unknown>,
           body_text: parsed.document.snapshot.bodyText,
-          slug: parsed.document.metadata?.slug ?? canonicalPayload.slug ?? null,
-          status: parsed.document.metadata?.status ?? canonicalPayload.status,
-          visibility: parsed.document.metadata?.visibility ?? canonicalPayload.visibility,
-          version: parsed.document.metadata?.version ?? canonicalPayload.version,
-          updated_at: parsed.document.metadata?.updatedAt ?? canonicalPayload.updated_at,
           content_hash: await computeMarkdownContentHash(source),
         }
       }
