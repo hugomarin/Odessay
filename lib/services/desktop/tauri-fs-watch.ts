@@ -21,6 +21,10 @@ type WatchOptions = {
   delayMs?: number
 }
 
+const DEFAULT_SELF_WRITE_SUPPRESSION_MS = 2_000
+
+const selfWriteExpiresAtByPath = new Map<string, number>()
+
 class FsWatcherResource extends Resource {}
 
 export type UnwatchFn = () => Promise<void>
@@ -55,4 +59,39 @@ export async function watchFsPaths(
 
 export function isOdessayInternalPath(path: string) {
   return path.includes("/.odessay/") || path.endsWith("/.odessay")
+}
+
+export function markOdessaySelfWritePath(
+  path: string,
+  now = Date.now(),
+  windowMs = DEFAULT_SELF_WRITE_SUPPRESSION_MS,
+) {
+  selfWriteExpiresAtByPath.set(path, now + windowMs)
+}
+
+export function isRecentOdessaySelfWritePath(path: string, now = Date.now()) {
+  pruneExpiredSelfWritePaths(now)
+  const expiresAt = selfWriteExpiresAtByPath.get(path)
+  return typeof expiresAt === "number" && expiresAt >= now
+}
+
+export function isOdessaySelfWriteEvent(event: TauriWatchEvent, now = Date.now()) {
+  const actionablePaths = event.paths.filter((path) => !isOdessayInternalPath(path))
+
+  return (
+    actionablePaths.length > 0 &&
+    actionablePaths.every((path) => isRecentOdessaySelfWritePath(path, now))
+  )
+}
+
+export function clearOdessaySelfWritePathsForTests() {
+  selfWriteExpiresAtByPath.clear()
+}
+
+function pruneExpiredSelfWritePaths(now: number) {
+  for (const [path, expiresAt] of selfWriteExpiresAtByPath) {
+    if (expiresAt < now) {
+      selfWriteExpiresAtByPath.delete(path)
+    }
+  }
 }

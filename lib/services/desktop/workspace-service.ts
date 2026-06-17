@@ -11,6 +11,7 @@ import {
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import {
   isOdessayInternalPath,
+  isOdessaySelfWriteEvent,
   watchFsPaths,
   type TauriWatchEvent,
   type UnwatchFn,
@@ -497,6 +498,10 @@ async function resolveWorkspaceWatchPaths(rootPath: string, selectedPaths: strin
 
 function shouldIgnoreWorkspaceWatchEvent(event: TauriWatchEvent) {
   if (!event.paths.some((path) => !isOdessayInternalPath(path))) {
+    return true
+  }
+
+  if (isOdessaySelfWriteEvent(event)) {
     return true
   }
 
