@@ -812,7 +812,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
       try {
         const service = await getDesktopWorkspaceService()
-        const writingId = await service.openFileInEditor(file.path)
+        const writingId = await service.openFileInEditor(file.path, file.id)
         router.push(`/write?id=${encodeURIComponent(writingId)}`)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Failed to open file")
@@ -1362,7 +1362,7 @@ function DesktopWorkspaceFile({
             <div className="truncate text-xs text-ink-4">{workspace.name}</div>
           </div>
         </div>
-        <Button type="button" onClick={() => void getDesktopWorkspaceService().then((service) => service.openFileInEditor(file.path).then((writingId) => router.push(`/write?id=${encodeURIComponent(writingId)}`)))}>
+        <Button type="button" onClick={() => void getDesktopWorkspaceService().then((service) => service.openFileInEditor(file.path, file.id).then((writingId) => router.push(`/write?id=${encodeURIComponent(writingId)}`)))}>
           Open in editor
         </Button>
       </div>

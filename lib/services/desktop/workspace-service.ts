@@ -3,6 +3,8 @@
 import { appConfigDir, join } from "@tauri-apps/api/path"
 import { open } from "@tauri-apps/plugin-dialog"
 import { localDB } from "@/lib/local-db"
+import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
+import { serializeDocumentFile } from "@/lib/editor/document-serialization"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import {
   markDesktopWritingDeletedByCanonicalPath,
@@ -19,6 +21,7 @@ import {
 import {
   tauriCreateFile,
   tauriOpenFile,
+  tauriWriteFile,
   tauriWorkspaceCreate,
   tauriWorkspaceSync,
   type DesktopWorkspaceSnapshot,
@@ -95,6 +98,39 @@ function formatMissingWorkspace(
     updatedAt: null,
     files: [],
   }
+}
+
+function filenameToTitle(filename: string): string {
+  return filename
+    .replace(/\.md$/, "")
+    .replace(/[-_]+/g, " ")
+    .trim()
+}
+
+function createWritingId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  throw new Error(
+    "crypto.randomUUID is required for workspace document identity. This runtime does not support UUID minting.",
+  )
+}
+
+function buildInitialWorkspaceMarkdown(title: string): string {
+  const nowIso = new Date().toISOString()
+  const metadata = {
+    id: createWritingId(),
+    slug: null,
+    status: "draft" as const,
+    visibility: "private" as const,
+    version: 1,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  }
+
+  const frontmatter = serializeDocumentFile(EMPTY_EDITOR_JSON, metadata)
+  const heading = title ? `# ${title}\n\n` : ""
+  return heading ? `${frontmatter}\n${heading}` : frontmatter
 }
 
 function ensureMarkdownName(fileName: string) {
@@ -285,18 +321,45 @@ export class DesktopWorkspaceService {
     return nextRecord
   }
 
-  async openFileInEditor(filePath: string): Promise<string> {
+  async openFileInEditor(filePath: string, workspaceFileId: string): Promise<string> {
+    // Seed a local writing record with the workspace index ID before opening.
+    // This ensures the DocumentService treats the workspace UUID as the
+    // canonical writing ID instead of deriving a new one from the path or
+    // frontmatter.
+    const existingByPath = await localDB.writings.getByCanonicalPath(filePath)
+    if (!existingByPath) {
+      const nowIso = new Date().toISOString()
+      await localDB.writings.save({
+        id: workspaceFileId,
+        canonical_path: filePath,
+        body_json: EMPTY_EDITOR_JSON,
+        body_text: "",
+        status: "draft",
+        visibility: "private",
+        version: 1,
+        sync_status: "pending",
+        lifecycle: "local-only",
+        created_at: nowIso,
+        updated_at: nowIso,
+        local_updated_at: Date.now(),
+      })
+    } else if (existingByPath.id !== workspaceFileId) {
+      await localDB.writings.delete(existingByPath.id)
+      await localDB.writings.save({
+        ...existingByPath,
+        id: workspaceFileId,
+        canonical_path: filePath,
+        local_updated_at: Date.now(),
+      })
+    }
+
     const documentService = await getDocumentService()
     const openResult = await documentService.openWriting(filePath)
     if (openResult.error) {
       throw new Error(openResult.error.message)
     }
 
-    const localWriting =
-      (await localDB.writings.getByCanonicalPath(filePath)) ??
-      (await localDB.writings.get(openResult.data?.id ?? filePath))
-
-    return localWriting?.id ?? openResult.data?.id ?? filePath
+    return workspaceFileId
   }
 
   async readFilePreview(filePath: string) {
@@ -312,7 +375,12 @@ export class DesktopWorkspaceService {
     }
 
     const expectedPath = await join(workspace.rootPath, normalizedName)
+    const title = filenameToTitle(normalizedName)
+    const initialMarkdown = buildInitialWorkspaceMarkdown(title)
+
     await tauriCreateFile(workspace.rootPath, normalizedName)
+    await tauriWriteFile(expectedPath, initialMarkdown)
+
     const refreshed = await this.getWorkspace(workspace.slug)
     if (!refreshed) {
       throw new Error("Workspace not found after creating file")

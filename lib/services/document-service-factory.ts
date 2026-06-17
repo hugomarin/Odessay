@@ -314,7 +314,8 @@ class DesktopDocumentService implements DocumentService {
       }
 
       const metadata = parsed.document.metadata
-      const canonicalId = existing?.id ?? metadata?.id ?? writingId
+      const canonicalId =
+        existing?.id ?? existingByCanonicalPath?.id ?? metadata?.id ?? writingId
       const localWriting: LocalWriting = {
         id: canonicalId,
         author_id: existing?.author_id ?? null,
