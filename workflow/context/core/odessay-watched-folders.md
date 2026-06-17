@@ -101,6 +101,7 @@ Similar a `.git` o `.obsidian` — propiedad de la herramienta, ignorable con `.
 ### `index.json`
 
 Vincula paths a UUIDs. Usa el `inode` del OS para detectar renombres.
+`content_hash` usa el contrato congelado de D6/D11: `blake3:<hex>` calculado sobre el texto UTF-8 del markdown canónico, con saltos de línea normalizados a LF (`\r\n` y `\r` → `\n`), sin stripping de frontmatter, sin trim y sin normalización Unicode.
 
 ```json
 {

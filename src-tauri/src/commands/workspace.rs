@@ -8,6 +8,7 @@ use uuid::Uuid;
 const WORKSPACE_DIR_NAME: &str = ".odessay";
 const LEGACY_WORKSPACE_DIR_NAME: &str = concat!(".ody", "ssey");
 const WORKSPACE_INDEX_FILE_NAME: &str = "index.json";
+const CONTENT_HASH_PREFIX: &str = "blake3";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkspaceFileSnapshot {
@@ -20,6 +21,8 @@ pub struct WorkspaceFileSnapshot {
     pub modified_at: u64,
     pub size: u64,
     pub inode: u64,
+    #[serde(rename = "contentHash")]
+    pub content_hash: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,6 +53,8 @@ struct WorkspaceIndexDocument {
 struct WorkspaceIndexEntry {
     id: String,
     inode: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    content_hash: Option<String>,
     #[serde(rename = "lastSeen")]
     last_seen: u64,
     size: u64,
@@ -242,22 +247,53 @@ pub fn workspace_sync(
         files: HashMap::new(),
     };
     let mut existing_by_inode = HashMap::new();
+    let mut existing_hash_counts = HashMap::new();
+    let mut existing_by_content_hash = HashMap::new();
 
     for (relative_path, entry) in &existing_index.files {
         if entry.inode > 0 {
             existing_by_inode.insert(entry.inode, (relative_path.clone(), entry.clone()));
         }
+
+        if let Some(content_hash) = entry.content_hash.as_ref() {
+            *existing_hash_counts
+                .entry(content_hash.clone())
+                .or_insert(0usize) += 1;
+            existing_by_content_hash
+                .insert(content_hash.clone(), (relative_path.clone(), entry.clone()));
+        }
     }
 
     for mut file in files {
-        let existing_entry = existing_index
-            .files
-            .get(&file.relative_path)
-            .cloned()
+        let existing_at_path = existing_index.files.get(&file.relative_path).cloned();
+        let can_reuse_hash = existing_at_path.as_ref().is_some_and(|entry| {
+            entry.inode == file.inode
+                && entry.size == file.size
+                && entry.last_seen == file.modified_at
+                && entry.content_hash.is_some()
+        });
+        let content_hash = if can_reuse_hash {
+            existing_at_path
+                .as_ref()
+                .and_then(|entry| entry.content_hash.clone())
+                .unwrap_or_default()
+        } else {
+            content_hash_for_markdown_file(Path::new(&file.path))?
+        };
+        let existing_entry = existing_at_path
             .or_else(|| {
                 existing_by_inode
                     .get(&file.inode)
                     .map(|(_, entry)| entry.clone())
+            })
+            .or_else(|| {
+                if existing_hash_counts.get(&content_hash).copied() == Some(1) {
+                    existing_by_content_hash
+                        .get(&content_hash)
+                        .map(|(_, entry)| entry.clone())
+                } else {
+                    None
+                }
             });
 
         let id = existing_entry
@@ -265,11 +301,13 @@ pub fn workspace_sync(
             .unwrap_or_else(|| Uuid::new_v4().to_string());
 
         file.id = id.clone();
+        file.content_hash = content_hash.clone();
         next_index.files.insert(
             file.relative_path.clone(),
             WorkspaceIndexEntry {
                 id,
                 inode: file.inode,
+                content_hash: Some(content_hash),
                 last_seen: file.modified_at,
                 size: file.size,
             },
@@ -298,6 +336,24 @@ pub fn workspace_sync(
         selected_paths: effective_selected_paths,
         files: files_with_ids,
     })
+}
+
+fn canonical_markdown_hash_bytes(markdown: &str) -> Vec<u8> {
+    markdown
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .into_bytes()
+}
+
+fn content_hash_for_markdown_file(path: &Path) -> Result<String, String> {
+    let bytes =
+        fs::read(path).map_err(|e| format!("workspace_sync read markdown for hash: {e}"))?;
+    let markdown =
+        String::from_utf8(bytes).map_err(|e| format!("workspace_sync hash invalid utf-8: {e}"))?;
+    let canonical_bytes = canonical_markdown_hash_bytes(&markdown);
+    let digest = blake3::hash(&canonical_bytes);
+
+    Ok(format!("{CONTENT_HASH_PREFIX}:{}", digest.to_hex()))
 }
 
 fn prepare_workspace_index_dir(canonical_root: &Path) -> Result<PathBuf, String> {
@@ -396,6 +452,7 @@ fn visit_workspace(
             modified_at,
             size: metadata.len(),
             inode: inode_for_path(&path),
+            content_hash: String::new(),
         });
     }
 
@@ -480,6 +537,81 @@ mod tests {
 
         assert_eq!(snapshot.files.len(), 1);
         assert_eq!(snapshot.files[0].relative_path, "visible.md");
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_writes_blake3_content_hash_to_index() {
+        let root = temp_workspace_root("writes-content-hash");
+        fs::write(root.join("letter.md"), "Hello\r\nworld\r\n").expect("write markdown file");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace with markdown file");
+        let expected_hash = format!(
+            "{CONTENT_HASH_PREFIX}:{}",
+            blake3::hash(b"Hello\nworld\n").to_hex()
+        );
+        let index_json = fs::read_to_string(
+            root.join(WORKSPACE_DIR_NAME)
+                .join(WORKSPACE_INDEX_FILE_NAME),
+        )
+        .expect("read index");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].content_hash, expected_hash);
+        assert!(index_json.contains(&format!(r#""content_hash": "{}""#, expected_hash)));
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_keeps_binding_by_path_after_atomic_save() {
+        let root = temp_workspace_root("path-first-atomic-save");
+        let file_path = root.join("letter.md");
+        fs::write(&file_path, "Before\n").expect("write markdown file");
+
+        let initial_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("initial sync workspace");
+        let initial_file = initial_snapshot.files[0].clone();
+
+        let temp_path = root.join(".letter.md.tmp");
+        fs::write(&temp_path, "After\n").expect("write temp markdown file");
+        fs::rename(&temp_path, &file_path).expect("replace markdown file");
+
+        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace after atomic save");
+        let next_file = &next_snapshot.files[0];
+
+        assert_eq!(next_file.relative_path, "letter.md");
+        assert_eq!(next_file.id, initial_file.id);
+        assert_ne!(next_file.content_hash, initial_file.content_hash);
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_uses_unique_content_hash_for_rename_binding() {
+        let root = temp_workspace_root("rename-by-content-hash");
+        let old_path = root.join("old.md");
+        let new_path = root.join("nested").join("new.md");
+        fs::write(&old_path, "Stable content\n").expect("write markdown file");
+
+        let initial_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("initial sync workspace");
+        let initial_file = initial_snapshot.files[0].clone();
+
+        fs::create_dir_all(root.join("nested")).expect("create nested dir");
+        fs::copy(&old_path, &new_path).expect("copy markdown to new path");
+        fs::remove_file(&old_path).expect("remove old markdown path");
+
+        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace after remove-create rename");
+        let next_file = &next_snapshot.files[0];
+
+        assert_eq!(next_file.relative_path, "nested/new.md");
+        assert_eq!(next_file.id, initial_file.id);
+        assert_eq!(next_file.content_hash, initial_file.content_hash);
 
         cleanup(&root);
     }

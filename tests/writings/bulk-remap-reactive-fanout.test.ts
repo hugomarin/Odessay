@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { localDB, setLocalDBScope, subscribeToLocalDBChanges } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { bulkRemapStatusToDraft } from "@/lib/writings/bulk-remap"
@@ -22,7 +22,12 @@ const createWriting = (overrides: Partial<LocalWriting> & { id: string }): Local
 
 beforeEach(() => {
   vi.stubGlobal("window", globalThis)
-  setLocalDBScope(`test-fanout-${Date.now()}`)
+  vi.stubGlobal("navigator", { onLine: false })
+  setLocalDBScope(`test-fanout-${crypto.randomUUID()}`)
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe("bulk remap reactive fan-out", () => {
