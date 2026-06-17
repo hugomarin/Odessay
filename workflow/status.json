@@ -2327,6 +2327,15 @@
       "date": "2026-06-14",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Workspace detail migrado a <ArtifactTable /> (list, columnas title/date/actions); archivos FS sin registro DB con datos limitados según spec. Typecheck PASS. Lint PASS (solo warnings pre-existentes en editor-shell). 746 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Shipped via /wf-ship --branch unify-design-system-ODE-270-ODE-285-ODE-290-ODE-289."
+    },
+    {
+      "issue": "ODE-288",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-288",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/263",
+      "commit": "660e0de",
+      "date": "2026-06-17",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Fix spell-check editor experience: range-based ProseMirror transactions for correction accepts, grouped accept for all N occurrences, DecorationSet mapped through transactions, stale suggestions anchored to source block. Typecheck PASS. Lint PASS (pre-existing editor-shell warnings). 751 tests PASS. ops:perf:gate PASS (14/0/1), ops:delivery:gate PASS. Performance Contract: required."
     }
   ]
 }
