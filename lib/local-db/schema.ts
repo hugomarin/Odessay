@@ -29,6 +29,7 @@ export type LocalWriting = {
   canonical_path?: string | null;
   body_json: Record<string, unknown>;
   body_text: string;
+  content_hash?: string | null;
   slug?: string | null;
   status: WritingStatus;
   artifact_type?: ArtifactType | null;
@@ -51,6 +52,7 @@ export type RemoteWritingPayload = {
   title?: string | null;
   body_json: Record<string, unknown>;
   body_text: string;
+  content_hash?: string | null;
   slug?: string | null;
   status: WritingStatus;
   artifact_type: ArtifactType;

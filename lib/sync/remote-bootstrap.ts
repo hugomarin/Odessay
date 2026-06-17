@@ -23,6 +23,7 @@ export type RemoteWritingListRecord = {
   deleted_at: string | null
   created_at: string
   updated_at: string
+  content_hash?: string | null
   content_updated_at?: string | null
   metadata_updated_at?: string | null
 }
@@ -110,6 +111,7 @@ export const mapRemoteWritingToLocal = (
     body_text: hasBody
       ? (remoteWriting.body_text ?? "")
       : (existingLocalWriting?.body_text ?? ""),
+    content_hash: remoteWriting.content_hash ?? existingLocalWriting?.content_hash ?? null,
     slug: remoteWriting.slug ?? null,
     status: normalizeWritingStatus(remoteWriting.status),
     artifact_type: normalizeArtifactType(remoteWriting.artifact_type),

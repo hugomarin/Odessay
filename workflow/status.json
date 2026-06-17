@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(sync): store writing content_hash in the cloud writing record. Adds Supabase migration with content_hash column and partial lookup index; shared TS BLAKE3 helper matching ODE-296 contract; writes content_hash into cloud sync payloads and mirrors it through local/remote writing records; desktop sync computes hash from canonical .md source. Updates odessay-modelo-datos.md. [ODE-297]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-297",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-297/store-content-hash-in-the-cloud-writing-record-supabase-migration",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/268",
+      "commit": "c55358d",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (123 files / 755 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (cloud schema/sync payload, no editor interaction hot path). Architecture Contract: Adapter(cloud) + Database, runtime cloud, owner database. Review score: 7.0/10. P1: missing Rust↔TS parity test required by issue (audit P1) — must be added as blocking follow-up before Fase 5 re-bind-by-hash. P2: web vs desktop hash input segment may diverge on frontmatter until D4. P3: Linear branchName mismatch with actual PR branch. P3: package.json version bump not in issue scope."
+    },
+    {
       "what": "feat(desktop): add BLAKE3 content_hash to desktop workspace binding index. Computes hash over canonical markdown in debounced workspace sync, persists content_hash in .odessay/index.json, keeps path-first reconciliation, and uses unique hash as rename/move fallback. Updates DesktopWorkspaceFile type and documents frozen hash normalization contract. [ODE-296]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-296",
