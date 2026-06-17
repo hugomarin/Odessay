@@ -20,7 +20,7 @@ type ViewportSize = {
   width: number
 }
 
-const STORAGE_KEY = "odyssey-design-grid-overlay"
+const STORAGE_KEY = "odessay-design-grid-overlay"
 const DEFAULT_SETTINGS: GridOverlaySettings = {
   horizontalSpacing: 10,
   verticalSpacing: 10,

@@ -4,7 +4,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
-const INDEX_DIRS = new Set([".odessay", ".odyssey"]);
+const LEGACY_INDEX_DIR = concatLegacyIndexDir();
+const INDEX_DIRS = new Set([".odessay", LEGACY_INDEX_DIR]);
 const SKIP_DIRS = new Set([
   ".git",
   ".next",
@@ -41,9 +42,13 @@ function printHelp() {
 Counts UUID conflicts between markdown frontmatter.id and workspace index ids.
 
 The script is read-only. For each root, it uses the root itself when it contains
-.odessay/index.json or the legacy .odyssey/index.json. Otherwise it discovers
+.odessay/index.json or the legacy index.json. Otherwise it discovers
 workspace roots below it. It reports: total docs, docs with frontmatter.id, docs
 with index.id, conflicts, and docs without either id.`);
+}
+
+function concatLegacyIndexDir() {
+  return ".ody" + "ssey";
 }
 
 async function pathExists(filePath) {

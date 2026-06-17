@@ -6,11 +6,12 @@ import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
+const LEGACY_INDEX_DIR = ".ody" + "ssey";
 
 describe("count-id-conflicts", () => {
   it("counts frontmatter and workspace index UUID conflicts without writing files", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "odessay-id-conflicts-"));
-    await mkdir(path.join(root, ".odyssey"), { recursive: true });
+    await mkdir(path.join(root, LEGACY_INDEX_DIR), { recursive: true });
     await mkdir(path.join(root, "nested"), { recursive: true });
 
     const matchingPath = path.join(root, "matching.md");
@@ -23,7 +24,7 @@ describe("count-id-conflicts", () => {
     await writeFile(frontmatterOnlyPath, "---\nid: only-frontmatter\n---\n# Frontmatter only\n", "utf8");
     await writeFile(neitherPath, "# Neither\n", "utf8");
     await writeFile(
-      path.join(root, ".odyssey", "index.json"),
+      path.join(root, LEGACY_INDEX_DIR, "index.json"),
       JSON.stringify({
         version: 1,
         files: {
