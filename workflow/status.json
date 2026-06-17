@@ -19,6 +19,10 @@
       {
         "issue": "ODE-188",
         "reason": "Orphan identifier — no longer resolvable in Linear workspace but referenced by historical commits. Ignored for traceability drift."
+      },
+      {
+        "issue": "ODE-310",
+        "reason": "Retrospective traceability/docs campaign (PRs #259/#261) for document-identity context corpus + skill-product-manager reform. Does not represent product-code delivery, so it is intentionally excluded from built[] per the issue note; ignored for status drift."
       }
     ]
   },
