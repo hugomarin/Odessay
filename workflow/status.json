@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(desktop): add BLAKE3 content_hash to desktop workspace binding index. Computes hash over canonical markdown in debounced workspace sync, persists content_hash in .odessay/index.json, keeps path-first reconciliation, and uses unique hash as rename/move fallback. Updates DesktopWorkspaceFile type and documents frozen hash normalization contract. [ODE-296]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-296",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-296/compute-blake3-content-hash-in-the-rust-watcher-local-binding-index",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/266",
+      "commit": "243fe16",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (121 files / 752 tests). cargo test PASS (5 passed / 1 ignored). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required. Architecture Contract: Adapter(desktop), runtime desktop, owner backend. Review score: 9.25/10 (P2×1 scope-deviation in undeclared test stabilization files, P3×1 Linear branch name mismatch)."
+    },
+    {
       "what": "fix(desktop): standardize workspace index folder from .odyssey to .odessay with idempotent migration, watcher exclusion, and Rust unit tests. [ODE-295]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-295",
