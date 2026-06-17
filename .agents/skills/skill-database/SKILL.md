@@ -12,12 +12,13 @@ description: Guía de base de datos de Odessay para migraciones, RLS, triggers, 
 
 ## Principio rector
 
-La base de datos remota es la fuente de verdad del **estado cloud actual** de Odessay. El schema en `odessay-modelo-datos.md` es la referencia para la capa remota y colaborativa. Cualquier cambio al schema pasa por una migración versionada.
+La base de datos remota es la **autoridad de la metadata** del documento y guarda una **copia** del contenido; **no** es la autoridad del contenido. La autoridad del contenido es el `.md` canónico (ver `workflow/context/core/odessay-adr-identidad.md`, D1/D10). El schema en `odessay-modelo-datos.md` es la referencia para la capa remota y colaborativa. Cualquier cambio al schema pasa por una migración versionada.
 
-Matiz arquitectónico:
+Matiz arquitectónico (resuelto por el ADR, ya no "ahora vs dirección"):
 
-- en el runtime web actual, gran parte del producto sigue operando sobre Supabase + local cache
-- en la dirección desktop, el documento canónico apunta a filesystem `.md`, no a la fila remota de `writings`
+- IndexedDB (`LocalWriting`) es **espejo** del registro de nube, no una verdad aparte (D10).
+- el documento canónico es el `.md`; `body_json` es copia de trabajo, no la verdad (D1).
+- el registro de nube debe sumar `content_hash` (sobre el markdown canónico) para reconciliar archivos desnudos cross-máquina (D11), y la identidad es un solo UUID cliente=nube (D5).
 
 Regla general:
 
@@ -38,8 +39,7 @@ Antes de cualquier operación, lee `workflow/context/core/odessay-modelo-datos.m
 
 - `profiles` — Extiende auth.users. Username, display_name, bio.
 - `writings` — La unidad fundamental. Body en JSON (TipTap) + texto plano. Estado (draft/finished) y visibilidad (private/shared/public) como dimensiones independientes.
-  - En runtime web/cloud actual `body_json` sigue siendo persistencia remota operativa.
-  - En dirección desktop, eso no equivale al contrato documental canónico del producto.
+  - `body_json` es **copia de trabajo / persistencia remota** del contenido, no su autoridad: el contenido canónico es el `.md` (ADR D1). La nube guarda una **copia** del contenido más la metadata autoritativa (D10). El contrato es único entre runtimes; solo cambia el substrato (markdown en desktop, `body_json` persistido en web), no la autoridad.
 - `correspondences` — Identidad del diálogo. Se crea cuando un writing recibe su primera respuesta.
 - `collections` — Agrupaciones del autor. Un writing puede estar en múltiples collections.
 - `writing_collections` — Join table.

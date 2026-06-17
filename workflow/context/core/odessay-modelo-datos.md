@@ -5,6 +5,8 @@ Lee `odessay-fundacional.md` para la visión y `odessay-stack.md` para las tecno
 
 Este documento describe principalmente el **modelo de datos remoto/cloud y el estado actual del runtime web**.
 
+> **En arquitectura de documento, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** este schema remoto es la **autoridad de la metadata** y guarda una **copia** del contenido; la verdad del contenido es el `.md` canónico (D1/D10). El registro de nube debe sumar `content_hash` para reconciliar archivos desnudos cross-máquina (D11).
+
 No define por sí solo el contrato documental futuro del producto. Para la estrategia desktop y el rol de `.md` como documento canónico, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`
@@ -201,7 +203,7 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 
 ### margins
 
-Índice materializado de anotaciones embebidas en la representación rica del documento en el runtime web actual. La fuente de verdad del índice vive hoy en nodos TipTap `annotationReference`; esta tabla existe para listar, filtrar y compartir anotaciones sin reparsear el documento completo en cada request.
+Payload/índice de anotaciones en la nube. La **fuente de verdad del contenido anotado es el documento canónico** (el `.md` con `==texto==[@n:..]` inline; ver `odessay-adr-identidad.md` D3), no `body_json` (copia de trabajo) ni esta tabla. `margins` existe para listar, filtrar y compartir sin reparsear el documento, y para conservar el estado de colaboración (`shared/resolved/shared_at`) que no vive en el documento. Está atada al `id` estable de cada anotación.
 
 | Campo | Tipo | Constraints | Nota |
 |-------|------|-------------|------|

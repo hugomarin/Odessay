@@ -5,6 +5,8 @@ Lee `odessay-fundacional.md` para la visión, `odessay-stack.md` para el stack, 
 
 Este documento define el comportamiento técnico y de UX del editor de Odessay. Es el componente más crítico del producto — donde ocurre todo.
 
+> **En contrato documental, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** el editor trabaja sobre `body_json` (copia de trabajo), pero la verdad persistida es el `.md` canónico (D1); el reparse `.md ⇄ body_json` debe ser lossless y el `id` de anotación debe sobrevivir el round-trip (D3).
+
 **Ámbito normativo:** este documento describe el comportamiento del editor y el runtime web actual, pero no debe leerse aislado de la estrategia desktop. Para decisiones sobre documento canónico, extracción de servicios o boundaries de runtime, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`

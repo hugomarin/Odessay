@@ -59,23 +59,27 @@ Para notas destinadas a que otros lean. En v1 no hay edición simultánea — el
 
 ## Arquitectura de almacenamiento
 
-### body_json como fuente de verdad
+> **Reconciliado con `workflow/context/core/odessay-adr-identidad.md` (D1/D3).** La fuente de verdad es el **documento canónico** (el `.md` con las anotaciones inline). `body_json` es la **copia de trabajo** del editor, no la verdad. En el runtime web el substrato persistido sigue siendo `body_json`, pero el contrato de contenido es el mismo: la representación canónica es el markdown anotado.
 
-Todas las anotaciones — incluyendo footnotes — viven como nodos TipTap dentro de `body_json`. No en la tabla `margins`.
+### Las anotaciones viven inline en el documento canónico
+
+Todas las anotaciones viven como **notación inline dentro del documento** (`==texto==[@n: comentario]`): la marca Highlight (`==..==`) define el rango y el marcador lleva el comentario. No son una capa aparte ni dependen de `body_json` como verdad. Al editar, se materializan como nodos `annotationReference` en la copia de trabajo `body_json`; al guardar, se re-serializan al `.md`/`body_text`.
 
 ```
 Usuario anota en reading view
               ↓
-API inserta nodo annotationReference en body_json
+Se inserta la notación inline en el documento (copia de trabajo body_json)
               ↓
-Servidor guarda → serializa body_json → body_text (markdown)
-                                      → upsert en margins (índice)
+Guardar → serializa al .md canónico (+ body_text derivado)
+        → upsert del payload en margins (índice en la NUBE, atado al id estable)
 ```
 
-**Por qué body_json y no margins:**
-1. **Versionamiento**: el versionamiento de documentos requiere una única fuente de verdad. Con margins como tabla separada, restaurar una versión dejaría anotaciones huérfanas.
-2. **Portabilidad markdown**: la anotación serializa como texto plano legible en `body_text`, sin metadata de sistema.
-3. **Copy semantics**: las anotaciones en `body_json` viajan con el texto en cualquier Cmd+C — el usuario copia su writing anotado directamente a Claude sin un paso de exportación separado.
+**Por qué inline y no una capa aparte:**
+1. **Versionamiento**: una sola fuente de verdad (el documento). `margins` se reconstruye del documento; restaurar una versión no deja anotaciones huérfanas.
+2. **Portabilidad**: la anotación viaja con el texto en el propio `.md`, sin sidecar ni metadata de sistema.
+3. **Copy semantics**: las anotaciones viajan con el texto en cualquier Cmd+C — el usuario copia su writing anotado directamente a Claude sin un paso de exportación separado.
+
+> **Riesgo bloqueante hoy (D3):** el `id` de la anotación NO se codifica inline y el round-trip `.md → body_json → .md` lo regenera (`crypto.randomUUID` en `footnote-node.ts`). Como `margins` se reconstruye por `id` en cada save (borrando filas cuyo id ya no existe), cada round-trip **destruye** el estado de colaboración (`resolved/shared/shared_at`). Codificar el `id` estable inline es prerrequisito de tratar el `.md` como verdad.
 
 ### Nodo unificado annotationReference
 
@@ -92,7 +96,7 @@ Un único tipo de nodo TipTap `annotationReference` cubre todos los tipos (inclu
 
 ### body_text: markdown derivado
 
-`body_text` se recalcula desde `body_json` en cada save. Nunca es fuente de verdad. El markdown resultante es legible por humanos y AIs sin metadata de sistema.
+`body_text` es **derivado**, nunca fuente de verdad (la verdad es el `.md` canónico; `body_json` es la copia de trabajo de la que se recalcula en el runtime web). El markdown resultante es legible por humanos y AIs sin metadata de sistema.
 
 ### margins: índice materializado
 
@@ -305,7 +309,7 @@ ALTER TABLE margins
 3. El formato de embedding en markdown usa **sigils inline** (`[@n: texto]`) — no comentarios HTML. Es más compacto, legible y compatible con el modelo TipTap.
 4. La síntesis multi-texto no entra en v1 — el valor en v1 es el filtro de perspectiva por anotación, no la automatización del resumen.
 5. Las etiquetas rápidas son shortcuts de texto, no tipos especiales — insertan texto libre en el campo de anotación.
-6. **`body_json` es la fuente de verdad**. `margins` es un índice derivado y puede reconstruirse desde `body_json` en cualquier momento.
+6. **El documento canónico (`.md` anotado inline) es la fuente de verdad** (ADR D1/D3); `body_json` es la copia de trabajo y `margins` es el payload/índice en la nube, atado al `id` estable de cada anotación y reconstruible desde el documento.
 7. El parser acepta el formato split antiguo de footnotes (`[^1]` + `[^1]: content` al fondo) para backwards compatibility, pero el serializer siempre emite formato inline.
 
 ---

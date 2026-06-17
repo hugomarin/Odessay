@@ -30,6 +30,13 @@
       "description": "Schema completo de Supabase y de la capa cloud/colaborativa actual: tablas, columnas, RLS y relaciones. Incluye §Contrato de schema efectivo con reglas de transición y checklist de validación contra schema deployado. Referencia obligatoria para issues que toquen migraciones, RPCs o cambios de tabla."
     },
     {
+      "path": "workflow/context/core/odessay-adr-identidad.md",
+      "type": "core",
+      "scope": "arquitectura-de-documento",
+      "state": "adr-aceptado-fuente-de-verdad",
+      "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube, binding por ruta+inode+content_hash. Prevalece sobre los odessay-desktop-* en arquitectura de documento."
+    },
+    {
       "path": "workflow/context/core/odessay-paginas.md",
       "type": "core",
       "description": "Arquitectura de rutas: zona pública, espacio del autor (dual: vista propia vs visitante) y zona privada. Mecanismo universal de respuesta (reply_to / parent_id). Layout y comportamiento de cada página."
@@ -40,6 +47,13 @@
       "scope": "flujos-de-producto-con-runtime-web-actual-como-base",
       "state": "canonical-with-transition-notes",
       "description": "Flujos de usuario paso a paso (11 secciones): registrarse, escribir, publicar, leer, organizar, navegar el editor, responder, invitar y formatear. Depende de odessay-paginas.md para el mecanismo de respuesta."
+    },
+    {
+      "path": "workflow/context/core/odessay-watched-folders.md",
+      "type": "core",
+      "scope": "workspace-desktop-filesystem-metadata",
+      "state": "spec-subordinado-al-adr-identidad",
+      "description": "Spec de Workspace / Watched Folders (ODE-245): carpetas vigiladas, índice de binding en .odessay/, watcher FSEvents, snapshots y sync. Subordinado al ADR de identidad (odessay-adr-identidad.md): la metadata vive en la nube no en meta.json (D4), content_hash es objetivo pendiente (D6/D11), carpeta .odessay no .odyssey (D8). Complementa el contrato de runtime de odessay-workspace.md."
     },
 
     {
@@ -121,7 +135,7 @@
       "type": "feature",
       "scope": "workspace-runtime-contract",
       "state": "desktop-first-runtime-map",
-      "description": "Contrato normativo de Workspace por runtime: qué capacidades existen en desktop, qué comportamiento debe mostrar web ante limitaciones de filesystem local, y cómo persiste `selectedPaths` en `.odyssey/index.json`."
+      "description": "Contrato normativo de Workspace por runtime: qué capacidades existen en desktop, qué comportamiento debe mostrar web ante limitaciones de filesystem local, y cómo persiste `selectedPaths` en `.odessay/index.json`. Subordinado al ADR de identidad (odessay-adr-identidad.md)."
     },
     {
       "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",
@@ -200,6 +214,11 @@
       "path": "workflow/define/roadmap.md",
       "type": "ops",
       "description": "Fases del producto y orden de implementación: qué bloquea qué, alcance de cada fase y estructura de proyectos en Linear. Fuente de verdad del qué y el cuándo."
+    },
+    {
+      "path": "workflow/define/plan-correcciones-contexto.md",
+      "type": "ops",
+      "description": "Plan de trabajo para reconciliar el corpus de documentación (context, specs, skills) con el ADR de identidad (odessay-adr-identidad.md): inventario de docs a corregir, secuencia, reglas de la pasada y criterio de cierre. No es el plan de implementación de código."
     },
     {
       "path": "workflow/define/dod-fase-1.md",

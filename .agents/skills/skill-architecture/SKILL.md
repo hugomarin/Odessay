@@ -9,12 +9,13 @@ Usa este skill cuando la tarea ya no sea solo “frontend”, “backend” o �
 
 No inventa arquitectura nueva. Opera sobre la arquitectura ya definida en:
 
+0. `workflow/context/core/odessay-adr-identidad.md` — **fuente de verdad de la arquitectura de documento** (identidad, fuente de verdad, metadata). Cierra la polaridad A1/A2/A3 que antes se aplazaba: `.md` canónico, `body_json` copia de trabajo, metadata en la nube, un solo UUID cliente=nube. **Prevalece** sobre los cuatro docs siguientes en cualquier discrepancia de contrato documental.
 1. `workflow/context/features/odessay-desktop-app.md`
 2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 3. `workflow/context/features/odessay-desktop-target-architecture.md`
 4. `workflow/context/features/odessay-desktop-migration-plan.md`
 
-Si estos documentos no bastan, el problema es de contexto/documentación y debe hacerse explícito. No improvisar una arquitectura paralela dentro del skill.
+Si estos documentos no bastan, el problema es de contexto/documentación y debe hacerse explícito. No improvisar una arquitectura paralela dentro del skill. Una vez ejecutado el ADR (D1/D5), **no** elegir fuente de verdad por `canonical_path` ni "promediar" arquitecturas: el contrato es fijo (D1).
 
 ---
 

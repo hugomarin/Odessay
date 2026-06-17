@@ -3,7 +3,11 @@
 **Documento técnico de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-editor.md` y `workflow/context/features/odessay-sync.md` junto con este documento antes de tocar el editor.
 
-Este documento describe el backbone actual de ProseMirror/TipTap y su integración en el runtime web. Para decisiones sobre contrato documental canónico y arquitectura multi-runtime, usar además:
+Este documento describe el backbone actual de ProseMirror/TipTap y su integración en el runtime web.
+
+> **En contrato documental canónico, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** `body_json`/ProseMirror JSON es **copia de trabajo**, no la verdad persistida (D1). El round-trip `.md ⇄ body_json` debe ser lossless, incluido el `id` estable de las anotaciones (D3).
+
+Para decisiones sobre contrato documental canónico y arquitectura multi-runtime, usar además:
 
 - `workflow/context/features/odessay-desktop-app.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`

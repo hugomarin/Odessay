@@ -58,7 +58,7 @@ Reglas generales:
 
 - Tratar `app/api/*` como adapters web cuando el issue toca arquitectura, no como núcleo del producto.
 - No introducir nuevas dependencias del frontend a endpoints internos si el cambio puede expresarse como contrato de servicio.
-- Evitar decisiones de backend que re-entrenchen `body_json` o Supabase como verdad universal del producto sin contrastarlo contra la estrategia desktop.
+- **Regla dura (ADR `odessay-adr-identidad.md`, D1/D10):** el backend NO trata `body_json` ni Supabase como verdad del **contenido**. El `.md` canónico es la verdad del contenido; la nube es autoridad de la **metadata** + copia del contenido; IndexedDB es espejo. No diseñar backend que re-entronice `body_json`/Supabase como verdad universal.
 - Si un cambio crea o altera un contrato de servicio, documentar explícitamente si pertenece al core compartido o al adapter web.
 - Si el trabajo real cae en `Layer: Application` o `Layer: Domain`, backend no debe resolverlo enteramente dentro de `app/api/*`; debe respetar la partición definida por `skill-architecture`.
 

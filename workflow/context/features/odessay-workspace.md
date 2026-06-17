@@ -1,7 +1,7 @@
 # ODESSAY — Workspace
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace.
+Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace. El **spec de implementación** de carpetas vigiladas (índice de binding `.odessay/`, watcher, sync, snapshots) vive en `workflow/context/core/odessay-watched-folders.md`.
 
 Este documento fija el contrato actual de **Workspace** en Odessay: qué existe en desktop, qué no existe en web y cuál debe ser el comportamiento explícito de la UI cuando el runtime no puede ofrecer acceso al filesystem local.
 
@@ -25,11 +25,11 @@ La regla operativa es esta:
 |---|---|---|---|
 | Crear workspace | Sí | No | Desktop puede crear una carpeta nueva y registrarla como workspace. Web no crea workspaces locales. |
 | Añadir carpeta existente | Sí | No | Desktop puede conectar una carpeta local existente. Web solo informa que la acción requiere la app desktop. |
-| Ver lista de workspaces | Sí | Solo mock/prototipo | Desktop lista workspaces reales desde settings locales + `.odyssey/index.json`. Web no lista workspaces locales reales. |
+| Ver lista de workspaces | Sí | Solo mock/prototipo | Desktop lista workspaces reales desde settings locales + `.odessay/index.json`. Web no lista workspaces locales reales. |
 | Ver detalle de workspace | Sí | Solo mock/prototipo | Desktop muestra archivos reales del workspace. Web no navega un filesystem local real. |
 | Selección granular de carpetas/archivos | Sí | No | Desktop puede limitar qué paths quedan incluidos. Web no expone árbol de filesystem local. |
 | Lista de archivos del workspace | Sí | No real | Desktop indexa `.md`/`.mdx` visibles dentro del scope elegido. Web no inspecciona carpetas locales del usuario. |
-| Sincronización con filesystem | Sí | No | Desktop relee el workspace desde disco y persiste metadata local en `.odyssey/index.json`. |
+| Sincronización con filesystem | Sí | No | Desktop relee el workspace desde disco y persiste el **índice de binding** local (ruta↔id, no metadata de Odessay; ver `odessay-adr-identidad.md` D4/D8) en `.odessay/index.json`. |
 | Watcher en tiempo real | Sí | No | Desktop observa cambios del filesystem con `fs:watch`. Web no tiene file events nativos equivalentes. |
 | Abrir archivo en editor | Sí | No real | Desktop abre el archivo local y lo enruta al editor. Web no abre archivos arbitrarios del disco. |
 | Selección de archivos dentro del workspace | Sí | No | Desktop puede incluir/excluir folders o archivos específicos. Web muestra limitación de runtime. |
@@ -59,7 +59,7 @@ Desktop sí puede ofrecer Workspace porque Tauri aporta:
 - selección de carpetas vía dialog nativo;
 - acceso a archivos y subcarpetas permitidos por capabilities;
 - watchers con `fs:watch`;
-- persistencia local en `.odyssey/index.json`;
+- persistencia local en `.odessay/index.json`;
 - lectura y refresco del contenido sin depender de Supabase.
 
 Capacidades actuales/esperadas de desktop:
@@ -82,7 +82,7 @@ Limitaciones relevantes:
 - no puede abrir carpetas arbitrarias del disco y seguir observándolas;
 - no puede mantener un watcher persistente sobre rutas locales;
 - no puede asumir permisos duraderos equivalentes a Tauri `fs:watch`;
-- no puede usar `.odyssey/index.json` como contrato operativo sobre una carpeta del usuario fuera del sandbox del browser.
+- no puede usar `.odessay/index.json` como contrato operativo sobre una carpeta del usuario fuera del sandbox del browser.
 
 Por eso Workspace no debe modelarse como una feature cross-runtime simétrica hoy.
 
@@ -90,7 +90,7 @@ Por eso Workspace no debe modelarse como una feature cross-runtime simétrica ho
 
 ## Contrato de persistencia local
 
-Workspace persiste configuración local en `.odyssey/index.json`.
+Workspace persiste configuración local en `.odessay/index.json`.
 
 Ese documento puede incluir:
 

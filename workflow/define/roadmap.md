@@ -437,7 +437,7 @@ Existe evidencia de producto y arquitectura suficiente para decidir si `Workspac
 
 - `ODE-245` — exploración MVP de Workspace / watched folders, reposicionado como validación post-convergencia y no como trabajo de cierre de Fase 7
 
-Referencia: `workflow/new features/watched-folders.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+Referencia: `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
 
 ---
 

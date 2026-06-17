@@ -8,7 +8,7 @@ El objetivo central de esta fase no es shipping completo. Es producir evidencia 
 Referencias:
 - `workflow/define/roadmap.md`
 - `workflow/define/dod-fase-7.md`
-- `workflow/new features/watched-folders.md`
+- `workflow/context/core/odessay-watched-folders.md`
 - `workflow/context/features/odessay-desktop-app.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`

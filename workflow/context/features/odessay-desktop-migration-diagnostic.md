@@ -3,6 +3,8 @@
 **Documento de diagnóstico para planear la migración arquitectónica a desktop.**
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección objetivo, `workflow/context/core/odessay-arquitectura.md` para el estado canónico del producto y `workflow/context/features/odessay-sync.md` para la capa local-first vigente.
 
+> **Subordinado a `workflow/context/core/odessay-adr-identidad.md` (ADR de identidad)** en fuente de verdad, identidad y metadata del documento (`.md` canónico, `body_json` copia de trabajo, metadata en la nube, un solo UUID cliente=nube). Ante cualquier discrepancia, prevalece el ADR.
+
 Después de este diagnóstico, la secuencia continúa con:
 
 - `workflow/context/features/odessay-desktop-target-architecture.md`

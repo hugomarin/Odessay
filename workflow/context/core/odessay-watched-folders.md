@@ -2,6 +2,11 @@
 
 **Linear:** [ODE-245](https://linear.app/z9ne/issue/ODE-245)
 
+> **Reconciliación con el ADR de identidad (`workflow/context/core/odessay-adr-identidad.md`).** Este spec acertó en lo esencial (trackear en su lugar, no tocar frontmatter, índice con inode), pero el ADR **supersede** dos puntos:
+> - **Metadata NO va en un sidecar `meta.json` en disco** — va en el **registro de nube** (writing + espejo IndexedDB) (D4). En disco solo vive un **índice de binding delgado** (ruta + inode + content_hash + UUID), no metadata.
+> - **`content_hash` es objetivo/pendiente**, no estado actual: hoy el índice implementado solo guarda inode + size, y la nube no guarda hash (D6/D11). El UUID del índice debe ser el **mismo de la nube** (D5), no un `Uuid::new_v4` propio.
+> - Nombre de la carpeta: **`.odessay/`** (no `.odyssey`, D8).
+
 ## Resumen
 
 Nueva sección **Workspace** en el sidebar izquierdo (debajo de Desk) que permite agregar carpetas de proyectos del filesystem para que Odessay las vigile. Cada archivo `.md` o `.txt` dentro de esas carpetas puede tener metadata en base de datos (status, tipo, etiquetas) y opcionalmente sincronizarse a la nube para acceso web.
@@ -84,7 +89,7 @@ Cuando el usuario agrega una carpeta vigilada, Odessay crea un directorio `.odes
     ├── index.json           ← mapa path → uuid
     └── objects/
         ├── <uuid>/
-        │   ├── meta.json    ← metadata del documento
+        │   ├── meta.json    ← ⚠️ SUPERSEDED (ADR D4): la metadata va a la nube, no a disco
         │   └── snapshots/
         │       ├── 2026-06-01T10:00.md
         │       └── 2026-06-05T09:15.md
@@ -104,14 +109,14 @@ Vincula paths a UUIDs. Usa el `inode` del OS para detectar renombres.
     "skills/my-skill.md": {
       "id": "abc-123",
       "inode": 12345678,
-      "content_hash": "sha256:abcdef...",
+      "content_hash": "blake3:abcdef...",
       "last_seen": "2026-06-05T10:00:00Z"
     }
   }
 }
 ```
 
-### `meta.json` por documento
+### `meta.json` por documento  — ⚠️ SUPERSEDED por ADR D4 (la metadata vive en la nube, no en disco)
 
 ```json
 {
@@ -166,7 +171,7 @@ Si el usuario activa sync para un documento:
 
 1. IndexedDB primero (offline-first, igual que documentos cloud actuales)
 2. Supabase en background — contenido + metadata
-3. La metadata del `.odessay/` también se sincroniza entre máquinas vía Supabase
+3. La metadata es **autoritativa en el registro de nube** (no en disco, ADR D4); entre máquinas viaja por Supabase. El `.odessay/` local solo guarda el índice de binding (ruta↔UUID↔inode↔`content_hash`), y el `content_hash` (D11) permite **re-vincular el archivo desnudo** en otra máquina.
 
 **Indicadores en UI:**
 
@@ -181,7 +186,7 @@ Si el usuario activa sync para un documento:
 
 ## Frontmatter
 
-Odessay **no modifica el frontmatter** de los archivos. Muchos documentos ya usan frontmatter para otros propósitos (templates, skills, configuración de herramientas). La metadata de Odessay vive exclusivamente en `.odessay/objects/<uuid>/meta.json`.
+Odessay **no modifica el frontmatter** de los archivos. Muchos documentos ya usan frontmatter para otros propósitos (templates, skills, configuración de herramientas). La metadata de Odessay vive en el **registro de nube** (writing + espejo IndexedDB), **no en disco** (ADR D4); en `.odessay/` solo vive el índice de binding (ruta↔UUID↔inode↔`content_hash`).
 
 Si en el futuro el usuario quiere que la metadata sea visible en el archivo, puede optar por exportarla a frontmatter manualmente — pero no es el comportamiento por defecto.
 

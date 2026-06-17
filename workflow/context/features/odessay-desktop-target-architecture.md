@@ -3,6 +3,10 @@
 **Documento de diseño objetivo para la arquitectura multi-runtime de Odessay.**
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección de producto, `workflow/context/features/odessay-desktop-migration-diagnostic.md` para el estado actual del codebase y `workflow/context/core/odessay-arquitectura.md` para la arquitectura vigente del producto.
 
+> **Subordinado a `workflow/context/core/odessay-adr-identidad.md` (ADR de identidad)** en fuente de verdad, identidad y metadata del documento (`.md` canónico, `body_json` copia de trabajo, metadata en la nube, un solo UUID cliente=nube). Ante cualquier discrepancia, prevalece el ADR.
+>
+> Spec de implementación del filesystem-tracking (carpetas vigiladas, índice de binding `.odessay/`, watcher): `workflow/context/core/odessay-watched-folders.md`.
+
 Este documento responde la pregunta: **si Odessay va a vivir en web, desktop y eventualmente mobile, cómo debe partirse el sistema para compartir producto sin compartir infraestructura por la fuerza**.
 
 ---

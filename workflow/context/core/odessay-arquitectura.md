@@ -4,6 +4,8 @@
 Lee `odessay-fundacional.md` primero. Este documento prevalece sobre versiones anteriores.
 Última actualización: Marzo 2026.
 
+> **En arquitectura de documento (identidad, fuente de verdad, metadata), prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** `.md` canónico, `body_json` copia de trabajo, metadata en la nube (no en frontmatter, D4), un solo UUID cliente=nube (D5), `content_hash` también en la nube (D11).
+
 ---
 
 ## Stack

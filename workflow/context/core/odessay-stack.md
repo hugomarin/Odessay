@@ -4,6 +4,8 @@
 Lee `odessay-fundacional.md` para entender qué es el producto.
 Última actualización: Marzo 2026.
 
+> **En arquitectura de documento, prevalece `workflow/context/core/odessay-adr-identidad.md` (ADR):** la base local (IndexedDB) es un **espejo**, no la verdad; la verdad del contenido es el `.md` canónico, la metadata vive en la nube (D1/D4/D10).
+
 ---
 
 ## Principio operativo

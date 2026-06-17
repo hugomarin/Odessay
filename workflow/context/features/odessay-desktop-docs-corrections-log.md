@@ -174,6 +174,27 @@ Motivo:
 
 - mejorar la jerarquía de descubrimiento desde `workflow/docs.json`
 
+### 2026-06-16 — Ronda 2: cierre de la polaridad (ADR de identidad)
+
+Contexto:
+
+- la consolidación de 2026-05-26 reemplazó "body_json como verdad universal" por una **formulación por runtime**, pero solo en core (`arquitectura`, `modelo-datos`, `stack`, `editor`, `prosemirror-tiptap`). **No se propagó** a la capa de anotaciones/márgenes/correspondencias, que seguían afirmando `body_json`/`body_text` como fuente de verdad. La polaridad quedó viva, ahora ubicada en esa capa.
+
+Resolución:
+
+- se crea `workflow/context/core/odessay-adr-identidad.md` como **fuente de verdad de la arquitectura de documento**. El ADR **cierra** la polaridad (ya no "por runtime aplazado"): `.md` canónico, `body_json` derivado, metadata en la nube (no en frontmatter), una sola identidad (UUID de cliente = UUID de nube), binding por ruta+inode+content_hash.
+
+Archivos reconciliados en esta ronda:
+
+- `features/odessay-anotaciones-ai.md`, `features/odessay-margenes.md`, `features/odessay-correspondencias.md`, `features/odessay-fase4-runtime-contract-audit.md`, `core/odessay-modelo-datos.md` (índice de anotaciones) → `body_json`/`body_text` dejan de ser verdad; modelo D3.
+- `features/odessay-workspace.md` → `.odyssey` → `.odessay` (typo de marca).
+- `core/odessay-watched-folders.md` → metadata a la nube (no `meta.json` en disco); `content_hash` marcado como pendiente.
+- los cuatro `odessay-desktop-*` y los skills `architecture/backend/database` → referencian el ADR.
+
+Motivo:
+
+- terminar lo que la ronda 1 dejó a medias y darle un dueño (el ADR) a la decisión que ningún skill estaba facultado para tomar.
+
 ---
 
 ## Pendientes reconocidos

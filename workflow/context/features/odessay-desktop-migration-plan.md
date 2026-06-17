@@ -3,6 +3,8 @@
 **Plan técnico de migración hacia la arquitectura multi-runtime de Odessay.**
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección de producto, `workflow/context/features/odessay-desktop-migration-diagnostic.md` para el diagnóstico del codebase actual y `workflow/context/features/odessay-desktop-target-architecture.md` para la arquitectura objetivo.
 
+> **Subordinado a `workflow/context/core/odessay-adr-identidad.md` (ADR de identidad)** en fuente de verdad, identidad y metadata del documento. El orden de implementación de identidad/metadata sigue el ADR (Consecuencias) y debe reconciliarse con `workflow/define/plan-correcciones-contexto.md` y el plan de fases. Ante cualquier discrepancia, prevalece el ADR.
+
 Este documento responde: **en qué orden conviene cambiar el sistema para llegar a desktop sin convertir el proceso en una refactor abstracta, riesgosa o interminable**.
 
 ---

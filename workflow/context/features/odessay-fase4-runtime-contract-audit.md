@@ -162,13 +162,15 @@ local-only  →  pending  →  synced  →  conflict
 
 ### 3.4 Margins Synchronization Contract (C4)
 
-**Qué gobierna:** la relación entre nodos `annotationReference` en `body_json` y la tabla materializada `margins`.
+**Qué gobierna:** la relación entre la notación de anotación inline del documento y la tabla `margins`.
+
+> Reconciliado con `workflow/context/core/odessay-adr-identidad.md` (D3).
 
 **Invariantes:**
 
-1. `body_json` es la fuente de verdad del contenido anotado.
-2. `margins` es un índice materializado para listar, filtrar y compartir sin reparsear el documento.
-3. Cada `save` del writing extrae nodos `annotationReference` desde `body_json`, hace upsert por `id` en `margins`, y elimina filas cuyo `id` ya no existe en el documento.
+1. El **documento canónico** (`.md` con anotaciones inline `==texto==[@n:..]`) es la fuente de verdad del contenido anotado; `body_json` es la copia de trabajo.
+2. `margins` es el payload/índice en la nube para listar, filtrar y compartir, y conserva el estado de colaboración (`resolved/shared/shared_at`) que no vive en el documento.
+3. Cada `save` extrae las anotaciones de la copia de trabajo, hace upsert por `id` en `margins`, y elimina filas cuyo `id` ya no existe. **Bloqueante (D3):** el `id` debe codificarse inline para sobrevivir el round-trip; hoy se regenera y este paso borra el estado de colaboración.
 4. Durante una transición de schema de `margins`, el adapter debe soportar tanto el schema legacy (`note`) como el schema moderno (`type`, `text`, `archived`, `resolved`).
 
 **Documento canónico:** `workflow/context/features/odessay-margenes.md` §Contrato de sincronización.
