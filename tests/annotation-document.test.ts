@@ -60,7 +60,7 @@ describe("annotation-document", () => {
       // bodyText preserves the original plain text (annotation text is not part of body_text)
       expect(result.bodyText).toBe("Hello world")
       expect(result.bodyMarkdown).toContain("==Hello==")
-      expect(result.bodyMarkdown).toContain("[@1: simplify]")
+      expect(result.bodyMarkdown).toMatch(/\[@1\|[^\]:|]+: simplify\]/)
       expect(result.bodyJson.content?.length).toBeGreaterThan(0)
     })
 
@@ -85,7 +85,7 @@ describe("annotation-document", () => {
       })
 
       expect(result.bodyMarkdown).toContain("==quick==")
-      expect(result.bodyMarkdown).toContain("[@p1: important detail]")
+      expect(result.bodyMarkdown).toMatch(/\[@p1\|[^\]:|]+: important detail\]/)
     })
 
     it("increments index sequentially for same-type annotations", () => {
@@ -115,7 +115,7 @@ describe("annotation-document", () => {
         text: "second note",
       })
 
-      expect(result.bodyMarkdown).toContain("[@2: second note]")
+      expect(result.bodyMarkdown).toMatch(/\[@2\|[^\]:|]+: second note\]/)
     })
 
     it("round-trips highlight + annotation through body_json and markdown", () => {
@@ -140,7 +140,8 @@ describe("annotation-document", () => {
 
       // Markdown must contain both the highlight mark and the annotation sigil
       expect(result.bodyMarkdown).toContain("==Passage==")
-      expect(result.bodyMarkdown).toContain("[@1: clarify]")
+      expect(result.bodyMarkdown).toContain("[@1|")
+      expect(result.bodyMarkdown).toContain(": clarify]")
 
       // body_json must contain the annotationReference node
       const paragraph = result.bodyJson.content?.[0]
@@ -154,7 +155,7 @@ describe("annotation-document", () => {
       // Re-serializing the resulting body_json produces equivalent markdown
       const reMarkdown = getBodyMarkdown(result.bodyJson)
       expect(reMarkdown).toContain("==Passage==")
-      expect(reMarkdown).toContain("[@1: clarify]")
+      expect(reMarkdown).toBe(result.bodyMarkdown)
     })
 
     it("replaces an existing annotation reference when the same text is re-annotated", () => {
@@ -199,7 +200,8 @@ describe("annotation-document", () => {
         attrs: { type: "ai", index: 1, text: "simplify this" },
       })
       expect(result.bodyMarkdown).toContain("==Hello==")
-      expect(result.bodyMarkdown).toContain("[@1: simplify this]")
+      expect(result.bodyMarkdown).toContain("[@1|")
+      expect(result.bodyMarkdown).toContain(": simplify this]")
       expect(result.bodyMarkdown).not.toContain("keep an eye on this")
     })
 

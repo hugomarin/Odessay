@@ -27,23 +27,23 @@ function createTestEditor(content = "") {
 
 describe("highlight annotation", () => {
   describe("markdown serialization", () => {
-    it("serializes highlight annotation to [@hN: text]", () => {
+    it("serializes highlight annotation with a stable inline id", () => {
       const editor = createTestEditor("Hello world")
       editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("highlight", "my note").run()
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown?.getMarkdown() ?? ""
-      expect(markdown).toContain("[@h1: my note]")
+      expect(markdown).toMatch(/\[@h1\|[^\]:|]+: my note\]/)
       editor.destroy()
     })
 
-    it("serializes empty highlight annotation to [@hN: ]", () => {
+    it("serializes empty highlight annotation with a stable inline id", () => {
       const editor = createTestEditor("Hello world")
       editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("highlight", "").run()
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const markdown = (editor.storage as any).markdown?.getMarkdown() ?? ""
-      expect(markdown).toContain("[@h1: ]")
+      expect(markdown).toMatch(/\[@h1\|[^\]:|]+: \]/)
       editor.destroy()
     })
   })

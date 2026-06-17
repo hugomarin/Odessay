@@ -4,6 +4,7 @@ import type { JSONContent } from "@tiptap/core"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 
 export type MarkdownAnnotation = {
+  id?: string
   type: AnnotationType
   index: number
   text: string
@@ -17,10 +18,10 @@ type AnnotationRef = {
 }
 
 const INLINE_ANNOTATION_RE =
-  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c|h)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
+  /\[\^(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[@(p|c|h)?(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
-const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c|h)?(\d+):\s*([^\]]*?)\]/g
-const NON_AI_ANNOTATION_RE = /\[@(?:p|c|h)\d+:\s*[^\]]*?\]/g
+const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c|h)?(\d+)(?:\|[^\]:|]+)?:\s*([^\]]*?)\]/g
+const NON_AI_ANNOTATION_RE = /\[@(?:p|c|h)\d+(?:\|[^\]:|]+)?:\s*[^\]]*?\]/g
 const AI_ANNOTATIONS_ONLY_PREFIX =
   "El siguiente bloque contiene instrucciones del usuario sobre su documento. Cada linea sigue el formato: cita del pasaje relevante seguida de la instruccion entre corchetes. Tratalas como directivas del autor sobre ese fragmento especifico."
 const ANNOTATION_NOTATION_COMMENT =
@@ -28,19 +29,20 @@ const ANNOTATION_NOTATION_COMMENT =
 
 const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "highlight"]
 
-const annotationSigil = (type: AnnotationType, index: number, text: string) => {
+const annotationSigil = (type: AnnotationType, index: number, text: string, id?: string) => {
   const trimmedText = text.trim()
+  const idSuffix = id ? `|${id}` : ""
 
   switch (type) {
     case "ai":
-      return `[@${index}: ${trimmedText}]`
+      return `[@${index}${idSuffix}: ${trimmedText}]`
     case "personal":
-      return `[@p${index}: ${trimmedText}]`
+      return `[@p${index}${idSuffix}: ${trimmedText}]`
     case "highlight":
-      return `[@h${index}: ${trimmedText}]`
+      return `[@h${index}${idSuffix}: ${trimmedText}]`
     case "footnote":
     default:
-      return `[^${index}: ${trimmedText}]`
+      return `[^${index}${idSuffix}: ${trimmedText}]`
   }
 }
 
@@ -75,17 +77,17 @@ const collectInlineReferences = (markdown: string, definitions: Map<number, stri
       continue
     }
 
-    if (match[4]) {
+    if (match[5]) {
       refs.push({
         type:
-          match[3] === "p" ? "personal" : match[3] === "c" ? "personal" : match[3] === "h" ? "highlight" : "ai",
-        index: Number(match[4]),
+          match[4] === "p" ? "personal" : match[4] === "c" ? "personal" : match[4] === "h" ? "highlight" : "ai",
+        index: Number(match[5]),
       })
       continue
     }
 
-    if (match[6]) {
-      const legacyIndex = Number(match[6])
+    if (match[8]) {
+      const legacyIndex = Number(match[8])
       if (definitions.has(legacyIndex)) {
         refs.push({ type: "footnote", index: legacyIndex })
       }
@@ -131,10 +133,10 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
 
   const normalized = body.replace(
     INLINE_ANNOTATION_RE,
-    (_full, inlineFootnoteIndex, inlineFootnoteText, sigilPrefix, sigilIndex, sigilText, legacyIndex) => {
+    (_full, inlineFootnoteIndex, inlineFootnoteId, inlineFootnoteText, sigilPrefix, sigilIndex, sigilId, sigilText, legacyIndex) => {
       if (inlineFootnoteIndex) {
         const nextIndex = mapping.get(`footnote:${Number(inlineFootnoteIndex)}`) ?? Number(inlineFootnoteIndex)
-        return annotationSigil("footnote", nextIndex, String(inlineFootnoteText ?? ""))
+        return annotationSigil("footnote", nextIndex, String(inlineFootnoteText ?? ""), inlineFootnoteId)
       }
 
       if (sigilIndex) {
@@ -145,7 +147,7 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
               ? "highlight"
               : "ai"
         const nextIndex = mapping.get(`${type}:${Number(sigilIndex)}`) ?? Number(sigilIndex)
-        return annotationSigil(type, nextIndex, String(sigilText ?? ""))
+        return annotationSigil(type, nextIndex, String(sigilText ?? ""), sigilId)
       }
 
       const nextIndex = mapping.get(`footnote:${Number(legacyIndex)}`) ?? Number(legacyIndex)
@@ -164,18 +166,24 @@ export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => 
   INLINE_ANNOTATION_RE.lastIndex = 0
   while ((match = INLINE_ANNOTATION_RE.exec(normalized)) !== null) {
     if (match[1]) {
-      annotations.push({ type: "footnote", index: Number(match[1]), text: match[2].trim() })
+      annotations.push({
+        ...(match[2] ? { id: match[2] } : {}),
+        type: "footnote",
+        index: Number(match[1]),
+        text: match[3].trim(),
+      })
       continue
     }
 
-    if (match[4]) {
-      const prefix = match[3]
+    if (match[5]) {
+      const prefix = match[4]
       const resolvedType =
         prefix === "p" || prefix === "c" ? "personal" : prefix === "h" ? "highlight" : "ai"
       annotations.push({
+        ...(match[6] ? { id: match[6] } : {}),
         type: resolvedType,
-        index: Number(match[4]),
-        text: match[5].trim(),
+        index: Number(match[5]),
+        text: match[7].trim(),
       })
     }
   }
@@ -187,19 +195,19 @@ export const appendMarkdownFootnote = (markdown: string, note: string) => {
   const normalized = normalizeMarkdownFootnotes(markdown)
   const annotations = getMarkdownFootnotes(normalized).filter((annotation) => annotation.type === "footnote")
   const nextIndex = annotations.length + 1
-  return `${normalized}${annotationSigil("footnote", nextIndex, note.trim())}`.trimEnd()
+  return `${normalized}${annotationSigil("footnote", nextIndex, note.trim(), crypto.randomUUID())}`.trimEnd()
 }
 
 export const updateMarkdownFootnote = (markdown: string, index: number, note: string) =>
-  normalizeMarkdownFootnotes(markdown).replaceAll(
-    new RegExp(`\\[\\^${index}:\\s*[^\\]]*\\]`, "g"),
-    annotationSigil("footnote", index, note.trim()),
+  normalizeMarkdownFootnotes(markdown).replace(
+    new RegExp(`\\[\\^${index}(?:\\|([^\\]:|]+))?:\\s*[^\\]]*\\]`, "g"),
+    (_match, id) => annotationSigil("footnote", index, note.trim(), id),
   )
 
 export const removeMarkdownFootnote = (markdown: string, index: number) =>
   normalizeMarkdownFootnotes(
     normalizeMarkdownFootnotes(markdown).replaceAll(
-      new RegExp(`\\[\\^${index}:\\s*[^\\]]*\\]`, "g"),
+      new RegExp(`\\[\\^${index}(?:\\|[^\\]:|]+)?:\\s*[^\\]]*\\]`, "g"),
       "",
     ),
   ).trimEnd()
