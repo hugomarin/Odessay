@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "fix(identity): stop writing Odessay frontmatter; route metadata to cloud/IndexedDB record. Serializer now emits markdown content only; legacy frontmatter with Odessay id is still parsed for old files but ignored for metadata; non-Odessay frontmatter is treated as document content. Desktop open/save/sync/migration/workspace creation source metadata from IndexedDB/cloud record instead of file frontmatter. Desktop sync rebuilds body_json/body_text/content_hash from canonical .md while keeping slug/status/visibility/version from cloud payload. [ODE-303]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-303",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-303/route-metadata-annotation-payload-to-the-cloud-record-stop-writing",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/273",
+      "commit": "cfe38c5",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (125 files / 769 tests); targeted tests PASS (52/52). ops:status:drift PASS. ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (serializer/sync metadata routing; no editor interaction hot path). Presentation Contract: not required. Architecture Contract compliant: Domain + Application + Adapter(cloud/desktop), runtime shared-core + cloud + desktop, owner architecture-first. Review score: 9.5/10 (P3×2: serializeDocumentFile legacy metadata parameter ignored; buildInitialWorkspaceMarkdown empty-title edge case). Context Gaps Detected: yes — initial brief omitted required desktop sequence in Reference docs; corrected before BUILD. Supabase MCP validation requested by brief was not executable in this session."
+    },
+    {
       "what": "feat(identity): harvest existing frontmatter ids into binding index + cloud without rewriting markdown. Adds scripts/identity/backup-restore.mjs (backup/verify/restore for .md files, .odessay/index.json, and optional cloud writings/margins), scripts/identity/harvest-ids.mjs (dry-run by default, --apply gated behind verified backup, frontmatter.id harvesting, id minting for files without id, conflict detection, optional --cloud registration), and shared scripts/identity/lib.mjs helpers. Adds tests/identity-harvest-scripts.test.ts covering dry-run/apply, minting, conflict failure, and backup/verify/restore. [ODE-301]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-301",
