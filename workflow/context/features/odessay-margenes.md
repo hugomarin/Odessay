@@ -136,6 +136,23 @@ La relación entre la notación de anotación inline en el documento y la tabla 
 3. **Sincronización por `save`.** Cada `save` extrae las anotaciones de la copia de trabajo, hace upsert por `id` en `margins`, y elimina las filas cuyo `id` ya no existe. **Riesgo bloqueante (D3):** como el `id` no se codifica inline y el round-trip lo regenera, hoy este paso **borra** el estado de colaboración de cada anotación en cada ciclo. Codificar el `id` estable inline es prerrequisito.
 4. **Transición de schema.** Durante una transición de schema de `margins`, el adapter debe soportar tanto el schema legacy (`note`) como el schema moderno (`type`, `text`, `archived`, `resolved`). El código debe detectar qué schema está activo y adaptar la query sin fallar.
 
+### Hallazgo ODE-294 — derivación real de anchors
+
+La revisión de código confirma D3: el rango de una anotación **no se almacena aparte en el marcador puntual**. Se deriva del texto con marca `highlight` inmediatamente anterior al nodo `annotationReference` / `footnoteReference`.
+
+Cadena actual verificable:
+
+1. El parser markdown detecta el marcador inline con `INLINE_ANNOTATION_RE` y lo transforma en un nodo HTML `annotation-ref`, generando un `id` nuevo con `crypto.randomUUID()` porque el markdown actual no porta id estable (`lib/editor/footnote-node.ts:24`, `lib/editor/footnote-node.ts:163`).
+2. Al parsear HTML de vuelta a TipTap, `AnnotationReferenceNode` conserva `data-annotation-id` / `annotation-id` si existe; si no existe, vuelve a generar `crypto.randomUUID()` (`lib/editor/footnote-node.ts:223`, `lib/editor/footnote-node.ts:288`, `lib/editor/footnote-node.ts:318`).
+3. `collectAnnotationNodes` acumula el texto de hijos `text` marcados con `highlight` en `pendingAnchor`, y solo pasa ese `pendingAnchor` al siguiente hijo si el hijo es `annotationReference` o `footnoteReference` (`lib/editor/footnote-extension.ts:290`, `lib/editor/footnote-extension.ts:292`, `lib/editor/footnote-extension.ts:298`).
+4. Cuando `collectAnnotationNodes` visita el nodo de anotación, calcula `anchor_text` desde ese `pendingAnchor`, `anchor_start` como `cursor.offset - anchorText.length` y `anchor_end` como `cursor.offset` (`lib/editor/footnote-extension.ts:270`, `lib/editor/footnote-extension.ts:277`, `lib/editor/footnote-extension.ts:278`, `lib/editor/footnote-extension.ts:279`).
+5. `extractWritingAnnotationNodes` es el wrapper público que reconstruye las anotaciones desde `body_json` llamando a `collectAnnotationNodes` (`lib/editor/footnote-extension.ts:309`, `lib/editor/footnote-extension.ts:315`).
+6. `buildMarginSyncRows` copia `annotation.anchor_start`, `annotation.anchor_end` y `annotation.anchor_text` a las filas de sync (`lib/margins/margins.ts:379`, `lib/margins/margins.ts:384`, `lib/margins/margins.ts:395`, `lib/margins/margins.ts:396`, `lib/margins/margins.ts:397`).
+7. El símbolo real que reconstruye la tabla materializada desde `body_json` sí es `syncMarginsFromBodyJson`; hace `upsert` por `id` y luego borra filas del mismo `writing_id`/`reader_id` cuyo `id` ya no está en el documento (`lib/margins/margins.ts:403`, `lib/margins/margins.ts:415`, `lib/margins/margins.ts:418`, `lib/margins/margins.ts:440`, `lib/margins/margins.ts:441`, `lib/margins/margins.ts:444`, `lib/margins/margins.ts:447`).
+8. El save path web invoca esa reconstrucción al persistir `body_json` en `PATCH /api/writings/[id]` y en la ruta de anotación (`app/api/writings/[id]/route.ts:130`, `app/api/writings/[id]/route.ts:171`, `app/api/writings/[id]/route.ts:191`, `app/api/writings/[id]/annotate/route.ts:74`).
+
+Conclusión: D3 queda confirmado en la derivación del rango. El gap destructivo no está en `anchor_start` / `anchor_end`, sino en identidad: el markdown inline actual porta `type/index/text`, pero no porta el `id`, y por eso un round-trip markdown vuelve a generar ids y hace que `syncMarginsFromBodyJson` elimine las filas previas de `margins`.
+
 ### Reglas de schema transition
 
 | Escenario | Comportamiento esperado |
