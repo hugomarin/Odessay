@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(desktop): unify UUID minting so workspace index adopts writing UUID. Workspace-created files now mint the writing UUID client-side, write it into transitional frontmatter, have .odessay/index.json adopt that id, and open in the editor through the same workspace/writing id without re-derivation. Existing index entries keep precedence for rename/move binding. [ODE-300]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-300",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-300/unify-uuid-minting-workspace-index-adopts-the-writing-uuid",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/270",
+      "commit": "3403683",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (124 files / 761 tests). cargo test commands::workspace PASS (7/7). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (desktop workspace/index identity plumbing, no editor hot path). Architecture Contract compliant: Adapter(desktop)+Application, runtime desktop/shared-core, owner architecture-first. First review rejected for missing Performance Contract declaration and non-UUID fallback; both corrected before merge. Review score: 9.5/10."
+    },
+    {
       "what": "fix(editor): persist annotation ids in markdown round-trip [ODE-299]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-299",
