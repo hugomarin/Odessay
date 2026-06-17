@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): flip the canonical switch so .md is the durable substrate on desktop and body_json remains the persisted substrate on web. Documents canonical_path as a desktop materialization binding, not a source-of-truth switch. Desktop cloud-only writings (no canonical_path) now open from persisted body_json instead of treating the writing id as a filesystem path. [ODE-304]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-304",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-304/flip-the-canonical-switch-md-as-canonical-substrate-desktop-body-json",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/274",
+      "commit": "05da4a8",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings only. npm test PASS (125 files / 770 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required. Presentation Contract: not required. Architecture Contract COMPLIANT: Layer=Domain, runtime scope=desktop+web, owner=architecture-first, invariant preserved (one markdown representation contract with two storage substrates; no destructive choice of truth by canonical_path). Review score: 10.0/10."
+    },
+    {
       "what": "fix(identity): stop writing Odessay frontmatter; route metadata to cloud/IndexedDB record. Serializer now emits markdown content only; legacy frontmatter with Odessay id is still parsed for old files but ignored for metadata; non-Odessay frontmatter is treated as document content. Desktop open/save/sync/migration/workspace creation source metadata from IndexedDB/cloud record instead of file frontmatter. Desktop sync rebuilds body_json/body_text/content_hash from canonical .md while keeping slug/status/visibility/version from cloud payload. [ODE-303]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-303",
