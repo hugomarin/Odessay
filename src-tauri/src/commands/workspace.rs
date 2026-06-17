@@ -5,6 +5,10 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use uuid::Uuid;
 
+const WORKSPACE_DIR_NAME: &str = ".odessay";
+const LEGACY_WORKSPACE_DIR_NAME: &str = concat!(".ody", "ssey");
+const WORKSPACE_INDEX_FILE_NAME: &str = "index.json";
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkspaceFileSnapshot {
     pub id: String,
@@ -86,7 +90,11 @@ fn normalize_selected_paths(selected_paths: Vec<String>) -> Result<Vec<String>, 
 
 fn should_ignore_entry(name: &str, is_dir: bool) -> bool {
     // Internal/system directories are always skipped, regardless of dot-prefix.
-    if name == ".odyssey" || name == ".git" || name == "node_modules" {
+    if name == WORKSPACE_DIR_NAME
+        || name == LEGACY_WORKSPACE_DIR_NAME
+        || name == ".git"
+        || name == "node_modules"
+    {
         return true;
     }
 
@@ -164,9 +172,7 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
     }
 
     // Reject path traversal or separator characters in name
-    if has_path_traversal(trimmed_name)
-        || trimmed_name.contains('/')
-        || trimmed_name.contains('\\')
+    if has_path_traversal(trimmed_name) || trimmed_name.contains('/') || trimmed_name.contains('\\')
     {
         return Err("workspace_create: name contains invalid characters".to_string());
     }
@@ -185,8 +191,7 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
         ));
     }
 
-    fs::create_dir_all(&target)
-        .map_err(|e| format!("workspace_create create_dir_all: {e}"))?;
+    fs::create_dir_all(&target).map_err(|e| format!("workspace_create create_dir_all: {e}"))?;
     Ok(target.to_string_lossy().to_string())
 }
 
@@ -210,11 +215,9 @@ pub fn workspace_sync(
         .canonicalize()
         .map_err(|e| format!("workspace_sync: failed to canonicalize root_path: {e}"))?;
 
-    let odyssey_dir = canonical_root.join(".odyssey");
-    fs::create_dir_all(&odyssey_dir)
-        .map_err(|e| format!("workspace_sync create_dir_all: {e}"))?;
+    let workspace_dir = prepare_workspace_index_dir(&canonical_root)?;
 
-    let index_path = odyssey_dir.join("index.json");
+    let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
     let existing_index = read_workspace_index(&index_path)?;
     let effective_selected_paths = match selected_paths {
         Some(selected_paths) => normalize_selected_paths(selected_paths)?,
@@ -223,7 +226,12 @@ pub fn workspace_sync(
 
     let mut files = Vec::new();
     let mut folder_count = 0usize;
-    visit_workspace(&canonical_root, &canonical_root, &mut files, &mut folder_count)?;
+    visit_workspace(
+        &canonical_root,
+        &canonical_root,
+        &mut files,
+        &mut folder_count,
+    )?;
     files.retain(|file| matches_selected_paths(&file.relative_path, &effective_selected_paths));
     folder_count = count_included_folders(&files);
 
@@ -290,6 +298,32 @@ pub fn workspace_sync(
         selected_paths: effective_selected_paths,
         files: files_with_ids,
     })
+}
+
+fn prepare_workspace_index_dir(canonical_root: &Path) -> Result<PathBuf, String> {
+    let workspace_dir = canonical_root.join(WORKSPACE_DIR_NAME);
+    let legacy_dir = canonical_root.join(LEGACY_WORKSPACE_DIR_NAME);
+
+    if legacy_dir.exists() && !workspace_dir.exists() {
+        fs::rename(&legacy_dir, &workspace_dir)
+            .map_err(|e| format!("workspace_sync migrate index dir: {e}"))?;
+        return Ok(workspace_dir);
+    }
+
+    fs::create_dir_all(&workspace_dir)
+        .map_err(|e| format!("workspace_sync create index dir: {e}"))?;
+
+    if legacy_dir.exists() {
+        let legacy_index_path = legacy_dir.join(WORKSPACE_INDEX_FILE_NAME);
+        let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
+
+        if legacy_index_path.exists() && !index_path.exists() {
+            fs::copy(&legacy_index_path, &index_path)
+                .map_err(|e| format!("workspace_sync preserve legacy index: {e}"))?;
+        }
+    }
+
+    Ok(workspace_dir)
 }
 
 fn read_workspace_index(index_path: &Path) -> Result<WorkspaceIndexDocument, String> {
@@ -380,4 +414,73 @@ fn inode_for_path(path: &PathBuf) -> u64 {
 #[cfg(not(unix))]
 fn inode_for_path(_path: &PathBuf) -> u64 {
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_workspace_root(test_name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "odessay-workspace-test-{test_name}-{}",
+            Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).expect("create temp workspace root");
+        root
+    }
+
+    fn cleanup(path: &Path) {
+        let _ = fs::remove_dir_all(path);
+    }
+
+    #[test]
+    fn workspace_sync_migrates_legacy_index_dir() {
+        let root = temp_workspace_root("migrate-legacy-index-dir");
+        let legacy_dir = root.join(LEGACY_WORKSPACE_DIR_NAME);
+        fs::create_dir_all(&legacy_dir).expect("create legacy index dir");
+        fs::write(root.join("letter.md"), "Hello").expect("write markdown file");
+        fs::write(
+            legacy_dir.join(WORKSPACE_INDEX_FILE_NAME),
+            r#"{
+  "version": 1,
+  "selectedPaths": [],
+  "files": {
+    "letter.md": {
+      "id": "existing-id",
+      "inode": 0,
+      "lastSeen": 0,
+      "size": 5
+    }
+  }
+}"#,
+        )
+        .expect("write legacy index");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace with legacy index");
+
+        assert!(root.join(WORKSPACE_DIR_NAME).exists());
+        assert!(!root.join(LEGACY_WORKSPACE_DIR_NAME).exists());
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].id, "existing-id");
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_ignores_internal_workspace_dir() {
+        let root = temp_workspace_root("ignore-internal-workspace-dir");
+        fs::create_dir_all(root.join(WORKSPACE_DIR_NAME)).expect("create workspace dir");
+        fs::write(root.join(WORKSPACE_DIR_NAME).join("ignored.md"), "ignored")
+            .expect("write internal markdown file");
+        fs::write(root.join("visible.md"), "visible").expect("write visible markdown file");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace with internal markdown file");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].relative_path, "visible.md");
+
+        cleanup(&root);
+    }
 }

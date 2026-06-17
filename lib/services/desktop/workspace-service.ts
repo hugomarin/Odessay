@@ -10,7 +10,7 @@ import {
 } from "@/lib/services/document-service-factory"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import {
-  isOdysseyInternalPath,
+  isOdessayInternalPath,
   watchFsPaths,
   type TauriWatchEvent,
   type UnwatchFn,
@@ -496,7 +496,7 @@ async function resolveWorkspaceWatchPaths(rootPath: string, selectedPaths: strin
 }
 
 function shouldIgnoreWorkspaceWatchEvent(event: TauriWatchEvent) {
-  if (!event.paths.some((path) => !isOdysseyInternalPath(path))) {
+  if (!event.paths.some((path) => !isOdessayInternalPath(path))) {
     return true
   }
 

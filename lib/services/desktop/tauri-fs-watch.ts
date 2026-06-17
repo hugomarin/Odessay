@@ -53,6 +53,6 @@ export async function watchFsPaths(
   }
 }
 
-export function isOdysseyInternalPath(path: string) {
-  return path.includes("/.odyssey/") || path.endsWith("/.odyssey")
+export function isOdessayInternalPath(path: string) {
+  return path.includes("/.odessay/") || path.endsWith("/.odessay")
 }
