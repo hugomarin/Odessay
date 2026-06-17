@@ -7,6 +7,7 @@ import type {
   RemoteWritingPayload,
   SyncMutation,
 } from "@/lib/local-db/schema";
+import { computeWritingContentHash } from "@/lib/content-hash";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
 
@@ -18,11 +19,12 @@ const createMutationId = () => {
   return `mutation-${Date.now()}`;
 };
 
-const toRemotePayload = (writing: LocalWriting): RemoteWritingPayload => ({
+export const toRemotePayload = async (writing: LocalWriting): Promise<RemoteWritingPayload> => ({
   author_id: writing.author_id ?? null,
   title: writing.title ?? null,
   body_json: writing.body_json,
   body_text: writing.body_text,
+  content_hash: writing.content_hash ?? await computeWritingContentHash(writing.body_json),
   slug: writing.slug ?? null,
   status: writing.status,
   artifact_type: normalizeArtifactType(writing.artifact_type),
@@ -49,7 +51,7 @@ export const enqueueMutation = async (
     entity_id: writing.id,
     entity_key: createEntityKey("writing", writing.id),
     operation,
-    payload: toRemotePayload(writing),
+    payload: await toRemotePayload(writing),
     created_at: Date.now(),
     attempts: 0,
   });

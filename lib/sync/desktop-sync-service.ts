@@ -16,6 +16,7 @@ import type { ServiceResponse } from "@/lib/services/contracts/service-types"
 import { localDB } from "@/lib/local-db"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
+import { computeMarkdownContentHash } from "@/lib/content-hash"
 import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands"
 import {
   beginHydrationProgress,
@@ -51,7 +52,7 @@ type RemoteWritingCollectionRecord = {
 }
 
 const WRITING_SELECT =
-  "id, author_id, title, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, body_json, body_text"
+  "id, author_id, title, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, content_hash, body_json, body_text"
 const COLLECTION_SELECT = "id, owner_id, name, description, visibility, created_at, updated_at"
 const DESKTOP_FLUSH_DEBOUNCE_MS = 1500
 
@@ -269,6 +270,7 @@ async function processWritingMutation(userId: string, mutation: Extract<SyncMuta
           visibility: parsed.document.metadata?.visibility ?? canonicalPayload.visibility,
           version: parsed.document.metadata?.version ?? canonicalPayload.version,
           updated_at: parsed.document.metadata?.updatedAt ?? canonicalPayload.updated_at,
+          content_hash: await computeMarkdownContentHash(source),
         }
       }
     } catch (error) {
