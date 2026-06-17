@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): suppress watcher self-write events to prevent reconciliation loops. Adds short-lived self-write registry in tauri-fs-watch.ts, marks create_file/write_file/rename_file as app-owned writes, filters watcher events composed only of recent self-writes, and preserves external edit detection after window expiry or when mixed with non-self-written paths. [ODE-298]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-298",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-298/suppress-watcher-self-write-events-to-prevent-reconciliation-loops",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/267",
+      "commit": "aea3f36",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (124 files / 759 tests). ops:status:drift OK. ops:delivery:gate PASS. CI Traceability SUCCESS. Vercel SUCCESS. Performance Contract: not required (desktop adapter watcher suppression, no editor interaction hot path). Architecture Contract: Adapter(desktop), runtime desktop, owner backend. First review rejected for missing Performance Contract declaration in PR body; corrected and re-reviewed. Manual tauri:dev validation deferred to interactive environment."
+    },
+    {
       "what": "feat(sync): store writing content_hash in the cloud writing record. Adds Supabase migration with content_hash column and partial lookup index; shared TS BLAKE3 helper matching ODE-296 contract; writes content_hash into cloud sync payloads and mirrors it through local/remote writing records; desktop sync computes hash from canonical .md source. Updates odessay-modelo-datos.md. [ODE-297]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-297",
