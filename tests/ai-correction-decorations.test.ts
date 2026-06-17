@@ -90,4 +90,30 @@ describe("AI correction decorations", () => {
     expect(resolved?.from).toBe(22)
     expect(resolved?.to).toBe(28)
   })
+
+  it("anchors stale suggestions to their source block instead of decorating another occurrence", () => {
+    const doc = schema.node("doc", null, [
+      schema.node("paragraph", null, [schema.text("prueva inicial.")]),
+      schema.node("paragraph", null, [schema.text("Otra prueba final.")]),
+    ])
+    let secondBlockPos = 0
+
+    doc.descendants((node, pos) => {
+      if (node.type.name === "paragraph" && node.textContent === "Otra prueba final.") {
+        secondBlockPos = pos
+        return false
+      }
+
+      return true
+    })
+
+    expect(
+      resolveCorrectionDecorationRanges(doc, [
+        createSuggestion({
+          status: "pending-stale",
+          block_id: `correction-block:old-hash:${secondBlockPos}`,
+        }),
+      ]),
+    ).toEqual([])
+  })
 })

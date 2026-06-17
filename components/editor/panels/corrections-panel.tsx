@@ -11,7 +11,7 @@ type CorrectionsPanelProps = {
   markdown: string;
   correctionsEnabled: boolean;
   showCorrections: boolean;
-  onAcceptSuggestion: (suggestion: PublicationSuggestion) => void;
+  onAcceptSuggestion: (suggestion: PublicationSuggestion, suggestionIds?: string[]) => void;
   onRejectSuggestion: (suggestionId: string) => void;
   onAcceptAll: () => void;
   onRejectAll: () => void;
@@ -201,8 +201,7 @@ export function CorrectionsPanel({
                     <button
                       type="button"
                       onClick={() => {
-                        for (const id of ids) onRejectSuggestion(id);
-                        onAcceptSuggestion(suggestion);
+                        onAcceptSuggestion(suggestion, ids);
                       }}
                       aria-label={isStale ? "Recalculating…" : "Accept"}
                       title={isStale ? "Recalculating…" : "Accept"}

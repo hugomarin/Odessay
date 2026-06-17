@@ -9,6 +9,89 @@ export type ResolvedCorrectionDecoration = {
   to: number
 }
 
+type TextMap = ReturnType<typeof collectDocumentTextMap>
+
+const parseBlockPosition = (blockId: string | null | undefined): number | null => {
+  if (!blockId) {
+    return null
+  }
+
+  const raw = blockId.split(":").at(-1)
+  const pos = raw ? Number.parseInt(raw, 10) : Number.NaN
+  return Number.isFinite(pos) ? pos : null
+}
+
+const resolveTextMapRange = (
+  textMap: TextMap,
+  match: { start: number; end: number },
+): { from: number; to: number } | null => {
+  const mappedPositions = textMap.positions.slice(match.start, match.end)
+
+  if (mappedPositions.length === 0 || mappedPositions.some((position) => position === null)) {
+    return null
+  }
+
+  const from = mappedPositions[0]
+  const last = mappedPositions[mappedPositions.length - 1]
+
+  if (typeof from !== "number" || typeof last !== "number") {
+    return null
+  }
+
+  return {
+    from,
+    to: last + 1,
+  }
+}
+
+const collectBlockTextMap = (
+  doc: ProseMirrorNode,
+  blockPos: number,
+): TextMap | null => {
+  if (blockPos < 0 || blockPos > doc.content.size) {
+    return null
+  }
+
+  let block: ProseMirrorNode | null = null
+
+  doc.descendants((node, pos) => {
+    if (pos !== blockPos) {
+      return true
+    }
+
+    block = node
+    return false
+  })
+
+  if (!block) {
+    return null
+  }
+
+  const blockMap = collectDocumentTextMap(block)
+
+  return {
+    text: blockMap.text,
+    positions: blockMap.positions.map((position) => (position === null ? null : position + blockPos)),
+  }
+}
+
+const resolveSuggestionRange = (
+  docTextMap: TextMap,
+  doc: ProseMirrorNode,
+  suggestion: PublicationSuggestion,
+) => {
+  const blockPos = parseBlockPosition(suggestion.block_id)
+  const blockTextMap = blockPos !== null ? collectBlockTextMap(doc, blockPos) : null
+  const textMap = blockTextMap ?? docTextMap
+  const match = findSuggestionMatch(textMap.text, suggestion)
+
+  if (!match) {
+    return null
+  }
+
+  return resolveTextMapRange(textMap, match)
+}
+
 export const resolveCorrectionDecorationRanges = (
   doc: ProseMirrorNode,
   suggestions: PublicationSuggestion[],
@@ -21,31 +104,18 @@ export const resolveCorrectionDecorationRanges = (
     return []
   }
 
-  const { text, positions } = collectDocumentTextMap(doc)
+  const docTextMap = collectDocumentTextMap(doc)
   const resolved: ResolvedCorrectionDecoration[] = []
   const occupiedRanges: Array<{ from: number; to: number }> = []
 
   for (const suggestion of pendingSuggestions) {
-    const match = findSuggestionMatch(text, suggestion)
+    const range = resolveSuggestionRange(docTextMap, doc, suggestion)
 
-    if (!match) {
+    if (!range) {
       continue
     }
 
-    const mappedPositions = positions.slice(match.start, match.end)
-
-    if (mappedPositions.length === 0 || mappedPositions.some((position) => position === null)) {
-      continue
-    }
-
-    const from = mappedPositions[0]
-    const last = mappedPositions[mappedPositions.length - 1]
-
-    if (typeof from !== "number" || typeof last !== "number") {
-      continue
-    }
-
-    const to = last + 1
+    const { from, to } = range
     const overlapsExistingRange = occupiedRanges.some((range) => from < range.to && to > range.from)
 
     if (overlapsExistingRange) {
