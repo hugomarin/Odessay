@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "docs(margins): trace annotation anchor derivation [ODE-294]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-294",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-294/trace-how-margins-anchors-derive-from-the-inline-annotation-marker",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/264",
+      "commit": "4d1f658",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 748 tests PASS. ops:status:drift WARN mode (pre-existing ODE-288, ODE-293, ODE-310). ops:delivery:gate PASS. Performance Contract: not required (docs-only trace, no runtime interaction path). Architecture Contract: Domain/shared-core/web, annotations contract (margins↔body_json). Context Gaps Detected: yes — brief originally lacked desktop sequence in Reference docs; resolved by updating brief before BUILD. Review score: 10.0/10."
+    },
+    {
       "what": "feat(identity): count workspace id conflicts between markdown frontmatter.id and workspace index ids. Adds scripts/identity/count-id-conflicts.mjs (read-only diagnostic) and tests/count-id-conflicts.test.ts. [ODE-293]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-293",
