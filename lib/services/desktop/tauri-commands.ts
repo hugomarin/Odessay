@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core"
+import { markOdessaySelfWritePath } from "@/lib/services/desktop/tauri-fs-watch"
 
 export type DesktopFileMetadata = {
   path: string
@@ -40,15 +41,23 @@ export async function tauriOpenFile(path: string): Promise<string> {
 }
 
 export async function tauriCreateFile(dir: string, filename: string): Promise<string> {
-  return invoke<string>("create_file", { dir, filename })
+  const path = await invoke<string>("create_file", { dir, filename })
+  markOdessaySelfWritePath(path)
+  return path
 }
 
 export async function tauriWriteFile(path: string, content: string): Promise<void> {
-  return invoke<void>("write_file", { path, content })
+  markOdessaySelfWritePath(path)
+  await invoke<void>("write_file", { path, content })
+  markOdessaySelfWritePath(path)
 }
 
 export async function tauriRenameFile(oldPath: string, newPath: string): Promise<string> {
-  return invoke<string>("rename_file", { oldPath, newPath })
+  markOdessaySelfWritePath(oldPath)
+  markOdessaySelfWritePath(newPath)
+  const resolvedPath = await invoke<string>("rename_file", { oldPath, newPath })
+  markOdessaySelfWritePath(resolvedPath)
+  return resolvedPath
 }
 
 export async function tauriListRecentFiles(
