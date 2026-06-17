@@ -113,7 +113,7 @@ Quitar el `id` del frontmatter (D4) elimina lo único que hoy hace portable la i
 
 ## Pendientes
 
-- **(Runtime)** Conteo real de ids en conflicto entre frontmatter e índice de workspace; requiere script sobre datos reales.
+- **(Runtime)** ✅ Resuelto en ODE-293 (PR #262): conteo real sobre workspaces locales vía scripts/identity/count-id-conflicts.mjs. Resultado: 80 docs, 15 con frontmatter.id, 80 con index.id, 15 conflictos, 0 sin ningún id, 4 índices legacy .odyssey/index.json cargados.
 
 ## Regla de gobernanza
 

@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(identity): count workspace id conflicts between markdown frontmatter.id and workspace index ids. Adds scripts/identity/count-id-conflicts.mjs (read-only diagnostic) and tests/count-id-conflicts.test.ts. [ODE-293]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-293",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-293/count-frontmatterworkspace-index-uuid-conflicts-discovery-script",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/262",
+      "commit": "d9457ec",
+      "date": "2026-06-16",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 749 tests PASS. ops:delivery:gate PASS. Performance Contract: not required (read-only diagnostic script, no runtime interaction path). Real workspace output: total docs 80, with frontmatter.id 15, with index.id 80, conflicts 15, without either id 0, 4 legacy .odyssey/index.json files loaded. Context Gaps Detected: yes — brief requested workflow/status.json modification and ADR pending closure, but BUILD protocol prohibits feature branches from touching workflow files; resolved by recording count in PR body and Linear comment, and updating workflow files in main post-merge. Review score: 8.75/10."
+    },
+    {
       "what": "feat(studio): add Studio as a sidebar destination with an authenticated /studio surface, empty state, Open artifact search picker action, New artifact creation link, and active sidebar state for editor routes. [ODE-274]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-274",
