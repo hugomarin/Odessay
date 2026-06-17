@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PublicationSuggestion } from "../lib/local-db/schema";
 import {
   applyAllPublicationSuggestions,
+  applyPublicationSuggestionGroup,
   applySuggestionToMarkdown,
   findSuggestionMatch,
   hashPublicationSource,
@@ -54,6 +55,53 @@ describe("publication suggestion engine", () => {
 
     expect(result.appliedIds).toEqual(["rewriting-1", "spelling-1"]);
     expect(result.markdown).toBe("The letter is ready for print.\nThe notes are ready to review.");
+  });
+
+  it("does not fall back to the first repeated match when context misses", () => {
+    const source = "The letter are ready for print.\nThe notes are ready for review.";
+    const match = findSuggestionMatch(
+      source,
+      createSuggestion({
+        context_before: "Missing context",
+        context_after: "also missing",
+      }),
+    );
+
+    expect(match).toBeNull();
+  });
+
+  it("applies grouped suggestions without marking unmatched group members as applied", () => {
+    const source = "prueva uno.\nprueva dos.";
+    const result = applyPublicationSuggestionGroup(source, [
+      createSuggestion({
+        id: "first",
+        original_text: "prueva",
+        replacement_text: "prueba",
+        context_before: null,
+        context_after: null,
+        occurrence: 0,
+      }),
+      createSuggestion({
+        id: "second",
+        original_text: "prueva",
+        replacement_text: "prueba",
+        context_before: null,
+        context_after: null,
+        occurrence: 1,
+      }),
+      createSuggestion({
+        id: "stale",
+        original_text: "prueva",
+        replacement_text: "prueba",
+        context_before: "missing",
+        context_after: null,
+        occurrence: null,
+      }),
+    ]);
+
+    expect(new Set(result.appliedIds)).toEqual(new Set(["first", "second"]));
+    expect(result.conflictIds).toEqual(["stale"]);
+    expect(result.markdown).toBe("prueba uno.\nprueba dos.");
   });
 
   it("returns a stable content hash", () => {

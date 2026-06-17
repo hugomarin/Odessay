@@ -57,6 +57,7 @@ import {
   clearPublicationSuggestions,
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
+import { resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
 import { createCorrectionSuggestionBatcher } from "@/lib/editor/correction-suggestion-batcher"
 import {
   collectCorrectionBlocks,
@@ -65,8 +66,7 @@ import {
   type CorrectionTriggerBlock,
 } from "@/lib/editor/correction-trigger-plugin"
 import {
-  applyAllPublicationSuggestions,
-  applySuggestionToMarkdown,
+  applyPublicationSuggestionGroup,
   deriveSuggestionContexts,
   hashPublicationSource,
   invalidateBlockSuggestions,
@@ -1595,37 +1595,146 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
 
+  const applyCorrectionSuggestionsByRange = useCallback(
+    (targetSuggestions: PublicationSuggestion[]) => {
+      if (!editor || modeRef.current !== "rich") {
+        return {
+          appliedIds: [] as string[],
+          conflictIds: targetSuggestions.map((suggestion) => suggestion.id),
+        }
+      }
+
+      const pendingSuggestions = targetSuggestions.filter((suggestion) => suggestion.status === "pending")
+
+      if (pendingSuggestions.length === 0) {
+        return {
+          appliedIds: [] as string[],
+          conflictIds: [],
+        }
+      }
+
+      const resolvedRanges = resolveCorrectionDecorationRanges(editor.state.doc, pendingSuggestions)
+      const rangesById = new Map(resolvedRanges.map((range) => [range.suggestion.id, range]))
+      const applicableRanges = pendingSuggestions
+        .map((suggestion) => rangesById.get(suggestion.id) ?? null)
+        .filter((range): range is NonNullable<typeof range> => range !== null)
+        .sort((left, right) => right.from - left.from)
+
+      if (applicableRanges.length === 0) {
+        return {
+          appliedIds: [] as string[],
+          conflictIds: pendingSuggestions.map((suggestion) => suggestion.id),
+        }
+      }
+
+      const selectionBookmark = editor.state.selection.getBookmark()
+      const transaction = editor.state.tr
+
+      for (const { suggestion, from, to } of applicableRanges) {
+        transaction.insertText(suggestion.replacement_text, from, to)
+      }
+
+      try {
+        transaction.setSelection(selectionBookmark.map(transaction.mapping).resolve(transaction.doc))
+      } catch {
+        transaction.setSelection(TextSelection.near(transaction.doc.resolve(transaction.selection.from)))
+      }
+
+      if (markdownSaveTimeoutRef.current) {
+        window.clearTimeout(markdownSaveTimeoutRef.current)
+        markdownSaveTimeoutRef.current = null
+      }
+
+      suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
+      isApplyingContentRef.current = true
+      editor.view.dispatch(transaction)
+      isApplyingContentRef.current = false
+      updateDerivedEditorState(editor)
+      void persistEditorSnapshot(editor)
+
+      const appliedIds = applicableRanges.map((range) => range.suggestion.id)
+
+      return {
+        appliedIds,
+        conflictIds: pendingSuggestions
+          .filter((suggestion) => !appliedIds.includes(suggestion.id))
+          .map((suggestion) => suggestion.id),
+      }
+    },
+    [editor, persistEditorSnapshot, updateDerivedEditorState],
+  )
+
+  const applyCorrectionSuggestionsFromMarkdown = useCallback(
+    (targetSuggestions: PublicationSuggestion[]) => {
+      const result = applyPublicationSuggestionGroup(currentDocumentMarkdownRef.current, targetSuggestions)
+
+      if (result.appliedIds.length > 0) {
+        suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
+        applyMarkdownFromPanel(result.markdown)
+      }
+
+      return {
+        appliedIds: result.appliedIds,
+        conflictIds: result.conflictIds,
+      }
+    },
+    [applyMarkdownFromPanel],
+  )
+
+  const applyCorrectionSuggestions = useCallback(
+    (targetSuggestions: PublicationSuggestion[]) => {
+      if (modeRef.current === "rich") {
+        return applyCorrectionSuggestionsByRange(targetSuggestions)
+      }
+
+      return applyCorrectionSuggestionsFromMarkdown(targetSuggestions)
+    },
+    [applyCorrectionSuggestionsByRange, applyCorrectionSuggestionsFromMarkdown],
+  )
+
   const closeActivePanel = useCallback(() => {
     setActivePanel(null)
   }, [])
 
   const handleAcceptCorrection = useCallback(
-    (suggestion: PublicationSuggestion) => {
-      const result = applySuggestionToMarkdown(currentDocumentMarkdownRef.current, suggestion)
-
-      if (result.applied) {
-        suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-        applyMarkdownFromPanel(result.markdown)
-        rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
-        const nextSuggestions = updateSuggestionStatuses(
-          automaticCorrectionSuggestionsRef.current,
-          [suggestion.id],
-          "accepted",
-        )
-        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
+    (suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
+      if (isSuggestionAcceptDisabled(suggestion)) {
         return
       }
 
-      const nextSuggestions = updateSuggestionStatuses(
-        automaticCorrectionSuggestionsRef.current,
-        [suggestion.id],
-        "conflict",
-      )
-      applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-      void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
+      const suggestionIdSet = new Set(suggestionIds)
+      const targetSuggestions = automaticCorrectionSuggestionsRef.current.filter((item) => suggestionIdSet.has(item.id))
+      const result = applyCorrectionSuggestions(targetSuggestions)
+
+      automaticCorrectionSuggestionsRef.current
+        .filter((item) => result.appliedIds.includes(item.id))
+        .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "accepted"))
+
+      let nextSuggestions = automaticCorrectionSuggestionsRef.current
+
+      if (result.appliedIds.length > 0) {
+        nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
+      }
+
+      if (result.conflictIds.length > 0) {
+        nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
+      }
+
+      if (result.appliedIds.length > 0 || result.conflictIds.length > 0) {
+        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+        void updatePersistedBlocksFromSuggestions(
+          nextSuggestions,
+          [
+            ...new Set(
+              targetSuggestions
+                .map((item) => item.source_hash ?? "")
+                .filter(Boolean),
+            ),
+          ],
+        )
+      }
     },
-    [applyCorrectionSuggestionUpdate, applyMarkdownFromPanel, updatePersistedBlocksFromSuggestions],
+    [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions],
   )
 
   const handleRejectCorrection = useCallback((suggestionId: string) => {
@@ -1646,24 +1755,24 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
   const handleAcceptAllCorrections = useCallback(() => {
-    const result = applyAllPublicationSuggestions(
-      currentDocumentMarkdownRef.current,
-      automaticCorrectionSuggestionsRef.current,
-    )
+    const pendingSuggestions = automaticCorrectionSuggestionsRef.current.filter((suggestion) => suggestion.status === "pending")
+    const result = applyCorrectionSuggestions(pendingSuggestions)
 
-    if (result.appliedIds.length === 0) {
+    if (result.appliedIds.length === 0 && result.conflictIds.length === 0) {
       return
     }
 
-    applyMarkdownFromPanel(result.markdown)
     automaticCorrectionSuggestionsRef.current
       .filter((suggestion) => result.appliedIds.includes(suggestion.id))
       .forEach((suggestion) => rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted"))
-    const nextSuggestions = updateSuggestionStatuses(
-      automaticCorrectionSuggestionsRef.current,
-      result.appliedIds,
-      "accepted",
-    )
+
+    let nextSuggestions = automaticCorrectionSuggestionsRef.current
+    if (result.appliedIds.length > 0) {
+      nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
+    }
+    if (result.conflictIds.length > 0) {
+      nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
+    }
     applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
     void updatePersistedBlocksFromSuggestions(
       nextSuggestions,
@@ -1676,7 +1785,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         ),
       ],
     )
-  }, [applyCorrectionSuggestionUpdate, applyMarkdownFromPanel, updatePersistedBlocksFromSuggestions])
+  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions])
 
   const handleRejectAllCorrections = useCallback(() => {
     const pending = automaticCorrectionSuggestionsRef.current.filter((s) => s.status === "pending")
@@ -3263,29 +3372,26 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
 
       if (detail.action === "accept") {
-        const result = applySuggestionToMarkdown(currentDocumentMarkdownRef.current, suggestion)
+        const result = applyCorrectionSuggestions([suggestion])
 
-        if (result.applied) {
-          suppressCorrectionAnalysisUntilRef.current = Date.now() + 1200
-          applyMarkdownFromPanel(result.markdown)
+        if (result.appliedIds.length > 0) {
           rememberCorrectionDecision(suggestion.correction_fingerprint, "accepted")
-          const nextSuggestions = updateSuggestionStatuses(
-            automaticCorrectionSuggestionsRef.current,
-            [suggestion.id],
-            "accepted",
-          )
-          applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-          void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
-          return
         }
 
-        const nextSuggestions = updateSuggestionStatuses(
-          automaticCorrectionSuggestionsRef.current,
-          [suggestion.id],
-          "conflict",
-        )
-        applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
-        void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
+        let nextSuggestions = automaticCorrectionSuggestionsRef.current
+
+        if (result.appliedIds.length > 0) {
+          nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.appliedIds, "accepted")
+        }
+
+        if (result.conflictIds.length > 0) {
+          nextSuggestions = updateSuggestionStatuses(nextSuggestions, result.conflictIds, "conflict")
+        }
+
+        if (result.appliedIds.length > 0 || result.conflictIds.length > 0) {
+          applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+          void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
+        }
         return
       }
 
@@ -3306,7 +3412,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     return () => {
       window.removeEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
     }
-  }, [applyCorrectionSuggestionUpdate, applyMarkdownFromPanel, updatePersistedBlocksFromSuggestions])
+  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions])
   const markdownFindMatches = useMemo(
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],

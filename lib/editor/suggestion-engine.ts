@@ -30,6 +30,12 @@ type BlockSuggestionReplacementResult = {
   replacedIds: string[];
 };
 
+export type SuggestionGroupApplyResult = {
+  markdown: string;
+  appliedIds: string[];
+  conflictIds: string[];
+};
+
 type SortedSuggestion = {
   suggestion: PublicationSuggestion;
   position: number;
@@ -140,7 +146,7 @@ const findContextAwareMatch = (
       }
 
       return true;
-    }) ?? matches[0]
+    }) ?? null
   );
 };
 
@@ -226,6 +232,38 @@ export const applyAllPublicationSuggestions = (
   }
 
   return { markdown: nextMarkdown, appliedIds };
+};
+
+export const applyPublicationSuggestionGroup = (
+  source: string,
+  suggestions: PublicationSuggestion[],
+): SuggestionGroupApplyResult => {
+  const applicableSuggestions = suggestions
+    .filter((suggestion) => suggestion.status === "pending")
+    .map((suggestion) => {
+      const match = findSuggestionMatch(source, suggestion);
+      return match ? { suggestion, match } : { suggestion, match: null };
+    });
+
+  const matchedSuggestions = applicableSuggestions
+    .filter((value): value is { suggestion: PublicationSuggestion; match: SuggestionMatch } => value.match !== null)
+    .sort((left, right) => right.match.start - left.match.start);
+
+  let nextMarkdown = source;
+  const appliedIds: string[] = [];
+
+  for (const { suggestion, match } of matchedSuggestions) {
+    nextMarkdown = `${nextMarkdown.slice(0, match.start)}${suggestion.replacement_text}${nextMarkdown.slice(match.end)}`;
+    appliedIds.push(suggestion.id);
+  }
+
+  return {
+    markdown: nextMarkdown,
+    appliedIds,
+    conflictIds: applicableSuggestions
+      .filter(({ suggestion }) => !appliedIds.includes(suggestion.id))
+      .map(({ suggestion }) => suggestion.id),
+  };
 };
 
 const parseBlockPosition = (blockId: string): number | null => {

@@ -10,6 +10,7 @@ import { isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine"
 type PublicationSuggestionPluginState = {
   suggestions: PublicationSuggestion[]
   activeSuggestionId: string | null
+  decorations: DecorationSet
 }
 
 type PublicationSuggestionMeta =
@@ -149,36 +150,58 @@ export const PublicationSuggestionExtension = Extension.create({
           init: () => ({
             suggestions: [],
             activeSuggestionId: null,
+            decorations: DecorationSet.empty,
           }),
           apply: (transaction, pluginState) => {
             const meta = transaction.getMeta(publicationSuggestionPluginKey) as PublicationSuggestionMeta | undefined
+            const mappedDecorations = transaction.docChanged
+              ? pluginState.decorations.map(transaction.mapping, transaction.doc)
+              : pluginState.decorations
 
             if (!Array.isArray(meta) && meta && "clear" in meta) {
               return {
                 suggestions: [],
                 activeSuggestionId: null,
+                decorations: DecorationSet.empty,
               }
             }
 
             if (Array.isArray(meta)) {
               const nextIds = new Set(meta.map((suggestion) => suggestion.id))
+              const activeSuggestionId = pluginState.activeSuggestionId && nextIds.has(pluginState.activeSuggestionId)
+                ? pluginState.activeSuggestionId
+                : null
+              const nextPluginState = {
+                suggestions: meta,
+                activeSuggestionId,
+                decorations: mappedDecorations,
+              }
 
               return {
-                suggestions: meta,
-                activeSuggestionId: pluginState.activeSuggestionId && nextIds.has(pluginState.activeSuggestionId)
-                  ? pluginState.activeSuggestionId
-                  : null,
+                ...nextPluginState,
+                decorations: buildPublicationDecorations(transaction.doc, nextPluginState),
               }
             }
 
             if (meta && "activeSuggestionId" in meta) {
-              return {
+              const nextPluginState = {
                 ...pluginState,
                 activeSuggestionId: meta.activeSuggestionId,
+                decorations: mappedDecorations,
+              }
+
+              return {
+                ...nextPluginState,
+                decorations: buildPublicationDecorations(transaction.doc, nextPluginState),
               }
             }
 
-            return pluginState
+            return mappedDecorations === pluginState.decorations
+              ? pluginState
+              : {
+                  ...pluginState,
+                  decorations: mappedDecorations,
+                }
           },
         },
         props: {
@@ -245,11 +268,11 @@ export const PublicationSuggestionExtension = Extension.create({
           decorations(state) {
             const pluginState = publicationSuggestionPluginKey.getState(state)
 
-            if (!pluginState || pluginState.suggestions.length === 0) {
+            if (!pluginState || pluginState.decorations === DecorationSet.empty) {
               return null
             }
 
-            return buildPublicationDecorations(state.doc, pluginState)
+            return pluginState.decorations
           },
         },
       }),
