@@ -2,26 +2,10 @@ import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
-import type { CanonicalDocumentMetadata } from "@/lib/editor/document-profile"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
 
-function buildMetadata(writing: LocalWriting): CanonicalDocumentMetadata {
-  return {
-    id: writing.id,
-    slug: writing.slug ?? null,
-    status: writing.status,
-    visibility: writing.visibility,
-    version: Math.max(1, writing.version),
-    createdAt: writing.created_at,
-    updatedAt: writing.updated_at,
-  }
-}
-
 function ensureSourceMarkdown(writing: LocalWriting): string {
-  const result = desktopDocumentEngine.serializeSourceDocument(
-    (writing.body_json as Record<string, unknown>) ?? EMPTY_EDITOR_JSON,
-    buildMetadata(writing),
-  )
+  const result = desktopDocumentEngine.serializeBodyJson((writing.body_json as Record<string, unknown>) ?? EMPTY_EDITOR_JSON)
 
   if (!result.success) {
     throw new Error(result.error)

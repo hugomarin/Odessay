@@ -4,7 +4,6 @@ import { appConfigDir, join } from "@tauri-apps/api/path"
 import { open } from "@tauri-apps/plugin-dialog"
 import { localDB } from "@/lib/local-db"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
-import { serializeDocumentFile } from "@/lib/editor/document-serialization"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import {
   markDesktopWritingDeletedByCanonicalPath,
@@ -107,30 +106,9 @@ function filenameToTitle(filename: string): string {
     .trim()
 }
 
-function createWritingId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID()
-  }
-  throw new Error(
-    "crypto.randomUUID is required for workspace document identity. This runtime does not support UUID minting.",
-  )
-}
-
 function buildInitialWorkspaceMarkdown(title: string): string {
-  const nowIso = new Date().toISOString()
-  const metadata = {
-    id: createWritingId(),
-    slug: null,
-    status: "draft" as const,
-    visibility: "private" as const,
-    version: 1,
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  }
-
-  const frontmatter = serializeDocumentFile(EMPTY_EDITOR_JSON, metadata)
   const heading = title ? `# ${title}\n\n` : ""
-  return heading ? `${frontmatter}\n${heading}` : frontmatter
+  return heading
 }
 
 function ensureMarkdownName(fileName: string) {
@@ -324,8 +302,7 @@ export class DesktopWorkspaceService {
   async openFileInEditor(filePath: string, workspaceFileId: string): Promise<string> {
     // Seed a local writing record with the workspace index ID before opening.
     // This ensures the DocumentService treats the workspace UUID as the
-    // canonical writing ID instead of deriving a new one from the path or
-    // frontmatter.
+    // canonical writing ID; the markdown file itself remains content-only.
     const existingByPath = await localDB.writings.getByCanonicalPath(filePath)
     if (!existingByPath) {
       const nowIso = new Date().toISOString()

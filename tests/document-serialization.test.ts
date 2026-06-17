@@ -124,7 +124,7 @@ updated_at: '2026-06-03T01:00:00.000Z'
 ---`)
   })
 
-  it("serializes and parses a canonical source document with front-matter", () => {
+  it("serializes document files as markdown content only", () => {
     const source = serializeDocumentFile(
       {
         type: "doc",
@@ -145,6 +145,24 @@ updated_at: '2026-06-03T01:00:00.000Z'
         updatedAt: "2026-06-03T02:00:00.000Z",
       },
     )
+
+    expect(source).toBe("Canonical body")
+    expect(source).not.toContain("---")
+    expect(source).not.toContain("id: writing-123")
+  })
+
+  it("parses legacy canonical source documents with front-matter", () => {
+    const source = `---
+id: writing-123
+slug: canonical-body
+status: draft
+visibility: private
+version: 4
+created_at: '2026-06-03T00:00:00.000Z'
+updated_at: '2026-06-03T02:00:00.000Z'
+---
+
+Canonical body`
 
     const parsed = parseDocumentFileToSnapshot(source)
 
@@ -176,5 +194,21 @@ updated_at: '2026-06-03T01:00:00.000Z'
 
     expect(snapshot.markdown).toBe("# Hello world")
     expect(snapshot.bodyText).toBe("Hello world")
+  })
+
+  it("keeps non-Odessay front-matter as document content", () => {
+    const source = `---
+name: skill-example
+description: Keep this YAML untouched
+---
+
+# Skill Body`
+
+    const parsed = parseDocumentFileToSnapshot(source)
+
+    expect(parsed.metadata).toBeNull()
+    expect(parsed.markdown).toContain("name: skill-example")
+    expect(parsed.markdown).toContain("# Skill Body")
+    expect(parsed.snapshot.bodyText).toContain("Skill Body")
   })
 })

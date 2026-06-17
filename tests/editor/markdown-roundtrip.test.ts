@@ -57,7 +57,7 @@ describe("editor markdown round-trip fixtures", () => {
     })
   }
 
-  it("preserves canonical front-matter with the markdown body", () => {
+  it("accepts legacy canonical frontmatter and round-trips the markdown body", () => {
     const source = `---
 id: writing-123
 slug: canonical-roundtrip
