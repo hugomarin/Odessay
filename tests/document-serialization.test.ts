@@ -63,7 +63,7 @@ describe("document serialization", () => {
 
     expect(markdown).toContain("# Title")
     expect(markdown).toContain("Alpha ==Beta==")
-    expect(markdown).toContain("[^1: Footnote body]")
+    expect(markdown).toContain("[^1|ann-1: Footnote body]")
   })
 
   it("creates a stable snapshot for empty inputs", () => {
@@ -99,7 +99,7 @@ describe("document serialization", () => {
     }
 
     expect(buildWritingMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1]\n\n[^1]: Footnote body")
-    expect(serializeDocumentToMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1: Footnote body]")
+    expect(serializeDocumentToMarkdown(bodyJson)).toBe("# Title\n\nAlpha **Beta** [^1|ann-1: Footnote body]")
   })
 
   it("serializes canonical front-matter with stable field ordering", () => {

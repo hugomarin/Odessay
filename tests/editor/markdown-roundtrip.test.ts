@@ -37,7 +37,7 @@ table.set("alpha", 1)
     name: "footnotes and mixed marks",
     markdown: `# Notes
 
-Paragraph with **bold**, *italic*, ~~strike~~, ==highlight== and a footnote [^1: Footnote body].
+Paragraph with **bold**, *italic*, ~~strike~~, ==highlight== and a footnote [^1|footnote-1: Footnote body].
 
 > Quote with [link](https://example.com).`,
   },
@@ -70,7 +70,7 @@ updated_at: 2026-06-03T01:00:00.000Z
 
 # Canonical File
 
-Paragraph with ==highlight== and [^1: Footnote body].`
+Paragraph with ==highlight== and [^1|footnote-1: Footnote body].`
 
     const result = engine.validateRoundTrip(source)
     expect(result.ok).toBe(true)

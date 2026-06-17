@@ -25,8 +25,8 @@ describe("footnote extension helpers", () => {
   it("appends a new footnote with sequential index", () => {
     const markdown = "Text[^1: Existing]"
 
-    expect(appendMarkdownFootnote(markdown, "New note")).toBe(
-      "Text[^1: Existing][^2: New note]",
+    expect(appendMarkdownFootnote(markdown, "New note")).toMatch(
+      /^Text\[\^1: Existing\]\[\^2\|[^\]:|]+: New note\]$/,
     )
   })
 
@@ -42,12 +42,20 @@ describe("footnote extension helpers", () => {
   })
 
   it("updates and removes footnotes while keeping numbering consistent", () => {
-    const markdown = "Body[^1: First][^2: Second]"
+    const markdown = "Body[^1|ann-a: First][^2|ann-b: Second]"
     const updated = updateMarkdownFootnote(markdown, 2, "Updated second")
 
-    expect(updated).toBe("Body[^1: First][^2: Updated second]")
+    expect(updated).toBe("Body[^1|ann-a: First][^2|ann-b: Updated second]")
 
-    expect(removeMarkdownFootnote(updated, 1)).toBe("Body[^1: Updated second]")
+    expect(removeMarkdownFootnote(updated, 1)).toBe("Body[^1|ann-b: Updated second]")
+  })
+
+  it("preserves inline annotation ids while renumbering by type", () => {
+    const markdown = "Body[@3|ai-a: third][@1|ai-b: first][@p2|p-a: personal][^7|fn-a: note]"
+
+    expect(normalizeMarkdownFootnotes(markdown)).toBe(
+      "Body[@1|ai-a: third][@2|ai-b: first][@p1|p-a: personal][^1|fn-a: note]",
+    )
   })
 
   it("builds AI copy that strips personal and collaborative annotations", () => {

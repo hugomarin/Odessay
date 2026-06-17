@@ -22,7 +22,7 @@ Paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, [link](https://exa
 
 ![Alt text](https://example.com/image.png)
 
-[^1: Footnote body]`
+[^1|footnote-1: Footnote body]`
 
 describe("markdown round-trip", () => {
   beforeEach(() => {
@@ -39,7 +39,7 @@ describe("markdown round-trip", () => {
     expect(first.markdown).toContain("==highlight==")
     expect(first.markdown).toContain("| A | B |")
     expect(first.markdown).toContain("![Alt text](https://example.com/image.png)")
-    expect(first.markdown).toContain("[^1: Footnote body]")
+    expect(first.markdown).toContain("[^1|footnote-1: Footnote body]")
     expect(second.markdown).toBe(first.markdown)
     expect(second.bodyText).toBe(first.bodyText)
   })

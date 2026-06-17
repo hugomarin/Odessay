@@ -16,13 +16,14 @@ export type AnnotationEntry = {
 type RawAnnotationMatch = {
   fullMatch: string
   legacyFootnote: boolean
+  id?: string
   type: AnnotationType
   index: number
   text: string
 }
 
 const INLINE_ANNOTATION_RE =
-  /\[\^(\d+):\s*([^\]]*?)\]|\[@(p|c|h)?(\d+):\s*([^\]]*?)\]|\[\^(\d+)\]/g
+  /\[\^(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[@(p|c|h)?(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_LINE_RE = /^\[\^(\d+)\]:\s*(.*)$/
 
 const escapeHtmlAttribute = (value: string) =>
@@ -54,27 +55,29 @@ const parseInlineAnnotation = (
     return {
       fullMatch: match[0],
       legacyFootnote: false,
+      id: match[2],
       type: "footnote",
       index: Number(match[1]),
-      text: match[2].trim(),
+      text: match[3].trim(),
     }
   }
 
-  if (match[4]) {
-    const prefix = match[3]
+  if (match[5]) {
+    const prefix = match[4]
     const resolvedType: AnnotationType =
       prefix === "p" || prefix === "c" ? "personal" : prefix === "h" ? "highlight" : "ai"
     return {
       fullMatch: match[0],
       legacyFootnote: false,
+      id: match[6],
       type: resolvedType,
-      index: Number(match[4]),
-      text: match[5].trim(),
+      index: Number(match[5]),
+      text: match[7].trim(),
     }
   }
 
-  if (match[6]) {
-    const index = Number(match[6])
+  if (match[8]) {
+    const index = Number(match[8])
     return {
       fullMatch: match[0],
       legacyFootnote: true,
@@ -160,7 +163,7 @@ function setupMarkdownItRule(md: any) {
               nextChildren.push({ type: "text", content: text.slice(lastIndex, match.index) })
             }
 
-            const annotationId = crypto.randomUUID()
+            const annotationId = parsed.id ?? crypto.randomUUID()
             const attrs = [
               `id="${annotationId}"`,
               `annotation-id="${annotationId}"`,
@@ -194,19 +197,20 @@ function setupMarkdownItRule(md: any) {
   )
 }
 
-const annotationToMarkdown = (type: AnnotationType, index: number, text: string) => {
+const annotationToMarkdown = (type: AnnotationType, index: number, text: string, id?: string) => {
   const trimmedText = text.trim()
+  const idSuffix = id ? `|${id}` : ""
 
   switch (type) {
     case "ai":
-      return `[@${index}: ${trimmedText}]`
+      return `[@${index}${idSuffix}: ${trimmedText}]`
     case "personal":
-      return `[@p${index}: ${trimmedText}]`
+      return `[@p${index}${idSuffix}: ${trimmedText}]`
     case "highlight":
-      return `[@h${index}: ${trimmedText}]`
+      return `[@h${index}${idSuffix}: ${trimmedText}]`
     case "footnote":
     default:
-      return `[^${index}: ${trimmedText}]`
+      return `[^${index}${idSuffix}: ${trimmedText}]`
   }
 }
 
@@ -408,6 +412,7 @@ export const AnnotationReferenceNode = Node.create({
               coerceAnnotationType(node.attrs.type as string),
               Number(node.attrs.index),
               String(node.attrs.text ?? ""),
+              typeof node.attrs.id === "string" ? node.attrs.id : undefined,
             ),
           )
         },

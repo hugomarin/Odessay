@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DesktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { Editor, type Content } from "@tiptap/core"
 import { createEditorExtensions } from "@/lib/editor/extensions"
+import { buildMarginSyncRows } from "@/lib/margins/margins"
 
 const engine = new DesktopDocumentEngine()
 
@@ -236,7 +237,7 @@ describe("DesktopDocumentEngine", () => {
       const result = engine.richToSource(editor)
       expect(result.success).toBe(true)
       if (!result.success) return
-      expect(result.markdown).toContain("[^1: Footnote body]")
+      expect(result.markdown).toContain("[^1|ann-1: Footnote body]")
       editor.destroy()
     })
   })
@@ -332,7 +333,51 @@ Paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, [link](https://exa
       const result = engine.sourceToRich(markdown)
       expect(result.success).toBe(true)
       if (!result.success) return
-      expect(result.snapshot.markdown).toContain("[^1: Footnote body]")
+      expect(result.snapshot.markdown).toContain("[^1|33333333-3333-4333-8333-333333333333: Footnote body]")
+    })
+
+    it("preserves annotation ids through repeated markdown round-trips and margin sync rows", () => {
+      const markdown = `Intro ==first passage==[@1|11111111-1111-4111-8111-111111111111: simplify this].
+
+Middle ==second passage==[@p1|22222222-2222-4222-8222-222222222222: keep for later].
+
+End ==third passage==[@h1|33333333-3333-4333-8333-333333333333: ].`
+
+      const first = engine.sourceToRich(markdown)
+      expect(first.success).toBe(true)
+      if (!first.success) return
+
+      const firstRows = buildMarginSyncRows(
+        first.snapshot.bodyJson,
+        "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+        "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb",
+      )
+      expect(firstRows.map((row) => row.id)).toEqual([
+        "11111111-1111-4111-8111-111111111111",
+        "22222222-2222-4222-8222-222222222222",
+        "33333333-3333-4333-8333-333333333333",
+      ])
+
+      const firstSerialized = engine.serializeBodyJson(first.snapshot.bodyJson)
+      expect(firstSerialized.success).toBe(true)
+      if (!firstSerialized.success) return
+      expect(firstSerialized.markdown).toBe(markdown)
+
+      const second = engine.sourceToRich(firstSerialized.markdown)
+      expect(second.success).toBe(true)
+      if (!second.success) return
+
+      const secondSerialized = engine.serializeBodyJson(second.snapshot.bodyJson)
+      expect(secondSerialized.success).toBe(true)
+      if (!secondSerialized.success) return
+      expect(secondSerialized.markdown).toBe(markdown)
+
+      const secondRows = buildMarginSyncRows(
+        second.snapshot.bodyJson,
+        "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa",
+        "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb",
+      )
+      expect(secondRows.map((row) => row.id)).toEqual(firstRows.map((row) => row.id))
     })
   })
 
@@ -350,7 +395,7 @@ updated_at: '2026-06-03T01:00:00.000Z'
 
 # Title
 
-Paragraph with [^1: Note].`
+Paragraph with [^1|note-1: Note].`
 
       const result = engine.validateRoundTrip(markdown)
       expect(result.ok).toBe(true)
@@ -381,7 +426,7 @@ const code = "block"
 | --- | --- |
 | Cell A | Cell B |
 
-Text with footnote [^1: Footnote body here].`
+Text with footnote [^1|footnote-1: Footnote body here].`
 
       const result = engine.validateRoundTrip(markdown)
       expect(result.ok).toBe(true)
@@ -433,7 +478,7 @@ function example() {
 | Foo | 1 |
 | Bar | 2 |
 
-A closing paragraph with a footnote [^1: This is the footnote text.]`
+A closing paragraph with a footnote [^1|footnote-1: This is the footnote text.]`
 
       const result = engine.validateRoundTrip(markdown)
       expect(result.ok).toBe(true)
@@ -452,7 +497,7 @@ A closing paragraph with a footnote [^1: This is the footnote text.]`
       const paragraphs = Array.from({ length: 20 }, (_, i) =>
         `Paragraph ${i + 1} with **bold**, *italic*, and [a link](https://example.com/page-${i + 1}).`,
       )
-      const markdown = `# Title\n\n${paragraphs.join("\n\n")}\n\n> Quote\n\n1. One\n2. Two\n\n- A\n- B\n\n\`\`\`ts\nconst x = 1\n\`\`\`\n\n| A | B |\n| --- | --- |\n| C | D |\n\nFootnote [^1: Note].`
+      const markdown = `# Title\n\n${paragraphs.join("\n\n")}\n\n> Quote\n\n1. One\n2. Two\n\n- A\n- B\n\n\`\`\`ts\nconst x = 1\n\`\`\`\n\n| A | B |\n| --- | --- |\n| C | D |\n\nFootnote [^1|note-1: Note].`
 
       const editor = createEditor(markdown)
       const start = performance.now()
@@ -468,7 +513,7 @@ A closing paragraph with a footnote [^1: This is the footnote text.]`
       const paragraphs = Array.from({ length: 20 }, (_, i) =>
         `Paragraph ${i + 1} with **bold**, *italic*, and [a link](https://example.com/page-${i + 1}).`,
       )
-      const markdown = `# Title\n\n${paragraphs.join("\n\n")}\n\n> Quote\n\n1. One\n2. Two\n\n- A\n- B\n\n\`\`\`ts\nconst x = 1\n\`\`\`\n\n| A | B |\n| --- | --- |\n| C | D |\n\nFootnote [^1: Note].`
+      const markdown = `# Title\n\n${paragraphs.join("\n\n")}\n\n> Quote\n\n1. One\n2. Two\n\n- A\n- B\n\n\`\`\`ts\nconst x = 1\n\`\`\`\n\n| A | B |\n| --- | --- |\n| C | D |\n\nFootnote [^1|note-1: Note].`
 
       const start = performance.now()
       const result = engine.sourceToRich(markdown)
