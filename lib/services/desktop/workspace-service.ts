@@ -111,7 +111,9 @@ function createWritingId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID()
   }
-  return `desktop-${Date.now()}`
+  throw new Error(
+    "crypto.randomUUID is required for workspace document identity. This runtime does not support UUID minting.",
+  )
 }
 
 function buildInitialWorkspaceMarkdown(title: string): string {
