@@ -298,7 +298,14 @@ pub fn workspace_sync(
 
         let id = existing_entry
             .map(|entry| entry.id)
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
+            .or_else(|| extract_writing_id_from_frontmatter(Path::new(&file.path)))
+            .unwrap_or_else(|| {
+                // Transitional fallback: files that were not created through
+                // Odessay and carry no front-matter ID still need an identifier
+                // for the workspace UI. This path will be removed once external
+                // files are imported (minted in the client) before indexing.
+                Uuid::new_v4().to_string()
+            });
 
         file.id = id.clone();
         file.content_hash = content_hash.clone();
@@ -343,6 +350,37 @@ fn canonical_markdown_hash_bytes(markdown: &str) -> Vec<u8> {
         .replace("\r\n", "\n")
         .replace('\r', "\n")
         .into_bytes()
+}
+
+/// Read the first portion of a markdown file and extract the `id` field from
+/// its YAML front-matter, if present and non-empty. This lets the workspace
+/// index adopt the writing UUID minted by the client instead of generating a
+/// second identifier in Rust.
+fn extract_writing_id_from_frontmatter(path: &Path) -> Option<String> {
+    let bytes = fs::read(path).ok()?;
+    // Only the start of the file is needed for front-matter; cap to avoid
+    // loading large files into memory just for an ID lookup.
+    let prefix = String::from_utf8(bytes.into_iter().take(4096).collect()).ok()?;
+    let normalized = prefix.replace("\r\n", "\n").replace('\r', "\n");
+
+    if !normalized.starts_with("---\n") {
+        return None;
+    }
+
+    let end = normalized.find("\n---\n")?;
+    let frontmatter = &normalized[4..end];
+
+    for line in frontmatter.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix("id:") {
+            let id = value.trim().trim_matches('"').trim_matches('\'').trim();
+            if !id.is_empty() {
+                return Some(id.to_string());
+            }
+        }
+    }
+
+    None
 }
 
 fn content_hash_for_markdown_file(path: &Path) -> Result<String, String> {
@@ -586,6 +624,68 @@ mod tests {
         assert_eq!(next_file.relative_path, "letter.md");
         assert_eq!(next_file.id, initial_file.id);
         assert_ne!(next_file.content_hash, initial_file.content_hash);
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_adopts_writing_id_from_frontmatter_for_new_files() {
+        let root = temp_workspace_root("adopt-frontmatter-id");
+        let file_path = root.join("letter.md");
+        fs::write(
+            &file_path,
+            "---\nid: writing-uuid-from-frontmatter\nversion: 1\ncreated_at: 2026-06-17T00:00:00.000Z\nupdated_at: 2026-06-17T00:00:00.000Z\n---\n\nHello\n",
+        )
+        .expect("write markdown file with frontmatter");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace with frontmatter file");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].id, "writing-uuid-from-frontmatter");
+
+        let index_json = fs::read_to_string(
+            root.join(WORKSPACE_DIR_NAME)
+                .join(WORKSPACE_INDEX_FILE_NAME),
+        )
+        .expect("read index");
+        assert!(index_json.contains("writing-uuid-from-frontmatter"));
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_existing_index_entry_takes_precedence_over_frontmatter() {
+        let root = temp_workspace_root("existing-entry-precedence");
+        let workspace_dir = root.join(WORKSPACE_DIR_NAME);
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        fs::write(
+            workspace_dir.join(WORKSPACE_INDEX_FILE_NAME),
+            r#"{
+  "version": 1,
+  "selectedPaths": [],
+  "files": {
+    "letter.md": {
+      "id": "existing-index-id",
+      "inode": 0,
+      "lastSeen": 0,
+      "size": 0
+    }
+  }
+}"#,
+        )
+        .expect("write existing index");
+        fs::write(
+            root.join("letter.md"),
+            "---\nid: frontmatter-id\nversion: 1\ncreated_at: 2026-06-17T00:00:00.000Z\nupdated_at: 2026-06-17T00:00:00.000Z\n---\n\nHello\n",
+        )
+        .expect("write markdown file");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace with existing entry");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].id, "existing-index-id");
 
         cleanup(&root);
     }
