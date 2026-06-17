@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(identity): harvest existing frontmatter ids into binding index + cloud without rewriting markdown. Adds scripts/identity/backup-restore.mjs (backup/verify/restore for .md files, .odessay/index.json, and optional cloud writings/margins), scripts/identity/harvest-ids.mjs (dry-run by default, --apply gated behind verified backup, frontmatter.id harvesting, id minting for files without id, conflict detection, optional --cloud registration), and shared scripts/identity/lib.mjs helpers. Adds tests/identity-harvest-scripts.test.ts covering dry-run/apply, minting, conflict failure, and backup/verify/restore. [ODE-301]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-301",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-301/harvest-existing-frontmatter-ids-into-binding-index-cloud-hard",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/272",
+      "commit": "c15d9c9",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (125 files / 765 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (migration harness CLI, no editor hot path). Presentation Contract: not required (no UI surfaces). Architecture Contract compliant: Application + Adapter(desktop/cloud), runtime desktop + cloud, owner architecture-first. Review score: 8.0/10 (P2×2: content-less cloud rows for minted ids, no UUID validation for frontmatter ids; P3×4: legacy dir string concatenation, harvest-ids arg parsing, backup select *, missing cloud test coverage). Context Gaps Detected: yes — original brief lacked full desktop sequence in Reference docs; resolved before BUILD."
+    },
+    {
       "what": "feat(desktop): unify UUID minting so workspace index adopts writing UUID. Workspace-created files now mint the writing UUID client-side, write it into transitional frontmatter, have .odessay/index.json adopt that id, and open in the editor through the same workspace/writing id without re-derivation. Existing index entries keep precedence for rename/move binding. [ODE-300]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-300",
