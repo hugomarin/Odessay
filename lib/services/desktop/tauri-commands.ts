@@ -15,6 +15,7 @@ export type DesktopWorkspaceFile = {
   modifiedAt: number
   size: number
   inode: number
+  contentHash: string
 }
 
 export type DesktopWorkspaceSnapshot = {
