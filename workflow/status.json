@@ -2406,6 +2406,15 @@
       "date": "2026-06-17",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Fix spell-check editor experience: range-based ProseMirror transactions for correction accepts, grouped accept for all N occurrences, DecorationSet mapped through transactions, stale suggestions anchored to source block. Typecheck PASS. Lint PASS (pre-existing editor-shell warnings). 751 tests PASS. ops:perf:gate PASS (14/0/1), ops:delivery:gate PASS. Performance Contract: required."
+    },
+    {
+      "issue": "ODE-302",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-302/specify-the-save-path-contract-across-the-four-stores-mini-spec",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/271",
+      "commit": "37783db",
+      "date": "2026-06-17",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Specified D10 save-path contract in workflow/context/features/odessay-sync.md for .md, SQLite/JSON caches, IndexedDB, and Supabase. Documents write order, failure handling, content_hash divergence, atomic save, route-first reconciliation, and verified current-code gaps with file:line citations. Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. 761 tests PASS. ops:delivery:gate PASS. CI Traceability SUCCESS. Vercel SUCCESS. Performance Contract: not required. Presentation Contract: not required. Architecture Contract PASS. Review score: 10.0/10."
     }
   ]
 }
