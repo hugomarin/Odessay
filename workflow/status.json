@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "fix(editor): persist annotation ids in markdown round-trip [ODE-299]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-299",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-299/persist-annotation-id-inline-across-the-markdown-round-trip-blocking",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/269",
+      "commit": "e645365",
+      "date": "2026-06-17",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (121 files / 754 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required. Presentation Contract: not required. Architecture Contract: Domain + editor adapter, invariantes de id estable cross round-trip y cero pérdida de filas en margins respetadas. Review score: 9.8/10 (P3×1 docs-gap: canonical inline id syntax not documented in odessay-anotaciones-ai.md)."
+    },
+    {
       "what": "fix(desktop): suppress watcher self-write events to prevent reconciliation loops. Adds short-lived self-write registry in tauri-fs-watch.ts, marks create_file/write_file/rename_file as app-owned writes, filters watcher events composed only of recent self-writes, and preserves external edit detection after window expiry or when mixed with non-self-written paths. [ODE-298]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-298",
