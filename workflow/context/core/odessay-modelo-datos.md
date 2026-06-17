@@ -108,6 +108,7 @@ Extiende `auth.users` de Supabase. Se crea automáticamente al registrarse vía 
 | title | text | nullable | Opcional |
 | body_json | jsonb | not null, default '{}' | **Persistencia remota actual del runtime web/cloud.** Contenido TipTap (ProseMirror JSON). No debe interpretarse como contrato documental universal del producto: la estrategia desktop converge a `.md` como documento canónico y trata `body_json` como representación rica/derivada o persistencia transitoria según el runtime. |
 | body_text | text | not null, default '' | Texto plano derivado de `body_json`. Para búsqueda full-text y contexto AI. Nunca editado directamente |
+| content_hash | text | nullable | `blake3:<hex>` sobre el markdown canónico normalizado (`CRLF/CR -> LF`). Permite re-emparejar un `.md` desnudo contra la nube cuando no existe índice local de binding (ADR D11). Se backfillea en el próximo save/sync. |
 | slug | text | nullable, unique por author_id | Generado del título. Usado solo en la URL pública `/{username}/{slug}`. Internamente se opera con `id` |
 | status | text | not null, default 'draft' | `new`, `exploring`, `draft`, `done` |
 | artifact_type | text | not null, default 'general' | Clasificación funcional del artifact: `general`, `agent`, `skill`, `prompt`, `template`, `status` |
@@ -317,3 +318,4 @@ Antes de mergear un cambio que toque schema:
 - `margins.reader_id` — Márgenes propios del lector
 - `writings.sync_status` — Queue de sync pendiente
 - `writings.slug` — Lookup por URL pública (parcial, filtrado por author_id)
+- `writings.content_hash` — Lookup por huella para re-bind cross-máquina de archivos `.md` desnudos (parcial, `content_hash is not null and deleted_at is null`)

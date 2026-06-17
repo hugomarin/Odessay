@@ -10,6 +10,7 @@ const writingPayloadSchema = z.object({
   title: z.string().nullable().optional(),
   body_json: z.record(z.string(), z.unknown()),
   body_text: z.string(),
+  content_hash: z.string().regex(/^blake3:[0-9a-f]{64}$/).nullable().optional(),
   slug: z.string().nullable().optional(),
   status: z.enum([...WRITING_STATUS_VALUES, "finished"]).default("draft"),
   artifact_type: z.enum(ARTIFACT_TYPE_VALUES).default("general"),
@@ -28,6 +29,9 @@ const deletePayloadSchema = z.object({
   updated_at: z.string().datetime(),
   deleted_at: z.string().datetime(),
 });
+
+const WRITING_DETAIL_SELECT =
+  "id, author_id, title, body_json, body_text, content_hash, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at, content_updated_at, metadata_updated_at";
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json(
@@ -52,9 +56,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const { id } = await context.params;
   const { data, error } = await supabase
     .from("writings")
-    .select(
-      "id, author_id, title, body_json, body_text, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, sync_status, deleted_at, created_at, updated_at, content_updated_at, metadata_updated_at",
-    )
+    .select(WRITING_DETAIL_SELECT)
     .eq("id", id)
     .eq("author_id", userId)
     .maybeSingle();
