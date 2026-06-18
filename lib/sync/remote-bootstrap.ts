@@ -140,14 +140,80 @@ const parseEnvelope = async <T>(response: Response): Promise<T> => {
   return envelope.data
 }
 
-const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
-  const localWriting = await localDB.writings.get(remoteWriting.id)
+const normalizeContentHash = (value: string | null | undefined) => {
+  const trimmed = value?.trim()
+  return trimmed || null
+}
 
-  if (!shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+const hasMaterializedPath = (writing: LocalWriting) => Boolean(writing.canonical_path?.trim())
+
+const isEligibleHashRebindCandidate = async (
+  writing: LocalWriting,
+  remoteWriting: RemoteWritingListRecord,
+) => {
+  if (writing.id === remoteWriting.id || writing.deleted_at || writing.sync_status === "deleted") {
     return false
   }
 
-  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting))
+  if (!hasMaterializedPath(writing)) {
+    return false
+  }
+
+  if (normalizeContentHash(writing.content_hash) !== normalizeContentHash(remoteWriting.content_hash)) {
+    return false
+  }
+
+  const activeMutation = await localDB.syncQueue.getCurrentForWriting(writing.id)
+  return !activeMutation
+}
+
+const findUniqueHashRebindCandidate = async (
+  remoteWriting: RemoteWritingListRecord,
+): Promise<LocalWriting | null> => {
+  if (remoteWriting.deleted_at || !normalizeContentHash(remoteWriting.content_hash)) {
+    return null
+  }
+
+  const localWritings = await localDB.writings.getAll({ includeDeleted: true })
+  const candidates: LocalWriting[] = []
+
+  for (const writing of localWritings) {
+    if (await isEligibleHashRebindCandidate(writing, remoteWriting)) {
+      candidates.push(writing)
+    }
+  }
+
+  return candidates.length === 1 ? candidates[0] : null
+}
+
+const retireReboundLocalWriting = async (writing: LocalWriting) => {
+  const nowIso = new Date().toISOString()
+  await localDB.writings.save({
+    ...writing,
+    canonical_path: null,
+    sync_status: "deleted",
+    deleted_at: nowIso,
+    updated_at: nowIso,
+    version: writing.version + 1,
+    local_updated_at: Date.now(),
+  })
+}
+
+const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
+  const localWriting = await localDB.writings.get(remoteWriting.id)
+  const hashRebindCandidate = localWriting ? null : await findUniqueHashRebindCandidate(remoteWriting)
+  const existingLocalWriting = localWriting ?? hashRebindCandidate
+
+  if (localWriting && !shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+    return false
+  }
+
+  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, existingLocalWriting))
+
+  if (hashRebindCandidate) {
+    await retireReboundLocalWriting(hashRebindCandidate)
+  }
+
   return true
 }
 

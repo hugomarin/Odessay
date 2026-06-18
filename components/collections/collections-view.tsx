@@ -167,6 +167,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         excerpt: item.excerpt,
         stateLabel: statusState.stateLabel,
         stateTone: statusState.stateTone,
+        documentState: item.documentState,
         recipientPreviews: [],
         dateLabel: buildDateLabel(updatedAt, now),
         isNew: false,

@@ -124,23 +124,6 @@ function toLocalWriting(record: WritingRecord, canonicalPath: string): LocalWrit
   }
 }
 
-const PROTECTED_MACOS_USER_DIR_RE = /^\/Users\/[^/]+\/(?:Desktop|Documents|Downloads)(?:\/|$)/
-
-function shouldUseInternalWritingsDir(configuredWritingsDir: string | null | undefined): boolean {
-  const trimmed = configuredWritingsDir?.trim()
-  if (!trimmed) {
-    return true
-  }
-
-  // Sandboxed macOS apps ask repeatedly when we touch privacy-protected folders
-  // directly on launch. Internal app data avoids that prompt for automatic I/O.
-  return PROTECTED_MACOS_USER_DIR_RE.test(trimmed)
-}
-
-function isProtectedCanonicalPath(path: string | null | undefined): boolean {
-  return Boolean(path?.trim() && PROTECTED_MACOS_USER_DIR_RE.test(path.trim()))
-}
-
 async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> {
   const { appConfigDir, appDataDir, join } = await import("@tauri-apps/api/path")
 
@@ -149,9 +132,7 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
   const settingsService = new DesktopSettingsService(configDir)
   const settingsResult = await settingsService.getDesktopSettings()
   const configuredWritingsDir = settingsResult.data?.writingsDir?.trim()
-  const writingsDir: string = shouldUseInternalWritingsDir(configuredWritingsDir)
-    ? defaultWritingsDir
-    : configuredWritingsDir!
+  const writingsDir: string = configuredWritingsDir || defaultWritingsDir
 
   if (writingsDir !== configuredWritingsDir) {
     await settingsService.updateDesktopSettings({ writingsDir })
@@ -175,7 +156,6 @@ class DesktopDocumentService implements DocumentService {
         await migrateIndexedDbToFilesystem({
           filesystem: this.runtime.filesystem,
         })
-        await this.rehomeProtectedCanonicalPaths()
       })()
         .catch((error) => {
           this.migrationPromise = null
@@ -184,30 +164,6 @@ class DesktopDocumentService implements DocumentService {
     }
 
     await this.migrationPromise
-  }
-
-  private async rehomeProtectedCanonicalPaths() {
-    const writings = await localDB.writings.getAll({ includeDeleted: true })
-    for (const writing of writings) {
-      if (writing.deleted_at || !isProtectedCanonicalPath(writing.canonical_path)) {
-        continue
-      }
-
-      const draftResult = await this.runtime.filesystem.createDraft(writing.title ?? undefined)
-      if (draftResult.error || !draftResult.data) {
-        throw new Error(draftResult.error?.message ?? "Failed to allocate internal canonical file")
-      }
-
-      const record = toCanonicalRecord(writing)
-      const derived = await this.writeCanonicalFile(record, draftResult.data.path)
-      await localDB.writings.save({
-        ...writing,
-        canonical_path: draftResult.data.path,
-        body_json: derived.bodyJson,
-        body_text: derived.bodyText,
-        local_updated_at: Date.now(),
-      })
-    }
   }
 
   private async resolveCanonicalPath(record: WritingRecord) {
@@ -294,10 +250,6 @@ class DesktopDocumentService implements DocumentService {
 
       if (existing && !mappedCanonicalPath) {
         return ok(toCanonicalRecord(existing))
-      }
-
-      if (!mappedCanonicalPath && isProtectedCanonicalPath(writingId)) {
-        return err("NOT_FOUND", "This writing is in a macOS protected folder. Reopen it from its current Artifact Studio copy.")
       }
 
       const canonicalPath = mappedCanonicalPath ?? writingId

@@ -8,6 +8,7 @@ const createWriting = (partial: Partial<LocalWriting> & Pick<LocalWriting, "id">
   id: partial.id,
   title: partial.title ?? "Untitled writing",
   body_json: partial.body_json ?? { type: "doc" },
+  canonical_path: partial.canonical_path,
   body_text: partial.body_text ?? "Default body",
   status: partial.status ?? "draft",
   visibility: partial.visibility ?? "private",
@@ -140,7 +141,46 @@ describe("buildDeskActivitySummary", () => {
     expect(todayRow?.destinationHref).toBe("/write/today-draft")
     expect(receivedRow?.destinationHref).toBeNull()
     expect(todayRow?.stateLabel).toBe("Draft")
+    expect(todayRow?.documentState).toBe("cloud-only")
     expect(todayRow?.dateLabel).toBe("")
+  })
+
+  it("exposes document state for Desk rows and hero cards", () => {
+    const summary = buildDeskActivitySummary(
+      [
+        createWriting({
+          id: "local-file",
+          lifecycle: "local-only",
+          sync_status: "synced",
+          canonical_path: "/docs/local-file.md",
+        }),
+        createWriting({
+          id: "synced-file",
+          lifecycle: "server-confirmed",
+          sync_status: "synced",
+          canonical_path: "/docs/synced-file.md",
+        }),
+        createWriting({
+          id: "pending-file",
+          lifecycle: "server-confirmed",
+          sync_status: "pending",
+          canonical_path: "/docs/pending-file.md",
+        }),
+      ],
+      {
+        filter: "all",
+        userId: "user-1",
+        now,
+      },
+    )
+
+    const rows = summary.groups.flatMap((group) => group.rows)
+    expect(rows.map((row) => row.documentState)).toEqual(["local-only", "synced", "pending"])
+    expect(summary.heroDrafts.map((draft) => draft.documentState)).toEqual([
+      "local-only",
+      "synced",
+      "pending",
+    ])
   })
 
   it("renders shared recipient names directly when provided", () => {

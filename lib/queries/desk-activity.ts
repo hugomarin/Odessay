@@ -7,6 +7,7 @@ import {
   normalizeWritingStatus,
   WRITING_STATUS_VALUES,
 } from "@/lib/writings/status"
+import { deriveDocumentStateForLocalWriting, type DocumentState } from "@/lib/writings/document-state"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
@@ -31,6 +32,7 @@ export type DeskHeroDraft = {
   excerpt: string
   status: DeskStatusTone
   statusLabel: string
+  documentState: DocumentState
   updatedLabel: string
   wordCount: number
   isActive: boolean
@@ -43,6 +45,7 @@ export type DeskActivityRow = {
   excerpt: string
   stateLabel: string
   stateTone: DeskStatusTone
+  documentState: DocumentState
   recipientPreviews: DeskRecipientPreview[]
   dateLabel: string
   isNew: boolean
@@ -101,6 +104,7 @@ type WritingMeta = {
   hasResponses: boolean
   isReceived: boolean
   status: LocalWriting["status"]
+  documentState: DocumentState
   visibility: LocalWriting["visibility"]
   recipientPreviews: DeskRecipientPreview[]
   artifactType: ArtifactType
@@ -313,6 +317,7 @@ const buildMetas = (
       hasResponses: (childrenByParent.get(writing.id) ?? 0) > 0,
       isReceived,
       status: writing.status,
+      documentState: deriveDocumentStateForLocalWriting(writing),
       visibility: writing.visibility,
       recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
       artifactType: normalizeArtifactType(writing.artifact_type),
@@ -443,6 +448,7 @@ const toActivityRow = (writing: WritingMeta, now: Date): DeskActivityRow => {
     excerpt: writing.excerpt,
     stateLabel: statusState.stateLabel,
     stateTone: statusState.stateTone,
+    documentState: writing.documentState,
     recipientPreviews: writing.recipientPreviews,
     dateLabel: buildDateLabel(writing.createdAt, now),
     isNew: writing.isReceived,
@@ -547,6 +553,7 @@ const buildRecentWritings = (writings: WritingMeta[], now: Date): DeskHeroDraft[
       excerpt: writing.excerpt,
       status: statusState.stateTone,
       statusLabel: statusState.stateLabel,
+      documentState: writing.documentState,
       updatedLabel: buildDateLabel(writing.contentUpdatedAt, now),
       wordCount: writing.wordCount,
       isActive: index === 0,
