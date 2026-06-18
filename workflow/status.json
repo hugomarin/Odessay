@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(identity): add frontmatter cleanup harness for Odessay metadata. Adds scripts/identity/clean-frontmatter.mjs (dry-run by default; --apply gated behind verified ODE-301 backup; removes only Odessay keys id/slug/status/visibility/version; preserves foreign frontmatter; removes whole block only when empty; requires workspace index id unless --cloud verifies existing cloud writing row; --cloud updates matching writings metadata before rewriting markdown). Expands tests/identity-harvest-scripts.test.ts with dry-run, apply, foreign frontmatter preservation, full block removal, backup divergence refusal, and missing-harvest refusal coverage. [ODE-308]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-308",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-308/clean-odessay-frontmatter-from-real-md-files-backup-dry-run",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/278",
+      "commit": "7e6780e",
+      "date": "2026-06-18",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings only. npm test PASS (126 files / 785 tests after merging main). ops:delivery:gate PASS. CI Traceability Gates SUCCESS after gh pr update-branch (branch was 11 commits behind main). Vercel Preview SUCCESS. Performance Contract: not required. Presentation Contract: not required. Architecture Contract COMPLIANT: Layer=Application, Runtime scope=desktop+cloud, Owner=backend, Invariants preserved. Review score: 9.25/10 (P2×1 cloud-test-gap, P3×1 arg-parsing edge case). Context gap corrected before BUILD: brief originally omitted required desktop sequence in Reference docs."
+    },
+    {
       "what": "feat(desk): add document state badge for cloud-only / local-only / synced / pending derived from cloud lifecycle + local file materialization signals. Adds lib/writings/document-state.ts selector, DocumentStateBadge component, surfaces in Desk hero/activity, Collections detail, and Workspace file rows, plus Playwright visual harness and screenshot evidence. [ODE-307]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-307",
