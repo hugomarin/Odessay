@@ -20,6 +20,7 @@ import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { WRITING_STATUS_SURFACE_STYLES } from "@/components/ui/writing-status-badge"
+import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
@@ -137,6 +138,15 @@ export function DeskActivityTable({
               ) : null}
             </div>
             {row.excerpt ? <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p> : null}
+          </div>
+        ),
+      },
+      {
+        id: "document-state",
+        width: "w-[118px]",
+        render: (row) => (
+          <div onClick={stopRowNavigation}>
+            <DocumentStateBadge state={row.documentState} variant="compact" />
           </div>
         ),
       },

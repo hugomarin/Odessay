@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { Plus } from "lucide-react"
 import { CollectionChips } from "@/components/desk/collection-chips"
+import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { WritingStatusBadge } from "@/components/ui/writing-status-badge"
 import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
@@ -37,11 +38,14 @@ export function DeskHero({ drafts, collectionOptions }: DeskHeroProps) {
               draft.isActive && "border-cursor/35 shadow-float-md",
             )}
           >
-            <WritingStatusBadge
-              status={draft.status}
-              variant="compact"
-              className={cn("self-start", draft.isActive && "border-cursor/20")}
-            />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <WritingStatusBadge
+                status={draft.status}
+                variant="compact"
+                className={cn("self-start", draft.isActive && "border-cursor/20")}
+              />
+              <DocumentStateBadge state={draft.documentState} variant="compact" />
+            </div>
             <p className="line-clamp-2 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
             {draft.excerpt ? (
               <p className="line-clamp-2 text-[12px] leading-[1.55] text-ink-3">{draft.excerpt}</p>

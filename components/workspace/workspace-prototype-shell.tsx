@@ -20,6 +20,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker"
+import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { Button } from "@/components/ui/button"
@@ -49,6 +50,12 @@ import {
 } from "@/lib/workspace/folder-tree"
 import type { WorkspaceDetail, WorkspaceFile, WorkspaceLayout, WorkspaceSummary } from "@/lib/workspace/types"
 import { buildWorkspaceHref } from "@/lib/workspace/workspace-route"
+import type { LocalWriting } from "@/lib/local-db/schema"
+import {
+  deriveDocumentStateForLocalWriting,
+  deriveDocumentStateFromSignals,
+  type DocumentState,
+} from "@/lib/writings/document-state"
 import { cn } from "@/lib/utils"
 
 type AddWorkspaceStep = "chooser" | "existing" | "existingSelection" | "scratch"
@@ -157,6 +164,36 @@ function WorkspaceControlChip({
 
 function workspaceMissingMessage(workspace: WorkspaceSummary | WorkspaceDetail) {
   return workspace.missingReason ?? "This local folder is unavailable or was moved."
+}
+
+function buildWritingByCanonicalPath(writings: LocalWriting[]) {
+  const map = new Map<string, LocalWriting>()
+
+  for (const writing of writings) {
+    const canonicalPath = writing.canonical_path?.trim()
+    if (canonicalPath) {
+      map.set(canonicalPath, writing)
+    }
+  }
+
+  return map
+}
+
+function deriveWorkspaceFileDocumentState(
+  file: WorkspaceFile,
+  writingByCanonicalPath: Map<string, LocalWriting>,
+): DocumentState {
+  const writing = writingByCanonicalPath.get(file.path)
+
+  if (writing) {
+    return deriveDocumentStateForLocalWriting(writing)
+  }
+
+  return deriveDocumentStateFromSignals({
+    hasCloudRecord: false,
+    hasLocalFile: true,
+    isPending: false,
+  })
 }
 
 export function WorkspaceIndexPrototype() {
@@ -728,6 +765,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [workspaceAction, setWorkspaceAction] = useState<WorkspaceActionState>(null)
   const [workspaceActionValue, setWorkspaceActionValue] = useState("")
+  const [writingByCanonicalPath, setWritingByCanonicalPath] = useState<Map<string, LocalWriting>>(new Map())
 
   const loadWorkspace = useCallback(async () => {
     setIsLoading(true)
@@ -735,14 +773,19 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
     try {
       const service = await getDesktopWorkspaceService()
-      const nextWorkspace = await service.getWorkspace(workspaceSlug)
+      const [{ localDB }, nextWorkspace] = await Promise.all([
+        import("@/lib/local-db"),
+        service.getWorkspace(workspaceSlug),
+      ])
       if (!nextWorkspace) {
         setWorkspace(null)
         setErrorMessage("Workspace not found")
         return
       }
 
+      const localWritings = await localDB.writings.getAll()
       setWorkspace(nextWorkspace)
+      setWritingByCanonicalPath(buildWritingByCanonicalPath(localWritings))
       await service.markWorkspaceOpened(workspaceSlug)
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to load workspace")
@@ -846,6 +889,16 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         ),
       },
       {
+        id: "document-state",
+        width: "w-[118px]",
+        render: (file) => (
+          <DocumentStateBadge
+            state={deriveWorkspaceFileDocumentState(file, writingByCanonicalPath)}
+            variant="compact"
+          />
+        ),
+      },
+      {
         id: "date",
         width: "w-[160px]",
         align: "end",
@@ -875,7 +928,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         ),
       },
     ],
-    [openInEditor],
+    [openInEditor, writingByCanonicalPath],
   )
 
   const handleCreateFile = async () => {
@@ -1083,6 +1136,10 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-3">
                   <span className="text-[17px] text-ink">{pinnedFile.name}</span>
+                  <DocumentStateBadge
+                    state={deriveWorkspaceFileDocumentState(pinnedFile, writingByCanonicalPath)}
+                    variant="compact"
+                  />
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] uppercase tracking-[0.08em] text-ink-4">
                     Pinned
                   </span>
