@@ -32,6 +32,235 @@ beforeEach(() => {
 })
 
 describe("hydrateLocalWritingsFromRemote — list response integration", () => {
+  it("re-binds a unique verbatim local copy by content_hash before materializing a duplicate", async () => {
+    const hash = "blake3:4796db1ca6452aa029b47b20463f02abb6d625bd164f5734d8c527fe330f7904"
+    const localCopy = makeLocalWriting({
+      id: "local-copy",
+      canonical_path: "/Users/test/Documents/letter.md",
+      content_hash: hash,
+      lifecycle: "local-only",
+      sync_status: "synced",
+    })
+    await localDB.writings.save(localCopy)
+
+    const listResponse = {
+      data: [
+        {
+          id: "remote-writing",
+          author_id: "user-1",
+          title: "Remote Title",
+          slug: "remote-title",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 3,
+          sync_status: "synced",
+          deleted_at: null,
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-03T00:00:00.000Z",
+          content_hash: hash,
+        },
+      ],
+      error: null,
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(listResponse), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    )
+
+    const applied = await hydrateLocalWritingsFromRemote()
+    expect(applied).toBe(1)
+
+    const rebound = await localDB.writings.get("remote-writing")
+    expect(rebound).not.toBeNull()
+    expect(rebound?.canonical_path).toBe("/Users/test/Documents/letter.md")
+    expect(rebound?.content_hash).toBe(hash)
+    expect(rebound?.body_text).toBe("Hello world")
+
+    const retiredLocalCopy = await localDB.writings.get("local-copy")
+    expect(retiredLocalCopy?.sync_status).toBe("deleted")
+    expect(retiredLocalCopy?.canonical_path).toBeNull()
+
+    vi.unstubAllGlobals()
+  })
+
+  it("re-binds a verbatim local copy even when the provisional local version is higher", async () => {
+    const hash = "blake3:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    await localDB.writings.save(makeLocalWriting({
+      id: "local-copy",
+      canonical_path: "/Users/test/Documents/letter.md",
+      content_hash: hash,
+      lifecycle: "local-only",
+      sync_status: "synced",
+      version: 9,
+    }))
+
+    const listResponse = {
+      data: [
+        {
+          id: "remote-writing",
+          author_id: "user-1",
+          title: "Remote Title",
+          slug: "remote-title",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          sync_status: "synced",
+          deleted_at: null,
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+          content_hash: hash,
+        },
+      ],
+      error: null,
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(listResponse), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    )
+
+    const applied = await hydrateLocalWritingsFromRemote()
+    expect(applied).toBe(1)
+    expect((await localDB.writings.get("remote-writing"))?.canonical_path).toBe(
+      "/Users/test/Documents/letter.md",
+    )
+    expect((await localDB.writings.get("local-copy"))?.sync_status).toBe("deleted")
+
+    vi.unstubAllGlobals()
+  })
+
+  it("does not re-bind a divergent local file with a different content_hash", async () => {
+    await localDB.writings.save(makeLocalWriting({
+      id: "local-divergent",
+      canonical_path: "/Users/test/Documents/letter.md",
+      content_hash: "blake3:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      lifecycle: "local-only",
+    }))
+
+    const listResponse = {
+      data: [
+        {
+          id: "remote-writing",
+          author_id: "user-1",
+          title: "Remote Title",
+          slug: "remote-title",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          sync_status: "synced",
+          deleted_at: null,
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+          content_hash: "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        },
+      ],
+      error: null,
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(listResponse), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    )
+
+    await hydrateLocalWritingsFromRemote()
+
+    const remote = await localDB.writings.get("remote-writing")
+    expect(remote?.canonical_path).toBeNull()
+
+    const local = await localDB.writings.get("local-divergent")
+    expect(local?.sync_status).not.toBe("deleted")
+    expect(local?.canonical_path).toBe("/Users/test/Documents/letter.md")
+
+    vi.unstubAllGlobals()
+  })
+
+  it("does not re-bind when content_hash matches more than one local file", async () => {
+    const hash = "blake3:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    await localDB.writings.save(makeLocalWriting({
+      id: "local-copy-a",
+      canonical_path: "/Users/test/Documents/a.md",
+      content_hash: hash,
+      lifecycle: "local-only",
+    }))
+    await localDB.writings.save(makeLocalWriting({
+      id: "local-copy-b",
+      canonical_path: "/Users/test/Documents/b.md",
+      content_hash: hash,
+      lifecycle: "local-only",
+    }))
+
+    const listResponse = {
+      data: [
+        {
+          id: "remote-writing",
+          author_id: "user-1",
+          title: "Remote Title",
+          slug: "remote-title",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          sync_status: "synced",
+          deleted_at: null,
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+          content_hash: hash,
+        },
+      ],
+      error: null,
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(listResponse), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      ),
+    )
+
+    await hydrateLocalWritingsFromRemote()
+
+    const remote = await localDB.writings.get("remote-writing")
+    expect(remote?.canonical_path).toBeNull()
+    expect((await localDB.writings.get("local-copy-a"))?.sync_status).not.toBe("deleted")
+    expect((await localDB.writings.get("local-copy-b"))?.sync_status).not.toBe("deleted")
+
+    vi.unstubAllGlobals()
+  })
+
   it("preserves local body when remote list response omits body fields", async () => {
     const existing = makeLocalWriting()
     await localDB.writings.save(existing)
