@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile)
 const repoRoot = path.resolve(__dirname, "..")
 const harvestScript = path.join(repoRoot, "scripts/identity/harvest-ids.mjs")
 const backupScript = path.join(repoRoot, "scripts/identity/backup-restore.mjs")
+const cleanScript = path.join(repoRoot, "scripts/identity/clean-frontmatter.mjs")
 const tempRoots: string[] = []
 
 async function makeTempWorkspace() {
@@ -212,5 +213,154 @@ describe("identity harvest scripts", () => {
     )
     const restoredIndex = JSON.parse(await fs.readFile(path.join(root, ".odessay/index.json"), "utf8"))
     expect(restoredIndex.files["nested/letter.md"].id).toBe("restore-me")
+  })
+
+  it("dry-runs Odessay frontmatter cleanup without rewriting markdown", async () => {
+    const root = await makeTempWorkspace()
+    const markdown = "---\nid: writing-id\nstatus: draft\n---\n\nHello\n"
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "letter.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(path.join(root, "letter.md"), markdown, "utf8")
+
+    const dryRun = await runJson(cleanScript, ["--workspace-root", root])
+
+    expect(dryRun.dryRun).toBe(true)
+    expect(dryRun.summary).toMatchObject({
+      total: 1,
+      changed: 1,
+      cleaned: 0,
+      unchanged: 0,
+      failed: 0,
+    })
+    expect(dryRun.workspaces[0].docs[0]).toMatchObject({
+      path: "letter.md",
+      id: "writing-id",
+      status: "would-clean",
+      removedKeys: ["id", "status"],
+      removedWholeBlock: true,
+    })
+    await expect(fs.readFile(path.join(root, "letter.md"), "utf8")).resolves.toBe(markdown)
+  })
+
+  it("refuses to clean frontmatter ids that were not harvested into the index", async () => {
+    const root = await makeTempWorkspace()
+    await fs.writeFile(path.join(root, "letter.md"), "---\nid: only-in-frontmatter\n---\n\nHello\n", "utf8")
+
+    const result = await runJson(cleanScript, ["--workspace-root", root])
+
+    expect(result.summary.failed).toBe(1)
+    expect(result.workspaces[0].docs[0]).toMatchObject({
+      status: "failed",
+      id: "only-in-frontmatter",
+      indexId: null,
+      failureReason: "missing workspace index id; run harvest first or verify with --cloud",
+    })
+    await expect(fs.readFile(path.join(root, "letter.md"), "utf8")).resolves.toBe(
+      "---\nid: only-in-frontmatter\n---\n\nHello\n",
+    )
+  })
+
+  it("removes only Odessay keys while preserving foreign frontmatter", async () => {
+    const root = await makeTempWorkspace()
+    const markdown =
+      "---\nname: My Skill\ndescription: Useful context\nid: writing-id\nstatus: active\nvisibility: private\n---\n\nBody\n"
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "skill.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(path.join(root, "skill.md"), markdown, "utf8")
+
+    const backupDir = await createBackup(root)
+    const applied = await runJson(cleanScript, [
+      "--workspace-root",
+      root,
+      "--apply",
+      "--backup-dir",
+      backupDir,
+    ])
+
+    expect(applied.summary).toMatchObject({ total: 1, changed: 1, cleaned: 1, failed: 0 })
+    expect(applied.workspaces[0].docs[0]).toMatchObject({
+      status: "cleaned",
+      removedKeys: ["id", "status", "visibility"],
+      preservedKeys: ["name", "description"],
+      removedWholeBlock: false,
+      cloudMetadata: {
+        status: "active",
+        visibility: "private",
+      },
+    })
+    await expect(fs.readFile(path.join(root, "skill.md"), "utf8")).resolves.toBe(
+      "---\nname: My Skill\ndescription: Useful context\n---\n\nBody\n",
+    )
+  })
+
+  it("removes the full frontmatter block when it only contains Odessay keys", async () => {
+    const root = await makeTempWorkspace()
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "letter.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(
+      path.join(root, "letter.md"),
+      "---\nid: writing-id\nslug: hello\nstatus: draft\nvisibility: private\nversion: 2\n---\n\nHello\n",
+      "utf8",
+    )
+
+    const backupDir = await createBackup(root)
+    const applied = await runJson(cleanScript, [
+      "--workspace-root",
+      root,
+      "--apply",
+      "--backup-dir",
+      backupDir,
+    ])
+
+    expect(applied.workspaces[0].docs[0]).toMatchObject({
+      status: "cleaned",
+      removedWholeBlock: true,
+      cloudMetadata: {
+        slug: "hello",
+        status: "draft",
+        visibility: "private",
+        version: 2,
+      },
+    })
+    await expect(fs.readFile(path.join(root, "letter.md"), "utf8")).resolves.toBe("Hello\n")
+  })
+
+  it("refuses apply when live files diverge from the backup", async () => {
+    const root = await makeTempWorkspace()
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "letter.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(path.join(root, "letter.md"), "---\nid: writing-id\n---\n\nOriginal\n", "utf8")
+
+    const backupDir = await createBackup(root)
+    await fs.writeFile(path.join(root, "letter.md"), "---\nid: writing-id\n---\n\nChanged\n", "utf8")
+
+    await expect(
+      execFileAsync(
+        "node",
+        [cleanScript, "--workspace-root", root, "--apply", "--backup-dir", backupDir],
+        { cwd: repoRoot },
+      ),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Backup verification failed before clean apply"),
+    })
+    await expect(fs.readFile(path.join(root, "letter.md"), "utf8")).resolves.toBe(
+      "---\nid: writing-id\n---\n\nChanged\n",
+    )
   })
 })
