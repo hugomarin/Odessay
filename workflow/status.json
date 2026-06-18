@@ -2495,6 +2495,15 @@
       "date": "2026-06-17",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Specified D10 save-path contract in workflow/context/features/odessay-sync.md for .md, SQLite/JSON caches, IndexedDB, and Supabase. Documents write order, failure handling, content_hash divergence, atomic save, route-first reconciliation, and verified current-code gaps with file:line citations. Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. 761 tests PASS. ops:delivery:gate PASS. CI Traceability SUCCESS. Vercel SUCCESS. Performance Contract: not required. Presentation Contract: not required. Architecture Contract PASS. Review score: 10.0/10."
+    },
+    {
+      "issue": "ODE-309",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-309/implement-d9-deletion-policy-file-delete-cloud-only-explicit-separate",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/279",
+      "commit": "f12e877",
+      "date": "2026-06-18",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Implemented D9 deletion policy: watcher file delete transitions document to cloud-only via detachLocalFile; explicit UI delete remains the only cloud record destruction path. Added cloud-delete confirmation copy and Playwright evidence. Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. 787 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Presentation Contract: required (output/playwright/ode-309-cloud-delete-confirmation.png). Architecture Contract: compliant. Review score: 8.8/10."
     }
   ]
 }
