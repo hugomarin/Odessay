@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "feat(desk): add document state badge for cloud-only / local-only / synced / pending derived from cloud lifecycle + local file materialization signals. Adds lib/writings/document-state.ts selector, DocumentStateBadge component, surfaces in Desk hero/activity, Collections detail, and Workspace file rows, plus Playwright visual harness and screenshot evidence. [ODE-307]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-307",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-307/document-state-ui-badge-cloud-only-local-only-synced-pending",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/277",
+      "commit": "32b5b28",
+      "date": "2026-06-18",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings only. npm test PASS (126 files / 776 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (renders existing row metadata, no editor/sync/network hot path). Presentation Contract: required — evidence committed at output/playwright/ode-307-document-state-badges.png. Architecture Contract COMPLIANT: Layer=UI+Application, Runtime scope=desktop+web, Owner=frontend, Contracts touched=document-state presentation (D9), Invariants preserved (local-only is a valid state; pending has priority over cloud/local signals). Review score: 9.25/10 (P3×3). context_risk=true: brief required a Reference docs update to include the odessay-desktop-* sequence before BUILD."
+    },
+    {
       "what": "fix(sync): rebind remote writings by content_hash before materializing a duplicate. Adds hash normalization, unique-verbatim local copy lookup via canonical_path + content_hash, active-mutation guard, and retiring of the provisional local row (clear canonical_path, mark deleted). Preserves divergent hashes and ambiguous duplicate matches as separate/new/conflict cases. [ODE-306]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-306",
