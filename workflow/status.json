@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-17",
+  "last_updated": "2026-06-18",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -50,6 +50,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "fix(desktop): keep files in place — retire rehomeProtectedCanonicalPaths and writingsDir ownership. Removes the desktop startup rehome pass that copied protected canonical paths out of Documents/Desktop/Downloads into app data; stops rewriting a configured protected writingsDir to internal app data; allows direct desktop opens for protected macOS paths with no local mapping so the file remains the canonical path in IndexedDB. [ODE-305]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-305",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-305/files-in-place-retire-rehomeprotectedcanonicalpaths-and-writingsdir",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/275",
+      "commit": "24e1b62",
+      "date": "2026-06-18",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings only. npm test PASS (125 files / 770 tests); targeted tests PASS (8/8). ODE-301 backup/restore harness PASS on temporary workspace. ops:delivery:gate PASS. CI Traceability Gates PASS (3m7s). Vercel Preview SUCCESS. Performance Contract: not required. Presentation Contract: not required. Architecture Contract COMPLIANT: Layer=Adapter(desktop)+Domain, runtime scope=desktop, owner=backend, invariant preserved (user files stay in place; rehome replegado; writingsDir is default draft/list location, not ownership boundary). Review score: 10.0/10."
+    },
     {
       "what": "fix(desktop): flip the canonical switch so .md is the durable substrate on desktop and body_json remains the persisted substrate on web. Documents canonical_path as a desktop materialization binding, not a source-of-truth switch. Desktop cloud-only writings (no canonical_path) now open from persisted body_json instead of treating the writing id as a filesystem path. [ODE-304]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
