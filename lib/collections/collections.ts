@@ -5,6 +5,7 @@ import type {
   LocalWritingCollection,
 } from "@/lib/local-db/schema";
 import { calculateSelectionMetrics } from "@/lib/editor/text-metrics";
+import { deriveDocumentStateForLocalWriting, type DocumentState } from "@/lib/writings/document-state";
 
 export const UNCATEGORIZED_COLLECTION_ID = "uncategorized";
 
@@ -38,6 +39,7 @@ export type CollectionDetailWritingItem = {
   excerpt: string;
   wordCount: number;
   status: LocalWriting["status"];
+  documentState: DocumentState;
   visibility: LocalWriting["visibility"];
   updatedAt: string;
   otherCollections: CollectionOption[];
@@ -175,6 +177,7 @@ export const buildCollectionDetailItems = ({
         excerpt: buildExcerpt(writing.body_text),
         wordCount: calculateSelectionMetrics(writing.body_text).words,
         status: writing.status,
+        documentState: deriveDocumentStateForLocalWriting(writing),
         visibility: writing.visibility,
         updatedAt: writing.updated_at,
         otherCollections,
