@@ -133,9 +133,10 @@ export type CreateDraftResult = {
 /**
  * Desktop adapter for DocumentService.
  *
- * Uses the file path as the stable writingId.
- * .md files in writingsDir are the source of truth — no Supabase, no IndexedDB,
- * no auth required.
+ * Uses the file path as the storage address.
+ * .md files on disk are the source of truth — no Supabase, no IndexedDB,
+ * no auth required. The configured writingsDir is only the default location
+ * for app-created drafts and directory-list fallback, not an ownership boundary.
  *
  * Invariants (Architecture Contract §ODE-208):
  *  - Implements DocumentService without redefining the contract.
@@ -226,7 +227,7 @@ export class FilesystemDocumentService implements DocumentService {
   // ─── Desktop-specific helpers ──────────────────────────────────────────────
 
   /**
-   * Create a new .md file in writingsDir and return a WritingRecord.
+   * Create a new .md file in the default draft directory and return a WritingRecord.
    * writingId = absolute file path.
    */
   async createDraft(title?: string): Promise<ServiceResponse<CreateDraftResult>> {
