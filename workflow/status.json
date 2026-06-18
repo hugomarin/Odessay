@@ -51,6 +51,16 @@
   },
   "built": [
     {
+      "what": "fix(sync): rebind remote writings by content_hash before materializing a duplicate. Adds hash normalization, unique-verbatim local copy lookup via canonical_path + content_hash, active-mutation guard, and retiring of the provisional local row (clear canonical_path, mark deleted). Preserves divergent hashes and ambiguous duplicate matches as separate/new/conflict cases. [ODE-306]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-306",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-306/pull-reconciliation-by-content-hash-before-materializing-a-file",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/276",
+      "commit": "edc20b6",
+      "date": "2026-06-18",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings only. Focused tests PASS (7/7 in tests/sync/hydrate-local-writings-from-remote.test.ts). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (pull/hydration reconciliation, no editor interaction hot path). Architecture Contract COMPLIANT: Layer=Adapter(desktop/cloud)+Domain, runtime scope=desktop+cloud, owner=backend, invariant preserved (no duplicate for unique verbatim copy; no re-bind for divergent content; no re-bind when hash ambiguous; no active local sync mutation overwritten). Review score: 9.0/10 (P2×1 non-atomic re-bind; P3×2 hash-scan complexity + Files affected mismatch). Context Gaps Detected: yes — original brief omitted required desktop sequence in Reference docs; corrected before BUILD."
+    },
+    {
       "what": "fix(desktop): keep files in place — retire rehomeProtectedCanonicalPaths and writingsDir ownership. Removes the desktop startup rehome pass that copied protected canonical paths out of Documents/Desktop/Downloads into app data; stops rewriting a configured protected writingsDir to internal app data; allows direct desktop opens for protected macOS paths with no local mapping so the file remains the canonical path in IndexedDB. [ODE-305]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-305",
