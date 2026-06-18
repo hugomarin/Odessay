@@ -16,10 +16,20 @@ type DeleteWritingDialogProps = {
   onConfirm: () => void
   count?: number
   title?: string
+  scope?: "cloud" | "writing"
 }
 
-export function DeleteWritingDialog({ open, onOpenChange, onConfirm, count = 1, title }: DeleteWritingDialogProps) {
+export function DeleteWritingDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  count = 1,
+  title,
+  scope = "cloud",
+}: DeleteWritingDialogProps) {
   const displayTitle = title?.trim()
+  const targetLabel = count === 1 ? "writing" : `${count} writings`
+  const isCloudDelete = scope === "cloud"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -27,13 +37,15 @@ export function DeleteWritingDialog({ open, onOpenChange, onConfirm, count = 1, 
         <DialogHeader>
           <DialogTitle>
             {displayTitle
-              ? `Delete “${displayTitle}”?`
-              : `Delete ${count === 1 ? "writing" : `${count} writings`}`}
+              ? `Delete ${isCloudDelete ? "cloud record for " : ""}“${displayTitle}”?`
+              : `Delete ${isCloudDelete ? "cloud records for " : ""}${targetLabel}`}
           </DialogTitle>
           <DialogDescription>
-            {displayTitle
-              ? "This action can't be undone."
-              : `Are you sure you want to delete ${count === 1 ? "this writing" : `these ${count} writings`}? This action cannot be undone.`}
+            {isCloudDelete
+              ? "This permanently deletes the cloud record. Deleting the local .md file separately only removes the local copy and keeps the cloud record."
+              : displayTitle
+                ? "This action can't be undone."
+                : `Are you sure you want to delete ${count === 1 ? "this writing" : `these ${count} writings`}? This action cannot be undone.`}
           </DialogDescription>
         </DialogHeader>
 

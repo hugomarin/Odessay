@@ -14,7 +14,7 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
-import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
+import { enqueueWritingUpsert } from "@/lib/sync/queue"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
@@ -416,14 +416,14 @@ class DesktopDocumentService implements DocumentService {
         return err("UNAVAILABLE", fileDeleteResult.error.message)
       }
 
-      await enqueueWritingDelete(existing.id)
-      const deleted = await localDB.writings.get(existing.id)
+      await localDB.writings.detachLocalFile(existing.id)
+      const detached = await localDB.writings.get(existing.id)
 
-      if (!deleted) {
-        return err("NOT_FOUND", `Writing ${existing.id} not found after delete`)
+      if (!detached) {
+        return err("NOT_FOUND", `Writing ${existing.id} not found after local file delete`)
       }
 
-      return ok(toCanonicalRecord(deleted))
+      return ok(toCanonicalRecord(detached))
     } catch (error) {
       return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
     }
@@ -524,7 +524,7 @@ export async function markDesktopWritingDeletedByCanonicalPath(
     return
   }
 
-  await enqueueWritingDelete(existing.id)
+  await localDB.writings.detachLocalFile(existing.id)
 }
 
 export async function importDesktopWritingFile(

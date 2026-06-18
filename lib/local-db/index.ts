@@ -25,6 +25,7 @@ type LocalDB = {
     get: (id: string) => Promise<LocalWriting | null>;
     getByCanonicalPath: (canonicalPath: string) => Promise<LocalWriting | null>;
     getAll: (filters?: WritingListFilters) => Promise<LocalWriting[]>;
+    detachLocalFile: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
   };
   collections: {
@@ -645,6 +646,20 @@ const softDeleteWriting = async (id: string) => {
   });
 };
 
+const detachWritingLocalFile = async (id: string) => {
+  const existing = await getWriting(id);
+
+  if (!existing || existing.sync_status === "deleted") {
+    return;
+  }
+
+  await saveWriting({
+    ...existing,
+    canonical_path: null,
+    local_updated_at: Date.now(),
+  });
+};
+
 const saveCollection = async (collection: LocalCollection) => {
   await withStore(LOCAL_DB_STORES.collections, "readwrite", async (store) => {
     await runRequest(store.put(collection));
@@ -1067,6 +1082,7 @@ const localDBInstance: LocalDB = {
     get: getWriting,
     getByCanonicalPath: getWritingByCanonicalPath,
     getAll: getAllWritings,
+    detachLocalFile: detachWritingLocalFile,
     delete: softDeleteWriting,
   },
   collections: {

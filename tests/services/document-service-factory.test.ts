@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getByCanonicalPathMock: vi.fn(),
   getAllMock: vi.fn(),
   saveMock: vi.fn(),
+  detachLocalFileMock: vi.fn(),
   enqueueWritingUpsertMock: vi.fn(),
   enqueueWritingDeleteMock: vi.fn(),
   migrateMock: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   updateDesktopSettingsMock: vi.fn(),
   createDraftMock: vi.fn(),
   saveWritingMock: vi.fn(),
+  deleteWritingMock: vi.fn(),
   openWritingMock: vi.fn(),
   exportWritingMock: vi.fn(),
   joinMock: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/lib/local-db", () => ({
       getByCanonicalPath: mocks.getByCanonicalPathMock,
       getAll: mocks.getAllMock,
       save: mocks.saveMock,
+      detachLocalFile: mocks.detachLocalFileMock,
     },
   },
 }))
@@ -63,6 +66,7 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
   FilesystemDocumentService: class {
     createDraft = mocks.createDraftMock
     saveWriting = mocks.saveWritingMock
+    deleteWriting = mocks.deleteWritingMock
     openWriting = mocks.openWritingMock
     exportWriting = mocks.exportWritingMock
   },
@@ -89,6 +93,7 @@ describe("document-service-factory", () => {
     mocks.getByCanonicalPathMock.mockReset()
     mocks.getAllMock.mockReset()
     mocks.saveMock.mockReset()
+    mocks.detachLocalFileMock.mockReset()
     mocks.enqueueWritingUpsertMock.mockReset()
     mocks.enqueueWritingDeleteMock.mockReset()
     mocks.migrateMock.mockReset()
@@ -96,6 +101,7 @@ describe("document-service-factory", () => {
     mocks.updateDesktopSettingsMock.mockReset()
     mocks.createDraftMock.mockReset()
     mocks.saveWritingMock.mockReset()
+    mocks.deleteWritingMock.mockReset()
     mocks.openWritingMock.mockReset()
     mocks.exportWritingMock.mockReset()
     mocks.joinMock.mockReset()
@@ -107,6 +113,7 @@ describe("document-service-factory", () => {
     mocks.getByCanonicalPathMock.mockResolvedValue(null)
     mocks.getAllMock.mockResolvedValue([])
     mocks.saveMock.mockResolvedValue(undefined)
+    mocks.detachLocalFileMock.mockResolvedValue(undefined)
     mocks.enqueueWritingUpsertMock.mockResolvedValue(undefined)
     mocks.enqueueWritingDeleteMock.mockResolvedValue(undefined)
     mocks.createDraftMock.mockResolvedValue({
@@ -143,6 +150,24 @@ describe("document-service-factory", () => {
         correspondenceId: null,
         version: 1,
         deletedAt: null,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        updatedAt: "2026-06-04T00:00:00.000Z",
+      },
+      error: null,
+    })
+    mocks.deleteWritingMock.mockResolvedValue({
+      data: {
+        id: "/tmp/documents/Artifact Studio/untitled.md",
+        authorId: null,
+        title: "Untitled writing",
+        content: { markdown: "# Untitled writing", richText: null, plainText: "Untitled writing", canonicalSource: "markdown" },
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parentId: null,
+        correspondenceId: null,
+        version: 1,
+        deletedAt: "2026-06-04T00:00:00.000Z",
         createdAt: "2026-06-04T00:00:00.000Z",
         updatedAt: "2026-06-04T00:00:00.000Z",
       },
@@ -284,6 +309,84 @@ describe("document-service-factory", () => {
     expect(mocks.saveWritingMock).toHaveBeenCalledTimes(1)
     expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("---")
     expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("id:")
+  })
+
+  it("detaches a watcher-deleted desktop file without enqueueing a cloud delete", async () => {
+    mocks.getByCanonicalPathMock.mockResolvedValueOnce({
+      id: "writing-cloud",
+      author_id: "user-1",
+      title: "Cloud backed",
+      canonical_path: "/tmp/documents/Artifact Studio/cloud-backed.md",
+      body_json: { type: "doc", content: [] },
+      body_text: "Cloud backed",
+      slug: null,
+      status: "draft",
+      visibility: "private",
+      parent_id: null,
+      correspondence_id: null,
+      version: 3,
+      sync_status: "synced",
+      lifecycle: "server-confirmed",
+      deleted_at: null,
+      created_at: "2026-06-04T00:00:00.000Z",
+      updated_at: "2026-06-04T00:00:00.000Z",
+      local_updated_at: 1,
+    })
+
+    const { markDesktopWritingDeletedByCanonicalPath } = await import("@/lib/services/document-service-factory")
+    await markDesktopWritingDeletedByCanonicalPath("/tmp/documents/Artifact Studio/cloud-backed.md")
+
+    expect(mocks.detachLocalFileMock).toHaveBeenCalledWith("writing-cloud")
+    expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
+  })
+
+  it("desktop deleteWriting removes the local file binding without deleting the cloud record", async () => {
+    const beforeDelete = {
+      id: "writing-cloud",
+      author_id: "user-1",
+      title: "Cloud backed",
+      canonical_path: "/tmp/documents/Artifact Studio/cloud-backed.md",
+      body_json: { type: "doc", content: [] },
+      body_text: "Cloud backed",
+      slug: null,
+      status: "draft" as const,
+      visibility: "private" as const,
+      parent_id: null,
+      correspondence_id: null,
+      version: 3,
+      sync_status: "synced" as const,
+      lifecycle: "server-confirmed" as const,
+      deleted_at: null,
+      created_at: "2026-06-04T00:00:00.000Z",
+      updated_at: "2026-06-04T00:00:00.000Z",
+      local_updated_at: 1,
+    }
+    const afterDelete = { ...beforeDelete, canonical_path: null }
+
+    mocks.getMock
+      .mockResolvedValueOnce(beforeDelete)
+      .mockResolvedValueOnce(afterDelete)
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.deleteWriting({
+      writingId: "writing-cloud",
+      version: 4,
+      updatedAt: "2026-06-05T00:00:00.000Z",
+      deletedAt: "2026-06-05T00:00:00.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.deletedAt).toBeNull()
+    expect(result.data?.content.canonicalSource).toBe("rich-text")
+    expect(mocks.deleteWritingMock).toHaveBeenCalledWith({
+      writingId: "/tmp/documents/Artifact Studio/cloud-backed.md",
+      version: 4,
+      updatedAt: "2026-06-05T00:00:00.000Z",
+      deletedAt: "2026-06-05T00:00:00.000Z",
+    })
+    expect(mocks.detachLocalFileMock).toHaveBeenCalledWith("writing-cloud")
+    expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
   })
 
   it("uses IndexedDB metadata instead of legacy file frontmatter when opening desktop markdown", async () => {
