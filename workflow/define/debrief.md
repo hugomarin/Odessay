@@ -133,3 +133,19 @@ _(sin entradas aún)_
 ## Fase 7 — Desktop
 
 _(sin entradas aún)_
+
+---
+
+## Fase 8 — Biblioteca, Preview y Calidad de Producto
+
+- IMP-2026-06-18-01 | deuda-tecnica | content_hash: falta el test de paridad Rust↔TS (ODE-297 P1, audit-blocking) y el re-bind por content_hash no es atómico — si falla el `retire` puede quedar `canonical_path` duplicado (ODE-306 P2); scan de pull O(N×M) (ODE-306 P3). Toca integridad de datos del re-bind, que ya está en producción. | next-sprint | ODE-311
+  - **Origin**: wf-debrief Fase 8 — consolida ODE-297 + ODE-306
+
+- IMP-2026-06-18-02 | bug | D9: divergencia de contrato de borrado web/desktop — el default "cloud scope" del delete-writing-dialog arrastra semántica desktop al web (ODE-309 P2); `DesktopDocumentService.deleteWriting` difiere de la semántica web sin contrato (ODE-309 P2); `detachLocalFile` escribe aun con `canonical_path` ya null (ODE-309 P3). | next-sprint | ODE-312
+  - **Origin**: wf-debrief Fase 8 — consolida ODE-309
+
+- IMP-2026-06-18-03 | deuda-tecnica | Identidad — endurecer política de migración: aceptar `frontmatter.id` sin validar UUID y filas cloud placeholder con body vacío (ODE-301 P2×2); parseArgs laxo y backup-restore `select *` (ODE-301 P3); sin cobertura automatizada de `--cloud` y validación de flags con valor (ODE-308 P2/P3). | backlog | ODE-313
+  - **Origin**: wf-debrief Fase 8 — consolida ODE-301 + ODE-308
+
+- IMP-2026-06-18-04 | deuda-tecnica | Docs + testability cleanup: documentar sintaxis inline canónica `|id` en odessay-anotaciones-ai.md (ODE-299 P3); unificar TooltipProvider + data-testid en document-state-badge + comentar import dinámico de localDB (ODE-307 P3); parámetro legacy ignorado en serializeDocumentFile y título vacío en buildInitialWorkspaceMarkdown (ODE-303 P3). | backlog | ODE-314
+  - **Origin**: wf-debrief Fase 8 — consolida ODE-299 + ODE-307 + ODE-303

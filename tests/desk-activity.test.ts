@@ -176,6 +176,11 @@ describe("buildDeskActivitySummary", () => {
 
     const rows = summary.groups.flatMap((group) => group.rows)
     expect(rows.map((row) => row.documentState)).toEqual(["local-only", "synced", "pending"])
+    expect(rows.map((row) => row.localPath)).toEqual([
+      "/docs/local-file.md",
+      "/docs/synced-file.md",
+      "/docs/pending-file.md",
+    ])
     expect(summary.heroDrafts.map((draft) => draft.documentState)).toEqual([
       "local-only",
       "synced",

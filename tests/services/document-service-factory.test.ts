@@ -265,13 +265,14 @@ describe("document-service-factory", () => {
 
     expect(result.error).toBeNull()
     expect(result.data).toMatchObject({
-      id: "/Users/hugo/Downloads/old.md",
       content: { canonicalSource: "markdown" },
     })
+    expect(result.data?.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    )
     expect(mocks.openWritingMock).toHaveBeenCalledWith("/Users/hugo/Downloads/old.md")
     expect(mocks.saveMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "/Users/hugo/Downloads/old.md",
         canonical_path: "/Users/hugo/Downloads/old.md",
       }),
     )

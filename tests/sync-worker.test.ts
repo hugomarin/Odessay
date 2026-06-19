@@ -104,6 +104,7 @@ const createLocalDbMock = () => {
       getPending: vi.fn(async () => [createMutation()]),
       getCurrentForEntity: vi.fn(async () => createMutation()),
       getCurrentForWriting: vi.fn(async () => createMutation()),
+      deleteForEntity: vi.fn(async () => undefined),
       markSynced: vi.fn(async () => undefined),
       markFailed: vi.fn(async () => undefined),
     },

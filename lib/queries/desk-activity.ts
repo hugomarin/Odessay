@@ -43,6 +43,7 @@ export type DeskActivityRow = {
   id: string
   title: string
   excerpt: string
+  localPath: string | null
   stateLabel: string
   stateTone: DeskStatusTone
   documentState: DocumentState
@@ -94,6 +95,7 @@ type WritingMeta = {
   slug: string | null
   title: string
   excerpt: string
+  localPath: string | null
   bodyText: string
   createdAt: Date
   updatedAt: Date
@@ -303,6 +305,7 @@ const buildMetas = (
       slug: writing.slug ?? null,
       title: buildTitle(writing.title),
       excerpt: buildExcerpt(writing.body_text),
+      localPath: writing.canonical_path?.trim() || null,
       bodyText: writing.body_text,
       createdAt,
       updatedAt,
@@ -446,6 +449,7 @@ const toActivityRow = (writing: WritingMeta, now: Date): DeskActivityRow => {
     id: writing.id,
     title: writing.title,
     excerpt: writing.excerpt,
+    localPath: writing.localPath,
     stateLabel: statusState.stateLabel,
     stateTone: statusState.stateTone,
     documentState: writing.documentState,

@@ -41,8 +41,8 @@ export const DOCUMENT_STATE_BADGE_COPY: Record<DocumentState, DocumentStateBadge
     className: "bg-[hsl(140,30%,91%)] text-[hsl(140,40%,30%)]",
   },
   pending: {
-    label: "Pending",
-    tooltip: "This document has local changes queued for sync.",
+    label: "Syncing",
+    tooltip: "This document has local changes queued for cloud sync or is retrying a sync.",
     icon: Clock3,
     className: "bg-[hsl(45,60%,91%)] text-[hsl(35,55%,32%)]",
   },
@@ -78,4 +78,3 @@ export function DocumentStateBadge({ state, variant = "full", className }: Docum
     </TooltipProvider>
   )
 }
-

@@ -37,6 +37,7 @@ export type CollectionDetailWritingItem = {
   slug: string | null;
   title: string;
   excerpt: string;
+  localPath: string | null;
   wordCount: number;
   status: LocalWriting["status"];
   documentState: DocumentState;
@@ -175,6 +176,7 @@ export const buildCollectionDetailItems = ({
         slug: writing.slug ?? null,
         title: buildWritingTitle(writing.title),
         excerpt: buildExcerpt(writing.body_text),
+        localPath: writing.canonical_path?.trim() || null,
         wordCount: calculateSelectionMetrics(writing.body_text).words,
         status: writing.status,
         documentState: deriveDocumentStateForLocalWriting(writing),
