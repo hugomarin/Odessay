@@ -165,6 +165,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         id: item.id,
         title: item.title,
         excerpt: item.excerpt,
+        localPath: item.localPath,
         stateLabel: statusState.stateLabel,
         stateTone: statusState.stateTone,
         documentState: item.documentState,

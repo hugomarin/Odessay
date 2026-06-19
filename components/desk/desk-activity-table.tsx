@@ -138,6 +138,14 @@ export function DeskActivityTable({
               ) : null}
             </div>
             {row.excerpt ? <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p> : null}
+            {row.localPath ? (
+              <p
+                className="truncate pt-1 text-[11px] leading-[1.35] text-ink-4"
+                title={row.localPath}
+              >
+                {row.localPath}
+              </p>
+            ) : null}
           </div>
         ),
       },

@@ -62,22 +62,24 @@ const isNotFoundError = (error: unknown) => {
   return status === 404 || code === "NOT_FOUND";
 };
 
-async function shouldAttemptRemoteHydration(writingId: string): Promise<{ shouldHydrate: boolean; reason?: string }> {
+async function shouldUseRemoteCorrectionPersistence(
+  writingId: string,
+): Promise<{ allowed: boolean; reason?: string }> {
   const localWriting = await localDB.writings.get(writingId);
 
   if (!localWriting) {
-    return { shouldHydrate: false, reason: "no local writing" };
+    return { allowed: false, reason: "no local writing" };
   }
 
   if (localWriting.lifecycle === "local-only") {
-    return { shouldHydrate: false, reason: "local-only lifecycle" };
+    return { allowed: false, reason: "local-only lifecycle" };
   }
 
   if (localWriting.lifecycle === "syncing") {
-    return { shouldHydrate: false, reason: "syncing lifecycle" };
+    return { allowed: false, reason: "syncing lifecycle" };
   }
 
-  return { shouldHydrate: true };
+  return { allowed: true };
 }
 
 const inFlightCorrectionHydrations = new Map<string, Promise<LocalCorrectionBlock[]>>();
@@ -90,9 +92,9 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
   }
 
   const promise = (async () => {
-    const lifecycleCheck = await shouldAttemptRemoteHydration(writingId);
+    const lifecycleCheck = await shouldUseRemoteCorrectionPersistence(writingId);
 
-    if (!lifecycleCheck.shouldHydrate) {
+    if (!lifecycleCheck.allowed) {
       console.info(`[corrections:hydrate] skipped remote hydration for ${writingId}: ${lifecycleCheck.reason}`);
       return [];
     }
@@ -155,9 +157,23 @@ export const persistCorrectionBlockRemotely = async ({
   block?: LocalCorrectionBlock;
   deletedBlockIds?: string[];
 }) => {
+  const effectiveWritingId = writingId ?? block?.writingId;
+
+  if (!effectiveWritingId) {
+    return;
+  }
+
+  const lifecycleCheck = await shouldUseRemoteCorrectionPersistence(effectiveWritingId);
+  if (!lifecycleCheck.allowed) {
+    console.info(
+      `[corrections:persist] skipped remote persist for ${effectiveWritingId}: ${lifecycleCheck.reason}`,
+    );
+    return;
+  }
+
   try {
     const result = await getAIService().persistCorrectionBlock({
-      writingId: writingId ?? block?.writingId,
+      writingId: effectiveWritingId,
       block: block
         ? {
             id: block.id,
@@ -192,12 +208,12 @@ export const persistCorrectionBlockRemotely = async ({
     }
   } catch (error) {
     if (isAuthRelatedError(error)) {
-      console.warn(`[corrections:persist] auth failure for ${writingId ?? block?.writingId}; skipping remote persist.`);
+      console.warn(`[corrections:persist] auth failure for ${effectiveWritingId}; skipping remote persist.`);
       return;
     }
 
     if (isNotFoundError(error)) {
-      console.info(`[corrections:persist] remote writing not found for ${writingId ?? block?.writingId}; skipping remote persist.`);
+      console.info(`[corrections:persist] remote writing not found for ${effectiveWritingId}; skipping remote persist.`);
       return;
     }
 

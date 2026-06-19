@@ -23,6 +23,7 @@ import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-
 import { migrateIndexedDbToFilesystem } from "@/lib/migrations/indexeddb-to-filesystem"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
+import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
 
 type DesktopRuntimeServices = {
   configDir: string
@@ -265,7 +266,7 @@ class DesktopDocumentService implements DocumentService {
       }
 
       const canonicalId =
-        existingRecord?.id ?? writingId
+        existingRecord?.id ?? (isUuidLikeWritingIdentifier(writingId) ? writingId : createWritingId())
       const localWriting: LocalWriting = {
         id: canonicalId,
         author_id: existingRecord?.author_id ?? null,

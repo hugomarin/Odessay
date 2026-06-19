@@ -57,6 +57,7 @@ type LocalDB = {
       entityId: string,
     ) => Promise<SyncMutation | null>;
     getCurrentForWriting: (writingId: string) => Promise<SyncMutation | null>;
+    deleteForEntity: (entityKind: SyncEntityKind, entityId: string) => Promise<void>;
     markSynced: (id: string) => Promise<void>;
     markFailed: (id: string, error: string, nextRetryAt: number) => Promise<void>;
   };
@@ -936,6 +937,23 @@ const getCurrentMutationForEntity = async (
     return (mutation as SyncMutation | undefined) ?? null;
   });
 
+const deleteMutationForEntity = async (
+  entityKind: SyncEntityKind,
+  entityId: string,
+) => {
+  await withStore(LOCAL_DB_STORES.syncMutations, "readwrite", async (store) => {
+    const entityKey = createEntityKey(entityKind, entityId);
+    const existingKey = await runRequest(store.index("by-entity-key").getKey(entityKey));
+
+    if (!existingKey) {
+      return;
+    }
+
+    await runRequest(store.delete(existingKey));
+  });
+  emitLocalDBChange();
+};
+
 const setEntitySyncState = async (
   entityKind: SyncEntityKind,
   entityId: string,
@@ -1112,6 +1130,7 @@ const localDBInstance: LocalDB = {
     getCurrentForEntity: getCurrentMutationForEntity,
     getCurrentForWriting: (writingId: string) =>
       getCurrentMutationForEntity("writing", writingId),
+    deleteForEntity: deleteMutationForEntity,
     markSynced: markMutationSynced,
     markFailed: markMutationFailed,
   },

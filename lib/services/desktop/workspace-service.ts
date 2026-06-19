@@ -1,6 +1,6 @@
 "use client"
 
-import { appConfigDir, join } from "@tauri-apps/api/path"
+import { appConfigDir } from "@tauri-apps/api/path"
 import { open } from "@tauri-apps/plugin-dialog"
 import { localDB } from "@/lib/local-db"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
@@ -46,6 +46,12 @@ function slugifyWorkspaceName(value: string) {
     .replace(/^-+|-+$/g, "")
 
   return slug || "workspace"
+}
+
+function joinDesktopPath(basePath: string, relativePath: string) {
+  const normalizedBase = basePath.replace(/[\\/]+$/, "")
+  const normalizedRelative = relativePath.replace(/^[\\/]+/, "")
+  return normalizedRelative ? `${normalizedBase}/${normalizedRelative}` : normalizedBase
 }
 
 function formatWorkspaceFromSnapshot(
@@ -300,6 +306,13 @@ export class DesktopWorkspaceService {
   }
 
   async openFileInEditor(filePath: string, workspaceFileId: string): Promise<string> {
+    // Old desktop builds could enqueue sync mutations keyed by canonical_path
+    // instead of the stable workspace UUID. Clear those stale path-keyed
+    // mutations before rebinding/opening so they do not keep the writing stuck
+    // in failed/pending forever.
+    await localDB.syncQueue.deleteForEntity("writing", filePath)
+    await localDB.syncQueue.deleteForEntity("writing-collections", filePath)
+
     // Seed a local writing record with the workspace index ID before opening.
     // This ensures the DocumentService treats the workspace UUID as the
     // canonical writing ID; the markdown file itself remains content-only.
@@ -314,13 +327,15 @@ export class DesktopWorkspaceService {
         status: "draft",
         visibility: "private",
         version: 1,
-        sync_status: "pending",
+        sync_status: "synced",
         lifecycle: "local-only",
         created_at: nowIso,
         updated_at: nowIso,
         local_updated_at: Date.now(),
       })
     } else if (existingByPath.id !== workspaceFileId) {
+      await localDB.syncQueue.deleteForEntity("writing", existingByPath.id)
+      await localDB.syncQueue.deleteForEntity("writing-collections", existingByPath.id)
       await localDB.writings.delete(existingByPath.id)
       await localDB.writings.save({
         ...existingByPath,
@@ -331,7 +346,7 @@ export class DesktopWorkspaceService {
     }
 
     const documentService = await getDocumentService()
-    const openResult = await documentService.openWriting(filePath)
+    const openResult = await documentService.openWriting(workspaceFileId)
     if (openResult.error) {
       throw new Error(openResult.error.message)
     }
@@ -351,7 +366,7 @@ export class DesktopWorkspaceService {
       throw new Error("File name is required")
     }
 
-    const expectedPath = await join(workspace.rootPath, normalizedName)
+    const expectedPath = joinDesktopPath(workspace.rootPath, normalizedName)
     const title = filenameToTitle(normalizedName)
     const initialMarkdown = buildInitialWorkspaceMarkdown(title)
 
@@ -537,7 +552,7 @@ async function resolveWorkspaceWatchPaths(rootPath: string, selectedPaths: strin
     return [rootPath]
   }
 
-  const watchedPaths = await Promise.all(selectedPaths.map((selectedPath) => join(rootPath, selectedPath)))
+  const watchedPaths = selectedPaths.map((selectedPath) => joinDesktopPath(rootPath, selectedPath))
   return Array.from(new Set(watchedPaths))
 }
 
