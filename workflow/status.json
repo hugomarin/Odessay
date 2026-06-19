@@ -23,6 +23,10 @@
       {
         "issue": "ODE-310",
         "reason": "Retrospective traceability/docs campaign (PRs #259/#261) for document-identity context corpus + skill-product-manager reform. Does not represent product-code delivery, so it is intentionally excluded from built[] per the issue note; ignored for status drift."
+      },
+      {
+        "issue": "ODE-315",
+        "reason": "wf-debrief Fase 8 traceability issue: captures post-delivery follow-ups for ODE-295..309 in workflow/define/debrief.md and spawns ODE-311..314. Process/docs only, not product-code delivery, so it is intentionally excluded from built[]; ignored for status drift (same pattern as ODE-310)."
       }
     ]
   },
