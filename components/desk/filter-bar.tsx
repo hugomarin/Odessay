@@ -14,6 +14,7 @@ import { useUserSettingsContext } from "@/components/settings/user-settings-prov
 import { cn } from "@/lib/utils"
 
 type DeskFilterBarProps = {
+  leading?: ReactNode
   searchQuery: string; onSearchChange: (value: string) => void
   selectedCollectionIds: string[]; onToggleCollection: (id: string) => void
   selectedStatuses: WritingStatus[]; onToggleStatus: (status: WritingStatus) => void
@@ -29,7 +30,7 @@ type DeskFilterBarProps = {
 const DATE_OPTIONS: { value: DeskCreatedDateFilter; label: string }[] = [
   { value: "today", label: "Today" }, { value: "last-7", label: "Last 7 days" }, { value: "last-30", label: "Last 30 days" }, { value: "this-year", label: "This year" }, { value: "custom", label: "Custom range" },
 ]
-const GROUP_OPTIONS: { value: DeskGroupBy; label: string }[] = [{ value: "none", label: "None" }, { value: "status", label: "Status" }, { value: "collection", label: "Collection" }, { value: "created-date", label: "Created date" }]
+const GROUP_OPTIONS: { value: DeskGroupBy; label: string }[] = [{ value: "none", label: "None" }, { value: "status", label: "Status" }, { value: "artifact", label: "Artifact" }, { value: "collection", label: "Collection" }, { value: "created-date", label: "Created date" }]
 const SORT_OPTIONS: { value: DeskSortBy; label: string }[] = [{ value: "created-at-desc", label: "Newest first" }, { value: "created-at-asc", label: "Oldest first" }, { value: "content-updated-at-desc", label: "Recently worked on" }]
 
 export function DeskFilterBar(props: DeskFilterBarProps) {
@@ -41,24 +42,32 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
   const collections = useMemo(() => [...props.collectionOptions, { id: UNCATEGORIZED_COLLECTION_ID, name: "Uncategorized" }], [props.collectionOptions])
   const enabledStatuses = WRITING_STATUS_VALUES.filter((status) => !settings.disabledStatuses.includes(status))
   const sortLabel = SORT_OPTIONS.find((option) => option.value === props.sortBy)?.label ?? "Newest first"
+  const criteria = [
+    props.searchQuery ? "name" : null,
+    props.selectedStatuses.length ? "status" : null,
+    props.selectedArtifactTypes.length ? "artifact" : null,
+    props.selectedCollectionIds.length ? "collection" : null,
+    props.createdDateFilter ? "date" : null,
+  ].filter(Boolean).join(", ")
 
   return <div id="desk-filter-bar" data-section="desk-filter-bar" data-testid="desk-filter-bar" className="DeskFilterBar">
     <LibraryControlsBar
       searchQuery={props.searchQuery}
       onSearchChange={props.onSearchChange}
+      leading={props.leading}
       filterActive={props.activeFilterCount > 0}
       groupActive={props.groupBy !== "none"}
       sortLabel={sortLabel}
-      filterContent={<div className="flex flex-wrap gap-2"><SecondLevelControl label="Status" open={statusOpen} onOpenChange={setStatusOpen}>{enabledStatuses.map((status) => <Choice key={status} selected={props.selectedStatuses.includes(status)} onClick={() => props.onToggleStatus(status)}>{getWritingStatusLabel(status)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Artifact" open={artifactOpen} onOpenChange={setArtifactOpen}>{ARTIFACT_TYPE_VALUES.map((type) => <Choice key={type} selected={props.selectedArtifactTypes.includes(type)} onClick={() => props.onToggleArtifactType(type)}>{getArtifactTypeLabel(type)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Workspace" open={collectionOpen} onOpenChange={setCollectionOpen}>{collections.map((collection) => <Choice key={collection.id} selected={props.selectedCollectionIds.includes(collection.id)} onClick={() => props.onToggleCollection(collection.id)}>{collection.name}</Choice>)}</SecondLevelControl><SecondLevelControl label="Date" open={dateOpen} onOpenChange={setDateOpen}>{DATE_OPTIONS.map((option) => <Choice key={option.value} selected={props.createdDateFilter === option.value} onClick={() => props.onCreatedDateFilterChange(props.createdDateFilter === option.value ? null : option.value)}>{option.label}</Choice>)}{props.createdDateFilter === "custom" ? <div className="space-y-2 px-2 pb-2"><Input type="date" value={props.createdDateFrom} onChange={(event) => props.onCreatedDateFromChange(event.target.value)} className="h-8 text-xs"/><Input type="date" value={props.createdDateTo} onChange={(event) => props.onCreatedDateToChange(event.target.value)} className="h-8 text-xs"/></div> : null}</SecondLevelControl></div>}
+      filterContent={<div className="space-y-1"><SecondLevelControl label="Status" open={statusOpen} onOpenChange={setStatusOpen}>{enabledStatuses.map((status) => <Choice key={status} selected={props.selectedStatuses.includes(status)} onClick={() => props.onToggleStatus(status)}>{getWritingStatusLabel(status)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Artifact" open={artifactOpen} onOpenChange={setArtifactOpen}>{ARTIFACT_TYPE_VALUES.map((type) => <Choice key={type} selected={props.selectedArtifactTypes.includes(type)} onClick={() => props.onToggleArtifactType(type)}>{getArtifactTypeLabel(type)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Collection" open={collectionOpen} onOpenChange={setCollectionOpen}>{collections.map((collection) => <Choice key={collection.id} selected={props.selectedCollectionIds.includes(collection.id)} onClick={() => props.onToggleCollection(collection.id)}>{collection.name}</Choice>)}</SecondLevelControl><SecondLevelControl label="Date" open={dateOpen} onOpenChange={setDateOpen}>{DATE_OPTIONS.map((option) => <Choice key={option.value} selected={props.createdDateFilter === option.value} onClick={() => props.onCreatedDateFilterChange(props.createdDateFilter === option.value ? null : option.value)}>{option.label}</Choice>)}{props.createdDateFilter === "custom" ? <div className="space-y-2 px-2 pb-2"><Input type="date" value={props.createdDateFrom} onChange={(event) => props.onCreatedDateFromChange(event.target.value)} className="h-8 text-xs"/><Input type="date" value={props.createdDateTo} onChange={(event) => props.onCreatedDateToChange(event.target.value)} className="h-8 text-xs"/></div> : null}</SecondLevelControl></div>}
       groupContent={<div className="flex flex-wrap gap-2">{GROUP_OPTIONS.map((option) => <Choice key={option.value} selected={props.groupBy === option.value} onClick={() => props.onGroupByChange(option.value)}>{option.label}</Choice>)}</div>}
       sortContent={<div className="space-y-1">{SORT_OPTIONS.map((option) => <Choice key={option.value} selected={props.sortBy === option.value} onClick={() => props.onSortByChange(option.value)}>{option.label}</Choice>)}</div>}
     />
-    {props.hasActiveFilters ? <p className="mt-2 text-[11px] text-ink-4">{props.filteredCount} writing{props.filteredCount !== 1 ? "s" : ""}{props.totalCount > 0 && props.filteredCount !== props.totalCount ? ` of ${props.totalCount}` : ""} filtered</p> : null}
+    {props.hasActiveFilters ? <p className="mt-2 text-[11px] text-ink-4">{props.filteredCount} writing{props.filteredCount !== 1 ? "s" : ""}{props.totalCount > 0 && props.filteredCount !== props.totalCount ? ` of ${props.totalCount}` : ""} filtered by {criteria}</p> : null}
   </div>
 }
 
 function SecondLevelControl({ label, open, onOpenChange, children }: { label: string; open: boolean; onOpenChange: (value: boolean) => void; children: ReactNode }) {
-  return <Popover open={open} onOpenChange={onOpenChange}><PopoverTrigger asChild><button type="button" className="inline-flex h-8 items-center gap-2 rounded-[7px] bg-muted px-3 text-[12px] text-ink-2 hover:bg-muted-h">{label}<ChevronDown className="h-3 w-3" strokeWidth={1.5}/></button></PopoverTrigger><PopoverContent align="start" className="w-[220px] p-2"><div className="space-y-1">{children}</div></PopoverContent></Popover>
+  return <Popover open={open} onOpenChange={onOpenChange}><PopoverTrigger asChild><button type="button" className="flex h-9 w-full items-center justify-between rounded-[7px] px-2.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-muted">{label}<ChevronDown className="h-3 w-3" strokeWidth={1.5}/></button></PopoverTrigger><PopoverContent align="start" className="max-h-[360px] w-[240px] overflow-y-auto p-2"><div className="space-y-1">{children}</div></PopoverContent></Popover>
 }
 function Choice({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: ReactNode }) {
   return <button type="button" onClick={onClick} className={cn("flex w-full items-center gap-2 rounded-[7px] px-2.5 py-2 text-left text-[12px] transition-colors", selected ? "bg-muted text-ink" : "text-ink-2 hover:bg-muted/70")}><span className={cn("flex h-4 w-4 items-center justify-center rounded-[4px] border-[0.5px]", selected ? "border-ink bg-ink text-bg" : "border-border")}><Check className={cn("h-3 w-3", selected ? "opacity-100" : "opacity-0")} strokeWidth={1.5}/></span>{children}</button>

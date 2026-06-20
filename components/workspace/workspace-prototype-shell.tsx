@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker"
 import { LibraryControlsBar } from "@/components/library/library-controls-bar"
+import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters"
 import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
@@ -790,9 +791,14 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [workspaceAction, setWorkspaceAction] = useState<WorkspaceActionState>(null)
   const [workspaceActionValue, setWorkspaceActionValue] = useState("")
   const [writingByCanonicalPath, setWritingByCanonicalPath] = useState<Map<string, LocalWriting>>(new Map())
-  const [fileDateFilter, setFileDateFilter] = useState<"all" | "last-7">("all")
-  const [fileGroupBy, setFileGroupBy] = useState<"none" | "folder">("none")
-  const [fileSortBy, setFileSortBy] = useState<"newest" | "oldest" | "name">("newest")
+  const {
+    dateFilter: fileDateFilter,
+    setDateFilter: setFileDateFilter,
+    groupBy: fileGroupBy,
+    setGroupBy: setFileGroupBy,
+    sortBy: fileSortBy,
+    setSortBy: setFileSortBy,
+  } = useWorkspaceTableFilters()
 
   const loadWorkspace = useCallback(async () => {
     setIsLoading(true)
@@ -840,6 +846,16 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const pinnedFile = useMemo(() => {
     return workspace ? pickPinnedFile(workspace.files) : null
   }, [workspace])
+
+  const fileGroups = useMemo(() => {
+    if (fileGroupBy === "none") return [{ items: visibleFiles }]
+    const groups = new Map<string, WorkspaceFile[]>()
+    for (const file of visibleFiles) {
+      const label = fileSecondaryLabel(file)
+      groups.set(label, [...(groups.get(label) ?? []), file])
+    }
+    return Array.from(groups.entries()).map(([label, items]) => ({ label, items }))
+  }, [fileGroupBy, visibleFiles])
 
   const watchedWorkspace = workspace?.status === "ready" ? workspace : null
 
@@ -1205,7 +1221,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             ) : (
               <div className="overflow-hidden">
                 <ArtifactTable
-                  groups={[{ items: visibleFiles }]}
+                  groups={fileGroups}
                   columns={fileColumns}
                   getRowId={(file) => file.id}
                   getRowAriaLabel={(file) => `Open ${file.name} in editor`}

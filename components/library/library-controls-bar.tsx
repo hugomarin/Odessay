@@ -1,13 +1,11 @@
 "use client"
 
-import { type ReactNode, useState } from "react"
+import { type ReactNode } from "react"
 import { ArrowDownUp, ChevronDown, Filter, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-
-type ControlSection = "filter" | "group" | null
 
 type LibraryControlsBarProps = {
   searchQuery: string
@@ -22,7 +20,7 @@ type LibraryControlsBarProps = {
   className?: string
 }
 
-/** Shared two-level controls for table-oriented library surfaces. */
+/** Shared, compact controls for table-oriented library surfaces. */
 export function LibraryControlsBar({
   searchQuery,
   onSearchChange,
@@ -35,17 +33,11 @@ export function LibraryControlsBar({
   leading,
   className,
 }: LibraryControlsBarProps) {
-  const [activeSection, setActiveSection] = useState<ControlSection>(null)
-
-  const toggleSection = (section: Exclude<ControlSection, null>) => {
-    setActiveSection((current) => (current === section ? null : section))
-  }
-
   return (
-    <div className={cn("LibraryControlsBar space-y-2", className)} data-testid="library-controls-bar">
+    <div className={cn("LibraryControlsBar", className)} data-testid="library-controls-bar">
       <div className="flex flex-wrap items-center gap-2">
         {leading}
-        <div className="relative min-w-[200px] flex-1">
+        <div className="relative min-w-[200px] flex-1 sm:max-w-[360px]">
           <Search className="absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-ink-4" strokeWidth={1.5} />
           <Input
             type="search"
@@ -67,29 +59,25 @@ export function LibraryControlsBar({
             </Button>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => toggleSection("filter")}
-          aria-expanded={activeSection === "filter"}
-          className={cn("h-9 gap-2 rounded-[8px] px-3 text-[13px]", filterActive || activeSection === "filter" ? "bg-muted text-ink" : "bg-muted/70")}
-        >
-          <Filter className="h-[14px] w-[14px]" strokeWidth={1.5} />
-          Filter
-          <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => toggleSection("group")}
-          aria-expanded={activeSection === "group"}
-          className={cn("h-9 gap-2 rounded-[8px] px-3 text-[13px]", groupActive || activeSection === "group" ? "bg-muted text-ink" : "bg-muted/70")}
-        >
-          Group by
-          <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
-        </Button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className={cn("h-9 gap-2 rounded-[8px] px-3 text-[13px]", filterActive ? "bg-muted text-ink" : "bg-muted/70")}>
+              <Filter className="h-[14px] w-[14px]" strokeWidth={1.5} />
+              Filter
+              <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[260px] p-2">{filterContent}</PopoverContent>
+        </Popover>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className={cn("h-9 gap-2 rounded-[8px] px-3 text-[13px]", groupActive ? "bg-muted text-ink" : "bg-muted/70")}>
+              Group by
+              <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[220px] p-2">{groupContent}</PopoverContent>
+        </Popover>
         <Popover>
           <PopoverTrigger asChild>
             <Button type="button" variant="ghost" size="sm" className="h-9 gap-2 rounded-[8px] bg-muted/70 px-3 text-[13px]">
@@ -104,11 +92,6 @@ export function LibraryControlsBar({
         </Popover>
       </div>
 
-      {activeSection ? (
-        <div className="border-t-[0.5px] border-border pt-2" data-testid={`library-controls-${activeSection}-panel`}>
-          {activeSection === "filter" ? filterContent : groupContent}
-        </div>
-      ) : null}
     </div>
   )
 }

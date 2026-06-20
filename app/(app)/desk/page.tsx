@@ -696,10 +696,9 @@ export default function DeskPage() {
         <>
           <DeskHero drafts={summary.heroDrafts} collectionOptions={collectionOptions} />
 
-          <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-[14px] sm:px-9">
-            <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
-            <div className="min-w-[280px] flex-1">
+          <div className="px-5 py-[14px] sm:px-9">
               <DeskFilterBar
+                leading={<DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 selectedCollectionIds={selectedCollectionIds}
@@ -724,7 +723,6 @@ export default function DeskPage() {
                 filteredCount={filteredSummary.total}
                 totalCount={summary.total}
               />
-            </div>
           </div>
 
           {hasSelection && (
