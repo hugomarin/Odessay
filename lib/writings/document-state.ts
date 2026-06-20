@@ -1,6 +1,6 @@
 import type { LocalSyncStatus, LocalWriting, WritingLifecycle } from "@/lib/local-db/schema"
 
-export type DocumentState = "cloud-only" | "local-only" | "synced" | "pending"
+export type DocumentState = "cloud-only" | "local-only" | "synced" | "pending" | "sync-failed"
 
 export type DocumentStateSignals = {
   hasCloudRecord: boolean
@@ -10,7 +10,7 @@ export type DocumentStateSignals = {
 
 export type DocumentStateSource = Pick<LocalWriting, "canonical_path" | "lifecycle" | "sync_status">
 
-const pendingSyncStatuses: ReadonlySet<LocalSyncStatus> = new Set(["pending", "failed"])
+const pendingSyncStatuses: ReadonlySet<LocalSyncStatus> = new Set(["pending"])
 
 export function deriveDocumentStateFromSignals({
   hasCloudRecord,
@@ -45,10 +45,13 @@ export function isDocumentStatePending(syncStatus: LocalSyncStatus, lifecycle: W
 }
 
 export function deriveDocumentStateForLocalWriting(writing: DocumentStateSource): DocumentState {
+  if (writing.sync_status === "failed") {
+    return "sync-failed"
+  }
+
   return deriveDocumentStateFromSignals({
     hasCloudRecord: hasCloudRecord(writing.lifecycle),
     hasLocalFile: hasMaterializedLocalFile(writing.canonical_path),
     isPending: isDocumentStatePending(writing.sync_status, writing.lifecycle),
   })
 }
-

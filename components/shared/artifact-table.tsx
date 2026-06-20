@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from "react"
 
 import { ArtifactTableCard } from "@/components/shared/artifact-table-card"
 import { ArtifactTableRow } from "@/components/shared/artifact-table-row"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type {
   ArtifactTableColumn,
   ArtifactTableGroup,
@@ -77,6 +78,45 @@ export function ArtifactTable<T>({
     return <>{emptyState ?? null}</>
   }
 
+  if (mode === "list") {
+    return (
+      <div className={cn("ArtifactTable", className)}>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {renderLeading ? <TableHead className="w-10 px-4"><span className="sr-only">Select</span></TableHead> : null}
+              {columns.map((column) => (
+                <TableHead key={column.id} className={cn(column.align === "end" ? "text-right" : "", column.className)}>
+                  {column.label ?? <span className="sr-only">Actions</span>}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {groups.flatMap((group, groupIndex) => {
+              if (group.items.length === 0) return []
+              const groupRows: ReactNode[] = []
+              if (group.label) {
+                groupRows.push(
+                  <TableRow key={`label-${group.label}-${groupIndex}`}>
+                    <TableCell colSpan={columns.length + (renderLeading ? 1 : 0)} className="bg-sb px-7 py-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">{group.label}</p>
+                    </TableCell>
+                  </TableRow>,
+                )
+              }
+              groupRows.push(...group.items.map((item) => {
+                const href = getRowHref?.(item)
+                return <ArtifactTableRow key={getRowId(item)} item={item} columns={columns} href={href} ariaLabel={getRowAriaLabel?.(item)} isSelected={isRowSelected?.(item)} leading={renderLeading?.(item)} onActivate={resolveActivate(item, href, getRowHref, onRowClick)} />
+              }))
+              return groupRows
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    )
+  }
+
   return (
     <div className={cn("ArtifactTable", className)}>
       {groups.map((group, groupIndex) => {
@@ -113,7 +153,20 @@ export function ArtifactTable<T>({
                 })}
               </div>
             ) : (
-              <div>
+              <Table>
+                {groupIndex === 0 ? (
+                  <TableHeader>
+                    <TableRow>
+                      {renderLeading ? <TableHead className="w-10 px-4"><span className="sr-only">Select</span></TableHead> : null}
+                      {columns.map((column) => (
+                        <TableHead key={column.id} className={cn(column.align === "end" ? "text-right" : "", column.className)}>
+                          {column.label ?? <span className="sr-only">Actions</span>}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                ) : null}
+                <TableBody>
                 {group.items.map((item) => {
                   const href = getRowHref?.(item)
                   return (
@@ -129,7 +182,8 @@ export function ArtifactTable<T>({
                     />
                   )
                 })}
-              </div>
+                </TableBody>
+              </Table>
             )}
           </Fragment>
         )

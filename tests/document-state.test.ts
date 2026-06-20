@@ -80,6 +80,14 @@ describe("document state derivation", () => {
     ).toBe("pending")
   })
 
+  it("keeps a failed sync distinct from an in-flight sync", () => {
+    expect(
+      deriveDocumentStateForLocalWriting(
+        makeWriting({ lifecycle: "server-confirmed", sync_status: "failed", canonical_path: "/docs/failed.md" }),
+      ),
+    ).toBe("sync-failed")
+  })
+
   it("treats a standalone local file as local-only", () => {
     expect(
       deriveDocumentStateFromSignals({
@@ -90,4 +98,3 @@ describe("document state derivation", () => {
     ).toBe("local-only")
   })
 })
-

@@ -47,6 +47,7 @@ export type DeskActivityRow = {
   stateLabel: string
   stateTone: DeskStatusTone
   documentState: DocumentState
+  artifactType?: ArtifactType
   recipientPreviews: DeskRecipientPreview[]
   dateLabel: string
   isNew: boolean
@@ -453,6 +454,7 @@ const toActivityRow = (writing: WritingMeta, now: Date): DeskActivityRow => {
     stateLabel: statusState.stateLabel,
     stateTone: statusState.stateTone,
     documentState: writing.documentState,
+    artifactType: writing.artifactType,
     recipientPreviews: writing.recipientPreviews,
     dateLabel: buildDateLabel(writing.createdAt, now),
     isNew: writing.isReceived,

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Clipboard, Download, Eye, Pencil, Tags, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Clipboard, Download, Eye, MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -20,9 +20,10 @@ import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { WRITING_STATUS_SURFACE_STYLES } from "@/components/ui/writing-status-badge"
-import { DocumentStateBadge } from "@/components/ui/document-state-badge"
+import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
+import { getArtifactTypeLabel } from "@/lib/writings/artifact-type"
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
@@ -96,7 +97,8 @@ export function DeskActivityTable({
     () => [
       {
         id: "title",
-        grow: true,
+        label: "Writing",
+        className: "w-full min-w-[20rem]",
         render: (row) => (
           <div
             style={{
@@ -108,6 +110,7 @@ export function DeskActivityTable({
               <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
                 {row.title}
               </p>
+              <DocumentStateIcon state={row.documentState} />
               {onRenameWriting ? (
                 <button
                   type="button"
@@ -138,29 +141,13 @@ export function DeskActivityTable({
               ) : null}
             </div>
             {row.excerpt ? <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p> : null}
-            {row.localPath ? (
-              <p
-                className="truncate pt-1 text-[11px] leading-[1.35] text-ink-4"
-                title={row.localPath}
-              >
-                {row.localPath}
-              </p>
-            ) : null}
-          </div>
-        ),
-      },
-      {
-        id: "document-state",
-        width: "w-[118px]",
-        render: (row) => (
-          <div onClick={stopRowNavigation}>
-            <DocumentStateBadge state={row.documentState} variant="compact" />
+            <p className="pt-1 text-[11px] leading-[1.35] text-ink-4">Created {row.dateLabel}</p>
           </div>
         ),
       },
       {
         id: "status",
-        width: "w-[154px]",
+        label: "Status",
         render: (row) => (
           <div onClick={stopRowNavigation}>
             <DropdownMenu>
@@ -200,9 +187,8 @@ export function DeskActivityTable({
         ),
       },
       {
-        id: "meta",
-        width: "w-[196px]",
-        align: "end",
+        id: "artifact",
+        label: "Artifact",
         render: (row) => {
           const selectedCollectionIds = collectionIdsByWritingId[row.id] ?? []
           const selectedCollections = selectedCollectionIds
@@ -211,7 +197,10 @@ export function DeskActivityTable({
           const isNavigable = Boolean(row.destinationHref)
 
           return (
-            <div className="flex items-center justify-end gap-2 text-[13px] text-ink-2" onClick={stopRowNavigation}>
+            <div className="flex items-center gap-2 text-[13px] text-ink-2" onClick={stopRowNavigation}>
+              <span className="inline-flex h-8 items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2">
+                {getArtifactTypeLabel(row.artifactType ?? "general")}
+              </span>
               {selectedCollections.length > 0 ? (
                 <div className="flex min-w-0 max-w-[132px] items-center justify-end gap-1">
                   {selectedCollections.slice(0, 2).map((collection) => (
@@ -275,49 +264,28 @@ export function DeskActivityTable({
         },
       },
       {
-        id: "date",
-        width: "w-[108px]",
-        align: "end",
-        render: (row) => (
-          <span className="whitespace-nowrap text-[13px] text-ink-4">{row.dateLabel}</span>
-        ),
+        id: "workspace",
+        label: "Workspace",
+        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4">No workspace</span>,
       },
       {
         id: "actions",
-        width: "w-[96px]",
+        label: "",
         align: "end",
         render: (row) => (
-          <div className="flex items-center justify-end gap-1.5" onClick={stopRowNavigation}>
-            {onCopyMarkdown ? (
-              <button
-                type="button"
-                aria-label={`Copy markdown for ${row.title}`}
-                onClick={() => onCopyMarkdown(row.id)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-              >
-                <Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />
-              </button>
-            ) : null}
-            {onDownloadMarkdown ? (
-              <button
-                type="button"
-                aria-label={`Download markdown for ${row.title}`}
-                onClick={() => onDownloadMarkdown(row.id)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-              >
-                <Download className="h-[12px] w-[12px]" strokeWidth={1.5} />
-              </button>
-            ) : null}
-            {showDeleteAction ? (
-              <button
-                type="button"
-                aria-label={`Delete writing ${row.title}`}
-                onClick={() => setPendingDeleteId(row.id)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-              >
-                <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
-              </button>
-            ) : null}
+          <div className="flex justify-end" onClick={stopRowNavigation}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label={`Actions for ${row.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
+                  <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={stopRowNavigation}>
+                {onCopyMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onCopyMarkdown(row.id)}><Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />Copy markdown</DropdownMenuItem> : null}
+                {onDownloadMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onDownloadMarkdown(row.id)}><Download className="h-[12px] w-[12px]" strokeWidth={1.5} />Download markdown</DropdownMenuItem> : null}
+                {showDeleteAction ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />Delete</DropdownMenuItem> : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ),
       },
