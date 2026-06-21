@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Clipboard, Download, Eye, MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Clipboard, Download, Eye, FolderCog, MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -23,7 +23,7 @@ import { WRITING_STATUS_SURFACE_STYLES } from "@/components/ui/writing-status-ba
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
-import { getArtifactTypeLabel } from "@/lib/writings/artifact-type"
+import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
@@ -33,6 +33,7 @@ type DeskActivityTableProps = {
   onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
+  onArtifactTypeChange?: (writingId: string, artifactType: ArtifactType) => Promise<void>
   onRenameWriting?: (writingId: string) => void
   onPreviewWriting?: (writingId: string) => void
   onCopyMarkdown?: (writingId: string) => void
@@ -64,6 +65,7 @@ export function DeskActivityTable({
   onToggleCollection,
   onCreateCollection,
   onStatusChange,
+  onArtifactTypeChange,
   onRenameWriting,
   onPreviewWriting,
   onCopyMarkdown,
@@ -98,7 +100,8 @@ export function DeskActivityTable({
       {
         id: "title",
         label: "Writing",
-        className: "w-full min-w-[20rem]",
+        width: "w-[48%]",
+        className: "min-w-0",
         render: (row) => (
           <div
             style={{
@@ -148,6 +151,7 @@ export function DeskActivityTable({
       {
         id: "status",
         label: "Status",
+        width: "w-[13%]",
         render: (row) => (
           <div onClick={stopRowNavigation}>
             <DropdownMenu>
@@ -189,6 +193,7 @@ export function DeskActivityTable({
       {
         id: "artifact",
         label: "Artifact",
+        width: "w-[16%]",
         render: (row) => {
           const selectedCollectionIds = collectionIdsByWritingId[row.id] ?? []
           const selectedCollections = selectedCollectionIds
@@ -198,9 +203,33 @@ export function DeskActivityTable({
 
           return (
             <div className="flex items-center gap-2 text-[13px] text-ink-2" onClick={stopRowNavigation}>
-              <span className="inline-flex h-8 items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2">
-                {getArtifactTypeLabel(row.artifactType ?? "general")}
-              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Change artifact type for ${row.title}`}
+                    className="inline-flex h-8 max-w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  >
+                    <span className="truncate">{getArtifactTypeLabel(row.artifactType ?? "general")}</span>
+                    <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-[148px]" onClick={stopRowNavigation}>
+                  {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                    <DropdownMenuItem
+                      key={artifactType}
+                      className="flex cursor-pointer items-center justify-between gap-3 text-[13px]"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void onArtifactTypeChange?.(row.id, artifactType)
+                      }}
+                    >
+                      {getArtifactTypeLabel(artifactType)}
+                      {(row.artifactType ?? "general") === artifactType ? <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> : null}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               {selectedCollections.length > 0 ? (
                 <div className="flex min-w-0 max-w-[132px] items-center justify-end gap-1">
                   {selectedCollections.slice(0, 2).map((collection) => (
@@ -266,12 +295,35 @@ export function DeskActivityTable({
       {
         id: "workspace",
         label: "Workspace",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4">No workspace</span>,
+        width: "w-[16%]",
+        render: (row) => (
+          <div onClick={stopRowNavigation}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Manage workspace for ${row.title}`}
+                  className="inline-flex h-8 max-w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                >
+                  <span className="truncate">No workspace</span>
+                  <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-[190px]" onClick={stopRowNavigation}>
+                <DropdownMenuItem disabled className="text-[13px]">No workspace assigned</DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => router.push("/workspace")}>
+                  <FolderCog className="h-[12px] w-[12px]" strokeWidth={1.5} />Manage workspaces
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ),
       },
       {
         id: "actions",
         label: "",
         align: "end",
+        width: "w-14",
         render: (row) => (
           <div className="flex justify-end" onClick={stopRowNavigation}>
             <DropdownMenu>
@@ -301,7 +353,9 @@ export function DeskActivityTable({
       onPreviewWriting,
       onRenameWriting,
       onStatusChange,
+      onArtifactTypeChange,
       onToggleCollection,
+      router,
       renderExtraActions,
       showDeleteAction,
     ],

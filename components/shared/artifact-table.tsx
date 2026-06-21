@@ -81,10 +81,14 @@ export function ArtifactTable<T>({
   if (mode === "list") {
     return (
       <div className={cn("ArtifactTable", className)}>
-        <Table>
+        <Table className="table-fixed">
+          <colgroup>
+            {renderLeading ? <col className="w-12" /> : null}
+            {columns.map((column) => <col key={column.id} className={column.width} />)}
+          </colgroup>
           <TableHeader>
             <TableRow>
-              {renderLeading ? <TableHead className="w-10 px-4"><span className="sr-only">Select</span></TableHead> : null}
+              {renderLeading ? <TableHead className="px-4"><span className="sr-only">Select</span></TableHead> : null}
               {columns.map((column) => (
                 <TableHead key={column.id} className={cn(column.align === "end" ? "text-right" : "", column.className)}>
                   {column.label ?? <span className="sr-only">Actions</span>}

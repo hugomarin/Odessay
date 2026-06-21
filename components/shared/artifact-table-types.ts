@@ -27,6 +27,8 @@ export type ArtifactTableColumn<T> = {
   id: ArtifactColumnId
   /** Visible header for list-mode tables. Omit for icon-only columns. */
   label?: string
+  /** Column width used by the semantic table layout when a stable rail is required. */
+  width?: string
   /** Horizontal alignment of the cell content. */
   align?: "start" | "end"
   /** Optional extra classes applied to the cell wrapper. */
