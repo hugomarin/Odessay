@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, Check, ChevronDown, Circle, Clipboard, Download, Eye, FileText, FolderCog, LayoutTemplate, MessageSquareText, Monitor, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
+import { Bot, Circle, Clipboard, Download, Eye, FileText, FolderCog, LayoutTemplate, MessageSquareText, Monitor, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,10 +17,9 @@ import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
-import { WRITING_STATUS_SURFACE_STYLES } from "@/components/ui/writing-status-badge"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
+import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
-import { cn } from "@/lib/utils"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 
 type DeskActivityTableProps = {
@@ -43,9 +42,6 @@ type DeskActivityTableProps = {
 
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
 const stopRowNavigation = (event: { stopPropagation: () => void }) => event.stopPropagation()
-
-const CONTROL_CLASS = "inline-flex h-9 w-fit min-w-[116px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[13px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-const ARTIFACT_CONTROL_CLASS = CONTROL_CLASS.replace("bg-bg", "bg-muted")
 
 function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
   const Icon = {
@@ -146,25 +142,17 @@ export function DeskActivityTable({
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={cn(
-                    CONTROL_CLASS,
-                    WRITING_STATUS_SURFACE_STYLES[row.stateTone],
-                  )}
-                >
-                  <WritingStatusIcon status={row.stateTone} />
-                  {row.stateLabel}
-                  <ChevronDown className="h-3 w-3 text-ink-4" strokeWidth={1.5} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[140px]" onClick={stopRowNavigation}>
+            <TablePropertySelector
+              ariaLabel={`Change status for ${row.title}`}
+              icon={<WritingStatusIcon status={row.stateTone} />}
+              label={row.stateLabel}
+              contentClassName="w-[248px]"
+              onClick={stopRowNavigation}
+            >
                 {enabledStatuses.map((status) => (
                   <DropdownMenuItem
                     key={status}
-                    className="flex cursor-pointer items-center justify-between gap-3 text-[13px]"
+                    className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
                     onClick={(event) => {
                       event.stopPropagation()
                       void onStatusChange?.(row.id, status)
@@ -174,11 +162,10 @@ export function DeskActivityTable({
                       <WritingStatusIcon status={status} />
                       {getWritingStatusLabel(status)}
                     </span>
-                    {row.stateTone === status ? <Check className="h-3.5 w-3.5" strokeWidth={1.5} /> : null}
+                    {row.stateTone === status ? <span className="h-2.5 w-2.5 rounded-full bg-ink" aria-hidden="true" /> : null}
                   </DropdownMenuItem>
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            </TablePropertySelector>
           </div>
         ),
       },
@@ -188,41 +175,32 @@ export function DeskActivityTable({
         width: "w-[14%]",
         className: "px-2",
         render: (row) => (
-            <div onClick={stopRowNavigation}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={`Change artifact type for ${row.title}`}
-                    className={ARTIFACT_CONTROL_CLASS}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <ArtifactTypeIcon artifactType={row.artifactType ?? "general"} />
-                      <span className="truncate">{getArtifactTypeLabel(row.artifactType ?? "general")}</span>
-                    </span>
-                    <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[248px] rounded-[18px] p-2 shadow-float-md" onClick={stopRowNavigation}>
-                  {ARTIFACT_TYPE_VALUES.map((artifactType) => (
-                    <DropdownMenuItem
-                      key={artifactType}
-                      className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        void onArtifactTypeChange?.(row.id, artifactType)
-                      }}
-                    >
-                      <span className="flex items-center gap-3">
-                        <ArtifactTypeIcon artifactType={artifactType} />
-                        {getArtifactTypeLabel(artifactType)}
-                      </span>
-                      {(row.artifactType ?? "general") === artifactType ? <span className="h-2.5 w-2.5 rounded-full bg-ink" aria-hidden="true" /> : null}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+          <div onClick={stopRowNavigation}>
+            <TablePropertySelector
+              ariaLabel={`Change artifact type for ${row.title}`}
+              icon={<ArtifactTypeIcon artifactType={row.artifactType ?? "general"} />}
+              label={getArtifactTypeLabel(row.artifactType ?? "general")}
+              contentClassName="w-[248px]"
+              onClick={stopRowNavigation}
+            >
+              {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                <DropdownMenuItem
+                  key={artifactType}
+                  className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void onArtifactTypeChange?.(row.id, artifactType)
+                  }}
+                >
+                  <span className="flex items-center gap-3">
+                    <ArtifactTypeIcon artifactType={artifactType} />
+                    {getArtifactTypeLabel(artifactType)}
+                  </span>
+                  {(row.artifactType ?? "general") === artifactType ? <span className="h-2.5 w-2.5 rounded-full bg-ink" aria-hidden="true" /> : null}
+                </DropdownMenuItem>
+              ))}
+            </TablePropertySelector>
+          </div>
         ),
       },
       {
@@ -232,27 +210,19 @@ export function DeskActivityTable({
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`Manage workspace for ${row.title}`}
-                  className={CONTROL_CLASS}
-                >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Monitor className="h-[12px] w-[12px] shrink-0 text-ink-4" strokeWidth={1.5} />
-                    <span className="truncate">No workspace</span>
-                  </span>
-                  <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-[190px]" onClick={stopRowNavigation}>
+            <TablePropertySelector
+              ariaLabel={`Manage workspace for ${row.title}`}
+              icon={<Monitor className="h-[12px] w-[12px] shrink-0 text-ink-4" strokeWidth={1.5} />}
+              label="No workspace"
+              className="min-w-[156px]"
+              contentClassName="w-[248px]"
+              onClick={stopRowNavigation}
+            >
                 <DropdownMenuItem disabled className="text-[13px]">No workspace assigned</DropdownMenuItem>
                 <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => router.push("/workspace")}>
                   <FolderCog className="h-[12px] w-[12px]" strokeWidth={1.5} />Manage workspaces
                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            </TablePropertySelector>
           </div>
         ),
       },
