@@ -37,7 +37,8 @@ export function LibraryControlsBar({
     <div className={cn("LibraryControlsBar", className)} data-testid="library-controls-bar">
       <div className="flex flex-wrap items-center gap-2">
         {leading}
-        <div className="relative min-w-[200px] flex-1 sm:max-w-[360px]">
+        <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
+        <div className="relative min-w-[200px] flex-1 sm:w-[360px] sm:flex-none">
           <Search className="absolute left-3 top-1/2 h-[14px] w-[14px] -translate-y-1/2 text-ink-4" strokeWidth={1.5} />
           <Input
             type="search"
@@ -90,6 +91,7 @@ export function LibraryControlsBar({
             {sortContent}
           </PopoverContent>
         </Popover>
+        </div>
       </div>
 
     </div>
