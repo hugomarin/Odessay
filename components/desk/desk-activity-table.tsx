@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Clipboard, Download, Eye, FolderCog, Monitor, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { Bot, Check, ChevronDown, Circle, Clipboard, Download, Eye, FileText, FolderCog, LayoutTemplate, MessageSquareText, Monitor, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,13 +39,25 @@ type DeskActivityTableProps = {
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
-  selectedIds?: Set<string>
-  onToggleSelection?: (id: string) => void
-  hasSelection?: boolean
 }
 
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
 const stopRowNavigation = (event: { stopPropagation: () => void }) => event.stopPropagation()
+
+const CONTROL_CLASS = "inline-flex h-9 w-fit min-w-[116px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[13px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+
+function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
+  const Icon = {
+    agent: Bot,
+    skill: Wrench,
+    prompt: MessageSquareText,
+    template: LayoutTemplate,
+    status: FileText,
+    general: Circle,
+  }[artifactType]
+
+  return <Icon className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
+}
 
 export function DeskActivityTable({
   groups,
@@ -59,9 +71,6 @@ export function DeskActivityTable({
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
-  selectedIds = new Set(),
-  onToggleSelection,
-  hasSelection = false,
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
@@ -81,8 +90,8 @@ export function DeskActivityTable({
       {
         id: "title",
         label: "Writing",
-        width: "w-[48%]",
-        className: "min-w-0",
+        width: "w-[55%]",
+        className: "min-w-0 px-10",
         render: (row) => (
           <div
             style={{
@@ -132,7 +141,8 @@ export function DeskActivityTable({
       {
         id: "status",
         label: "Status",
-        width: "w-[13%]",
+        width: "w-[12%]",
+        className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
             <DropdownMenu>
@@ -140,7 +150,7 @@ export function DeskActivityTable({
                 <button
                   type="button"
                   className={cn(
-                    "inline-flex h-8 w-full max-w-[136px] cursor-pointer items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+                    CONTROL_CLASS,
                     WRITING_STATUS_SURFACE_STYLES[row.stateTone],
                   )}
                 >
@@ -174,7 +184,8 @@ export function DeskActivityTable({
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[16%]",
+        width: "w-[14%]",
+        className: "px-2",
         render: (row) => (
             <div onClick={stopRowNavigation}>
               <DropdownMenu>
@@ -182,9 +193,12 @@ export function DeskActivityTable({
                   <button
                     type="button"
                     aria-label={`Change artifact type for ${row.title}`}
-                    className="inline-flex h-8 w-full max-w-[148px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                    className={CONTROL_CLASS}
                   >
-                    <span className="truncate">{getArtifactTypeLabel(row.artifactType ?? "general")}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <ArtifactTypeIcon artifactType={row.artifactType ?? "general"} />
+                      <span className="truncate">{getArtifactTypeLabel(row.artifactType ?? "general")}</span>
+                    </span>
                     <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
                   </button>
                 </DropdownMenuTrigger>
@@ -210,7 +224,8 @@ export function DeskActivityTable({
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[16%]",
+        width: "w-[17%]",
+        className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
             <DropdownMenu>
@@ -218,7 +233,7 @@ export function DeskActivityTable({
                 <button
                   type="button"
                   aria-label={`Manage workspace for ${row.title}`}
-                  className="inline-flex h-8 w-full max-w-[136px] cursor-pointer items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className={CONTROL_CLASS}
                 >
                   <span className="flex min-w-0 items-center gap-2">
                     <Monitor className="h-[12px] w-[12px] shrink-0 text-ink-4" strokeWidth={1.5} />
@@ -242,6 +257,7 @@ export function DeskActivityTable({
         label: "",
         align: "end",
         width: "w-14",
+        className: "px-4",
         render: (row) => (
           <div className="flex items-center justify-end gap-2" onClick={stopRowNavigation}>
             {renderExtraActions ? <div className="shrink-0">{renderExtraActions(row)}</div> : null}
@@ -274,30 +290,6 @@ export function DeskActivityTable({
       showDeleteAction,
     ],
   )
-
-  const renderSelection = (row: DeskActivityRow) => {
-    const isRowSelected = selectedIds.has(row.id)
-    return (
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-          onToggleSelection?.(row.id)
-        }}
-        className={cn(
-          "inline-flex h-4 w-4 items-center justify-center rounded-[4px] border transition-all duration-150",
-          isRowSelected
-            ? "border-ink bg-ink text-bg"
-            : "border-border bg-sb text-transparent hover:border-ink-3",
-          hasSelection ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-        )}
-        aria-label={isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
-        aria-pressed={isRowSelected}
-      >
-        <Check className="h-3 w-3" strokeWidth={2.2} />
-      </button>
-    )
-  }
 
   if (isLoading) {
     return (
@@ -346,8 +338,7 @@ export function DeskActivityTable({
           getRowAriaLabel={(row) =>
             row.destinationHref ? `Open writing ${row.title}` : `${row.title} is read-only on Desk`
           }
-          isRowSelected={(row) => selectedIds.has(row.id)}
-          renderLeading={renderSelection}
+          showHeader={false}
         />
       </div>
 

@@ -117,7 +117,6 @@ export default function DeskPage() {
 
   const {
     selectedIds,
-    toggleSelection,
     selectAll,
     deselectAll,
     hasSelection,
@@ -796,9 +795,6 @@ export default function DeskPage() {
               isLoading={isLoading}
               collectionOptions={collectionOptions}
               collectionIdsByWritingId={collectionIdsByWritingId}
-              selectedIds={selectedIds}
-              onToggleSelection={toggleSelection}
-              hasSelection={hasSelection}
               onToggleCollection={toggleWritingCollection}
               onCreateCollection={createWritingCollection}
               onStatusChange={changeWritingStatus}

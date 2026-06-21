@@ -29,6 +29,8 @@ export type ArtifactTableProps<T> = {
   loadingState?: ReactNode
   emptyState?: ReactNode
   className?: string
+  /** Hide column labels for dense library rows that communicate their controls directly. */
+  showHeader?: boolean
   /** Tailwind grid template applied to each group in grid mode. */
   gridClassName?: string
 }
@@ -67,6 +69,7 @@ export function ArtifactTable<T>({
   loadingState,
   emptyState,
   className,
+  showHeader = true,
   gridClassName = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3",
 }: ArtifactTableProps<T>) {
   if (isLoading) {
@@ -86,16 +89,18 @@ export function ArtifactTable<T>({
             {renderLeading ? <col className="w-12" /> : null}
             {columns.map((column) => <col key={column.id} className={column.width} />)}
           </colgroup>
-          <TableHeader>
-            <TableRow>
-              {renderLeading ? <TableHead className="px-4"><span className="sr-only">Select</span></TableHead> : null}
-              {columns.map((column) => (
-                <TableHead key={column.id} className={cn(column.align === "end" ? "text-right" : "", column.className)}>
-                  {column.label ?? <span className="sr-only">Actions</span>}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
+          {showHeader ? (
+            <TableHeader>
+              <TableRow>
+                {renderLeading ? <TableHead className="px-4"><span className="sr-only">Select</span></TableHead> : null}
+                {columns.map((column) => (
+                  <TableHead key={column.id} className={cn(column.align === "end" ? "text-right" : "", column.className)}>
+                    {column.label ?? <span className="sr-only">Actions</span>}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+          ) : null}
           <TableBody>
             {groups.flatMap((group, groupIndex) => {
               if (group.items.length === 0) return []
