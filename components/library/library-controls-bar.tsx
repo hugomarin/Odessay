@@ -1,7 +1,7 @@
 "use client"
 
 import { type ReactNode } from "react"
-import { ArrowDownUp, ChevronDown, Filter, Search, X } from "lucide-react"
+import { ArrowDownUp, ChevronDown, Filter, Group, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
@@ -73,6 +73,7 @@ export function LibraryControlsBar({
         <Popover>
           <PopoverTrigger asChild>
             <Button type="button" variant="ghost" size="sm" className={cn("h-9 gap-2 rounded-[8px] px-3 text-[13px]", groupActive ? "bg-muted text-ink" : "bg-muted/70")}>
+              <Group className="h-[14px] w-[14px]" strokeWidth={1.5} />
               Group by
               <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
             </Button>
