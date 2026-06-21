@@ -20,6 +20,8 @@ import {
   Trash2,
 } from "lucide-react"
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker"
+import { LibraryControlsBar } from "@/components/library/library-controls-bar"
+import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters"
 import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
@@ -155,6 +157,29 @@ function WorkspaceControlChip({
       className={cn(
         "inline-flex h-9 items-center gap-2 rounded-[8px] px-5 text-[13px] text-ink-2 transition-colors",
         active ? "bg-muted text-ink" : "bg-muted/70 hover:bg-muted hover:text-ink",
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function WorkspaceControlOption({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean
+  children: ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-[7px] px-2.5 py-2 text-left text-[12px] transition-colors",
+        active ? "bg-muted text-ink" : "text-ink-2 hover:bg-muted/70",
       )}
     >
       {children}
@@ -766,6 +791,14 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [workspaceAction, setWorkspaceAction] = useState<WorkspaceActionState>(null)
   const [workspaceActionValue, setWorkspaceActionValue] = useState("")
   const [writingByCanonicalPath, setWritingByCanonicalPath] = useState<Map<string, LocalWriting>>(new Map())
+  const {
+    dateFilter: fileDateFilter,
+    setDateFilter: setFileDateFilter,
+    groupBy: fileGroupBy,
+    setGroupBy: setFileGroupBy,
+    sortBy: fileSortBy,
+    setSortBy: setFileSortBy,
+  } = useWorkspaceTableFilters()
 
   const loadWorkspace = useCallback(async () => {
     setIsLoading(true)
@@ -799,12 +832,30 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   }, [loadWorkspace])
 
   const visibleFiles = useMemo(() => {
-    return workspace?.files.filter((file) => matchesFileQuery(file, deferredQuery)) ?? []
-  }, [deferredQuery, workspace])
+    const files = workspace?.files.filter((file) => {
+      if (!matchesFileQuery(file, deferredQuery)) return false
+      if (fileDateFilter === "last-7") return file.modifiedAt >= Date.now() - 7 * 24 * 60 * 60 * 1000
+      return true
+    }) ?? []
+    return files.sort((left, right) => {
+      if (fileSortBy === "name") return left.name.localeCompare(right.name)
+      return fileSortBy === "oldest" ? left.modifiedAt - right.modifiedAt : right.modifiedAt - left.modifiedAt
+    })
+  }, [deferredQuery, fileDateFilter, fileSortBy, workspace])
 
   const pinnedFile = useMemo(() => {
     return workspace ? pickPinnedFile(workspace.files) : null
   }, [workspace])
+
+  const fileGroups = useMemo(() => {
+    if (fileGroupBy === "none") return [{ items: visibleFiles }]
+    const groups = new Map<string, WorkspaceFile[]>()
+    for (const file of visibleFiles) {
+      const label = fileSecondaryLabel(file)
+      groups.set(label, [...(groups.get(label) ?? []), file])
+    }
+    return Array.from(groups.entries()).map(([label, items]) => ({ label, items }))
+  }, [fileGroupBy, visibleFiles])
 
   const watchedWorkspace = workspace?.status === "ready" ? workspace : null
 
@@ -1106,13 +1157,17 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-            <WorkspaceSearchInput
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Filter by name..."
-            />
-          </div>
+          <LibraryControlsBar
+            className="mt-6"
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            filterActive={fileDateFilter !== "all"}
+            groupActive={fileGroupBy !== "none"}
+            sortLabel={fileSortBy === "newest" ? "Newest first" : fileSortBy === "oldest" ? "Oldest first" : "Name"}
+            filterContent={<div className="space-y-1"><WorkspaceControlOption active={fileDateFilter === "all"} onClick={() => setFileDateFilter("all")}>All files</WorkspaceControlOption><WorkspaceControlOption active={fileDateFilter === "last-7"} onClick={() => setFileDateFilter("last-7")}>Modified in the last 7 days</WorkspaceControlOption></div>}
+            groupContent={<div className="space-y-1"><WorkspaceControlOption active={fileGroupBy === "none"} onClick={() => setFileGroupBy("none")}>None</WorkspaceControlOption><WorkspaceControlOption active={fileGroupBy === "folder"} onClick={() => setFileGroupBy("folder")}>Folder</WorkspaceControlOption></div>}
+            sortContent={<div className="space-y-1"><WorkspaceControlOption active={fileSortBy === "newest"} onClick={() => setFileSortBy("newest")}>Newest first</WorkspaceControlOption><WorkspaceControlOption active={fileSortBy === "oldest"} onClick={() => setFileSortBy("oldest")}>Oldest first</WorkspaceControlOption><WorkspaceControlOption active={fileSortBy === "name"} onClick={() => setFileSortBy("name")}>Name</WorkspaceControlOption></div>}
+          />
         </div>
 
         <div className="px-10 py-8">
@@ -1166,7 +1221,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             ) : (
               <div className="overflow-hidden">
                 <ArtifactTable
-                  groups={[{ items: visibleFiles }]}
+                  groups={fileGroups}
                   columns={fileColumns}
                   getRowId={(file) => file.id}
                   getRowAriaLabel={(file) => `Open ${file.name} in editor`}
