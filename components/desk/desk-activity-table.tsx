@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Clipboard, Download, Eye, FolderCog, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Clipboard, Download, Eye, FolderCog, Monitor, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -218,10 +218,13 @@ export function DeskActivityTable({
                 <button
                   type="button"
                   aria-label={`Manage workspace for ${row.title}`}
-                  className="inline-flex h-8 w-full max-w-[176px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className="inline-flex h-8 w-full max-w-[136px] cursor-pointer items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                 >
-                  <span className="truncate">No workspace</span>
-                  <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Monitor className="h-[12px] w-[12px] shrink-0 text-ink-4" strokeWidth={1.5} />
+                    <span className="truncate">No workspace</span>
+                  </span>
+                  <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="min-w-[190px]" onClick={stopRowNavigation}>
