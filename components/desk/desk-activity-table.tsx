@@ -2,9 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ChevronDown, Clipboard, Download, Eye, FolderCog, MoreHorizontal, Pencil, Tags, Trash2 } from "lucide-react"
-import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Check, ChevronDown, Clipboard, Download, Eye, FolderCog, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,24 +44,12 @@ type DeskActivityTableProps = {
   hasSelection?: boolean
 }
 
-const buildInitials = (value: string) =>
-  value
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
 const stopRowNavigation = (event: { stopPropagation: () => void }) => event.stopPropagation()
 
 export function DeskActivityTable({
   groups,
   isLoading = false,
-  collectionOptions,
-  collectionIdsByWritingId,
-  onToggleCollection,
-  onCreateCollection,
   onStatusChange,
   onArtifactTypeChange,
   onRenameWriting,
@@ -85,11 +71,6 @@ export function DeskActivityTable({
     () => WRITING_STATUS_VALUES.filter((status) => !settings.disabledStatuses.includes(status)),
     [settings.disabledStatuses],
   )
-  const collectionOptionById = useMemo(
-    () => new Map(collectionOptions.map((option) => [option.id, option])),
-    [collectionOptions],
-  )
-
   const tableGroups = useMemo(
     () => groups.map((group) => ({ label: group.label, items: group.rows })),
     [groups],
@@ -159,7 +140,7 @@ export function DeskActivityTable({
                 <button
                   type="button"
                   className={cn(
-                    "inline-flex h-8 cursor-pointer items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+                    "inline-flex h-8 w-full max-w-[136px] cursor-pointer items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
                     WRITING_STATUS_SURFACE_STYLES[row.stateTone],
                   )}
                 >
@@ -194,21 +175,14 @@ export function DeskActivityTable({
         id: "artifact",
         label: "Artifact",
         width: "w-[16%]",
-        render: (row) => {
-          const selectedCollectionIds = collectionIdsByWritingId[row.id] ?? []
-          const selectedCollections = selectedCollectionIds
-            .map((collectionId) => collectionOptionById.get(collectionId))
-            .filter((collection): collection is CollectionOption => Boolean(collection))
-          const isNavigable = Boolean(row.destinationHref)
-
-          return (
-            <div className="flex items-center gap-2 text-[13px] text-ink-2" onClick={stopRowNavigation}>
+        render: (row) => (
+            <div onClick={stopRowNavigation}>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     aria-label={`Change artifact type for ${row.title}`}
-                    className="inline-flex h-8 max-w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                    className="inline-flex h-8 w-full max-w-[148px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                   >
                     <span className="truncate">{getArtifactTypeLabel(row.artifactType ?? "general")}</span>
                     <ChevronDown className="h-3 w-3 shrink-0 text-ink-4" strokeWidth={1.5} />
@@ -230,67 +204,8 @@ export function DeskActivityTable({
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              {selectedCollections.length > 0 ? (
-                <div className="flex min-w-0 max-w-[132px] items-center justify-end gap-1">
-                  {selectedCollections.slice(0, 2).map((collection) => (
-                    <span
-                      key={collection.id}
-                      className="inline-flex max-w-[60px] items-center rounded-[8px] border-[0.5px] border-[hsl(30_16%_78%)] bg-[hsl(34_30%_92%)] px-2 py-1 text-[11px] font-medium text-[hsl(28_22%_22%)]"
-                    >
-                      <span className="truncate">{collection.name}</span>
-                    </span>
-                  ))}
-                  {selectedCollections.length > 2 ? (
-                    <span className="shrink-0 text-[11px] text-ink-4">+{selectedCollections.length - 2}</span>
-                  ) : null}
-                </div>
-              ) : null}
-              {isNavigable ? (
-                <CollectionAssignmentMenu
-                  collections={collectionOptions}
-                  selectedIds={selectedCollectionIds}
-                  onToggleCollection={(collectionId) => onToggleCollection(row.id, collectionId)}
-                  onCreateCollection={(name) => onCreateCollection(row.id, name)}
-                  title="Add to collections"
-                  description="Choose multiple labels, then close when you're done."
-                  trigger={
-                    <button
-                      type="button"
-                      aria-label={`Assign ${row.title} to collections`}
-                      className="inline-flex h-7 shrink-0 items-center gap-[6px] rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[9px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                    >
-                      <Tags className="h-[11px] w-[11px]" strokeWidth={1.5} />
-                      <span>Add</span>
-                    </button>
-                  }
-                />
-              ) : null}
-              {renderExtraActions ? renderExtraActions(row) : null}
-              {row.recipientPreviews.length > 0 ? (
-                <div className="flex min-w-0 items-center gap-2">
-                  <div className="-space-x-1 shrink-0">
-                    {row.recipientPreviews.slice(0, 2).map((recipient) => {
-                      const initialsSource = recipient.displayName ?? recipient.username
-                      return (
-                        <Avatar
-                          key={recipient.username}
-                          className="inline-flex h-5 w-5 border-[0.5px] border-border align-middle"
-                        >
-                          <AvatarFallback className="bg-ink-2 text-[9px] text-bg">
-                            {buildInitials(initialsSource)}
-                          </AvatarFallback>
-                        </Avatar>
-                      )
-                    })}
-                  </div>
-                  <span className="min-w-0 truncate text-[13px] text-ink-2">
-                    @{row.recipientPreviews[0]?.username}
-                  </span>
-                </div>
-              ) : null}
             </div>
-          )
-        },
+        ),
       },
       {
         id: "workspace",
@@ -303,7 +218,7 @@ export function DeskActivityTable({
                 <button
                   type="button"
                   aria-label={`Manage workspace for ${row.title}`}
-                  className="inline-flex h-8 max-w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className="inline-flex h-8 w-full max-w-[176px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4 transition-colors hover:bg-muted hover:text-ink-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                 >
                   <span className="truncate">No workspace</span>
                   <ChevronDown className="h-3 w-3 shrink-0" strokeWidth={1.5} />
@@ -325,7 +240,8 @@ export function DeskActivityTable({
         align: "end",
         width: "w-14",
         render: (row) => (
-          <div className="flex justify-end" onClick={stopRowNavigation}>
+          <div className="flex items-center justify-end gap-2" onClick={stopRowNavigation}>
+            {renderExtraActions ? <div className="shrink-0">{renderExtraActions(row)}</div> : null}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label={`Actions for ${row.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
@@ -343,18 +259,13 @@ export function DeskActivityTable({
       },
     ],
     [
-      collectionIdsByWritingId,
-      collectionOptionById,
-      collectionOptions,
       enabledStatuses,
       onCopyMarkdown,
-      onCreateCollection,
       onDownloadMarkdown,
       onPreviewWriting,
       onRenameWriting,
       onStatusChange,
       onArtifactTypeChange,
-      onToggleCollection,
       router,
       renderExtraActions,
       showDeleteAction,
