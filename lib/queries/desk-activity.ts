@@ -1,7 +1,7 @@
 import type { LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
 import type { CollectionOption } from "@/lib/collections/collections"
-import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
+import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
 import {
   getWritingStatusLabel,
   normalizeWritingStatus,
@@ -14,7 +14,7 @@ export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "
 
 export type DeskStatusTone = "new" | "exploring" | "draft" | "in_review" | "done" | "archived" | "canceled"
 
-export type DeskGroupBy = "none" | "status" | "collection" | "created-date"
+export type DeskGroupBy = "none" | "status" | "artifact" | "collection" | "created-date"
 
 export type DeskSortBy = "created-at-desc" | "created-at-asc" | "content-updated-at-desc"
 
@@ -491,6 +491,20 @@ const buildGroups = (
     return WRITING_STATUS_VALUES.filter((status) => groups.has(status)).map((status) => ({
       label: getWritingStatusLabel(status),
       rows: groups.get(status) ?? [],
+    }))
+  }
+
+  if (groupBy === "artifact") {
+    const groups = new Map<ArtifactType, DeskActivityRow[]>()
+    for (const writing of writings) {
+      const rows = groups.get(writing.artifactType) ?? []
+      rows.push(toActivityRow(writing, now))
+      groups.set(writing.artifactType, rows)
+    }
+
+    return ARTIFACT_TYPE_VALUES.filter((artifactType) => groups.has(artifactType)).map((artifactType) => ({
+      label: getArtifactTypeLabel(artifactType),
+      rows: groups.get(artifactType) ?? [],
     }))
   }
 

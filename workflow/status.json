@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-18",
+  "last_updated": "2026-06-21",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -23,6 +23,10 @@
       {
         "issue": "ODE-310",
         "reason": "Retrospective traceability/docs campaign (PRs #259/#261) for document-identity context corpus + skill-product-manager reform. Does not represent product-code delivery, so it is intentionally excluded from built[] per the issue note; ignored for status drift."
+      },
+      {
+        "issue": "ODE-315",
+        "reason": "wf-debrief Fase 8 traceability issue: captures post-delivery follow-ups for ODE-295..309 in workflow/define/debrief.md and spawns ODE-311..314. Process/docs only, not product-code delivery, so it is intentionally excluded from built[]; ignored for status drift (same pattern as ODE-310)."
       }
     ]
   },
@@ -50,6 +54,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(library): redesign Desk and Workspace table controls with shared two-level Filter / Group by / Sort bar. Adds components/library/library-controls-bar.tsx shared component, refactors components/desk/filter-bar.tsx to first-level search + Filter + Group by + Sort with second-level Status / Artifact / Workspace / Date filters, integrates DeskViewToggle as leading in app/(app)/desk/page.tsx, adds hooks/useWorkspaceTableFilters.ts for Workspace table state, surfaces shared controls in components/workspace/workspace-prototype-shell.tsx, and extends lib/queries/desk-activity.ts groupBy with \"artifact\" plus tests/desk-activity.test.ts coverage. [ODE-316]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-316",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-316/redesign-library-controls-bar-with-two-level-filter-group-by-sort",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/283",
+      "commit": "8d70ea9",
+      "date": "2026-06-21",
+      "notes": "Typecheck PASS. Lint PASS with 6 pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (126 files / 788 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required. Presentation Contract: required — evidence verified in Linear attachments (Desk Filter open, Desk Group by open, Workspace table controls). Architecture Contract: not applicable. Review score: 9.8/10 (P3×1)."
+    },
     {
       "what": "feat(identity): add frontmatter cleanup harness for Odessay metadata. Adds scripts/identity/clean-frontmatter.mjs (dry-run by default; --apply gated behind verified ODE-301 backup; removes only Odessay keys id/slug/status/visibility/version; preserves foreign frontmatter; removes whole block only when empty; requires workspace index id unless --cloud verifies existing cloud writing row; --cloud updates matching writings metadata before rewriting markdown). Expands tests/identity-harvest-scripts.test.ts with dry-run, apply, foreign frontmatter preservation, full block removal, backup divergence refusal, and missing-harvest refusal coverage. [ODE-308]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",

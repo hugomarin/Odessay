@@ -382,6 +382,24 @@ describe("buildDeskActivitySummary", () => {
     expect(doneGroup?.rows.map((row) => row.title)).toEqual(["Weekly correspondence", "Earlier reply"])
   })
 
+  it("groups by artifact type", () => {
+    const withArtifactTypes = writings.map((writing) =>
+      writing.id === "draft-today"
+        ? { ...writing, artifact_type: "agent" as const }
+        : { ...writing, artifact_type: "general" as const },
+    )
+
+    const summary = buildDeskActivitySummary(withArtifactTypes, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "artifact",
+    })
+
+    expect(summary.groups.map((group) => group.label)).toEqual(["General", "Agent"])
+    expect(summary.groups[1]?.rows.map((row) => row.title)).toEqual(["Today draft"])
+  })
+
   it("groups by collection", () => {
     const summary = buildDeskActivitySummary(writings, {
       filter: "all",
