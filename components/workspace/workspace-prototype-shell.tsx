@@ -7,9 +7,11 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Circle,
   ExternalLink,
   FileText,
   Folder,
+  Layers,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -26,6 +28,7 @@ import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
+import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -921,7 +924,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "title",
         label: "Writing",
-        className: "w-full min-w-[20rem]",
+        width: "w-[55%]",
+        className: "min-w-0 px-10",
         render: (file) => (
           <div
             style={{
@@ -945,22 +949,51 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "status",
         label: "Status",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4">Local file</span>,
+        width: "w-[12%]",
+        className: "px-2",
+        render: () => (
+          <TablePropertySelector
+            readOnly
+            ariaLabel="Local file"
+            icon={<Circle className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />}
+            label="Local file"
+          />
+        ),
       },
       {
         id: "artifact",
         label: "Artifact",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-2">Markdown</span>,
+        width: "w-[14%]",
+        className: "px-2",
+        render: () => (
+          <TablePropertySelector
+            readOnly
+            ariaLabel="Markdown"
+            icon={<FileText className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />}
+            label="Markdown"
+          />
+        ),
       },
       {
         id: "workspace",
         label: "Workspace",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-2">{workspace?.name ?? "Workspace"}</span>,
+        width: "w-[17%]",
+        className: "px-2",
+        render: () => (
+          <TablePropertySelector
+            readOnly
+            ariaLabel={`Workspace ${workspace?.name ?? ""}`}
+            icon={<Layers className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />}
+            label={workspace?.name ?? "Workspace"}
+          />
+        ),
       },
       {
         id: "actions",
         label: "",
         align: "end",
+        width: "w-14",
+        className: "px-4",
         render: (file) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
