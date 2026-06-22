@@ -2536,6 +2536,15 @@
       "date": "2026-06-22",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Shared WorkspaceAssignmentDropdown (table+rail variants, centralized copy) across Desk rows and Preview rail; contextual document->workspace assignment model (pure single-valued map in lib/workspace/assignment.ts) persisted in desktop-local settings; DesktopWorkspaceService assign/clear/get/list + prune on removeWorkspace; runtime facade (desktop vs web-unavailable stub). Invariants preserved: files-in-place (D7), no local paths in UI, single primary workspace. Presentation Contract: required (evidence/ode-318/ 5 PNGs verified, Desk+Preview parity). Performance Contract: not required. Architecture Contract: compliant. Review 9.5/10."
+    },
+    {
+      "issue": "ODE-319",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-319/redesign-preview-modal-with-single-column-properties-rail",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/285",
+      "commit": "19c86fa",
+      "date": "2026-06-22",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Preview modal redesigned with a narrow single-column properties rail. Header reduced to navigation, Open full writing, destructive menu, and close. Status and Artifact Type reuse Desk property controls; Workspace retains the shared ODE-318 control. Sharing and Export moved into the rail. Presentation evidence attached to Linear issue and linked from PR. Performance Contract: not required. Review score: 10.0/10."
     }
   ]
 }
