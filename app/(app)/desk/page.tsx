@@ -806,7 +806,14 @@ export default function DeskPage() {
 
       {activeView === "mine" ? (
         <>
-          <DeskHero drafts={summary.heroDrafts} collectionOptions={collectionOptions} />
+          <DeskHero
+            drafts={summary.heroDrafts}
+            workspaceOptions={workspaceOptions}
+            workspaceAvailable={workspaceAvailable}
+            onAssignWorkspace={assignWorkspace}
+            onUnassignWorkspace={unassignWorkspace}
+            onCreateWorkspace={createWorkspaceAndAssign}
+          />
 
           <div className="px-5 py-[14px] sm:px-9">
               <DeskFilterBar

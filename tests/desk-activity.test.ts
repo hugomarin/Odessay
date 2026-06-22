@@ -186,6 +186,12 @@ describe("buildDeskActivitySummary", () => {
       "synced",
       "pending",
     ])
+    expect(summary.heroDrafts.map((draft) => draft.createdLabel)).toEqual([
+      "Created 9 mar",
+      "Created 9 mar",
+      "Created 9 mar",
+    ])
+    expect(summary.heroDrafts.map((draft) => draft.workspaceName)).toEqual([null, null, null])
   })
 
   it("renders shared recipient names directly when provided", () => {
