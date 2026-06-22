@@ -52,6 +52,10 @@ export type DeskActivityRow = {
   dateLabel: string
   isNew: boolean
   destinationHref: string | null
+  /** Slug of the writing's primary workspace, or null when unassigned. */
+  workspaceSlug: string | null
+  /** Display name of the assigned workspace, or null when unassigned. */
+  workspaceName: string | null
 }
 
 export type DeskActivityGroup = {
@@ -89,6 +93,10 @@ type BuildDeskActivityOptions = {
   sortBy?: DeskSortBy
   assignments?: LocalWritingCollection[]
   collectionOptions?: CollectionOption[]
+  /** writing id → workspace slug (contextual document↔workspace assignment). */
+  workspaceAssignments?: Record<string, string>
+  /** workspace slug → display name, used to resolve the assigned workspace label. */
+  workspaceNamesBySlug?: Record<string, string>
 }
 
 type WritingMeta = {
@@ -112,6 +120,8 @@ type WritingMeta = {
   recipientPreviews: DeskRecipientPreview[]
   artifactType: ArtifactType
   collectionIds: string[]
+  workspaceSlug: string | null
+  workspaceName: string | null
 }
 
 const WEEK_IN_MS = 7 * 24 * 60 * 60 * 1000
@@ -282,6 +292,8 @@ const buildMetas = (
   recipientPreviewsByWritingId?: Record<string, DeskRecipientPreview[]>,
   assignmentsByWritingId?: Map<string, string[]>,
   sortBy?: DeskSortBy,
+  workspaceAssignments?: Record<string, string>,
+  workspaceNamesBySlug?: Record<string, string>,
 ): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
   const childrenByParent = new Map<string, number>()
@@ -293,6 +305,10 @@ const buildMetas = (
   }
 
   const metas = activeWritings.map((writing) => {
+    const workspaceSlug = workspaceAssignments?.[writing.id] ?? null
+    const workspaceName = workspaceSlug
+      ? (workspaceNamesBySlug?.[workspaceSlug] ?? workspaceSlug)
+      : null
     const updatedAtRaw = writing.updated_at || writing.created_at
     const updatedAt = toDate(updatedAtRaw)
     const createdAt = toDate(writing.created_at)
@@ -326,6 +342,8 @@ const buildMetas = (
       recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
       artifactType: normalizeArtifactType(writing.artifact_type),
       collectionIds: assignmentsByWritingId?.get(writing.id) ?? [],
+      workspaceSlug,
+      workspaceName,
     }
   })
 
@@ -461,6 +479,8 @@ const toActivityRow = (writing: WritingMeta, now: Date): DeskActivityRow => {
     destinationHref: writing.isReceived
       ? null
       : buildWritingRouteHref("/write", { id: writing.id, slug: writing.slug }),
+    workspaceSlug: writing.workspaceSlug,
+    workspaceName: writing.workspaceName,
   }
 }
 
@@ -601,6 +621,8 @@ export const buildDeskActivitySummary = (
     options.recipientPreviewsByWritingId,
     assignmentsByWritingId,
     options.sortBy,
+    options.workspaceAssignments,
+    options.workspaceNamesBySlug,
   )
   let filtered = applyFilter(allWritings, options.filter)
 

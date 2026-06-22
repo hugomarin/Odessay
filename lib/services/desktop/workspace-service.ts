@@ -33,6 +33,14 @@ import type {
   WorkspaceStatus,
   WorkspaceSummary,
 } from "@/lib/workspace/types"
+import {
+  pruneAssignments,
+  readAssignmentSlug,
+  withAssignment,
+  withoutAssignment,
+  type WorkspaceAssignmentMap,
+  type WorkspaceAssignmentOption,
+} from "@/lib/workspace/assignment"
 
 const MAX_PREVIEW_LENGTH = 420
 
@@ -419,6 +427,76 @@ export class DesktopWorkspaceService {
     const records = await this.readRecords()
     const nextRecords = records.filter((record) => record.slug !== slug)
     await this.writeRecords(nextRecords)
+
+    // Keep assignments honest: a writing can no longer point at a removed
+    // workspace. The file itself is untouched ("files in place").
+    const assignments = await this.readAssignments()
+    const pruned = pruneAssignments(
+      assignments,
+      nextRecords.map((record) => record.slug),
+    )
+    await this.writeAssignments(pruned)
+  }
+
+  // ─── Document ↔ workspace assignment (contextual ownership) ─────────────────
+  //
+  // The assignment is logical metadata: it records which workspace a writing
+  // belongs to without moving the underlying file or exposing local paths.
+
+  private async readAssignments(): Promise<WorkspaceAssignmentMap> {
+    const result = await this.settingsService.getDesktopSettings()
+    const assignments = result.data?.workspaceAssignments
+    return assignments && typeof assignments === "object" ? assignments : {}
+  }
+
+  private async writeAssignments(assignments: WorkspaceAssignmentMap) {
+    await this.settingsService.updateDesktopSettings({ workspaceAssignments: assignments })
+  }
+
+  /** Lists registered workspaces as lightweight assignment targets (no FS sync). */
+  async listAssignableWorkspaces(): Promise<WorkspaceAssignmentOption[]> {
+    const records = await this.readRecords()
+    return records.map((record) => ({ slug: record.slug, name: record.name }))
+  }
+
+  /** Returns the full writing id → workspace slug map for the current account. */
+  async listAssignments(): Promise<WorkspaceAssignmentMap> {
+    const [assignments, records] = await Promise.all([
+      this.readAssignments(),
+      this.readRecords(),
+    ])
+
+    // Never surface assignments that point at workspaces that no longer exist.
+    return pruneAssignments(
+      assignments,
+      records.map((record) => record.slug),
+    )
+  }
+
+  /** Returns the current workspace slug for a writing, or null when unassigned. */
+  async getAssignment(writingId: string): Promise<string | null> {
+    const assignments = await this.readAssignments()
+    return readAssignmentSlug(assignments, writingId)
+  }
+
+  /**
+   * Assigns (or moves) a writing to an existing workspace. Single-valued, so a
+   * move simply replaces the previous slug. Does not touch the file on disk.
+   */
+  async assignToWorkspace(writingId: string, slug: string): Promise<void> {
+    const records = await this.readRecords()
+    if (!records.some((record) => record.slug === slug)) {
+      throw new Error(`Unknown workspace: ${slug}`)
+    }
+
+    const assignments = await this.readAssignments()
+    await this.writeAssignments(withAssignment(assignments, writingId, slug))
+  }
+
+  /** Removes any workspace assignment for a writing. The file stays in place. */
+  async clearAssignment(writingId: string): Promise<void> {
+    const assignments = await this.readAssignments()
+    await this.writeAssignments(withoutAssignment(assignments, writingId))
   }
 
   async watchWorkspace(

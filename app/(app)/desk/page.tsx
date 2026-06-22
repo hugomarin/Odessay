@@ -40,6 +40,12 @@ import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { getSyncService } from "@/lib/sync"
 import { getDocumentService } from "@/lib/services/document-service-factory"
+import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
+import {
+  buildWorkspaceNameLookup,
+  type WorkspaceAssignmentMap,
+  type WorkspaceAssignmentOption,
+} from "@/lib/workspace/assignment"
 import { isTauriRuntime } from "@/lib/runtime/detect"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
@@ -83,13 +89,25 @@ export default function DeskPage() {
   const [renameTarget, setRenameTarget] = useState<RenameTarget | null>(null)
   const [previewWritingId, setPreviewWritingId] = useState<string | null>(null)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceAssignmentOption[]>([])
+  const [workspaceAssignments, setWorkspaceAssignments] = useState<WorkspaceAssignmentMap>({})
+  const [workspaceAvailable, setWorkspaceAvailable] = useState(false)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
+  const workspaceAssignmentsRef = useRef(workspaceAssignments)
+  const workspaceNamesRef = useRef<Record<string, string>>({})
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
   const sharingService = useMemo(() => createSharingService(), [])
   const router = useRouter()
 
   recipientPreviewsRef.current = recipientPreviewsByWritingId
+
+  const workspaceNamesBySlug = useMemo(
+    () => buildWorkspaceNameLookup(workspaceOptions),
+    [workspaceOptions],
+  )
+  workspaceAssignmentsRef.current = workspaceAssignments
+  workspaceNamesRef.current = workspaceNamesBySlug
 
   const {
     searchQuery,
@@ -206,11 +224,75 @@ export default function DeskPage() {
         collectionOptions: buildCollectionOptions(nextCollections),
         groupBy,
         sortBy,
+        workspaceAssignments: workspaceAssignmentsRef.current,
+        workspaceNamesBySlug: workspaceNamesRef.current,
       }),
     )
     setCollections(nextCollections)
     setWritingCollections(nextAssignments)
   }, [groupBy, sortBy])
+
+  const refreshWorkspaceAssignments = useCallback(async () => {
+    const service = getWorkspaceAssignmentService()
+    const assignments = await service.listAssignments()
+    workspaceAssignmentsRef.current = assignments
+    setWorkspaceAssignments(assignments)
+  }, [])
+
+  const loadWorkspaceData = useCallback(async () => {
+    const service = getWorkspaceAssignmentService()
+    setWorkspaceAvailable(service.isAvailable)
+
+    if (!service.isAvailable) {
+      workspaceAssignmentsRef.current = {}
+      setWorkspaceOptions([])
+      setWorkspaceAssignments({})
+      return
+    }
+
+    const [options, assignments] = await Promise.all([
+      service.listWorkspaces(),
+      service.listAssignments(),
+    ])
+    workspaceAssignmentsRef.current = assignments
+    setWorkspaceOptions(options)
+    setWorkspaceAssignments(assignments)
+  }, [])
+
+  const assignWorkspace = useCallback(
+    async (writingId: string, slug: string) => {
+      const service = getWorkspaceAssignmentService()
+      await service.assign(writingId, slug)
+      await refreshWorkspaceAssignments()
+      await loadDeskActivity()
+    },
+    [loadDeskActivity, refreshWorkspaceAssignments],
+  )
+
+  const unassignWorkspace = useCallback(
+    async (writingId: string) => {
+      const service = getWorkspaceAssignmentService()
+      await service.clearAssignment(writingId)
+      await refreshWorkspaceAssignments()
+      await loadDeskActivity()
+    },
+    [loadDeskActivity, refreshWorkspaceAssignments],
+  )
+
+  const createWorkspaceAndAssign = useCallback(
+    async (writingId: string) => {
+      const service = getWorkspaceAssignmentService()
+      const created = await service.createWorkspace()
+      if (!created) {
+        return
+      }
+
+      await service.assign(writingId, created.slug)
+      await loadWorkspaceData()
+      await loadDeskActivity()
+    },
+    [loadDeskActivity, loadWorkspaceData],
+  )
 
   const loadRecipientPreviewsAsync = useCallback(async () => {
     const localWritings = await localDB.writings.getAll()
@@ -267,6 +349,8 @@ export default function DeskPage() {
 
     const load = async () => {
       setIsLoading(true)
+      // 0. Load desktop-local workspace metadata so rows can show assignments
+      await loadWorkspaceData()
       // 1. Render local data immediately — don't wait for remote
       await loadDeskActivity()
       void loadRecipientPreviewsAsync()
@@ -289,7 +373,7 @@ export default function DeskPage() {
     return () => {
       cancelled = true
     }
-  }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
+  }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync, loadWorkspaceData])
 
   useEffect(() => {
     if (activeView !== "shared") {
@@ -394,6 +478,8 @@ export default function DeskPage() {
       collectionOptions,
       groupBy,
       sortBy,
+      workspaceAssignments,
+      workspaceNamesBySlug,
       clientFilter: {
         searchQuery,
         selectedCollectionIds,
@@ -421,6 +507,8 @@ export default function DeskPage() {
     sortBy,
     writingCollections,
     collectionOptions,
+    workspaceAssignments,
+    workspaceNamesBySlug,
   ])
 
   const visibleWritingIds = useMemo(() => {
@@ -797,6 +885,11 @@ export default function DeskPage() {
               onCreateCollection={createWritingCollection}
               onStatusChange={changeWritingStatus}
               onArtifactTypeChange={changeWritingArtifactType}
+              workspaceOptions={workspaceOptions}
+              workspaceAvailable={workspaceAvailable}
+              onAssignWorkspace={assignWorkspace}
+              onUnassignWorkspace={unassignWorkspace}
+              onCreateWorkspace={createWorkspaceAndAssign}
               onRenameWriting={openRenameWriting}
               onPreviewWriting={openWritingPreview}
               onCopyMarkdown={copyWritingMarkdown}
@@ -859,6 +952,11 @@ export default function DeskPage() {
             onToggleCollection={toggleWritingCollection}
             onCreateCollection={createWritingCollection}
             onStatusChange={changeWritingStatus}
+            workspaceOptions={workspaceOptions}
+            workspaceAvailable={workspaceAvailable}
+            onAssignWorkspace={assignWorkspace}
+            onUnassignWorkspace={unassignWorkspace}
+            onCreateWorkspace={createWorkspaceAndAssign}
             onTitleChange={saveWritingTitleById}
             onOpenFullWriting={openFullWriting}
             onExportMarkdown={downloadWritingMarkdown}
