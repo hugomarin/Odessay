@@ -4,15 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   ArrowRight,
+  Bot,
   ChevronDown,
+  Circle,
   Download,
   ExternalLink,
   FileText,
   FileType,
+  LayoutTemplate,
+  MessageSquareText,
   MoreHorizontal,
-  Share2,
   Tag,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
@@ -33,6 +37,8 @@ import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { TablePropertySelector } from "@/components/ui/table-property-selector"
+import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
@@ -54,6 +60,7 @@ type WritingPreviewModalProps = {
   onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
+  onArtifactTypeChange?: (writingId: string, artifactType: ArtifactType) => Promise<void>
   workspaceOptions?: WorkspaceAssignmentOption[]
   workspaceAvailable?: boolean
   onAssignWorkspace?: (writingId: string, slug: string) => void | Promise<void>
@@ -64,6 +71,7 @@ type WritingPreviewModalProps = {
   onExportMarkdown?: (writingId: string) => Promise<void> | void
   onExportDocument?: (writingId: string, format: PreviewExportFormat) => Promise<void>
   onShare?: (writingId: string) => Promise<PreviewShareResult>
+  onOpenWebAction?: (writingId: string, action: "publish" | "share") => Promise<void>
   onDelete?: (writingId: string) => Promise<void>
 }
 
@@ -107,6 +115,7 @@ export function WritingPreviewModal({
   onToggleCollection,
   onCreateCollection,
   onStatusChange,
+  onArtifactTypeChange,
   workspaceOptions = [],
   workspaceAvailable = false,
   onAssignWorkspace,
@@ -117,13 +126,13 @@ export function WritingPreviewModal({
   onExportMarkdown,
   onExportDocument,
   onShare,
+  onOpenWebAction,
   onDelete,
 }: WritingPreviewModalProps) {
   const { fetchPreview, getCachedPreview, prefetchPreview, retainOnly, clear, updatePreviewTitle } = useWritingPreviewCache()
   const [preview, setPreview] = useState<CachedWritingPreview | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [titleDraft, setTitleDraft] = useState("")
-  const [statusOpen, setStatusOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -258,6 +267,16 @@ export function WritingPreviewModal({
       setIsSharing(false)
     }
   }, [isSharing, onShare, row])
+
+  const handleOpenWebAction = useCallback(async (action: "publish" | "share") => {
+    if (!row || !onOpenWebAction) return
+    setActionFeedback(null)
+    try {
+      await onOpenWebAction(row.id, action)
+    } catch (error) {
+      setActionFeedback({ tone: "error", message: error instanceof Error ? error.message : "Could not open the web action." })
+    }
+  }, [onOpenWebAction, row])
 
   const handleConfirmDelete = useCallback(async () => {
     if (!row || !onDelete) {
@@ -420,71 +439,7 @@ export function WritingPreviewModal({
                 </button>
               ) : null}
 
-              {onShare ? (
-                <button
-                  type="button"
-                  onClick={() => void handleShare()}
-                  disabled={isSharing}
-                  className="inline-flex h-8 items-center gap-[6px] rounded-[8px] px-[10px] text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                >
-                  <Share2 className="h-[13px] w-[13px]" strokeWidth={1.5} />
-                  {isSharing ? "Sharing…" : "Share"}
-                </button>
-              ) : null}
-
-              {onExportMarkdown || onExportDocument ? (
-                <Popover open={exportOpen} onOpenChange={setExportOpen}>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center gap-[6px] rounded-[8px] px-[10px] text-[12px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                    >
-                      <Download className="h-[13px] w-[13px]" strokeWidth={1.5} />
-                      Export
-                      <ChevronDown
-                        className={cn("h-3 w-3 text-ink-4 transition-transform", exportOpen && "rotate-180")}
-                        strokeWidth={1.5}
-                      />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-[224px] p-[5px]">
-                    {onExportMarkdown ? (
-                      <PreviewMenuItem
-                        icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                        label={exportingFormat === "markdown" ? "Exporting Markdown…" : "Markdown (.md)"}
-                        disabled={exportingFormat !== null}
-                        onSelect={() => void handleExportMarkdown()}
-                      />
-                    ) : null}
-                    {onExportDocument ? (
-                      <>
-                        <PreviewMenuItem
-                          icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                          label={exportingFormat === "pdf" ? "Exporting PDF…" : "PDF (.pdf)"}
-                          disabled={!hasRemoteWriting || exportingFormat !== null}
-                          onSelect={() => void handleExportDocument("pdf")}
-                        />
-                        <PreviewMenuItem
-                          icon={<FileType className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                          label={exportingFormat === "docx" ? "Exporting Word…" : "Word (.docx)"}
-                          disabled={!hasRemoteWriting || exportingFormat !== null}
-                          onSelect={() => void handleExportDocument("docx")}
-                        />
-                        {!hasRemoteWriting ? (
-                          <>
-                            <div className="my-1 h-px bg-border" />
-                            <p className="px-[10px] pb-1 pt-1 text-[10px] leading-[1.4] text-ink-4">
-                              Markdown is local. PDF and Word require a saved writing.
-                            </p>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </PopoverContent>
-                </Popover>
-              ) : null}
-
-              {onDelete || onOpenFullWriting ? (
+              {onDelete ? (
                 <Popover open={moreOpen} onOpenChange={setMoreOpen}>
                   <PopoverTrigger asChild>
                     <button
@@ -496,18 +451,7 @@ export function WritingPreviewModal({
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[200px] p-[5px]">
-                    {onOpenFullWriting ? (
-                      <PreviewMenuItem
-                        icon={<ExternalLink className="h-[13px] w-[13px]" strokeWidth={1.5} />}
-                        label="Open full writing"
-                        onSelect={() => {
-                          setMoreOpen(false)
-                          handleOpenFullWriting()
-                        }}
-                      />
-                    ) : null}
-                    {onDelete ? (
-                      <PreviewMenuItem
+                    <PreviewMenuItem
                         icon={<Trash2 className="h-[13px] w-[13px]" strokeWidth={1.5} />}
                         label="Delete writing"
                         destructive
@@ -515,8 +459,7 @@ export function WritingPreviewModal({
                           setMoreOpen(false)
                           setDeleteOpen(true)
                         }}
-                      />
-                    ) : null}
+                    />
                   </PopoverContent>
                 </Popover>
               ) : null}
@@ -543,7 +486,7 @@ export function WritingPreviewModal({
             </div>
           ) : null}
 
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_292px]">
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_272px]">
             <main className="min-h-0 overflow-y-auto bg-bg">
               <div className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-8 py-7">
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Title</p>
@@ -600,35 +543,37 @@ export function WritingPreviewModal({
                 <p className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-4">Properties</p>
               </div>
 
-              <div className="space-y-5 overflow-y-auto px-5 py-5">
+              <div className="space-y-5 overflow-y-auto px-4 py-5">
                 <section className="space-y-2">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Status</p>
                   {row ? (
-                    <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-                      <PopoverTrigger asChild>
-                        <div>
-                          <PropertiesDropdownTrigger
-                            open={statusOpen}
-                            icon={<WritingStatusIcon status={row.stateTone} />}
-                            label={row.stateLabel}
-                          />
-                        </div>
-                      </PopoverTrigger>
-                      <PopoverContent align="start" className="w-[236px] p-[5px]">
+                    <TablePropertySelector
+                      ariaLabel={`Change status for ${row.title}`}
+                      icon={<WritingStatusIcon status={row.stateTone} />}
+                      label={row.stateLabel}
+                      variant="rail"
+                      contentClassName="w-[248px]"
+                    >
                         {enabledStatuses.map((status) => (
-                          <PropertiesPopoverItem
+                          <PreviewMenuItem
                             key={status}
-                            selected={row.stateTone === status}
                             icon={<WritingStatusIcon status={status} />}
                             label={getWritingStatusLabel(status)}
                             onSelect={() => {
                               void onStatusChange?.(row.id, status)
-                              setStatusOpen(false)
                             }}
                           />
                         ))}
-                      </PopoverContent>
-                    </Popover>
+                    </TablePropertySelector>
+                  ) : null}
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Artifact Type</p>
+                  {row ? (
+                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<PreviewArtifactTypeIcon artifactType={row.artifactType ?? "general"} />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="rail" contentClassName="w-[248px]">
+                      {ARTIFACT_TYPE_VALUES.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<PreviewArtifactTypeIcon artifactType={artifactType} />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
+                    </TablePropertySelector>
                   ) : null}
                 </section>
 
@@ -693,6 +638,23 @@ export function WritingPreviewModal({
                       </div>
                     </div>
                   ) : null}
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Sharing</p>
+                  <div className="space-y-3 rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-[11px]">
+                    <div><p className="text-[12px] font-medium text-ink-2">Web publishing</p><p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">Publishing and link sharing continue on web.</p></div>
+                    <button type="button" onClick={() => void handleOpenWebAction("publish")} disabled={!onOpenWebAction} className="inline-flex h-8 w-full items-center justify-center gap-[6px] rounded-[6px] border-[0.5px] border-ink bg-ink px-[10px] text-[11px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"><ExternalLink className="h-[11px] w-[11px]" strokeWidth={1.5} />Publish on web</button>
+                    <button type="button" onClick={() => void handleShare()} disabled={!onShare || isSharing} className="inline-flex h-8 w-full items-center justify-center gap-[6px] rounded-[6px] border-[0.5px] border-border bg-bg px-[10px] text-[11px] font-medium text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"><ExternalLink className="h-[11px] w-[11px]" strokeWidth={1.5} />{isSharing ? "Sharing…" : "Share with link"}</button>
+                  </div>
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Export</p>
+                  <Popover open={exportOpen} onOpenChange={setExportOpen}><PopoverTrigger asChild><div><PropertiesDropdownTrigger open={exportOpen} icon={<Download className="h-[13px] w-[13px]" strokeWidth={1.5} />} label="Export as…" /></div></PopoverTrigger><PopoverContent align="start" className="w-[224px] p-[5px]">
+                    {onExportMarkdown ? <PreviewMenuItem icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />} label={exportingFormat === "markdown" ? "Exporting Markdown…" : "Markdown (.md)"} disabled={exportingFormat !== null} onSelect={() => void handleExportMarkdown()} /> : null}
+                    {onExportDocument ? <><PreviewMenuItem icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />} label={exportingFormat === "pdf" ? "Exporting PDF…" : "PDF (.pdf)"} disabled={!hasRemoteWriting || exportingFormat !== null} onSelect={() => void handleExportDocument("pdf")} /><PreviewMenuItem icon={<FileType className="h-[13px] w-[13px]" strokeWidth={1.5} />} label={exportingFormat === "docx" ? "Exporting Word…" : "Word (.docx)"} disabled={!hasRemoteWriting || exportingFormat !== null} onSelect={() => void handleExportDocument("docx")} /></> : null}
+                  </PopoverContent></Popover>
                 </section>
 
                 <section className="space-y-2">
@@ -801,29 +763,7 @@ function PropertiesDropdownTrigger({
   )
 }
 
-function PropertiesPopoverItem({
-  selected = false,
-  icon,
-  label,
-  onSelect,
-}: {
-  selected?: boolean
-  icon: React.ReactNode
-  label: string
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted",
-        selected && "font-medium text-ink",
-      )}
-    >
-      <span className={cn("flex shrink-0 items-center text-ink-4", selected && "text-ink-2")}>{icon}</span>
-      <span>{label}</span>
-      {selected ? <span className="ml-auto h-1.5 w-1.5 rounded-full bg-ink" /> : null}
-    </button>
-  )
+function PreviewArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
+  const Icon = { agent: Bot, skill: Wrench, prompt: MessageSquareText, template: LayoutTemplate, status: FileText, general: Circle }[artifactType]
+  return <Icon className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
 }

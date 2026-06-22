@@ -52,6 +52,7 @@ import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { downloadBlob } from "@/lib/utils/download"
+import { buildWebWritingActionUrl, openExternalUrl, type WebWritingAction } from "@/lib/runtime/external-link"
 
 
 type RenameTarget = {
@@ -748,6 +749,12 @@ export default function DeskPage() {
     [sharingService],
   )
 
+  const openPreviewWebAction = useCallback(async (writingId: string, action: WebWritingAction) => {
+    const url = buildWebWritingActionUrl({ writingId, action })
+    if (!url) throw new Error("Web publishing is not configured for this environment.")
+    await openExternalUrl(url)
+  }, [])
+
   const openFullWriting = useCallback(
     (writingId: string) => {
       const target = previewRows.find((candidate) => candidate.id === writingId)
@@ -952,6 +959,7 @@ export default function DeskPage() {
             onToggleCollection={toggleWritingCollection}
             onCreateCollection={createWritingCollection}
             onStatusChange={changeWritingStatus}
+            onArtifactTypeChange={changeWritingArtifactType}
             workspaceOptions={workspaceOptions}
             workspaceAvailable={workspaceAvailable}
             onAssignWorkspace={assignWorkspace}
@@ -962,6 +970,7 @@ export default function DeskPage() {
             onExportMarkdown={downloadWritingMarkdown}
             onExportDocument={exportWritingDocument}
             onShare={shareWritingFromPreview}
+            onOpenWebAction={openPreviewWebAction}
             onDelete={deleteWritingFromPreview}
           />
         </>
