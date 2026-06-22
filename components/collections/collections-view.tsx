@@ -35,6 +35,8 @@ import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activ
 import { enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncService } from "@/lib/sync"
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
+import type { WritingStatus } from "@/lib/writings/status"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type CollectionsViewProps = {
@@ -227,6 +229,42 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     [assignments, createCollection],
   )
 
+  const changeWritingStatus = useCallback(async (writingId: string, status: WritingStatus) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted" || writing.status === status) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    await enqueueWritingUpsert({
+      ...writing,
+      status,
+      version: writing.version + 1,
+      updated_at: nowIso,
+      metadata_updated_at: nowIso,
+      local_updated_at: Date.now(),
+    })
+    void getSyncService().scheduleFlush()
+  }, [])
+
+  const changeWritingArtifactType = useCallback(async (writingId: string, artifactType: ArtifactType) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted" || writing.artifact_type === artifactType) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    await enqueueWritingUpsert({
+      ...writing,
+      artifact_type: artifactType,
+      version: writing.version + 1,
+      updated_at: nowIso,
+      metadata_updated_at: nowIso,
+      local_updated_at: Date.now(),
+    })
+    void getSyncService().scheduleFlush()
+  }, [])
+
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await localDB.writings.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
@@ -399,7 +437,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 pb-10 pt-4 md:px-9">
-        <div className="mx-auto w-full max-w-[980px]">
+        <div className="w-full">
           {!isUncategorizedView && !activeCollection ? (
             <p className="font-lora text-[18px] italic text-ink-3">Collection not found.</p>
           ) : detailItems.length === 0 ? (
@@ -418,6 +456,9 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onCreateCollection={async (writingId, name) => {
                   await createCollectionAndAssign(writingId, name)
                 }}
+                onStatusChange={changeWritingStatus}
+                onArtifactTypeChange={changeWritingArtifactType}
+                showWorkspaceColumn={false}
                 onRenameWriting={openRenameWriting}
                 showDeleteAction={false}
                 renderExtraActions={

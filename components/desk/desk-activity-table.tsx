@@ -53,6 +53,8 @@ type DeskActivityTableProps = {
    */
   selectedIds?: Set<string>
   onToggleSelection?: (id: string) => void
+  /** Hide the workspace column on surfaces that don't manage workspace assignment (e.g. Collections). */
+  showWorkspaceColumn?: boolean
 }
 
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
@@ -90,6 +92,7 @@ export function DeskActivityTable({
   showDeleteAction = true,
   selectedIds,
   onToggleSelection,
+  showWorkspaceColumn = true,
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
@@ -352,7 +355,7 @@ export function DeskActivityTable({
       >
         <ArtifactTable
           groups={tableGroups}
-          columns={columns}
+          columns={showWorkspaceColumn ? columns : columns.filter((column) => column.id !== "workspace")}
           getRowId={(row) => row.id}
           getRowHref={(row) => row.destinationHref}
           onRowClick={(row) => {
