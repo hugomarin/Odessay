@@ -9,6 +9,7 @@ import {
   tauriSettingsRead,
   tauriSettingsWrite,
 } from "@/lib/services/desktop/tauri-commands"
+import type { WorkspaceAssignmentMap } from "@/lib/workspace/assignment"
 import type { WorkspaceLayout, WorkspaceRecord } from "@/lib/workspace/types"
 
 function ok<T>(data: T): ServiceResponse<T> {
@@ -27,6 +28,13 @@ export type DesktopSettings = {
   lastActiveWritingId?: string | null
   workspaces?: WorkspaceRecord[]
   workspaceLayout?: WorkspaceLayout
+  /**
+   * Contextual document↔workspace assignments (writing id → workspace slug).
+   * Local, single-valued metadata — see `lib/workspace/assignment.ts`. Lives in
+   * desktop settings because the workspace layer is desktop-first; it is not a
+   * synced field on the writing record.
+   */
+  workspaceAssignments?: WorkspaceAssignmentMap
 } & UserSettings
 
 const SETTINGS_KEY = "desktop_settings_v1"
