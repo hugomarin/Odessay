@@ -2527,6 +2527,15 @@
       "date": "2026-06-21",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "ArtifactTable v2 on semantic Table primitive; Desk+Workspace share list mode; document-state as compact tooltip icon (+sync-failed); row actions in ... menu; local path removed. Presentation: Desk validated visually, Workspace by component reuse. Review 9.0/10."
+    },
+    {
+      "issue": "ODE-318",
+      "linear_url": "https://linear.app/z9ne/issue/ode-318/implement-workspace-assignment-and-move-flows-across-desk-and-preview",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/284",
+      "commit": "a652b10",
+      "date": "2026-06-22",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Shared WorkspaceAssignmentDropdown (table+rail variants, centralized copy) across Desk rows and Preview rail; contextual document->workspace assignment model (pure single-valued map in lib/workspace/assignment.ts) persisted in desktop-local settings; DesktopWorkspaceService assign/clear/get/list + prune on removeWorkspace; runtime facade (desktop vs web-unavailable stub). Invariants preserved: files-in-place (D7), no local paths in UI, single primary workspace. Presentation Contract: required (evidence/ode-318/ 5 PNGs verified, Desk+Preview parity). Performance Contract: not required. Architecture Contract: compliant. Review 9.5/10."
     }
   ]
 }
