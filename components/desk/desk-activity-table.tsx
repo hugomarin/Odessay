@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, Circle, Clipboard, Download, Eye, FileText, FolderCog, LayoutTemplate, MessageSquareText, Monitor, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
+import { Bot, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,8 @@ import type { DeskActivityGroup, DeskActivityRow } from "@/lib/queries/desk-acti
 import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
+import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
+import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
@@ -31,6 +33,11 @@ type DeskActivityTableProps = {
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
   onArtifactTypeChange?: (writingId: string, artifactType: ArtifactType) => Promise<void>
+  workspaceOptions?: WorkspaceAssignmentOption[]
+  workspaceAvailable?: boolean
+  onAssignWorkspace?: (writingId: string, slug: string) => void | Promise<void>
+  onUnassignWorkspace?: (writingId: string) => void | Promise<void>
+  onCreateWorkspace?: (writingId: string) => void | Promise<void>
   onRenameWriting?: (writingId: string) => void
   onPreviewWriting?: (writingId: string) => void
   onCopyMarkdown?: (writingId: string) => void
@@ -61,6 +68,11 @@ export function DeskActivityTable({
   isLoading = false,
   onStatusChange,
   onArtifactTypeChange,
+  workspaceOptions = [],
+  workspaceAvailable = false,
+  onAssignWorkspace,
+  onUnassignWorkspace,
+  onCreateWorkspace,
   onRenameWriting,
   onPreviewWriting,
   onCopyMarkdown,
@@ -210,19 +222,18 @@ export function DeskActivityTable({
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
-            <TablePropertySelector
-              ariaLabel={`Manage workspace for ${row.title}`}
-              icon={<Monitor className="h-[12px] w-[12px] shrink-0 text-ink-4" strokeWidth={1.5} />}
-              label="No workspace"
-              className="min-w-[156px]"
-              contentClassName="w-[248px]"
-              onClick={stopRowNavigation}
-            >
-                <DropdownMenuItem disabled className="text-[13px]">No workspace assigned</DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => router.push("/workspace")}>
-                  <FolderCog className="h-[12px] w-[12px]" strokeWidth={1.5} />Manage workspaces
-                </DropdownMenuItem>
-            </TablePropertySelector>
+            <WorkspaceAssignmentDropdown
+              writingId={row.id}
+              title={row.title}
+              currentSlug={row.workspaceSlug}
+              currentName={row.workspaceName}
+              options={workspaceOptions}
+              available={workspaceAvailable}
+              variant="table"
+              onAssign={(writingId, slug) => onAssignWorkspace?.(writingId, slug)}
+              onUnassign={(writingId) => onUnassignWorkspace?.(writingId)}
+              onCreateWorkspace={(writingId) => onCreateWorkspace?.(writingId)}
+            />
           </div>
         ),
       },
@@ -259,7 +270,11 @@ export function DeskActivityTable({
       onRenameWriting,
       onStatusChange,
       onArtifactTypeChange,
-      router,
+      workspaceOptions,
+      workspaceAvailable,
+      onAssignWorkspace,
+      onUnassignWorkspace,
+      onCreateWorkspace,
       renderExtraActions,
       showDeleteAction,
     ],

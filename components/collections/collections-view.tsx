@@ -173,6 +173,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         dateLabel: buildDateLabel(updatedAt, now),
         isNew: false,
         destinationHref: buildWritingRouteHref("/write", { id: item.id, slug: item.slug }),
+        workspaceSlug: null,
+        workspaceName: null,
       }
 
       if (updatedAt.toDateString() === now.toDateString()) {

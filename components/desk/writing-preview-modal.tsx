@@ -16,6 +16,8 @@ import {
   X,
 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
+import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
+import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import {
   Dialog,
   DialogContent,
@@ -52,6 +54,11 @@ type WritingPreviewModalProps = {
   onToggleCollection: (writingId: string, collectionId: string) => Promise<void>
   onCreateCollection: (writingId: string, name: string) => Promise<void>
   onStatusChange?: (writingId: string, status: WritingStatus) => Promise<void>
+  workspaceOptions?: WorkspaceAssignmentOption[]
+  workspaceAvailable?: boolean
+  onAssignWorkspace?: (writingId: string, slug: string) => void | Promise<void>
+  onUnassignWorkspace?: (writingId: string) => void | Promise<void>
+  onCreateWorkspace?: (writingId: string) => void | Promise<void>
   onTitleChange?: (writingId: string, title: string) => Promise<void>
   onOpenFullWriting?: (writingId: string) => void
   onExportMarkdown?: (writingId: string) => Promise<void> | void
@@ -100,6 +107,11 @@ export function WritingPreviewModal({
   onToggleCollection,
   onCreateCollection,
   onStatusChange,
+  workspaceOptions = [],
+  workspaceAvailable = false,
+  onAssignWorkspace,
+  onUnassignWorkspace,
+  onCreateWorkspace,
   onTitleChange,
   onOpenFullWriting,
   onExportMarkdown,
@@ -617,6 +629,24 @@ export function WritingPreviewModal({
                         ))}
                       </PopoverContent>
                     </Popover>
+                  ) : null}
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Workspace</p>
+                  {row ? (
+                    <WorkspaceAssignmentDropdown
+                      writingId={row.id}
+                      title={row.title}
+                      currentSlug={row.workspaceSlug}
+                      currentName={row.workspaceName}
+                      options={workspaceOptions}
+                      available={workspaceAvailable}
+                      variant="rail"
+                      onAssign={(writingId, slug) => onAssignWorkspace?.(writingId, slug)}
+                      onUnassign={(writingId) => onUnassignWorkspace?.(writingId)}
+                      onCreateWorkspace={(writingId) => onCreateWorkspace?.(writingId)}
+                    />
                   ) : null}
                 </section>
 
