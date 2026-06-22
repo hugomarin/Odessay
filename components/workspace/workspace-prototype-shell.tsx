@@ -23,6 +23,7 @@ import { FolderTreePicker } from "@/components/workspace/folder-tree-picker"
 import { LibraryControlsBar } from "@/components/library/library-controls-bar"
 import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters"
 import { DocumentStateBadge } from "@/components/ui/document-state-badge"
+import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { Button } from "@/components/ui/button"
@@ -919,7 +920,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     () => [
       {
         id: "title",
-        grow: true,
+        label: "Writing",
+        className: "w-full min-w-[20rem]",
         render: (file) => (
           <div
             style={{
@@ -932,6 +934,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
                 {file.name}
               </p>
+              <DocumentStateIcon state={deriveWorkspaceFileDocumentState(file, writingByCanonicalPath)} />
             </div>
             {fileSecondaryLabel(file) !== "Root folder" ? (
               <p className="truncate pl-[26px] pt-1 text-[12px] text-ink-3">{fileSecondaryLabel(file)}</p>
@@ -940,46 +943,41 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         ),
       },
       {
-        id: "document-state",
-        width: "w-[118px]",
-        render: (file) => (
-          <DocumentStateBadge
-            state={deriveWorkspaceFileDocumentState(file, writingByCanonicalPath)}
-            variant="compact"
-          />
-        ),
+        id: "status",
+        label: "Status",
+        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4">Local file</span>,
       },
       {
-        id: "date",
-        width: "w-[160px]",
-        align: "end",
-        render: (file) => (
-          <span className="whitespace-nowrap text-[13px] text-ink-4">
-            {formatFileTimestamp(file.modifiedAt)}
-          </span>
-        ),
+        id: "artifact",
+        label: "Artifact",
+        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-2">Markdown</span>,
+      },
+      {
+        id: "workspace",
+        label: "Workspace",
+        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-2">{workspace?.name ?? "Workspace"}</span>,
       },
       {
         id: "actions",
-        width: "w-[52px]",
+        label: "",
         align: "end",
         render: (file) => (
-          <button
-            type="button"
-            aria-label={`Open ${file.name} in editor`}
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void openInEditor(file)
-            }}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-          >
-            <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label={`Actions for ${file.name}`} onClick={(event) => event.stopPropagation()} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
+                <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+              <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => void openInEditor(file)}>
+                <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />Open in editor
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ),
       },
     ],
-    [openInEditor, writingByCanonicalPath],
+    [openInEditor, workspace?.name, writingByCanonicalPath],
   )
 
   const handleCreateFile = async () => {

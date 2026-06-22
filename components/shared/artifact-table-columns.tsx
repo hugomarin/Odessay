@@ -1,6 +1,12 @@
 "use client"
 
-import { Clipboard, ExternalLink, Trash2 } from "lucide-react"
+import { Clipboard, ExternalLink, MoreHorizontal, Trash2 } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 import { WritingStatusBadge } from "@/components/ui/writing-status-badge"
 import { getArtifactTypeLabel } from "@/lib/writings/artifact-type"
@@ -52,11 +58,11 @@ export function createArtifactColumns(
   return columns.map((id): ArtifactTableColumn<ArtifactTableItem> => {
     switch (id) {
       case "title":
-        return { id, grow: true, render: renderTitle }
+        return { id, label: "Writing", className: "w-full", render: renderTitle }
       case "workspace":
         return {
           id,
-          width: "w-[160px]",
+          label: "Workspace",
           render: (item) =>
             item.workspaceLabel ? (
               <span className="truncate text-[13px] text-ink-3">{item.workspaceLabel}</span>
@@ -65,7 +71,7 @@ export function createArtifactColumns(
       case "artifactType":
         return {
           id,
-          width: "w-[120px]",
+          label: "Artifact",
           render: (item) =>
             item.artifactType ? (
               <span className="inline-flex items-center rounded-[6px] bg-muted px-2 py-0.5 text-[11px] font-medium text-ink-3">
@@ -76,13 +82,13 @@ export function createArtifactColumns(
       case "status":
         return {
           id,
-          width: "w-[132px]",
+          label: "Status",
           render: (item) => (item.status ? <WritingStatusBadge status={item.status} /> : null),
         }
       case "date":
         return {
           id,
-          width: "w-[120px]",
+          label: "Created",
           align: "end",
           render: (item) =>
             item.dateLabel ? (
@@ -92,28 +98,40 @@ export function createArtifactColumns(
       case "actions":
         return {
           id,
-          width: "w-[92px]",
+          label: "",
           align: "end",
           render: (item) => (
-            <div className="flex items-center justify-end gap-1.5">
+            <div className="flex items-center justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Actions for ${item.title}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  >
+                    <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
               {actions.map((action) => {
                 const { label, icon: Icon } = ACTION_CONFIG[action]
                 return (
-                  <button
+                  <DropdownMenuItem
                     key={action}
-                    type="button"
-                    aria-label={`${label} ${item.title}`}
                     onClick={(event) => {
-                      event.preventDefault()
                       event.stopPropagation()
                       onActionClick?.(action, item)
                     }}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-4/70 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink-2 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                    className="cursor-pointer gap-2 text-[13px]"
                   >
                     <Icon className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                  </button>
+                    {label}
+                  </DropdownMenuItem>
                 )
               })}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ),
         }

@@ -25,10 +25,10 @@ export type ArtifactAction = "open" | "copy" | "delete"
  */
 export type ArtifactTableColumn<T> = {
   id: ArtifactColumnId
-  /** Fixed-width tailwind class (e.g. "w-[154px]"). Omit when `grow` is set. */
+  /** Visible header for list-mode tables. Omit for icon-only columns. */
+  label?: string
+  /** Column width used by the semantic table layout when a stable rail is required. */
   width?: string
-  /** When true the column flexes to fill remaining space (the title column). */
-  grow?: boolean
   /** Horizontal alignment of the cell content. */
   align?: "start" | "end"
   /** Optional extra classes applied to the cell wrapper. */

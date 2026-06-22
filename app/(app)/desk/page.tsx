@@ -37,6 +37,7 @@ import { createSharingService } from "@/lib/services/sharing-service-factory"
 import { type RecipientPreview } from "@/lib/services/web-sharing-service"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { getSyncService } from "@/lib/sync"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { isTauriRuntime } from "@/lib/runtime/detect"
@@ -116,7 +117,6 @@ export default function DeskPage() {
 
   const {
     selectedIds,
-    toggleSelection,
     selectAll,
     deselectAll,
     hasSelection,
@@ -528,6 +528,23 @@ export default function DeskPage() {
     await enqueueWritingUpsert(updatedWriting)
   }, [])
 
+  const changeWritingArtifactType = useCallback(async (writingId: string, artifactType: ArtifactType) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted" || writing.artifact_type === artifactType) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    await enqueueWritingUpsert({
+      ...writing,
+      artifact_type: artifactType,
+      version: writing.version + 1,
+      updated_at: nowIso,
+      metadata_updated_at: nowIso,
+      local_updated_at: Date.now(),
+    })
+  }, [])
+
   const saveWritingTitleById = useCallback(
     async (writingId: string, nextTitle: string) => {
       const writing = await localDB.writings.get(writingId)
@@ -776,12 +793,10 @@ export default function DeskPage() {
               isLoading={isLoading}
               collectionOptions={collectionOptions}
               collectionIdsByWritingId={collectionIdsByWritingId}
-              selectedIds={selectedIds}
-              onToggleSelection={toggleSelection}
-              hasSelection={hasSelection}
               onToggleCollection={toggleWritingCollection}
               onCreateCollection={createWritingCollection}
               onStatusChange={changeWritingStatus}
+              onArtifactTypeChange={changeWritingArtifactType}
               onRenameWriting={openRenameWriting}
               onPreviewWriting={openWritingPreview}
               onCopyMarkdown={copyWritingMarkdown}

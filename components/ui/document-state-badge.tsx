@@ -1,6 +1,6 @@
 "use client"
 
-import { CheckCircle2, Cloud, Clock3, HardDrive } from "lucide-react"
+import { AlertCircle, CheckCircle2, Cloud, Clock3, HardDrive } from "lucide-react"
 import type { ComponentType, SVGProps } from "react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { DocumentState } from "@/lib/writings/document-state"
@@ -45,6 +45,12 @@ export const DOCUMENT_STATE_BADGE_COPY: Record<DocumentState, DocumentStateBadge
     tooltip: "This document has local changes queued for cloud sync or is retrying a sync.",
     icon: Clock3,
     className: "bg-[hsl(45,60%,91%)] text-[hsl(35,55%,32%)]",
+  },
+  "sync-failed": {
+    label: "Sync failed",
+    tooltip: "This document could not be synced. Its local copy remains available.",
+    icon: AlertCircle,
+    className: "bg-[hsl(0,72%,96%)] text-destructive",
   },
 }
 
