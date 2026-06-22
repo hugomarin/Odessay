@@ -2518,6 +2518,15 @@
       "date": "2026-06-18",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Implemented D9 deletion policy: watcher file delete transitions document to cloud-only via detachLocalFile; explicit UI delete remains the only cloud record destruction path. Added cloud-delete confirmation copy and Playwright evidence. Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. 787 tests PASS. ops:delivery:gate PASS. Performance Contract: not required. Presentation Contract: required (output/playwright/ode-309-cloud-delete-confirmation.png). Architecture Contract: compliant. Review score: 8.8/10."
+    },
+    {
+      "issue": "ODE-317",
+      "linear_url": "https://linear.app/z9ne/issue/ode-317/rebuild-artifacttable-v2-for-desk-and-workspace-table-mode",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/282",
+      "commit": "09993d1",
+      "date": "2026-06-21",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "ArtifactTable v2 on semantic Table primitive; Desk+Workspace share list mode; document-state as compact tooltip icon (+sync-failed); row actions in ... menu; local path removed. Presentation: Desk validated visually, Workspace by component reuse. Review 9.0/10."
     }
   ]
 }
