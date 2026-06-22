@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
+import { Bot, Check, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { cn } from "@/lib/utils"
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
@@ -45,6 +46,13 @@ type DeskActivityTableProps = {
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
+  /**
+   * Selection wiring for bulk edit. When `onToggleSelection` is provided the table
+   * renders a leading checkbox per row; surfaces that don't pass it (e.g. Collections)
+   * get no selection column. `selectedIds` drives the selected-row styling.
+   */
+  selectedIds?: Set<string>
+  onToggleSelection?: (id: string) => void
 }
 
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
@@ -80,10 +88,38 @@ export function DeskActivityTable({
   onDeleteRequest,
   renderExtraActions,
   showDeleteAction = true,
+  selectedIds,
+  onToggleSelection,
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const { settings } = useUserSettingsContext()
+  const selectionEnabled = Boolean(onToggleSelection)
+  const hasSelection = (selectedIds?.size ?? 0) > 0
+
+  const renderSelection = (row: DeskActivityRow) => {
+    const isRowSelected = selectedIds?.has(row.id) ?? false
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onToggleSelection?.(row.id)
+        }}
+        className={cn(
+          "inline-flex h-4 w-4 items-center justify-center rounded-[4px] border transition-all duration-150",
+          isRowSelected
+            ? "border-ink bg-ink text-bg"
+            : "border-border bg-sb text-transparent hover:border-ink-3",
+          hasSelection ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+        aria-label={isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
+        aria-pressed={isRowSelected}
+      >
+        <Check className="h-3 w-3" strokeWidth={2.2} />
+      </button>
+    )
+  }
 
   const enabledStatuses = useMemo(
     () => WRITING_STATUS_VALUES.filter((status) => !settings.disabledStatuses.includes(status)),
@@ -327,6 +363,8 @@ export function DeskActivityTable({
           getRowAriaLabel={(row) =>
             row.destinationHref ? `Open writing ${row.title}` : `${row.title} is read-only on Desk`
           }
+          isRowSelected={selectionEnabled ? (row) => selectedIds?.has(row.id) ?? false : undefined}
+          renderLeading={selectionEnabled ? renderSelection : undefined}
           showHeader={false}
         />
       </div>
