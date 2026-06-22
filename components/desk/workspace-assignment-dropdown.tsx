@@ -47,7 +47,7 @@ type WorkspaceAssignmentDropdownProps = {
   currentName: string | null
   options: WorkspaceAssignmentOption[]
   available: boolean
-  variant?: "table" | "rail"
+  variant?: "table" | "rail" | "card"
   title: string
   onAssign: (writingId: string, slug: string) => void | Promise<void>
   onUnassign: (writingId: string) => void | Promise<void>
@@ -80,7 +80,20 @@ export function WorkspaceAssignmentDropdown({
   const TriggerIcon = isAssigned ? Layers : Monitor
 
   const trigger =
-    variant === "rail" ? (
+    variant === "card" ? (
+      <button
+        type="button"
+        aria-label={`Manage workspace for ${title}`}
+        className={cn(
+          "inline-flex h-7 max-w-full items-center gap-1.5 rounded-[6px] border-[0.5px] border-border bg-bg px-2 text-[11px] transition-colors hover:bg-muted data-[state=open]:border-ink-3 data-[state=open]:bg-sb focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+          isAssigned ? "text-ink-2" : "text-ink-3",
+        )}
+      >
+        <TriggerIcon className="h-[11px] w-[11px] shrink-0 text-ink-4" strokeWidth={1.5} />
+        <span className="truncate">{triggerLabel}</span>
+        <ChevronDown className="h-[11px] w-[11px] shrink-0 text-ink-4" strokeWidth={1.5} />
+      </button>
+    ) : variant === "rail" ? (
       <button
         type="button"
         aria-label={`Manage workspace for ${title}`}

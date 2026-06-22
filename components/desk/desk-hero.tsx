@@ -1,19 +1,29 @@
 import Link from "next/link"
 import { Plus } from "lucide-react"
-import { CollectionChips } from "@/components/desk/collection-chips"
-import { DocumentStateBadge } from "@/components/ui/document-state-badge"
-import { WritingStatusBadge } from "@/components/ui/writing-status-badge"
-import type { CollectionOption } from "@/lib/collections/collections"
+import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
+import { DocumentStateIcon } from "@/components/ui/document-state-icon"
+import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
 
 type DeskHeroProps = {
   drafts: DeskHeroDraft[]
-  collectionOptions: CollectionOption[]
+  workspaceOptions: WorkspaceAssignmentOption[]
+  workspaceAvailable: boolean
+  onAssignWorkspace: (writingId: string, slug: string) => void | Promise<void>
+  onUnassignWorkspace: (writingId: string) => void | Promise<void>
+  onCreateWorkspace: (writingId: string) => void | Promise<void>
 }
 
-export function DeskHero({ drafts, collectionOptions }: DeskHeroProps) {
+export function DeskHero({
+  drafts,
+  workspaceOptions,
+  workspaceAvailable,
+  onAssignWorkspace,
+  onUnassignWorkspace,
+  onCreateWorkspace,
+}: DeskHeroProps) {
   return (
     <div
       id="desk-hero"
@@ -27,40 +37,50 @@ export function DeskHero({ drafts, collectionOptions }: DeskHeroProps) {
 
       <div className="flex gap-[10px] overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {drafts.map((draft) => (
-          <Link
+          <article
             key={draft.id}
-            href={buildWritingRouteHref("/write", draft)}
             id={`desk-hero-draft-card-${draft.id}`}
             data-section="desk-hero-draft-card"
             data-testid="desk-hero-draft-card"
             className={cn(
-              "DeskHeroDraftCard flex h-[170px] w-[220px] shrink-0 snap-start flex-col gap-2 rounded-lg border-[0.5px] border-border bg-white p-[14px] shadow-float transition-colors hover:border-ink-4/35",
+              "DeskHeroDraftCard flex h-[190px] w-[220px] shrink-0 snap-start flex-col rounded-lg border-[0.5px] border-border bg-sb p-[14px] shadow-float transition-[border-color,box-shadow] duration-200 hover:border-ink-4/35",
               draft.isActive && "border-cursor/35 shadow-float-md",
             )}
           >
-            <div className="flex min-w-0 items-center gap-1.5">
-              <WritingStatusBadge
-                status={draft.status}
-                variant="compact"
-                className={cn("self-start", draft.isActive && "border-cursor/20")}
-              />
-              <DocumentStateBadge state={draft.documentState} variant="compact" />
+            <Link
+              href={buildWritingRouteHref("/write", draft)}
+              className="group/card min-h-0 flex-1 outline-none focus-visible:rounded-md focus-visible:ring-1 focus-visible:ring-ink-3"
+              aria-label={`Open ${draft.title}`}
+            >
+              <div className="flex min-w-0 items-start gap-1.5">
+                <p className="line-clamp-2 min-w-0 flex-1 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
+                <DocumentStateIcon state={draft.documentState} className="mt-0.5" />
+              </div>
+              {draft.excerpt ? (
+                <p className="mt-2 line-clamp-2 text-[12px] leading-[1.55] text-ink-3">{draft.excerpt}</p>
+              ) : null}
+            </Link>
+            <div className="border-t-[0.5px] border-border pt-2">
+              <div className="flex items-center justify-between text-[11px] text-ink-4">
+                <span>{draft.createdLabel}</span>
+                <span>{draft.wordCount} words</span>
+              </div>
+              <div className="mt-2">
+                <WorkspaceAssignmentDropdown
+                  writingId={draft.id}
+                  currentSlug={draft.workspaceSlug}
+                  currentName={draft.workspaceName}
+                  options={workspaceOptions}
+                  available={workspaceAvailable}
+                  variant="card"
+                  title={draft.title}
+                  onAssign={onAssignWorkspace}
+                  onUnassign={onUnassignWorkspace}
+                  onCreateWorkspace={onCreateWorkspace}
+                />
+              </div>
             </div>
-            <p className="line-clamp-2 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
-            {draft.excerpt ? (
-              <p className="line-clamp-2 text-[12px] leading-[1.55] text-ink-3">{draft.excerpt}</p>
-            ) : null}
-            <CollectionChips
-              collectionIds={draft.collectionIds}
-              collectionOptions={collectionOptions}
-              limit={2}
-              className="mt-auto"
-            />
-            <div className="mt-auto flex items-center justify-between border-t-[0.5px] border-border pt-2 text-[11px] text-ink-4">
-              <span>{draft.updatedLabel}</span>
-              <span>{draft.wordCount} words</span>
-            </div>
-          </Link>
+          </article>
         ))}
 
         <Link

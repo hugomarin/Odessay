@@ -30,13 +30,12 @@ export type DeskHeroDraft = {
   slug: string | null
   title: string
   excerpt: string
-  status: DeskStatusTone
-  statusLabel: string
   documentState: DocumentState
-  updatedLabel: string
+  createdLabel: string
   wordCount: number
   isActive: boolean
-  collectionIds: string[]
+  workspaceSlug: string | null
+  workspaceName: string | null
 }
 
 export type DeskActivityRow = {
@@ -585,19 +584,17 @@ const buildRecentWritings = (writings: WritingMeta[], now: Date): DeskHeroDraft[
     .slice(0, 10)
 
   return recent.map((writing, index) => {
-    const statusState = buildStatusLabel(writing.status)
     return {
       id: writing.id,
       slug: writing.slug,
       title: writing.title,
       excerpt: writing.excerpt,
-      status: statusState.stateTone,
-      statusLabel: statusState.stateLabel,
       documentState: writing.documentState,
-      updatedLabel: buildDateLabel(writing.contentUpdatedAt, now),
+      createdLabel: `Created ${buildDateLabel(writing.createdAt, now) || "today"}`,
       wordCount: writing.wordCount,
       isActive: index === 0,
-      collectionIds: writing.collectionIds,
+      workspaceSlug: writing.workspaceSlug,
+      workspaceName: writing.workspaceName,
     }
   })
 }
