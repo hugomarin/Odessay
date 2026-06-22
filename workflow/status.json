@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "feat(desk): align Recent Writings cards with Biblioteca v2 state and metadata language. Replaces textual sync badges with the shared materialization-state icon and tooltip, uses creation date plus word count in the footer, and adds the shared compact workspace control without changing the writing-open route. [ODE-320]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-320",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-320/align-recent-writings-cards-with-biblioteca-v2-state-and-metadata",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/286",
+      "commit": "45e76be",
+      "date": "2026-06-22",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell hook warnings. Local full npm test intermittently fails an unrelated desktop-document-engine latency threshold; its isolated test passed and CI Traceability Gates SUCCESS. ops:delivery:gate PASS. Vercel Preview SUCCESS. Performance Contract: not required. Presentation Contract: base card and cloud-only tooltip evidence attached in Linear; Desk data was 147/147 cloud-only, so varied real-state rail evidence was not applicable and no synthetic records were introduced. Review score: 10.0/10."
+    },
+    {
       "what": "feat(library): redesign Desk and Workspace table controls with shared two-level Filter / Group by / Sort bar. Adds components/library/library-controls-bar.tsx shared component, refactors components/desk/filter-bar.tsx to first-level search + Filter + Group by + Sort with second-level Status / Artifact / Workspace / Date filters, integrates DeskViewToggle as leading in app/(app)/desk/page.tsx, adds hooks/useWorkspaceTableFilters.ts for Workspace table state, surfaces shared controls in components/workspace/workspace-prototype-shell.tsx, and extends lib/queries/desk-activity.ts groupBy with \"artifact\" plus tests/desk-activity.test.ts coverage. [ODE-316]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-316",
