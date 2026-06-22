@@ -14,6 +14,7 @@ type TablePropertySelectorProps = {
   icon: ReactNode
   label: ReactNode
   children: ReactNode
+  variant?: "table" | "rail"
   className?: string
   contentClassName?: string
   onClick?: (event: { stopPropagation: () => void }) => void
@@ -31,6 +32,7 @@ export function TablePropertySelector({
   className,
   contentClassName,
   onClick,
+  variant = "table",
 }: TablePropertySelectorProps) {
   return (
     <DropdownMenu>
@@ -39,7 +41,8 @@ export function TablePropertySelector({
           type="button"
           aria-label={ariaLabel}
           className={cn(
-            "inline-flex h-9 w-fit min-w-[116px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[13px] font-medium text-ink-2 transition-colors hover:bg-muted data-[state=open]:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+            "items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[13px] font-medium text-ink-2 transition-colors hover:bg-muted data-[state=open]:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+            variant === "rail" ? "flex h-10 w-full" : "inline-flex h-9 w-fit min-w-[116px]",
             className,
           )}
         >
