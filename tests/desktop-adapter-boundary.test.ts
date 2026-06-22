@@ -44,6 +44,7 @@ const allowedImports = new Set([
   // Desktop-only: this module uses @supabase/supabase-js (JWT auth, no cookies/SSR)
   "@/lib/supabase/desktop-client",
   "@/lib/workspace/types",
+  "@/lib/workspace/assignment",
   "@/lib/local-db",
   "@/lib/editor/document-serialization",
   "@/lib/editor/extensions",

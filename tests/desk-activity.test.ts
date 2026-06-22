@@ -478,3 +478,53 @@ describe("buildDeskActivitySummary", () => {
     expect(summary.groups[0]?.rows[0]?.title).toBe("Today draft")
   })
 })
+
+describe("buildDeskActivitySummary workspace assignment", () => {
+  const workspaceWritings: LocalWriting[] = [
+    createWriting({ id: "assigned", title: "Assigned writing" }),
+    createWriting({ id: "unassigned", title: "Unassigned writing" }),
+  ]
+
+  it("resolves the assigned workspace name onto rows", () => {
+    const summary = buildDeskActivitySummary(workspaceWritings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      workspaceAssignments: { assigned: "drafts" },
+      workspaceNamesBySlug: { drafts: "Drafts" },
+    })
+
+    const rows = summary.groups[0]?.rows ?? []
+    const assigned = rows.find((row) => row.id === "assigned")
+    const unassigned = rows.find((row) => row.id === "unassigned")
+
+    expect(assigned?.workspaceSlug).toBe("drafts")
+    expect(assigned?.workspaceName).toBe("Drafts")
+    expect(unassigned?.workspaceSlug).toBeNull()
+    expect(unassigned?.workspaceName).toBeNull()
+  })
+
+  it("falls back to the slug when the name is unknown and defaults to null", () => {
+    const withSlugOnly = buildDeskActivitySummary(workspaceWritings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      workspaceAssignments: { assigned: "orphan-slug" },
+    })
+    const assigned = withSlugOnly.groups[0]?.rows.find((row) => row.id === "assigned")
+    expect(assigned?.workspaceSlug).toBe("orphan-slug")
+    expect(assigned?.workspaceName).toBe("orphan-slug")
+
+    const withoutAssignments = buildDeskActivitySummary(workspaceWritings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+    })
+    const row = withoutAssignments.groups[0]?.rows[0]
+    expect(row?.workspaceSlug).toBeNull()
+    expect(row?.workspaceName).toBeNull()
+  })
+})
