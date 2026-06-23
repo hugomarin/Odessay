@@ -1257,6 +1257,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   getRowId={(file) => file.id}
                   getRowAriaLabel={(file) => `Open ${file.name} in editor`}
                   onRowClick={(file) => void openInEditor(file)}
+                  showHeader={false}
                 />
               </div>
             )}

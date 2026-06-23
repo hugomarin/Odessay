@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { Pencil, Plus, Trash2, X } from "lucide-react"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
@@ -38,6 +39,13 @@ import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/st
 import type { WritingStatus } from "@/lib/writings/status"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
+import {
+  buildWorkspaceNameLookup,
+  readAssignmentSlug,
+  type WorkspaceAssignmentMap,
+  type WorkspaceAssignmentOption,
+} from "@/lib/workspace/assignment"
 
 type CollectionsViewProps = {
   initialExpandedCollectionId?: string | null
@@ -78,6 +86,61 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   const [renameWritingTarget, setRenameWritingTarget] = useState<RenameTarget | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
+  const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceAssignmentOption[]>([])
+  const [workspaceAssignments, setWorkspaceAssignments] = useState<WorkspaceAssignmentMap>({})
+  const [workspaceAvailable, setWorkspaceAvailable] = useState(false)
+  const workspaceNameLookup = useMemo(
+    () => buildWorkspaceNameLookup(workspaceOptions),
+    [workspaceOptions],
+  )
+
+  const loadWorkspaceData = useCallback(async () => {
+    const service = getWorkspaceAssignmentService()
+    setWorkspaceAvailable(service.isAvailable)
+
+    if (!service.isAvailable) {
+      setWorkspaceOptions([])
+      setWorkspaceAssignments({})
+      return
+    }
+
+    const [options, assignments] = await Promise.all([
+      service.listWorkspaces(),
+      service.listAssignments(),
+    ])
+    setWorkspaceOptions(options)
+    setWorkspaceAssignments(assignments)
+  }, [])
+
+  const assignWorkspace = useCallback(
+    async (writingId: string, slug: string) => {
+      await getWorkspaceAssignmentService().assign(writingId, slug)
+      await loadWorkspaceData()
+    },
+    [loadWorkspaceData],
+  )
+
+  const unassignWorkspace = useCallback(
+    async (writingId: string) => {
+      await getWorkspaceAssignmentService().clearAssignment(writingId)
+      await loadWorkspaceData()
+    },
+    [loadWorkspaceData],
+  )
+
+  const createWorkspaceAndAssign = useCallback(
+    async (writingId: string) => {
+      const service = getWorkspaceAssignmentService()
+      const created = await service.createWorkspace()
+      if (!created) {
+        return
+      }
+
+      await service.assign(writingId, created.slug)
+      await loadWorkspaceData()
+    },
+    [loadWorkspaceData],
+  )
 
   const loadLocalState = useCallback(async () => {
     const [nextWritings, nextCollections, nextAssignments] = await Promise.all([
@@ -102,7 +165,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       ])
 
       if (!cancelled) {
-        await loadLocalState()
+        await Promise.all([loadLocalState(), loadWorkspaceData()])
       }
     }
 
@@ -122,7 +185,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       unsubscribeScope()
       debounced.cancel()
     }
-  }, [loadLocalState])
+  }, [loadLocalState, loadWorkspaceData])
 
   const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
   const collectionSummaries = useMemo(
@@ -163,6 +226,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     for (const item of detailItems) {
       const updatedAt = new Date(item.updatedAt)
       const statusState = buildStatusState(item.status)
+      const workspaceSlug = readAssignmentSlug(workspaceAssignments, item.id)
       const row = {
         id: item.id,
         title: item.title,
@@ -175,8 +239,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         dateLabel: buildDateLabel(updatedAt, now),
         isNew: false,
         destinationHref: buildWritingRouteHref("/write", { id: item.id, slug: item.slug }),
-        workspaceSlug: null,
-        workspaceName: null,
+        workspaceSlug,
+        workspaceName: workspaceSlug ? workspaceNameLookup[workspaceSlug] ?? workspaceSlug : null,
       }
 
       if (updatedAt.toDateString() === now.toDateString()) {
@@ -193,7 +257,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     }
 
     return groups.filter((group) => group.rows.length > 0)
-  }, [detailItems])
+  }, [detailItems, workspaceAssignments, workspaceNameLookup])
 
   const createCollection = useCallback(async (name: string) => {
     const ownerId = getLocalDBScope()
@@ -458,18 +522,20 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 }}
                 onStatusChange={changeWritingStatus}
                 onArtifactTypeChange={changeWritingArtifactType}
-                showWorkspaceColumn={false}
+                workspaceOptions={workspaceOptions}
+                workspaceAvailable={workspaceAvailable}
+                onAssignWorkspace={assignWorkspace}
+                onUnassignWorkspace={unassignWorkspace}
+                onCreateWorkspace={createWorkspaceAndAssign}
                 onRenameWriting={openRenameWriting}
                 showDeleteAction={false}
-                renderExtraActions={
+                renderExtraMenuItems={
                   isUncategorizedView
                     ? undefined
                     : (row) => (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
+                        <DropdownMenuItem
+                          className="cursor-pointer gap-2 text-[13px]"
+                          onClick={() => {
                             void setLocalWritingCollections(
                               row.id,
                               (getWritingCollectionIds(row.id, assignments) ?? []).filter(
@@ -477,10 +543,10 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                               ),
                             ).then(() => void getSyncService().scheduleFlush())
                           }}
-                          className="inline-flex h-7 items-center rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[10px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                         >
-                          Remove
-                        </button>
+                          <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                          Remove from collection
+                        </DropdownMenuItem>
                       )
                 }
               />

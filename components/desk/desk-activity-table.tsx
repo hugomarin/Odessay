@@ -45,6 +45,8 @@ type DeskActivityTableProps = {
   onDownloadMarkdown?: (writingId: string) => void
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
+  /** Extra items rendered at the top of the row's "…" actions menu (e.g. "Remove from collection"). */
+  renderExtraMenuItems?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
   /**
    * Selection wiring for bulk edit. When `onToggleSelection` is provided the table
@@ -89,6 +91,7 @@ export function DeskActivityTable({
   onDownloadMarkdown,
   onDeleteRequest,
   renderExtraActions,
+  renderExtraMenuItems,
   showDeleteAction = true,
   selectedIds,
   onToggleSelection,
@@ -282,23 +285,30 @@ export function DeskActivityTable({
         align: "end",
         width: "w-14",
         className: "px-4",
-        render: (row) => (
-          <div className="flex items-center justify-end gap-2" onClick={stopRowNavigation}>
-            {renderExtraActions ? <div className="shrink-0">{renderExtraActions(row)}</div> : null}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" aria-label={`Actions for ${row.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
-                  <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={stopRowNavigation}>
-                {onCopyMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onCopyMarkdown(row.id)}><Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />Copy markdown</DropdownMenuItem> : null}
-                {onDownloadMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onDownloadMarkdown(row.id)}><Download className="h-[12px] w-[12px]" strokeWidth={1.5} />Download markdown</DropdownMenuItem> : null}
-                {showDeleteAction ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />Delete</DropdownMenuItem> : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ),
+        render: (row) => {
+          const extraMenuItems = renderExtraMenuItems?.(row)
+          const hasMenu = Boolean(extraMenuItems || onCopyMarkdown || onDownloadMarkdown || showDeleteAction)
+          return (
+            <div className="flex items-center justify-end gap-2" onClick={stopRowNavigation}>
+              {renderExtraActions ? <div className="shrink-0">{renderExtraActions(row)}</div> : null}
+              {hasMenu ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" aria-label={`Actions for ${row.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
+                      <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={stopRowNavigation}>
+                    {extraMenuItems}
+                    {onCopyMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onCopyMarkdown(row.id)}><Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />Copy markdown</DropdownMenuItem> : null}
+                    {onDownloadMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onDownloadMarkdown(row.id)}><Download className="h-[12px] w-[12px]" strokeWidth={1.5} />Download markdown</DropdownMenuItem> : null}
+                    {showDeleteAction ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />Delete</DropdownMenuItem> : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
+          )
+        },
       },
     ],
     [
@@ -315,6 +325,7 @@ export function DeskActivityTable({
       onUnassignWorkspace,
       onCreateWorkspace,
       renderExtraActions,
+      renderExtraMenuItems,
       showDeleteAction,
     ],
   )
