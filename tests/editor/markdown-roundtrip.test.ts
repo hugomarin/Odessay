@@ -104,6 +104,30 @@ Body text here.`
     expect(engine.validateRoundTrip(source)).toEqual({ ok: true })
   })
 
+  it("preserves foreign frontmatter that happens to include an id key", () => {
+    const source = `---
+id: my-note-2024
+title: My Note
+tags: journal
+---
+
+# Body
+
+Text.`
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
+    })
+
+    const serialized = engine.serializeBodyJson(parsed.snapshot.bodyJson)
+    expect(serialized).toEqual({ success: true, markdown: source })
+    expect(engine.validateRoundTrip(source)).toEqual({ ok: true })
+  })
+
   it("preserves folded YAML frontmatter through the desktop save path", () => {
     const source = `---
 name: pm-orchestrator
