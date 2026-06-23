@@ -463,7 +463,7 @@ version: 2
         status: "done",
         visibility: "public",
         version: 7,
-        body_text: "File body",
+        body_text: expect.stringContaining("id: legacy-frontmatter-id"),
       }),
     )
   })

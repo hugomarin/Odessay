@@ -197,6 +197,19 @@ Motivo:
 
 ---
 
+### 2026-06-23 — Runtime alineado con D4: frontmatter siempre es contenido
+
+Corrección:
+
+- se eliminó `parseCanonicalFrontmatter` del runtime; Odessay ya no clasifica ningún bloque YAML como metadata propia.
+- todo frontmatter entra al editor como contenido y round-trippea intacto, incluso si contiene solo las claves históricas `id/slug/status/visibility/version/created_at/updated_at`.
+
+Motivo:
+
+- D4 establece trato uniforme para todos los archivos: el `.md` nunca es un casillero de metadata de Odessay. La clasificación legacy podía descartar datos al abrir y guardar.
+
+---
+
 ## Pendientes reconocidos
 
 Esta consolidación reduce contradicciones, pero no convierte automáticamente todo el corpus en una arquitectura desktop resuelta.

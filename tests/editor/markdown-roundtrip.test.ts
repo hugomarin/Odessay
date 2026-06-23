@@ -57,7 +57,7 @@ describe("editor markdown round-trip fixtures", () => {
     })
   }
 
-  it("accepts legacy canonical frontmatter and round-trips the markdown body", () => {
+  it("preserves frontmatter composed only of legacy Odessay keys", () => {
     const source = `---
 id: writing-123
 slug: canonical-roundtrip
@@ -74,6 +74,14 @@ Paragraph with ==highlight== and [^1|footnote-1: Footnote body].`
 
     const result = engine.validateRoundTrip(source)
     expect(result.ok).toBe(true)
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed).toMatchObject({ success: true })
+    if (!parsed.success) return
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
+    })
   })
 
   it("round-trips foreign frontmatter byte-for-byte as a frontmatter node", () => {
