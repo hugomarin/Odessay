@@ -1,7 +1,9 @@
-const isTauriBuild = process.env.TAURI_BUILD === "true"
+import { isTauriRuntimeServer } from "@/lib/runtime/detect-server"
+
+const isTauriRuntime = isTauriRuntimeServer()
 
 export default async function SettingsAccountPage() {
-  if (isTauriBuild) {
+  if (isTauriRuntime) {
     // Static export: server-side cookies/session don't exist. Defer the fetch
     // to a client component that reads from DesktopAuthService → Keychain.
     // Otherwise, the page is pre-rendered with no user and bakes in a

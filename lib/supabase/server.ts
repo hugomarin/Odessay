@@ -1,9 +1,10 @@
 import type { CookieOptions } from "@supabase/ssr"
+import { isTauriRuntimeServer } from "@/lib/runtime/detect-server"
 import { supabasePublicKey, supabaseUrl } from "@/lib/supabase/shared"
 
-const isTauriBuild = process.env.TAURI_BUILD === "true"
+const isTauriRuntime = isTauriRuntimeServer()
 
-export const createClient = isTauriBuild ? createDesktopClient : createWebClient
+export const createClient = isTauriRuntime ? createDesktopClient : createWebClient
 
 async function createDesktopClient() {
   const { createClient: createSupabaseClient } = await import("@supabase/supabase-js")

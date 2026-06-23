@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { EditorShell } from "@/components/editor/editor-shell"
 import { DesktopWriteEntry } from "@/components/editor/desktop-write-entry"
+import { isTauriRuntimeServer } from "@/lib/runtime/detect-server"
 
 type WritePageProps = {
   searchParams?: Promise<{
@@ -8,7 +9,7 @@ type WritePageProps = {
   }>
 }
 
-const isTauriBuild = process.env.TAURI_BUILD === "true"
+const isTauriRuntime = isTauriRuntimeServer()
 
 function DesktopWritePage() {
   // useSearchParams (inside DesktopWriteEntry) requires a Suspense boundary in
@@ -27,4 +28,4 @@ async function WebWritePage({ searchParams }: WritePageProps) {
   return <EditorShell key={forceNewWriting ? "write-new" : "write-root"} forceNewWriting={forceNewWriting} />
 }
 
-export default isTauriBuild ? DesktopWritePage : WebWritePage
+export default isTauriRuntime ? DesktopWritePage : WebWritePage
