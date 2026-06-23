@@ -75,4 +75,32 @@ Paragraph with ==highlight== and [^1|footnote-1: Footnote body].`
     const result = engine.validateRoundTrip(source)
     expect(result.ok).toBe(true)
   })
+
+  it("round-trips foreign frontmatter byte-for-byte as a frontmatter node", () => {
+    const source = `---
+doc: linear-issue-creation
+titulo: Create Linear issues
+capa: tool-policy
+tipo: policy
+funcion: Create issues safely
+cuando_usar: On issue creation
+relaciones: ODE-322
+---
+
+# Tool Policy
+
+Body text here.`
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
+    })
+
+    const serialized = engine.serializeBodyJson(parsed.snapshot.bodyJson)
+    expect(serialized).toEqual({ success: true, markdown: source })
+    expect(engine.validateRoundTrip(source)).toEqual({ ok: true })
+  })
 })

@@ -209,6 +209,12 @@ description: Keep this YAML untouched
     expect(parsed.metadata).toBeNull()
     expect(parsed.markdown).toContain("name: skill-example")
     expect(parsed.markdown).toContain("# Skill Body")
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: "name: skill-example\ndescription: Keep this YAML untouched" },
+    })
+    expect(parsed.snapshot.bodyText).toContain("name: skill-example")
     expect(parsed.snapshot.bodyText).toContain("Skill Body")
+    expect(parsed.snapshot.markdown).toBe(source)
   })
 })

@@ -93,6 +93,29 @@ const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetada
   })
 }
 
+const restoreForeignFrontmatter = (frontmatter: string, markdown: string) =>
+  `${FRONTMATTER_DELIMITER}\n${frontmatter}\n${FRONTMATTER_DELIMITER}${markdown ? `\n\n${markdown}` : ""}`
+
+const normalizeDocumentMarkdown = (source: string) => {
+  const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
+
+  if (frontmatter && !parseCanonicalFrontmatter(frontmatter)) {
+    return restoreForeignFrontmatter(frontmatter, normalizeMarkdownForRoundTrip(markdown))
+  }
+
+  return normalizeMarkdownForRoundTrip(frontmatter ? markdown : source)
+}
+
+const materializeDocumentMarkdown = (source: string) => {
+  const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
+
+  if (frontmatter && !parseCanonicalFrontmatter(frontmatter)) {
+    return restoreForeignFrontmatter(frontmatter, materializeMarkdownForRichParser(markdown))
+  }
+
+  return materializeMarkdownForRichParser(frontmatter ? markdown : source)
+}
+
 export const serializeCanonicalFrontmatter = (metadata: CanonicalDocumentMetadata): string => {
   const normalized = normalizeCanonicalDocumentMetadata(metadata)
   const yaml = dump(
@@ -112,7 +135,7 @@ export const serializeCanonicalFrontmatter = (metadata: CanonicalDocumentMetadat
 }
 
 export const serializeEditorToMarkdown = (editor: Editor) =>
-  normalizeMarkdownForRoundTrip(
+  normalizeDocumentMarkdown(
     getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
   )
 
@@ -146,8 +169,7 @@ export const serializeDocumentToSnapshot = (
 }
 
 export const parseMarkdownToSnapshot = (markdown: string): DocumentSerializationSnapshot => {
-  const normalizedMarkdown = normalizeMarkdownForRoundTrip(splitCanonicalDocumentSource(markdown).markdown)
-  const editor = createDocumentEditor(materializeMarkdownForRichParser(normalizedMarkdown))
+  const editor = createDocumentEditor(materializeDocumentMarkdown(markdown))
 
   try {
     return {
