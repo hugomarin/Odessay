@@ -57,6 +57,20 @@ const splitCanonicalDocumentSource = (
   }
 }
 
+// Keys emitted by serializeCanonicalFrontmatter. Odessay-authored frontmatter
+// only contains keys from this set. A document whose frontmatter carries any other key
+// is foreign content (Jekyll/Hugo/Obsidian/agent files routinely use `id`), and
+// must round-trip intact rather than be silently discarded as canonical metadata.
+const CANONICAL_FRONTMATTER_KEYS = new Set([
+  "id",
+  "slug",
+  "status",
+  "visibility",
+  "version",
+  "created_at",
+  "updated_at",
+])
+
 const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetadata | null => {
   const parsed = load(frontmatter)
 
@@ -67,6 +81,13 @@ const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetada
   const record = parsed as Record<string, unknown>
   const rawId = typeof record.id === "string" ? record.id.trim() : ""
   if (!rawId) {
+    return null
+  }
+
+  // Any key outside the canonical set means this is foreign frontmatter that
+  // merely happens to include an `id`; preserve it instead of treating it as
+  // Odessay metadata (which never round-trips back into the .md).
+  if (Object.keys(record).some((key) => !CANONICAL_FRONTMATTER_KEYS.has(key))) {
     return null
   }
 
