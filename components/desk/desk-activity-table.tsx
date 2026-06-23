@@ -62,7 +62,7 @@ type DeskActivityTableProps = {
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
 const stopRowNavigation = (event: { stopPropagation: () => void }) => event.stopPropagation()
 
-function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
+export function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
   const Icon = {
     agent: Bot,
     skill: Wrench,

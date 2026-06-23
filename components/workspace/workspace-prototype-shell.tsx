@@ -7,7 +7,6 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
-  Circle,
   ExternalLink,
   FileText,
   Folder,
@@ -29,6 +28,10 @@ import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
+import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
+import { getArtifactTypeLabel } from "@/lib/writings/artifact-type"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -950,28 +953,37 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         label: "Status",
         width: "w-[12%]",
         className: "px-2",
-        render: () => (
-          <TablePropertySelector
-            readOnly
-            ariaLabel="Local file"
-            icon={<Circle className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />}
-            label="Local file"
-          />
-        ),
+        render: (file) => {
+          // The .md file IS the canonical document (ADR identidad D1/D9). Show the
+          // bound document's real status via the binding; a "solo local" file with
+          // no record yet defaults to draft until first sync (D9).
+          const status = normalizeWritingStatus(writingByCanonicalPath.get(file.path)?.status ?? "draft")
+          return (
+            <TablePropertySelector
+              readOnly
+              ariaLabel={`Status ${getWritingStatusLabel(status)}`}
+              icon={<WritingStatusIcon status={status} />}
+              label={getWritingStatusLabel(status)}
+            />
+          )
+        },
       },
       {
         id: "artifact",
         label: "Artifact",
         width: "w-[14%]",
         className: "px-2",
-        render: () => (
-          <TablePropertySelector
-            readOnly
-            ariaLabel="Markdown"
-            icon={<FileText className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />}
-            label="Markdown"
-          />
-        ),
+        render: (file) => {
+          const artifactType = writingByCanonicalPath.get(file.path)?.artifact_type ?? "general"
+          return (
+            <TablePropertySelector
+              readOnly
+              ariaLabel={`Artifact ${getArtifactTypeLabel(artifactType)}`}
+              icon={<ArtifactTypeIcon artifactType={artifactType} />}
+              label={getArtifactTypeLabel(artifactType)}
+            />
+          )
+        },
       },
       {
         id: "workspace",
