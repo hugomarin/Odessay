@@ -933,15 +933,14 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               maskImage: "linear-gradient(90deg, #000 86%, transparent)",
             }}
           >
-            <div className="flex min-w-0 items-center gap-3">
-              <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+            <div className="flex min-w-0 items-center gap-2">
               <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
                 {file.name}
               </p>
               <DocumentStateIcon state={deriveWorkspaceFileDocumentState(file, writingByCanonicalPath)} />
             </div>
             {fileSecondaryLabel(file) !== "Root folder" ? (
-              <p className="truncate pl-[26px] pt-1 text-[12px] text-ink-3">{fileSecondaryLabel(file)}</p>
+              <p className="truncate pt-1 text-[12px] text-ink-3">{fileSecondaryLabel(file)}</p>
             ) : null}
           </div>
         ),

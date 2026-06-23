@@ -39,6 +39,9 @@ import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/st
 import type { WritingStatus } from "@/lib/writings/status"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
+import { downloadBlob } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import {
   buildWorkspaceNameLookup,
@@ -329,6 +332,28 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     void getSyncService().scheduleFlush()
   }, [])
 
+  const copyWritingMarkdown = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    await copyTextWithFallback(`${markdown}\n`)
+  }, [])
+
+  const downloadWritingMarkdown = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    const blob = new Blob([`${markdown}\n`], { type: "text/markdown;charset=utf-8" })
+    downloadBlob(
+      blob,
+      buildMarkdownDownloadName({ title: writing.title, bodyText: writing.body_text, writingId: writing.id }),
+    )
+  }, [])
+
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await localDB.writings.get(writingId)
     if (!writing || writing.sync_status === "deleted") {
@@ -528,6 +553,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onUnassignWorkspace={unassignWorkspace}
                 onCreateWorkspace={createWorkspaceAndAssign}
                 onRenameWriting={openRenameWriting}
+                onCopyMarkdown={copyWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdown}
                 showDeleteAction={false}
                 renderExtraMenuItems={
                   isUncategorizedView
