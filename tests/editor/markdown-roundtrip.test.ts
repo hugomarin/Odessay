@@ -57,7 +57,7 @@ describe("editor markdown round-trip fixtures", () => {
     })
   }
 
-  it("accepts legacy canonical frontmatter and round-trips the markdown body", () => {
+  it("preserves frontmatter composed only of legacy Odessay keys", () => {
     const source = `---
 id: writing-123
 slug: canonical-roundtrip
@@ -74,5 +74,87 @@ Paragraph with ==highlight== and [^1|footnote-1: Footnote body].`
 
     const result = engine.validateRoundTrip(source)
     expect(result.ok).toBe(true)
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed).toMatchObject({ success: true })
+    if (!parsed.success) return
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
+    })
+  })
+
+  it("round-trips foreign frontmatter byte-for-byte as a frontmatter node", () => {
+    const source = `---
+doc: linear-issue-creation
+titulo: Create Linear issues
+capa: tool-policy
+tipo: policy
+funcion: Create issues safely
+cuando_usar: On issue creation
+relaciones: ODE-322
+---
+
+# Tool Policy
+
+Body text here.`
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
+    })
+
+    const serialized = engine.serializeBodyJson(parsed.snapshot.bodyJson)
+    expect(serialized).toEqual({ success: true, markdown: source })
+    expect(engine.validateRoundTrip(source)).toEqual({ ok: true })
+  })
+
+  it("preserves foreign frontmatter that happens to include an id key", () => {
+    const source = `---
+id: my-note-2024
+title: My Note
+tags: journal
+---
+
+# Body
+
+Text.`
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed.success).toBe(true)
+    if (!parsed.success) return
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
+    })
+
+    const serialized = engine.serializeBodyJson(parsed.snapshot.bodyJson)
+    expect(serialized).toEqual({ success: true, markdown: source })
+    expect(engine.validateRoundTrip(source)).toEqual({ ok: true })
+  })
+
+  it("preserves folded YAML frontmatter through the desktop save path", () => {
+    const source = `---
+name: pm-orchestrator
+description: >
+  Garante del flujo de planeación del Planning Harness. Recibe una intención (crear épica,
+  crear issue, validar issue, aprender) y responde por que se convierta en el resultado que su
+  flujo define: arranca la cadena, lanza cada subagente siguiendo el ruteo del Refiner, la
+  monitorea vía el estado, y cierra (presenta al usuario y crea en Linear con su aprobación).
+  El contenido lo producen el Refiner, los especialistas y el Planning Auditor.
+tools: Read, Glob, Grep, Write, Edit, Task, Skill, Linear
+model: inherit
+---
+`
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed).toMatchObject({ success: true })
+    if (!parsed.success) return
+
+    const saved = engine.serializeBodyJson(parsed.snapshot.bodyJson)
+    expect(saved).toEqual({ success: true, markdown: source.trimEnd() })
   })
 })

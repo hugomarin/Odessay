@@ -151,7 +151,7 @@ updated_at: '2026-06-03T01:00:00.000Z'
     expect(source).not.toContain("id: writing-123")
   })
 
-  it("parses legacy canonical source documents with front-matter", () => {
+  it("treats legacy Odessay-shaped front-matter as document content", () => {
     const source = `---
 id: writing-123
 slug: canonical-body
@@ -166,20 +166,17 @@ Canonical body`
 
     const parsed = parseDocumentFileToSnapshot(source)
 
-    expect(parsed.metadata).toEqual({
-      id: "writing-123",
-      slug: "canonical-body",
-      status: "draft",
-      visibility: "private",
-      version: 4,
-      createdAt: "2026-06-03T00:00:00.000Z",
-      updatedAt: "2026-06-03T02:00:00.000Z",
+    expect(parsed.metadata).toBeNull()
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: source.slice(4, source.indexOf("\n---")) },
     })
-    expect(parsed.snapshot.markdown).toBe("Canonical body")
-    expect(parsed.snapshot.bodyText).toBe("Canonical body")
+    expect(parsed.snapshot.markdown).toBe(source)
+    expect(parsed.snapshot.bodyText).toContain("id: writing-123")
+    expect(parsed.snapshot.bodyText).toContain("Canonical body")
   })
 
-  it("parses markdown snapshots even when the source includes canonical front-matter", () => {
+  it("preserves legacy Odessay-shaped front-matter in markdown snapshots", () => {
     const snapshot = parseMarkdownToSnapshot(`---
 id: writing-123
 slug: hello-world
@@ -192,8 +189,9 @@ updated_at: '2026-06-03T01:00:00.000Z'
 
 # Hello world`)
 
-    expect(snapshot.markdown).toBe("# Hello world")
-    expect(snapshot.bodyText).toBe("Hello world")
+    expect(snapshot.markdown).toContain("id: writing-123")
+    expect(snapshot.bodyText).toContain("id: writing-123")
+    expect(snapshot.bodyText).toContain("Hello world")
   })
 
   it("keeps non-Odessay front-matter as document content", () => {
@@ -209,6 +207,12 @@ description: Keep this YAML untouched
     expect(parsed.metadata).toBeNull()
     expect(parsed.markdown).toContain("name: skill-example")
     expect(parsed.markdown).toContain("# Skill Body")
+    expect(parsed.snapshot.bodyJson.content?.[0]).toMatchObject({
+      type: "frontmatter",
+      attrs: { raw: "name: skill-example\ndescription: Keep this YAML untouched" },
+    })
+    expect(parsed.snapshot.bodyText).toContain("name: skill-example")
     expect(parsed.snapshot.bodyText).toContain("Skill Body")
+    expect(parsed.snapshot.markdown).toBe(source)
   })
 })

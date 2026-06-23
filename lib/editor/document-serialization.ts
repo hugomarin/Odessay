@@ -1,6 +1,6 @@
 import { Editor } from "@tiptap/core"
 import type { JSONContent } from "@tiptap/core"
-import { dump, load } from "js-yaml"
+import { dump } from "js-yaml"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
 import {
   normalizeCanonicalDocumentMetadata,
@@ -57,42 +57,20 @@ const splitCanonicalDocumentSource = (
   }
 }
 
-const parseCanonicalFrontmatter = (frontmatter: string): CanonicalDocumentMetadata | null => {
-  const parsed = load(frontmatter)
+const restoreForeignFrontmatter = (frontmatter: string, markdown: string) =>
+  `${FRONTMATTER_DELIMITER}\n${frontmatter}\n${FRONTMATTER_DELIMITER}${markdown ? `\n\n${markdown}` : ""}`
 
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return null
+const normalizeDocumentMarkdown = (source: string) => {
+  const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
+
+  if (frontmatter) {
+    return restoreForeignFrontmatter(frontmatter, normalizeMarkdownForRoundTrip(markdown))
   }
 
-  const record = parsed as Record<string, unknown>
-  const rawId = typeof record.id === "string" ? record.id.trim() : ""
-  if (!rawId) {
-    return null
-  }
-
-  const readIsoString = (value: unknown): string | undefined => {
-    if (typeof value === "string") {
-      return value
-    }
-
-    if (value instanceof Date && !Number.isNaN(value.getTime())) {
-      return value.toISOString()
-    }
-
-    return undefined
-  }
-
-  return normalizeCanonicalDocumentMetadata({
-    id: rawId,
-    slug: typeof record.slug === "string" ? record.slug : null,
-    status: typeof record.status === "string" ? record.status : undefined,
-    visibility: typeof record.visibility === "string" ? record.visibility : undefined,
-    version: typeof record.version === "number" ? record.version : undefined,
-    createdAt: readIsoString(record.created_at),
-    updatedAt: readIsoString(record.updated_at),
-  })
+  return normalizeMarkdownForRoundTrip(frontmatter ? markdown : source)
 }
 
+/** @deprecated D4: Odessay metadata never belongs in a .md frontmatter block. */
 export const serializeCanonicalFrontmatter = (metadata: CanonicalDocumentMetadata): string => {
   const normalized = normalizeCanonicalDocumentMetadata(metadata)
   const yaml = dump(
@@ -112,7 +90,7 @@ export const serializeCanonicalFrontmatter = (metadata: CanonicalDocumentMetadat
 }
 
 export const serializeEditorToMarkdown = (editor: Editor) =>
-  normalizeMarkdownForRoundTrip(
+  normalizeDocumentMarkdown(
     getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
   )
 
@@ -146,10 +124,24 @@ export const serializeDocumentToSnapshot = (
 }
 
 export const parseMarkdownToSnapshot = (markdown: string): DocumentSerializationSnapshot => {
-  const normalizedMarkdown = normalizeMarkdownForRoundTrip(splitCanonicalDocumentSource(markdown).markdown)
-  const editor = createDocumentEditor(materializeMarkdownForRichParser(normalizedMarkdown))
+  const { frontmatter, markdown: bodyMarkdown } = splitCanonicalDocumentSource(markdown)
+  const foreignFrontmatter = frontmatter
+  const editor = createDocumentEditor(
+    materializeMarkdownForRichParser(frontmatter ? bodyMarkdown : markdown),
+  )
 
   try {
+    if (foreignFrontmatter) {
+      const bodyJson = editor.getJSON()
+      editor.commands.setContent({
+        ...bodyJson,
+        content: [
+          { type: "frontmatter", attrs: { raw: foreignFrontmatter } },
+          ...(bodyJson.content ?? []),
+        ],
+      })
+    }
+
     return {
       bodyJson: editor.getJSON(),
       bodyText: editor.getText({ blockSeparator: BLOCK_SEPARATOR }),
@@ -169,13 +161,9 @@ export const serializeDocumentFile = (
 }
 
 export const parseDocumentFileToSnapshot = (source: string): CanonicalDocumentFileSnapshot => {
-  const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
-  const metadata = frontmatter ? parseCanonicalFrontmatter(frontmatter) : null
-  const markdownSource = metadata ? markdown : source
-
   return {
-    metadata,
-    snapshot: parseMarkdownToSnapshot(markdownSource),
-    markdown: normalizeMarkdownForRoundTrip(markdownSource),
+    metadata: null,
+    snapshot: parseMarkdownToSnapshot(source),
+    markdown: normalizeDocumentMarkdown(source),
   }
 }

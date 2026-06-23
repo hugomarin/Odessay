@@ -113,6 +113,7 @@ export class DesktopDocumentEngine {
    * The metadata parameter is accepted for legacy call sites, but Odessay
    * metadata now lives in the cloud record + IndexedDB mirror, never in .md
    * frontmatter.
+   * @deprecated D4: use serializeBodyJson; metadata is not serialized to .md.
    */
   serializeSourceDocument(
     bodyJson: JSONContent | null | undefined,
@@ -143,10 +144,7 @@ export class DesktopDocumentEngine {
       return { ok: false, error: parsedDocument.error }
     }
 
-    const serialized =
-      parsedDocument.document.metadata !== null
-        ? this.serializeSourceDocument(parsedDocument.document.snapshot.bodyJson, parsedDocument.document.metadata)
-        : this.serializeBodyJson(parsedDocument.document.snapshot.bodyJson)
+    const serialized = this.serializeBodyJson(parsedDocument.document.snapshot.bodyJson)
     if (!serialized.success) {
       return { ok: false, error: serialized.error }
     }

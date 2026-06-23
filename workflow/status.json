@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-22",
+  "last_updated": "2026-06-23",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -54,6 +54,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(editor): preserve foreign non-Odessay front-matter as a round-trip-safe, read-only Rich editor node. The raw YAML remains verbatim through Markdown ⇄ Rich conversion while Rich renders key:value rows; canonical Odessay front-matter with id remains extracted from the document body. [ODE-322]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-322",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-322/render-foreign-non-odessay-front-matter-as-a-round-trip-safe-editor",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/288",
+      "commit": "194a36e",
+      "date": "2026-06-23",
+      "notes": "Typecheck PASS. Lint PASS with six pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (128 files / 803 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (parser/serializer plus atomic NodeView, outside typing hot path). Presentation evidence attached in Linear for Rich key:value and raw YAML Source modes; Source→Rich retained all seven fixture rows. Architecture Contract COMPLIANT: shared editor core plus frontend presentation, desktop write-path only. Review score: 9.5/10."
+    },
     {
       "what": "feat(desk): align Recent Writings cards with Biblioteca v2 state and metadata language. Replaces textual sync badges with the shared materialization-state icon and tooltip, uses creation date plus word count in the footer, and adds the shared compact workspace control without changing the writing-open route. [ODE-320]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",

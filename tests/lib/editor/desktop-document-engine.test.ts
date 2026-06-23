@@ -243,7 +243,7 @@ describe("DesktopDocumentEngine", () => {
   })
 
   describe("sourceToRich", () => {
-    it("parses canonical front-matter without treating it as document content", () => {
+    it("preserves legacy Odessay-shaped front-matter as document content", () => {
       const markdown = `---
 id: writing-123
 slug: title
@@ -263,7 +263,11 @@ Paragraph body`
       if (!result.success) return
       expect(result.snapshot.markdown).toContain("# Title")
       expect(result.snapshot.markdown).toContain("Paragraph body")
-      expect(result.snapshot.markdown).not.toContain("created_at")
+      expect(result.snapshot.markdown).toContain("created_at")
+      expect(result.snapshot.bodyJson.content?.[0]).toMatchObject({
+        type: "frontmatter",
+        attrs: { raw: markdown.slice(4, markdown.indexOf("\n---")) },
+      })
     })
 
     it("parses headings, paragraphs and marks to ProseMirror JSON", () => {
