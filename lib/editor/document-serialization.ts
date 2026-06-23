@@ -106,16 +106,6 @@ const normalizeDocumentMarkdown = (source: string) => {
   return normalizeMarkdownForRoundTrip(frontmatter ? markdown : source)
 }
 
-const materializeDocumentMarkdown = (source: string) => {
-  const { frontmatter, markdown } = splitCanonicalDocumentSource(source)
-
-  if (frontmatter && !parseCanonicalFrontmatter(frontmatter)) {
-    return restoreForeignFrontmatter(frontmatter, materializeMarkdownForRichParser(markdown))
-  }
-
-  return materializeMarkdownForRichParser(frontmatter ? markdown : source)
-}
-
 export const serializeCanonicalFrontmatter = (metadata: CanonicalDocumentMetadata): string => {
   const normalized = normalizeCanonicalDocumentMetadata(metadata)
   const yaml = dump(
@@ -169,9 +159,24 @@ export const serializeDocumentToSnapshot = (
 }
 
 export const parseMarkdownToSnapshot = (markdown: string): DocumentSerializationSnapshot => {
-  const editor = createDocumentEditor(materializeDocumentMarkdown(markdown))
+  const { frontmatter, markdown: bodyMarkdown } = splitCanonicalDocumentSource(markdown)
+  const foreignFrontmatter = frontmatter && !parseCanonicalFrontmatter(frontmatter) ? frontmatter : null
+  const editor = createDocumentEditor(
+    materializeMarkdownForRichParser(frontmatter ? bodyMarkdown : markdown),
+  )
 
   try {
+    if (foreignFrontmatter) {
+      const bodyJson = editor.getJSON()
+      editor.commands.setContent({
+        ...bodyJson,
+        content: [
+          { type: "frontmatter", attrs: { raw: foreignFrontmatter } },
+          ...(bodyJson.content ?? []),
+        ],
+      })
+    }
+
     return {
       bodyJson: editor.getJSON(),
       bodyText: editor.getText({ blockSeparator: BLOCK_SEPARATOR }),
