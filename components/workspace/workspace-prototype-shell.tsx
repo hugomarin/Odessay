@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileText,
   Folder,
+  Layers,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -26,6 +27,11 @@ import { DocumentStateBadge } from "@/components/ui/document-state-badge"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
+import { TablePropertySelector } from "@/components/ui/table-property-selector"
+import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
+import { getArtifactTypeLabel } from "@/lib/writings/artifact-type"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -921,7 +927,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "title",
         label: "Writing",
-        className: "w-full min-w-[20rem]",
+        width: "w-[55%]",
+        className: "min-w-0 px-10",
         render: (file) => (
           <div
             style={{
@@ -929,15 +936,14 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               maskImage: "linear-gradient(90deg, #000 86%, transparent)",
             }}
           >
-            <div className="flex min-w-0 items-center gap-3">
-              <FileText className="h-[14px] w-[14px] shrink-0 text-ink-4" strokeWidth={1.5} />
+            <div className="flex min-w-0 items-center gap-2">
               <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
                 {file.name}
               </p>
               <DocumentStateIcon state={deriveWorkspaceFileDocumentState(file, writingByCanonicalPath)} />
             </div>
             {fileSecondaryLabel(file) !== "Root folder" ? (
-              <p className="truncate pl-[26px] pt-1 text-[12px] text-ink-3">{fileSecondaryLabel(file)}</p>
+              <p className="truncate pt-1 text-[12px] text-ink-3">{fileSecondaryLabel(file)}</p>
             ) : null}
           </div>
         ),
@@ -945,22 +951,60 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "status",
         label: "Status",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-4">Local file</span>,
+        width: "w-[12%]",
+        className: "px-2",
+        render: (file) => {
+          // The .md file IS the canonical document (ADR identidad D1/D9). Show the
+          // bound document's real status via the binding; a "solo local" file with
+          // no record yet defaults to draft until first sync (D9).
+          const status = normalizeWritingStatus(writingByCanonicalPath.get(file.path)?.status ?? "draft")
+          return (
+            <TablePropertySelector
+              readOnly
+              ariaLabel={`Status ${getWritingStatusLabel(status)}`}
+              icon={<WritingStatusIcon status={status} />}
+              label={getWritingStatusLabel(status)}
+            />
+          )
+        },
       },
       {
         id: "artifact",
         label: "Artifact",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-2">Markdown</span>,
+        width: "w-[14%]",
+        className: "px-2",
+        render: (file) => {
+          const artifactType = writingByCanonicalPath.get(file.path)?.artifact_type ?? "general"
+          return (
+            <TablePropertySelector
+              readOnly
+              ariaLabel={`Artifact ${getArtifactTypeLabel(artifactType)}`}
+              icon={<ArtifactTypeIcon artifactType={artifactType} />}
+              label={getArtifactTypeLabel(artifactType)}
+            />
+          )
+        },
       },
       {
         id: "workspace",
         label: "Workspace",
-        render: () => <span className="inline-flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] text-ink-2">{workspace?.name ?? "Workspace"}</span>,
+        width: "w-[17%]",
+        className: "px-2",
+        render: () => (
+          <TablePropertySelector
+            readOnly
+            ariaLabel={`Workspace ${workspace?.name ?? ""}`}
+            icon={<Layers className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />}
+            label={workspace?.name ?? "Workspace"}
+          />
+        ),
       },
       {
         id: "actions",
         label: "",
         align: "end",
+        width: "w-14",
+        className: "px-4",
         render: (file) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1224,6 +1268,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   getRowId={(file) => file.id}
                   getRowAriaLabel={(file) => `Open ${file.name} in editor`}
                   onRowClick={(file) => void openInEditor(file)}
+                  showHeader={false}
                 />
               </div>
             )}

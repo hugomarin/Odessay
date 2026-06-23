@@ -1,15 +1,16 @@
 import { DesktopAppShell } from "@/components/navigation/desktop-app-shell"
 import { Sidebar } from "@/components/navigation/sidebar"
 import { UserSettingsProvider } from "@/components/settings/user-settings-provider"
+import { isTauriRuntimeServer } from "@/lib/runtime/detect-server"
 
-const isTauriBuild = process.env.TAURI_BUILD === "true"
+const isTauriRuntime = isTauriRuntimeServer()
 
 type AppLayoutProps = Readonly<{
   children: React.ReactNode
 }>
 
 export default async function AppLayout({ children }: AppLayoutProps) {
-  if (isTauriBuild) {
+  if (isTauriRuntime) {
     return (
       <UserSettingsProvider>
         <DesktopAppShell>{children}</DesktopAppShell>

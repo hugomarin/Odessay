@@ -3,9 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Pencil, Plus, Trash2 } from "lucide-react"
+import { Pencil, Plus, Trash2, X } from "lucide-react"
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
+import { BulkActionBar } from "@/components/desk/bulk-action-bar"
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
+import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   buildCollectionDetailItems,
@@ -31,11 +36,23 @@ import {
 } from "@/lib/local-db"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
-import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activity"
-import { enqueueWritingUpsert } from "@/lib/sync/queue"
+import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/queries/desk-activity"
+import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncService } from "@/lib/sync"
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
+import type { WritingStatus } from "@/lib/writings/status"
+import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
+import { copyTextWithFallback } from "@/lib/utils/clipboard"
+import { downloadBlob } from "@/lib/utils/download"
+import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
+import {
+  buildWorkspaceNameLookup,
+  readAssignmentSlug,
+  type WorkspaceAssignmentMap,
+  type WorkspaceAssignmentOption,
+} from "@/lib/workspace/assignment"
 
 type CollectionsViewProps = {
   initialExpandedCollectionId?: string | null
@@ -76,6 +93,65 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   const [renameWritingTarget, setRenameWritingTarget] = useState<RenameTarget | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null)
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const { selectedIds, toggleSelection, selectAll, deselectAll, hasSelection, selectedCount } =
+    useWritingSelection()
+  const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceAssignmentOption[]>([])
+  const [workspaceAssignments, setWorkspaceAssignments] = useState<WorkspaceAssignmentMap>({})
+  const [workspaceAvailable, setWorkspaceAvailable] = useState(false)
+  const workspaceNameLookup = useMemo(
+    () => buildWorkspaceNameLookup(workspaceOptions),
+    [workspaceOptions],
+  )
+
+  const loadWorkspaceData = useCallback(async () => {
+    const service = getWorkspaceAssignmentService()
+    setWorkspaceAvailable(service.isAvailable)
+
+    if (!service.isAvailable) {
+      setWorkspaceOptions([])
+      setWorkspaceAssignments({})
+      return
+    }
+
+    const [options, assignments] = await Promise.all([
+      service.listWorkspaces(),
+      service.listAssignments(),
+    ])
+    setWorkspaceOptions(options)
+    setWorkspaceAssignments(assignments)
+  }, [])
+
+  const assignWorkspace = useCallback(
+    async (writingId: string, slug: string) => {
+      await getWorkspaceAssignmentService().assign(writingId, slug)
+      await loadWorkspaceData()
+    },
+    [loadWorkspaceData],
+  )
+
+  const unassignWorkspace = useCallback(
+    async (writingId: string) => {
+      await getWorkspaceAssignmentService().clearAssignment(writingId)
+      await loadWorkspaceData()
+    },
+    [loadWorkspaceData],
+  )
+
+  const createWorkspaceAndAssign = useCallback(
+    async (writingId: string) => {
+      const service = getWorkspaceAssignmentService()
+      const created = await service.createWorkspace()
+      if (!created) {
+        return
+      }
+
+      await service.assign(writingId, created.slug)
+      await loadWorkspaceData()
+    },
+    [loadWorkspaceData],
+  )
 
   const loadLocalState = useCallback(async () => {
     const [nextWritings, nextCollections, nextAssignments] = await Promise.all([
@@ -100,7 +176,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       ])
 
       if (!cancelled) {
-        await loadLocalState()
+        await Promise.all([loadLocalState(), loadWorkspaceData()])
       }
     }
 
@@ -120,7 +196,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       unsubscribeScope()
       debounced.cancel()
     }
-  }, [loadLocalState])
+  }, [loadLocalState, loadWorkspaceData])
 
   const collectionOptions = useMemo(() => buildCollectionOptions(collections), [collections])
   const collectionSummaries = useMemo(
@@ -161,6 +237,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     for (const item of detailItems) {
       const updatedAt = new Date(item.updatedAt)
       const statusState = buildStatusState(item.status)
+      const workspaceSlug = readAssignmentSlug(workspaceAssignments, item.id)
       const row = {
         id: item.id,
         title: item.title,
@@ -173,8 +250,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         dateLabel: buildDateLabel(updatedAt, now),
         isNew: false,
         destinationHref: buildWritingRouteHref("/write", { id: item.id, slug: item.slug }),
-        workspaceSlug: null,
-        workspaceName: null,
+        workspaceSlug,
+        workspaceName: workspaceSlug ? workspaceNameLookup[workspaceSlug] ?? workspaceSlug : null,
       }
 
       if (updatedAt.toDateString() === now.toDateString()) {
@@ -191,7 +268,22 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     }
 
     return groups.filter((group) => group.rows.length > 0)
-  }, [detailItems])
+  }, [detailItems, workspaceAssignments, workspaceNameLookup])
+
+  const previewRows = useMemo<DeskActivityRow[]>(
+    () => detailGroups.flatMap((group) => group.rows),
+    [detailGroups],
+  )
+  const previewIndex = useMemo(() => {
+    if (!previewWritingId) {
+      return null
+    }
+    const index = previewRows.findIndex((row) => row.id === previewWritingId)
+    return index >= 0 ? index : null
+  }, [previewRows, previewWritingId])
+  const visibleWritingIds = useMemo(() => previewRows.map((row) => row.id), [previewRows])
+  const allVisibleSelected =
+    visibleWritingIds.length > 0 && visibleWritingIds.every((id) => selectedIds.has(id))
 
   const createCollection = useCallback(async (name: string) => {
     const ownerId = getLocalDBScope()
@@ -226,6 +318,135 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     },
     [assignments, createCollection],
   )
+
+  const changeWritingStatus = useCallback(async (writingId: string, status: WritingStatus) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted" || writing.status === status) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    await enqueueWritingUpsert({
+      ...writing,
+      status,
+      version: writing.version + 1,
+      updated_at: nowIso,
+      metadata_updated_at: nowIso,
+      local_updated_at: Date.now(),
+    })
+    void getSyncService().scheduleFlush()
+  }, [])
+
+  const changeWritingArtifactType = useCallback(async (writingId: string, artifactType: ArtifactType) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted" || writing.artifact_type === artifactType) {
+      return
+    }
+
+    const nowIso = new Date().toISOString()
+    await enqueueWritingUpsert({
+      ...writing,
+      artifact_type: artifactType,
+      version: writing.version + 1,
+      updated_at: nowIso,
+      metadata_updated_at: nowIso,
+      local_updated_at: Date.now(),
+    })
+    void getSyncService().scheduleFlush()
+  }, [])
+
+  const openWritingPreview = useCallback((writingId: string) => {
+    setPreviewWritingId(writingId)
+  }, [])
+
+  const openFullWriting = useCallback(
+    (writingId: string) => {
+      router.push(buildWritingRouteHref("/write", { id: writingId }))
+    },
+    [router],
+  )
+
+  const saveWritingTitleById = useCallback(
+    async (writingId: string, nextTitle: string) => {
+      const writing = await localDB.writings.get(writingId)
+      if (!writing || writing.sync_status === "deleted") {
+        return
+      }
+      const trimmedTitle = nextTitle.trim() || "Untitled writing"
+      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+        return
+      }
+      await enqueueWritingUpsert({
+        ...writing,
+        title: trimmedTitle,
+        version: writing.version + 1,
+        updated_at: new Date().toISOString(),
+        local_updated_at: Date.now(),
+      })
+    },
+    [],
+  )
+
+  const bulkChangeStatus = useCallback(
+    async (status: WritingStatus) => {
+      for (const writingId of Array.from(selectedIds)) {
+        await changeWritingStatus(writingId, status)
+      }
+    },
+    [changeWritingStatus, selectedIds],
+  )
+
+  const bulkAddToCollection = useCallback(
+    async (collectionId: string) => {
+      for (const writingId of Array.from(selectedIds)) {
+        const currentIds = getWritingCollectionIds(writingId, assignments)
+        if (currentIds.includes(collectionId)) {
+          continue
+        }
+        await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collectionId]))
+      }
+      void getSyncService().scheduleFlush()
+    },
+    [assignments, selectedIds],
+  )
+
+  const bulkCreateCollectionAndAdd = useCallback(
+    async (name: string) => {
+      const collection = await createCollection(name)
+      for (const writingId of Array.from(selectedIds)) {
+        const currentIds = getWritingCollectionIds(writingId, assignments)
+        await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
+      }
+      void getSyncService().scheduleFlush()
+    },
+    [assignments, createCollection, selectedIds],
+  )
+
+  const deleteWriting = useCallback(async (writingId: string) => {
+    await enqueueWritingDelete(writingId)
+  }, [])
+
+  const copyWritingMarkdown = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    await copyTextWithFallback(`${markdown}\n`)
+  }, [])
+
+  const downloadWritingMarkdown = useCallback(async (writingId: string) => {
+    const writing = await localDB.writings.get(writingId)
+    if (!writing || writing.sync_status === "deleted") {
+      return
+    }
+    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    const blob = new Blob([`${markdown}\n`], { type: "text/markdown;charset=utf-8" })
+    downloadBlob(
+      blob,
+      buildMarkdownDownloadName({ title: writing.title, bodyText: writing.body_text, writingId: writing.id }),
+    )
+  }, [])
 
   const openRenameWriting = useCallback(async (writingId: string) => {
     const writing = await localDB.writings.get(writingId)
@@ -399,13 +620,28 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 pb-10 pt-4 md:px-9">
-        <div className="mx-auto w-full max-w-[980px]">
+        <div className="w-full">
           {!isUncategorizedView && !activeCollection ? (
             <p className="font-lora text-[18px] italic text-ink-3">Collection not found.</p>
           ) : detailItems.length === 0 ? (
             <p className="font-lora text-[18px] italic text-ink-3">No writings here yet.</p>
           ) : (
-            <div className="border-t-[0.5px] border-border">
+            <>
+              {hasSelection && (
+                <BulkActionBar
+                  selectedCount={selectedCount}
+                  visibleCount={visibleWritingIds.length}
+                  allVisibleSelected={allVisibleSelected}
+                  onSelectAll={() => selectAll(visibleWritingIds)}
+                  onDeselectAll={deselectAll}
+                  onDelete={() => setIsBulkDeleteOpen(true)}
+                  onStatusChange={bulkChangeStatus}
+                  collectionOptions={collectionOptions}
+                  onAddToCollection={bulkAddToCollection}
+                  onCreateCollection={bulkCreateCollectionAndAdd}
+                />
+              )}
+              <div className="border-t-[0.5px] border-border">
               <DeskActivityTable
                 groups={detailGroups}
                 collectionOptions={collectionOptions}
@@ -418,17 +654,27 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onCreateCollection={async (writingId, name) => {
                   await createCollectionAndAssign(writingId, name)
                 }}
+                onStatusChange={changeWritingStatus}
+                onArtifactTypeChange={changeWritingArtifactType}
+                workspaceOptions={workspaceOptions}
+                workspaceAvailable={workspaceAvailable}
+                onAssignWorkspace={assignWorkspace}
+                onUnassignWorkspace={unassignWorkspace}
+                onCreateWorkspace={createWorkspaceAndAssign}
                 onRenameWriting={openRenameWriting}
-                showDeleteAction={false}
-                renderExtraActions={
+                onPreviewWriting={openWritingPreview}
+                onCopyMarkdown={copyWritingMarkdown}
+                onDownloadMarkdown={downloadWritingMarkdown}
+                onDeleteRequest={deleteWriting}
+                selectedIds={selectedIds}
+                onToggleSelection={toggleSelection}
+                renderExtraMenuItems={
                   isUncategorizedView
                     ? undefined
                     : (row) => (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
+                        <DropdownMenuItem
+                          className="cursor-pointer gap-2 text-[13px]"
+                          onClick={() => {
                             void setLocalWritingCollections(
                               row.id,
                               (getWritingCollectionIds(row.id, assignments) ?? []).filter(
@@ -436,14 +682,15 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                               ),
                             ).then(() => void getSyncService().scheduleFlush())
                           }}
-                          className="inline-flex h-7 items-center rounded-[9px] border-[0.5px] border-border bg-muted/40 px-[10px] text-[11px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                         >
-                          Remove
-                        </button>
+                          <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                          Remove from collection
+                        </DropdownMenuItem>
                       )
                 }
               />
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -484,6 +731,51 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           void saveWritingTitle(nextTitle)
           setRenameWritingTarget(null)
         }}
+      />
+
+      <DeleteWritingDialog
+        open={isBulkDeleteOpen}
+        onOpenChange={setIsBulkDeleteOpen}
+        count={selectedCount}
+        onConfirm={async () => {
+          for (const id of Array.from(selectedIds)) {
+            await enqueueWritingDelete(id)
+          }
+          deselectAll()
+        }}
+      />
+
+      <WritingPreviewModal
+        open={previewWritingId !== null && previewIndex !== null}
+        rows={previewRows}
+        currentIndex={previewIndex}
+        collectionOptions={collectionOptions}
+        collectionIdsByWritingId={Object.fromEntries(
+          detailItems.map((item) => [item.id, getWritingCollectionIds(item.id, assignments)]),
+        )}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewWritingId(null)
+          }
+        }}
+        onIndexChange={(index) => {
+          const nextRow = previewRows[index]
+          if (nextRow) {
+            setPreviewWritingId(nextRow.id)
+          }
+        }}
+        onToggleCollection={toggleWritingCollection}
+        onCreateCollection={createCollectionAndAssign}
+        onStatusChange={changeWritingStatus}
+        onArtifactTypeChange={changeWritingArtifactType}
+        workspaceOptions={workspaceOptions}
+        workspaceAvailable={workspaceAvailable}
+        onAssignWorkspace={assignWorkspace}
+        onUnassignWorkspace={unassignWorkspace}
+        onCreateWorkspace={createWorkspaceAndAssign}
+        onTitleChange={saveWritingTitleById}
+        onOpenFullWriting={openFullWriting}
+        onExportMarkdown={downloadWritingMarkdown}
       />
     </section>
   )

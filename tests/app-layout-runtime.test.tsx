@@ -143,4 +143,25 @@ describe("app/(app)/layout runtime split", () => {
       expect(redirectMock).not.toHaveBeenCalled()
     })
   })
+
+  describe("tauri dev (TAURI_ENV=true)", () => {
+    beforeEach(() => {
+      vi.stubEnv("TAURI_BUILD", "")
+      vi.stubEnv("TAURI_ENV", "true")
+    })
+
+    it("renders DesktopAppShell and never touches cookies or supabase server", async () => {
+      const AppLayout = await loadLayout()
+
+      const element = (await AppLayout({ children: "child" })) as ReactElement
+      expect(element.type).toBe(USER_SETTINGS_MARKER)
+      const shell = (element.props as { children: ReactElement }).children
+      expect(shell.type).toBe(DESKTOP_APP_SHELL_MARKER)
+
+      expect(cookiesMock).not.toHaveBeenCalled()
+      expect(createSupabaseServerMock).not.toHaveBeenCalled()
+      expect(supabaseGetUserMock).not.toHaveBeenCalled()
+      expect(redirectMock).not.toHaveBeenCalled()
+    })
+  })
 })

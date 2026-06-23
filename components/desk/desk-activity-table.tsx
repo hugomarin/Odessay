@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
+import { Bot, Check, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import { DocumentStateIcon } from "@/components/ui/document-state-icon"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
+import { cn } from "@/lib/utils"
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[]
@@ -44,13 +45,24 @@ type DeskActivityTableProps = {
   onDownloadMarkdown?: (writingId: string) => void
   onDeleteRequest?: (id: string) => void
   renderExtraActions?: (row: DeskActivityRow) => ReactNode
+  /** Extra items rendered at the top of the row's "…" actions menu (e.g. "Remove from collection"). */
+  renderExtraMenuItems?: (row: DeskActivityRow) => ReactNode
   showDeleteAction?: boolean
+  /**
+   * Selection wiring for bulk edit. When `onToggleSelection` is provided the table
+   * renders a leading checkbox per row; surfaces that don't pass it (e.g. Collections)
+   * get no selection column. `selectedIds` drives the selected-row styling.
+   */
+  selectedIds?: Set<string>
+  onToggleSelection?: (id: string) => void
+  /** Hide the workspace column on surfaces that don't manage workspace assignment (e.g. Collections). */
+  showWorkspaceColumn?: boolean
 }
 
 /** Stops a cell-level interaction from bubbling up to the row navigation handler. */
 const stopRowNavigation = (event: { stopPropagation: () => void }) => event.stopPropagation()
 
-function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
+export function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType }) {
   const Icon = {
     agent: Bot,
     skill: Wrench,
@@ -79,11 +91,41 @@ export function DeskActivityTable({
   onDownloadMarkdown,
   onDeleteRequest,
   renderExtraActions,
+  renderExtraMenuItems,
   showDeleteAction = true,
+  selectedIds,
+  onToggleSelection,
+  showWorkspaceColumn = true,
 }: DeskActivityTableProps) {
   const router = useRouter()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const { settings } = useUserSettingsContext()
+  const selectionEnabled = Boolean(onToggleSelection)
+  const hasSelection = (selectedIds?.size ?? 0) > 0
+
+  const renderSelection = (row: DeskActivityRow) => {
+    const isRowSelected = selectedIds?.has(row.id) ?? false
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onToggleSelection?.(row.id)
+        }}
+        className={cn(
+          "inline-flex h-4 w-4 items-center justify-center rounded-[4px] border transition-all duration-150",
+          isRowSelected
+            ? "border-ink bg-ink text-bg"
+            : "border-border bg-sb text-transparent hover:border-ink-3",
+          hasSelection ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+        aria-label={isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
+        aria-pressed={isRowSelected}
+      >
+        <Check className="h-3 w-3" strokeWidth={2.2} />
+      </button>
+    )
+  }
 
   const enabledStatuses = useMemo(
     () => WRITING_STATUS_VALUES.filter((status) => !settings.disabledStatuses.includes(status)),
@@ -243,23 +285,30 @@ export function DeskActivityTable({
         align: "end",
         width: "w-14",
         className: "px-4",
-        render: (row) => (
-          <div className="flex items-center justify-end gap-2" onClick={stopRowNavigation}>
-            {renderExtraActions ? <div className="shrink-0">{renderExtraActions(row)}</div> : null}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" aria-label={`Actions for ${row.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
-                  <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" onClick={stopRowNavigation}>
-                {onCopyMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onCopyMarkdown(row.id)}><Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />Copy markdown</DropdownMenuItem> : null}
-                {onDownloadMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onDownloadMarkdown(row.id)}><Download className="h-[12px] w-[12px]" strokeWidth={1.5} />Download markdown</DropdownMenuItem> : null}
-                {showDeleteAction ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />Delete</DropdownMenuItem> : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ),
+        render: (row) => {
+          const extraMenuItems = renderExtraMenuItems?.(row)
+          const hasMenu = Boolean(extraMenuItems || onCopyMarkdown || onDownloadMarkdown || showDeleteAction)
+          return (
+            <div className="flex items-center justify-end gap-2" onClick={stopRowNavigation}>
+              {renderExtraActions ? <div className="shrink-0">{renderExtraActions(row)}</div> : null}
+              {hasMenu ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" aria-label={`Actions for ${row.title}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3">
+                      <MoreHorizontal className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={stopRowNavigation}>
+                    {extraMenuItems}
+                    {onCopyMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onCopyMarkdown(row.id)}><Clipboard className="h-[12px] w-[12px]" strokeWidth={1.5} />Copy markdown</DropdownMenuItem> : null}
+                    {onDownloadMarkdown ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px]" onClick={() => onDownloadMarkdown(row.id)}><Download className="h-[12px] w-[12px]" strokeWidth={1.5} />Download markdown</DropdownMenuItem> : null}
+                    {showDeleteAction ? <DropdownMenuItem className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive" onClick={() => setPendingDeleteId(row.id)}><Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />Delete</DropdownMenuItem> : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
+            </div>
+          )
+        },
       },
     ],
     [
@@ -276,6 +325,7 @@ export function DeskActivityTable({
       onUnassignWorkspace,
       onCreateWorkspace,
       renderExtraActions,
+      renderExtraMenuItems,
       showDeleteAction,
     ],
   )
@@ -316,7 +366,7 @@ export function DeskActivityTable({
       >
         <ArtifactTable
           groups={tableGroups}
-          columns={columns}
+          columns={showWorkspaceColumn ? columns : columns.filter((column) => column.id !== "workspace")}
           getRowId={(row) => row.id}
           getRowHref={(row) => row.destinationHref}
           onRowClick={(row) => {
@@ -327,6 +377,8 @@ export function DeskActivityTable({
           getRowAriaLabel={(row) =>
             row.destinationHref ? `Open writing ${row.title}` : `${row.title} is read-only on Desk`
           }
+          isRowSelected={selectionEnabled ? (row) => selectedIds?.has(row.id) ?? false : undefined}
+          renderLeading={selectionEnabled ? renderSelection : undefined}
           showHeader={false}
         />
       </div>

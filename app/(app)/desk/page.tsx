@@ -136,6 +136,7 @@ export default function DeskPage() {
 
   const {
     selectedIds,
+    toggleSelection,
     selectAll,
     deselectAll,
     hasSelection,
@@ -913,6 +914,8 @@ export default function DeskPage() {
                 await loadDeskActivity()
                 void loadRecipientPreviewsAsync()
               }}
+              selectedIds={selectedIds}
+              onToggleSelection={toggleSelection}
             />
           )}
 

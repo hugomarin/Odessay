@@ -2,6 +2,7 @@ import { notFound, permanentRedirect, redirect } from "next/navigation"
 import { EditorShell } from "@/components/editor/editor-shell"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { isTauriRuntimeServer } from "@/lib/runtime/detect-server"
 import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
 import { resolveWriteDetailRoute } from "@/lib/writings/write-detail-route"
 
@@ -11,7 +12,7 @@ type WriteDetailPageProps = {
 
 const WRITING_SELECT =
   "id, title, slug, body_json, body_text, updated_at, author_id, visibility, deleted_at, status, version, sync_status, parent_id, correspondence_id"
-const isTauriBuild = process.env.TAURI_BUILD === "true"
+const isTauriRuntime = isTauriRuntimeServer()
 
 const resolveOwnedWriting = async (userId: string, identifier: string) => {
   const admin = createAdminClient()
@@ -69,7 +70,7 @@ async function WebWriteDetailPage({ params }: WriteDetailPageProps) {
   return <EditorShell key={routeResolution.writingId} writingId={routeResolution.writingId} />
 }
 
-export default isTauriBuild ? DesktopWriteDetailPage : WebWriteDetailPage
+export default isTauriRuntime ? DesktopWriteDetailPage : WebWriteDetailPage
 
 export function generateStaticParams() {
   return [{ id: "placeholder" }]
