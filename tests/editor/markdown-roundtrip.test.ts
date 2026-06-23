@@ -103,4 +103,26 @@ Body text here.`
     expect(serialized).toEqual({ success: true, markdown: source })
     expect(engine.validateRoundTrip(source)).toEqual({ ok: true })
   })
+
+  it("preserves folded YAML frontmatter through the desktop save path", () => {
+    const source = `---
+name: pm-orchestrator
+description: >
+  Garante del flujo de planeación del Planning Harness. Recibe una intención (crear épica,
+  crear issue, validar issue, aprender) y responde por que se convierta en el resultado que su
+  flujo define: arranca la cadena, lanza cada subagente siguiendo el ruteo del Refiner, la
+  monitorea vía el estado, y cierra (presenta al usuario y crea en Linear con su aprobación).
+  El contenido lo producen el Refiner, los especialistas y el Planning Auditor.
+tools: Read, Glob, Grep, Write, Edit, Task, Skill, Linear
+model: inherit
+---
+`
+
+    const parsed = engine.sourceToRich(source)
+    expect(parsed).toMatchObject({ success: true })
+    if (!parsed.success) return
+
+    const saved = engine.serializeBodyJson(parsed.snapshot.bodyJson)
+    expect(saved).toEqual({ success: true, markdown: source.trimEnd() })
+  })
 })

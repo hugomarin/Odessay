@@ -1295,11 +1295,19 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         // Load JSON first to get the markdown serialization, then re-parse as markdown
         // so that footnote references are converted to footnoteReference nodes.
         editor.commands.setContent(localWriting.body_json)
-        const loadedMarkdown = normalizeMarkdownForRoundTrip(
-          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor))
-        )
+        const serialized = isDesktopRuntime()
+          ? desktopDocumentEngine.richToSource(editor)
+          : null
+        const loadedMarkdown = serialized?.success
+          ? serialized.markdown
+          : normalizeMarkdownForRoundTrip(
+              getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+            )
         if (loadedMarkdown) {
-          editor.commands.setContent(materializeMarkdownForRichParser(loadedMarkdown))
+          const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(loadedMarkdown) : null
+          editor.commands.setContent(
+            parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(loadedMarkdown),
+          )
         }
         isApplyingContentRef.current = false
         setPersistedCorrectionBlocks(localCorrectionBlocks)
@@ -2560,11 +2568,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           bodyMarkdown = getEditorMarkdown(editor)
         }
         const footnoteNodes = getEditorFootnotes(editor)
-        setMarkdownValue(normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)))
+        setMarkdownValue(
+          isDesktopRuntime()
+            ? bodyMarkdown
+            : normalizeMarkdownForRoundTrip(getMarkdownWithFootnoteDefinitions(bodyMarkdown, footnoteNodes)),
+        )
         return
       }
 
-      const normalizedMarkdown = normalizeMarkdownForRoundTrip(markdownValue)
+      const normalizedMarkdown = isDesktopRuntime()
+        ? markdownValue
+        : normalizeMarkdownForRoundTrip(markdownValue)
       modeRef.current = "rich"
       isApplyingContentRef.current = true
       if (isDesktopRuntime()) {
@@ -2609,7 +2623,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
 
         isApplyingContentRef.current = true
-        editor.commands.setContent(materializeMarkdownForRichParser(normalizedMarkdown))
+        const parsed = isDesktopRuntime() ? desktopDocumentEngine.sourceToRich(normalizedMarkdown) : null
+        editor.commands.setContent(
+          parsed?.success ? parsed.snapshot.bodyJson : materializeMarkdownForRichParser(normalizedMarkdown),
+        )
         isApplyingContentRef.current = false
         // Update metrics from TipTap but do NOT derive markdownValue from it —
         // TipTap serializes table nodes as HTML, which would overwrite GFM textarea content.
@@ -4148,11 +4165,16 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
   const getBodyMarkdown = useCallback(() => {
     if (!editor) return null
-    return modeRef.current === "markdown"
-      ? markdownValue
-      : normalizeMarkdownForRoundTrip(
-          getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
-        )
+    if (modeRef.current === "markdown") return markdownValue
+
+    if (isDesktopRuntime()) {
+      const result = desktopDocumentEngine.richToSource(editor)
+      if (result.success) return result.markdown
+    }
+
+    return normalizeMarkdownForRoundTrip(
+      getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
+    )
   }, [editor, markdownValue])
 
   const handleGetSaveContent = useCallback(() => {
