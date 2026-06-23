@@ -114,6 +114,7 @@ Quitar el `id` del frontmatter (D4) elimina lo único que hoy hace portable la i
 ## Pendientes
 
 - **(Runtime)** ✅ Resuelto en ODE-293 (PR #262): conteo real sobre workspaces locales vía scripts/identity/count-id-conflicts.mjs. Resultado: 80 docs, 15 con frontmatter.id, 80 con index.id, 15 conflictos, 0 sin ningún id, 4 índices legacy .odyssey/index.json cargados.
+- **(Runtime D4)** ✅ Resuelto en ODE-322: se removió `parseCanonicalFrontmatter`; el runtime nunca interpreta frontmatter como casillero de metadata de Odessay y lo round-trippea siempre como contenido.
 
 ## Regla de gobernanza
 

@@ -87,11 +87,18 @@ export const FrontmatterNode = Node.create({
   },
 
   parseHTML() {
-    return [{ tag: "odessay-frontmatter" }]
+    return [
+      { tag: "odessay-frontmatter" },
+      { tag: 'pre[data-frontmatter="true"]' },
+    ]
   },
 
-  renderHTML({ HTMLAttributes }) {
-    return ["odessay-frontmatter", mergeAttributes(HTMLAttributes)]
+  renderHTML({ HTMLAttributes, node }) {
+    return [
+      "pre",
+      mergeAttributes(HTMLAttributes, { "data-frontmatter": "true" }),
+      frontmatterToMarkdown(String(node.attrs.raw ?? "")),
+    ]
   },
 
   renderText({ node }) {

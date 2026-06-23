@@ -336,7 +336,7 @@ Body from markdown truth.`)
       expect.objectContaining({
         id: "writing-1",
         slug: null,
-        body_text: "Canonical title\nBody from markdown truth.",
+        body_text: expect.stringContaining("id: writing-1"),
         version: 2,
         updated_at: "2026-06-02T00:00:00.000Z",
       }),
