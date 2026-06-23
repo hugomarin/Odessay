@@ -204,6 +204,46 @@
     line-height: 1.85;
   }
 
+  .odessay-editor-content .odessay-frontmatter {
+    background: hsl(var(--muted) / 0.55);
+    border: 0.5px solid hsl(var(--border));
+    border-radius: 8px;
+    color: hsl(var(--ink-2));
+    font-family: var(--od-font-ui);
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0 0 1.5em;
+    max-width: 100%;
+    overflow: auto;
+    padding: 12px 14px;
+  }
+
+  .odessay-editor-content .odessay-frontmatter-list {
+    display: grid;
+    grid-template-columns: minmax(7rem, max-content) minmax(0, 1fr);
+    margin: 0;
+  }
+
+  .odessay-editor-content .odessay-frontmatter-list dt {
+    color: hsl(var(--ink-3));
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    padding-right: 18px;
+  }
+
+  .odessay-editor-content .odessay-frontmatter-list dd {
+    margin: 0;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .odessay-editor-content .odessay-frontmatter-raw {
+    font: inherit;
+    margin: 0;
+    white-space: pre-wrap;
+  }
+
   .odessay-markdown-source {
     caret-color: hsl(190 100% 50%);
     color: transparent;
