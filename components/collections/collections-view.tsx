@@ -7,6 +7,10 @@ import { Pencil, Plus, Trash2, X } from "lucide-react"
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu"
 import { CollectionCreateDialog } from "@/components/collections/collection-create-dialog"
 import { DeskActivityTable } from "@/components/desk/desk-activity-table"
+import { BulkActionBar } from "@/components/desk/bulk-action-bar"
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
+import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   buildCollectionDetailItems,
@@ -32,8 +36,8 @@ import {
 } from "@/lib/local-db"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
-import type { DeskActivityGroup, DeskStatusTone } from "@/lib/queries/desk-activity"
-import { enqueueWritingUpsert } from "@/lib/sync/queue"
+import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/queries/desk-activity"
+import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { getSyncService } from "@/lib/sync"
 import { getWritingStatusLabel, normalizeWritingStatus } from "@/lib/writings/status"
 import type { WritingStatus } from "@/lib/writings/status"
@@ -89,6 +93,10 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   const [renameWritingTarget, setRenameWritingTarget] = useState<RenameTarget | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [isRenaming, setIsRenaming] = useState(false)
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null)
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const { selectedIds, toggleSelection, selectAll, deselectAll, hasSelection, selectedCount } =
+    useWritingSelection()
   const [workspaceOptions, setWorkspaceOptions] = useState<WorkspaceAssignmentOption[]>([])
   const [workspaceAssignments, setWorkspaceAssignments] = useState<WorkspaceAssignmentMap>({})
   const [workspaceAvailable, setWorkspaceAvailable] = useState(false)
@@ -262,6 +270,21 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     return groups.filter((group) => group.rows.length > 0)
   }, [detailItems, workspaceAssignments, workspaceNameLookup])
 
+  const previewRows = useMemo<DeskActivityRow[]>(
+    () => detailGroups.flatMap((group) => group.rows),
+    [detailGroups],
+  )
+  const previewIndex = useMemo(() => {
+    if (!previewWritingId) {
+      return null
+    }
+    const index = previewRows.findIndex((row) => row.id === previewWritingId)
+    return index >= 0 ? index : null
+  }, [previewRows, previewWritingId])
+  const visibleWritingIds = useMemo(() => previewRows.map((row) => row.id), [previewRows])
+  const allVisibleSelected =
+    visibleWritingIds.length > 0 && visibleWritingIds.every((id) => selectedIds.has(id))
+
   const createCollection = useCallback(async (name: string) => {
     const ownerId = getLocalDBScope()
     const collection = await createLocalCollection({
@@ -330,6 +353,77 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       local_updated_at: Date.now(),
     })
     void getSyncService().scheduleFlush()
+  }, [])
+
+  const openWritingPreview = useCallback((writingId: string) => {
+    setPreviewWritingId(writingId)
+  }, [])
+
+  const openFullWriting = useCallback(
+    (writingId: string) => {
+      router.push(buildWritingRouteHref("/write", { id: writingId }))
+    },
+    [router],
+  )
+
+  const saveWritingTitleById = useCallback(
+    async (writingId: string, nextTitle: string) => {
+      const writing = await localDB.writings.get(writingId)
+      if (!writing || writing.sync_status === "deleted") {
+        return
+      }
+      const trimmedTitle = nextTitle.trim() || "Untitled writing"
+      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+        return
+      }
+      await enqueueWritingUpsert({
+        ...writing,
+        title: trimmedTitle,
+        version: writing.version + 1,
+        updated_at: new Date().toISOString(),
+        local_updated_at: Date.now(),
+      })
+    },
+    [],
+  )
+
+  const bulkChangeStatus = useCallback(
+    async (status: WritingStatus) => {
+      for (const writingId of Array.from(selectedIds)) {
+        await changeWritingStatus(writingId, status)
+      }
+    },
+    [changeWritingStatus, selectedIds],
+  )
+
+  const bulkAddToCollection = useCallback(
+    async (collectionId: string) => {
+      for (const writingId of Array.from(selectedIds)) {
+        const currentIds = getWritingCollectionIds(writingId, assignments)
+        if (currentIds.includes(collectionId)) {
+          continue
+        }
+        await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collectionId]))
+      }
+      void getSyncService().scheduleFlush()
+    },
+    [assignments, selectedIds],
+  )
+
+  const bulkCreateCollectionAndAdd = useCallback(
+    async (name: string) => {
+      const collection = await createCollection(name)
+      for (const writingId of Array.from(selectedIds)) {
+        const currentIds = getWritingCollectionIds(writingId, assignments)
+        await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
+      }
+      void getSyncService().scheduleFlush()
+    },
+    [assignments, createCollection, selectedIds],
+  )
+
+  const deleteWriting = useCallback(async (writingId: string) => {
+    await enqueueWritingDelete(writingId)
   }, [])
 
   const copyWritingMarkdown = useCallback(async (writingId: string) => {
@@ -532,7 +626,22 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           ) : detailItems.length === 0 ? (
             <p className="font-lora text-[18px] italic text-ink-3">No writings here yet.</p>
           ) : (
-            <div className="border-t-[0.5px] border-border">
+            <>
+              {hasSelection && (
+                <BulkActionBar
+                  selectedCount={selectedCount}
+                  visibleCount={visibleWritingIds.length}
+                  allVisibleSelected={allVisibleSelected}
+                  onSelectAll={() => selectAll(visibleWritingIds)}
+                  onDeselectAll={deselectAll}
+                  onDelete={() => setIsBulkDeleteOpen(true)}
+                  onStatusChange={bulkChangeStatus}
+                  collectionOptions={collectionOptions}
+                  onAddToCollection={bulkAddToCollection}
+                  onCreateCollection={bulkCreateCollectionAndAdd}
+                />
+              )}
+              <div className="border-t-[0.5px] border-border">
               <DeskActivityTable
                 groups={detailGroups}
                 collectionOptions={collectionOptions}
@@ -553,9 +662,12 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 onUnassignWorkspace={unassignWorkspace}
                 onCreateWorkspace={createWorkspaceAndAssign}
                 onRenameWriting={openRenameWriting}
+                onPreviewWriting={openWritingPreview}
                 onCopyMarkdown={copyWritingMarkdown}
                 onDownloadMarkdown={downloadWritingMarkdown}
-                showDeleteAction={false}
+                onDeleteRequest={deleteWriting}
+                selectedIds={selectedIds}
+                onToggleSelection={toggleSelection}
                 renderExtraMenuItems={
                   isUncategorizedView
                     ? undefined
@@ -577,7 +689,8 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                       )
                 }
               />
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -618,6 +731,51 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
           void saveWritingTitle(nextTitle)
           setRenameWritingTarget(null)
         }}
+      />
+
+      <DeleteWritingDialog
+        open={isBulkDeleteOpen}
+        onOpenChange={setIsBulkDeleteOpen}
+        count={selectedCount}
+        onConfirm={async () => {
+          for (const id of Array.from(selectedIds)) {
+            await enqueueWritingDelete(id)
+          }
+          deselectAll()
+        }}
+      />
+
+      <WritingPreviewModal
+        open={previewWritingId !== null && previewIndex !== null}
+        rows={previewRows}
+        currentIndex={previewIndex}
+        collectionOptions={collectionOptions}
+        collectionIdsByWritingId={Object.fromEntries(
+          detailItems.map((item) => [item.id, getWritingCollectionIds(item.id, assignments)]),
+        )}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPreviewWritingId(null)
+          }
+        }}
+        onIndexChange={(index) => {
+          const nextRow = previewRows[index]
+          if (nextRow) {
+            setPreviewWritingId(nextRow.id)
+          }
+        }}
+        onToggleCollection={toggleWritingCollection}
+        onCreateCollection={createCollectionAndAssign}
+        onStatusChange={changeWritingStatus}
+        onArtifactTypeChange={changeWritingArtifactType}
+        workspaceOptions={workspaceOptions}
+        workspaceAvailable={workspaceAvailable}
+        onAssignWorkspace={assignWorkspace}
+        onUnassignWorkspace={unassignWorkspace}
+        onCreateWorkspace={createWorkspaceAndAssign}
+        onTitleChange={saveWritingTitleById}
+        onOpenFullWriting={openFullWriting}
+        onExportMarkdown={downloadWritingMarkdown}
       />
     </section>
   )
