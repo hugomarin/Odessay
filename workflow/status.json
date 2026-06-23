@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "fix(library): restore Desk multi-select and align Collections table to Desk reference; add server-side runtime detection fix for tauri dev. Restores selectedIds/onToggleSelection wiring in DeskActivityTable, enables BulkActionBar in Desk, aligns Collections detail (full width, functional status/artifact controls, preview modal, bulk actions, delete). Adds lib/runtime/detect-server.ts and updates tauri.conf.json beforeDevCommand so server-side branches use TAURI_ENV in tauri dev, preventing /login redirects. [ODE-321]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-321",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-321/fix-table-v2-regressions-restore-desk-multi-select-and-align",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/287",
+      "commit": "b520371",
+      "date": "2026-06-23",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (128 files / 806 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (reactive fan-out covered by existing debounce). Workspace full functionality moved to a follow-up issue per owner decision; Desk and Collections outcomes accepted. Review score: 8.5/10."
+    },
+    {
       "what": "feat(editor): preserve foreign non-Odessay front-matter as a round-trip-safe, read-only Rich editor node. The raw YAML remains verbatim through Markdown ⇄ Rich conversion while Rich renders key:value rows; canonical Odessay front-matter with id remains extracted from the document body. [ODE-322]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-322",
