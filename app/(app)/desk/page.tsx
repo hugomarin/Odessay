@@ -851,6 +851,11 @@ export default function DeskPage() {
                   await changeWritingStatus(writingId, status)
                 }
               }}
+              onArtifactTypeChange={async (artifactType) => {
+                for (const writingId of Array.from(selectedIds)) {
+                  await changeWritingArtifactType(writingId, artifactType)
+                }
+              }}
               collectionOptions={collectionOptions}
               onAddToCollection={async (collectionId) => {
                 for (const writingId of Array.from(selectedIds)) {
