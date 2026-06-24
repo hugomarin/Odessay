@@ -122,6 +122,11 @@ import {
   getDocumentService,
   importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
+import {
+  filenameToTitle,
+  titleToFilename,
+  UNTITLED_DOCUMENT_NAME,
+} from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
@@ -245,6 +250,7 @@ const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled writing"
+const DESKTOP_UNTITLED_WRITING_TITLE = UNTITLED_DOCUMENT_NAME
 
 function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
   const text = bodyText.trim()
@@ -591,7 +597,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const nextTitle =
         overrideTitle && overrideTitle.length > 0
           ? overrideTitle
-          : hasExplicitTitleRef.current
+          : isDesktopRuntime()
+            ? titleRef.current.trim() || DESKTOP_UNTITLED_WRITING_TITLE
+            : hasExplicitTitleRef.current
             ? titleRef.current.trim() || UNTITLED_WRITING_TITLE
             : nextDerivedTitle
 
@@ -1042,7 +1050,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     const ensureIdentity = async () => {
       const { writingId: nextId } = createBlankDraftIdentity()
       const nowIso = new Date().toISOString()
-      const nextTitle = deriveAutoTitle("", nowIso)
+      const nextTitle = isDesktopRuntime()
+        ? DESKTOP_UNTITLED_WRITING_TITLE
+        : deriveAutoTitle("", nowIso)
 
       try {
         if (isDesktopRuntime()) {
@@ -3896,7 +3906,23 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [])
 
   const handleRenameWritingConfirm = useCallback(
-    (nextTitle: string) => {
+    async (nextTitle: string) => {
+      if (isDesktopRuntime()) {
+        const writingId = currentWritingIdRef.current
+        if (!writingId) return
+
+        const result = await (await getDocumentService()).renameWriting({
+          writingId,
+          title: nextTitle,
+          updatedAt: new Date().toISOString(),
+        })
+        if (result.error || !result.data) return
+
+        setTitle(result.data.title ?? nextTitle)
+        setHasExplicitTitle((result.data.title ?? nextTitle) !== UNTITLED_WRITING_TITLE)
+        return
+      }
+
       setTitle(nextTitle)
       setHasExplicitTitle(nextTitle !== UNTITLED_WRITING_TITLE)
 
@@ -3923,7 +3949,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
     const nowIso = new Date().toISOString()
     const nextWritingId = createWritingId()
-    const nextTitle = deriveAutoTitle("", nowIso)
+    const nextTitle = isDesktopRuntime()
+      ? DESKTOP_UNTITLED_WRITING_TITLE
+      : deriveAutoTitle("", nowIso)
 
     // Claim ownership of the blank-draft -> identified-local-writing transition
     // synchronously so persistEditorSnapshot never races against it.
@@ -4067,7 +4095,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const parseResult = desktopDocumentEngine.sourceToRich(content)
       const bodyJson = parseResult.success ? parseResult.snapshot.bodyJson : EMPTY_EDITOR_JSON
       const bodyText = parseResult.success ? parseResult.snapshot.bodyText : ""
-      const nextTitle = deriveAutoTitle(bodyText, nowIso)
+      const nextTitle = isDesktopRuntime()
+        ? _path.split("/").pop()?.replace(/\.md$/i, "") || DESKTOP_UNTITLED_WRITING_TITLE
+        : deriveAutoTitle(bodyText, nowIso)
 
       const record: WritingRecord = {
         id: nextWritingId,
@@ -4102,6 +4132,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           currentWritingIdRef.current = result.data.id
           setCurrentWritingId(result.data.id)
           setHydrationWritingId(result.data.id)
+          setTitle(result.data.title ?? nextTitle)
         } else {
           await (await getDocumentService()).saveWriting({ writing: record })
         }
@@ -4114,7 +4145,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setHydrationWritingId(currentWritingIdRef.current)
       openWritingTab({
         writingId: currentWritingIdRef.current,
-        title: nextTitle,
+        title: isDesktopRuntime() ? titleRef.current || nextTitle : nextTitle,
         saveState: "saved-local",
         hasPendingSync: false,
       })
@@ -4134,6 +4165,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (!writingId || !isDesktopRuntime()) return
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
     await relocateDesktopWriting(writingId, path)
+    const filenameTitle = filenameToTitle(path)
+    setTitle(filenameTitle)
+    setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
     currentCanonicalPathRef.current = path
     setExternalFileNotice(null)
   }, [])
@@ -4148,6 +4182,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         writingId: currentWritingId ?? "draft",
       }),
     [bodyText, currentWritingId, displayTitle],
+  )
+
+  // Save As creates a canonical desktop document, not an export. It must retain
+  // the human filename, whereas exports intentionally use a portable slug.
+  const desktopSaveFileBaseName = useMemo(
+    () => titleToFilename(displayTitle, ""),
+    [displayTitle],
   )
 
   const getBodyMarkdown = useCallback(() => {
@@ -4167,8 +4208,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const handleGetSaveContent = useCallback(() => {
     const content = getBodyMarkdown()
     if (content === null) return null
-    return { content: `${content.trimEnd()}\n`, defaultName: exportFileBaseName }
-  }, [getBodyMarkdown, exportFileBaseName])
+    return {
+      content: `${content.trimEnd()}\n`,
+      defaultName: isDesktopRuntime() ? desktopSaveFileBaseName : exportFileBaseName,
+    }
+  }, [desktopSaveFileBaseName, exportFileBaseName, getBodyMarkdown])
 
   useTauriMenuEvents({
     onOpenFile: handleMenuOpenFile,

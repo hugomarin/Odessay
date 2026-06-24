@@ -11,6 +11,14 @@ import {
   type WorkspaceAssignmentMap,
 } from "@/lib/workspace/assignment"
 
+const tauriMocks = vi.hoisted(() => ({
+  tauriCreateFile: vi.fn(),
+  tauriOpenFile: vi.fn(),
+  tauriWriteFile: vi.fn(),
+  tauriWorkspaceCreate: vi.fn(),
+  tauriWorkspaceSync: vi.fn(),
+}))
+
 // The desktop workspace service imports Tauri + local-db modules at the top
 // level. Stub them so the assignment methods (which only touch the injected
 // settings service) can be exercised in isolation.
@@ -29,15 +37,15 @@ vi.mock("@/lib/services/desktop/tauri-fs-watch", () => ({
   watchFsPaths: vi.fn(),
 }))
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
-  tauriCreateFile: vi.fn(),
-  tauriOpenFile: vi.fn(),
-  tauriWriteFile: vi.fn(),
-  tauriWorkspaceCreate: vi.fn(),
-  tauriWorkspaceSync: vi.fn(),
+  tauriCreateFile: tauriMocks.tauriCreateFile,
+  tauriOpenFile: tauriMocks.tauriOpenFile,
+  tauriWriteFile: tauriMocks.tauriWriteFile,
+  tauriWorkspaceCreate: tauriMocks.tauriWorkspaceCreate,
+  tauriWorkspaceSync: tauriMocks.tauriWorkspaceSync,
 }))
 
 import { DesktopWorkspaceService } from "@/lib/services/desktop/workspace-service"
-import type { WorkspaceRecord } from "@/lib/workspace/types"
+import type { WorkspaceDetail, WorkspaceRecord } from "@/lib/workspace/types"
 
 describe("workspace assignment helpers", () => {
   it("reads the assigned slug, treating empty values as unassigned", () => {
@@ -110,6 +118,11 @@ describe("DesktopWorkspaceService assignments", () => {
   let service: DesktopWorkspaceService
 
   beforeEach(() => {
+    tauriMocks.tauriCreateFile.mockReset()
+    tauriMocks.tauriOpenFile.mockReset()
+    tauriMocks.tauriWriteFile.mockReset()
+    tauriMocks.tauriWorkspaceCreate.mockReset()
+    tauriMocks.tauriWorkspaceSync.mockReset()
     settings = createFakeSettingsService({
       workspaces: [record("drafts", "Drafts"), record("letters", "Letters")],
     })
@@ -154,5 +167,31 @@ describe("DesktopWorkspaceService assignments", () => {
     expect(await service.getAssignment("writing-1")).toBeNull()
     expect(await service.getAssignment("writing-2")).toBe("letters")
     expect(await service.listAssignments()).toEqual({ "writing-2": "letters" })
+  })
+
+  it("keeps hyphens and underscores in a workspace filename-derived title", async () => {
+    const path = "/Users/me/drafts/my-file_name.md"
+    const workspace: WorkspaceDetail = {
+      ...record("drafts", "Drafts"),
+      selectedPaths: [],
+      status: "ready",
+      missingReason: null,
+      fileCount: 0,
+      folderCount: 0,
+      updatedAt: null,
+      files: [],
+    }
+    tauriMocks.tauriWorkspaceSync.mockResolvedValue({
+      selectedPaths: [],
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: Date.now(),
+      files: [{ id: path, path, relativePath: "my-file_name.md", name: "my-file_name.md", modifiedAt: Date.now(), size: 0, inode: 1 }],
+    })
+
+    await service.createFile(workspace, "my-file_name")
+
+    expect(tauriMocks.tauriCreateFile).toHaveBeenCalledWith("/Users/me/drafts", "my-file_name.md")
+    expect(tauriMocks.tauriWriteFile).toHaveBeenCalledWith(path, "# my-file_name\n\n")
   })
 })

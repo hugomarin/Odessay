@@ -93,6 +93,8 @@ SaveWriting
 
 **4. IndexedDB + cola después del `.md`.** Tras el archivo, `DesktopDocumentService.saveWriting()` construye `LocalWriting` con `canonical_path`, `body_json` derivado y lifecycle local; luego llama `enqueueWritingUpsert()` (`lib/services/document-service-factory.ts:346-362`). Esa función guarda el writing en IndexedDB con `sync_status: "pending"` y después encola la mutación (`lib/sync/queue.ts:67-74`).
 
+**Nombre simétrico en push (ODE-324).** Cuando una mutación desktop tiene `canonical_path`, el worker relee el `.md` antes de subir y deriva `title` del basename de esa ruta, junto con `body_json`, `body_text` y `content_hash`. Así un rename en Finder o un cache histórico no puede subir un título distinto del filename; el push corrige nube e IndexedDB sin renombrar el archivo.
+
 **5. Supabase en background.** La mutación contiene `content_hash` BLAKE3 calculado desde el Markdown canónico serializado (`lib/sync/queue.ts:22-42`, `lib/content-hash.ts:7-18`). El worker procesa la cola por transporte HTTP actual (`lib/sync/worker.ts:66-77`) y marca la mutación como synced solo después de respuesta remota exitosa (`lib/sync/worker.ts:275-306`). El endpoint cloud valida `content_hash` y hace update-or-insert en `writings` (`app/api/writings/[id]/route.ts:9-25`, `app/api/writings/[id]/route.ts:117-206`).
 
 ### Manejo de fallas por etapa

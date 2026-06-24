@@ -12,6 +12,12 @@ import type {
   WritingSummary,
 } from "@/lib/services/contracts/document-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
+import {
+  filenameToTitle,
+  resolveUniqueFilename,
+  titleToFilename,
+  UNTITLED_DOCUMENT_NAME,
+} from "@/lib/desktop/document-naming"
 import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization"
 import { renderWritingToDocxBytes } from "@/lib/export/to-docx"
 import { renderWritingToPdfBytes } from "@/lib/export/to-pdf"
@@ -44,34 +50,12 @@ function isoToMs(iso: string): number {
   return new Date(iso).getTime()
 }
 
-function slugify(title: string): string {
-  return title
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80) || "untitled"
-}
-
-function extractTitle(markdown: string, fallback: string): string {
-  const match = markdown.match(/^#\s+(.+)$/m)
-  return match ? match[1].trim() : fallback
-}
-
 function extractPlainText(markdown: string): string {
   return markdown
     .replace(/^#{1,6}\s+/gm, "")
     .replace(/[*_`~]+/g, "")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/\n{2,}/g, " ")
-    .trim()
-}
-
-function filenameToTitle(filename: string): string {
-  return filename
-    .replace(/\.md$/, "")
-    .replace(/[-_]+/g, " ")
     .trim()
 }
 
@@ -134,13 +118,16 @@ export type CreateDraftResult = {
  * Desktop adapter for DocumentService.
  *
  * Uses the file path as the storage address.
- * .md files on disk are the source of truth — no Supabase, no IndexedDB,
- * no auth required. The configured writingsDir is only the default location
- * for app-created drafts and directory-list fallback, not an ownership boundary.
+ * .md files on disk are the source of truth for content — no Supabase, no
+ * IndexedDB, no auth required. The filename (stem) is the source of truth for
+ * the document name; `title` in caches/cloud reflects it (ODE-324).
+ * The configured writingsDir is only the default location for app-created drafts
+ * and directory-list fallback, not an ownership boundary.
  *
- * Invariants (Architecture Contract §ODE-208):
+ * Invariants (Architecture Contract §ODE-208 / ODE-324):
  *  - Implements DocumentService without redefining the contract.
- *  - .md on disk is the source of truth; no cache can be more authoritative.
+ *  - .md on disk is the source of truth for content; the filename is the source
+ *    of truth for the document name.
  *  - May depend on Tauri invoke but not on Next.js, Supabase, cookies, or /api/*.
  *  - Write-path: UI → saveWriting() → tauriWriteFile() → .md on disk.
  *  - Auth and sync failures must never block the local save.
@@ -229,16 +216,22 @@ export class FilesystemDocumentService implements DocumentService {
   /**
    * Create a new .md file in the default draft directory and return a WritingRecord.
    * writingId = absolute file path.
+   *
+   * The filename is derived from the human title. Collisions are resolved in
+   * TypeScript ("Nombre.md" → "Nombre 2.md") before invoking Rust, because
+   * `rename_file` can overwrite silently.
    */
   async createDraft(title?: string): Promise<ServiceResponse<CreateDraftResult>> {
-    const displayTitle = title ?? "Untitled"
-    const slug = slugify(displayTitle)
-    const timestamp = Date.now()
-    const filename = `${slug}-${timestamp}.md`
+    const displayTitle = title ?? UNTITLED_DOCUMENT_NAME
     const initialContent = title ? `# ${title}\n\n` : ""
 
     try {
+      const existing = await this.listDirectoryFilenames(this.writingsDir)
+      const desiredFilename = titleToFilename(displayTitle)
+      const filename = resolveUniqueFilename(desiredFilename, existing)
+
       const path = await tauriCreateFile(this.writingsDir, filename)
+      const effectiveTitle = filenameToTitle(path)
       if (initialContent) {
         await tauriWriteFile(path, initialContent)
       }
@@ -246,7 +239,7 @@ export class FilesystemDocumentService implements DocumentService {
       const writing: WritingRecord = {
         id: path,
         authorId: null,
-        title: displayTitle,
+        title: effectiveTitle,
         content: {
           markdown: initialContent,
           richText: null,
@@ -268,6 +261,15 @@ export class FilesystemDocumentService implements DocumentService {
       return ok({ path, writing })
     } catch (e) {
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to create draft")
+    }
+  }
+
+  private async listDirectoryFilenames(dir: string): Promise<string[]> {
+    try {
+      const files = await tauriListRecentFiles(dir, 10_000)
+      return files.map((meta) => meta.path.split("/").pop() ?? meta.name)
+    } catch {
+      return []
     }
   }
 
@@ -296,12 +298,13 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Open a .md file by its absolute path (writingId = path).
+   * The document title is the filename stem (ODE-324), not a heading inside the body.
    */
   async openWriting(writingId: string): Promise<ServiceResponse<WritingRecord>> {
     try {
       const markdown = await tauriOpenFile(writingId)
       const filename = writingId.split("/").pop() ?? writingId
-      const title = extractTitle(markdown, filenameToTitle(filename))
+      const title = filenameToTitle(filename)
       const plainText = extractPlainText(markdown)
       const now = isoNow()
       const writing: WritingRecord = {
@@ -355,7 +358,8 @@ export class FilesystemDocumentService implements DocumentService {
   }
 
   /**
-   * Rename the .md file to a slug derived from the new title.
+   * Rename the .md file to a filename derived from the new human title.
+   * Collisions are resolved in TypeScript before invoking Rust.
    */
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     const { writingId, title } = input
@@ -364,9 +368,18 @@ export class FilesystemDocumentService implements DocumentService {
     }
     try {
       const dir = writingId.split("/").slice(0, -1).join("/")
-      const timestamp = Date.now()
-      const newFilename = `${slugify(title)}-${timestamp}.md`
+      const currentFilename = writingId.split("/").pop() ?? ""
+      const existing = (await this.listDirectoryFilenames(dir)).filter(
+        (filename) => filename.toLowerCase() !== currentFilename.toLowerCase(),
+      )
+      const desiredFilename = titleToFilename(title)
+      const newFilename = resolveUniqueFilename(desiredFilename, existing)
       const newPath = `${dir}/${newFilename}`
+
+      if (newPath === writingId) {
+        return this.openWriting(writingId)
+      }
+
       const resolvedNewPath = await tauriRenameFile(writingId, newPath)
 
       const markdown = await tauriOpenFile(resolvedNewPath)
@@ -374,7 +387,7 @@ export class FilesystemDocumentService implements DocumentService {
       const renamedRecord: WritingRecord = {
         id: resolvedNewPath,
         authorId: null,
-        title,
+        title: filenameToTitle(resolvedNewPath),
         content: {
           markdown,
           richText: null,
@@ -463,7 +476,7 @@ export class FilesystemDocumentService implements DocumentService {
       const parsed = parseDocumentFileToSnapshot(markdown)
       const document = buildWritingExportDocument(parsed.snapshot.bodyJson)
       const filename = input.writingId.split("/").pop()?.replace(/\.md$/, "") ?? "export"
-      const title = extractTitle(parsed.markdown, filename)
+      const title = filenameToTitle(filename)
 
       const bytes =
         input.format === "pdf"

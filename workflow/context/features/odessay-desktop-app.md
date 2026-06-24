@@ -77,6 +77,10 @@ Esto implica:
 - JSON de ProseMirror no es la fuente de verdad persistida.
 - Caches, índices, previews o materializaciones ricas son derivados re-generables.
 
+### Nombre del documento
+
+El filename es el nombre humano canónico del documento desktop. Su stem se muestra como `title` sin normalizar guiones, mayúsculas, acentos ni espacios. Al crear, renombrar o usar **Save As**, Odessay conserva esos caracteres y solo elimina caracteres ilegales del filesystem; las colisiones se resuelven antes del rename (`Nombre.md`, `Nombre 2.md`, ...), sin sobrescribir. Rename desde la app y desde Finder mantiene alineados ruta, título local y título sincronizado.
+
 ---
 
 ## Odessay Markdown Profile

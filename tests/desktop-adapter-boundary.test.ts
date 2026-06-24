@@ -46,6 +46,7 @@ const allowedImports = new Set([
   "@/lib/workspace/types",
   "@/lib/workspace/assignment",
   "@/lib/local-db",
+  "@/lib/desktop/document-naming",
   "@/lib/editor/document-serialization",
   "@/lib/editor/extensions",
   "@/lib/export/to-docx",

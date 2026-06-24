@@ -47,6 +47,8 @@ import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/exp
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { downloadBlob } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
+import { getDocumentService } from "@/lib/services/document-service-factory"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import {
   buildWorkspaceNameLookup,
   readAssignmentSlug,
@@ -376,6 +378,17 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
         return
       }
+      if (isDesktopRuntime()) {
+        const result = await (await getDocumentService()).renameWriting({
+          writingId: writing.id,
+          title: trimmedTitle,
+          updatedAt: new Date().toISOString(),
+        })
+        if (result.error) return
+        await loadLocalState()
+        return
+      }
+
       await enqueueWritingUpsert({
         ...writing,
         title: trimmedTitle,
@@ -384,7 +397,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         local_updated_at: Date.now(),
       })
     },
-    [],
+    [loadLocalState],
   )
 
   const bulkChangeStatus = useCallback(
@@ -474,6 +487,17 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
       const trimmedTitle = nextTitle.trim() || "Untitled writing"
       if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
+        return
+      }
+
+      if (isDesktopRuntime()) {
+        const result = await (await getDocumentService()).renameWriting({
+          writingId: writing.id,
+          title: trimmedTitle,
+          updatedAt: new Date().toISOString(),
+        })
+        if (result.error) return
+        await loadLocalState()
         return
       }
 

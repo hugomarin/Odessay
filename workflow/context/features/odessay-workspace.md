@@ -71,6 +71,8 @@ Capacidades actuales/esperadas de desktop:
 - observar solo los paths incluidos por el usuario;
 - reconciliar renames/deletes del filesystem con el índice local.
 
+Al reconciliar un rename, Workspace conserva el binding ruta-primero (D6) y re-deriva el `title` del nuevo filename antes de encolarlo para sync. Un rename atómico no se interpreta como borrado; el título es cache del stem y no puede retener el nombre de la ruta previa.
+
 ---
 
 ## Limitaciones técnicas del runtime web
