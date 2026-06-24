@@ -128,6 +128,7 @@ import {
   UNTITLED_DOCUMENT_NAME,
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
+import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
@@ -4222,6 +4223,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     onSaveComplete: handleSaveComplete,
     documentKey: currentWritingId,
   })
+
+  // Picks up a file opened via Cmd+O from outside Write (see useGlobalOpenFileMenu).
+  useEffect(() => {
+    if (!sessionLoaded || !isDesktopRuntime()) return
+    const pending = consumePendingOpenFile()
+    if (!pending) return
+    void handleMenuOpenFile(pending.path, pending.content)
+  }, [sessionLoaded, handleMenuOpenFile])
 
   const downloadBlob = useCallback((blob: Blob, filename: string) => {
     downloadBlobUtil(blob, filename)

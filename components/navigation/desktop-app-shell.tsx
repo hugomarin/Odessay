@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import type { Session } from "@supabase/supabase-js"
 import { Sidebar } from "@/components/navigation/sidebar"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import { useGlobalOpenFileMenu } from "@/hooks/useGlobalOpenFileMenu"
 
 type ShellUser = {
   displayName: string | null
@@ -17,6 +18,8 @@ const ANON_USER: ShellUser = { email: null, displayName: null, username: null }
 export function DesktopAppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [user, setUser] = useState<ShellUser>(ANON_USER)
+
+  useGlobalOpenFileMenu()
 
   useEffect(() => {
     const supabase = createDesktopClient()
