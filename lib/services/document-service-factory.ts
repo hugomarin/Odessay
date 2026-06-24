@@ -23,6 +23,7 @@ import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-
 import { migrateIndexedDbToFilesystem } from "@/lib/migrations/indexeddb-to-filesystem"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
+import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
 import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
 
 type DesktopRuntimeServices = {
@@ -64,15 +65,6 @@ function createWritingId() {
   }
 
   return `desktop-${Date.now()}`
-}
-
-function deriveDraftTitleFromPlainText(plainText: string, fallback: string) {
-  const firstLine = plainText
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-
-  return firstLine?.slice(0, 48) || fallback
 }
 
 function toCanonicalRecord(local: LocalWriting): WritingRecord {
@@ -270,7 +262,9 @@ class DesktopDocumentService implements DocumentService {
       const localWriting: LocalWriting = {
         id: canonicalId,
         author_id: existingRecord?.author_id ?? null,
-        title: existingRecord?.title ?? fileResult.data.title,
+        // Desktop names are derived from the filename on every filesystem open;
+        // a cache must never preserve a stale title over the canonical path.
+        title: fileResult.data.title,
         canonical_path: canonicalPath,
         body_json: parsed.document.snapshot.bodyJson as Record<string, unknown>,
         body_text: parsed.document.snapshot.bodyText,
@@ -324,7 +318,7 @@ class DesktopDocumentService implements DocumentService {
       const writing: WritingRecord = {
         id: options.writingId?.trim() || createWritingId(),
         authorId: null,
-        title: options.title?.trim() || "Untitled writing",
+        title: options.title?.trim() || UNTITLED_DOCUMENT_NAME,
         content: {
           richText: (options.initialBodyJson as Record<string, unknown> | null | undefined) ?? EMPTY_EDITOR_JSON,
           markdown: null,
@@ -385,7 +379,7 @@ class DesktopDocumentService implements DocumentService {
 
       const updated: LocalWriting = {
         ...existing,
-        title: input.title,
+        title: renameResult.data.title,
         canonical_path: renameResult.data.id,
         updated_at: input.updatedAt,
         local_updated_at: Date.now(),
@@ -498,7 +492,12 @@ export async function createDesktopDraft(
 export async function relocateDesktopWriting(writingId: string, newPath: string): Promise<void> {
   const existing = await localDB.writings.get(writingId)
   if (!existing) return
-  await enqueueWritingUpsert({ ...existing, canonical_path: newPath, local_updated_at: Date.now() })
+  await enqueueWritingUpsert({
+    ...existing,
+    title: filenameToTitle(newPath),
+    canonical_path: newPath,
+    local_updated_at: Date.now(),
+  })
 }
 
 export async function relocateDesktopWritingByCanonicalPath(
@@ -512,6 +511,7 @@ export async function relocateDesktopWritingByCanonicalPath(
 
   await enqueueWritingUpsert({
     ...existing,
+    title: filenameToTitle(nextPath),
     canonical_path: nextPath,
     local_updated_at: Date.now(),
   })
@@ -537,7 +537,7 @@ export async function importDesktopWritingFile(
     return err("INVALID_INPUT", parsed.error)
   }
 
-  const title = deriveDraftTitleFromPlainText(parsed.document.snapshot.bodyText, "Imported writing")
+  const title = filenameToTitle(path)
 
   const result = await createDesktopDraft({
     writingId: createWritingId(),

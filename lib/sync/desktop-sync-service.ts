@@ -18,6 +18,7 @@ import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
 import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands"
+import { filenameToTitle } from "@/lib/desktop/document-naming"
 import {
   beginHydrationProgress,
   completeHydrationProgress,
@@ -263,6 +264,7 @@ async function processWritingMutation(userId: string, mutation: Extract<SyncMuta
       if (parsed.success) {
         canonicalPayload = {
           ...canonicalPayload,
+          title: filenameToTitle(existing.canonical_path),
           body_json: parsed.document.snapshot.bodyJson as Record<string, unknown>,
           body_text: parsed.document.snapshot.bodyText,
           content_hash: await computeMarkdownContentHash(source),
@@ -326,6 +328,7 @@ async function processWritingMutation(userId: string, mutation: Extract<SyncMuta
   if (existing) {
     await localDB.writings.save({
       ...existing,
+      title: canonicalPayload.title,
       sync_status: "synced",
       lifecycle: "server-confirmed",
     })

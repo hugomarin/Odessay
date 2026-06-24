@@ -89,6 +89,8 @@ La parte "local" del estado es **por-máquina**; la parte "nube" es global. La U
 - **IndexedDB (`LocalWriting`):** **espejo local** del registro de nube para trabajo offline. No es verdad aparte.
 - **SQLite (`writings_index`) + JSON de identificación:** **caches y puente** (recientes, títulos, mapa ruta↔id). Reconstruibles; **nunca autoritativos**.
 
+**Regla de nombre (ODE-324):** en desktop, el nombre humano canónico es el stem del filename (`title = filename` sin `.md`). `title` en IndexedDB, SQLite y nube es un reflejo reconstruible, no una fuente alternativa. Abrir o sincronizar un archivo re-deriva el título desde su ruta; renombrar desde la app renombra primero el archivo y después actualiza caches y cola. Los caracteres ilegales se eliminan al crear/renombrar, preservando mayúsculas, acentos y espacios; una colisión se resuelve como `Nombre 2.md`, cuyo título efectivo es `Nombre 2`. El auto-title desde cuerpo de ODE-38 queda limitado al runtime web y a drafts sin filename materializado.
+
 Orden de guardado: escribir el `.md` (commit del contenido) → actualizar caches locales (SQLite + JSON) → actualizar el espejo (IndexedDB) → encolar sync a Supabase (asíncrono, con reintentos). La divergencia entre lados se detecta con la huella de contenido. Con la huella como puente, el guardado **atómico** (temporal + reemplazo) es seguro aunque cambie el inode (la reconciliación es ruta-primero, ver D6).
 
 ### D11 — Portabilidad de identidad cross-máquina: el `content_hash` también vive en la nube (BLOQUEANTE de D4)

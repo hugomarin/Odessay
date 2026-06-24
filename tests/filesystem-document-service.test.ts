@@ -204,7 +204,7 @@ describe("FilesystemDocumentService", () => {
 
   it("openWriting reads the .md and returns markdown as content.markdown", async () => {
     vi.useRealTimers()
-    const path = `${WRITINGS_DIR}/my-writing.md`
+    const path = `${WRITINGS_DIR}/My Writing.md`
     const md = "# My Writing\n\nSome content here."
     mockFiles.set(path, md)
 
@@ -218,14 +218,14 @@ describe("FilesystemDocumentService", () => {
     vi.useFakeTimers()
   })
 
-  it("openWriting derives title from filename when no H1 is present", async () => {
+  it("openWriting derives title verbatim from the filename stem", async () => {
     vi.useRealTimers()
     const path = `${WRITINGS_DIR}/my-writing-file.md`
     mockFiles.set(path, "Some plain paragraph without a heading.")
 
     const result = await service.openWriting(path)
     expect(result.error).toBeNull()
-    expect(result.data!.title).toBe("my writing file")
+    expect(result.data!.title).toBe("my-writing-file")
     vi.useFakeTimers()
   })
 
@@ -382,6 +382,36 @@ describe("FilesystemDocumentService", () => {
     })
     expect(result.data).toBeNull()
     expect(result.error!.code).toBe("INVALID_INPUT")
+    vi.useFakeTimers()
+  })
+
+  it("createDraft resolves filename collisions without overwriting", async () => {
+    vi.useRealTimers()
+    await service.createDraft("My Note")
+    const second = await service.createDraft("My Note")
+    expect(second.error).toBeNull()
+    expect(second.data!.path).toContain("My Note 2.md")
+    expect(second.data!.writing.title).toBe("My Note")
+    vi.useFakeTimers()
+  })
+
+  it("renameWriting resolves filename collisions without overwriting", async () => {
+    vi.useRealTimers()
+    const existingPath = `${WRITINGS_DIR}/My Note.md`
+    mockFiles.set(existingPath, "# My Note")
+    mockMetadata.push({ path: existingPath, name: "My Note", modifiedAt: Date.now(), size: 10 })
+    const oldPath = `${WRITINGS_DIR}/Old Name.md`
+    mockFiles.set(oldPath, "# Old Name")
+
+    const result = await service.renameWriting({
+      writingId: oldPath,
+      title: "My Note",
+      updatedAt: new Date().toISOString(),
+    })
+
+    expect(result.error).toBeNull()
+    expect(result.data!.id).toContain("My Note 2.md")
+    expect(result.data!.title).toBe("My Note 2")
     vi.useFakeTimers()
   })
 
