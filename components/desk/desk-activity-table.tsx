@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, Check, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Tag, Trash2, Wrench } from "lucide-react"
+import { Bot, Check, Clipboard, Download, Eye, File, FileChartColumn, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Tag, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -70,8 +70,8 @@ export function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType 
     skill: Wrench,
     prompt: MessageSquareText,
     template: LayoutTemplate,
-    status: FileText,
-    general: Circle,
+    status: FileChartColumn,
+    general: File,
   }[artifactType]
 
   return <Icon className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
@@ -213,7 +213,7 @@ export function DeskActivityTable({
               ) : null}
             </div>
             {row.excerpt ? <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p> : null}
-            <p className="pt-1 text-[11px] leading-[1.35] text-ink-4">Created {row.dateLabel}</p>
+            <p className="pt-1 text-[11px] leading-[1.35] text-ink-4">{row.dateLabel}</p>
             <CollectionChips
               collectionIds={collectionIdsByWritingId[row.id] ?? []}
               collectionOptions={collectionOptions}
@@ -317,7 +317,7 @@ export function DeskActivityTable({
         label: "",
         align: "end",
         width: "w-14",
-        className: "px-4",
+        className: "pl-4 pr-10",
         render: (row) => {
           const extraMenuItems = renderExtraMenuItems?.(row)
           const hasMenu = Boolean(extraMenuItems || onCopyMarkdown || onDownloadMarkdown || showDeleteAction)

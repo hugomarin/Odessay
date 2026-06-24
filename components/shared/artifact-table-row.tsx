@@ -41,7 +41,7 @@ function ArtifactTableRowInner<T>({ item, columns, href, ariaLabel, isSelected, 
           : "cursor-default",
       )}
     >
-      {leading != null ? <TableCell className="w-10 px-4 align-top pt-[1.15rem]">{leading}</TableCell> : null}
+      {leading != null ? <TableCell className="w-8 px-3 align-top pt-[1.15rem]">{leading}</TableCell> : null}
       {columns.map((column) => (
         <TableCell key={column.id} className={cn("min-w-0", column.align === "end" ? "text-right" : "", column.className)}>
           {column.render(item)}
