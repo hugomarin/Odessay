@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "fix(desktop): unify document filename identity — title = filename stem, bidirectional. New lib/desktop/document-naming.ts (titleToFilename/filenameToTitle/resolveUniqueFilename) consolidates 5+ prior title-derivation functions; removed slugify/extractTitle (H1-based) from filesystem-document-service. Open/create/rename derive title from filename; in-app rename (editor + collections) now calls DocumentService.renameWriting (previously orphaned), renaming the physical file atomically with cache/queue updates; Finder rename reconciliation re-derives title from the new path; desktop sync push re-derives title from canonical_path before upload (symmetry with body_json/body_text); Save As preserves the human filename instead of the slugified export name; collisions resolved as 'Name 2.md' in TS before invoking Rust rename (no silent overwrite). ADR D10 extended + odessay-sync.md/odessay-workspace.md/odessay-desktop-app.md updated. [ODE-324]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-324",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-324/unificar-identidad-de-nombre-del-documento-filename-canonico-title",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/295",
+      "commit": "a4080fa",
+      "date": "2026-06-24",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing exhaustive-deps warnings only). npm test PASS (818 tests incl. 62 new). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Performance Contract: not required (no input/paste/click hot-path I/O). Architecture Contract verified against diff (Layer/Runtime scope/Owner/Contracts/Invariants). Review score: 9.8/10 — single P3 (inline filename-stem duplication, non-blocking)."
+    },
+    {
       "what": "fix(library): restore Desk multi-select and align Collections table to Desk reference; add server-side runtime detection fix for tauri dev. Restores selectedIds/onToggleSelection wiring in DeskActivityTable, enables BulkActionBar in Desk, aligns Collections detail (full width, functional status/artifact controls, preview modal, bulk actions, delete). Adds lib/runtime/detect-server.ts and updates tauri.conf.json beforeDevCommand so server-side branches use TAURI_ENV in tauri dev, preventing /login redirects. [ODE-321]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-321",
