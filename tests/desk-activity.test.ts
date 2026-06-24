@@ -142,7 +142,7 @@ describe("buildDeskActivitySummary", () => {
     expect(receivedRow?.destinationHref).toBeNull()
     expect(todayRow?.stateLabel).toBe("Draft")
     expect(todayRow?.documentState).toBe("cloud-only")
-    expect(todayRow?.dateLabel).toBe("")
+    expect(todayRow?.dateLabel).toBe("Today")
   })
 
   it("exposes document state for Desk rows and hero cards", () => {

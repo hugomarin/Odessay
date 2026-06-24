@@ -6,7 +6,9 @@ import { CollectionAssignmentMenu } from "@/components/collections/collection-as
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
+import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import { cn } from "@/lib/utils"
 
@@ -18,6 +20,7 @@ type BulkActionBarProps = {
   onDeselectAll: () => void
   onDelete: () => void
   onStatusChange: (status: WritingStatus) => Promise<void> | void
+  onArtifactTypeChange: (artifactType: ArtifactType) => Promise<void> | void
   collectionOptions: CollectionOption[]
   onAddToCollection: (collectionId: string) => Promise<void> | void
   onCreateCollection: (name: string) => Promise<void> | void
@@ -31,11 +34,13 @@ export function BulkActionBar({
   onDeselectAll,
   onDelete,
   onStatusChange,
+  onArtifactTypeChange,
   collectionOptions,
   onAddToCollection,
   onCreateCollection,
 }: BulkActionBarProps) {
   const [statusOpen, setStatusOpen] = useState(false)
+  const [artifactOpen, setArtifactOpen] = useState(false)
   const { settings } = useUserSettingsContext()
   const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
 
@@ -101,6 +106,41 @@ export function BulkActionBar({
                 >
                   <WritingStatusIcon status={status} />
                   <span>{getWritingStatusLabel(status)}</span>
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+
+          <Popover open={artifactOpen} onOpenChange={setArtifactOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10",
+                  artifactOpen && "border-bg/35 bg-bg/10",
+                )}
+              >
+                <ArtifactTypeIcon artifactType="general" />
+                Artifacts
+                <ChevronDown
+                  className={cn("h-3 w-3 text-bg/60 transition-transform", artifactOpen && "rotate-180")}
+                  strokeWidth={1.5}
+                />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[180px] p-[5px]">
+              {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                <button
+                  key={artifactType}
+                  type="button"
+                  onClick={() => {
+                    void onArtifactTypeChange(artifactType)
+                    setArtifactOpen(false)
+                  }}
+                  className="flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted"
+                >
+                  <ArtifactTypeIcon artifactType={artifactType} />
+                  <span>{getArtifactTypeLabel(artifactType)}</span>
                 </button>
               ))}
             </PopoverContent>

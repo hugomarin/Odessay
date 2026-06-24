@@ -165,22 +165,19 @@ const buildTitle = (title: string | null | undefined) => {
 }
 
 const buildDateLabel = (updatedAt: Date, now: Date) => {
-  const formatterOptions = {
-    locale: "es-MX",
-  } as const
-  const today = updatedAt.toDateString() === now.toDateString()
-
-  if (today) {
-    return ""
+  if (updatedAt.toDateString() === now.toDateString()) {
+    return "Today"
   }
 
-  if (now.getTime() - updatedAt.getTime() < WEEK_IN_MS) {
-    return new Intl.DateTimeFormat(formatterOptions.locale, { weekday: "short" }).format(updatedAt)
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (updatedAt.toDateString() === yesterday.toDateString()) {
+    return "Yesterday"
   }
 
-  return new Intl.DateTimeFormat(formatterOptions.locale, {
-    month: "short",
+  return new Intl.DateTimeFormat("es-MX", {
     day: "numeric",
+    month: "short",
   }).format(updatedAt)
 }
 

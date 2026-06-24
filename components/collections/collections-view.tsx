@@ -409,6 +409,15 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
     [changeWritingStatus, selectedIds],
   )
 
+  const bulkChangeArtifactType = useCallback(
+    async (artifactType: ArtifactType) => {
+      for (const writingId of Array.from(selectedIds)) {
+        await changeWritingArtifactType(writingId, artifactType)
+      }
+    },
+    [changeWritingArtifactType, selectedIds],
+  )
+
   const bulkAddToCollection = useCallback(
     async (collectionId: string) => {
       for (const writingId of Array.from(selectedIds)) {
@@ -660,6 +669,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                   onDeselectAll={deselectAll}
                   onDelete={() => setIsBulkDeleteOpen(true)}
                   onStatusChange={bulkChangeStatus}
+                  onArtifactTypeChange={bulkChangeArtifactType}
                   collectionOptions={collectionOptions}
                   onAddToCollection={bulkAddToCollection}
                   onCreateCollection={bulkCreateCollectionAndAdd}
