@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "fix(desk): align Desk activity table visual consistency, artifact-type icons, bulk Artifact Type editing and Cmd+O outside Write. New 'Artifacts' dropdown in BulkActionBar mirroring Status, reusing changeWritingArtifactType for sequential bulk edits; actions-column right padding aligned with title column; ArtifactTypeIcon general/status switched to File/FileChartColumn (lucide-react); row selection checkbox hit-area resized proportionally; date label under title drops 'Created' prefix in favor of Today/Yesterday/D MMM; new useGlobalOpenFileMenu + lib/editor/pending-open-file.ts handoff lets Cmd+O work from Desk/Collections and hand the opened file to EditorShell without duplicating the native dialog when already in Write. [ODE-325]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-325",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-325/fix-desk-activity-table-visual-consistency-artifact-type-icons-bulk",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/296",
+      "commit": "4111d75212212c46355e8f8da2d2205cad1ebe39",
+      "date": "2026-06-24",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing exhaustive-deps warnings only). npm test PASS (818 tests). ops:delivery:gate PASS. CI Traceability Gates SUCCESS. Vercel Preview SUCCESS. Architecture Contract COMPLIANT (single menu:open-file listener active per route). Two-round review: round 1 rejected for missing Performance Contract (reactive fan-out) and Visual/UX Contract evidence; round 2 approved with PASS_HUMAN_OVERRIDE — visual evidence (row/checkbox/date, Artifacts dropdown, native Cmd+O dialog outside Write) fully covered screenshots, reactive fan-out evidence with N>1 not explicitly demonstrated but owner authorized override given the bulk-edit handler replicates the already-approved bulk-status sequential await pattern 1:1. Review score: 9/10."
+    },
+    {
       "what": "fix(desktop): unify document filename identity — title = filename stem, bidirectional. New lib/desktop/document-naming.ts (titleToFilename/filenameToTitle/resolveUniqueFilename) consolidates 5+ prior title-derivation functions; removed slugify/extractTitle (H1-based) from filesystem-document-service. Open/create/rename derive title from filename; in-app rename (editor + collections) now calls DocumentService.renameWriting (previously orphaned), renaming the physical file atomically with cache/queue updates; Finder rename reconciliation re-derives title from the new path; desktop sync push re-derives title from canonical_path before upload (symmetry with body_json/body_text); Save As preserves the human filename instead of the slugified export name; collisions resolved as 'Name 2.md' in TS before invoking Rust rename (no silent overwrite). ADR D10 extended + odessay-sync.md/odessay-workspace.md/odessay-desktop-app.md updated. [ODE-324]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-324",
