@@ -47,15 +47,16 @@ jobs:
         run: npm ci
 
       - name: Verify version alignment
-        run: node -e "
-          const pkg = require('./package.json');
-          const tauri = require('./src-tauri/tauri.conf.json');
-          if (pkg.version !== tauri.version) {
-            console.error('Version drift:', pkg.version, 'vs', tauri.version);
-            process.exit(1);
-          }
-          console.log('Version:', pkg.version);
-        "
+        run: |
+          node -e "
+            const pkg = require('./package.json');
+            const tauri = require('./src-tauri/tauri.conf.json');
+            if (pkg.version !== tauri.version) {
+              console.error('Version drift:', pkg.version, 'vs', tauri.version);
+              process.exit(1);
+            }
+            console.log('Version:', pkg.version);
+          "
 
       - name: Resolve release tag
         id: resolve-tag
