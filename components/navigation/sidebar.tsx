@@ -10,7 +10,6 @@ import { UserBar } from "@/components/navigation/user-bar"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
-import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { getShortcutForPlatform, type ShortcutDisplay } from "@/lib/keyboard-shortcuts"
 import {
   initializeUiShellStore,
@@ -80,7 +79,7 @@ const NAV_ITEMS: NavItem[] = [
     shortcut: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
   },
   {
-    href: "/studio",
+    href: "/write",
     label: "Studio",
     icon: PenLine,
     section: "sidebar-nav-studio",
@@ -137,20 +136,10 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null)
   const [installing, setInstalling] = useState(false)
 
-  // Workspace is a desktop-only feature (local filesystem access). Hide its nav
-  // entry on web. Gated behind `mounted` so the first client render matches the
-  // SSR/SSG output (runtime detection only resolves after hydration on desktop).
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
+  // Workspace is hidden from the sidebar while the feature is still rough.
   const navItems = useMemo(() => {
-    if (mounted && isDesktopRuntime()) {
-      return NAV_ITEMS
-    }
     return NAV_ITEMS.filter((item) => item.href !== "/workspace")
-  }, [mounted])
+  }, [])
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()
@@ -235,7 +224,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
 
       if (action === "goStudio") {
         event.preventDefault()
-        window.location.href = "/studio"
+        window.location.href = "/write"
         return
       }
     }
@@ -282,7 +271,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               href="/desk"
               className={cn(
                 "overflow-hidden transition-[width,opacity] duration-[300ms] ease-layout",
-                isIconOnly ? "w-0 opacity-0" : "w-[92px] opacity-100",
+                isIconOnly ? "w-0 opacity-0" : "w-[150px] opacity-100",
               )}
               aria-label="Artifact Studio"
             >
@@ -367,8 +356,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
           >
             <div className="space-y-2">
               {navItems.map((item) => {
-                const isStudioSurface = item.href === "/studio" && pathname.startsWith("/write")
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`) || isStudioSurface
+                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                 const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
 
                 return (

@@ -1,6 +1,6 @@
 pub mod commands;
 
-use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
+use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -25,7 +25,10 @@ pub fn run() {
             let settings =
                 MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
             let app_menu = SubmenuBuilder::new(app, "Artifact Studio")
-                .about(None)
+                .about(Some(AboutMetadata {
+                    name: Some("Artifact Studio".to_string()),
+                    ..Default::default()
+                }))
                 .separator()
                 .item(&settings)
                 .separator()
