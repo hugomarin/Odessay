@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { Bot, Check, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Trash2, Wrench } from "lucide-react"
+import { Bot, Check, Circle, Clipboard, Download, Eye, FileText, LayoutTemplate, MessageSquareText, MoreHorizontal, Pencil, Tag, Trash2, Wrench } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,8 @@ import type { WritingStatus } from "@/lib/writings/status"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
+import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
+import { CollectionChips } from "@/components/desk/collection-chips"
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import { ArtifactTable } from "@/components/shared/artifact-table"
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types"
@@ -78,6 +80,10 @@ export function ArtifactTypeIcon({ artifactType }: { artifactType: ArtifactType 
 export function DeskActivityTable({
   groups,
   isLoading = false,
+  collectionOptions,
+  collectionIdsByWritingId,
+  onToggleCollection,
+  onCreateCollection,
   onStatusChange,
   onArtifactTypeChange,
   workspaceOptions = [],
@@ -183,9 +189,36 @@ export function DeskActivityTable({
                   <Eye className="h-[12px] w-[12px]" strokeWidth={1.5} />
                 </button>
               ) : null}
+              {collectionOptions.length > 0 ? (
+                <div onClick={stopRowNavigation}>
+                  <CollectionAssignmentMenu
+                    collections={collectionOptions}
+                    selectedIds={collectionIdsByWritingId[row.id] ?? []}
+                    align="start"
+                    title="Collections"
+                    description="Choose labels for this writing."
+                    onToggleCollection={(collectionId) => void onToggleCollection(row.id, collectionId)}
+                    onCreateCollection={(name) => void onCreateCollection(row.id, name)}
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                        aria-label={`Assign collections for ${row.title}`}
+                      >
+                        <Tag className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                      </button>
+                    }
+                  />
+                </div>
+              ) : null}
             </div>
             {row.excerpt ? <p className="truncate pt-1 text-[12px] text-ink-3">{row.excerpt}</p> : null}
             <p className="pt-1 text-[11px] leading-[1.35] text-ink-4">Created {row.dateLabel}</p>
+            <CollectionChips
+              collectionIds={collectionIdsByWritingId[row.id] ?? []}
+              collectionOptions={collectionOptions}
+              className="pt-1"
+            />
           </div>
         ),
       },
@@ -327,6 +360,10 @@ export function DeskActivityTable({
       renderExtraActions,
       renderExtraMenuItems,
       showDeleteAction,
+      collectionOptions,
+      collectionIdsByWritingId,
+      onToggleCollection,
+      onCreateCollection,
     ],
   )
 
