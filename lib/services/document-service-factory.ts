@@ -294,13 +294,17 @@ class DesktopDocumentService implements DocumentService {
       await this.ensureMigrated()
       const existing = await localDB.writings.get(input.writing.id)
       const canonicalPath = await this.resolveCanonicalPath(input.writing)
-      const derived = await this.writeCanonicalFile(input.writing, canonicalPath)
+      const canonicalWriting = {
+        ...input.writing,
+        title: filenameToTitle(canonicalPath),
+      }
+      const derived = await this.writeCanonicalFile(canonicalWriting, canonicalPath)
       const localWriting: LocalWriting = {
-        ...toLocalWriting(input.writing, canonicalPath),
-        author_id: existing?.author_id ?? input.writing.authorId ?? null,
+        ...toLocalWriting(canonicalWriting, canonicalPath),
+        author_id: existing?.author_id ?? canonicalWriting.authorId ?? null,
         body_json: derived.bodyJson,
         body_text: derived.bodyText,
-        slug: input.writing.slug ?? existing?.slug ?? null,
+        slug: canonicalWriting.slug ?? existing?.slug ?? null,
         lifecycle: existing?.lifecycle ?? "local-only",
       }
 
@@ -345,9 +349,13 @@ class DesktopDocumentService implements DocumentService {
         return err("UNAVAILABLE", "Failed to allocate canonical file")
       }
 
-      const derived = await this.writeCanonicalFile(writing, canonicalPath)
+      const canonicalWriting = {
+        ...writing,
+        title: filenameToTitle(canonicalPath),
+      }
+      const derived = await this.writeCanonicalFile(canonicalWriting, canonicalPath)
       const localWriting: LocalWriting = {
-        ...toLocalWriting(writing, canonicalPath),
+        ...toLocalWriting(canonicalWriting, canonicalPath),
         body_json: derived.bodyJson,
         body_text: derived.bodyText,
       }

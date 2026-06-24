@@ -231,6 +231,7 @@ export class FilesystemDocumentService implements DocumentService {
       const filename = resolveUniqueFilename(desiredFilename, existing)
 
       const path = await tauriCreateFile(this.writingsDir, filename)
+      const effectiveTitle = filenameToTitle(path)
       if (initialContent) {
         await tauriWriteFile(path, initialContent)
       }
@@ -238,7 +239,7 @@ export class FilesystemDocumentService implements DocumentService {
       const writing: WritingRecord = {
         id: path,
         authorId: null,
-        title: displayTitle,
+        title: effectiveTitle,
         content: {
           markdown: initialContent,
           richText: null,

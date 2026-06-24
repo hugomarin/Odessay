@@ -391,7 +391,7 @@ describe("FilesystemDocumentService", () => {
     const second = await service.createDraft("My Note")
     expect(second.error).toBeNull()
     expect(second.data!.path).toContain("My Note 2.md")
-    expect(second.data!.writing.title).toBe("My Note")
+    expect(second.data!.writing.title).toBe("My Note 2")
     vi.useFakeTimers()
   })
 

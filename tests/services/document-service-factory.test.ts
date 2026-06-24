@@ -312,6 +312,32 @@ describe("document-service-factory", () => {
     expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("id:")
   })
 
+  it("uses the collision-resolved filename as the local and queued title", async () => {
+    mocks.createDraftMock.mockResolvedValueOnce({
+      data: {
+        path: "/tmp/documents/Artifact Studio/My Note 2.md",
+        writing: {
+          id: "/tmp/documents/Artifact Studio/My Note 2.md",
+          authorId: null,
+          title: "My Note 2",
+        },
+      },
+      error: null,
+    })
+
+    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+    const result = await createDesktopDraft({ title: "My Note" })
+
+    expect(result.error).toBeNull()
+    expect(result.data?.title).toBe("My Note 2")
+    expect(mocks.enqueueWritingUpsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        canonical_path: "/tmp/documents/Artifact Studio/My Note 2.md",
+        title: "My Note 2",
+      }),
+    )
+  })
+
   it("detaches a watcher-deleted desktop file without enqueueing a cloud delete", async () => {
     mocks.getByCanonicalPathMock.mockResolvedValueOnce({
       id: "writing-cloud",

@@ -2,6 +2,7 @@
 
 import { appConfigDir } from "@tauri-apps/api/path"
 import { open } from "@tauri-apps/plugin-dialog"
+import { filenameToTitle } from "@/lib/desktop/document-naming"
 import { localDB } from "@/lib/local-db"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { getDocumentService } from "@/lib/services/document-service-factory"
@@ -111,13 +112,6 @@ function formatMissingWorkspace(
     updatedAt: null,
     files: [],
   }
-}
-
-function filenameToTitle(filename: string): string {
-  return filename
-    .replace(/\.md$/, "")
-    .replace(/[-_]+/g, " ")
-    .trim()
 }
 
 function buildInitialWorkspaceMarkdown(title: string): string {
