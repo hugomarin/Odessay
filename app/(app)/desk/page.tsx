@@ -807,14 +807,7 @@ export default function DeskPage() {
 
       {activeView === "mine" ? (
         <>
-          <DeskHero
-            drafts={summary.heroDrafts}
-            workspaceOptions={workspaceOptions}
-            workspaceAvailable={workspaceAvailable}
-            onAssignWorkspace={assignWorkspace}
-            onUnassignWorkspace={unassignWorkspace}
-            onCreateWorkspace={createWorkspaceAndAssign}
-          />
+          <DeskHero drafts={summary.heroDrafts} />
 
           <div className="px-5 py-[14px] sm:px-9">
               <DeskFilterBar
@@ -900,11 +893,6 @@ export default function DeskPage() {
               onCreateCollection={createWritingCollection}
               onStatusChange={changeWritingStatus}
               onArtifactTypeChange={changeWritingArtifactType}
-              workspaceOptions={workspaceOptions}
-              workspaceAvailable={workspaceAvailable}
-              onAssignWorkspace={assignWorkspace}
-              onUnassignWorkspace={unassignWorkspace}
-              onCreateWorkspace={createWorkspaceAndAssign}
               onRenameWriting={openRenameWriting}
               onPreviewWriting={openWritingPreview}
               onCopyMarkdown={copyWritingMarkdown}
@@ -916,6 +904,7 @@ export default function DeskPage() {
               }}
               selectedIds={selectedIds}
               onToggleSelection={toggleSelection}
+              showWorkspaceColumn={false}
             />
           )}
 

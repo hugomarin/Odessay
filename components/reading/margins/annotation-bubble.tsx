@@ -6,6 +6,7 @@ import { VoiceRecorderControls } from "./voice-recorder-controls"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
 import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
+import { getEditorShortcutAction } from "@/lib/editor/shortcuts"
 
 type AnnotationBubbleProps = {
   position: { x: number; y: number } | null
@@ -91,6 +92,30 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     document.addEventListener("keydown", handleKeydown)
     return () => document.removeEventListener("keydown", handleKeydown)
   }, [position, onCancel])
+
+  // Toggle voice recording with the global voice-note shortcut (⌘⌥R / Ctrl+Alt+R)
+  // when the bubble is open. Capture phase runs before the editor-shell handler.
+  useEffect(() => {
+    if (!position || !supportsVoice) return
+
+    function handleKeydown(event: KeyboardEvent) {
+      const action = getEditorShortcutAction(event)
+      if (action !== "voiceNote") return
+
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (state === "idle" || state === "stopped") {
+        setVoiceError(null)
+        void start()
+      } else if (state === "recording" || state === "paused") {
+        stop()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeydown, true)
+    return () => window.removeEventListener("keydown", handleKeydown, true)
+  }, [position, supportsVoice, state, start, stop])
 
   if (!position) return null
 

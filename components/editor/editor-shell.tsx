@@ -1844,14 +1844,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
   }, [editor])
 
-  const isRichSelectionInsideTable = useCallback(() => {
-    if (!editor || modeRef.current !== "rich") {
-      return false
-    }
-
-    return editor.isActive("table")
-  }, [editor])
-
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
       const runGlobalAction = () => {
@@ -1885,7 +1877,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             router.push("/workspace")
             return true
           case "goStudio":
-            router.push("/studio")
+            router.push("/write")
             return true
           case "search":
             window.dispatchEvent(new CustomEvent("odessay:open-search"))
@@ -2515,11 +2507,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         return
       }
 
-      if (isRichSelectionInsideTable()) {
-        setPendingRichSelection(null)
-        return
-      }
-
       const snapshot = captureRichSelectionSnapshot()
       if (!snapshot) {
         setPendingRichSelection(null)
@@ -2539,7 +2526,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     return () => {
       editor.off("selectionUpdate", handleSelectionUpdate)
     }
-  }, [captureRichSelectionSnapshot, editor, isRichSelectionInsideTable, pendingAnnotation])
+  }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
 
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {

@@ -1,28 +1,16 @@
 import Link from "next/link"
 import { Plus } from "lucide-react"
-import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
-import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
 
 type DeskHeroProps = {
   drafts: DeskHeroDraft[]
-  workspaceOptions: WorkspaceAssignmentOption[]
-  workspaceAvailable: boolean
-  onAssignWorkspace: (writingId: string, slug: string) => void | Promise<void>
-  onUnassignWorkspace: (writingId: string) => void | Promise<void>
-  onCreateWorkspace: (writingId: string) => void | Promise<void>
 }
 
 export function DeskHero({
   drafts,
-  workspaceOptions,
-  workspaceAvailable,
-  onAssignWorkspace,
-  onUnassignWorkspace,
-  onCreateWorkspace,
 }: DeskHeroProps) {
   return (
     <div
@@ -64,20 +52,6 @@ export function DeskHero({
               <div className="flex items-center justify-between text-[11px] text-ink-4">
                 <span>{draft.createdLabel}</span>
                 <span>{draft.wordCount} words</span>
-              </div>
-              <div className="mt-2">
-                <WorkspaceAssignmentDropdown
-                  writingId={draft.id}
-                  currentSlug={draft.workspaceSlug}
-                  currentName={draft.workspaceName}
-                  options={workspaceOptions}
-                  available={workspaceAvailable}
-                  variant="card"
-                  title={draft.title}
-                  onAssign={onAssignWorkspace}
-                  onUnassign={onUnassignWorkspace}
-                  onCreateWorkspace={onCreateWorkspace}
-                />
               </div>
             </div>
           </article>

@@ -56,12 +56,12 @@ describe("desktop menus — static configuration", () => {
     expect(src).toContain("CmdOrCtrl+Shift+S")
   })
 
-  it("tauri.conf.json has a single window labeled 'main' with title 'Artifact Studio'", () => {
+  it("tauri.conf.json has a single window labeled 'main' with an empty title", () => {
     const conf = readConf()
     const windows = conf?.app?.windows ?? []
     expect(windows.length).toBeGreaterThanOrEqual(1)
     const main = windows.find((w: { label: string }) => w.label === "main")
     expect(main).toBeDefined()
-    expect(main?.title).toBe("Artifact Studio")
+    expect(main?.title).toBe("")
   })
 })
