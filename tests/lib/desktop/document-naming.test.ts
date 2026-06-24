@@ -24,6 +24,9 @@ describe("document-naming", () => {
     it("preserves case, accents and spaces", () => {
       expect(titleToFilename("Mi Nota")).toBe("Mi Nota.md")
       expect(titleToFilename("Acentuación")).toBe("Acentuación.md")
+      expect(titleToFilename("Test de salvadode Archivo con Nombre propio", "")).toBe(
+        "Test de salvadode Archivo con Nombre propio",
+      )
     })
 
     it("sanitises filesystem-illegal characters", () => {

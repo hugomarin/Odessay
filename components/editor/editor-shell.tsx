@@ -122,7 +122,11 @@ import {
   getDocumentService,
   importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
-import { UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
+import {
+  filenameToTitle,
+  titleToFilename,
+  UNTITLED_DOCUMENT_NAME,
+} from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
@@ -4161,6 +4165,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (!writingId || !isDesktopRuntime()) return
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
     await relocateDesktopWriting(writingId, path)
+    const filenameTitle = filenameToTitle(path)
+    setTitle(filenameTitle)
+    setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
     currentCanonicalPathRef.current = path
     setExternalFileNotice(null)
   }, [])
@@ -4175,6 +4182,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         writingId: currentWritingId ?? "draft",
       }),
     [bodyText, currentWritingId, displayTitle],
+  )
+
+  // Save As creates a canonical desktop document, not an export. It must retain
+  // the human filename, whereas exports intentionally use a portable slug.
+  const desktopSaveFileBaseName = useMemo(
+    () => titleToFilename(displayTitle, ""),
+    [displayTitle],
   )
 
   const getBodyMarkdown = useCallback(() => {
@@ -4194,8 +4208,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const handleGetSaveContent = useCallback(() => {
     const content = getBodyMarkdown()
     if (content === null) return null
-    return { content: `${content.trimEnd()}\n`, defaultName: exportFileBaseName }
-  }, [getBodyMarkdown, exportFileBaseName])
+    return {
+      content: `${content.trimEnd()}\n`,
+      defaultName: isDesktopRuntime() ? desktopSaveFileBaseName : exportFileBaseName,
+    }
+  }, [desktopSaveFileBaseName, exportFileBaseName, getBodyMarkdown])
 
   useTauriMenuEvents({
     onOpenFile: handleMenuOpenFile,
