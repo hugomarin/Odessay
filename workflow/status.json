@@ -70,7 +70,7 @@
       "issue": "ODE-323",
       "linear_url": "https://linear.app/z9ne/issue/ODE-323/fix-release-desktop-workflow-yaml-syntax",
       "pr_url": "https://github.com/hugomarin/Odessay/pull/294",
-      "commit": "54d451c",
+      "commit": "b7fbb3d",
       "date": "2026-06-23",
       "notes": "CI-only change to the desktop release workflow. Bundled with the v0.2.0 version bump in PR #294. Enables the tag-driven (app-v*) build, minisign, and GitHub Release upload pipeline."
     },
