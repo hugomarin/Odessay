@@ -51,7 +51,7 @@ import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
 import { copyTextWithFallback } from "@/lib/utils/clipboard"
-import { downloadBlob } from "@/lib/utils/download"
+import { downloadBlob, saveBinaryArtifact } from "@/lib/utils/download"
 import { buildWebWritingActionUrl, openExternalUrl, type WebWritingAction } from "@/lib/runtime/external-link"
 
 
@@ -718,9 +718,7 @@ export default function DeskPage() {
       throw new Error(result.error?.message ?? `Failed to export ${format.toUpperCase()}.`)
     }
 
-    const artifact = result.data
-    const blob = new Blob([artifact.bytes.buffer as ArrayBuffer], { type: artifact.mimeType })
-    downloadBlob(blob, artifact.fileName)
+    await saveBinaryArtifact(result.data)
   }, [])
 
   const shareWritingFromPreview = useCallback(
