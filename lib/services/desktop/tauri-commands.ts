@@ -52,6 +52,12 @@ export async function tauriWriteFile(path: string, content: string): Promise<voi
   markOdessaySelfWritePath(path)
 }
 
+export async function tauriWriteBinaryFile(path: string, bytes: Uint8Array): Promise<void> {
+  markOdessaySelfWritePath(path)
+  await invoke<void>("write_binary_file", { path, bytes: Array.from(bytes) })
+  markOdessaySelfWritePath(path)
+}
+
 export async function tauriRenameFile(oldPath: string, newPath: string): Promise<string> {
   markOdessaySelfWritePath(oldPath)
   markOdessaySelfWritePath(newPath)

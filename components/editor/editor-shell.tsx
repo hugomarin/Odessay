@@ -95,7 +95,7 @@ import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
-import { downloadBlob as downloadBlobUtil } from "@/lib/utils/download"
+import { downloadBlob as downloadBlobUtil, saveBinaryArtifact } from "@/lib/utils/download"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
@@ -4257,10 +4257,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         throw new Error(result.error.message)
       }
 
-      const blob = new Blob([result.data.bytes.buffer as ArrayBuffer], { type: result.data.mimeType })
-      downloadBlob(blob, result.data.fileName || `${exportFileBaseName}.${format}`)
+      return saveBinaryArtifact({
+        bytes: result.data.bytes,
+        fileName: result.data.fileName || `${exportFileBaseName}.${format}`,
+        mimeType: result.data.mimeType,
+      })
     },
-    [currentWritingId, downloadBlob, exportFileBaseName],
+    [currentWritingId, exportFileBaseName],
   )
 
   useEffect(() => {

@@ -53,6 +53,24 @@ pub fn write_file(path: String, content: String) -> Result<(), String> {
     })
 }
 
+/// Atomically write binary content to `path` by writing a .tmp sibling then renaming.
+/// Used by native export delivery so desktop PDF/DOCX exports do not go through browser downloads.
+#[tauri::command]
+pub fn write_binary_file(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    let target = Path::new(&path);
+    if let Some(parent) = target.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| format!("create_dir_all: {e}"))?;
+        }
+    }
+    let tmp_path = format!("{}.tmp", path);
+    fs::write(&tmp_path, &bytes).map_err(|e| format!("write_binary_file tmp: {e}"))?;
+    fs::rename(&tmp_path, target).map_err(|e| {
+        let _ = fs::remove_file(&tmp_path);
+        format!("write_binary_file rename: {e}")
+    })
+}
+
 /// Rename a file from `old_path` to `new_path`. Returns `new_path` on success.
 #[tauri::command]
 pub fn rename_file(old_path: String, new_path: String) -> Result<String, String> {
@@ -122,4 +140,29 @@ pub fn resolve_asset_path(doc_path: String, relative_path: String) -> Result<Str
         ));
     }
     Ok(canonical.to_string_lossy().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn write_binary_file_persists_exact_bytes() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after unix epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("odessay-binary-export-{unique}"));
+        let target = root.join("exports").join("letter.pdf");
+        let bytes = vec![0x25, 0x50, 0x44, 0x46, 0x00, 0xff];
+
+        write_binary_file(target.to_string_lossy().to_string(), bytes.clone())
+            .expect("binary export should be written");
+
+        let persisted = fs::read(&target).expect("binary export should be readable");
+        assert_eq!(persisted, bytes);
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

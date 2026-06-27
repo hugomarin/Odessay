@@ -39,9 +39,9 @@ type PropertiesPanelProps = {
   onArtifactTypeChange: (next: ArtifactType) => void
   onVisibilityChange: (next: WritingVisibility) => void
   onSpellcheckPreferenceChange: (next: EditorSpellcheckPreference) => void
-  onExportMarkdown: () => Promise<void> | void
-  onExportPdf: () => Promise<void> | void
-  onExportDocx: () => Promise<void> | void
+  onExportMarkdown: () => Promise<boolean | void> | boolean | void
+  onExportPdf: () => Promise<boolean | void> | boolean | void
+  onExportDocx: () => Promise<boolean | void> | boolean | void
   onClose: () => void
 }
 
@@ -348,13 +348,16 @@ export function PropertiesPanel({
 
       try {
         if (format === "markdown") {
-          await onExportMarkdown()
+          const exported = await onExportMarkdown()
+          if (exported === false) return
           setExportFeedback("Markdown export generated.")
         } else if (format === "pdf") {
-          await onExportPdf()
+          const exported = await onExportPdf()
+          if (exported === false) return
           setExportFeedback("PDF export generated.")
         } else {
-          await onExportDocx()
+          const exported = await onExportDocx()
+          if (exported === false) return
           setExportFeedback("Word export generated.")
         }
       } catch (error) {

@@ -293,6 +293,7 @@ pub fn run() {
             commands::document::open_file,
             commands::document::create_file,
             commands::document::write_file,
+            commands::document::write_binary_file,
             commands::document::rename_file,
             commands::document::list_recent_files,
             commands::document::resolve_asset_path,
