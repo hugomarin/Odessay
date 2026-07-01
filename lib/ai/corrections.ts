@@ -50,9 +50,6 @@ const TOKEN_CHAR_PATTERN = /[\p{L}\p{N}\p{M}'’-]/u;
 
 const isTokenChar = (value: string) => TOKEN_CHAR_PATTERN.test(value);
 
-const supportsLooseSubstringMatch = (type: CanonicalCorrection["type"]) =>
-  type === "spacing" || type === "punctuation";
-
 const hasTokenBoundaryMatch = (source: string, originalText: string) => {
   if (!originalText) {
     return false;
@@ -85,10 +82,6 @@ const hasTokenBoundaryMatch = (source: string, originalText: string) => {
 const isValidCorrectionMatch = (blockText: string, correction: CanonicalCorrection) => {
   if (!blockText.includes(correction.originalText)) {
     return false;
-  }
-
-  if (supportsLooseSubstringMatch(correction.type)) {
-    return true;
   }
 
   return hasTokenBoundaryMatch(blockText, correction.originalText);

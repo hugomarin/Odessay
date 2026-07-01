@@ -271,6 +271,13 @@ Estos gaps están documentados como trabajo pendiente. Cada cambio debe avanzar 
 
 Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el array `uncertain` del contrato mecánico. El adapter (`corrections-contract-adapter.ts`) mantiene compatibilidad hacia atrás.
 
+#### Invariante de selección de rangos
+
+- `originalText` debe coincidir con un rango seleccionable limpio dentro del bloque.
+- `spelling`, `accent`, `grammar`, `agreement`, `duplication` y `basic_redaction` solo se aceptan cuando `originalText` cae sobre límites completos de palabra o frase; un substring parcial dentro de un token mayor se rechaza.
+- `spacing` y `punctuation` también deben mapear a un rango limpio seleccionable. No se aceptan substrings parciales dentro de una palabra solo por coincidir textualmente.
+- Si el modelo devuelve un match parcial ambiguo, el sistema lo descarta durante la normalización canónica. No se expande silenciosamente al token completo.
+
 ### Memoria de decisiones
 
 - **Reject:** fingerprint se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.

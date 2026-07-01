@@ -170,6 +170,35 @@ describe("AI corrections", () => {
     expect(canonical.corrections).toHaveLength(3);
   });
 
+  it("rejects punctuation corrections that only match inside a larger token", () => {
+    const canonical = normalizeCanonicalCorrections(
+      {
+        summary: "Invalid punctuation match.",
+        language: "es",
+        corrections: [
+          {
+            blockId: "block-1",
+            type: "punctuation",
+            severity: "low",
+            confidence: "high",
+            originalText: "hola",
+            replacementText: "hola,",
+          },
+        ],
+        uncertain: [],
+      },
+      [
+        {
+          id: "block-1",
+          hash: hashCorrectionBlock("El holandes llego temprano."),
+          text: "El holandes llego temprano.",
+        },
+      ],
+    );
+
+    expect(canonical.corrections).toEqual([]);
+  });
+
   it("adapts canonical corrections to legacy publication review shape with block metadata", () => {
     const canonical = normalizeCanonicalCorrections(
       {
