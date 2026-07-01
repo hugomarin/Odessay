@@ -87,6 +87,118 @@ describe("AI corrections", () => {
     expect(canonical.uncertain).toHaveLength(1);
   });
 
+  it("rejects partial-word spelling matches but keeps phrase, spacing, and punctuation corrections", () => {
+    const canonical = normalizeCanonicalCorrections(
+      {
+        summary: "Mixed validation.",
+        language: "es",
+        corrections: [
+          {
+            blockId: "block-1",
+            type: "spelling",
+            severity: "medium",
+            confidence: "high",
+            originalText: "funcioand",
+            replacementText: "funcionando",
+          },
+          {
+            blockId: "block-1",
+            type: "grammar",
+            severity: "medium",
+            confidence: "high",
+            originalText: "Por ejemplo cuando",
+            replacementText: "Por ejemplo, cuando",
+          },
+          {
+            blockId: "block-2",
+            type: "spacing",
+            severity: "medium",
+            confidence: "high",
+            originalText: "deescritorio",
+            replacementText: "de escritorio",
+          },
+          {
+            blockId: "block-3",
+            type: "punctuation",
+            severity: "low",
+            confidence: "high",
+            originalText: "hola mundo",
+            replacementText: "hola, mundo",
+          },
+        ],
+        uncertain: [],
+      },
+      [
+        {
+          id: "block-1",
+          hash: hashCorrectionBlock("Sigue funcioando. Por ejemplo cuando salimos."),
+          text: "Sigue funcioando. Por ejemplo cuando salimos.",
+        },
+        {
+          id: "block-2",
+          hash: hashCorrectionBlock("Uso deescritorio cada dia."),
+          text: "Uso deescritorio cada dia.",
+        },
+        {
+          id: "block-3",
+          hash: hashCorrectionBlock("El panel dice hola mundo al abrir."),
+          text: "El panel dice hola mundo al abrir.",
+        },
+      ],
+    );
+
+    expect(canonical.corrections).toMatchObject([
+      {
+        blockId: "block-1",
+        type: "grammar",
+        originalText: "Por ejemplo cuando",
+        replacementText: "Por ejemplo, cuando",
+      },
+      {
+        blockId: "block-2",
+        type: "spacing",
+        originalText: "deescritorio",
+        replacementText: "de escritorio",
+      },
+      {
+        blockId: "block-3",
+        type: "punctuation",
+        originalText: "hola mundo",
+        replacementText: "hola, mundo",
+      },
+    ]);
+    expect(canonical.corrections).toHaveLength(3);
+  });
+
+  it("rejects punctuation corrections that only match inside a larger token", () => {
+    const canonical = normalizeCanonicalCorrections(
+      {
+        summary: "Invalid punctuation match.",
+        language: "es",
+        corrections: [
+          {
+            blockId: "block-1",
+            type: "punctuation",
+            severity: "low",
+            confidence: "high",
+            originalText: "hola",
+            replacementText: "hola,",
+          },
+        ],
+        uncertain: [],
+      },
+      [
+        {
+          id: "block-1",
+          hash: hashCorrectionBlock("El holandes llego temprano."),
+          text: "El holandes llego temprano.",
+        },
+      ],
+    );
+
+    expect(canonical.corrections).toEqual([]);
+  });
+
   it("adapts canonical corrections to legacy publication review shape with block metadata", () => {
     const canonical = normalizeCanonicalCorrections(
       {
