@@ -233,7 +233,7 @@ El sistema actual no cumple aún todos los principios de construcción. Estos so
 |-----------|--------------|-----|
 | Persistir para no reprocesar | Persistencia IndexedDB + Supabase con write-through | Completado en ODE-165 |
 | Velocidad mediante batching | 1 bloque = 1 llamada HTTP secuencial | Sin batching ni paralelismo |
-| Separar qué/cuándo | Umbral de 8 palabras descarta párrafos cortos | Filtro de longitud mezcla concerns |
+| Separar qué/cuándo | Todo bloque válido con texto es elegible; debounce controla cuándo se analiza | Completado en ODE-327 |
 | Smart invalidation | Stale invalidation con keep/drop/replace | Mejorado en ODE-163 |
 | Observabilidad | `logCorrectionEvent` con discriminated union de 8 eventos | Completado en ODE-161 |
 | Control de usuario | Toggles de activación y visibilidad de correcciones | Completado en ODE-167 |

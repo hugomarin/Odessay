@@ -278,6 +278,8 @@ Los bloques con respuesta válida se persisten normalmente. Los faltantes se rei
 
 ## Mejora 3: Eliminar umbral de 8 palabras
 
+Estado: completado en ODE-327. Mantener esta sección como contexto histórico del cambio; no reintroducir filtros por longitud en scheduling, hydration ni persistencia de correcciones.
+
 ### Objetivo
 Todo bloque con texto válido es candidato a corrección, sin importar su longitud.
 

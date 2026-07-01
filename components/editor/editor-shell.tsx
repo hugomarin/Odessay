@@ -58,6 +58,7 @@ import {
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
 import { getResolvedCorrectionText, resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
+import { getHydrateMissCorrectionBlocks, isCorrectionBlockEligible } from "@/lib/editor/correction-analysis"
 import { createCorrectionSuggestionBatcher } from "@/lib/editor/correction-suggestion-batcher"
 import {
   collectCorrectionBlocks,
@@ -1331,8 +1332,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
 
         const cachedBlockHashes = new Set(localCorrectionBlocks.map((block) => block.blockHash))
-        const uncachedBlocks = collectCorrectionBlocks(editor.state.doc).filter(
-          (block) => block.wordCount >= 8 && !cachedBlockHashes.has(block.hash),
+        const uncachedBlocks = getHydrateMissCorrectionBlocks(
+          collectCorrectionBlocks(editor.state.doc),
+          cachedBlockHashes,
         )
 
         for (const block of uncachedBlocks) {
@@ -3323,7 +3325,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           })
         }
 
-        if (block.wordCount < 8) {
+        if (!isCorrectionBlockEligible(block)) {
           applyStaleInvalidation()
           continue
         }
