@@ -46,6 +46,54 @@ export type CanonicalCorrection = z.infer<typeof canonicalCorrectionSchema>;
 export type CanonicalCorrectionsResponse = z.infer<typeof canonicalCorrectionsResponseSchema>;
 export type UncertainCorrection = z.infer<typeof uncertainCorrectionSchema>;
 
+const TOKEN_CHAR_PATTERN = /[\p{L}\p{N}\p{M}'’-]/u;
+
+const isTokenChar = (value: string) => TOKEN_CHAR_PATTERN.test(value);
+
+const supportsLooseSubstringMatch = (type: CanonicalCorrection["type"]) =>
+  type === "spacing" || type === "punctuation";
+
+const hasTokenBoundaryMatch = (source: string, originalText: string) => {
+  if (!originalText) {
+    return false;
+  }
+
+  let searchIndex = 0;
+
+  while (searchIndex <= source.length - originalText.length) {
+    const matchIndex = source.indexOf(originalText, searchIndex);
+
+    if (matchIndex === -1) {
+      return false;
+    }
+
+    const previousChar = matchIndex > 0 ? source[matchIndex - 1] : "";
+    const nextChar = source[matchIndex + originalText.length] ?? "";
+    const startsAtBoundary = previousChar.length === 0 || !isTokenChar(previousChar);
+    const endsAtBoundary = nextChar.length === 0 || !isTokenChar(nextChar);
+
+    if (startsAtBoundary && endsAtBoundary) {
+      return true;
+    }
+
+    searchIndex = matchIndex + originalText.length;
+  }
+
+  return false;
+};
+
+const isValidCorrectionMatch = (blockText: string, correction: CanonicalCorrection) => {
+  if (!blockText.includes(correction.originalText)) {
+    return false;
+  }
+
+  if (supportsLooseSubstringMatch(correction.type)) {
+    return true;
+  }
+
+  return hasTokenBoundaryMatch(blockText, correction.originalText);
+};
+
 export const hashCorrectionBlock = (text: string) => {
   let hash = 2166136261;
 
@@ -83,7 +131,7 @@ export const normalizeCanonicalCorrections = (
         const block = blockById.get(correction.blockId);
         return Boolean(
           block &&
-          block.text.includes(correction.originalText) &&
+          isValidCorrectionMatch(block.text, correction) &&
           correction.originalText.trim() !== correction.replacementText.trim(),
         );
       }),
