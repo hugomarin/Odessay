@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "fix(ai): reject partial-word AI correction matches. Adds token-boundary validation in lib/ai/corrections.ts so spelling/accent corrections must match complete word/token ranges; preserves phrase, spacing, and punctuation corrections; adds regression coverage for funcioando partial underline and allowed phrase/spacing cases; updates odessay-ai-writing-assist.md with the token-boundary invariant. [ODE-329]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-329",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-329/reject-partial-word-ai-correction-matches",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/303",
+      "commit": "355ce5e",
+      "date": "2026-07-01",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (131 files / 829 tests). ops:delivery:gate PASS. CI Traceability SUCCESS. Vercel Preview SUCCESS. Architecture Contract COMPLIANT. Backfilled traceability entry after merge."
+    },
+    {
       "what": "fix(corrections): harden correction cache invalidation after manual edits. Introduces logical block identity (correction-block:${logicalId}:${hash}:${pos}) and positional-window fallback for legacy rows; updates editor hydration to drop persisted blocks whose source hash no longer exists in the current document and propagate cleanup to IndexedDB and Supabase; makes /api/corrections/persist delete stale logical versions before upsert; adds regression coverage for shifted-position invalidation, hydration cleanup, and route-level stale-row deletion; updates AI writing assist docs with the new block identity contract. [ODE-328]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-328",
