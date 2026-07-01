@@ -39,13 +39,14 @@ const schema = new Schema({
 })
 
 describe("correction trigger plugin helpers", () => {
-  it("collects text-bearing editor blocks and skips code blocks", () => {
+  it("collects short text-bearing editor blocks and skips code blocks", () => {
     const doc = schema.node("doc", null, [
-      schema.node("heading", null, [schema.text("A headed block with enough words")]),
-      schema.node("paragraph", null, [schema.text("A paragraph block with enough words to analyze")]),
+      schema.node("heading", null, [schema.text("Titulo breve")]),
+      schema.node("paragraph", null, [schema.text("Solo asi")]),
+      schema.node("paragraph", null, [schema.text("   ")]),
       schema.node("bulletList", null, [
         schema.node("listItem", null, [
-          schema.node("paragraph", null, [schema.text("A list item block with enough words to analyze")]),
+          schema.node("paragraph", null, [schema.text("Muy bien")]),
         ]),
       ]),
       schema.node("codeBlock", null, [schema.text("const typo = 'do not analyze this block'")]),
