@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-06-27",
+  "last_updated": "2026-07-01",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -54,6 +54,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "fix(editor): correct AI correction range mapping in ProseMirror decorations. Maps block-local offsets to document positions using the node content offset (`blockPos + 1`), revalidates `original_text` before applying a correction so stale suggestions become conflicts instead of mutating adjacent text, adds regression tests for first-block phrases and marked text, and updates AI assist and ProseMirror docs with the range-mapping invariant. [ODE-326]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-326",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-326/fix-ai-correction-range-mapping-in-prosemirror-decorations",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/300",
+      "commit": "4dc0e25717e5299e0cf0afd8d2c700f7e4f0cc6d",
+      "date": "2026-07-01",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing react-hooks/exhaustive-deps warnings only). npm test PASS (820 tests). CI Traceability Gates PASS after ODE-332 status backfill. Vercel Preview PASS. Perf gate 13 pass / 1 warn / 0 required_failures. QualityScore 8.8/10 (P2: incorrect DOCX_MIME_TYPE constant in export-delivery.ts; P3×3: scope deviation, missing raw outputs in PR body, Files Affected mismatch)."
+    },
     {
       "what": "fix(export): route desktop PDF/DOCX exports through native Tauri Save dialog and binary file write to avoid CSP-blocked browser downloads. Adds lib/services/desktop/export-delivery.ts, saveBinaryArtifact in lib/utils/download.ts, write_binary_file Rust command, and wires editor and Desk preview exports to saveBinaryArtifact. Web exports keep Blob download path. [ODE-332]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
