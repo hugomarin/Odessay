@@ -3,6 +3,7 @@ import type { Editor as TiptapEditor } from "@tiptap/core"
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { Plugin, PluginKey } from "@tiptap/pm/state"
 import { hashCorrectionBlock } from "@/lib/ai/corrections"
+import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation"
 
 export type CorrectionTriggerBlock = {
   id: string
@@ -28,6 +29,17 @@ const EXCLUDED_NODE_TYPES = new Set(["codeBlock"])
 
 const countWords = (text: string) => text.trim().split(/\s+/).filter(Boolean).length
 
+const getCorrectionBlockLogicalId = (doc: ProseMirrorNode, pos: number) => {
+  const resolved = doc.resolve(Math.min(pos + 1, doc.content.size))
+  const segments: string[] = []
+
+  for (let depth = 0; depth < resolved.depth; depth += 1) {
+    segments.push(String(resolved.index(depth)))
+  }
+
+  return segments.join(".")
+}
+
 const isAnalysisNode = (node: ProseMirrorNode) =>
   ANALYSIS_NODE_TYPES.has(node.type.name) &&
   !EXCLUDED_NODE_TYPES.has(node.type.name) &&
@@ -36,12 +48,13 @@ const isAnalysisNode = (node: ProseMirrorNode) =>
 const rangesIntersect = (leftFrom: number, leftTo: number, rightFrom: number, rightTo: number) =>
   leftFrom < rightTo && leftTo > rightFrom
 
-const toCorrectionBlock = (node: ProseMirrorNode, pos: number): CorrectionTriggerBlock => {
+const toCorrectionBlock = (doc: ProseMirrorNode, node: ProseMirrorNode, pos: number): CorrectionTriggerBlock => {
   const text = node.textContent.trim()
   const hash = hashCorrectionBlock(text)
+  const logicalId = getCorrectionBlockLogicalId(doc, pos)
 
   return {
-    id: `correction-block:${hash}:${pos}`,
+    id: `correction-block:${logicalId}:${hash}:${pos}`,
     pos,
     nodeSize: node.nodeSize,
     nodeType: node.type.name,
@@ -63,7 +76,7 @@ export const collectCorrectionBlocks = (doc: ProseMirrorNode): CorrectionTrigger
       return true
     }
 
-    blocks.push(toCorrectionBlock(node, pos))
+    blocks.push(toCorrectionBlock(doc, node, pos))
 
     if (node.type.name === "listItem" || node.type.name === "taskItem") {
       return false
@@ -98,7 +111,7 @@ export const collectCorrectionBlocksInRanges = (
         const node = resolved.node(depth)
 
         if (isAnalysisNode(node)) {
-          const block = toCorrectionBlock(node, resolved.before(depth))
+          const block = toCorrectionBlock(doc, node, resolved.before(depth))
           byId.set(block.id, block)
           break
         }
@@ -125,7 +138,7 @@ export const collectCorrectionBlocksInRanges = (
         return false
       }
 
-      const block = toCorrectionBlock(node, pos)
+      const block = toCorrectionBlock(doc, node, pos)
 
       if (rangesIntersect(block.pos, block.pos + block.nodeSize, Math.max(0, from - 1), Math.min(doc.content.size, to + 1))) {
         byId.set(block.id, block)
@@ -173,7 +186,11 @@ const createCorrectionTriggerPlugin = () =>
           .filter((block) => !acknowledged.has(block.id))
           .map((block) => {
             const mapped = transaction.mapping.mapResult(block.pos, 1)
-            return mapped.deleted ? null : { ...block, pos: mapped.pos, id: `correction-block:${block.hash}:${mapped.pos}` }
+            const logicalId = parseCorrectionBlockLogicalId(block.id)
+            const nextId = logicalId
+              ? `correction-block:${logicalId}:${block.hash}:${mapped.pos}`
+              : `correction-block:${block.hash}:${mapped.pos}`
+            return mapped.deleted ? null : { ...block, pos: mapped.pos, id: nextId }
           })
           .filter((block): block is CorrectionTriggerBlock => block !== null)
 

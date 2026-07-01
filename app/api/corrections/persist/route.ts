@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
+import { findLogicalStaleCorrectionBlocks } from "@/lib/corrections/block-invalidation";
 
 const publicationSuggestionSchema = z.object({
   id: z.string().trim().min(1),
@@ -77,6 +78,38 @@ async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>
   return { ok: true as const };
 }
 
+async function resolveStalePersistedBlockIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  writingId: string,
+  block: z.infer<typeof persistedCorrectionBlockSchema>,
+) {
+  const { data, error } = await supabase
+    .from("correction_blocks")
+    .select("id, block_id, block_hash")
+    .eq("writing_id", writingId)
+
+  if (error) {
+    return { data: null, error }
+  }
+
+  const staleBlocks = findLogicalStaleCorrectionBlocks(
+    (data ?? []).map((candidate) => ({
+      id: candidate.id,
+      blockId: candidate.block_id,
+      blockHash: candidate.block_hash,
+    })),
+    {
+      id: block.block_id,
+      hash: block.block_hash,
+    },
+  )
+
+  return {
+    data: staleBlocks.map((candidate) => candidate.id),
+    error: null,
+  }
+}
+
 export async function POST(request: Request) {
   const preflight = handleCorsPreflight(request)
   if (preflight) return preflight
@@ -111,12 +144,23 @@ export async function POST(request: Request) {
     return withCorsHeaders(ownership.response, request);
   }
 
-  if (parsedBody.data.deletedBlockIds.length > 0) {
+  const staleBlockIds =
+    parsedBody.data.block
+      ? await resolveStalePersistedBlockIds(supabase, effectiveWritingId, parsedBody.data.block)
+      : { data: [] as string[], error: null }
+
+  if (staleBlockIds.error) {
+    return withCorsHeaders(jsonError(500, "DB_ERROR", staleBlockIds.error.message), request);
+  }
+
+  const deletedBlockIds = [...new Set([...parsedBody.data.deletedBlockIds, ...(staleBlockIds.data ?? [])])]
+
+  if (deletedBlockIds.length > 0) {
     const { error } = await supabase
       .from("correction_blocks")
       .delete()
       .eq("writing_id", effectiveWritingId)
-      .in("id", parsedBody.data.deletedBlockIds);
+      .in("id", deletedBlockIds);
 
     if (error) {
       return withCorsHeaders(jsonError(500, "DB_ERROR", error.message), request);
@@ -128,7 +172,7 @@ export async function POST(request: Request) {
       {
         data: {
           persistedId: null,
-          deletedIds: parsedBody.data.deletedBlockIds,
+          deletedIds: deletedBlockIds,
           syncedAt: new Date().toISOString(),
         },
         error: null,
@@ -151,7 +195,7 @@ export async function POST(request: Request) {
     {
       data: {
         persistedId: data.id,
-        deletedIds: parsedBody.data.deletedBlockIds,
+        deletedIds: deletedBlockIds,
         syncedAt: new Date().toISOString(),
       },
       error: null,
