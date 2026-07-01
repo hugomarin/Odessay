@@ -70,6 +70,24 @@ describe("publication suggestion engine", () => {
     expect(match).toBeNull();
   });
 
+  it("does not match a punctuation suggestion when the replacement already exists", () => {
+    const source = "Con Opus está más difícil. Pero ahí seguramente aparece la oportunidad.";
+    const suggestion = createSuggestion({
+      id: "punctuation-1",
+      kind: "punctuation",
+      original_text: "Con Opus está más difícil",
+      replacement_text: "Con Opus está más difícil.",
+      context_before: null,
+      context_after: "Pero ahí seguramente",
+    });
+
+    expect(findSuggestionMatch(source, suggestion)).toBeNull();
+    expect(applySuggestionToMarkdown(source, suggestion)).toEqual({
+      markdown: source,
+      applied: false,
+    });
+  });
+
   it("applies grouped suggestions without marking unmatched group members as applied", () => {
     const source = "prueva uno.\nprueva dos.";
     const result = applyPublicationSuggestionGroup(source, [

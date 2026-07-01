@@ -54,6 +54,24 @@ describe("stale correction invalidation", () => {
     expect(invalidation.suggestions).toEqual([])
   })
 
+  it("drops punctuation suggestions when the edited block already contains the replacement", () => {
+    const redundant = createSuggestion({
+      id: "punctuation-1",
+      kind: "punctuation",
+      original_text: "Con Opus está más difícil",
+      replacement_text: "Con Opus está más difícil.",
+    })
+
+    const invalidation = invalidateBlockSuggestions([redundant], {
+      id: "block-1",
+      text: "Con Opus está más difícil. Pero ahí seguramente aparece la oportunidad.",
+    })
+
+    expect(invalidation.keptIds).toEqual([])
+    expect(invalidation.droppedIds).toEqual([redundant.id])
+    expect(invalidation.suggestions).toEqual([])
+  })
+
   it("replaces stale suggestions when a new model response arrives", () => {
     const stale = createSuggestion({ id: "stale-1", status: "pending-stale" })
     const otherBlock = createSuggestion({ id: "other-block", block_id: "block-2" })
