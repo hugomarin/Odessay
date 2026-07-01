@@ -3,7 +3,7 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-editor.md`, `workflow/context/features/odessay-sync.md`, `workflow/context/core/odessay-modelo-datos.md` y `workflow/context/core/odessay-stack.md` antes de implementar.
 
-Última actualización: 2026-05-17.
+Última actualización: 2026-07-01.
 
 ---
 
@@ -41,10 +41,11 @@ No reemplaza `odessay-ai-editor.md` (editor residente de observaciones). Esta sp
 
 El trabajo del modelo es caro y lento. Una vez que un bloque fue analizado y su hash no cambió, no debe volver a pasar por la API.
 
-- Las correcciones de cada bloque se almacenan localmente (IndexedDB) y remotamente (Supabase) indexadas por `(writingId, blockId, blockHash)`.
+- Las correcciones de cada bloque se almacenan localmente (IndexedDB) y remotamente (Supabase) indexadas por la identidad activa del bloque: `writingId`, `blockId` y `blockHash`.
 - Al cargar un writing, el sistema restaura sugerencias de bloques cuyo hash coincida sin llamar al modelo.
 - Solo los bloques modificados (hash divergente) o nuevos se encolan para corrección.
 - Esto elimina el reprocesamiento completo al recargar la página o cambiar de pestaña.
+- Si un Accept/Reject o una edición manual cambia el `blockHash` del mismo párrafo lógico, la persistencia debe **remapear** la fila existente al nuevo `blockId`/`blockHash` y borrar la fila stale anterior para que IndexedDB y Supabase converjan sobre una sola versión activa.
 
 ### 2. Velocidad mediante paralelismo y batching
 
@@ -73,6 +74,7 @@ Las sugerencias no se destruyen preventivamente.
 - Esto evita el parpadeo de decoraciones mientras el usuario escribe.
 - A nivel de cache persistido, la invalidación ya no depende solo de posición exacta. El sistema invalida por **identidad lógica del bloque** y usa una **ventana posicional pequeña** como fallback para filas legacy que aún no tienen identidad lógica estable.
 - Invariante persistido: Supabase e IndexedDB deben converger al **cache activo actual** del writing; versiones lógicas stale del mismo párrafo no se conservan como historial activo cuando cambia `source_hash`.
+- Cuando el párrafo lógico sigue existiendo pero su hash cambia, el write-through de persistencia debe reconstruir la fila con el `blockId`/`blockHash` actuales, reescribir `suggestions[*].source_hash`, y enviar `deletedBlockIds` para retirar la fila stale remota.
 
 ### 5. Observabilidad integrada
 
@@ -144,6 +146,30 @@ Guardrails del mapper:
 - Antes de aplicar Accept/Replace, el texto actual del documento en el rango resuelto debe seguir siendo exactamente `originalText`; si no coincide, la sugerencia se marca como stale/conflict y no se aplica.
 - En hidratación, cualquier bloque persistido cuyo `block_hash` ya no exista en el documento actual debe eliminarse del cache local y remoto antes de reexponer sugerencias.
 
+### Harness de regresión canónico
+
+ODE-330 introduce un harness determinista para la familia de bugs de ortografía y persistencia:
+
+- Ruta: `/perf/orthography-harness`
+- Cliente: `app/perf/orthography-harness/orthography-harness-client.tsx`
+- Fixture: `lib/testing/orthography-regression-fixture.ts`
+- Writing seeded: `13192f3a-d68e-4ff9-bcf8-fe02cce6b8aa`
+- Test de aceptación: `tests/playwright/orthography-regression-harness.e2e.ts`
+
+Propósito operativo:
+
+- reproducir sin llamadas live al modelo el flujo de apply/reject/manual edit/reload
+- verificar que párrafos cortos sigan siendo elegibles para corrección
+- verificar que la persistencia remueva bloques stale cuando cambia el `blockHash` del mismo bloque lógico
+- verificar que panel, decoraciones inline e hidratación recargada converjan al mismo set de sugerencias activas
+
+Escenario canónico del fixture:
+
+- el panel inicial debe exponer `funcioando`, `aplicació`, `paralabras`, `aprrafo`, `mejro`, `Solo asi`, `Tendremos una buen producto` y la sugerencia de puntuación `escritorio creo -> escritorio. Creo`
+- aceptar `funcioando` no debe activar ni aplicar sugerencias no relacionadas
+- aceptar `escritorio creo -> escritorio. Creo` no debe corromper el texto (`deescritorio. Creoo`)
+- editar manualmente `mejro -> mejor` debe invalidar la sugerencia stale y persistir el estado corregido tras recarga
+
 ---
 
 ## Contrato de proveedor/modelo (obligatorio)
@@ -198,6 +224,13 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 
 - **Automático:** debounce por inactividad de escritura (2s). El plugin ProseMirror identifica bloques dirty tras cada transacción.
 - **Manual:** no existe actualmente en la UI. El botón "Reanalyze" del panel legacy fue eliminado.
+
+### Estado actual de elegibilidad e invalidación
+
+- No existe umbral mínimo de palabras para correcciones automáticas; párrafos cortos como `Solo asi` siguen siendo elegibles.
+- Las coincidencias parciales de token no deben subrayarse ni aceptarse como reemplazos válidos.
+- Las sugerencias persistidas se reconcilian por bloque lógico primero y por ventana posicional legacy solo como fallback.
+- Si una sugerencia aceptada cambia el hash del mismo párrafo lógico, el cache persistido debe remapearse a la nueva identidad antes de exponer la siguiente hidratación.
 
 ### Streaming
 

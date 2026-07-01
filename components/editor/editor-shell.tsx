@@ -905,6 +905,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [editorExtensions, flushQueuedRichModeUpdate],
   )
 
+  // Keep an imperative handle to the latest TipTap instance so persistence remaps
+  // can read the current block graph even when callbacks outlive a render.
   useEffect(() => {
     editorInstanceRef.current = editor ?? null
   }, [editor])

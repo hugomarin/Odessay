@@ -57,15 +57,17 @@ export const createOrthographyRegressionCorrectionBlocks = (): LocalCorrectionBl
           uncertain: [],
         })
 
+        const suggestions: LocalCorrectionBlock["suggestions"] = adapted.legacy.suggestions.map((suggestion) => ({
+          ...suggestion,
+          source_hash: block.hash,
+        }))
+
         return {
           id: `auto-correction:${ORTHOGRAPHY_REGRESSION_WRITING_ID}:${block.hash}`,
           writingId: ORTHOGRAPHY_REGRESSION_WRITING_ID,
           blockId: block.id,
           blockHash: block.hash,
-          suggestions: adapted.legacy.suggestions.map((suggestion) => ({
-            ...suggestion,
-            source_hash: block.hash,
-          })) as LocalCorrectionBlock["suggestions"],
+          suggestions,
           model: "orthography-fixture",
           createdAt: ORTHOGRAPHY_REGRESSION_CREATED_AT,
           latencyMs: 12,
