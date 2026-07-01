@@ -91,6 +91,7 @@ Estos tests viven sobre harnesses estables y suelen ser la mejor base para cambi
 - [tests/playwright/rich-bold-selection-boundary.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/rich-bold-selection-boundary.e2e.ts:1)
 - [tests/playwright/footnote-roundtrip.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/footnote-roundtrip.e2e.ts:1)
 - [tests/playwright/highlight-roundtrip.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/highlight-roundtrip.e2e.ts:1)
+- [tests/playwright/orthography-regression-harness.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/orthography-regression-harness.e2e.ts:1)
 
 Clasificación:
 
@@ -103,6 +104,11 @@ Cuándo reutilizarlos:
 - round-trip de estructuras editoriales
 - shortcuts
 - uploads o tablas en editor
+
+Caso adicional dentro de esta familia:
+
+- `orthography-regression-harness.e2e.ts` cubre correcciones automáticas, invalidación tras edición manual, remap persistido de `blockId`/`blockHash`, y reload/hydration sobre el harness `/perf/orthography-harness`
+- clasificarlo como `usable as-is` para regresiones de editor/corrections que necesiten mocks deterministas de review/persist sin auth ni modelo live
 
 Nota:
 

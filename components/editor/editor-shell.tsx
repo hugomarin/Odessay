@@ -105,6 +105,7 @@ import {
   DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
   findStaleCorrectionBlockRecords,
   hydrateCorrectionBlocksFromRemote,
+  parseCorrectionBlockLogicalId,
   persistCorrectionBlockRemotely,
   reconcileHydratedCorrectionBlocks,
 } from "@/lib/corrections/persistence"
@@ -415,6 +416,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
+  const editorInstanceRef = useRef<Editor | null>(null)
   const editorExtensions = useMemo(() => createEditorExtensions(), [])
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -510,27 +512,78 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
   const updatePersistedBlocksFromSuggestions = useCallback(
     async (nextSuggestions: PublicationSuggestion[], blockHashes: string[]) => {
-      const updatedBlocks = blockHashes
-        .map((blockHash) => {
-          const currentBlock = persistedCorrectionBlocksRef.current.get(blockHash)
+      const currentEditor = editorInstanceRef.current
 
-          if (!currentBlock) {
-            return null
-          }
-
-          return {
-            ...currentBlock,
-            suggestions: nextSuggestions.filter((suggestion) => suggestion.source_hash === blockHash),
-          } satisfies LocalCorrectionBlock
-        })
-        .filter((block): block is LocalCorrectionBlock => block !== null)
-
-      if (updatedBlocks.length === 0) {
+      if (!currentEditor) {
         return
       }
 
-      for (const block of updatedBlocks) {
-        await persistCorrectionBlockWriteThrough(block)
+      const currentBlocksByLogicalId = new Map(
+        collectCorrectionBlocks(currentEditor.state.doc)
+          .map((block) => [parseCorrectionBlockLogicalId(block.id), block] as const)
+          .filter((entry): entry is [string, CorrectionTriggerBlock] => entry[0] !== null),
+      )
+
+      const updates = blockHashes
+        .map((blockHash) => {
+          const persistedBlock = persistedCorrectionBlocksRef.current.get(blockHash)
+
+          if (!persistedBlock) {
+            return null
+          }
+
+          const logicalId = parseCorrectionBlockLogicalId(persistedBlock.blockId)
+          const currentBlock = logicalId ? currentBlocksByLogicalId.get(logicalId) ?? null : null
+          const nextBlockHash = currentBlock?.hash ?? persistedBlock.blockHash
+          const nextBlockId = currentBlock?.id ?? persistedBlock.blockId
+          const didBlockHashChange = nextBlockHash !== persistedBlock.blockHash
+          const suggestions = nextSuggestions
+            .filter((suggestion) => suggestion.source_hash === blockHash)
+            .map((suggestion) =>
+              didBlockHashChange
+                ? {
+                    ...suggestion,
+                    block_id: nextBlockId,
+                    source_hash: nextBlockHash,
+                  }
+                : suggestion,
+            )
+
+          return {
+            previousBlock: persistedBlock,
+            nextBlock: {
+              ...persistedBlock,
+              id: didBlockHashChange
+                ? createCorrectionBlockRecordId(persistedBlock.writingId, nextBlockHash)
+                : persistedBlock.id,
+              blockId: nextBlockId,
+              blockHash: nextBlockHash,
+              suggestions,
+            } satisfies LocalCorrectionBlock,
+            deletedBlockIds: didBlockHashChange ? [persistedBlock.id] : [],
+          }
+        })
+        .filter(
+          (
+            update,
+          ): update is {
+            previousBlock: LocalCorrectionBlock
+            nextBlock: LocalCorrectionBlock
+            deletedBlockIds: string[]
+          } => update !== null,
+        )
+
+      if (updates.length === 0) {
+        return
+      }
+
+      for (const update of updates) {
+        if (update.deletedBlockIds.length > 0) {
+          persistedCorrectionBlocksRef.current.delete(update.previousBlock.blockHash)
+          await localDB.correctionBlocks.delete(update.previousBlock.id)
+        }
+
+        await persistCorrectionBlockWriteThrough(update.nextBlock, update.deletedBlockIds)
       }
     },
     [persistCorrectionBlockWriteThrough],
@@ -851,6 +904,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     },
     [editorExtensions, flushQueuedRichModeUpdate],
   )
+
+  // Keep an imperative handle to the latest TipTap instance so persistence remaps
+  // can read the current block graph even when callbacks outlive a render.
+  useEffect(() => {
+    editorInstanceRef.current = editor ?? null
+  }, [editor])
 
   const persistCurrentWorkspaceViewState = useCallback(() => {
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
