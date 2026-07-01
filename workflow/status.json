@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "fix(corrections): harden correction cache invalidation after manual edits. Introduces logical block identity (correction-block:${logicalId}:${hash}:${pos}) and positional-window fallback for legacy rows; updates editor hydration to drop persisted blocks whose source hash no longer exists in the current document and propagate cleanup to IndexedDB and Supabase; makes /api/corrections/persist delete stale logical versions before upsert; adds regression coverage for shifted-position invalidation, hydration cleanup, and route-level stale-row deletion; updates AI writing assist docs with the new block identity contract. [ODE-328]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-328",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-328/harden-correction-cache-invalidation-after-manual-edits",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/302",
+      "commit": "251431a",
+      "date": "2026-07-01",
+      "notes": "Typecheck PASS. Lint PASS with 6 pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (131 files / 828 tests). ops:perf:gate PASS (14 pass / 0 warn / 1 skip / required_failures: 0). ops:delivery:gate PASS with OPS_PERF_TRACE_PATH. CI Traceability SUCCESS. Vercel Preview SUCCESS. Architecture Contract COMPLIANT. QualityScore 9.8/10 (single P3: persist route query loads all correction_blocks for the writing without explicit limit/position filter)."
+    },
+    {
       "what": "fix(editor): analyze short correction blocks in the AI orthography engine. Removes the 8-word minimum from correction hydration misses and dirty-block scheduling; centralizes correction block eligibility around non-empty text in lib/editor/correction-analysis.ts so short paragraphs are analyzed consistently; adds focused regression coverage for short-block eligibility, hydration parity and source-hash dedupe; updates AI writing assist docs to reflect that every valid text block is eligible. [ODE-327]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-327",
