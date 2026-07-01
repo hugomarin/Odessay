@@ -55,6 +55,16 @@
   },
   "built": [
     {
+      "what": "test(editor): add orthography regression harness for correction apply and persistence. Adds deterministic fixture and Playwright E2E under /perf/orthography-harness; mocks /api/ai/publication-review, /api/corrections/hydrate and /api/corrections/persist to verify apply, manual-edit invalidation, persisted block remap, and reload/hydration; fixes EditorShell updatePersistedBlocksFromSuggestions to remap persisted correction blocks to the new blockId/blockHash when a logical paragraph changes hash and to propagate deletedBlockIds through the write-through. Updates odessay-ai-writing-assist.md and playwright-catalog.md with the harness contract. [ODE-330]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-330",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-330/add-orthography-regression-harness-for-correction-apply-and",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/304",
+      "commit": "fe28dc7",
+      "date": "2026-07-01",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (131 files / 830 tests). Playwright orthography-regression-harness.e2e.ts PASS (1/1). ops:delivery:gate PASS (perf gate skipped, no OPS_PERF_TRACE_PATH). CI Traceability Gates SUCCESS after ODE-329 backfill. Vercel Preview SUCCESS. Architecture Contract COMPLIANT after brief completed with Owner and Required docs. QualityScore 9.8/10 (single P3: editorInstanceRef synchronized via useEffect, documented)."
+    },
+    {
       "what": "fix(ai): reject partial-word AI correction matches. Adds token-boundary validation in lib/ai/corrections.ts so spelling/accent corrections must match complete word/token ranges; preserves phrase, spacing, and punctuation corrections; adds regression coverage for funcioando partial underline and allowed phrase/spacing cases; updates odessay-ai-writing-assist.md with the token-boundary invariant. [ODE-329]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-329",
