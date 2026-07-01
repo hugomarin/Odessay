@@ -54,6 +54,24 @@ describe("stale correction invalidation", () => {
     expect(invalidation.suggestions).toEqual([])
   })
 
+  it("drops punctuation suggestions when the edited block already contains the replacement", () => {
+    const redundant = createSuggestion({
+      id: "punctuation-1",
+      kind: "punctuation",
+      original_text: "Con Opus está más difícil",
+      replacement_text: "Con Opus está más difícil.",
+    })
+
+    const invalidation = invalidateBlockSuggestions([redundant], {
+      id: "block-1",
+      text: "Con Opus está más difícil. Pero ahí seguramente aparece la oportunidad.",
+    })
+
+    expect(invalidation.keptIds).toEqual([])
+    expect(invalidation.droppedIds).toEqual([redundant.id])
+    expect(invalidation.suggestions).toEqual([])
+  })
+
   it("replaces stale suggestions when a new model response arrives", () => {
     const stale = createSuggestion({ id: "stale-1", status: "pending-stale" })
     const otherBlock = createSuggestion({ id: "other-block", block_id: "block-2" })
@@ -69,6 +87,32 @@ describe("stale correction invalidation", () => {
     expect(replacement.replacedIds).toEqual([stale.id])
     expect(replacement.suggestions).toEqual([otherBlock, fresh])
     expect(replacement.suggestions.find((suggestion) => suggestion.id === fresh.id)?.status).toBe("pending")
+  })
+
+  it("replaces stale suggestions when the same logical block gets a new hash", () => {
+    const stale = createSuggestion({
+      id: "stale-1",
+      block_id: "correction-block:0.3:blk-old:236",
+      source_hash: "blk-old",
+      status: "pending-stale",
+    })
+    const sibling = createSuggestion({
+      id: "sibling-1",
+      block_id: "correction-block:0.4:blk-sibling:260",
+      source_hash: "blk-sibling",
+    })
+    const fresh = createSuggestion({
+      id: "fresh-1",
+      block_id: "correction-block:0.3:blk-new:236",
+      source_hash: "blk-new",
+      original_text: "otrra",
+      replacement_text: "otra",
+    })
+
+    const replacement = replaceBlockSuggestions([stale, sibling], fresh.block_id!, [fresh])
+
+    expect(replacement.replacedIds).toEqual([stale.id])
+    expect(replacement.suggestions).toEqual([sibling, fresh])
   })
 
   it("keeps stale suggestions visible in panel order but marks them as non-actionable", () => {

@@ -3,6 +3,7 @@ import type {
   PublicationSuggestion,
   PublicationSuggestionStatus,
 } from "@/lib/local-db/schema";
+import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation";
 
 type SuggestionMatch = {
   start: number;
@@ -86,9 +87,33 @@ const buildLooseContextPattern = (value: string) => {
   return new RegExp(tokens.map((token) => escapeRegex(token)).join("\\s+"), "i");
 };
 
+const isRedundantSuggestionMatch = (
+  source: string,
+  match: SuggestionMatch,
+  originalText: string,
+  replacementText: string,
+) => {
+  const normalizedOriginal = normalizeSearchValue(originalText);
+  const normalizedReplacement = normalizeSearchValue(replacementText);
+
+  if (!normalizedOriginal || !normalizedReplacement) {
+    return false;
+  }
+
+  if (
+    normalizedReplacement === normalizedOriginal ||
+    normalizedReplacement.length < normalizedOriginal.length
+  ) {
+    return false;
+  }
+
+  return source.slice(match.start, match.start + normalizedReplacement.length) === normalizedReplacement;
+};
+
 const findContextAwareMatch = (
   source: string,
   originalText: string,
+  replacementText: string,
   contextBefore?: string | null,
   contextAfter?: string | null,
   occurrence?: number | null,
@@ -109,7 +134,12 @@ const findContextAwareMatch = (
       break;
     }
 
-    matches.push({ start: index, end: index + normalizedOriginal.length });
+    const match = { start: index, end: index + normalizedOriginal.length };
+
+    if (!isRedundantSuggestionMatch(source, match, originalText, replacementText)) {
+      matches.push(match);
+    }
+
     cursor = index + normalizedOriginal.length;
   }
 
@@ -168,6 +198,7 @@ export const findSuggestionMatch = (source: string, suggestion: PublicationSugge
   findContextAwareMatch(
     source,
     suggestion.original_text,
+    suggestion.replacement_text,
     suggestion.context_before,
     suggestion.context_after,
     suggestion.occurrence,
@@ -275,6 +306,13 @@ const parseBlockPosition = (blockId: string): number | null => {
 const isSameBlock = (suggestionBlockId: string | null | undefined, blockId: string): boolean => {
   if (!suggestionBlockId) return false;
   if (suggestionBlockId === blockId) return true;
+  const suggestionLogicalId = parseCorrectionBlockLogicalId(suggestionBlockId);
+  const blockLogicalId = parseCorrectionBlockLogicalId(blockId);
+
+  if (suggestionLogicalId && blockLogicalId) {
+    return suggestionLogicalId === blockLogicalId;
+  }
+
   const suggestionPos = parseBlockPosition(suggestionBlockId);
   const blockPos = parseBlockPosition(blockId);
   return suggestionPos !== null && blockPos !== null && suggestionPos === blockPos;
@@ -294,7 +332,14 @@ export const invalidateBlockSuggestions = (
 
     if (
       (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
-      block.text.includes(suggestion.original_text)
+      findContextAwareMatch(
+        block.text,
+        suggestion.original_text,
+        suggestion.replacement_text,
+        null,
+        null,
+        null,
+      )
     ) {
       keptIds.push(suggestion.id);
       return [{ ...suggestion, status: "pending-stale" as const }];
@@ -317,12 +362,12 @@ export const replaceBlockSuggestions = (
   nextBlockSuggestions: PublicationSuggestion[],
 ): BlockSuggestionReplacementResult => {
   const replacedIds = suggestions
-    .filter((suggestion) => suggestion.block_id === blockId)
+    .filter((suggestion) => isSameBlock(suggestion.block_id, blockId))
     .map((suggestion) => suggestion.id);
 
   return {
     suggestions: [
-      ...suggestions.filter((suggestion) => suggestion.block_id !== blockId),
+      ...suggestions.filter((suggestion) => !isSameBlock(suggestion.block_id, blockId)),
       ...nextBlockSuggestions,
     ],
     replacedIds,
@@ -404,5 +449,5 @@ export const findChecklistMatch = (source: string, item: PublicationChecklistIte
     return null;
   }
 
-  return findContextAwareMatch(source, item.target_text, null, null);
+  return findContextAwareMatch(source, item.target_text, item.target_text, null, null);
 };
