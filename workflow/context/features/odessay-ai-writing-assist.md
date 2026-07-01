@@ -130,6 +130,11 @@ corrections: [
 
 El frontend usa `block_id` + `source_hash` para invalidar sugerencias cuando el texto cambia y para calcular el rango de la decoración inline.
 
+Guardrails del mapper:
+- El sufijo posicional de `blockId` identifica la posición del nodo bloque en ProseMirror, no el primer carácter del bloque.
+- Al convertir offsets locales del bloque a posiciones del documento, el frontend debe sumar también el content offset interno del nodo (`blockPos + 1`), no usar `blockPos` crudo.
+- Antes de aplicar Accept/Replace, el texto actual del documento en el rango resuelto debe seguir siendo exactamente `originalText`; si no coincide, la sugerencia se marca como stale/conflict y no se aplica.
+
 ---
 
 ## Contrato de proveedor/modelo (obligatorio)

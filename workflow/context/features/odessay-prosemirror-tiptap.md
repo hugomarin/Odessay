@@ -132,6 +132,8 @@ Estado actual:
 
 Implicación:
 - Funciona para casos básicos, pero es frágil con texto repetido, streaming concurrido, cierre del panel y acciones Accept/Reject si no se separan estado de decorations y estado de panel.
+- Cuando una sugerencia usa `blockId` con posición de bloque, el mapper de decorations/rangos debe traducir offsets locales del bloque a posiciones del documento con el content offset interno del nodo (`blockPos + 1`). Aplicar un replacement con `blockPos` crudo desplaza el rango una posición a la izquierda y puede consumir espacios o duplicar caracteres adyacentes.
+- El path de Accept debe revalidar el texto actual del documento en el rango resuelto antes de mutar; si ya no coincide con `original_text`, la sugerencia no se aplica.
 
 ---
 

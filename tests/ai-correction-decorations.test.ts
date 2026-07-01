@@ -13,6 +13,11 @@ const schema = new Schema({
     },
     text: { group: "inline" },
   },
+  marks: {
+    em: {
+      toDOM: () => ["em", 0],
+    },
+  },
 })
 
 const createSuggestion = (overrides: Partial<PublicationSuggestion> = {}): PublicationSuggestion => ({
@@ -89,6 +94,39 @@ describe("AI correction decorations", () => {
 
     expect(resolved?.from).toBe(22)
     expect(resolved?.to).toBe(28)
+  })
+
+  it("maps first-block phrases after a space without consuming adjacent characters", () => {
+    const doc = schema.node("doc", null, [
+      schema.node("paragraph", null, [schema.text("aplicació de escritorio creo")]),
+    ])
+
+    const [resolved] = resolveCorrectionDecorationRanges(doc, [
+      createSuggestion({
+        original_text: "escritorio creo",
+        replacement_text: "escritorio. Creo",
+      }),
+    ])
+
+    expect(resolved?.from).toBe(14)
+    expect(resolved?.to).toBe(29)
+    expect(doc.textBetween(resolved?.from ?? 0, resolved?.to ?? 0, "", "")).toBe("escritorio creo")
+  })
+
+  it("preserves exact ranges for marked text inside a block", () => {
+    const doc = schema.node("doc", null, [
+      schema.node("paragraph", null, [
+        schema.text("Texto "),
+        schema.text("prueva", [schema.mark("em")]),
+        schema.text(" final"),
+      ]),
+    ])
+
+    const [resolved] = resolveCorrectionDecorationRanges(doc, [createSuggestion()])
+
+    expect(resolved?.from).toBe(7)
+    expect(resolved?.to).toBe(13)
+    expect(doc.textBetween(resolved?.from ?? 0, resolved?.to ?? 0, "", "")).toBe("prueva")
   })
 
   it("anchors stale suggestions to their source block instead of decorating another occurrence", () => {

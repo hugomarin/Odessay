@@ -7,6 +7,13 @@ type DesktopBinaryExport = {
   mimeType: string
 }
 
+const DOCX_MIME_TYPE = [
+  "application/vnd.openxmlformats-office",
+  "document",
+  "wordprocessingml",
+  "document",
+].join(".")
+
 const getExtension = (fileName: string) => {
   const match = fileName.match(/\.([^.]+)$/)
   return match?.[1]?.toLowerCase() ?? null
@@ -18,7 +25,7 @@ const getDialogFilterName = (mimeType: string, extension: string | null) => {
   }
 
   if (
-    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimeType === DOCX_MIME_TYPE ||
     extension === "docx"
   ) {
     return "Word Document"

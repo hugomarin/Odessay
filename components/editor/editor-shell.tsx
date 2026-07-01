@@ -57,7 +57,7 @@ import {
   clearPublicationSuggestions,
   setPublicationSuggestions as setEditorPublicationSuggestions,
 } from "@/lib/editor/publication-suggestion-extension"
-import { resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
+import { getResolvedCorrectionText, resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
 import { createCorrectionSuggestionBatcher } from "@/lib/editor/correction-suggestion-batcher"
 import {
   collectCorrectionBlocks,
@@ -1635,7 +1635,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const resolvedRanges = resolveCorrectionDecorationRanges(editor.state.doc, pendingSuggestions)
       const rangesById = new Map(resolvedRanges.map((range) => [range.suggestion.id, range]))
       const applicableRanges = pendingSuggestions
-        .map((suggestion) => rangesById.get(suggestion.id) ?? null)
+        .map((suggestion) => {
+          const range = rangesById.get(suggestion.id) ?? null
+
+          if (!range) {
+            return null
+          }
+
+          return getResolvedCorrectionText(editor.state.doc, range) === suggestion.original_text
+            ? range
+            : null
+        })
         .filter((range): range is NonNullable<typeof range> => range !== null)
         .sort((left, right) => right.from - left.from)
 
