@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { hydrateCorrectionBlocksFromRemote } from "@/lib/corrections/persistence"
+import {
+  findStaleCorrectionBlockRecords,
+  hydrateCorrectionBlocksFromRemote,
+  reconcileHydratedCorrectionBlocks,
+} from "@/lib/corrections/persistence"
 import type { LocalWriting, WritingLifecycle } from "@/lib/local-db/schema"
 
 const localDBMock = vi.hoisted(() => ({
@@ -138,5 +142,68 @@ describe("hydrateCorrectionBlocksFromRemote lifecycle awareness", () => {
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("auth failure"))
 
     consoleSpy.mockRestore()
+  })
+})
+
+describe("correction persistence invalidation", () => {
+  it("invalidates stale logical versions when a block hash changes after a small position shift", () => {
+    const staleBlocks = findStaleCorrectionBlockRecords(
+      [
+        {
+          id: "auto-correction:writing-1:blk-old",
+          blockId: "correction-block:0.3:blk-old:236",
+          blockHash: "blk-old",
+        },
+        {
+          id: "auto-correction:writing-1:blk-neighbor",
+          blockId: "correction-block:0.4:blk-neighbor:240",
+          blockHash: "blk-neighbor",
+        },
+      ],
+      {
+        id: "correction-block:0.3:blk-new:237",
+        hash: "blk-new",
+        pos: 237,
+      },
+    )
+
+    expect(staleBlocks.map((block) => block.id)).toEqual(["auto-correction:writing-1:blk-old"])
+  })
+
+  it("drops hydrated blocks whose source hash no longer exists in the current document", () => {
+    const reconciliation = reconcileHydratedCorrectionBlocks(
+      [
+        {
+          id: "auto-correction:writing-1:blk-old",
+          writingId: "writing-1",
+          blockId: "correction-block:0.3:blk-old:236",
+          blockHash: "blk-old",
+          suggestions: [],
+          model: "test-model",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          latencyMs: null,
+          promptTokens: null,
+          completionTokens: null,
+          syncedAt: "2026-05-28T00:00:01.000Z",
+        },
+        {
+          id: "auto-correction:writing-1:blk-current",
+          writingId: "writing-1",
+          blockId: "correction-block:0.4:blk-current:245",
+          blockHash: "blk-current",
+          suggestions: [],
+          model: "test-model",
+          createdAt: "2026-05-28T00:00:00.000Z",
+          latencyMs: null,
+          promptTokens: null,
+          completionTokens: null,
+          syncedAt: "2026-05-28T00:00:01.000Z",
+        },
+      ],
+      ["blk-current"],
+    )
+
+    expect(reconciliation.fresh.map((block) => block.id)).toEqual(["auto-correction:writing-1:blk-current"])
+    expect(reconciliation.stale.map((block) => block.id)).toEqual(["auto-correction:writing-1:blk-old"])
   })
 })

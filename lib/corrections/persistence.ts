@@ -1,6 +1,15 @@
 import { localDB } from "@/lib/local-db";
 import type { LocalCorrectionBlock, PublicationSuggestion } from "@/lib/local-db/schema";
 import { getAIService } from "@/lib/services/ai-service-factory";
+import {
+  DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
+  findLogicalStaleCorrectionBlocks,
+  parseCorrectionBlockLogicalId,
+  parseCorrectionBlockPosition,
+  partitionHydratedCorrectionBlocks,
+  type CurrentCorrectionBlockIdentity,
+  type PersistedCorrectionBlockIdentity,
+} from "@/lib/corrections/block-invalidation";
 
 type CorrectionPersistenceError = Error & {
   status?: number;
@@ -22,16 +31,10 @@ export type PersistedCorrectionBlockRecord = {
 };
 
 export const CORRECTION_BLOCK_CACHE_LIMIT = 20;
+export { DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW, parseCorrectionBlockLogicalId, parseCorrectionBlockPosition }
 
 export const createCorrectionBlockRecordId = (writingId: string, blockHash: string) =>
   `auto-correction:${writingId}:${blockHash}`;
-
-export const parseCorrectionBlockPosition = (blockId: string) => {
-  const parts = blockId.split(":");
-  const rawPosition = parts.at(-1);
-  const position = rawPosition ? Number.parseInt(rawPosition, 10) : Number.NaN;
-  return Number.isFinite(position) ? position : null;
-};
 
 export const mapPersistedCorrectionRecordToLocal = (
   record: PersistedCorrectionBlockRecord,
@@ -49,6 +52,17 @@ export const mapPersistedCorrectionRecordToLocal = (
   completionTokens: record.completion_tokens,
   syncedAt,
 });
+
+export const findStaleCorrectionBlockRecords = (
+  candidates: PersistedCorrectionBlockIdentity[],
+  current: CurrentCorrectionBlockIdentity,
+  positionWindow = DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
+) => findLogicalStaleCorrectionBlocks(candidates, current, positionWindow)
+
+export const reconcileHydratedCorrectionBlocks = (
+  blocks: LocalCorrectionBlock[],
+  currentBlockHashes: Iterable<string>,
+) => partitionHydratedCorrectionBlocks(blocks, currentBlockHashes)
 
 const isAuthRelatedError = (error: unknown) => {
   const status = (error as CorrectionPersistenceError | null | undefined)?.status;

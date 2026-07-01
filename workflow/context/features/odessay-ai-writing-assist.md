@@ -71,6 +71,8 @@ Las sugerencias no se destruyen preventivamente.
 - Si el texto editado todavía contiene `originalText` de la sugerencia, esta se mantiene visible como "pendiente" hasta que llegue la nueva respuesta del modelo.
 - Solo se invalidan sugerencias cuyo `originalText` ya no existe en el bloque.
 - Esto evita el parpadeo de decoraciones mientras el usuario escribe.
+- A nivel de cache persistido, la invalidación ya no depende solo de posición exacta. El sistema invalida por **identidad lógica del bloque** y usa una **ventana posicional pequeña** como fallback para filas legacy que aún no tienen identidad lógica estable.
+- Invariante persistido: Supabase e IndexedDB deben converger al **cache activo actual** del writing; versiones lógicas stale del mismo párrafo no se conservan como historial activo cuando cambia `source_hash`.
 
 ### 5. Observabilidad integrada
 
@@ -117,23 +119,30 @@ El backend no conoce ProseMirror. El contrato usa `blockId` como string opaco:
 ```ts
 // Frontend envía
 correctionBlock: {
-  id: "correction-block:${hash}:${pos}",  // opaco para el backend
+  id: "correction-block:${logicalId}:${hash}:${pos}",  // opaco para el backend
   text: "...",
   hash: "blk-..."
 }
 
 // Backend responde
 corrections: [
-  { blockId: "correction-block:${hash}:${pos}", originalText: "...", replacementText: "..." }
+  { blockId: "correction-block:${logicalId}:${hash}:${pos}", originalText: "...", replacementText: "..." }
 ]
 ```
 
-El frontend usa `block_id` + `source_hash` para invalidar sugerencias cuando el texto cambia y para calcular el rango de la decoración inline.
+`logicalId` se deriva de la ruta estructural del bloque en el documento ProseMirror (índices por profundidad) y permanece estable ante pequeños shifts de posición causados por ediciones manuales dentro del mismo bloque lógico.
+
+El frontend usa `block_id` + `source_hash` para invalidar sugerencias cuando el texto cambia y para calcular el rango de la decoración inline. Para persistencia, la invalidación stale sigue esta jerarquía:
+
+1. match por `logicalId` cuando existe en ambos lados;
+2. fallback por ventana posicional corta para filas legacy;
+3. exclusión por `blockHash` actual para no borrar la versión vigente.
 
 Guardrails del mapper:
 - El sufijo posicional de `blockId` identifica la posición del nodo bloque en ProseMirror, no el primer carácter del bloque.
 - Al convertir offsets locales del bloque a posiciones del documento, el frontend debe sumar también el content offset interno del nodo (`blockPos + 1`), no usar `blockPos` crudo.
 - Antes de aplicar Accept/Replace, el texto actual del documento en el rango resuelto debe seguir siendo exactamente `originalText`; si no coincide, la sugerencia se marca como stale/conflict y no se aplica.
+- En hidratación, cualquier bloque persistido cuyo `block_hash` ya no exista en el documento actual debe eliminarse del cache local y remoto antes de reexponer sugerencias.
 
 ---
 
@@ -251,7 +260,7 @@ Estos gaps están documentados como trabajo pendiente. Cada cambio debe avanzar 
   "language": "es",
   "corrections": [
     {
-      "blockId": "correction-block:abc123:456",
+      "blockId": "correction-block:0.3:abc123:456",
       "type": "spelling",
       "originalText": "hhacia",
       "replacementText": "hacia"

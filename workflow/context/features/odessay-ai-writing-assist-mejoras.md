@@ -100,7 +100,7 @@ Eliminar el reprocesamiento completo al recargar la página, cambiar de pestaña
 create table correction_blocks (
   id text primary key,                   -- "auto-correction:writingId:blockHash"
   writing_id uuid not null references writings(id) on delete cascade,
-  block_id text not null,                -- "correction-block:hash:pos"
+  block_id text not null,                -- "correction-block:logicalId:hash:pos"
   block_hash text not null,              -- "blk-..."
   suggestions jsonb not null,
   model text not null,
@@ -166,7 +166,11 @@ type CachedCorrectionBlock = {
 
 Cuando un bloque se edita y su hash cambia:
 - Eliminar la entrada vieja de IndexedDB.
-- Eliminar la entrada vieja de Supabase (DELETE por `id`).
+- Eliminar la entrada vieja de Supabase.
+- La selección de filas stale ya no depende solo de `id` o de posición exacta.
+- Primero se busca match por **identidad lógica de bloque** (`logicalId`, derivado de la ruta estructural ProseMirror).
+- Si la fila persistida es legacy y no tiene identidad lógica compatible, se usa un fallback por **ventana posicional corta**.
+- Nunca se conserva como estado activo una versión lógica stale del mismo párrafo cuando cambia `block_hash`, aunque existan sugerencias `accepted` o `suggestions: []`.
 
 **Eviction en IndexedDB**
 

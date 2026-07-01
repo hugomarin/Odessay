@@ -6,6 +6,7 @@ const supabaseAuthMock = vi.hoisted(() => ({
 }))
 
 const ownershipMaybeSingleMock = vi.hoisted(() => vi.fn())
+const persistedBlocksEqMock = vi.hoisted(() => vi.fn())
 const deleteInMock = vi.hoisted(() => vi.fn())
 const upsertSingleMock = vi.hoisted(() => vi.fn())
 
@@ -25,6 +26,9 @@ const adminFromMock = vi.hoisted(() =>
 
     if (table === "correction_blocks") {
       return {
+        select: vi.fn(() => ({
+          eq: persistedBlocksEqMock,
+        })),
         delete: vi.fn(() => ({
           eq: vi.fn(() => ({
             in: deleteInMock,
@@ -66,6 +70,7 @@ describe("POST /api/corrections/persist", () => {
     vi.unstubAllGlobals()
     supabaseAuthMock.getUser.mockReset()
     ownershipMaybeSingleMock.mockReset()
+    persistedBlocksEqMock.mockReset()
     deleteInMock.mockReset()
     upsertSingleMock.mockReset()
     adminFromMock.mockClear()
@@ -111,6 +116,7 @@ describe("POST /api/corrections/persist", () => {
       data: { user: { id: "user-1" } },
     })
     ownershipMaybeSingleMock.mockResolvedValue({ data: { id: "writing-1" }, error: null })
+    persistedBlocksEqMock.mockResolvedValue({ data: [], error: null })
     deleteInMock.mockResolvedValue({ error: null })
     upsertSingleMock.mockResolvedValue({ data: { id: "auto-correction:writing-1:blk-1" }, error: null })
 
@@ -140,5 +146,54 @@ describe("POST /api/corrections/persist", () => {
     expect(body.data.deletedIds).toEqual(["auto-correction:writing-1:blk-old"])
     expect(deleteInMock).toHaveBeenCalledWith("id", ["auto-correction:writing-1:blk-old"])
     expect(upsertSingleMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("deletes stale logical versions when the same block shifts position after a manual edit", async () => {
+    supabaseAuthMock.getUser.mockResolvedValue({
+      data: { user: { id: "user-1" } },
+    })
+    ownershipMaybeSingleMock.mockResolvedValue({ data: { id: "writing-1" }, error: null })
+    persistedBlocksEqMock.mockResolvedValue({
+      data: [
+        {
+          id: "auto-correction:writing-1:blk-old",
+          block_id: "correction-block:0.3:blk-old:236",
+          block_hash: "blk-old",
+        },
+        {
+          id: "auto-correction:writing-1:blk-other",
+          block_id: "correction-block:0.4:blk-other:240",
+          block_hash: "blk-other",
+        },
+      ],
+      error: null,
+    })
+    deleteInMock.mockResolvedValue({ error: null })
+    upsertSingleMock.mockResolvedValue({ data: { id: "auto-correction:writing-1:blk-new" }, error: null })
+
+    const response = await POST(
+      createRequest({
+        writingId: "7d26d0d8-f3c8-4b98-94d4-4bb5f6d2f9ab",
+        block: {
+          id: "auto-correction:writing-1:blk-new",
+          writing_id: "7d26d0d8-f3c8-4b98-94d4-4bb5f6d2f9ab",
+          block_id: "correction-block:0.3:blk-new:237",
+          block_hash: "blk-new",
+          suggestions: [],
+          model: "test-model",
+          created_at: "2026-05-19T00:00:00.000Z",
+          latency_ms: 120,
+          prompt_tokens: 12,
+          completion_tokens: 4,
+        },
+      }),
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.error).toBeNull()
+    expect(body.data.persistedId).toBe("auto-correction:writing-1:blk-new")
+    expect(body.data.deletedIds).toEqual(["auto-correction:writing-1:blk-old"])
+    expect(deleteInMock).toHaveBeenCalledWith("id", ["auto-correction:writing-1:blk-old"])
   })
 })

@@ -102,9 +102,11 @@ import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
   CORRECTION_BLOCK_CACHE_LIMIT,
   createCorrectionBlockRecordId,
+  DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
+  findStaleCorrectionBlockRecords,
   hydrateCorrectionBlocksFromRemote,
-  parseCorrectionBlockPosition,
   persistCorrectionBlockRemotely,
+  reconcileHydratedCorrectionBlocks,
 } from "@/lib/corrections/persistence"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
@@ -536,10 +538,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
   const deletePersistedBlocksForPosition = useCallback(
     async (writingId: string, block: CorrectionTriggerBlock) => {
-      const staleBlocks = [...persistedCorrectionBlocksRef.current.values()].filter((candidate) => {
-        const candidatePosition = parseCorrectionBlockPosition(candidate.blockId)
-        return candidatePosition === block.pos && candidate.blockHash !== block.hash
-      })
+      const staleBlocks = findStaleCorrectionBlockRecords(
+        [...persistedCorrectionBlocksRef.current.values()].map((candidate) => ({
+          id: candidate.id,
+          blockId: candidate.blockId,
+          blockHash: candidate.blockHash,
+        })),
+        {
+          id: block.id,
+          hash: block.hash,
+          pos: block.pos,
+        },
+        DEFAULT_CORRECTION_BLOCK_POSITION_WINDOW,
+      ).map((candidate) => persistedCorrectionBlocksRef.current.get(candidate.blockHash)).filter(
+        (candidate): candidate is LocalCorrectionBlock => candidate !== undefined,
+      )
 
       if (staleBlocks.length === 0) {
         return
@@ -1322,6 +1335,27 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           )
         }
         isApplyingContentRef.current = false
+        const currentDocBlocks = collectCorrectionBlocks(editor.state.doc)
+        const hydratedReconciliation = reconcileHydratedCorrectionBlocks(
+          localCorrectionBlocks,
+          currentDocBlocks.map((block) => block.hash),
+        )
+
+        if (hydratedReconciliation.stale.length > 0) {
+          const staleIds = hydratedReconciliation.stale.map((block) => block.id)
+
+          await localDB.correctionBlocks.deleteMany(staleIds)
+          void persistCorrectionBlockRemotely({
+            writingId: targetWritingId,
+            deletedBlockIds: staleIds,
+          }).catch((error) => {
+            console.info(
+              `[corrections] hydrate cleanup skipped message=${error instanceof Error ? error.message : String(error)}`,
+            )
+          })
+        }
+
+        localCorrectionBlocks = hydratedReconciliation.fresh
         setPersistedCorrectionBlocks(localCorrectionBlocks)
         applyCorrectionSuggestionUpdate(() => flattenPersistedSuggestions(localCorrectionBlocks), {
           immediate: true,
@@ -1333,7 +1367,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
         const cachedBlockHashes = new Set(localCorrectionBlocks.map((block) => block.blockHash))
         const uncachedBlocks = getHydrateMissCorrectionBlocks(
-          collectCorrectionBlocks(editor.state.doc),
+          currentDocBlocks,
           cachedBlockHashes,
         )
 
