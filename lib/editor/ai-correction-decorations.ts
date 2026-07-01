@@ -71,9 +71,14 @@ const collectBlockTextMap = (
 
   return {
     text: blockMap.text,
-    positions: blockMap.positions.map((position) => (position === null ? null : position + blockPos)),
+    positions: blockMap.positions.map((position) => (position === null ? null : position + blockPos + 1)),
   }
 }
+
+export const getResolvedCorrectionText = (
+  doc: ProseMirrorNode,
+  range: { from: number; to: number },
+) => doc.textBetween(range.from, range.to, "", "")
 
 const resolveSuggestionRange = (
   docTextMap: TextMap,
