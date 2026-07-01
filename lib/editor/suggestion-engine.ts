@@ -3,6 +3,7 @@ import type {
   PublicationSuggestion,
   PublicationSuggestionStatus,
 } from "@/lib/local-db/schema";
+import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation";
 
 type SuggestionMatch = {
   start: number;
@@ -305,6 +306,13 @@ const parseBlockPosition = (blockId: string): number | null => {
 const isSameBlock = (suggestionBlockId: string | null | undefined, blockId: string): boolean => {
   if (!suggestionBlockId) return false;
   if (suggestionBlockId === blockId) return true;
+  const suggestionLogicalId = parseCorrectionBlockLogicalId(suggestionBlockId);
+  const blockLogicalId = parseCorrectionBlockLogicalId(blockId);
+
+  if (suggestionLogicalId && blockLogicalId) {
+    return suggestionLogicalId === blockLogicalId;
+  }
+
   const suggestionPos = parseBlockPosition(suggestionBlockId);
   const blockPos = parseBlockPosition(blockId);
   return suggestionPos !== null && blockPos !== null && suggestionPos === blockPos;
@@ -354,12 +362,12 @@ export const replaceBlockSuggestions = (
   nextBlockSuggestions: PublicationSuggestion[],
 ): BlockSuggestionReplacementResult => {
   const replacedIds = suggestions
-    .filter((suggestion) => suggestion.block_id === blockId)
+    .filter((suggestion) => isSameBlock(suggestion.block_id, blockId))
     .map((suggestion) => suggestion.id);
 
   return {
     suggestions: [
-      ...suggestions.filter((suggestion) => suggestion.block_id !== blockId),
+      ...suggestions.filter((suggestion) => !isSameBlock(suggestion.block_id, blockId)),
       ...nextBlockSuggestions,
     ],
     replacedIds,
