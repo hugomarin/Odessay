@@ -34,6 +34,7 @@ type DesktopRuntimeServices = {
 
 type DesktopDraftOptions = {
   writingId?: string | null
+  authorId?: string | null
   title?: string | null
   slug?: string | null
   status?: WritingRecord["status"]
@@ -321,7 +322,7 @@ class DesktopDocumentService implements DocumentService {
       const nowIso = new Date().toISOString()
       const writing: WritingRecord = {
         id: options.writingId?.trim() || createWritingId(),
-        authorId: null,
+        authorId: options.authorId ?? null,
         title: options.title?.trim() || UNTITLED_DOCUMENT_NAME,
         content: {
           richText: (options.initialBodyJson as Record<string, unknown> | null | undefined) ?? EMPTY_EDITOR_JSON,

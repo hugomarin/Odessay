@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { isTauriRuntime } from "@/lib/runtime/detect"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { cn } from "@/lib/utils"
@@ -55,13 +54,9 @@ function groupSharedItems(items: SharedWritingListItem[]) {
 export function SharedWithMeList({ items, isLoading = false, error = null }: SharedWithMeListProps) {
   const router = useRouter()
   const groupedItems = groupSharedItems(items)
-  // Desktop has no shared reading route (the reading view is a dynamic
-  // server route, absent from the static export). Show the list, but don't
-  // wire up navigation that would just bounce back to the Desk.
-  const canOpen = !isTauriRuntime()
+  const canOpen = true
 
   const openWriting = (item: SharedWritingListItem) => {
-    if (!canOpen) return
     router.push(buildWritingRouteHref("/shared", item))
   }
 

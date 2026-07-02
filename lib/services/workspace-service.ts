@@ -4,6 +4,7 @@ import type {
   WorkspaceAssignmentMap,
   WorkspaceAssignmentOption,
 } from "@/lib/workspace/assignment"
+import type { WorkspaceDetail } from "@/lib/workspace/types"
 
 /**
  * Runtime-agnostic entry point for document↔workspace assignment, shared by Desk
@@ -24,6 +25,8 @@ export interface WorkspaceAssignmentService {
   listAssignments(): Promise<WorkspaceAssignmentMap>
   /** Current workspace slug for a writing, or null. */
   getAssignment(writingId: string): Promise<string | null>
+  /** Full workspace detail for destination-picking or inspection flows. */
+  getWorkspaceDetail(slug: string): Promise<WorkspaceDetail | null>
   /** Assigns or moves a writing to an existing workspace. Never moves the file. */
   assign(writingId: string, slug: string): Promise<void>
   /** Removes the workspace assignment for a writing. Never moves the file. */
@@ -52,6 +55,11 @@ class DesktopWorkspaceAssignmentService implements WorkspaceAssignmentService {
   async getAssignment(writingId: string): Promise<string | null> {
     const service = await getDesktopWorkspaceService()
     return service.getAssignment(writingId)
+  }
+
+  async getWorkspaceDetail(slug: string): Promise<WorkspaceDetail | null> {
+    const service = await getDesktopWorkspaceService()
+    return service.getWorkspace(slug)
   }
 
   async assign(writingId: string, slug: string): Promise<void> {
@@ -83,6 +91,10 @@ class UnavailableWorkspaceAssignmentService implements WorkspaceAssignmentServic
   }
 
   async getAssignment(): Promise<string | null> {
+    return null
+  }
+
+  async getWorkspaceDetail(): Promise<WorkspaceDetail | null> {
     return null
   }
 

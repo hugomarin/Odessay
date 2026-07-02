@@ -164,6 +164,8 @@ export type ReadingInteractiveShellProps = {
     accountLabel: string
   }
   respondHref?: string
+  extraActionLabel?: string
+  extraActionHref?: string | null
 }
 
 export function ReadingInteractiveShell({
@@ -181,6 +183,8 @@ export function ReadingInteractiveShell({
   chromeMode = "default",
   publicHeader,
   respondHref,
+  extraActionLabel,
+  extraActionHref = null,
 }: ReadingInteractiveShellProps) {
   const [marginPanelOpen, setMarginPanelOpen] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null)
@@ -514,9 +518,11 @@ export function ReadingInteractiveShell({
         onToggleMarginPanel={() => setMarginPanelOpen((v) => !v)}
         isAuthenticated={isAuthenticated}
         mode={chromeMode}
-        publicHeader={publicHeader}
-        respondHref={respondHref}
-      />
+      publicHeader={publicHeader}
+      respondHref={respondHref}
+      extraActionLabel={extraActionLabel}
+      extraActionHref={extraActionHref}
+    />
 
       <div
         id="reading-body-shell"
