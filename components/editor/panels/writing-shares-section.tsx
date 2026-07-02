@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { X } from "lucide-react"
 import type { ShareRecipient } from "@/lib/services/contracts/sharing-service"
-import { createBrowserSharingService } from "@/lib/services/web-sharing-service"
+import { createSharingService } from "@/lib/services/sharing-service-factory"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import { cn } from "@/lib/utils"
 
 type UserSearchResult = {
@@ -28,8 +29,28 @@ type WritingSharesSectionProps = {
   onSharesStateChange?: (hasShares: boolean) => void
 }
 
+async function searchUsersWeb(query: string): Promise<UserSearchResult[]> {
+  const response = await fetch(`/api/users/search?q=${encodeURIComponent(query)}`)
+  const payload = (await response.json()) as ApiEnvelope<UserSearchResult[]>
+  return payload.data ?? []
+}
+
+async function searchUsersDesktop(query: string): Promise<UserSearchResult[]> {
+  const { createDesktopSharingService } = await import("@/lib/services/desktop/desktop-sharing-service")
+  const service = createDesktopSharingService()
+  const result = await service.searchUsers(query)
+  return result.data ?? []
+}
+
+async function searchUsers(query: string): Promise<UserSearchResult[]> {
+  if (isTauriRuntime()) {
+    return searchUsersDesktop(query)
+  }
+  return searchUsersWeb(query)
+}
+
 export function WritingSharesSection({ writingId, onSharesStateChange }: WritingSharesSectionProps) {
-  const sharingService = useMemo(() => createBrowserSharingService(), [])
+  const sharingService = useMemo(() => createSharingService(), [])
   const [shares, setShares] = useState<ShareRecipient[]>([])
   const [isLoadingShares, setIsLoadingShares] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -48,12 +69,13 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       .then((result) => {
         if (result.data) {
           setShares(result.data)
-          onSharesStateChange?.(result.data.length > 0)
+        } else if (result.error) {
+          setError(result.error.message ?? "Couldn't load shares.")
         }
       })
-      .catch(() => null)
+      .catch(() => setError("Couldn't load shares."))
       .finally(() => setIsLoadingShares(false))
-  }, [onSharesStateChange, sharingService, writingId])
+  }, [sharingService, writingId])
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -72,12 +94,11 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       setIsSearching(true)
 
       try {
-        const response = await fetch(`/api/users/search?q=${encodeURIComponent(trimmed)}`)
-        const payload = (await response.json()) as ApiEnvelope<UserSearchResult[]>
+        const results = await searchUsers(trimmed)
         const existingIds = new Set(shares.map((share) => share.userId))
-        const results = (payload.data ?? []).filter((user) => !existingIds.has(user.id))
+        const filtered = results.filter((user) => !existingIds.has(user.id))
 
-        setSearchResults(results)
+        setSearchResults(filtered)
         setShowDropdown(true)
       } catch {
         setSearchResults([])
@@ -92,6 +113,10 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       }
     }
   }, [searchQuery, shares])
+
+  useEffect(() => {
+    onSharesStateChange?.(shares.length > 0)
+  }, [onSharesStateChange, shares])
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -123,18 +148,14 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
           return
         }
 
-        setShares((current) => {
-          const nextShares = [...current, result.data]
-          onSharesStateChange?.(nextShares.length > 0)
-          return nextShares
-        })
+        setShares((current) => [...current, result.data])
       } catch {
         setError("Couldn't add this user. Please try again.")
       } finally {
         setIsSaving(false)
       }
     },
-    [onSharesStateChange, sharingService, writingId],
+    [sharingService, writingId],
   )
 
   const handleRevoke = useCallback(
@@ -153,18 +174,14 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
           return
         }
 
-        setShares((current) => {
-          const nextShares = current.filter((share) => share.userId !== sharedWithId)
-          onSharesStateChange?.(nextShares.length > 0)
-          return nextShares
-        })
+        setShares((current) => current.filter((share) => share.userId !== sharedWithId))
       } catch {
         setError("Couldn't revoke access. Please try again.")
       } finally {
         setIsSaving(false)
       }
     },
-    [onSharesStateChange, sharingService, writingId],
+    [sharingService, writingId]
   )
 
   return (

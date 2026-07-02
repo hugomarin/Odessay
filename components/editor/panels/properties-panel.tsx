@@ -532,6 +532,14 @@ export function PropertiesPanel({
                 {externalLinkError ? (
                   <p className="text-[11px] text-[hsl(0,72%,45%)]">{externalLinkError}</p>
                 ) : null}
+                {hasRemoteWriting && writingId ? (
+                  <div className="-mx-3 border-t-[0.5px] border-border">
+                    <WritingSharesSection
+                      writingId={writingId}
+                      onSharesStateChange={handleSharesStateChange}
+                    />
+                  </div>
+                ) : null}
                 <div className="-mx-3 border-t-[0.5px] border-border">
                   <PreviewLinkSection
                     hasRemoteWriting={hasRemoteWriting}

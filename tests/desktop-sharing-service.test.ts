@@ -31,7 +31,7 @@ describe("desktop sharing service preview-link bridge", () => {
     expect(result.data).toBeNull()
     expect(result.error).toEqual({
       code: "UNAVAILABLE",
-      message: "Preview links are unavailable because NEXT_PUBLIC_APP_URL is not configured.",
+      message: "This action is unavailable because NEXT_PUBLIC_APP_URL is not configured.",
       retryable: false,
     })
   })
