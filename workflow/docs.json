@@ -1,10 +1,7 @@
 {
   "project": "Odessay",
-
   "_comment": "Inventario completo de todos los documentos del proyecto. Un documento que no aparece aquí es un nodo huérfano — no tiene ruta de entrada para ningún agente. Actualizar este archivo cuando se agregue, mueva o elimine cualquier documento.",
-
   "registry": [
-
     {
       "path": "workflow/context/core/odessay-fundacional.md",
       "type": "core",
@@ -55,7 +52,6 @@
       "state": "spec-subordinado-al-adr-identidad",
       "description": "Spec de Workspace / Watched Folders (ODE-245): carpetas vigiladas, índice de binding en .odessay/, watcher FSEvents, snapshots y sync. Subordinado al ADR de identidad (odessay-adr-identidad.md): la metadata vive en la nube no en meta.json (D4), content_hash es objetivo pendiente (D6/D11), carpeta .odessay no .odyssey (D8). Complementa el contrato de runtime de odessay-workspace.md."
     },
-
     {
       "path": "workflow/context/features/odessay-editor.md",
       "type": "feature",
@@ -168,7 +164,6 @@
       "type": "feature",
       "description": "Espacio público del autor: /{username} con vista dual (pública vs propia), /{username}/{slug} para writings públicos. Sin métricas de engagement. Slug generation, SEO/OG y contexto de correspondencia en lectura pública."
     },
-
     {
       "path": "workflow/context/features/odessay-auth-email.md",
       "type": "feature",
@@ -179,7 +174,6 @@
       "type": "feature",
       "description": "Captura manual de conversaciones completas desde ChatGPT y Claude hacia Odessay mediante una extensión de navegador. Define alcance, payload Markdown, reutilización desde Narratif, handoff a Odessay, uso de sesión web existente para auth y creación de writings nuevos a partir del contenido capturado."
     },
-
     {
       "path": "workflow/agents.md",
       "type": "ops",
@@ -305,13 +299,11 @@
       "type": "ops",
       "description": "Mockup HTML interactivo para explorar una nueva barra de tabs del editor: tabs con ancho maximo, hover sobre toda la pieza, estado activo mas claro, sans serif en navegacion y estado unsaved reducido a un punto discreto."
     },
-
     {
       "path": "workflow/context/framework/framework-mece.md",
       "type": "framework",
       "description": "Framework MECE genérico y transferible a cualquier proyecto: las 10 preguntas que todo sistema debe responder, cómo detectar gaps y cómo aplicarlo. No contiene información específica de Odessay."
     },
-
     {
       "path": ".agents/agents/README.md",
       "type": "agent",
@@ -408,10 +400,13 @@
       "path": ".agents/skills/skill-ux-testing/SKILL.md",
       "type": "skill",
       "description": "Testing de UX con Playwright: cómo estructurar tests E2E para flujos críticos, pruebas de aceptación y regresiones. Incluye uso de Playwright MCP para testear interacciones en browser."
+    },
+    {
+      "path": "workflow/context/features/odessay-versions.md",
+      "type": "feature",
+      "description": "Versions de documento: snapshots deliberados (no historial de tecleo) anclados al ciclo de edicion AI externa sobre anotaciones tipo ai. Trigger automatico via watcher desktop (sugiere, no crea en silencio) + trigger manual. Comparacion entre versiones vía AI: reporte de cobertura por anotacion + resumen narrativo. Runtime scope desktop-first v1."
     }
-
   ],
-
   "structure": {
     "workflow/context/core/": "Verdades estables del producto. Descripción del qué, para quién, cómo se ve y cómo funciona.",
     "workflow/context/features/": "Spec de cada feature con complejidad propia. Un documento por feature.",

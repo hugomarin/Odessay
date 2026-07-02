@@ -44,6 +44,19 @@ Referencias:
 - El motor de corrección no genera falsos positivos por matching parcial de palabra.
 - El cache de sugerencias se invalida correctamente tras ediciones manuales.
 - Existe harness de regresión reproducible para apply + persistencia de correcciones.
+- El autor puede enseñarle una palabra al motor ("Learn word"); esa palabra deja de marcarse en cualquier documento futuro, no solo en la instancia donde se aprendió.
+
+## 5.1) Editor y Studio — ergonomía de trabajo con múltiples documentos
+
+- Los tabs del editor se pueden reordenar por drag; Studio refleja el mismo orden sin trabajo adicional.
+- Existe tabla de contenidos automática por documento, navegable por click, que se mantiene sincronizada con los headings sin acción manual.
+
+## 5.2) Versions — ciclo de edición AI externa formalizado
+
+- Existe un registro deliberado de versiones de un writing (no historial de cada tecleo), con snapshot inmutable y desconectado del documento activo.
+- El watcher de desktop sugiere crear una versión cuando detecta que un `.md` cambió afuera de la app mientras tenía anotaciones de margen tipo `ai` abiertas — nunca crea la versión en silencio.
+- El autor puede comparar dos versiones y obtener un reporte de cobertura por anotación `ai` más un resumen narrativo del cambio, generado por AI, de solo lectura.
+- Esta funcionalidad no contradice el límite del agente residente (`odessay-ai-editor.md`): la evaluación observa y reporta, nunca escribe en el body del autor.
 
 ## 6) Promesa percibida por el usuario en esta fase
 

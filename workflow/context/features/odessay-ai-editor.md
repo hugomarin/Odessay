@@ -81,9 +81,11 @@ El agente se adapta al tipo de escritura declarado por el autor. Sus capacidades
 - Nunca genera texto. Ni una frase, ni una palabra.
 - Nunca reescribe lo que el autor escribió.
 - Nunca sugiere frases alternativas.
-- Nunca corrige gramática ni ortografía (no es su rol).
+- Nunca corrige gramática ni ortografía (no es su rol — ver `odessay-ai-writing-assist.md` para ese flujo, que sí reemplaza texto pero es un sistema mecánico separado, no el agente residente).
 - Nunca interviene mientras el autor está escribiendo activamente.
 - Nunca inventa observaciones por compromiso — si no tiene nada que decir, calla.
+
+**Aclaración de alcance (2026-07-01, corrige context rot):** esta regla aplica al **agente residente descrito en este documento** — el que observa y dialoga en `/api/ai/observe` y `/api/ai/discuss`. No es una regla del producto contra que *cualquier* AI edite un documento de Odessay. El autor puede usar herramientas externas (Claude Code, Codex, u otro agente que opere sobre archivos locales) para ejecutar directivas que dejó como anotaciones de margen tipo `ai` — hoy vía copy-out manual (ver `odessay-margenes.md §Relación con el AI editor` y `filterCopyableAnnotations`), y el watcher de desktop (`lib/services/desktop/tauri-fs-watch.ts`) ya detecta esos cambios externos al `.md` local igual que cualquier otra edición fuera de la app. Ese flujo — externo, sobre el archivo, fuera del agente residente — es legítimo y es la base de la funcionalidad de Versions (`odessay-versions.md`). Lo que sigue siendo cierto sin excepción: el agente residente de este documento, dentro de Odessay, nunca escribe en el body del autor.
 
 ---
 
