@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "feat(desktop): native People sharing (search, invite, revoke). Generalizes the ODE-335 callPreviewLinkRoute helper into callWebRoute; implements listRecipients/shareWriting/revokeShare/searchUsers against /api/writings/{id}/shares and /api/users/search via Bearer token + NEXT_PUBLIC_APP_URL; renders WritingSharesSection in the desktop Properties panel. [ODE-336]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-336",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-336/implement-desktop-native-people-sharing-search-invite-revoke",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/310",
+      "commit": "6418198",
+      "date": "2026-07-02",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. npm test PASS (842 passed). ops:delivery:gate PASS (Performance Contract not required). CI Traceability Gates PASS. Vercel Preview SUCCESS. Architecture Contract COMPLIANT. QualityScore 9.3/10 (non-blocking P2 missing DMG/tauri-dev evidence, P3 unreachable status branch)."
+    },
+    {
       "what": "feat(desktop): native preview link generation without browser redirect. Bridges desktop sharing service to existing web /api/writings/{id}/share-test-link route via Bearer token and NEXT_PUBLIC_APP_URL; replaces browser redirect with inline Generate/Copy/Regenerate/Revoke UI in properties panel and desk preview modal; adds desktop-sharing-service tests. [ODE-335]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-335",
