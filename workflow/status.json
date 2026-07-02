@@ -34,7 +34,7 @@
     "name": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
     "linear_project": "https://linear.app/z9ne/project/fase-8-biblioteca-preview-y-calidad-de-producto-7b2ee7ac",
     "roadmap_ref": "workflow/define/roadmap.md",
-    "notes": "Fase 8 activa con ODE-262. Roadmap y DoD formales pendientes de wf-define. Track paralelo dentro de Fase 8: iniciativa de Identidad de documentos (milestones M7-M14, ODE-293 a ODE-309) anclada en el ADR workflow/context/core/odessay-adr-identidad.md; campaña de groundwork docs/skill registrada en ODE-310 (PRs #259 y #260 merged a main). wf-define + wf-audit de la iniciativa ejecutados 2026-06-16."
+    "notes": "Fase 8 activa con ODE-262. Roadmap y DoD formalizados en workflow/define/dod-fase-8.md (2026-07-01, wf-define). Track paralelo dentro de Fase 8: iniciativa de Identidad de documentos (milestones M7-M14, ODE-293 a ODE-309) anclada en el ADR workflow/context/core/odessay-adr-identidad.md; campaña de groundwork docs/skill registrada en ODE-310 (PRs #259 y #260 merged a main). wf-define + wf-audit de la iniciativa ejecutados 2026-06-16. Track de sharing/copy (ODE-335, ODE-336, ODE-337) definido 2026-07-01 desde /Users/hugomarin/.claude/plans/abundant-popping-ullman.md; ODE-337 declara overlap de intención con ODE-292 (desktop read+save-as-own de compartidos), sin modificarlo."
   },
   "phase_plan": {
     "phase": "Fase 6 — Desktop Local-First Runtime",

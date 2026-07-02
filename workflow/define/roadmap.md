@@ -404,6 +404,31 @@ Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/contex
 
 ---
 
+## Fase 8 — Biblioteca, Preview y Calidad de Producto
+
+Al terminar esta fase: Biblioteca (Desk/Workspace) y Preview se sienten como un producto terminado, la identidad de documento (D1–D10) queda cerrada, la corrección ortográfica AI es confiable, y compartir/recibir contenido compartido funciona nativamente en desktop sin saltos al navegador. No reabre el contrato documental de Fase 7; consolida sobre la base ya convergida.
+
+DoD formal: `workflow/define/dod-fase-8.md`.
+
+---
+
+**Desktop native Preview Link sharing** `[frontend, backend]`
+"Share with link" en el panel Properties de desktop genera/copia/rota/revoca el token del preview link en la app, sin redirigir al navegador. Usa el mismo puente Bearer-token que `desktop-ai-service.ts` contra las rutas API existentes (ya Bearer-aware vía `getCurrentUserFromRequest`); no requiere cambios server-side.
+Referencia: `lib/services/desktop/desktop-sharing-service.ts`, `lib/services/desktop-ai-service.ts`, `app/api/writings/[id]/share-test-link/route.ts`, `lib/supabase/request-auth.ts`, `components/editor/panels/properties-panel.tsx`.
+
+**Desktop native People sharing** `[frontend, backend]`
+Buscar e invitar a una persona específica, y revocar su acceso, funciona nativamente en desktop con el mismo puente Bearer-token, contra `app/api/writings/[id]/shares/route.ts`.
+Referencia: `lib/services/desktop/desktop-sharing-service.ts`, `lib/services/web-sharing-service.ts`, `app/api/writings/[id]/shares/route.ts`, `components/editor/panels/properties-panel.tsx`.
+
+**"Add to my writings" copy button (web reading surfaces)** `[frontend, backend, database]`
+Un viewer autenticado que abre `/preview/[token]` o `/shared/[id]` puede convertir el writing en una copia propia, editable y desconectada del original con un click. Si no hay sesión, se solicita login/signup antes de completar la copia. Redirige a `/write/{newWritingId}`.
+Dependencias: ninguna dura, pero comparte intención con ODE-292 (paridad desktop de lectura + guardar-como-propio de compartidos) — el import route debe quedar reusable por ese flujo.
+Referencia: `app/api/writings/import/route.ts` (nuevo), `lib/sharing/test-link-access.ts`, `app/(public)/preview/[token]/page.tsx`, `app/(reading)/shared/[id]/page.tsx`.
+
+Referencia general: `workflow/context/core/odessay-adr-identidad.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+
+---
+
 ## Fase 7.1 — Exploración de Workspace Local / Watched Folders
 
 Al terminar esta fase: Odessay habrá validado si trabajar sobre carpetas locales existentes del usuario debe convertirse en una línea formal del producto, sin mezclar esa exploración con el gate de convergencia web/desktop.
