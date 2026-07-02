@@ -27,6 +27,46 @@
       {
         "issue": "ODE-315",
         "reason": "wf-debrief Fase 8 traceability issue: captures post-delivery follow-ups for ODE-295..309 in workflow/define/debrief.md and spawns ODE-311..314. Process/docs only, not product-code delivery, so it is intentionally excluded from built[]; ignored for status drift (same pattern as ODE-310)."
+      },
+      {
+        "issue": "ODE-292",
+        "reason": "Referenced by workflow/docs commit 1c1d607 on main (ODE-292/ODE-337 complementarity and local-first invariant note) before the product-code PR #307 merged. Will be replaced by a built[] entry after PR #307 lands."
+      },
+      {
+        "issue": "ODE-331",
+        "reason": "Referenced by workflow/docs commit 86ae47b on main (wf-audit fixes for ODE-331..342) before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-335",
+        "reason": "Referenced by workflow/docs commits f6be22b and 1c1d607 on main (Fase 8 DoD/roadmap formalization and ODE-292/ODE-337 complementarity note) before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-336",
+        "reason": "Referenced by workflow/docs commit f6be22b on main (Fase 8 DoD/roadmap formalization) before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-337",
+        "reason": "Referenced by workflow/docs commits f6be22b, 1c1d607 and 86ae47b on main before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-338",
+        "reason": "Referenced by workflow/docs commits 58d8bae and 86ae47b on main before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-339",
+        "reason": "Referenced by workflow/docs commits 58d8bae and 86ae47b on main before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-340",
+        "reason": "Referenced by workflow/docs commits 055d699, 60230cb, 58d8bae and 86ae47b on main before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-341",
+        "reason": "Referenced by workflow/docs commits 58d8bae and 86ae47b on main before product-code delivery. Planned Fase 8 issue, not yet built."
+      },
+      {
+        "issue": "ODE-342",
+        "reason": "Referenced by workflow/docs commit 58d8bae on main before product-code delivery. Planned Fase 8 issue, not yet built."
       }
     ]
   },
