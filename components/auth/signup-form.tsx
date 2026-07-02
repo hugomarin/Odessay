@@ -31,6 +31,10 @@ export function SignupForm() {
     () => sanitizeRedirectPath(searchParams.get("next")),
     [searchParams],
   )
+  const loginHref = useMemo(
+    () => `/login?next=${encodeURIComponent(redirectTo)}`,
+    [redirectTo],
+  )
 
   const [displayName, setDisplayName] = useState("")
   const [username, setUsername] = useState("")
@@ -133,7 +137,7 @@ export function SignupForm() {
         username,
         email: normalizeEmail(email),
         password,
-        nextPath: "/desk",
+        nextPath: redirectTo,
       })
 
       if (result.error) {
@@ -143,7 +147,7 @@ export function SignupForm() {
 
       if (result.data.requiresEmailConfirmation) {
         router.replace(
-          `/login?email=${encodeURIComponent(normalizeEmail(email))}&checkEmail=1`,
+          `/login?email=${encodeURIComponent(normalizeEmail(email))}&checkEmail=1&next=${encodeURIComponent(redirectTo)}`,
         )
         router.refresh()
         return
@@ -267,7 +271,7 @@ export function SignupForm() {
 
         <p className="text-[13px] text-ink-4">
           Already have an account?{" "}
-          <Link className="font-medium text-ink-2 transition-colors hover:text-ink" href="/login">
+          <Link className="font-medium text-ink-2 transition-colors hover:text-ink" href={loginHref}>
             Log in
           </Link>
         </p>

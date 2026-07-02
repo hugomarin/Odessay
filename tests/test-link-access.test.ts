@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest"
-import {
-  getTestLinkInvitationState,
-  normalizeTestLinkToken,
-  renderPreviewBodyHtml,
-} from "@/lib/sharing/test-link-access"
+import { afterEach, describe, expect, it } from "vitest"
+import { getTestLinkInvitationState, normalizeTestLinkToken, renderPreviewBodyHtml } from "@/lib/sharing/test-link-access"
 import { getTestLinkEmail } from "@/lib/sharing/test-link"
 
 describe("test link access guards", () => {
+  afterEach(() => {
+    delete process.env.ODE_TEST_LINK_FIXTURES
+  })
+
   it("normalizes valid tokens and rejects malformed tokens", () => {
     expect(normalizeTestLinkToken("  validToken_123-456  ")).toBe("validToken_123-456")
     expect(normalizeTestLinkToken("bad token with spaces")).toBeNull()

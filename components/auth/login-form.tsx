@@ -28,6 +28,10 @@ export function LoginForm() {
     () => sanitizeRedirectPath(searchParams.get("next")),
     [searchParams],
   )
+  const signupHref = useMemo(
+    () => `/signup?next=${encodeURIComponent(redirectTo)}`,
+    [redirectTo],
+  )
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -143,7 +147,7 @@ export function LoginForm() {
 
         <p className="text-[13px] text-ink-4">
           Don&apos;t have an account?{" "}
-          <Link className="font-medium text-ink-2 transition-colors hover:text-ink" href="/signup">
+          <Link className="font-medium text-ink-2 transition-colors hover:text-ink" href={signupHref}>
             Sign up
           </Link>
         </p>

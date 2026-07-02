@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { JSONContent } from "@tiptap/core"
+import type { ReactNode } from "react"
 import { ReadingTopbar } from "./reading-topbar"
 import { ReadingContent } from "./reading-content"
 import { SelectionPopup } from "./margins/selection-popup"
@@ -166,6 +167,7 @@ export type ReadingInteractiveShellProps = {
   respondHref?: string
   extraActionLabel?: string
   extraActionHref?: string | null
+  extraActionNode?: ReactNode
 }
 
 export function ReadingInteractiveShell({
@@ -185,6 +187,7 @@ export function ReadingInteractiveShell({
   respondHref,
   extraActionLabel,
   extraActionHref = null,
+  extraActionNode,
 }: ReadingInteractiveShellProps) {
   const [marginPanelOpen, setMarginPanelOpen] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null)
@@ -522,6 +525,7 @@ export function ReadingInteractiveShell({
       respondHref={respondHref}
       extraActionLabel={extraActionLabel}
       extraActionHref={extraActionHref}
+      extraActionNode={extraActionNode}
     />
 
       <div

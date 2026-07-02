@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { AlignLeft, ChevronLeft, ChevronRight, Edit3 } from "lucide-react"
 import Link from "next/link"
+import type { ReactNode } from "react"
 
 type ReadingTopbarProps = {
   writingId: string
@@ -27,6 +28,7 @@ type ReadingTopbarProps = {
   respondHref?: string
   extraActionLabel?: string
   extraActionHref?: string | null
+  extraActionNode?: ReactNode
 }
 
 export function ReadingTopbar({
@@ -47,6 +49,7 @@ export function ReadingTopbar({
   respondHref,
   extraActionLabel,
   extraActionHref = null,
+  extraActionNode,
 }: ReadingTopbarProps) {
   const router = useRouter()
   const resolvedRespondHref = respondHref ?? `/write?reply_to=${writingId}`
@@ -115,6 +118,8 @@ export function ReadingTopbar({
                 {publicHeader.accountLabel}
               </Link>
             ) : null}
+
+            {extraActionNode}
 
             {extraActionLabel && extraActionHref ? (
               <Link
@@ -193,6 +198,8 @@ export function ReadingTopbar({
 
       {/* Right — tools */}
       <div className="flex items-center gap-1">
+        {extraActionNode}
+
         {extraActionLabel && extraActionHref ? (
           <Link
             href={extraActionHref}

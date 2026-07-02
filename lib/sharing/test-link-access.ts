@@ -60,6 +60,8 @@ export const getTestLinkInvitationState = (
 export type PreviewWriting = {
   id: string
   title: string
+  bodyJson: JSONContent | null
+  bodyText: string
   bodyHtml: string
   status: WritingStatus
   visibility: "private" | "shared" | "public"
@@ -149,6 +151,8 @@ const TEST_LINK_FIXTURE_RESPONSES: Record<string, TestLinkAccessResult> = {
     writing: {
       id: "fixture-writing-id",
       title: "Fixture Preview",
+      bodyJson: PREVIEW_FIXTURE_BODY_JSON,
+      bodyText: "Preview fixture content",
       bodyHtml: renderWritingBodyHtml(PREVIEW_FIXTURE_BODY_JSON, "Preview fixture content").bodyHtml,
       status: "draft",
       visibility: "private",
@@ -316,6 +320,8 @@ export const getPreviewWritingFromTestLink = async (rawToken: string): Promise<T
     writing: {
       id: writing.id,
       title: writing.title?.trim() || "Untitled writing",
+      bodyJson: writing.body_json as JSONContent | null,
+      bodyText: writing.body_text ?? "",
       bodyHtml: renderedBody.bodyHtml,
       status: writing.status,
       visibility: writing.visibility,
