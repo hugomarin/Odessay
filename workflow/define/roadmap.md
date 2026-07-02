@@ -404,6 +404,53 @@ Referencia: `workflow/context/features/odessay-desktop-app.md`, `workflow/contex
 
 ---
 
+## Fase 8 — Biblioteca, Preview y Calidad de Producto
+
+Al terminar esta fase: Biblioteca (Desk/Workspace) y Preview se sienten como un producto terminado, la identidad de documento (D1–D10) queda cerrada, la corrección ortográfica AI es confiable, y compartir/recibir contenido compartido funciona nativamente en desktop sin saltos al navegador. No reabre el contrato documental de Fase 7; consolida sobre la base ya convergida.
+
+DoD formal: `workflow/define/dod-fase-8.md`.
+
+---
+
+**Desktop native Preview Link sharing** `[frontend, backend]`
+"Share with link" en el panel Properties de desktop genera/copia/rota/revoca el token del preview link en la app, sin redirigir al navegador. Usa el mismo puente Bearer-token que `desktop-ai-service.ts` contra las rutas API existentes (ya Bearer-aware vía `getCurrentUserFromRequest`); no requiere cambios server-side.
+Referencia: `lib/services/desktop/desktop-sharing-service.ts`, `lib/services/desktop-ai-service.ts`, `app/api/writings/[id]/share-test-link/route.ts`, `lib/supabase/request-auth.ts`, `components/editor/panels/properties-panel.tsx`.
+
+**Desktop native People sharing** `[frontend, backend]`
+Buscar e invitar a una persona específica, y revocar su acceso, funciona nativamente en desktop con el mismo puente Bearer-token, contra `app/api/writings/[id]/shares/route.ts`.
+Referencia: `lib/services/desktop/desktop-sharing-service.ts`, `lib/services/web-sharing-service.ts`, `app/api/writings/[id]/shares/route.ts`, `components/editor/panels/properties-panel.tsx`.
+
+**"Add to my writings" copy button (web reading surfaces)** `[frontend, backend, database]`
+Un viewer autenticado que abre `/preview/[token]` o `/shared/[id]` puede convertir el writing en una copia propia, editable y desconectada del original con un click. Si no hay sesión, se solicita login/signup antes de completar la copia. Redirige a `/write/{newWritingId}`.
+Dependencias: ninguna dura, pero comparte intención con ODE-292 (paridad desktop de lectura + guardar-como-propio de compartidos) — el import route debe quedar reusable por ese flujo.
+Referencia: `app/api/writings/import/route.ts` (nuevo), `lib/sharing/test-link-access.ts`, `app/(public)/preview/[token]/page.tsx`, `app/(reading)/shared/[id]/page.tsx`.
+
+**Learn word in orthography correction (user dictionary)** `[frontend, backend, database]`
+Tercera acción "Learn word" en el panel de correcciones, además de Accept/Reject: descarta la sugerencia y persiste la palabra en un diccionario del usuario (`learned_words`, greenfield) para que el motor de corrección deje de marcarla en cualquier documento futuro. Distinto de la memoria por fingerprint existente (`correction-memory-client.ts`), que no generaliza por palabra.
+Referencia: `workflow/context/features/odessay-ai-writing-assist.md`, `lib/ai/corrections.ts`, `lib/editor/correction-memory-client.ts`.
+
+**Reorder editor tabs by drag** `[frontend]`
+Arrastrar un tab del editor a otra posición cambia su orden; persiste en `LocalEditorSession.tabs`. Studio refleja el nuevo orden automáticamente (mirror existente, sin cambios propios). Requiere nueva dependencia de drag-and-drop (ninguna instalada hoy).
+Referencia: `components/editor/editor-tabs.tsx`, `lib/local-db/editor-sessions.ts`.
+
+**Automatic table of contents** `[frontend]`
+Panel de TOC generado desde los headings del documento (niveles 1-3), al estilo Google Docs — se actualiza solo, navega por click. Usa `@tiptap/extension-table-of-contents` (no instalada, compatible con la versión TipTap 3.x actual).
+Referencia: `workflow/context/features/odessay-prosemirror-tiptap.md`, `lib/editor/extensions.ts`.
+
+**Document Versions — snapshot foundation (desktop)** `[frontend, backend, database]`
+Modelo de datos de "versión" (snapshot inmutable y desconectado del `.md`) con dos triggers: automático, sugerido por el watcher de desktop cuando detecta un cambio externo genuino en un archivo que contiene al menos una anotación de margen tipo `ai` (ciclo de edición vía herramientas AI externas como Claude Code/Codex sobre el archivo local — condición corregida por audit 2026-07-01: presencia de anotación `ai`, no "no resuelta", porque `resolved` es cloud-only y el watcher no tiene acceso a red garantizado en ese instante); y manual, en cualquier momento. Runtime scope desktop-first v1 — depende del watcher de filesystem local. Requirió reconciliar una ambigüedad de contexto en `odessay-ai-editor.md` (aclarada 2026-07-01): el agente residente nunca genera texto, pero herramientas externas sobre archivos locales son un patrón legítimo y ya soportado por el watcher.
+Dependencias: ninguna dura sobre otros issues de Fase 8.
+Referencia: `workflow/context/features/odessay-versions.md`, `workflow/context/features/odessay-margenes.md`, `workflow/context/features/odessay-ai-editor.md`, `workflow/context/features/odessay-sync.md`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `.agents/skills/skill-architecture/SKILL.md`.
+
+**Document Versions — AI-powered comparison** `[backend, frontend]`
+Comparar dos versiones produce (a) reporte de cobertura por anotación `ai` — ¿se atendió?, ¿cómo?, ¿hubo cambios adicionales no pedidos? — y (b) resumen narrativo de cambios. Evaluación de solo lectura: nunca escribe de vuelta al documento, coherente con el límite del agente residente.
+Dependencias: Document Versions — snapshot foundation (desktop).
+Referencia: `workflow/context/features/odessay-versions.md`, `workflow/context/features/odessay-ai-writing-assist.md`, `workflow/context/features/odessay-margenes.md`.
+
+Referencia general: `workflow/context/core/odessay-adr-identidad.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+
+---
+
 ## Fase 7.1 — Exploración de Workspace Local / Watched Folders
 
 Al terminar esta fase: Odessay habrá validado si trabajar sobre carpetas locales existentes del usuario debe convertirse en una línea formal del producto, sin mezclar esa exploración con el gate de convergencia web/desktop.
