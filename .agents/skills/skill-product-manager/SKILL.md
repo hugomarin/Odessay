@@ -371,7 +371,8 @@ Regla:
 
 - No copiar este ejemplo por inercia.
 - `Reference docs` debe construirse desde el scope real del issue.
-- Si el issue toca desktop, shared core, runtime boundaries o contrato documental, la secuencia desktop reemplaza cualquier baseline implícito web/Supabase-first.
+- Si el issue toca desktop, shared core, runtime boundaries o contrato documental, la familia documental desktop reemplaza cualquier baseline implícito web/Supabase-first.
+- `Reference docs` no se valida por "trae los cuatro docs" sino por suficiencia contractual: debe incluir exactamente los documentos que BUILD necesita para ejecutar sin inferir arquitectura desde el código.
 
 **Qué incluir según el tipo de issue:**
 - Cualquier issue con UI → `.agents/skills/skill-design/SKILL.md` + `.agents/skills/skill-design/vistas.md`
@@ -385,7 +386,11 @@ Regla:
 - Issues con templates visuales reutilizables (emails, PDFs, public pages) → la sección correspondiente de `.agents/skills/skill-design/vistas.md` con el spec canónico citado por anchor (no genérico).
 - Issues que tocan AI de corrección ortográfica, streaming de sugerencias o memoria de accept/reject → `workflow/context/features/odessay-ai-writing-assist.md` (obligatorio).
 - Issues que tocan extensiones de TipTap/ProseMirror, decorations, serializer/parser o round-trip Markdown ↔ JSON → `workflow/context/features/odessay-prosemirror-tiptap.md` (obligatorio).
-- Issues que tocan arquitectura del producto, portabilidad web/desktop/mobile, runtime boundaries, servicios compartidos, filesystem local, o el rol de `.md`/`body_json` → `workflow/context/features/odessay-desktop-app.md` + `workflow/context/features/odessay-desktop-migration-diagnostic.md` + `workflow/context/features/odessay-desktop-target-architecture.md` + `workflow/context/features/odessay-desktop-migration-plan.md`
+- Issues que tocan arquitectura del producto, portabilidad web/desktop/mobile, runtime boundaries, servicios compartidos, filesystem local, o el rol de `.md`/`body_json` → citar el subconjunto suficiente de la familia desktop:
+  - `workflow/context/features/odessay-desktop-app.md` cuando el issue depende de dirección de producto, objetivos de experiencia o definición del problema desktop.
+  - `workflow/context/features/odessay-desktop-migration-diagnostic.md` cuando el issue depende del estado actual del codebase, gaps de migración, diferencias `tauri dev` vs build, save path real o restricciones del runtime vigente.
+  - `workflow/context/features/odessay-desktop-target-architecture.md` cuando el issue depende de layering, boundaries, adapters, contracts o arquitectura objetivo.
+  - `workflow/context/features/odessay-desktop-migration-plan.md` cuando el issue depende de secuencia de rollout, fases de migración, dependencias o estrategia de transición.
 - Issues que tocan clasificación por capas, ownership entre frontend/backend/database, contracts de servicio o boundaries core/adapters → `.agents/skills/skill-architecture/SKILL.md` (obligatorio)
 
 **Regla de conexión de documentos (obligatoria):**
@@ -394,6 +399,7 @@ Regla:
 - No dejar documentos “huérfanos”: todo documento de `workflow/context/features/` debe tener al menos un tipo de issue que lo cite de forma explícita.
 - En temas de desktop/arquitectura, el PM debe poder explicar la ruta de descubrimiento del documento: `prompt/roadmap -> workflow/docs.json -> doc de dirección -> diagnóstico -> target architecture -> migration plan`. Si no puede reconstruir esa ruta, hay riesgo de documento desconectado.
 - En temas de arquitectura, el PM debe poder responder además: `qué capa es`, `qué runtime toca`, `qué contract toca` y `quién es owner`. Si no puede responder eso, el brief todavía no está listo para BUILD.
+- Si el issue usa solo una parte de la familia desktop, el brief debe justificarlo implícitamente en su `Architecture Contract`: `Required docs` debe nombrar los docs concretos de los que depende el trabajo. Si el trabajo depende del estado actual del runtime o del save path real, omitir `odessay-desktop-migration-diagnostic.md` es un gap bloqueante.
 - Si el issue toca desktop/shared core/runtime boundaries/save/sync/parser/servicios, el brief debe incluir además un bloque explícito `Architecture Contract` con:
   - `Layer`
   - `Runtime scope`
