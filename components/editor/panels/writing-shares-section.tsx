@@ -69,14 +69,13 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
       .then((result) => {
         if (result.data) {
           setShares(result.data)
-          onSharesStateChange?.(result.data.length > 0)
         } else if (result.error) {
           setError(result.error.message ?? "Couldn't load shares.")
         }
       })
       .catch(() => setError("Couldn't load shares."))
       .finally(() => setIsLoadingShares(false))
-  }, [onSharesStateChange, sharingService, writingId])
+  }, [sharingService, writingId])
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -116,6 +115,10 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
   }, [searchQuery, shares])
 
   useEffect(() => {
+    onSharesStateChange?.(shares.length > 0)
+  }, [onSharesStateChange, shares])
+
+  useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setShowDropdown(false)
@@ -145,18 +148,14 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
           return
         }
 
-        setShares((current) => {
-          const nextShares = [...current, result.data]
-          onSharesStateChange?.(nextShares.length > 0)
-          return nextShares
-        })
+        setShares((current) => [...current, result.data])
       } catch {
         setError("Couldn't add this user. Please try again.")
       } finally {
         setIsSaving(false)
       }
     },
-    [onSharesStateChange, sharingService, writingId],
+    [sharingService, writingId],
   )
 
   const handleRevoke = useCallback(
@@ -175,18 +174,14 @@ export function WritingSharesSection({ writingId, onSharesStateChange }: Writing
           return
         }
 
-        setShares((current) => {
-          const nextShares = current.filter((share) => share.userId !== sharedWithId)
-          onSharesStateChange?.(nextShares.length > 0)
-          return nextShares
-        })
+        setShares((current) => current.filter((share) => share.userId !== sharedWithId))
       } catch {
         setError("Couldn't revoke access. Please try again.")
       } finally {
         setIsSaving(false)
       }
     },
-    [onSharesStateChange, sharingService, writingId],
+    [sharingService, writingId]
   )
 
   return (
