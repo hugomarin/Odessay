@@ -1,4 +1,5 @@
 import type { JSONContent } from "@tiptap/core"
+import type { ReactNode } from "react"
 import { ReadingInteractiveShell } from "./reading-interactive-shell"
 
 export type ReadingViewProps = {
@@ -31,6 +32,7 @@ export type ReadingViewProps = {
   respondHref?: string
   extraActionLabel?: string
   extraActionHref?: string | null
+  extraActionNode?: ReactNode
 }
 
 export function ReadingView({
@@ -50,6 +52,7 @@ export function ReadingView({
   respondHref,
   extraActionLabel,
   extraActionHref = null,
+  extraActionNode,
 }: ReadingViewProps) {
   return (
     <ReadingInteractiveShell
@@ -69,6 +72,7 @@ export function ReadingView({
       respondHref={respondHref}
       extraActionLabel={extraActionLabel}
       extraActionHref={extraActionHref}
+      extraActionNode={extraActionNode}
     />
   )
 }

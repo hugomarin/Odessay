@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { notFound, redirect } from "next/navigation"
 import type { JSONContent } from "@tiptap/core"
+import { AddToMyWritingsButton } from "@/components/reading/add-to-my-writings-button"
 import { ReadingView } from "@/components/reading/reading-view"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
@@ -173,6 +174,7 @@ export default async function SharedReadingPage({ params }: PageProps) {
       sequenceTotal={sequenceTotal}
       canRespond={canRespond}
       backUrl="/shared"
+      extraActionNode={<AddToMyWritingsButton source="shared" writingId={writing.id} />}
     />
   )
 }
