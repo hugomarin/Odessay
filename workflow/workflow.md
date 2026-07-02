@@ -108,20 +108,17 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican. No cargar nada adicional por deducción propia.
 
 **Excepción obligatoria por gap de contexto arquitectónico:**
-- Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, y no cita la secuencia desktop en `Reference docs`, el agente debe detener BUILD y marcar `Context Gap` bloqueante.
-- En ese caso, no improvisar contexto desde el código. Pedir corrección del brief para incluir, según aplique:
-  - `workflow/context/features/odessay-desktop-app.md`
-  - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
-  - `workflow/context/features/odessay-desktop-target-architecture.md`
-  - `workflow/context/features/odessay-desktop-migration-plan.md`
-- Si el brief toca esos mismos scopes y además no incluye `Architecture Contract` con `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs`, BUILD también debe detenerse con `Context Gap` bloqueante. No inferir ese contrato desde el diff ni desde el código existente.
+- Si el brief toca desktop, shared core, runtime boundaries, filesystem local, `.md` como contrato documental, extracción de servicios (`DocumentService`, `SyncService`, etc.) o migración web → desktop, el agente debe validar el brief contra su `Architecture Contract`.
+- Si falta `Architecture Contract`, o le falta cualquiera de estos campos: `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants`, `Required docs`, BUILD debe detenerse con `Context Gap` bloqueante. No inferir ese contrato desde el diff ni desde el código existente.
+- Si `Required docs` o `Reference docs` no son suficientes para ejecutar sin inferir arquitectura desde el código, BUILD debe detenerse con `Context Gap` bloqueante y pedir corrección del brief según el criterio de `skill-product-manager` + `skill-architecture`.
+- Regla específica: si el trabajo depende del estado actual del codebase, del save path real, de restricciones del runtime desktop vigente o de gaps de migración ya diagnosticados, entonces `workflow/context/features/odessay-desktop-migration-diagnostic.md` debe aparecer explícitamente en `Required docs`/`Reference docs`. Si no aparece, el brief está incompleto.
 
 **Secuencia:**
 
 **Setup**
 1. Leer brief. Declarar Performance Contract y Presentation Contract solo para las dimensiones/superficies que realmente toca el issue. Si una dimensión o superficie no aplica, registrar `not required` con justificación breve en vez de expandir evidencia innecesaria.
    > _Presentation Contract: paridad cross-surface en `/write/[id]`, `/preview/[token]`, `/shared/[id]`, `/{username}/{slug}` — `tables`, `pre/code` y URLs largas con wrap, contención y scroll equivalentes entre superficies._
-   > _Architecture Contract: si el brief toca desktop/shared-core/runtime boundaries/save/sync/parser/services, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, detenerse._
+   > _Architecture Contract: si el brief toca desktop/shared-core/runtime boundaries/save/sync/parser/services, BUILD debe operar dentro de `Layer`, `Runtime scope`, `Owner`, `Contracts touched`, `Invariants` y `Required docs` ya definidos. Si falta uno, o los docs requeridos no bastan para ejecutar sin inferir arquitectura desde el código, detenerse._
 2. Mover issue a `In Progress` en Linear. Verificar rama con `git branch --show-current` — si es `main`, crear `codex/{issue-id}-{descripcion}` antes de cualquier edición.
 3. Pre-flight: `npm run env:check --if-present` + `npm run ops:status:drift --if-present`.
    - Si aparece un identificador histórico inválido o huérfano, registrarlo en `workflow/status.json.traceability_exceptions.ignored_issue_ids` con razón concreta. No volver a copiar ese falso positivo en notas de `status.json`, PRs o reviews posteriores.
@@ -286,7 +283,7 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 1. El Issue Brief desde Linear.
 2. Los documentos listados en la sección `Reference docs` del brief — son los únicos que aplican.
 
-**Excepción obligatoria por gap de contexto arquitectónico:** aplica la misma excepción que wf-build (ver sección BUILD). Si el brief toca desktop, shared core, runtime boundaries o servicios sin citar la secuencia desktop en `Reference docs`, detener SHIP y marcar `Context Gap` bloqueante.
+**Excepción obligatoria por gap de contexto arquitectónico:** aplica la misma excepción que wf-build (ver sección BUILD). Si el brief toca desktop, shared core, runtime boundaries o servicios y su `Architecture Contract`/`Required docs` no bastan para ejecutar sin inferir arquitectura desde el código, detener SHIP y marcar `Context Gap` bloqueante.
 
 **Secuencia:**
 
