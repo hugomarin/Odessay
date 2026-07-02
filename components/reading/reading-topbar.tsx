@@ -25,6 +25,8 @@ type ReadingTopbarProps = {
     accountLabel: string
   }
   respondHref?: string
+  extraActionLabel?: string
+  extraActionHref?: string | null
 }
 
 export function ReadingTopbar({
@@ -43,6 +45,8 @@ export function ReadingTopbar({
   mode = "default",
   publicHeader,
   respondHref,
+  extraActionLabel,
+  extraActionHref = null,
 }: ReadingTopbarProps) {
   const router = useRouter()
   const resolvedRespondHref = respondHref ?? `/write?reply_to=${writingId}`
@@ -109,6 +113,15 @@ export function ReadingTopbar({
                 }`}
               >
                 {publicHeader.accountLabel}
+              </Link>
+            ) : null}
+
+            {extraActionLabel && extraActionHref ? (
+              <Link
+                href={extraActionHref}
+                className="ml-1 flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-3.5 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
+              >
+                {extraActionLabel}
               </Link>
             ) : null}
 
@@ -180,6 +193,15 @@ export function ReadingTopbar({
 
       {/* Right — tools */}
       <div className="flex items-center gap-1">
+        {extraActionLabel && extraActionHref ? (
+          <Link
+            href={extraActionHref}
+            className="ml-1 flex h-8 items-center rounded-[8px] border-[0.5px] border-border bg-bg px-3.5 text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted"
+          >
+            {extraActionLabel}
+          </Link>
+        ) : null}
+
         {/* Margins toggle */}
         {isAuthenticated && (
           <button

@@ -29,6 +29,8 @@ export type ReadingViewProps = {
     accountLabel: string
   }
   respondHref?: string
+  extraActionLabel?: string
+  extraActionHref?: string | null
 }
 
 export function ReadingView({
@@ -46,6 +48,8 @@ export function ReadingView({
   chromeMode = "default",
   publicHeader,
   respondHref,
+  extraActionLabel,
+  extraActionHref = null,
 }: ReadingViewProps) {
   return (
     <ReadingInteractiveShell
@@ -63,6 +67,8 @@ export function ReadingView({
       chromeMode={chromeMode}
       publicHeader={publicHeader}
       respondHref={respondHref}
+      extraActionLabel={extraActionLabel}
+      extraActionHref={extraActionHref}
     />
   )
 }
