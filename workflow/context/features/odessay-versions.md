@@ -32,7 +32,7 @@ Versions no es historial de cada tecleo (eso es `History` de TipTap, in-memory, 
   → [Watcher de desktop (tauri-fs-watch.ts) detecta el cambio externo al archivo]
   → [Artifact Studio sugiere: "Este archivo cambió afuera. ¿Crear una versión?"]
   → [Autor confirma (o crea versión manualmente en cualquier momento, sin depender del watcher)]
-  → [Versión nueva queda registrada, enlazada a las anotaciones "ai" que estaban abiertas en la versión anterior]
+  → [Versión nueva queda registrada, enlazada a las anotaciones "ai" presentes en la versión anterior]
   → [Autor puede pedir comparación AI entre dos versiones]
 ```
 
@@ -42,7 +42,8 @@ Versions no es historial de cada tecleo (eso es `History` de TipTap, in-memory, 
 
 Dos triggers, no mutuamente excluyentes:
 
-1. **Automático por watcher.** El watcher de desktop (`lib/services/desktop/tauri-fs-watch.ts`) ya distingue escrituras propias de la app (supresión de self-write, `DEFAULT_SELF_WRITE_SUPPRESSION_MS`) de cambios externos al `.md`. Cuando detecta un cambio externo genuino en un archivo que tiene anotaciones `ai` activas (no resueltas) en su última versión conocida, Artifact Studio debe **sugerir** crear una versión — no crearla en silencio. El autor decide.
+1. **Automático por watcher.** El watcher de desktop (`lib/services/desktop/tauri-fs-watch.ts`) ya distingue escrituras propias de la app (supresión de self-write, `DEFAULT_SELF_WRITE_SUPPRESSION_MS`) de cambios externos al `.md`. Cuando detecta un cambio externo genuino en un archivo que contiene **al menos una anotación tipo `ai`** en su notación inline, Artifact Studio debe **sugerir** crear una versión — no crearla en silencio. El autor decide.
+   > **Corrección de audit (2026-07-01):** la condición NO puede ser "no resuelta" (`resolved`). Ese campo vive solo en la tabla cloud `margins` (ver §Relación con el AI editor / contrato de sincronización en `odessay-margenes.md`), nada en el código lo escribe hoy, y el watcher es un evento local sin acceso garantizado a red — no puede evaluar `resolved` en ese instante. La condición es deliberadamente más simple: presencia de anotación `ai`, punto. Distinguir "atendida" de "pendiente" es trabajo futuro explícito, no de v1.
 2. **Manual.** Botón explícito "Guardar versión" disponible en cualquier momento, independiente de si hay anotaciones `ai` pendientes — para que el autor marque un punto antes de un cambio grande por su cuenta.
 
 Ambos triggers producen el mismo tipo de registro; difieren solo en cómo se originaron (`created_via: "watcher-suggested" | "manual"`).
@@ -59,7 +60,7 @@ Campos mínimos:
 - `created_at`, `created_via` (`watcher-suggested | manual`)
 - `content_hash` del snapshot (reutilizar `lib/content-hash.ts`, mismo contrato BLAKE3 que sync)
 - snapshot del contenido — `.md` canónico completo en desktop (fuente de verdad D1, ver `odessay-adr-identidad.md`); considerar guardar solo el `.md` (no `body_json` derivado) para no duplicar el problema de doble fuente de verdad que la identidad de documento ya resolvió
-- `annotations_open_ai` — lista de IDs de anotaciones tipo `ai` que estaban activas (no resueltas) al momento de crear la versión, para anclar la comparación posterior
+- `annotations_open_ai` — lista de IDs de anotaciones tipo `ai` presentes (no filtradas por `resolved`, ver corrección de audit arriba) al momento de crear la versión, para anclar la comparación posterior
 
 **Costo de storage:** `body_json` no tiene límite de tamaño documentado (ver hallazgo en la investigación de este issue); duplicar snapshots completos por versión escala con el número de versiones × tamaño del documento. Es una decisión de producto aceptar ese costo a cambio de simplicidad — no se optimiza con diffs incrementales en v1.
 

@@ -54,7 +54,7 @@ Referencias:
 ## 5.2) Versions — ciclo de edición AI externa formalizado
 
 - Existe un registro deliberado de versiones de un writing (no historial de cada tecleo), con snapshot inmutable y desconectado del documento activo.
-- El watcher de desktop sugiere crear una versión cuando detecta que un `.md` cambió afuera de la app mientras tenía anotaciones de margen tipo `ai` abiertas — nunca crea la versión en silencio.
+- El watcher de desktop sugiere crear una versión cuando detecta que un `.md` cambió afuera de la app mientras contiene al menos una anotación de margen tipo `ai` (presencia, no "no resuelta" — ese estado es cloud-only y no evaluable localmente por el watcher, corregido por audit 2026-07-01) — nunca crea la versión en silencio.
 - El autor puede comparar dos versiones y obtener un reporte de cobertura por anotación `ai` más un resumen narrativo del cambio, generado por AI, de solo lectura.
 - Esta funcionalidad no contradice el límite del agente residente (`odessay-ai-editor.md`): la evaluación observa y reporta, nunca escribe en el body del autor.
 
