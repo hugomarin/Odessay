@@ -1,6 +1,7 @@
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import type {
   PreviewLinkState,
+  ShareRecipient,
   SharedWritingListItem,
   SharingService,
 } from "@/lib/services/contracts/sharing-service"
@@ -12,7 +13,9 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 // requests fall back to the SPA index.html (HTTP 200 with HTML), which the
 // fetch-based browser service cannot parse ("Unexpected sharing service
 // response."). This implementation talks to Supabase directly using the
-// authenticated desktop client.
+// authenticated desktop client for read paths, and bridges share mutations
+// through the authenticated web routes via absolute NEXT_PUBLIC_APP_URL fetches
+// + Bearer token.
 //
 // RLS makes the read paths safe without the service-role key:
 //   - writing_shares_select_related: a user can read shares where
@@ -20,11 +23,6 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 //   - writings_select_accessible (can_read_writing): a user can read writings
 //     shared with them.
 //   - profiles_select_public: profiles are world-readable.
-//
-// Direct recipient mutations (share/revoke) still rely on web-only flows, so
-// they remain unavailable on desktop. Preview test-links, however, are bridged
-// through the authenticated web route via absolute NEXT_PUBLIC_APP_URL fetches.
-// The desktop Desk view only uses the read methods below.
 
 const MAX_BATCH_SHARE_IDS = 50
 
@@ -34,8 +32,16 @@ type RecipientPreview = {
   username: string
   displayName: string
 }
+
+type UserSearchResult = {
+  id: string
+  username: string
+  display_name: string
+}
+
 type DesktopSharingService = SharingService & {
   listRecipientPreviews(writingIds: string[]): Promise<ServiceResponse<Record<string, RecipientPreview[]>>>
+  searchUsers(query: string): Promise<ServiceResponse<UserSearchResult[]>>
 }
 
 function ok<T>(data: T): ServiceResponse<T> {
@@ -73,15 +79,17 @@ async function getBearerToken(supabase: DesktopSupabaseClient): Promise<string |
   }
 }
 
-async function callPreviewLinkRoute<T>(
+type RouteInit = RequestInit & { expectedStatus?: number | number[] }
+
+async function callWebRoute<T>(
   supabase: DesktopSupabaseClient,
-  writingId: string,
-  init: RequestInit,
+  routePath: string,
+  init: RouteInit,
   fallbackMessage: string,
 ): Promise<ServiceResponse<T>> {
   const baseUrl = getWebRuntimeBaseUrl()
   if (!baseUrl) {
-    return unavailable("Preview links are unavailable because NEXT_PUBLIC_APP_URL is not configured.")
+    return unavailable("This action is unavailable because NEXT_PUBLIC_APP_URL is not configured.")
   }
 
   const token = await getBearerToken(supabase)
@@ -89,14 +97,22 @@ async function callPreviewLinkRoute<T>(
     return err(makeError("UNAUTHORIZED", "No active session.", false))
   }
 
+  const expectedStatuses = Array.isArray(init.expectedStatus)
+    ? init.expectedStatus
+    : [init.expectedStatus ?? 200]
+
   try {
-    const response = await fetch(`${baseUrl}/api/writings/${writingId}/share-test-link`, {
+    const response = await fetch(`${baseUrl}${routePath}`, {
       ...init,
       headers: {
         "authorization": `Bearer ${token}`,
         ...(init.headers ?? {}),
       },
     })
+
+    if (expectedStatuses.includes(response.status) && response.status === 204) {
+      return ok(undefined as T)
+    }
 
     let envelope: { data: T | null; error: { code: string; message: string } | null } | null = null
 
@@ -118,6 +134,15 @@ async function callPreviewLinkRoute<T>(
   } catch {
     return unavailable(fallbackMessage)
   }
+}
+
+async function callPreviewLinkRoute<T>(
+  supabase: DesktopSupabaseClient,
+  writingId: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<ServiceResponse<T>> {
+  return callWebRoute<T>(supabase, `/api/writings/${writingId}/share-test-link`, init, fallbackMessage)
 }
 
 function normalizeProfile(
@@ -175,16 +200,47 @@ export function createDesktopSharingService(): DesktopSharingService {
   const supabase = createDesktopClient()
 
   return {
-    async listRecipients() {
-      return unavailable()
+    async listRecipients(writingId) {
+      return callWebRoute<ShareRecipient[]>(
+        supabase,
+        `/api/writings/${writingId}/shares`,
+        { method: "GET", cache: "no-store" },
+        "Could not load recipients right now.",
+      )
     },
 
-    async shareWriting() {
-      return unavailable()
+    async shareWriting(input) {
+      return callWebRoute<ShareRecipient>(
+        supabase,
+        `/api/writings/${input.writingId}/shares`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shared_with_id: input.sharedWithUserId }),
+          expectedStatus: 201,
+        },
+        "Could not share this writing right now.",
+      )
     },
 
-    async revokeShare() {
-      return unavailable()
+    async revokeShare(input) {
+      const result = await callWebRoute<void>(
+        supabase,
+        `/api/writings/${input.writingId}/shares`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ shared_with_id: input.sharedWithUserId }),
+          expectedStatus: [200, 204],
+        },
+        "Could not revoke access right now.",
+      )
+
+      if (result.error) {
+        return result as ServiceResponse<{ writingId: string; sharedWithUserId: string }>
+      }
+
+      return ok({ writingId: input.writingId, sharedWithUserId: input.sharedWithUserId })
     },
 
     async getPreviewLink(writingId) {
@@ -292,6 +348,15 @@ export function createDesktopSharingService(): DesktopSharingService {
       }
 
       return ok(result)
+    },
+
+    async searchUsers(query) {
+      return callWebRoute<UserSearchResult[]>(
+        supabase,
+        `/api/users/search?q=${encodeURIComponent(query)}`,
+        { method: "GET", cache: "no-store" },
+        "Could not search users right now.",
+      )
     },
   }
 }

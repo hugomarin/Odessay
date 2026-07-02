@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
 import { parseUserSearchQuery } from "@/lib/sharing/writing-shares"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
 const jsonError = (status: number, code: string, message: string) =>
   NextResponse.json({ data: null, error: { code, message } }, { status })
 
 // GET /api/users/search?q=... — search users by username or display_name
 // Returns only id, username, display_name — never email.
+// Supports both cookie auth (web) and Bearer token auth (desktop proxy).
 export async function GET(req: Request) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { userId } = await getCurrentUserFromRequest(req)
 
-  if (!user) return jsonError(401, "UNAUTHORIZED", "No active session.")
+  if (!userId) return jsonError(401, "UNAUTHORIZED", "No active session.")
 
   const url = new URL(req.url)
   const q = parseUserSearchQuery(url.searchParams.get("q"))
@@ -28,7 +26,7 @@ export async function GET(req: Request) {
     .from("profiles")
     .select("id, username, display_name")
     .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
-    .neq("id", user.id)
+    .neq("id", userId)
     .limit(10)
 
   if (error) return jsonError(500, "DB_ERROR", error.message)
