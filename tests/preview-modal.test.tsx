@@ -36,6 +36,33 @@ vi.mock("@/components/settings/user-settings-provider", () => ({
   useUserSettingsContext: () => ({ settings: { disabledStatuses: [] } }),
 }))
 
+vi.mock("@/lib/services/sharing-service-factory", () => ({
+  createSharingService: () => ({
+    getPreviewLink: vi.fn().mockResolvedValue({
+      data: {
+        active: false,
+        token: null,
+        link: null,
+        createdAt: null,
+      },
+      error: null,
+    }),
+    rotatePreviewLink: vi.fn().mockResolvedValue({
+      data: {
+        active: true,
+        token: "preview-token",
+        link: "https://app.odessay.com/preview/preview-token",
+        createdAt: "2026-07-02T00:00:00.000Z",
+      },
+      error: null,
+    }),
+    revokePreviewLink: vi.fn().mockResolvedValue({
+      data: { writingId: "writing-1", revoked: true },
+      error: null,
+    }),
+  }),
+}))
+
 vi.mock("@/components/collections/collection-assignment-menu", () => ({
   CollectionAssignmentMenu: ({ trigger }: { trigger: ReactNode }) => <>{trigger}</>,
 }))
@@ -125,7 +152,9 @@ describe("WritingPreviewModal", () => {
     expect(positions).toEqual([...positions].sort((a, b) => a - b))
     expect(content).toContain("Open full writing")
     expect(content).toContain("Publish on web")
-    expect(content).toContain("Share with link")
+    expect(content).toContain("Preview link")
+    expect(content).toContain("Generate link")
+    expect(content).not.toContain("Share with link")
     expect(content).toContain("Export as…")
     expect(container.querySelector('[aria-label="More options"]')).toBeNull()
   })
