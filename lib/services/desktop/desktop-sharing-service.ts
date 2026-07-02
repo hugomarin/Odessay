@@ -1,5 +1,9 @@
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
-import type { SharedWritingListItem, SharingService } from "@/lib/services/contracts/sharing-service"
+import type {
+  PreviewLinkState,
+  SharedWritingListItem,
+  SharingService,
+} from "@/lib/services/contracts/sharing-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 
 // Desktop sharing service.
@@ -17,10 +21,10 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 //     shared with them.
 //   - profiles_select_public: profiles are world-readable.
 //
-// Mutations (share/revoke) and preview test-links rely on the server-side
-// admin client and the invitations table, so they are reported as unavailable
-// on desktop rather than silently failing. The desktop Desk view only uses the
-// read methods below.
+// Direct recipient mutations (share/revoke) still rely on web-only flows, so
+// they remain unavailable on desktop. Preview test-links, however, are bridged
+// through the authenticated web route via absolute NEXT_PUBLIC_APP_URL fetches.
+// The desktop Desk view only uses the read methods below.
 
 const MAX_BATCH_SHARE_IDS = 50
 
@@ -46,8 +50,74 @@ function makeError(code: ServiceError["code"], message: string, retryable = fals
   return { code, message, retryable }
 }
 
-function unavailable<T>(): ServiceResponse<T> {
-  return err(makeError("UNAVAILABLE", "Sharing actions are only available on the web app.", false))
+function unavailable<T>(message = "Sharing actions are only available on the web app."): ServiceResponse<T> {
+  return err(makeError("UNAVAILABLE", message, false))
+}
+
+function getWebRuntimeBaseUrl(): string | null {
+  const url = process.env.NEXT_PUBLIC_APP_URL
+  return url ? url.replace(/\/$/, "") : null
+}
+
+async function getBearerToken(supabase: DesktopSupabaseClient): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.auth.getSession()
+
+    if (error || !data.session) {
+      return null
+    }
+
+    return data.session.access_token
+  } catch {
+    return null
+  }
+}
+
+async function callPreviewLinkRoute<T>(
+  supabase: DesktopSupabaseClient,
+  writingId: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<ServiceResponse<T>> {
+  const baseUrl = getWebRuntimeBaseUrl()
+  if (!baseUrl) {
+    return unavailable("Preview links are unavailable because NEXT_PUBLIC_APP_URL is not configured.")
+  }
+
+  const token = await getBearerToken(supabase)
+  if (!token) {
+    return err(makeError("UNAUTHORIZED", "No active session.", false))
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/writings/${writingId}/share-test-link`, {
+      ...init,
+      headers: {
+        "authorization": `Bearer ${token}`,
+        ...(init.headers ?? {}),
+      },
+    })
+
+    let envelope: { data: T | null; error: { code: string; message: string } | null } | null = null
+
+    try {
+      envelope = (await response.json()) as { data: T | null; error: { code: string; message: string } | null }
+    } catch {
+      envelope = null
+    }
+
+    if (!response.ok || !envelope?.data || envelope.error) {
+      return err({
+        code: (envelope?.error?.code as ServiceError["code"] | undefined) ?? "UNAVAILABLE",
+        message: envelope?.error?.message ?? fallbackMessage,
+        retryable: response.status >= 500,
+      })
+    }
+
+    return ok(envelope.data)
+  } catch {
+    return unavailable(fallbackMessage)
+  }
 }
 
 function normalizeProfile(
@@ -117,16 +187,31 @@ export function createDesktopSharingService(): DesktopSharingService {
       return unavailable()
     },
 
-    async getPreviewLink() {
-      return unavailable()
+    async getPreviewLink(writingId) {
+      return callPreviewLinkRoute<PreviewLinkState>(
+        supabase,
+        writingId,
+        { method: "GET", cache: "no-store" },
+        "Could not load the preview link right now.",
+      )
     },
 
-    async rotatePreviewLink() {
-      return unavailable()
+    async rotatePreviewLink(writingId) {
+      return callPreviewLinkRoute<PreviewLinkState>(
+        supabase,
+        writingId,
+        { method: "POST" },
+        "Could not generate the preview link right now.",
+      )
     },
 
-    async revokePreviewLink() {
-      return unavailable()
+    async revokePreviewLink(writingId) {
+      return callPreviewLinkRoute<{ writingId: string; revoked: boolean }>(
+        supabase,
+        writingId,
+        { method: "DELETE" },
+        "Could not revoke the preview link right now.",
+      )
     },
 
     async listIncomingShares() {
