@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-01",
+  "last_updated": "2026-07-02",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -27,10 +27,6 @@
       {
         "issue": "ODE-315",
         "reason": "wf-debrief Fase 8 traceability issue: captures post-delivery follow-ups for ODE-295..309 in workflow/define/debrief.md and spawns ODE-311..314. Process/docs only, not product-code delivery, so it is intentionally excluded from built[]; ignored for status drift (same pattern as ODE-310)."
-      },
-      {
-        "issue": "ODE-292",
-        "reason": "Referenced by workflow/docs commit 1c1d607 on main (ODE-292/ODE-337 complementarity and local-first invariant note) before the product-code PR #307 merged. Will be replaced by a built[] entry after PR #307 lands."
       },
       {
         "issue": "ODE-331",
@@ -94,6 +90,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(desktop): read and copy shared writings on desktop. Adds static /shared?id=<uuid> entry, DesktopSharedEntry, shared-reading-service with RLS direct load, prev/next sequence, Save as my copy via createDesktopDraft + workspace assignment; re-enables Shared with me row navigation in desktop. [ODE-292]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-292",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-292/desktop-leer-writings-compartidos-y-guardarlos-como-archivo-propio",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/307",
+      "commit": "d7025da",
+      "date": "2026-07-02",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (133 files / 837 tests). ops:delivery:gate PASS (Performance Contract not required). CI Traceability Gates PASS after traceability backfill PR #308. Vercel Preview SUCCESS. Architecture Contract COMPLIANT. QualityScore 7.5/10 (non-blocking P2/P3 observations)."
+    },
     {
       "what": "test(editor): add orthography regression harness for correction apply and persistence. Adds deterministic fixture and Playwright E2E under /perf/orthography-harness; mocks /api/ai/publication-review, /api/corrections/hydrate and /api/corrections/persist to verify apply, manual-edit invalidation, persisted block remap, and reload/hydration; fixes EditorShell updatePersistedBlocksFromSuggestions to remap persisted correction blocks to the new blockId/blockHash when a logical paragraph changes hash and to propagate deletedBlockIds through the write-through. Updates odessay-ai-writing-assist.md and playwright-catalog.md with the harness contract. [ODE-330]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
