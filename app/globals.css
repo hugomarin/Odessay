@@ -992,3 +992,12 @@
   background: hsla(0, 0%, 100%, 0.18);
   opacity: 1;
 }
+
+.pub-suggestion-bubble-learn {
+  opacity: 0.82;
+}
+
+.pub-suggestion-bubble-learn:hover {
+  background: hsla(0, 0%, 100%, 0.16);
+  opacity: 1;
+}

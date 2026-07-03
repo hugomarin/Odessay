@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const authGetUser = vi.fn()
+const authGetSession = vi.fn()
 const rpcMock = vi.fn()
 const fromSelectMock = vi.fn()
 const fromEqMock = vi.fn()
@@ -13,7 +14,7 @@ const tauriListRecentFilesMock = vi.fn()
 
 vi.mock("@/lib/supabase/desktop-client", () => ({
   createDesktopClient: () => ({
-    auth: { getUser: authGetUser },
+    auth: { getUser: authGetUser, getSession: authGetSession },
     rpc: rpcMock,
     from: () => ({
       select: fromSelectMock,
@@ -50,6 +51,9 @@ describe("desktop shared reading service", () => {
 
     authGetUser.mockResolvedValue({
       data: { user: { id: "user-1" } },
+    })
+    authGetSession.mockResolvedValue({
+      data: { session: null },
     })
 
     fromSelectMock.mockReturnValue({

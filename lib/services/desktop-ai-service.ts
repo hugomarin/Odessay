@@ -3,11 +3,15 @@
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import type {
   AIService,
+  LearnedWordEntry,
+  LearnedWordsPage,
+  LearnWordInput,
   PersistCorrectionBlockInput,
   PersistCorrectionBlockResult,
   PersistedCorrectionBlock,
   PublicationReviewRequest,
   PublicationReviewResult,
+  ListLearnedWordsInput,
   TitleSuggestion,
   TitleSuggestionRequest,
 } from "@/lib/services/contracts/ai-service"
@@ -57,6 +61,11 @@ type PublicationReviewPayload = {
   uncertain?: PublicationReviewResult["uncertain"]
   promptTokens?: number | null
   completionTokens?: number | null
+}
+
+type LearnedWordsPayload = {
+  items: LearnedWordEntry[]
+  nextCursor: string | null
 }
 
 export const desktopAIService: AIService = {
@@ -223,6 +232,102 @@ export const desktopAIService: AIService = {
       )
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not persist correction blocks.")
+    }
+  },
+
+  async listLearnedWords(input: ListLearnedWordsInput = {}) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<LearnedWordsPage>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const params = new URLSearchParams()
+      if (input.limit) params.set("limit", String(input.limit))
+      if (input.cursor) params.set("cursor", input.cursor)
+
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/corrections/learned-words?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          "authorization": `Bearer ${token}`,
+        },
+        cache: "no-store",
+      })
+
+      return parseServiceEnvelope<LearnedWordsPayload>(
+        response,
+        "UNAVAILABLE",
+        "Could not load learned words.",
+      )
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not load learned words.")
+    }
+  },
+
+  async learnWord(input: LearnWordInput) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<LearnedWordEntry>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/corrections/learned-words`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(input),
+      })
+
+      return parseServiceEnvelope<LearnedWordEntry>(
+        response,
+        "UNAVAILABLE",
+        "Could not save learned word.",
+      )
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not save learned word.")
+    }
+  },
+
+  async deleteLearnedWord(id: string) {
+    const token = await getBearerToken()
+
+    if (!token) {
+      return err<{ deletedId: string }>({
+        code: "UNAUTHORIZED",
+        message: "No active session.",
+        retryable: false,
+      })
+    }
+
+    try {
+      const response = await fetch(`${getWebRuntimeBaseUrl()}/api/corrections/learned-words`, {
+        method: "DELETE",
+        headers: {
+          "content-type": "application/json",
+          "authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({ id }),
+      })
+
+      return parseServiceEnvelope<{ deletedId: string }>(
+        response,
+        "UNAVAILABLE",
+        "Could not delete learned word.",
+      )
+    } catch (error) {
+      return unavailable(error instanceof Error ? error.message : "Could not delete learned word.")
     }
   },
 }

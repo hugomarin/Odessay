@@ -186,6 +186,7 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
       return {
         id,
         kind,
+        mechanical_type: correction.type,
         title: correctionTitle(correction),
         reason: "",
         original_text: correction.originalText,

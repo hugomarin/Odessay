@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import type { CorrectionLanguage } from "@/lib/ai/language-detection";
+import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words";
 
 export type CorrectionBlock = {
   id: string;
@@ -102,8 +103,10 @@ export const normalizeCanonicalCorrections = (
   parsed: unknown,
   blocks: CorrectionBlock[],
   fallbackLanguage?: CorrectionLanguage,
+  learnedWords: Iterable<string> = [],
 ): CanonicalCorrectionsResponse => {
   const blockById = new Map(blocks.map((block) => [block.id, block]));
+  const learnedWordSet = createLearnedWordSet(learnedWords);
   const response = canonicalCorrectionsResponseSchema.parse(parsed);
   const language = response.language === "unknown"
     ? fallbackLanguage ?? detectCorrectionLanguage(blocks.map((block) => block.text).join("\n\n"))
@@ -125,6 +128,7 @@ export const normalizeCanonicalCorrections = (
         return Boolean(
           block &&
           isValidCorrectionMatch(block.text, correction) &&
+          !learnedWordSet.has(normalizeLearnedWord(correction.originalText)) &&
           correction.originalText.trim() !== correction.replacementText.trim(),
         );
       }),
@@ -138,7 +142,10 @@ export const normalizeCanonicalCorrections = (
   };
 };
 
-export const buildMechanicalCorrectionsPrompt = (blocks: CorrectionBlock[]) => `
+export const buildMechanicalCorrectionsPrompt = (
+  blocks: CorrectionBlock[],
+  learnedWords: string[] = [],
+) => `
 You are a conservative mechanical correction engine.
 
 Detect mechanical errors only: spelling, typos, missing/wrong accents, malformed words, wrong spacing, duplicated words, agreement errors, basic punctuation.
@@ -146,8 +153,12 @@ Do NOT rewrite, polish, translate, or change the author's voice.
 Do NOT flag technical terms, product names, or regional usage.
 Do NOT flag English words in mixed-language (Spanish/English) documents — treat them as intentional.
 Do NOT suggest a correction where originalText and replacementText are identical.
+Do NOT flag any item that appears in the user's learned words list.
 
 Known terms to preserve: AI, Linear, React, Next.js, Python, WhatsApp, CLI, markdown, PDF, app, harness, harnesses, prompt, writing, collection, desk, settings, topbar, toolbar, export, status, preview, artifact, artifacts, compaction, skill, skills, workflow, loop, review, reviewer, performance, multiagent, memory.
+
+User learned words to always preserve:
+${learnedWords.length > 0 ? learnedWords.join(", ") : "(none)"}
 
 Return valid JSON:
 {

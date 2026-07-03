@@ -160,4 +160,26 @@ describe("stale correction invalidation", () => {
 
     expect(visibleSuggestions.map((suggestion) => suggestion.id)).toEqual(["punctuation-1", "grammar-1"])
   })
+
+  it("keeps unmatched pending suggestions visible after matched ones so the sidebar does not drop live items", () => {
+    const matched = createSuggestion({
+      id: "matched-1",
+      original_text: "prueva",
+      replacement_text: "prueba",
+      occurrence: 0,
+    })
+    const unmatched = createSuggestion({
+      id: "unmatched-1",
+      original_text: "Odessay",
+      replacement_text: "Odyssey",
+      occurrence: 0,
+    })
+
+    const visibleSuggestions = getVisibleCorrectionSuggestions(
+      [unmatched, matched],
+      "Esta prueva sigue visible.",
+    )
+
+    expect(visibleSuggestions.map((suggestion) => suggestion.id)).toEqual(["matched-1", "unmatched-1"])
+  })
 })

@@ -203,6 +203,7 @@ export type PublicationChecklistStatus = "pending" | "done";
 export type PublicationSuggestion = {
   id: string;
   kind: PublicationSuggestionKind;
+  mechanical_type?: "spelling" | "accent" | "grammar" | "agreement" | "punctuation" | "duplication" | "spacing" | "basic_redaction" | null;
   title: string;
   reason: string;
   original_text: string;

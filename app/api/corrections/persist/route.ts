@@ -8,6 +8,16 @@ import { findLogicalStaleCorrectionBlocks } from "@/lib/corrections/block-invali
 const publicationSuggestionSchema = z.object({
   id: z.string().trim().min(1),
   kind: z.enum(["spelling", "grammar", "punctuation", "rewriting"]),
+  mechanical_type: z.enum([
+    "spelling",
+    "accent",
+    "grammar",
+    "agreement",
+    "punctuation",
+    "duplication",
+    "spacing",
+    "basic_redaction",
+  ]).nullable().optional(),
   title: z.string().trim().min(1),
   reason: z.string().catch(""),
   original_text: z.string().trim().min(1),
