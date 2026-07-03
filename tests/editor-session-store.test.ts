@@ -9,13 +9,16 @@ import {
   openDraftTab,
   openWritingTab,
   publishTabState,
+  reorderTab,
   resetEditorSessionStoreForTests,
   saveTabViewState,
 } from "../lib/stores/editor-session-store";
+import { getStudioSessionState, resetStudioSessionForTests } from "../lib/stores/studio-session-store";
 
 beforeEach(async () => {
   vi.stubGlobal("window", globalThis);
   resetEditorSessionStoreForTests();
+  resetStudioSessionForTests();
   setLocalDBScope(`editor-session-${crypto.randomUUID()}`);
   await localDB.editorSessions.save(createEmptyEditorSession());
 });
@@ -122,5 +125,38 @@ describe("editorSessionStore", () => {
     expect(session.active_tab_id).toBe("writing-6");
     expect(session.tabs.some((tab) => tab.id === EDITOR_DRAFT_TAB_ID)).toBe(false);
     expect(session.tabs.at(-1)?.writing_id).toBe("writing-6");
+  });
+
+  it("reorders tabs without changing the active tab", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-1", title: "First draft" });
+    openWritingTab({ writingId: "writing-2", title: "Second draft" });
+    openWritingTab({ writingId: "writing-3", title: "Third draft" });
+
+    reorderTab("writing-1", "writing-3");
+
+    const session = getEditorSessionState().session;
+    expect(session.active_tab_id).toBe("writing-3");
+    expect(session.tabs.map((tab) => tab.id)).toEqual([
+      "writing-2",
+      "writing-3",
+      "writing-1",
+    ]);
+  });
+
+  it("keeps Studio mirrored to the reordered tab order", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-1", title: "First draft" });
+    openWritingTab({ writingId: "writing-2", title: "Second draft" });
+    openWritingTab({ writingId: "writing-3", title: "Third draft" });
+
+    reorderTab("writing-3", "writing-1");
+
+    expect(getStudioSessionState().activeArtifactId).toBe("writing-3");
+    expect(getStudioSessionState().artifacts.map((artifact) => artifact.id)).toEqual([
+      "writing-3",
+      "writing-1",
+      "writing-2",
+    ]);
   });
 });

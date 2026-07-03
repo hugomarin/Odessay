@@ -147,6 +147,7 @@ import {
   openDraftTab,
   openWritingTab,
   publishTabState,
+  reorderTab,
   saveTabViewState,
   useEditorSessionStore,
 } from "@/lib/stores/editor-session-store"
@@ -4141,6 +4142,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [editor, editorSession.active_tab_id],
   )
 
+  const handleReorderWorkspaceTab = useCallback((tabId: string, targetTabId: string) => {
+    reorderTab(tabId, targetTabId)
+  }, [])
+
   const handleRenameModalOpenChange = useCallback((open: boolean) => {
     setRenameModalOpen(open)
     if (!open) {
@@ -4598,6 +4603,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
             onRenameTab={handleRenameWorkspaceTab}
+            onReorderTab={handleReorderWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
