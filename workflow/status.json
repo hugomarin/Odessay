@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-02",
+  "last_updated": "2026-07-03",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -2741,6 +2741,15 @@
       "date": "2026-06-22",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Preview modal redesigned with a narrow single-column properties rail. Header reduced to navigation, Open full writing, destructive menu, and close. Status and Artifact Type reuse Desk property controls; Workspace retains the shared ODE-318 control. Sharing and Export moved into the rail. Presentation evidence attached to Linear issue and linked from PR. Performance Contract: not required. Review score: 10.0/10."
+    },
+    {
+      "issue": "ODE-338",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-338/add-learn-word-action-to-orthography-correction-user-dictionary",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/312",
+      "commit": "08e8aab",
+      "date": "2026-07-03",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Added per-user learned_words dictionary for orthography corrections. Learn word action in inline bubble and CorrectionsPanel; prompt injection + canonical post-filter; desktop/web service adapters; migration + RLS + tests. Typecheck PASS. Lint PASS with 6 pre-existing warnings. Tests PASS (138/856). Performance Contract required: trace captured, ops:perf:gate 13 pass/1 warn/1 skip (required_failures:0), ops:delivery:gate OK. Review score: 8.5/10."
     }
   ]
 }
