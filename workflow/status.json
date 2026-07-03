@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "feat(editor): reorder editor tabs by drag-and-drop. Adds reorderEditorSessionTabs helper and reorderTab action to editor-session-store, persists new tab order in LocalEditorSession.tabs (IndexedDB), wires HTML5 drag-and-drop into editor-tabs.tsx/editor-tab-item.tsx with visual drag/target feedback, preserves active tab and editor state, and keeps Studio mirror synchronized via syncStudioSessionFromEditorTabs. [ODE-339]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-339",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-339/reorder-editor-tabs-by-drag-and-drop",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/313",
+      "commit": "123c901",
+      "date": "2026-07-03",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (136 files / 850 tests). ops:perf:gate PASS (2 pass / 0 warn / 13 skip / required_failures: 0) with issue-scoped drag budget. ops:delivery:gate PASS with OPS_PERF_TRACE_PATH. CI Traceability SUCCESS. Vercel Preview SUCCESS. Visual/UX Contract: screenshots attached to agent conversation confirm tab order changes and persists. QualityScore 9.3/10 (P2 scope note on parity-test normalization, P3 keyboard-support deferral note)."
+    },
+    {
       "what": "feat(sharing): add 'Add to my writings' web copy action to /preview/[token] and /shared/[id]. New POST /api/writings/import creates a disconnected, private draft copy (source: preview revalidates token server-side via getPreviewWritingFromTestLink; source: shared re-checks author_id/writing_shares authorization). New AddToMyWritingsButton reused across both surfaces, with login/signup next-preservation (new capability in app/(auth)/login and signup forms) so preview import auto-completes after auth. [ODE-337]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-337",
