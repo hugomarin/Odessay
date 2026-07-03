@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "feat(sharing): add 'Add to my writings' web copy action to /preview/[token] and /shared/[id]. New POST /api/writings/import creates a disconnected, private draft copy (source: preview revalidates token server-side via getPreviewWritingFromTestLink; source: shared re-checks author_id/writing_shares authorization). New AddToMyWritingsButton reused across both surfaces, with login/signup next-preservation (new capability in app/(auth)/login and signup forms) so preview import auto-completes after auth. [ODE-337]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-337",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-337/add-add-to-my-writings-copy-action-to-preview-and-shared-reading-pages",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/311",
+      "commit": "40fa166",
+      "date": "2026-07-02",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell warnings only. Tests PASS (11 new). ops:delivery:gate PASS. CI Traceability PASS. Vercel Preview SUCCESS. Round 1 rejected for missing required Performance Contract (Payload weight) and Visual/UX Contract evidence, PR left in draft. Round 2 approved after live evidence generated: POST /api/writings/import measured at 201 (45B) against real staging Supabase via local dev server + real login; full flow screenshots (button, login redirect with next preserved, signup checkEmail branch, post-import /write/{id} independent copy) attached to ODE-337 in Linear. QualityScore 9/10. P3: /shared/[id] button not screenshotted live (same component already confirmed on /preview), documented non-blocking."
+    },
+    {
       "what": "feat(desktop): native People sharing (search, invite, revoke). Generalizes the ODE-335 callPreviewLinkRoute helper into callWebRoute; implements listRecipients/shareWriting/revokeShare/searchUsers against /api/writings/{id}/shares and /api/users/search via Bearer token + NEXT_PUBLIC_APP_URL; renders WritingSharesSection in the desktop Properties panel. [ODE-336]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-336",
