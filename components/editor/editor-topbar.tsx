@@ -19,6 +19,7 @@ import {
   Strikethrough,
   Table,
   Image,
+  ListTree,
 } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { EditorTabs } from "@/components/editor/editor-tabs"
@@ -50,6 +51,7 @@ type EditorTopbarProps = {
   mode: "rich" | "markdown"
   isFocusMode: boolean
   activePanel: "notes" | "properties" | "publication" | null
+  isTableOfContentsOpen: boolean
   isPublicationModeEnabled: boolean
   tabs: LocalEditorSessionTab[]
   activeTabId: string | null
@@ -60,6 +62,7 @@ type EditorTopbarProps = {
   onNewTab: () => void
   onToggleFocusMode: () => void
   onOpenShortcutHelp: () => void
+  onToggleTableOfContents: () => void
   onTogglePanel: (panel: "notes" | "properties" | "publication") => void
   onRunAction: RunEditorAction
   isTabBarVisible?: boolean
@@ -197,6 +200,7 @@ export function EditorTopbar({
   mode,
   isFocusMode,
   activePanel,
+  isTableOfContentsOpen,
   isPublicationModeEnabled,
   tabs,
   activeTabId,
@@ -207,6 +211,7 @@ export function EditorTopbar({
   onNewTab,
   onToggleFocusMode,
   onOpenShortcutHelp,
+  onToggleTableOfContents,
   onTogglePanel,
   onRunAction,
   isTabBarVisible = true,
@@ -526,24 +531,36 @@ export function EditorTopbar({
           </div>
 
           <div className="flex items-center gap-1.5">
-          <ActionTooltip
-            label={isFocusMode ? "Exit focus mode" : "Focus mode"}
-            shortcut={getEditorShortcutLabel("focusMode")}
-            side="bottom"
-          >
-            <button
-              type="button"
-              onClick={onToggleFocusMode}
-              className={getTopbarIconButtonClass(isFocusMode)}
-              aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
+            <ActionTooltip label="Table of contents" side="bottom">
+              <button
+                type="button"
+                onClick={onToggleTableOfContents}
+                className={getTopbarIconButtonClass(isTableOfContentsOpen)}
+                aria-label="Table of contents"
+                aria-pressed={isTableOfContentsOpen}
+              >
+                <ListTree className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+              </button>
+            </ActionTooltip>
+
+            <ActionTooltip
+              label={isFocusMode ? "Exit focus mode" : "Focus mode"}
+              shortcut={getEditorShortcutLabel("focusMode")}
+              side="bottom"
             >
-              {isFocusMode ? (
-                <Minimize2 className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
-              ) : (
-                <Expand className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
-              )}
-            </button>
-          </ActionTooltip>
+              <button
+                type="button"
+                onClick={onToggleFocusMode}
+                className={getTopbarIconButtonClass(isFocusMode)}
+                aria-label={isFocusMode ? "Exit focus mode" : "Focus mode"}
+              >
+                {isFocusMode ? (
+                  <Minimize2 className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+                ) : (
+                  <Expand className="h-[13px] w-[13px]" strokeWidth={TOPBAR_ICON_STROKE_WIDTH} />
+                )}
+              </button>
+            </ActionTooltip>
 
           <ActionTooltip
             label="Keyboard shortcuts"

@@ -2,6 +2,7 @@
 
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { getMarkRange, type JSONContent } from "@tiptap/core"
+import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import { generateHTML } from "@tiptap/html"
 import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
@@ -254,6 +255,12 @@ const CorrectionsPanel = lazy(() =>
   })),
 )
 
+const TableOfContentsPanel = lazy(() =>
+  import("@/components/editor/panels/table-of-contents-panel").then((module) => ({
+    default: module.TableOfContentsPanel,
+  })),
+)
+
 const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 
 const AUTO_TITLE_MAX_CHARS = 48
@@ -340,6 +347,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
+  const [isTableOfContentsOpen, setIsTableOfContentsOpen] = useState(true)
+  const [tableOfContentsItems, setTableOfContentsItems] = useState<TableOfContentDataItem[]>([])
+  const [selectedTableOfContentsItemId, setSelectedTableOfContentsItemId] = useState<string | null>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
   const [spellcheckPreference, setSpellcheckPreference] = useState<EditorSpellcheckPreference>("system")
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
@@ -396,6 +406,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const editorCursorSnapshotRef = useRef<EditorCursorSnapshot | null>(null)
   const richUpdateRafRef = useRef<number | null>(null)
   const richUpdateEditorRef = useRef<Editor | null>(null)
+  const tableOfContentsItemsRef = useRef<TableOfContentDataItem[]>([])
+  const activeTableOfContentsItemIdRef = useRef<string | null>(null)
+  const tableOfContentsScrollRafRef = useRef<number | null>(null)
   const markdownSelectionRafRef = useRef<number | null>(null)
   const pendingMarkdownSelectionRef = useRef<{
     start: number
@@ -425,7 +438,20 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
   const editorInstanceRef = useRef<Editor | null>(null)
-  const editorExtensions = useMemo(() => createEditorExtensions(), [])
+  const getTableOfContentsScrollParent = useCallback(() => {
+    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+    return editorViewport ?? window
+  }, [])
+  const editorExtensions = useMemo(
+    () =>
+      createEditorExtensions({
+        onTableOfContentsUpdate: (items) => {
+          setTableOfContentsItems([...items])
+        },
+        tableOfContentsScrollParent: getTableOfContentsScrollParent,
+      }),
+    [getTableOfContentsScrollParent],
+  )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
     [spellcheckPreference],
@@ -918,6 +944,98 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   useEffect(() => {
     editorInstanceRef.current = editor ?? null
   }, [editor])
+
+  useEffect(() => {
+    tableOfContentsItemsRef.current = tableOfContentsItems
+  }, [tableOfContentsItems])
+
+  useEffect(() => {
+    activeTableOfContentsItemIdRef.current = selectedTableOfContentsItemId
+  }, [selectedTableOfContentsItemId])
+
+  useEffect(() => {
+    if (
+      selectedTableOfContentsItemId &&
+      !tableOfContentsItems.some((item) => item.id === selectedTableOfContentsItemId)
+    ) {
+      setSelectedTableOfContentsItemId(null)
+    }
+  }, [selectedTableOfContentsItemId, tableOfContentsItems])
+
+  const syncActiveTableOfContentsItemFromScroll = useCallback(() => {
+    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+    const items = tableOfContentsItemsRef.current
+
+    if (items.length === 0) {
+      return
+    }
+
+    const editorViewportRect = editorViewport?.getBoundingClientRect()
+    const usesEditorScroll = editorViewport
+      ? editorViewport.scrollHeight > editorViewport.clientHeight + 1
+      : false
+    const viewportTop = usesEditorScroll && editorViewportRect ? editorViewportRect.top : 0
+    const viewportBottom = usesEditorScroll && editorViewportRect ? editorViewportRect.bottom : window.innerHeight
+    const activationLine = viewportTop + 96
+    const visibleItems = items
+      .map((item) => ({ item, rect: item.dom.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.bottom >= viewportTop && rect.top <= viewportBottom)
+
+    const nextActiveItem = visibleItems.reduce<TableOfContentDataItem | null>((closest, current) => {
+      if (!closest) {
+        return current.item
+      }
+
+      const closestRect = closest.dom.getBoundingClientRect()
+      const closestDistance = Math.abs(closestRect.top - activationLine)
+      const currentDistance = Math.abs(current.rect.top - activationLine)
+      return currentDistance < closestDistance ? current.item : closest
+    }, null)
+
+    if (nextActiveItem && nextActiveItem.id !== activeTableOfContentsItemIdRef.current) {
+      activeTableOfContentsItemIdRef.current = nextActiveItem.id
+      setSelectedTableOfContentsItemId(nextActiveItem.id)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!editor || typeof window === "undefined") {
+      return
+    }
+
+    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+    const scrollHandler = editor.storage.tableOfContents?.scrollHandler
+
+    const handleScroll = () => {
+      if (typeof scrollHandler === "function") {
+        scrollHandler()
+      }
+
+      if (tableOfContentsScrollRafRef.current !== null) {
+        return
+      }
+
+      tableOfContentsScrollRafRef.current = window.requestAnimationFrame(() => {
+        tableOfContentsScrollRafRef.current = null
+        syncActiveTableOfContentsItemFromScroll()
+      })
+    }
+
+    editor.commands.updateTableOfContents()
+    handleScroll()
+    editorViewport?.addEventListener("scroll", handleScroll, { passive: true })
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      editorViewport?.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("scroll", handleScroll)
+
+      if (tableOfContentsScrollRafRef.current !== null) {
+        window.cancelAnimationFrame(tableOfContentsScrollRafRef.current)
+        tableOfContentsScrollRafRef.current = null
+      }
+    }
+  }, [editor, syncActiveTableOfContentsItemFromScroll, tableOfContentsItems.length])
 
   const persistCurrentWorkspaceViewState = useCallback(() => {
     const tabId = currentWritingIdRef.current ?? EDITOR_DRAFT_TAB_ID
@@ -1827,6 +1945,19 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const closeActivePanel = useCallback(() => {
     setActivePanel(null)
   }, [])
+
+  const navigateToTableOfContentsItem = useCallback(
+    (item: TableOfContentDataItem) => {
+      if (!editor) {
+        return
+      }
+
+      const cursorPosition = Math.min(item.pos + 1, editor.state.doc.content.size)
+      setSelectedTableOfContentsItemId(item.id)
+      editor.chain().focus().setTextSelection({ from: cursorPosition, to: cursorPosition }).scrollIntoView().run()
+    },
+    [editor],
+  )
 
   const handleAcceptCorrection = useCallback(
     (suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
@@ -4597,6 +4728,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
+            isTableOfContentsOpen={isTableOfContentsOpen}
             isPublicationModeEnabled={activePanel === "publication"}
             tabs={editorSession.tabs}
             activeTabId={editorSession.active_tab_id}
@@ -4607,6 +4739,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
+            onToggleTableOfContents={() => setIsTableOfContentsOpen((current) => !current)}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
             }}
@@ -4681,39 +4814,52 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     <div className="h-3 w-2/3 rounded bg-foreground/5" />
                   </div>
                 ) : null}
-                <WritingEditorContent
-                  editor={editor}
-                  mode={mode}
-                  markdownValue={markdownValue}
-                  onMarkdownChange={handleMarkdownChange}
-                  onMarkdownSelectionChange={(selection) => {
-                    markdownSelectionRef.current = selection
-                    setMarkdownSelectionState(selection)
-                  }}
-                  markdownTextareaRef={markdownTextareaRef}
-                  markdownOverlayHtml={markdownOverlayHtml}
-                  topSlot={
-                    !isFocusMode && isFindReplaceOpen ? (
-                      <EditorFindReplace
-                        searchValue={findQuery}
-                        replaceValue={replaceValue}
-                        caseSensitive={findCaseSensitive}
-                        matchCount={matchCount}
-                        activeMatchNumber={matchCount > 0 ? activeMatchIndex + 1 : 0}
-                        onSearchChange={setFindQuery}
-                        onReplaceChange={setReplaceValue}
-                        onToggleCaseSensitive={() => setFindCaseSensitive((currentState) => !currentState)}
-                        onNavigatePrevious={() => navigateFindMatches(-1)}
-                        onNavigateNext={() => navigateFindMatches(1)}
-                        onReplaceOne={handleReplaceCurrentMatch}
-                        onReplaceAll={handleReplaceAllMatches}
-                        onClose={() => closeFindReplacePanel()}
-                        searchInputRef={findInputRef}
-                        replaceInputRef={replaceInputRef}
+                <div className="flex min-h-0 flex-1">
+                  {!isFocusMode && isTableOfContentsOpen ? (
+                    <Suspense fallback={null}>
+                      <TableOfContentsPanel
+                        items={tableOfContentsItems}
+                        activeItemId={selectedTableOfContentsItemId}
+                        onNavigate={navigateToTableOfContentsItem}
+                        onClose={() => setIsTableOfContentsOpen(false)}
                       />
-                    ) : null
-                  }
-                />
+                    </Suspense>
+                  ) : null}
+
+                  <WritingEditorContent
+                    editor={editor}
+                    mode={mode}
+                    markdownValue={markdownValue}
+                    onMarkdownChange={handleMarkdownChange}
+                    onMarkdownSelectionChange={(selection) => {
+                      markdownSelectionRef.current = selection
+                      setMarkdownSelectionState(selection)
+                    }}
+                    markdownTextareaRef={markdownTextareaRef}
+                    markdownOverlayHtml={markdownOverlayHtml}
+                    topSlot={
+                      !isFocusMode && isFindReplaceOpen ? (
+                        <EditorFindReplace
+                          searchValue={findQuery}
+                          replaceValue={replaceValue}
+                          caseSensitive={findCaseSensitive}
+                          matchCount={matchCount}
+                          activeMatchNumber={matchCount > 0 ? activeMatchIndex + 1 : 0}
+                          onSearchChange={setFindQuery}
+                          onReplaceChange={setReplaceValue}
+                          onToggleCaseSensitive={() => setFindCaseSensitive((currentState) => !currentState)}
+                          onNavigatePrevious={() => navigateFindMatches(-1)}
+                          onNavigateNext={() => navigateFindMatches(1)}
+                          onReplaceOne={handleReplaceCurrentMatch}
+                          onReplaceAll={handleReplaceAllMatches}
+                          onClose={() => closeFindReplacePanel()}
+                          searchInputRef={findInputRef}
+                          replaceInputRef={replaceInputRef}
+                        />
+                      ) : null
+                    }
+                  />
+                </div>
 
                 {!isFocusMode ? (
                   <EditorStatusBar
