@@ -22,7 +22,7 @@ export const publicationSuggestionPluginKey = new PluginKey<PublicationSuggestio
 
 const dispatchSuggestionAction = (
   target: HTMLElement,
-  action: "accept" | "reject",
+  action: "accept" | "reject" | "learn",
   suggestionId: string,
 ) => {
   target.dispatchEvent(
@@ -36,6 +36,18 @@ const dispatchSuggestionAction = (
     }),
   )
 }
+
+const canLearnWord = (suggestion: PublicationSuggestion) =>
+  suggestion.kind === "spelling" &&
+  (
+    suggestion.mechanical_type == null ||
+    suggestion.mechanical_type === "spelling" ||
+    suggestion.mechanical_type === "accent"
+  )
+
+const CIRCLE_CHECK_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`
+const CIRCLE_X_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`
+const CIRCLE_PLUS_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>`
 
 const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   const isStale = isSuggestionAcceptDisabled(suggestion)
@@ -58,7 +70,7 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   accept.type = "button"
   accept.className = "pub-suggestion-bubble-action pub-suggestion-bubble-accept"
   accept.setAttribute("aria-label", "Aceptar")
-  accept.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`
+  accept.innerHTML = CIRCLE_CHECK_ICON
   accept.dataset.action = "accept"
   accept.dataset.suggestionId = suggestion.id
   if (isStale) {
@@ -70,11 +82,23 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   reject.type = "button"
   reject.className = "pub-suggestion-bubble-action"
   reject.setAttribute("aria-label", "Rechazar")
-  reject.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+  reject.innerHTML = CIRCLE_X_ICON
   reject.dataset.action = "reject"
   reject.dataset.suggestionId = suggestion.id
 
-  bubble.append(label, accept, reject)
+  if (canLearnWord(suggestion)) {
+    const learn = document.createElement("button")
+    learn.type = "button"
+    learn.className = "pub-suggestion-bubble-action pub-suggestion-bubble-learn"
+    learn.setAttribute("aria-label", "Learn word")
+    learn.setAttribute("title", "Learn word")
+    learn.innerHTML = CIRCLE_PLUS_ICON
+    learn.dataset.action = "learn"
+    learn.dataset.suggestionId = suggestion.id
+    bubble.append(label, accept, reject, learn)
+  } else {
+    bubble.append(label, accept, reject)
+  }
   anchor.append(bubble)
 
   return anchor
@@ -238,7 +262,7 @@ export const PublicationSuggestionExtension = Extension.create({
                 const action = actionButton.dataset.action
                 const suggestionId = actionButton.dataset.suggestionId
 
-                if ((action !== "accept" && action !== "reject") || !suggestionId) {
+                if ((action !== "accept" && action !== "reject" && action !== "learn") || !suggestionId) {
                   return false
                 }
 

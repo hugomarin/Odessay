@@ -217,8 +217,13 @@ export const getVisibleCorrectionSuggestions = (
       const match = findSuggestionMatch(markdown, suggestion);
       return { suggestion, position: match?.start ?? Number.MAX_SAFE_INTEGER, matched: match !== null };
     })
-    .filter(({ matched }) => matched)
-    .sort((left, right) => left.position - right.position)
+    .sort((left, right) => {
+      if (left.matched !== right.matched) {
+        return left.matched ? -1 : 1;
+      }
+
+      return left.position - right.position;
+    })
     .map(({ suggestion }) => suggestion);
 
 export const applySuggestionToMarkdown = (

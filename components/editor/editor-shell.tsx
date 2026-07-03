@@ -109,6 +109,7 @@ import {
   persistCorrectionBlockRemotely,
   reconcileHydratedCorrectionBlocks,
 } from "@/lib/corrections/persistence"
+import { normalizeLearnedWord } from "@/lib/corrections/learned-words"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
@@ -121,6 +122,7 @@ import type {
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { getAIService } from "@/lib/services/ai-service-factory"
+import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft,
   getDocumentService,
@@ -344,6 +346,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
   const [correctionsEnabled, setCorrectionsEnabled] = useState(true)
   const [showCorrections, setShowCorrections] = useState(true)
+  const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
+  const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
+  const [learnedWordsDeferred, setLearnedWordsDeferred] = useState(false)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [renameModalSnapshot, setRenameModalSnapshot] = useState<RenameWritingSnapshot | null>(null)
@@ -407,6 +412,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const currentDocumentMarkdownRef = useRef("")
   const correctionsEnabledRef = useRef(true)
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
+  const learnedWordsRef = useRef<LearnedWordEntry[]>([])
+  const learnedWordsLoadedRef = useRef(false)
   const persistedCorrectionBlocksRef = useRef(new Map<string, LocalCorrectionBlock>())
   const enqueueCorrectionBlockRef = useRef<((block: CorrectionTriggerBlock, reason?: "edit" | "hydrate-miss") => void) | null>(null)
   const correctionQueueRef = useRef<CorrectionTriggerBlock[]>([])
@@ -1878,6 +1885,98 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
   }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
+  const handleLearnWord = useCallback((suggestion: PublicationSuggestion, suggestionIds: string[] = [suggestion.id]) => {
+    const normalizedWord = normalizeLearnedWord(suggestion.original_text)
+
+    if (!normalizedWord) {
+      handleRejectCorrection(suggestion.id)
+      return
+    }
+
+    const targetIds = [
+      ...new Set([
+        ...suggestionIds,
+        ...automaticCorrectionSuggestionsRef.current
+          .filter((item) => normalizeLearnedWord(item.original_text) === normalizedWord)
+          .map((item) => item.id),
+      ]),
+    ]
+    const sourceHashes = [
+      ...new Set(
+        automaticCorrectionSuggestionsRef.current
+          .filter((item) => targetIds.includes(item.id))
+          .map((item) => item.source_hash ?? "")
+          .filter(Boolean),
+      ),
+    ]
+
+    const optimisticEntry: LearnedWordEntry = {
+      id: `pending:${normalizedWord}`,
+      word: normalizedWord,
+      language: "unknown",
+      createdAt: new Date().toISOString(),
+    }
+
+    setLearnedWords((current) => {
+      if (current.some((item) => item.word === normalizedWord)) {
+        return current
+      }
+
+      return [optimisticEntry, ...current]
+    })
+
+    automaticCorrectionSuggestionsRef.current
+      .filter((item) => targetIds.includes(item.id))
+      .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "rejected"))
+
+    const nextSuggestions = updateSuggestionStatuses(
+      automaticCorrectionSuggestionsRef.current,
+      targetIds,
+      "rejected",
+    )
+    applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+    void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
+
+    void getAIService().learnWord({
+      word: suggestion.original_text,
+      language: "unknown",
+    }).then((result) => {
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? "Could not save learned word.")
+      }
+
+      setLearnedWords((current) => {
+        const withoutOptimistic = current.filter((item) => item.id !== optimisticEntry.id)
+
+        if (withoutOptimistic.some((item) => item.word === result.data.word)) {
+          return withoutOptimistic
+        }
+
+        return [result.data, ...withoutOptimistic]
+      })
+    }).catch((error) => {
+      console.error("[learned-words] persist failed", error)
+    })
+  }, [
+    applyCorrectionSuggestionUpdate,
+    handleRejectCorrection,
+    updatePersistedBlocksFromSuggestions,
+  ])
+
+  const handleRemoveLearnedWord = useCallback((id: string) => {
+    const previous = learnedWordsRef.current
+    setLearnedWords(previous.filter((item) => item.id !== id))
+
+    void getAIService().deleteLearnedWord(id).then((result) => {
+      if (result.error) {
+        throw new Error(result.error.message)
+      }
+    }).catch((error) => {
+      console.error("[learned-words] delete failed", error)
+      setLearnedWords(previous)
+    })
+  }, [])
+
   const handleAcceptAllCorrections = useCallback(() => {
     const pendingSuggestions = automaticCorrectionSuggestionsRef.current.filter((suggestion) => suggestion.status === "pending")
     const result = applyCorrectionSuggestions(pendingSuggestions)
@@ -3054,6 +3153,33 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     automaticCorrectionSuggestionsRef.current = automaticCorrectionSuggestions
   }, [automaticCorrectionSuggestions])
 
+  useEffect(() => {
+    learnedWordsRef.current = learnedWords
+  }, [learnedWords])
+
+  useEffect(() => {
+    if (!currentWritingId || learnedWordsLoadedRef.current) {
+      return
+    }
+
+    learnedWordsLoadedRef.current = true
+    setLearnedWordsLoading(true)
+
+    void getAIService().listLearnedWords({ limit: 100 }).then((result) => {
+      if (result.error || !result.data) {
+        console.info(`[learned-words] load skipped code=${result.error?.code ?? "unknown"}`)
+        return
+      }
+
+      setLearnedWords(result.data.items)
+      setLearnedWordsDeferred(Boolean(result.data.nextCursor))
+    }).catch((error) => {
+      console.info(`[learned-words] load skipped message=${error instanceof Error ? error.message : String(error)}`)
+    }).finally(() => {
+      setLearnedWordsLoading(false)
+    })
+  }, [currentWritingId])
+
   const normalizeAutomaticSuggestion = useCallback(
     (block: CorrectionTriggerBlock, suggestion: PublicationSuggestion): PublicationSuggestion => {
       const sourceMarkdown = currentDocumentMarkdownRef.current
@@ -3184,6 +3310,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           },
           correctionMemory: {
             entries: readCorrectionMemory(),
+          },
+          learnedWords: {
+            entries: learnedWordsRef.current.map((item) => ({
+              word: item.word,
+              language: item.language,
+            })),
           },
         })
 
@@ -3524,6 +3656,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         )
         applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
         void updatePersistedBlocksFromSuggestions(nextSuggestions, [suggestion.source_hash ?? ""])
+        return
+      }
+
+      if (detail.action === "learn") {
+        handleLearnWord(suggestion)
       }
     }
 
@@ -3532,7 +3669,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     return () => {
       window.removeEventListener("odessay:publication-suggestion-action", handleAutomaticInlineAction)
     }
-  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions])
+  }, [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, handleLearnWord, updatePersistedBlocksFromSuggestions])
   const markdownFindMatches = useMemo(
     () => (isFindReplaceOpen ? findTextMatches(markdownValue, findQuery, findCaseSensitive) : []),
     [findCaseSensitive, findQuery, isFindReplaceOpen, markdownValue],
@@ -4759,8 +4896,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 showCorrections={showCorrections}
                 onAcceptSuggestion={handleAcceptCorrection}
                 onRejectSuggestion={handleRejectCorrection}
+                onLearnWord={handleLearnWord}
                 onAcceptAll={handleAcceptAllCorrections}
                 onRejectAll={handleRejectAllCorrections}
+                learnedWords={learnedWords}
+                learnedWordsLoading={learnedWordsLoading}
+                onRemoveLearnedWord={handleRemoveLearnedWord}
+                learnedWordsDeferred={learnedWordsDeferred}
                 onCorrectionsEnabledChange={setCorrectionsEnabled}
                 onShowCorrectionsChange={setShowCorrections}
                 onClose={closeActivePanel}

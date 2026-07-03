@@ -19,8 +19,12 @@ describe("CorrectionsPanel toggles", () => {
         showCorrections: true,
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
+        onLearnWord: () => {},
         onAcceptAll: () => {},
         onRejectAll: () => {},
+        learnedWords: [],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
         onCorrectionsEnabledChange,
         onShowCorrectionsChange,
         onClose: () => {},
@@ -40,8 +44,12 @@ describe("CorrectionsPanel toggles", () => {
         showCorrections: false,
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
+        onLearnWord: () => {},
         onAcceptAll: () => {},
         onRejectAll: () => {},
+        learnedWords: [],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
         onCorrectionsEnabledChange: () => {},
         onShowCorrectionsChange: () => {},
         onClose: () => {},
@@ -50,5 +58,49 @@ describe("CorrectionsPanel toggles", () => {
 
     expect(html).toContain("Active corrections")
     expect(html).toContain("Show corrections")
+  })
+
+  it("shows the learn word action for spelling suggestions and lists learned words", () => {
+    const html = renderToString(
+      React.createElement(CorrectionsPanel, {
+        suggestions: [
+          {
+            id: "s1",
+            kind: "spelling",
+            mechanical_type: "spelling",
+            title: "Fix spelling",
+            reason: "",
+            original_text: "Odessay",
+            replacement_text: "Odyssey",
+            status: "pending",
+          },
+        ],
+        markdown: "Odessay",
+        correctionsEnabled: true,
+        showCorrections: true,
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onLearnWord: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        learnedWords: [
+          {
+            id: "lw-1",
+            word: "odessay",
+            language: "unknown",
+            createdAt: "2026-07-03T00:00:00.000Z",
+          },
+        ],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
+        onCorrectionsEnabledChange: () => {},
+        onShowCorrectionsChange: () => {},
+        onClose: () => {},
+      }),
+    )
+
+    expect(html).toContain("Learn word")
+    expect(html).toContain("Learned words")
+    expect(html).toContain("odessay")
   })
 })

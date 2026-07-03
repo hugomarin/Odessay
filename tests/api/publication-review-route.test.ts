@@ -154,6 +154,46 @@ describe("POST /api/ai/publication-review", () => {
     })
   })
 
+  it("injects learned words into the prompt and filters them defensively from the response", async () => {
+    const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.messages[1].content).toContain("odessay")
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:pub-test:1","type":"spelling","originalText":"Odessay","replacementText":"Odyssey"}],"uncertain":[]}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({
+      markdown: "Odessay es una herramienta.",
+      bodyText: "Odessay es una herramienta.",
+      correctionBlock: {
+        id: "correction-block:pub-test:1",
+        text: "Odessay es una herramienta.",
+        hash: "pub-test",
+      },
+      learnedWords: {
+        entries: [{ word: "odessay", language: "unknown" }],
+      },
+    }))
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.data.corrections).toEqual([])
+    expect(payload.data.suggestions).toEqual([])
+  })
+
   it("returns a stream error event instead of an opaque failed HTTP stream when provider JSON is invalid", async () => {
     vi.stubGlobal(
       "fetch",

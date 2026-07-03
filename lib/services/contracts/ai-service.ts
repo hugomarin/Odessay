@@ -22,6 +22,20 @@ export type CorrectionMemoryEntry = {
   decidedAt: string
 }
 
+export type LearnedWordLanguage = "es" | "en" | "mixed" | "unknown"
+
+export type LearnedWordEntry = {
+  id: string
+  word: string
+  language: LearnedWordLanguage
+  createdAt: string
+}
+
+export type LearnedWordsPage = {
+  items: LearnedWordEntry[]
+  nextCursor: string | null
+}
+
 export type CorrectionBlockInput = {
   id: string
   text: string
@@ -66,6 +80,7 @@ export type PersistedCorrectionSuggestionStatus =
 export type PersistedCorrectionSuggestion = {
   id: string
   kind: PersistedCorrectionSuggestionKind
+  mechanical_type?: MechanicalCorrectionKind | null
   title: string
   reason: string
   original_text: string
@@ -88,6 +103,12 @@ export type PublicationReviewRequest = {
   correctionBlock: CorrectionBlockInput
   correctionMemory?: {
     entries: CorrectionMemoryEntry[]
+  }
+  learnedWords?: {
+    entries: Array<{
+      word: string
+      language?: LearnedWordLanguage | null
+    }>
   }
   stream?: boolean
 }
@@ -133,11 +154,24 @@ export type PersistCorrectionBlockResult = {
   syncedAt: string
 }
 
+export type ListLearnedWordsInput = {
+  limit?: number
+  cursor?: string | null
+}
+
+export type LearnWordInput = {
+  word: string
+  language?: LearnedWordLanguage | null
+}
+
 export interface AIService {
   suggestTitle(input: TitleSuggestionRequest): Promise<ServiceResponse<TitleSuggestion>>
   reviewPublication(input: PublicationReviewRequest): Promise<ServiceResponse<PublicationReviewResult>>
   hydrateCorrectionBlocks(writingId: string): Promise<ServiceResponse<PersistedCorrectionBlock[]>>
   persistCorrectionBlock(input: PersistCorrectionBlockInput): Promise<ServiceResponse<PersistCorrectionBlockResult>>
+  listLearnedWords(input?: ListLearnedWordsInput): Promise<ServiceResponse<LearnedWordsPage>>
+  learnWord(input: LearnWordInput): Promise<ServiceResponse<LearnedWordEntry>>
+  deleteLearnedWord(id: string): Promise<ServiceResponse<{ deletedId: string }>>
 }
 
 export const AI_SERVICE_CONTRACT = {
@@ -190,6 +224,30 @@ export const AI_SERVICE_CONTRACT = {
       input: ["PersistCorrectionBlockInput"],
       output: ["PersistCorrectionBlockResult"],
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "UNAVAILABLE", "AI_REQUEST_FAILED"],
+    },
+    {
+      name: "listLearnedWords",
+      kind: "query",
+      summary: "Load the current user's learned-word dictionary with pagination support.",
+      input: ["optional cursor and limit"],
+      output: ["LearnedWordsPage"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "UNAVAILABLE"],
+    },
+    {
+      name: "learnWord",
+      kind: "command",
+      summary: "Persist a learned word for the current user.",
+      input: ["word", "optional language"],
+      output: ["LearnedWordEntry"],
+      errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "UNAVAILABLE"],
+    },
+    {
+      name: "deleteLearnedWord",
+      kind: "command",
+      summary: "Remove a learned word from the current user's dictionary.",
+      input: ["learned word id"],
+      output: ["deletedId"],
+      errorCodes: ["UNAUTHORIZED", "NOT_FOUND", "UNAVAILABLE"],
     },
   ],
   hotspots: [

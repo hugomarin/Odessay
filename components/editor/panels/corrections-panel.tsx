@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { Check, X } from "lucide-react";
+import { CircleCheck, CirclePlus, CircleX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PublicationSuggestion } from "@/lib/local-db/schema";
+import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service";
 import { getVisibleCorrectionSuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
 
 type CorrectionsPanelProps = {
@@ -13,8 +14,13 @@ type CorrectionsPanelProps = {
   showCorrections: boolean;
   onAcceptSuggestion: (suggestion: PublicationSuggestion, suggestionIds?: string[]) => void;
   onRejectSuggestion: (suggestionId: string) => void;
+  onLearnWord: (suggestion: PublicationSuggestion, suggestionIds?: string[]) => void;
   onAcceptAll: () => void;
   onRejectAll: () => void;
+  learnedWords: LearnedWordEntry[];
+  learnedWordsLoading: boolean;
+  onRemoveLearnedWord: (id: string) => void;
+  learnedWordsDeferred?: boolean;
   onCorrectionsEnabledChange: (enabled: boolean) => void;
   onShowCorrectionsChange: (show: boolean) => void;
   onClose: () => void;
@@ -27,8 +33,13 @@ export function CorrectionsPanel({
   showCorrections,
   onAcceptSuggestion,
   onRejectSuggestion,
+  onLearnWord,
   onAcceptAll,
   onRejectAll,
+  learnedWords,
+  learnedWordsLoading,
+  onRemoveLearnedWord,
+  learnedWordsDeferred = false,
   onCorrectionsEnabledChange,
   onShowCorrectionsChange,
   onClose,
@@ -181,11 +192,11 @@ export function CorrectionsPanel({
               return (
                 <li
                   key={suggestion.id}
-                  className={`group flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted ${
+                  className={`group rounded-md px-2 py-2 transition-colors hover:bg-muted ${
                     isStale ? "opacity-50" : ""
                   }`}
                 >
-                  <div className="flex min-w-0 flex-1 items-baseline gap-1.5 text-[12px] leading-tight">
+                  <div className="flex min-w-0 items-baseline gap-1.5 text-[12px] leading-tight">
                     <span className="truncate text-ink-4 line-through decoration-ink-4 decoration-[0.5px]">
                       {suggestion.original_text}
                     </span>
@@ -197,7 +208,7 @@ export function CorrectionsPanel({
                       <span className="shrink-0 text-[10px] text-ink-4">×{count}</span>
                     )}
                   </div>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100">
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 opacity-70 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
                       onClick={() => {
@@ -206,25 +217,79 @@ export function CorrectionsPanel({
                       aria-label={isStale ? "Recalculating…" : "Accept"}
                       title={isStale ? "Recalculating…" : "Accept"}
                       disabled={isStale}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
+                      className="inline-flex h-6 items-center gap-1 rounded-[6px] border border-border px-2 text-[11px] text-ink-3 transition-colors hover:bg-bg hover:text-ink disabled:cursor-default"
                     >
-                      <Check className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <CircleCheck className="h-3 w-3" strokeWidth={1.7} />
+                      <span>Accept</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => { for (const id of ids) onRejectSuggestion(id); }}
-                      aria-label="Reject"
-                      title="Reject"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded text-ink-3 transition-colors hover:bg-bg hover:text-ink"
+                      className="inline-flex h-6 items-center gap-1 rounded-[6px] border border-border px-2 text-[11px] text-ink-3 transition-colors hover:bg-bg hover:text-ink"
                     >
-                      <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      <CircleX className="h-3 w-3" strokeWidth={1.7} />
+                      <span>Reject</span>
                     </button>
+                    {suggestion.kind === "spelling" &&
+                    (
+                      suggestion.mechanical_type == null ||
+                      suggestion.mechanical_type === "spelling" ||
+                      suggestion.mechanical_type === "accent"
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onLearnWord(suggestion, ids);
+                        }}
+                        className="inline-flex h-6 items-center gap-1 rounded-[6px] border border-border px-2 text-[11px] text-ink-3 transition-colors hover:bg-bg hover:text-ink"
+                      >
+                        <CirclePlus className="h-3 w-3" strokeWidth={1.7} />
+                        <span>Learn word</span>
+                      </button>
+                    ) : null}
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
+      </div>
+
+      <div className="border-t-[0.5px] border-border px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Learned words</p>
+            <p className="text-[11px] text-ink-4">
+              {learnedWordsDeferred ? "Advanced management deferred; latest saved words are listed here." : "Saved across your documents."}
+            </p>
+          </div>
+          {learnedWords.length > 0 ? (
+            <span className="text-[10px] text-ink-4">{learnedWords.length}</span>
+          ) : null}
+        </div>
+
+        <div className="mt-2">
+          {learnedWordsLoading ? (
+            <p className="text-[11px] text-ink-4">Loading learned words…</p>
+          ) : learnedWords.length === 0 ? (
+            <p className="text-[11px] text-ink-4">No learned words yet.</p>
+          ) : (
+            <ul className="space-y-1">
+              {learnedWords.map((item) => (
+                <li key={item.id} className="flex items-center justify-between gap-2 rounded-[6px] px-2 py-1 text-[11px] text-ink-3">
+                  <span className="min-w-0 truncate">{item.word}</span>
+                  <button
+                    type="button"
+                    onClick={() => onRemoveLearnedWord(item.id)}
+                    className="shrink-0 text-ink-4 transition-colors hover:text-ink"
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </aside>
   );

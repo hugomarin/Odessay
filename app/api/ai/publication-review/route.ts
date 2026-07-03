@@ -15,6 +15,7 @@ import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth";
 import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors";
+import { createLearnedWordSet } from "@/lib/corrections/learned-words";
 
 const memoryEntrySchema = z.object({
   fingerprint: z.string().trim().min(1),
@@ -36,6 +37,14 @@ const requestSchema = z.object({
   }),
   correctionMemory: z.object({
     entries: z.array(memoryEntrySchema).default([]),
+  }).optional(),
+  learnedWords: z.object({
+    entries: z.array(
+      z.object({
+        word: z.string().trim().min(1),
+        language: z.enum(["es", "en", "mixed", "unknown"]).optional().nullable(),
+      }),
+    ).default([]),
   }).optional(),
 });
 
@@ -352,6 +361,9 @@ const applyMemory = (
   corrections: filterCorrectionsByMemory(canonical.corrections, correctionMemory),
 });
 
+const getLearnedWordsFromRequest = (requestBody: z.infer<typeof requestSchema>) =>
+  [...createLearnedWordSet((requestBody.learnedWords?.entries ?? []).map((entry) => entry.word))];
+
 async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
@@ -364,7 +376,8 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     },
   ] satisfies CorrectionBlock[];
   const fallbackLanguage = detectCorrectionLanguage(sourceText);
-  const promptText = buildMechanicalCorrectionsPrompt(blocks);
+  const learnedWords = getLearnedWordsFromRequest(requestBody);
+  const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
 
   console.info(
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
@@ -376,7 +389,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
 
   try {
     const parsedJson = parseModelJson(firstResponse.text);
-    const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage);
+    const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
     const t2 = Date.now();
     console.info(`[corrections] first parse ok totalLatencyMs=${t2 - t0}`);
     return {
@@ -395,7 +408,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
 
     try {
       const parsedJson = parseModelJson(retryResponse.text);
-      const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage);
+      const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
       const t2 = Date.now();
       console.info(`[corrections] retry parse ok totalLatencyMs=${t2 - t0}`);
       return {
@@ -547,7 +560,8 @@ const streamCorrectionsFromModel = ({
         ] satisfies CorrectionBlock[];
         const batchId = requestBody.correctionBlock.id;
         const fallbackLanguage = detectCorrectionLanguage(sourceText);
-        const promptText = buildMechanicalCorrectionsPrompt(blocks);
+        const learnedWords = getLearnedWordsFromRequest(requestBody);
+        const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
         const emittedCorrections = new Set<string>();
         const emittedUncertain = new Set<string>();
 
@@ -561,7 +575,7 @@ const streamCorrectionsFromModel = ({
           try {
             const parsedJson = parseModelJson(text);
             const canonical = applyMemory(
-              normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage),
+              normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords),
               requestBody.correctionMemory,
             );
 
@@ -644,7 +658,7 @@ const streamCorrectionsFromModel = ({
         }
 
         const canonical = applyMemory(
-          normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage),
+          normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords),
           requestBody.correctionMemory,
         );
         const payload = createJsonResponsePayload({

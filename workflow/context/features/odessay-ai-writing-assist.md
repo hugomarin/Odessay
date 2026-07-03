@@ -238,6 +238,29 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 - Frontend consume eventos `suggestion` parciales y los acumula en estado.
 - Decoraciones inline se actualizan vía TipTap plugin sin bloquear el editor.
 
+### Learned words
+
+El motor admite una tercera acción por sugerencia ortográfica — **Learn word** — además de Accept/Reject. Al usarla:
+
+- La sugerencia actual se descarta visualmente (mismo efecto que Reject).
+- La palabra se registra en un diccionario por usuario (`public.learned_words`).
+- Futuras correcciones no deben volver a marcar esa palabra para el mismo usuario.
+
+**Persistencia.** La tabla `learned_words` vive en Supabase con RLS owner-only (`user_id = auth.uid()`), FK a `profiles(id) on delete cascade`, y un índice único sobre `(user_id, language, word)`.
+
+**Normalización.** Las palabras se normalizan case-insensitive y accent-insensitive antes de guardar y antes de filtrar, de modo que aprender "Odéssay" también proteja "odessay" y "ODESSAY".
+
+**Exclusión en dos capas.** Para no depender solo de que el modelo obedezca la instrucción:
+
+1. El prompt (`buildMechanicalCorrectionsPrompt`) incluye una lista de "User learned words to always preserve".
+2. La normalización canónica (`normalizeCanonicalCorrections`) descarta cualquier corrección cuyo `originalText` normalizado coincida con una palabra aprendida.
+
+**Relación con `correction-memory-client.ts`.** La memoria de Reject existente guarda un fingerprint por instancia de corrección y coexiste con el diccionario de palabras. Learn word generaliza por palabra; Reject sigue siendo por ocurrencia específica.
+
+**UI.** Learn word aparece en la burbuja inline y en el panel de correcciones para sugerencias de tipo `spelling`/`accent`. El panel también expone una lista mínima de palabras aprendidas con acción de remover.
+
+**Performance.** La lista de palabras aprendidas se carga una sola vez por sesión de documento (`useEffect` en `EditorShell` con guarda `learnedWordsLoadedRef`), no por bloque. El endpoint de lista usa paginación cursor-based con límite configurable; el cliente solicita `limit=100` y muestra un indicador si existen más páginas.
+
 ---
 
 ## Feature B — Title Suggestion
@@ -315,6 +338,7 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 - **Reject:** fingerprint se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
 - **Accept:** se aplica al markdown y se marca como `accepted`.
+- **Learn word:** registra la palabra en el diccionario por usuario (`learned_words`) y la descarta del set visible.
 - **Edición manual:** invalida sugerencias del bloque afectado.
 
 ---
@@ -337,13 +361,16 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 ### Activos
 - `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block`)
+- `app/api/corrections/learned-words/route.ts` — diccionario de palabras aprendidas (list/create/delete)
 - `lib/ai/corrections.ts` — schema, prompt builder, normalización
 - `lib/ai/corrections-contract-adapter.ts` — adaptador de contrato legacy
+- `lib/corrections/learned-words.ts` — normalización y helpers del diccionario
 - `lib/editor/correction-trigger-plugin.ts` — detección de dirty blocks
 - `lib/editor/publication-suggestion-extension.ts` — decoraciones inline
-- `components/editor/panels/corrections-panel.tsx` — panel lateral con toggles
+- `components/editor/panels/corrections-panel.tsx` — panel lateral con toggles y lista de learned words
 - `components/editor/editor-shell.tsx` — orquestación del flujo
 - `lib/corrections/persistence.ts` — persistencia remota e IndexedDB de correction blocks
+- `lib/services/contracts/ai-service.ts` — contrato `AIService` con operaciones de learned words
 
 ### Legacy / no usados
 - `components/editor/panels/publication-panel.tsx` — panel legacy; no se renderiza
