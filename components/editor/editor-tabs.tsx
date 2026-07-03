@@ -13,12 +13,23 @@ type EditorTabsProps = {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onRenameTab: (tabId: string) => void;
+  onReorderTab: (tabId: string, targetTabId: string) => void;
   onNewTab: () => void;
 };
 
-export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenameTab, onNewTab }: EditorTabsProps) {
+export function EditorTabs({
+  tabs,
+  activeTabId,
+  onSelectTab,
+  onCloseTab,
+  onRenameTab,
+  onReorderTab,
+  onNewTab,
+}: EditorTabsProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const [availableWidth, setAvailableWidth] = useState(0);
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const [dragTargetTabId, setDragTargetTabId] = useState<string | null>(null);
 
   useEffect(() => {
     const element = scrollerRef.current;
@@ -61,6 +72,14 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenam
       <div
         ref={scrollerRef}
         className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        onDragOver={(event) => {
+          if (!draggedTabId) {
+            return;
+          }
+
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
       >
         <div className="inline-flex min-w-full items-end gap-2 pr-3">
           {tabs.map((tab) => (
@@ -71,6 +90,49 @@ export function EditorTabs({ tabs, activeTabId, onSelectTab, onCloseTab, onRenam
               onSelect={onSelectTab}
               onClose={onCloseTab}
               onRename={onRenameTab}
+              draggable
+              isDragging={tab.id === draggedTabId}
+              isDragTarget={tab.id === dragTargetTabId && tab.id !== draggedTabId}
+              onDragStart={(event) => {
+                const target = event.target;
+                if (!(target instanceof HTMLElement) || target.closest("[data-tab-action='true']")) {
+                  event.preventDefault();
+                  return;
+                }
+
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", tab.id);
+                setDraggedTabId(tab.id);
+                setDragTargetTabId(tab.id);
+              }}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                if (draggedTabId && draggedTabId !== tab.id) {
+                  setDragTargetTabId(tab.id);
+                }
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (draggedTabId && draggedTabId !== tab.id && dragTargetTabId !== tab.id) {
+                  setDragTargetTabId(tab.id);
+                }
+              }}
+              onDrop={(event) => {
+                if (!draggedTabId || draggedTabId === tab.id) {
+                  setDraggedTabId(null);
+                  setDragTargetTabId(null);
+                  return;
+                }
+
+                event.preventDefault();
+                onReorderTab(draggedTabId, tab.id);
+                setDraggedTabId(null);
+                setDragTargetTabId(null);
+              }}
+              onDragEnd={() => {
+                setDraggedTabId(null);
+                setDragTargetTabId(null);
+              }}
               widthStyle={tabWidth}
             />
           ))}

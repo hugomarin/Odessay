@@ -3,6 +3,7 @@
 import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
+import type { DragEventHandler } from "react";
 
 type EditorTabItemProps = {
   tab: LocalEditorSessionTab;
@@ -10,18 +11,51 @@ type EditorTabItemProps = {
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onRename: (tabId: string) => void;
+  draggable?: boolean;
+  isDragging?: boolean;
+  isDragTarget?: boolean;
+  onDragStart?: DragEventHandler<HTMLDivElement>;
+  onDragEnter?: DragEventHandler<HTMLDivElement>;
+  onDragOver?: DragEventHandler<HTMLDivElement>;
+  onDrop?: DragEventHandler<HTMLDivElement>;
+  onDragEnd?: DragEventHandler<HTMLDivElement>;
   widthStyle?: string;
 };
 
-export function EditorTabItem({ tab, active, onSelect, onClose, onRename, widthStyle }: EditorTabItemProps) {
+export function EditorTabItem({
+  tab,
+  active,
+  onSelect,
+  onClose,
+  onRename,
+  draggable = false,
+  isDragging = false,
+  isDragTarget = false,
+  onDragStart,
+  onDragEnter,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  widthStyle,
+}: EditorTabItemProps) {
   return (
     <div
       style={widthStyle ? { width: widthStyle } : undefined}
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      data-editor-tab-id={tab.id}
       className={cn(
-        "group relative flex h-[46px] min-w-[72px] max-w-[240px] shrink-0 items-center overflow-hidden rounded-t-[10px] border border-b-0 border-transparent text-left font-sans transition-[background-color,border-color,color,box-shadow] duration-150 ease-out",
+        "group relative flex h-[46px] min-w-[72px] max-w-[240px] shrink-0 items-center overflow-hidden rounded-t-[10px] border border-b-0 border-transparent text-left font-sans transition-[background-color,border-color,color,box-shadow,opacity] duration-150 ease-out",
         active
           ? "translate-y-px border-transparent bg-bg text-ink shadow-[0_-3px_8px_rgba(35,24,15,0.035),0_12px_22px_rgba(35,24,15,0.05),0_2px_6px_rgba(35,24,15,0.04)]"
           : "bg-transparent text-ink-4 hover:bg-muted/80 hover:text-ink-3",
+        draggable && "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-45",
+        isDragTarget && "ring-1 ring-inset ring-cursor/40",
       )}
     >
       <button
@@ -41,6 +75,7 @@ export function EditorTabItem({ tab, active, onSelect, onClose, onRename, widthS
             onClick={() => {
               onRename(tab.id);
             }}
+            data-tab-action="true"
             className="pointer-events-auto inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-[background-color,color] duration-100 ease-out hover:bg-muted hover:text-ink"
             aria-label={`Rename ${tab.title}`}
           >
@@ -52,6 +87,7 @@ export function EditorTabItem({ tab, active, onSelect, onClose, onRename, widthS
           onClick={() => {
             onClose(tab.id);
           }}
+          data-tab-action="true"
           className={cn(
             "pointer-events-auto inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-100 ease-out hover:bg-muted hover:text-ink group-hover:opacity-100",
             active && "opacity-100",

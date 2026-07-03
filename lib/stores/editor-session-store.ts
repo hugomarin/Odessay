@@ -11,6 +11,7 @@ import {
   findTabIndexByWritingId,
   isDraftTab,
   mergeEditorTabViewState,
+  reorderEditorSessionTabs,
 } from "@/lib/local-db/editor-sessions";
 import { emitEditorSessionChange, readEditorSession, writeEditorSession } from "@/lib/editor/session-persistence";
 import { syncStudioSessionFromEditorTabs } from "@/lib/stores/studio-session-store";
@@ -394,6 +395,20 @@ export function closeTab(tabId: string) {
   });
 
   return nextActiveTabId;
+}
+
+export function reorderTab(tabId: string, targetTabId: string) {
+  setSessionState((current) => {
+    const nextTabs = reorderEditorSessionTabs(current.tabs, tabId, targetTabId);
+    if (nextTabs === current.tabs) {
+      return current;
+    }
+
+    return {
+      ...current,
+      tabs: nextTabs,
+    };
+  });
 }
 
 export function getEditorSessionState() {

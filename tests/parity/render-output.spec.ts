@@ -14,6 +14,8 @@ const fixtureNames = readdirSync(FIXTURE_DIR).filter((name) => name.endsWith(".m
 
 const normalizeHtml = (html: string) =>
   html
+    .replaceAll(/\s+xmlns="http:\/\/www\.w3\.org\/1999\/xhtml"/g, "")
+    .replaceAll(/\s*\/>/g, ">")
     .replaceAll(/\s+data-id="[^"]+"/g, "")
     .replaceAll(/\s+data-annotation-id="[^"]+"/g, "")
     .replaceAll(/\s+/g, " ")

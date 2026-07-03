@@ -108,6 +108,31 @@ export const findTabIndexByWritingId = (
   writingId: string | null,
 ) => tabs.findIndex((tab) => tab.writing_id === writingId);
 
+export const reorderEditorSessionTabs = (
+  tabs: LocalEditorSessionTab[],
+  fromTabId: string,
+  toTabId: string,
+): LocalEditorSessionTab[] => {
+  if (fromTabId === toTabId) {
+    return tabs;
+  }
+
+  const fromIndex = tabs.findIndex((tab) => tab.id === fromTabId);
+  const toIndex = tabs.findIndex((tab) => tab.id === toTabId);
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+    return tabs;
+  }
+
+  const nextTabs = [...tabs];
+  const [movedTab] = nextTabs.splice(fromIndex, 1);
+  if (!movedTab) {
+    return tabs;
+  }
+
+  nextTabs.splice(toIndex, 0, movedTab);
+  return nextTabs;
+};
+
 export const isDraftTab = (tabId: string, writingId: string | null) =>
   tabId === EDITOR_DRAFT_TAB_ID || writingId === null;
 

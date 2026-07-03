@@ -56,6 +56,7 @@ type EditorTopbarProps = {
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
   onRenameTab: (tabId: string) => void
+  onReorderTab: (tabId: string, targetTabId: string) => void
   onNewTab: () => void
   onToggleFocusMode: () => void
   onOpenShortcutHelp: () => void
@@ -202,6 +203,7 @@ export function EditorTopbar({
   onSelectTab,
   onCloseTab,
   onRenameTab,
+  onReorderTab,
   onNewTab,
   onToggleFocusMode,
   onOpenShortcutHelp,
@@ -383,6 +385,7 @@ export function EditorTopbar({
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
               onRenameTab={onRenameTab}
+              onReorderTab={onReorderTab}
               onNewTab={onNewTab}
             />
           ) : null}
