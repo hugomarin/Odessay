@@ -81,7 +81,7 @@ El cliente desktop (`lib/supabase/desktop-client.ts:23`) usa `keychainStorage` c
 1. **Single-flight + dueño único de hidratación** (request coalescing). Las vistas leen IndexedDB y se suscriben; solo el bootstrap orquesta hidratación remota.
 2. **Hidratación incremental en dos fases** (manifest + fetch selectivo por `content_hash`). Convierte 5.4 MB de arranque en decenas de KB.
 3. **Cache write-through sobre `keychainStorage`** (decorator del storage adapter). Elimina ~90% del IPC keychain sin violar el contrato ODE-219.
-4. **RLS con predicado inline + initplan** (patrón estándar Supabase). El caso dueño resuelve por índice sin invocar función por fila.
+4. **RLS con predicado inline + initplan** (patrón estándar Supabase). El caso dueño resuelve por índice sin invocar función por fila; la rama shared usa un helper security-definer mínimo para evitar la recursión de RLS (trampa documentada en §M4).
 5. **Registro global de eventos de menú** (singleton + registry, o un solo canal `menu:action`).
 6. **Presupuesto de red por vista como instrumento verificable**, no como prosa (ya declarado en `skill-backend`; falta el gate).
 
@@ -116,10 +116,12 @@ Línea base medida el 2026-07-03 (DevTools Network, desktop, sesión activa, seg
 **Resultado esperado (aceptación del dueño):** el arranque transfiere ~3.6 MB menos y los writings quedan hidratados en ~1–2 s en vez de 11–15 s — los 11 s actuales no son latencia del servidor sino tres descargas idénticas compitiendo entre sí; al quedar una sola, cae a su tiempo real ya observado (~1–2 s en las capturas). *Gate:* 1 request por recurso. *Proyección:* el tiempo resultante.
 
 **Files affected:**
-- lib/sync/desktop-sync-service.ts (modifica — guard de vuelo único en `hydrateWritings` y `hydrateCollections`, replicando el patrón de `remote-bootstrap.ts:220-249`)
+- lib/sync/desktop-sync-service.ts (modifica — guard de vuelo único en `hydrateWritings` y `hydrateCollections`, replicando el patrón de `remote-bootstrap.ts:220-249`, más ventana de frescura por userId)
 - components/sync/sync-bootstrap.tsx (modifica — el listener de auth solo re-hidrata si `userId` cambió respecto al último hidratado; guardar el último userId hidratado en un ref)
-- app/(app)/desk/page.tsx (modifica — su hidratación pasa a `refreshIfStale` o se elimina en favor de leer localDB)
-- components/collections/collections-view.tsx (modifica — ídem)
+- app/(app)/desk/page.tsx (modifica — `hydrateRemoteIfNeeded`/`syncRemoteWritings` dejan de disparar un fetch remoto adicional: pasan por el camino deduplicado del servicio)
+- components/collections/collections-view.tsx (modifica — ídem con su `Promise.all` de hydrate)
+
+**Nota de mecanismo:** el single-flight solo dedupea llamadores **concurrentes**. Desk monta después de que el bootstrap terminó, así que sin más, dispararía un segundo fetch secuencial. El guard se complementa con una **ventana de frescura** (`lastHydratedAt` por userId; llamadas dentro de la ventana devuelven el resultado local sin request — BUILD decide el valor, sugerido 30–60 s, y lo documenta). `refreshIfStale` no existe en el código: es este mecanismo, hay que crearlo.
 - tests/ (nuevo — test del guard: N llamadores concurrentes ⇒ 1 request)
 - workflow/status.json (modifica)
 
@@ -219,17 +221,12 @@ using (
   deleted_at is null and (
     author_id = (select auth.uid())
     or visibility = 'public'
-    or (
-      visibility = 'shared'
-      and exists (
-        select 1 from public.writing_shares ws
-        where ws.writing_id = writings.id
-          and ws.shared_with_id = (select auth.uid())
-      )
-    )
+    or (visibility = 'shared' and public.has_writing_share(id))
   )
 )
 ```
+
+**Trampa de recursión (por qué NO un `exists` inline a `writing_shares`):** la policy de SELECT de `writing_shares` (`writing_shares_select_related`, `20260317145743:688`) contiene un `exists` de vuelta a `writings`. Un `exists` inline sobre `writing_shares` dentro de la policy de `writings` crea el ciclo writings→writing_shares→writings y Postgres lo rechaza con `42P17 infinite recursion detected in policy`. Esta recursión es la razón histórica de la función security-definer. La solución que conserva el perf win: un helper mínimo `public.has_writing_share(target_writing_id uuid)` — security definer, stable, que consulta **solo** `writing_shares` (`exists(select 1 from writing_shares where writing_id = $1 and shared_with_id = auth.uid())`), sin tocar `writings`. El executor evalúa el OR de izquierda a derecha, así que para el caso dominante (dueño) la rama `author_id = (select auth.uid())` corta antes de invocar la función; la función solo corre para filas no-propias no-públicas.
 
 **Contratos y trampas:** T-D es EL riesgo de este issue: `can_read_writing()` **no se borra ni se modifica** — la usan las policies de INSERT/UPDATE de writings (parent_id) y la policy de `writing_collections`. Solo se reemplaza el gate de la policy de SELECT. T-A: después de migrar, re-verificar que el INSERT plano del sync desktop sigue pasando y que upsert sigue fallando igual (no "aprovechar" para arreglarlo). Semántica de `deleted_at`: la función actual excluye filas borradas del SELECT; la policy nueva conserva ese comportamiento — verificar que ningún flujo legítimo lee writings con `deleted_at` puesto (el sync desktop marca deletes vía UPDATE, que usa la policy de UPDATE, no la de SELECT — pero si algún flujo re-lee el row tras el soft-delete para confirmación, se rompe; buscar callers antes de migrar).
 
