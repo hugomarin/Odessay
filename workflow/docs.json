@@ -190,6 +190,11 @@
       "description": "Auditoría y referencia operativa de shortcuts por runtime (web vs desktop), incluyendo colisiones evitadas, equivalencia con el menú nativo y punto de descubrimiento en la UI del editor."
     },
     {
+      "path": "docs/plan-mejoras-network-sync-2026-07.md",
+      "type": "ops",
+      "description": "Auditoría del waterfall de red (2026-07) y plan de mejoras en formato pre-brief para /wf-define: hidratación triplicada, sync no incremental, IPC keychain por request, listeners de menú por mount y RLS por fila. Cada trabajo (M1-M6 → ODE-353..ODE-358) trae Files affected, failure modes, consumers, evidencia y DoD. Su §Parte 0 lista las contradicciones/trampas conocidas del codebase (42501 sin upsert, dos clientes Supabase, can_read_writing multi-consumer, single-flight web existente) y es lectura obligatoria antes de ejecutar issues del track."
+    },
+    {
       "path": "workflow/status.json",
       "type": "ops",
       "description": "Estado del codebase: fase activa con links a Linear y roadmap, y build log con commits y fechas. Puente entre GitHub, Linear y el roadmap."
