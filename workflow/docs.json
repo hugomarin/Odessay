@@ -74,19 +74,7 @@
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
-      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas por bloque (trigger, guardrails, memoria de reject/manual-fix, learned words, stale handling por block hash) y sugerencia de título con invocación explícita. El flujo automático usa stream:false; la ruta soporta NDJSON pero no es el camino vigente."
-    },
-    {
-      "path": "workflow/context/features/odessay-ai-writing-assist-mejoras.md",
-      "type": "feature",
-      "state": "historical-plan-mostly-implemented",
-      "description": "Plan histórico de mejoras del sistema de correcciones (observabilidad, persistencia, batching, smart invalidation, métricas, limpieza legacy, panel). Mayoría implementada; pendiente solo el batching (Mejora 2). NO leer como estado actual del sistema — contrastar con odessay-ai-writing-assist.md y docs/revision-correcciones-anotaciones-2026-07.md §7."
-    },
-    {
-      "path": "workflow/context/features/odessay-anotaciones-ai.md",
-      "type": "feature",
-      "state": "pending-rewrite-ODE-169",
-      "description": "Anotaciones expandidas: tipos por audiencia, sigils inline (==texto==[@n: comentario]) y flujo copiar-para-AI. ATENCIÓN: describe el tipo `collaborative` que el código reemplazó por `highlight` (lib/editor/footnote-node.ts es la fuente de verdad de los tipos). Pendiente de reescritura; no citarlo como contrato de tipos sin contrastar con el código."
+      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas en streaming (trigger, guardrails, memoria de reject/manual-fix, stale handling por block hash) y sugerencia de título con invocación explícita."
     },
     {
       "path": "workflow/context/features/odessay-margenes.md",
@@ -204,7 +192,7 @@
     {
       "path": "docs/plan-mejoras-network-sync-2026-07.md",
       "type": "ops",
-      "description": "Auditoría del waterfall de red (2026-07) y plan de mejoras en formato pre-brief para /wf-define: hidratación triplicada, sync no incremental, IPC keychain por request, listeners de menú por mount y RLS por fila. Cada trabajo (M1-M6) trae Files affected, failure modes, consumers, evidencia y DoD. Su §Parte 0 lista las contradicciones/trampas conocidas del codebase (42501 sin upsert, dos clientes Supabase, can_read_writing multi-consumer, single-flight web existente) y es lectura obligatoria antes de crear issues del plan."
+      "description": "Auditoría del waterfall de red (2026-07) y plan de mejoras en formato pre-brief para /wf-define: hidratación triplicada, sync no incremental, IPC keychain por request, listeners de menú por mount y RLS por fila. Cada trabajo (M1-M6 → ODE-353..ODE-358) trae Files affected, failure modes, consumers, evidencia y DoD. Su §Parte 0 lista las contradicciones/trampas conocidas del codebase (42501 sin upsert, dos clientes Supabase, can_read_writing multi-consumer, single-flight web existente) y es lectura obligatoria antes de ejecutar issues del track."
     },
     {
       "path": "workflow/status.json",
