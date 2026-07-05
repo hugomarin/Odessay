@@ -21,6 +21,11 @@ import Strike from "@tiptap/extension-strike"
 import { Table } from "@tiptap/extension-table"
 import { TableCell } from "@tiptap/extension-table-cell"
 import { TableHeader } from "@tiptap/extension-table-header"
+import {
+  TableOfContents,
+  getHierarchicalIndexes,
+  type TableOfContentData,
+} from "@tiptap/extension-table-of-contents"
 import { TableRow } from "@tiptap/extension-table-row"
 import Text from "@tiptap/extension-text"
 import { Markdown } from "tiptap-markdown"
@@ -36,53 +41,80 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
   content: [{ type: "paragraph" }],
 }
 
-export const createEditorExtensions = (): Extensions => [
-  Document,
-  Paragraph,
-  Text,
-  Heading.extend({ addKeyboardShortcuts: () => ({}) }).configure({ levels: [1, 2, 3] }),
-  Bold.extend({ addKeyboardShortcuts: () => ({}) }),
-  Italic.extend({ addKeyboardShortcuts: () => ({}) }),
-  Strike.extend({ addKeyboardShortcuts: () => ({}) }),
-  Highlight.extend({ addKeyboardShortcuts: () => ({}) }),
-  Image.extend({ addKeyboardShortcuts: () => ({}) }).configure({
-    allowBase64: false,
-    inline: false,
-  }),
-  Link.configure({
-    openOnClick: false,
-    autolink: true,
-    protocols: ["http", "https", "mailto"],
-  }),
-  Blockquote.extend({ addKeyboardShortcuts: () => ({}) }),
-  BulletList.extend({ addKeyboardShortcuts: () => ({}) }),
-  OrderedList.extend({ addKeyboardShortcuts: () => ({}) }),
-  ListItem,
-  Code.extend({ addKeyboardShortcuts: () => ({}) }),
-  CodeBlock.extend({ addKeyboardShortcuts: () => ({}) }),
-  Markdown.configure({
-    transformPastedText: true,
-    transformCopiedText: true,
-    breaks: true,
-    linkify: true,
-  }),
-  Table.configure({ resizable: false }),
-  TableRow,
-  TableHeader,
-  TableCell,
-  FindReplaceExtension,
-  CorrectionTriggerExtension,
-  PublicationSuggestionExtension,
-  FrontmatterNode,
-  AnnotationReferenceNode,
-  FootnoteExtension,
-  History,
-  HorizontalRule.extend({ addKeyboardShortcuts: () => ({}) }),
-  Placeholder.configure({
-    placeholder: ({ node }) => (node.type.name === "heading" ? "Heading..." : ""),
-  }),
-  CharacterCount,
-]
+type CreateEditorExtensionsOptions = {
+  onTableOfContentsUpdate?: (items: TableOfContentData) => void
+  tableOfContentsScrollParent?: () => HTMLElement | Window
+}
+
+export const createEditorExtensions = (options: CreateEditorExtensionsOptions = {}): Extensions => {
+  const tableOfContentsExtensions: Extensions = options.onTableOfContentsUpdate
+    ? [
+        TableOfContents.configure({
+          anchorTypes: ["heading"],
+          getIndex: getHierarchicalIndexes,
+          scrollParent: () => {
+            if (options.tableOfContentsScrollParent) {
+              return options.tableOfContentsScrollParent()
+            }
+
+            return window
+          },
+          onUpdate: (items) => {
+            options.onTableOfContentsUpdate?.(items)
+          },
+        }),
+      ]
+    : []
+
+  return [
+    Document,
+    Paragraph,
+    Text,
+    Heading.extend({ addKeyboardShortcuts: () => ({}) }).configure({ levels: [1, 2, 3] }),
+    Bold.extend({ addKeyboardShortcuts: () => ({}) }),
+    Italic.extend({ addKeyboardShortcuts: () => ({}) }),
+    Strike.extend({ addKeyboardShortcuts: () => ({}) }),
+    Highlight.extend({ addKeyboardShortcuts: () => ({}) }),
+    Image.extend({ addKeyboardShortcuts: () => ({}) }).configure({
+      allowBase64: false,
+      inline: false,
+    }),
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+      protocols: ["http", "https", "mailto"],
+    }),
+    Blockquote.extend({ addKeyboardShortcuts: () => ({}) }),
+    BulletList.extend({ addKeyboardShortcuts: () => ({}) }),
+    OrderedList.extend({ addKeyboardShortcuts: () => ({}) }),
+    ListItem,
+    Code.extend({ addKeyboardShortcuts: () => ({}) }),
+    CodeBlock.extend({ addKeyboardShortcuts: () => ({}) }),
+    Markdown.configure({
+      transformPastedText: true,
+      transformCopiedText: true,
+      breaks: true,
+      linkify: true,
+    }),
+    Table.configure({ resizable: false }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    ...tableOfContentsExtensions,
+    FindReplaceExtension,
+    CorrectionTriggerExtension,
+    PublicationSuggestionExtension,
+    FrontmatterNode,
+    AnnotationReferenceNode,
+    FootnoteExtension,
+    History,
+    HorizontalRule.extend({ addKeyboardShortcuts: () => ({}) }),
+    Placeholder.configure({
+      placeholder: ({ node }) => (node.type.name === "heading" ? "Heading..." : ""),
+    }),
+    CharacterCount,
+  ]
+}
 
 export const getEditorMarkdown = (editor: { storage: unknown }) => {
   const markdownStorage = (editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown
