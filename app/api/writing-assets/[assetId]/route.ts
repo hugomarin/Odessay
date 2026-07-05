@@ -1,12 +1,10 @@
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
 
-export async function GET(_request: Request, context: { params: Promise<{ assetId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ assetId: string }> }) {
   try {
     const { assetId } = await context.params
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    const viewerId = user?.id ?? null
+    const { userId: viewerId } = await getCurrentUserFromRequest(request)
 
     const admin = createAdminClient()
 

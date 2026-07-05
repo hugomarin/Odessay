@@ -61,6 +61,25 @@ export const toggleMarkdownInlineMarker = (
 export const normalizeMarkdownHighlights = (markdown: string): string =>
   markdown.replace(/<mark(?:\s[^>]*)?>([\s\S]*?)<\/mark>/gi, "==$1==")
 
+const BLOCK_IMAGE_TOKEN_RE = /!\[[^\]\n]*\]\([^)\n]+\)/
+
+const normalizeBlockImageBoundaries = (markdown: string): string => {
+  let result = markdown
+  let previous = ""
+
+  while (result !== previous) {
+    previous = result
+    result = result
+      .replace(
+        new RegExp(`(${BLOCK_IMAGE_TOKEN_RE.source})(?=${BLOCK_IMAGE_TOKEN_RE.source})`, "g"),
+        "$1\n\n",
+      )
+      .replace(new RegExp(`(${BLOCK_IMAGE_TOKEN_RE.source})(?=[^\\s\\n])`, "g"), "$1\n\n")
+  }
+
+  return result
+}
+
 const mergeFragmentedHighlights = (markdown: string): string => {
   let result = markdown
   let prev = ""
@@ -197,7 +216,9 @@ export const convertHtmlTablesToMarkdown = (value: string): string => {
 export const normalizeMarkdownForRoundTrip = (markdown: string): string =>
   normalizeMarkdownFootnotes(
     mergeFragmentedHighlights(
-      normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)),
+      normalizeBlockImageBoundaries(
+        normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)),
+      ),
     ),
   )
 

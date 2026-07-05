@@ -25,7 +25,7 @@ Estas decisiones son transversales y aplican a todas las mejoras. Cualquier issu
 
 ### Batching
 - **Tamaño por defecto: `BATCH_SIZE = 5`** bloques por request.
-- Justificación: los modelos actuales (Claude Sonnet 4.6, GPT-4o) tienen contexto >100K tokens; el cuello de botella es **TTFB percibido**, no el budget. Con 5 bloques el primer resultado llega en ~2–3s; con 8+ se degrada la sensación de progreso.
+- Justificación: los modelos del proveedor configurado (variable de entorno `FIREWORKS_MODEL` — el modelo es operativo, no constante funcional; ver `odessay-ai-writing-assist.md §Contrato de proveedor/modelo`) tienen contexto amplio; el cuello de botella es **TTFB percibido**, no el budget. Con 5 bloques el primer resultado llega en ~2–3s; con 8+ se degrada la sensación de progreso.
 - Parametrizable vía constante para ajustar con las métricas de la Mejora 5.
 
 ### Fallo parcial del batch
@@ -38,7 +38,7 @@ Una sugerencia cuyo `originalText` sobrevive a un edit se conserva visualmente c
 **No hay techo duro en la cola de correcciones.** El batching colectivo (Mejora 2) absorbe el caso: 30 bloques pendientes se resuelven en 6 requests de 5, no en 30 individuales. El debounce extendido (Mejora 3) evita disparar mientras el usuario aún organiza el texto.
 
 ### Estado actual del proyecto
-- **Sin usuarios en producción**: las migraciones de IndexedDB y Supabase pueden ser destructivas sin necesidad de backfill.
+- **"Sin usuarios en producción" — autorización caducada (revisión 2026-07).** Esta premisa databa del inicio del plan y no tiene fecha de verificación. Antes de cualquier migración destructiva de IndexedDB o Supabase, confirmar con el dueño si ya existen usuarios/datos reales; sin esa confirmación explícita, toda migración debe incluir backfill.
 
 ---
 
@@ -54,7 +54,7 @@ Antes de tocar el flujo de correcciones, instrumentar lo suficiente para validar
 ```ts
 // lib/observability/corrections-log.ts
 type CorrectionEvent =
-  | { type: "queue:enqueue"; blockId: string; reason: "edit" | "paste" | "hydrate-miss" }
+  | { type: "queue:enqueue"; blockId: string; reason: "edit" | "hydrate-miss" } // "paste" se especificó pero nunca se implementó como reason distinto
   | { type: "queue:flush"; batchSize: number; blockIds: string[] }
   | { type: "request:start"; batchId: string; blockIds: string[] }
   | { type: "request:end"; batchId: string; latencyMs: number; suggestions: number; missing: string[] }
@@ -355,7 +355,7 @@ Las sugerencias mantenidas se marcan con `status: "pending-stale"` (nuevo estado
 ### Archivos a modificar
 - `components/editor/editor-shell.tsx` — lógica de dirty blocks
 - `lib/local-db/schema.ts` — agregar `"pending-stale"` a `PublicationSuggestionStatus` (no opcional: el panel lo necesita para deshabilitar acciones)
-- `components/editor/panels/orthography-panel.tsx` (o `corrections-panel.tsx` tras Mejora 7) — deshabilitar acciones cuando `status === "pending-stale"`
+- `components/editor/panels/corrections-panel.tsx` — deshabilitar acciones cuando `status === "pending-stale"`
 - `app/globals.css` — estilo para sugerencias stale
 
 ### Criterio de aceptación
@@ -457,7 +457,7 @@ Mostrar todas las correcciones pendientes en el panel, no solo ortografía.
 
 ### Cambios
 
-**Frontend — `orthography-panel.tsx`**
+**Frontend — `corrections-panel.tsx`** (el archivo se llamaba `orthography-panel.tsx` al escribir este plan)
 
 ```tsx
 // Antes

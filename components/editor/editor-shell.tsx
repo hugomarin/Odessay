@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
+import { cn } from "@/lib/utils"
 import {
   mapLocalSyncStatusToSaveState,
   mapSyncLifecycleToSaveState,
@@ -1954,7 +1955,18 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       const cursorPosition = Math.min(item.pos + 1, editor.state.doc.content.size)
       setSelectedTableOfContentsItemId(item.id)
-      editor.chain().focus().setTextSelection({ from: cursorPosition, to: cursorPosition }).scrollIntoView().run()
+      editor.chain().focus().setTextSelection({ from: cursorPosition, to: cursorPosition }).run()
+
+      // Scroll the heading to the center of the visible area so the caret
+      // isn't hidden by the fixed topbar or bottom status bar.
+      requestAnimationFrame(() => {
+        const domPosition = editor.view.domAtPos(cursorPosition)
+        const element =
+          domPosition.node instanceof Element
+            ? domPosition.node
+            : domPosition.node.parentElement
+        element?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" })
+      })
     },
     [editor],
   )
@@ -4728,7 +4740,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
-            isTableOfContentsOpen={isTableOfContentsOpen}
             isPublicationModeEnabled={activePanel === "publication"}
             tabs={editorSession.tabs}
             activeTabId={editorSession.active_tab_id}
@@ -4739,7 +4750,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
             onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
-            onToggleTableOfContents={() => setIsTableOfContentsOpen((current) => !current)}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
             }}
@@ -4814,14 +4824,20 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     <div className="h-3 w-2/3 rounded bg-foreground/5" />
                   </div>
                 ) : null}
-                <div className="flex min-h-0 flex-1">
-                  {!isFocusMode && isTableOfContentsOpen ? (
+                <div
+                  className={cn(
+                    "relative flex min-h-0 flex-1",
+                    !isFocusMode && isTableOfContentsOpen && "pl-64",
+                  )}
+                >
+                  {!isFocusMode ? (
                     <Suspense fallback={null}>
                       <TableOfContentsPanel
                         items={tableOfContentsItems}
                         activeItemId={selectedTableOfContentsItemId}
                         onNavigate={navigateToTableOfContentsItem}
-                        onClose={() => setIsTableOfContentsOpen(false)}
+                        isOpen={isTableOfContentsOpen}
+                        onToggleOpen={() => setIsTableOfContentsOpen((current) => !current)}
                       />
                     </Suspense>
                   ) : null}

@@ -66,6 +66,70 @@ describe("document serialization", () => {
     expect(markdown).toContain("[^1|ann-1: Footnote body]")
   })
 
+  it("separates consecutive block images when serializing canonical markdown", () => {
+    const markdown = serializeDocumentToMarkdown({
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 2 },
+          content: [{ type: "text", text: "Imagenes" }],
+        },
+        {
+          type: "image",
+          attrs: { src: "/api/writing-assets/asset-1", alt: "" },
+        },
+        {
+          type: "image",
+          attrs: { src: "/api/writing-assets/asset-2", alt: "" },
+        },
+        {
+          type: "image",
+          attrs: { src: "/api/writing-assets/asset-3", alt: "Example image" },
+        },
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Tail paragraph" }],
+        },
+      ],
+    })
+
+    expect(markdown).toBe(`## Imagenes
+
+![](/api/writing-assets/asset-1)
+
+![](/api/writing-assets/asset-2)
+
+![Example image](/api/writing-assets/asset-3)
+
+Tail paragraph`)
+
+    const parsed = parseMarkdownToSnapshot(markdown)
+    expect(parsed.bodyJson.content).toMatchObject([
+      {
+        type: "heading",
+        attrs: { level: 2 },
+        content: [{ type: "text", text: "Imagenes" }],
+      },
+      {
+        type: "image",
+        attrs: { src: "/api/writing-assets/asset-1", alt: "" },
+      },
+      {
+        type: "image",
+        attrs: { src: "/api/writing-assets/asset-2", alt: "" },
+      },
+      {
+        type: "image",
+        attrs: { src: "/api/writing-assets/asset-3", alt: "Example image" },
+      },
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Tail paragraph" }],
+      },
+    ])
+  })
+
   it("creates a stable snapshot for empty inputs", () => {
     const snapshot = serializeDocumentToSnapshot(null)
 

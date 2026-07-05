@@ -447,6 +447,23 @@ Comparar dos versiones produce (a) reporte de cobertura por anotación `ai` — 
 Dependencias: Document Versions — snapshot foundation (desktop).
 Referencia: `workflow/context/features/odessay-versions.md`, `workflow/context/features/odessay-ai-writing-assist.md`, `workflow/context/features/odessay-margenes.md`.
 
+### Track de confiabilidad de correcciones y anotaciones — Fase 8 (definido 2026-07-03)
+
+Origen: revisión completa del subsistema en `docs/revision-correcciones-anotaciones-2026-07.md` (21 hallazgos de código C1-C19/A1-A2 + 13 documentales D1-D13). Implementa los criterios del DoD §5 que ODE-338 dejó abiertos. Secuencia: ODE-343 (critical-path, entrega skills/docs) → chain de editor-shell ODE-344 → ODE-345 → ODE-346 → ODE-347 → ODE-348 → ODE-351; en paralelo ODE-349 (backend) y ODE-350 (anotaciones); decisión del dueño en ODE-352.
+
+**Ship planning-skill hardening and corrections documentation reconciliation (ODE-343)** `[infra, critical-path]` — entrega el gate §Revisión por skills de dominio, skill-corrections, red flags de review y la reconciliación documental D2/D6/D9/D10/D11.
+**Create shared token-boundary matching module (ODE-344)** `[frontend, ai-editor]` — C1/C13/C15: un solo matching con límites de token para servidor, decoraciones y apply. DoD §5 "no falsos positivos por matching parcial".
+**Make correction fingerprints stable across edits (ODE-345)** `[frontend, ai-editor]` — C2: identidad sin hash/pos; los rechazos sobreviven ediciones.
+**Route all suggestion entry points through a single admission filter (ODE-346)** `[frontend, ai-editor]` — C3/C6: learned words filtran también en hidratación de cache y retroactivamente. DoD §5 "deja de marcarse en cualquier documento futuro".
+**Guarantee exit transitions for stale suggestions (ODE-347)** `[frontend, ai-editor]` — C4/C10: pending-stale expira (10 s); error, cache-hit y ventana de supresión tienen salida.
+**Harden learned words (ODE-348)** `[frontend, backend]` — C7/C8: rollback del optimista, retry de carga, paginación completa.
+**Parse LLM corrections per item and unify route paths (ODE-349)** `[backend, ai-editor]` — C5/C18/D5: un item malformado no vacía el lote; una sola normalización en la ruta.
+**Color annotation highlights by mark type (ODE-350)** `[frontend]` — A1/A2/D3: color por marca (`data-annotation-type`), no por heurística de párrafo; reescribe `odessay-anotaciones-ai.md` al sistema de tipos real.
+**Batch correction blocks per request and clean queue lifecycle (ODE-351)** `[frontend, backend, ai-editor]` — C17/C14/C12/D1/D7/D8: batching (Mejora 2, único pendiente del plan de mejoras), limpieza de cola por doc, contador del toast.
+**Decide corrections product policies (ODE-352)** `[needs-clarification]` — C11/C16/C19: spellcheck nativo, normalización de acentos, memoria de rechazos a Supabase — decisiones del dueño antes de implementar.
+
+Referencia del track: `docs/revision-correcciones-anotaciones-2026-07.md`, `.agents/skills/skill-corrections/SKILL.md`, `workflow/context/features/odessay-ai-writing-assist.md`.
+
 Referencia general: `workflow/context/core/odessay-adr-identidad.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
 
 ---

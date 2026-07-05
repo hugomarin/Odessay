@@ -99,10 +99,18 @@ Reglas de implementación:
 
 ## ProseMirror/Decorations guardrails (obligatorio cuando aplica)
 
+Si el cambio toca correcciones AI, cargar además `.agents/skills/skill-corrections/SKILL.md` — especializa estos guardrails y declara su enforcement.
+
+Cada guardrail declara cómo se verifica. `no enforcement` significa que solo el review lo atrapa: verificarlo manualmente es obligatorio, no opcional (precedente: el guardrail de "primer match de string" existía aquí y aun así se violó en producción — ver `docs/revision-correcciones-anotaciones-2026-07.md` C1).
+
 - No introducir cambios en decorations sin declarar identidad estable de sugerencia/corrección.
+  `enforced by: no enforcement — verificar en review`
 - En streaming, descartar chunks stale por identidad/hash de bloque.
+  `enforced by: no enforcement — verificar en review`
 - Evitar lógica final basada solo en "primer match de string" para correcciones AI en producción.
+  `enforced by: no enforcement — el test llega con Fix 1 del plan de docs/revision-correcciones-anotaciones-2026-07.md; hasta entonces, bloqueante en review`
 - Cualquier cambio parser/serializer debe validar round-trip Markdown ↔ JSON del subset soportado.
+  `enforced by: tests/document-serialization.test.ts (npx vitest run tests/document-serialization.test.ts)`
 
 ---
 
@@ -741,7 +749,7 @@ const editor = useEditor({
 
 Auto-save local: inmediato. Sync remoto: debounce 1500ms. Sin indicador agresivo — solo estado sutil en statusbar.
 
-**Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta), `Strike` (fuera del subconjunto epistolar). No agregar sin revisar `odessay-editor.md`.
+**Extensión excluida intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip). `Strike`, `Highlight` y `Table` están activas (con shortcuts de teclado deshabilitados en Strike/Highlight). El inventario canónico de extensiones es `lib/editor/extensions.ts` — este listado y el de `odessay-prosemirror-tiptap.md` deben coincidir con él. No agregar ni quitar extensiones sin revisar `odessay-editor.md`.
 
 Shortcuts: `⌘B`, `⌘I`, `⌘K`, `⌘⌥1/2/3`, `⌘⇧F`. Sin toolbar flotante al seleccionar.
 

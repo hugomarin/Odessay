@@ -96,7 +96,7 @@ El endpoint `/api/ai/publication-review` opera exclusivamente en modo `block`.
 |------|----------------|--------|
 | `block` | Frontend envía `correctionBlock: {id, text, hash}` | **Activo — único contrato válido** |
 
-El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Ortografía" y abre `OrthographyPanel`, que consume el estado de correcciones automáticas por bloque.
+El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Corrections" y abre `CorrectionsPanel` (`components/editor/panels/corrections-panel.tsx`), que consume el estado de correcciones automáticas por bloque.
 
 **Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block` existente.
 

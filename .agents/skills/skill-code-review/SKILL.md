@@ -241,6 +241,11 @@ Si alguno de estos checks falla → **rechazar**. Son bloqueantes porque los bug
 - **Identidad creada en hot path:** `crypto.randomUUID()`, `localDB.save()`, o cualquier efecto secundario de persistencia dentro del handler síncrono de `input`, `paste` o `click`.
 - **Múltiples fuentes de verdad para una dimensión:** `writingId` vive simultáneamente en params, estado local, Zustand y refs sin un owner claro.
 - El PR toca AI corrections/title suggestions/ProseMirror y no actualiza o no valida los documentos de referencia correspondientes (`odessay-ai-writing-assist.md`, `odessay-prosemirror-tiptap.md`) cuando cambió el contrato real.
+- **Estado transitorio sin salida garantizada:** el diff introduce o toca un estado intermedio (stale, recalculando, pendiente) que tiene transición de entrada pero ningún camino de salida en fallo o timeout — el happy path lo resuelve, el error lo deja colgado para siempre.
+- **Filtro de negocio en un solo entry point:** una regla de filtrado/validación (learned words, permisos, dedupe) se aplica en un punto de entrada del dato pero no en los demás (cache, hidratación, streaming). Verificar todos los caminos por los que el dato llega a la UI.
+- **Update optimista sin rollback:** el diff escribe estado local antes de confirmar el servidor y el `catch` solo loguea — en fallo, la UI queda mintiendo.
+- **Colapso de colección sobre output de LLM:** `.catch([])`, `catch` silencioso o parse all-or-nothing sobre una respuesta de modelo — un item malformado descarta el lote completo sin log.
+- **Doble implementación de búsqueda/matching de texto** (cliente vs servidor, texto plano vs markdown) sin test de paridad entre ambas.
 - El PR requería `Architecture Contract` y no lo trae, lo trae incompleto o el diff lo contradice.
 - UI actúa como orquestador de save/sync/infra cuando el contract declara `Application` o `Adapter`.
 - Un módulo `shared core` introduce dependencias de Next, Supabase, cookies, `fetch`, `window` o filesystem concreto.
@@ -258,7 +263,7 @@ Si alguno de estos checks falla → **rechazar**. Son bloqueantes porque los bug
 
 Si el PR toca alguno de estos scopes, el revisor debe verificar coherencia con docs:
 - AI corrections / streaming / accept-reject memory:
-  - validar contra `workflow/context/features/odessay-ai-writing-assist.md`.
+  - validar contra `workflow/context/features/odessay-ai-writing-assist.md` y el checklist de `.agents/skills/skill-corrections/SKILL.md`.
 - TipTap / ProseMirror extensions / decorations / parser-serializer:
   - validar contra `workflow/context/features/odessay-prosemirror-tiptap.md`.
 - Desktop / shared core / runtime boundaries / save path / sync / parser / services:

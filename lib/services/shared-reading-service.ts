@@ -41,6 +41,8 @@ export type DesktopSharedCopyInput = {
   destinationFolder: string
 }
 
+const WRITING_ASSET_API_RE = /^\/api\/writing-assets\/([0-9a-f-]+)$/i
+
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
 }
@@ -61,6 +63,109 @@ async function getDesktopSessionUserId() {
     data: { user },
   } = await supabase.auth.getUser()
   return user?.id ?? null
+}
+
+async function getDesktopBearerToken() {
+  const supabase = createDesktopClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
+function getWebRuntimeBaseUrl(): string | null {
+  const url = process.env.NEXT_PUBLIC_APP_URL
+  return url ? url.replace(/\/$/, "") : null
+}
+
+function collectWritingAssetIds(value: unknown, assetIds = new Set<string>()) {
+  if (!value || typeof value !== "object") {
+    return assetIds
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectWritingAssetIds(item, assetIds))
+    return assetIds
+  }
+
+  const record = value as Record<string, unknown>
+  const src = typeof record.src === "string" ? record.src : null
+  const match = src?.match(WRITING_ASSET_API_RE)
+
+  if (match?.[1]) {
+    assetIds.add(match[1])
+  }
+
+  Object.values(record).forEach((nested) => collectWritingAssetIds(nested, assetIds))
+  return assetIds
+}
+
+function rewriteWritingAssetUrls(value: unknown, resolvedUrls: Map<string, string>): unknown {
+  if (!value || typeof value !== "object") {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteWritingAssetUrls(item, resolvedUrls))
+  }
+
+  const record = value as Record<string, unknown>
+  const nextRecord: Record<string, unknown> = {}
+
+  for (const [key, nested] of Object.entries(record)) {
+    if (key === "src" && typeof nested === "string") {
+      const match = nested.match(WRITING_ASSET_API_RE)
+      nextRecord[key] = match?.[1] ? (resolvedUrls.get(match[1]) ?? nested) : nested
+      continue
+    }
+
+    nextRecord[key] = rewriteWritingAssetUrls(nested, resolvedUrls)
+  }
+
+  return nextRecord
+}
+
+async function resolveDesktopSharedAssetUrls(
+  bodyJson: Record<string, unknown> | null,
+): Promise<Record<string, unknown> | null> {
+  if (!bodyJson) {
+    return bodyJson
+  }
+
+  const baseUrl = getWebRuntimeBaseUrl()
+  const token = await getDesktopBearerToken()
+
+  if (!baseUrl || !token) {
+    return bodyJson
+  }
+
+  const assetIds = Array.from(collectWritingAssetIds(bodyJson))
+  if (assetIds.length === 0) {
+    return bodyJson
+  }
+
+  const resolvedUrls = new Map<string, string>()
+
+  await Promise.all(
+    assetIds.map(async (assetId) => {
+      try {
+        const response = await fetch(`${baseUrl}/api/writing-assets/${assetId}`, {
+          headers: {
+            authorization: `Bearer ${token}`,
+          },
+          redirect: "follow",
+        })
+
+        if (response.ok && response.url) {
+          resolvedUrls.set(assetId, response.url)
+        }
+      } catch {
+        // Keep the original src if resolution fails.
+      }
+    }),
+  )
+
+  return rewriteWritingAssetUrls(bodyJson, resolvedUrls) as Record<string, unknown>
 }
 
 async function listIncomingSharedItems(): Promise<ServiceResponse<SharedWritingListItem[]>> {
@@ -115,7 +220,13 @@ async function loadSharedWritingById(writingId: string): Promise<ServiceResponse
     return err("NOT_FOUND", "Shared writing not found.")
   }
 
-  return ok(data as DesktopSharedWritingRow)
+  const writing = data as DesktopSharedWritingRow
+  const resolvedBodyJson = await resolveDesktopSharedAssetUrls(writing.body_json)
+
+  return ok({
+    ...writing,
+    body_json: resolvedBodyJson,
+  })
 }
 
 export async function loadDesktopSharedReading(

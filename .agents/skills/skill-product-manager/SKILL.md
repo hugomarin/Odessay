@@ -30,7 +30,7 @@ Para `/wf-define`, el patrón correcto es:
 - este skill provee el marco principal de planning, secuenciación y calidad de briefs
 - `skill-audit-planning` está disponible para revisar la calidad del plan antes de cerrarlo o al preparar `wf-audit`
 - `skill-architecture` entra como segunda capa obligatoria cuando el problema toca desktop, multi-runtime o boundaries del sistema
-- `skill-frontend`, `skill-backend`, `skill-database` u otros skills técnicos pueden participar como especialistas consultivos para responder dudas puntuales
+- los skills técnicos del scope (`skill-frontend`, `skill-backend`, `skill-database`, `skill-corrections`, etc.) **no son consultivos opcionales**: todo brief pasa por la revisión de los skills de su scope antes de crear el issue (ver §Revisión por skills de dominio)
 
 Reglas:
 
@@ -54,6 +54,7 @@ La `Execution Trace` mínima debe declarar:
 - `Planning role`
 - `Skills loaded`
 - `Specialist consults`
+- `Skill reviews` — veredicto por cada skill de dominio del scope: `sin objeciones` u `objeciones resueltas: <lista>` (ver §Revisión por skills de dominio). No se puede cerrar una definición con este campo vacío si el scope activó al menos un skill.
 - `Audit run`
 - `Definition check` — resultado de la verificación de definición (ver §Verificación de definición): `docs↔code↔linear = consistente` o `contradicción detectada (bloquea)`. No se puede cerrar una definición con este campo vacío.
 - `Artifacts created`
@@ -124,6 +125,47 @@ Marcar el brief como `needs-clarification` / `blocked` y declarar la contradicci
 ### Salida obligatoria
 
 El campo `Definition check` de la `Execution Trace` registra el resultado: `docs↔code↔linear = consistente` o `contradicción detectada (bloquea)` con la contradicción concreta. Un brief no está listo para DEFINE/BUILD con este campo vacío.
+
+---
+
+## Revisión por skills de dominio — antes de crear el issue
+
+La verificación de definición garantiza que el brief está construido sobre hechos. Esta sección garantiza que el brief **no viola las reglas de las disciplinas que va a tocar**. Son gates distintos: un brief puede ser verdadero y aun así planear algo que `skill-frontend` prohíbe.
+
+Precedente que motiva este gate: ODE-338 (learned words) pasó DEFINE, BUILD y REVIEW violando invariantes ya escritos en los skills (matching sin límites de token prohibido por `skill-frontend §ProseMirror guardrails`; filtro aplicado en un solo entry point). Los skills existían; nadie los invocó contra el brief. Ver `docs/revision-correcciones-anotaciones-2026-07.md §5`.
+
+### Matriz de activación (obligatoria, no consultiva)
+
+| El brief toca... | Skill que DEBE revisar el brief |
+|---|---|
+| UI, componentes, editor, vistas | `skill-frontend` (+ `skill-design` si hay superficie visual nueva) |
+| API routes, server-side, integraciones | `skill-backend` |
+| Migraciones, schema, RLS, queries | `skill-database` |
+| AI corrections, learned words, sugerencias, decoraciones de corrección | `skill-corrections` |
+| Desktop, multi-runtime, shared core, save path, sync, parser/serializer, servicios | `skill-architecture` (ya obligatorio; se mantiene) |
+| Flujos de usuario con criterios de aceptación E2E | `skill-ux-testing` |
+
+Si el brief toca varios scopes, se invocan varios skills. Si no toca ninguno (issue de infra/docs puro), el campo `Skill reviews` de la Execution Trace declara `no aplica — <razón>`.
+
+### Protocolo de revisión
+
+Por cada skill activado, el agente de planeación (o un subagente si el entorno lo soporta):
+
+1. Carga el `SKILL.md` completo del skill.
+2. Revisa el brief contra tres cosas del skill: **invariantes/guardrails**, **anti-patterns bloqueantes**, y **checklist de entrega** (para verificar que los Requirements del brief son compatibles con lo que el checklist va a exigir en BUILD).
+3. Produce un veredicto: `sin objeciones` o una lista de objeciones concretas, cada una citando la regla del skill que el brief viola u omite.
+4. Las objeciones son **bloqueantes**: se resuelven modificando el brief (o escalando al dueño si la objeción revela una tensión de producto) antes de crear el issue en Linear. No se anotan como "notas" para resolver en BUILD.
+
+El resultado va en la `Execution Trace` (`Skill reviews`) y las objeciones resueltas quedan reflejadas en el brief mismo (Requirements, Failure modes, Reference docs) — no como apéndice.
+
+### Regla de invariantes citados
+
+Cuando el brief cite un invariante de un skill o feature doc como criterio ("las coincidencias parciales no se aceptan", "todo estado tiene salida"), debe anotar cómo se verifica:
+
+- `enforced by: <test o comando existente>` — el invariante tiene verificación ejecutable; BUILD debe mantenerla verde.
+- `no enforcement — BUILD debe crear el test` — el invariante existe solo en prosa; crear su test entra al alcance del issue.
+
+Un invariante citado sin esta anotación es un `Context Gap`: nadie sabrá si se cumplió.
 
 ---
 
@@ -297,6 +339,19 @@ de forma independiente. No son instrucciones de implementación — son resultad
 2. La tabla Y existe con los campos Z.
 3. El endpoint W responde correctamente cuando...
 
+## Failure modes *(required si el issue toca operaciones async: fetch, sync, cache, AI, colas, timers)*
+
+Los Requirements describen el happy path. Esta sección obliga a definir el comportamiento esperado cuando algo falla — la clase de bug que los checklists no atrapan (carreras, estados colgados, optimistic updates sin rollback; precedente: C4, C6, C7, C8 y C10 de `docs/revision-correcciones-anotaciones-2026-07.md`, todos shippeados porque ningún brief preguntó "¿y si falla?").
+
+Por cada operación async que el issue introduce o modifica, responder cuatro preguntas:
+
+1. **Fallo de red/servicio:** ¿qué ve el usuario y qué queda en el estado local? ¿Hay retry? ¿Hay rollback del update optimista?
+2. **Respuesta inválida:** si la fuente (API, LLM, cache) devuelve datos malformados o parciales, ¿se degrada por item o colapsa todo?
+3. **Carrera:** si esta operación compite con otra (carga vs análisis, edición vs re-cálculo, cambio de doc a mitad), ¿quién gana y cómo se garantiza?
+4. **Estado intermedio:** si la operación introduce un estado transitorio visible (loading, stale, recalculando), ¿cuál es su transición de salida garantizada y su timeout? Un estado sin salida es un bug de diseño, no un edge case.
+
+Formato: prosa corta por operación. `not required` exige justificación ("el issue no toca operaciones async porque...") — la omisión silenciosa es lo que este campo existe para evitar.
+
 ## Performance Contract
 
 El contrato de performance no se reduce a la latencia del teclado. La velocidad de Odessay es multidimensional (ver `workflow/context/core/odessay-stack.md §Velocidad multidimensional`) y el brief lo refleja: el PM declara, por dimensión, si el issue la toca y qué evidencia se exige.
@@ -384,7 +439,7 @@ Regla:
 - Issues que tocan un feature con doc propio → el doc de `workflow/context/features/` correspondiente
 - Issues que tocan tabs, filtros, o navegación interna del editor → `workflow/context/features/odessay-sync.md` + `workflow/context/core/odessay-arquitectura.md`
 - Issues con templates visuales reutilizables (emails, PDFs, public pages) → la sección correspondiente de `.agents/skills/skill-design/vistas.md` con el spec canónico citado por anchor (no genérico).
-- Issues que tocan AI de corrección ortográfica, streaming de sugerencias o memoria de accept/reject → `workflow/context/features/odessay-ai-writing-assist.md` (obligatorio).
+- Issues que tocan AI de corrección ortográfica, streaming de sugerencias o memoria de accept/reject → `workflow/context/features/odessay-ai-writing-assist.md` + `.agents/skills/skill-corrections/SKILL.md` (ambos obligatorios).
 - Issues que tocan extensiones de TipTap/ProseMirror, decorations, serializer/parser o round-trip Markdown ↔ JSON → `workflow/context/features/odessay-prosemirror-tiptap.md` (obligatorio).
 - Issues que tocan arquitectura del producto, portabilidad web/desktop/mobile, runtime boundaries, servicios compartidos, filesystem local, o el rol de `.md`/`body_json` → citar el subconjunto suficiente de la familia desktop:
   - `workflow/context/features/odessay-desktop-app.md` cuando el issue depende de dirección de producto, objetivos de experiencia o definición del problema desktop.
@@ -654,3 +709,7 @@ Un brief construido sobre un spec que contradice el código propaga el error con
 Un issue de UI sin `Visual / UX Contract` está incompleto. "Se ve como Desk" no es una intención implícita que BUILD pueda adivinar y REVIEW pueda verificar. Sin referencia visual nombrada y criterio de paridad enumerado, el resultado pasa todos los checks técnicos y aun así no coincide. Ver §Visual / UX Contract.
 
 Un issue visible cerrado solo con proof of work de código no está aceptado. Typecheck/lint/tests verdes prueban que el código corre, no que el resultado es el correcto. Si el dueño no aceptó el demo de outcome, el issue no está Done aunque el PR esté mergeado. Ver §Aceptación de resultado del dueño.
+
+Un brief que no pasó por los skills de su scope es un brief sin revisar. Que el PM conozca las reglas de frontend no sustituye cargar `skill-frontend` y confrontar el brief contra sus invariantes — el precedente ODE-338 demuestra que las reglas escritas no protegen si nadie las invoca. Ver §Revisión por skills de dominio.
+
+Un issue con operaciones async sin sección Failure modes shippea el happy path. Los bugs de carrera, estados colgados y optimistic updates sin rollback no los atrapa ningún checklist de código — solo se previenen si el brief los definió. Ver §Failure modes.

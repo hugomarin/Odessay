@@ -42,6 +42,9 @@ Referencias:
 ## 5) Calidad de corrección ortográfica AI
 
 - El motor de corrección no genera falsos positivos por matching parcial de palabra.
+- Rechazar una sugerencia sigue surtiendo efecto después de editar el bloque (la identidad de la corrección no depende de hash ni posición).
+- Ninguna sugerencia queda indefinidamente atenuada y no accionable ("Recalculando…"): todo estado transitorio tiene salida garantizada en éxito, fallo y timeout.
+- Los resaltados de anotaciones muestran el color de su propio tipo, sin importar qué otras anotaciones conviven en el párrafo (complemento 2026-07-03, track de confiabilidad).
 - El cache de sugerencias se invalida correctamente tras ediciones manuales.
 - Existe harness de regresión reproducible para apply + persistencia de correcciones.
 - El autor puede enseñarle una palabra al motor ("Learn word"); esa palabra deja de marcarse en cualquier documento futuro, no solo en la instancia donde se aprendió.
