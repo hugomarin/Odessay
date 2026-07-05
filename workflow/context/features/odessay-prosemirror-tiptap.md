@@ -84,9 +84,12 @@ Definidas en `lib/editor/extensions.ts` con `createEditorExtensions()`.
 
 ### Custom Odessay extensions
 - `FindReplaceExtension` (`lib/editor/find-replace.ts`)
+- `CorrectionTriggerExtension` (`lib/editor/correction-trigger-plugin.ts`) — detección de dirty blocks para correcciones AI
 - `PublicationSuggestionExtension` (`lib/editor/publication-suggestion-extension.ts`)
-- `FootnoteReferenceNode` (`lib/editor/footnote-node.ts`)
+- `AnnotationReferenceNode` (`lib/editor/footnote-node.ts`) — antes `FootnoteReferenceNode`; el schema acepta ambos nombres de nodo por compatibilidad
 - `FootnoteExtension` (`lib/editor/footnote-extension.ts`)
+- `FrontmatterNode` (`lib/editor/frontmatter-node.ts`)
+- `TableOfContents` (opcional, solo si el shell pasa `onTableOfContentsUpdate`)
 
 ---
 
@@ -99,7 +102,7 @@ Archivos:
 - `lib/editor/footnote-extension.ts`
 
 Diseño:
-- Node inline atómico (`footnoteReference`) con `index` y `text`.
+- Node inline atómico (`annotationReference`, antes `footnoteReference` — el código acepta ambos nombres) con attrs `{ id, type, index, text }`; `type` cubre `footnote | personal | ai | highlight`.
 - NodeView renderiza `<sup>` clickable y emite evento `footnote:click`.
 - Serialización markdown de referencia: `[^n]`.
 - Definiciones se reconstruyen al persistir (`getMarkdownWithFootnoteDefinitions`).
@@ -124,7 +127,7 @@ Archivo:
 Estado actual:
 - Recibe lista de sugerencias por `setMeta`.
 - Recalcula decorations buscando texto (`original_text`) en el doc.
-- No usa todavía mapping incremental robusto por `tr.mapping`.
+- Las decorations existentes se mapean incrementalmente por `tr.mapping` en cada transacción; el recálculo completo ocurre solo al recibir una nueva lista por `setMeta`.
 - ODE-143 agregó mini-bubbles inline, pero la QA real mostró que no deben estar siempre desplegadas. El estado esperado es: texto subrayado/decorado por defecto; bubble/popover solo al click/focus de la decoración.
 - Las decorations no deben depender de que el panel lateral `Ready to publish` esté abierto. Cerrar el panel puede ocultar la lista de sugerencias, pero si el modo de corrección sigue activo, los marks inline deben permanecer visibles.
 - Aceptar/rechazar desde bubble o panel debe actualizar solo esa sugerencia y preservar el resto. No debe recrear ids visibles ni reanalizar automáticamente.

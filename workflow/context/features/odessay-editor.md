@@ -111,7 +111,7 @@ TipTap es el editor headless que corre sobre ProseMirror. Se usa en modo complet
 | CharacterCount | `@tiptap/extension-character-count` | Conteo de palabras para status bar |
 | Markdown | `tiptap-markdown` | Serialización y parseo Markdown ↔ JSON. Fuente de verdad del round-trip. |
 
-**Extensiones excluidas intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip), `Table` (Markdown no lo serializa fielmente en el parser objetivo). No agregar sin revisar paridad con el subconjunto definido.
+**Extensión excluida intencionalmente:** `Underline` (Markdown no lo soporta — rompería el round-trip). `Table` está activa (non-resizable, con normalización HTML ↔ Markdown en `markdown-format.ts`; ver `odessay-prosemirror-tiptap.md`). El inventario canónico es `lib/editor/extensions.ts`. No agregar ni quitar extensiones sin revisar paridad con el subconjunto definido.
 
 **Extensiones custom a desarrollar:**
 
