@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-04",
+  "last_updated": "2026-07-05",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -90,6 +90,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(editor): add automatic table of contents to the editor. Adds @tiptap/extension-table-of-contents to the live editor extension set, a left-side TOC panel with H1/H2/H3 hierarchy and indentation, empty state, scrollspy active highlighting, click-to-caret navigation via setTextSelection, and a topbar toggle independent of the global navigation sidebar. [ODE-340]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-340",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-340/add-automatic-table-of-contents-to-the-editor",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/314",
+      "commit": "a409b8b",
+      "date": "2026-07-05",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks/exhaustive-deps warnings. npm test PASS (138 files / 858 tests). ops:perf:gate PASS (14 pass / 0 warn / 1 skip / required_failures: 0) with local trace capturing >10 headings and TOC panel open. ops:delivery:gate PASS with OPS_PERF_TRACE_PATH. CI Traceability SUCCESS. Vercel Preview SUCCESS. Visual/UX Contract: screenshots and recording committed in output/playwright/ confirm TOC hierarchy, left position, click-to-caret, scrollspy, toggle, and global sidebar coexistence. QualityScore 9.3/10 (P3×3: hardcoded active color, missing automated test coverage, unguarded item.dom access)."
+    },
     {
       "what": "feat(editor): reorder editor tabs by drag-and-drop. Adds reorderEditorSessionTabs helper and reorderTab action to editor-session-store, persists new tab order in LocalEditorSession.tabs (IndexedDB), wires HTML5 drag-and-drop into editor-tabs.tsx/editor-tab-item.tsx with visual drag/target feedback, preserves active tab and editor state, and keeps Studio mirror synchronized via syncStudioSessionFromEditorTabs. [ODE-339]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
