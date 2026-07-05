@@ -3,6 +3,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+let currentTestScope = "user-1"
+
 const localDBMock = {
   writings: {
     get: vi.fn(),
@@ -58,6 +60,10 @@ const fromMock = vi.fn((table: string) => {
 
 vi.mock("@/lib/local-db", () => ({
   localDB: localDBMock,
+  getLocalDBScope: () => currentTestScope,
+  setLocalDBScope: (scope?: string) => {
+    currentTestScope = scope ?? "anonymous"
+  },
 }))
 
 vi.mock("@/lib/services/auth-service-factory", () => ({
@@ -89,6 +95,7 @@ describe("desktopSyncService", () => {
   beforeEach(() => {
     vi.resetModules()
     window.localStorage.clear()
+    currentTestScope = "user-1"
 
     localDBMock.writings.get.mockReset()
     localDBMock.writings.save.mockReset()
@@ -345,5 +352,353 @@ Body from markdown truth.`)
     expect(localDBMock.writings.save).toHaveBeenCalledWith(
       expect.objectContaining({ title: "writing-1", sync_status: "synced" }),
     )
+  })
+
+  it("shares a single request across concurrent hydrateWritings callers", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    localDBMock.writings.get.mockResolvedValue(null)
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Alpha",
+          slug: "alpha",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Alpha body",
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const [r1, r2, r3] = await Promise.all([
+      desktopSyncService.hydrateWritings(),
+      desktopSyncService.hydrateWritings(),
+      desktopSyncService.hydrateWritings(),
+    ])
+
+    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    expect(r1.data?.appliedCount).toBe(1)
+    expect(r2.data?.appliedCount).toBe(1)
+    expect(r3.data?.appliedCount).toBe(1)
+  })
+
+  it("reuses local state for sequential hydrateWritings callers inside the freshness window", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    localDBMock.writings.get.mockResolvedValue(null)
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Alpha",
+          slug: "alpha",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Alpha body",
+        },
+      ],
+      error: null,
+    })
+
+    const nowSpy = vi.spyOn(Date, "now")
+    const baseTime = 1_000_000
+    nowSpy.mockReturnValue(baseTime)
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const first = await desktopSyncService.hydrateWritings()
+    expect(first.data?.appliedCount).toBe(1)
+    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+
+    // Advance time but stay inside the 45 s freshness window.
+    nowSpy.mockReturnValue(baseTime + 30_000)
+    const second = await desktopSyncService.hydrateWritings()
+    expect(second.data?.appliedCount).toBe(0)
+    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+
+    nowSpy.mockRestore()
+  })
+
+  it("issues a new request when the freshness window has expired", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    localDBMock.writings.get.mockResolvedValue(null)
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Alpha",
+          slug: "alpha",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Alpha body",
+        },
+      ],
+      error: null,
+    })
+
+    const nowSpy = vi.spyOn(Date, "now")
+    const baseTime = 1_000_000
+    nowSpy.mockReturnValue(baseTime)
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    await desktopSyncService.hydrateWritings()
+    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+
+    nowSpy.mockReturnValue(baseTime + 50_000)
+    await desktopSyncService.hydrateWritings()
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
+
+    nowSpy.mockRestore()
+  })
+
+  it("does not share in-flight promises or freshness across different users", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    localDBMock.writings.get.mockResolvedValue(null)
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Alpha",
+          slug: "alpha",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Alpha body",
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    await desktopSyncService.hydrateWritings()
+    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+
+    // Switch to a different user. The freshness window of user-1 must not apply.
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-2" } } },
+      error: null,
+    })
+    currentTestScope = "user-2"
+
+    const result = await desktopSyncService.hydrateWritings()
+    expect(result.data?.appliedCount).toBe(1)
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("aborts hydration when the local scope is no longer active", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    localDBMock.writings.get.mockResolvedValue(null)
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Alpha",
+          slug: "alpha",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 1,
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Alpha body",
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    // Simulate that the user signed out before the response was applied: the
+    // session still says user-1, but the local DB scope has been cleared.
+    currentTestScope = "anonymous"
+
+    const result = await desktopSyncService.hydrateWritings()
+
+    expect(result.error).toBeNull()
+    expect(result.data?.appliedCount).toBe(0)
+    expect(localDBMock.writings.save).not.toHaveBeenCalled()
+  })
+
+  it("shares a single request across concurrent hydrateCollections callers", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    collectionsEqMock.mockResolvedValue({
+      data: [
+        {
+          id: "collection-1",
+          owner_id: "user-1",
+          name: "Alpha",
+          description: null,
+          visibility: "private",
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    })
+    writingCollectionsSelectMock.mockResolvedValue({ data: [], error: null })
+    localDBMock.collections.get.mockResolvedValue(null)
+    localDBMock.syncQueue.getCurrentForEntity.mockResolvedValue(null)
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const [r1, r2, r3] = await Promise.all([
+      desktopSyncService.hydrateCollections(),
+      desktopSyncService.hydrateCollections(),
+      desktopSyncService.hydrateCollections(),
+    ])
+
+    expect(collectionsSelectMock).toHaveBeenCalledTimes(1)
+    expect(r1.data?.appliedCount).toBe(1)
+    expect(r2.data?.appliedCount).toBe(1)
+    expect(r3.data?.appliedCount).toBe(1)
+  })
+
+  it("reuses local state for sequential hydrateCollections callers inside the freshness window", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    collectionsEqMock.mockResolvedValue({
+      data: [
+        {
+          id: "collection-1",
+          owner_id: "user-1",
+          name: "Alpha",
+          description: null,
+          visibility: "private",
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-02T00:00:00.000Z",
+        },
+      ],
+      error: null,
+    })
+    writingCollectionsSelectMock.mockResolvedValue({ data: [], error: null })
+    localDBMock.collections.get.mockResolvedValue(null)
+    localDBMock.syncQueue.getCurrentForEntity.mockResolvedValue(null)
+
+    const nowSpy = vi.spyOn(Date, "now")
+    const baseTime = 2_000_000
+    nowSpy.mockReturnValue(baseTime)
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const first = await desktopSyncService.hydrateCollections()
+    expect(first.data?.appliedCount).toBe(1)
+    expect(collectionsSelectMock).toHaveBeenCalledTimes(1)
+
+    nowSpy.mockReturnValue(baseTime + 30_000)
+    const second = await desktopSyncService.hydrateCollections()
+    expect(second.data?.appliedCount).toBe(0)
+    expect(collectionsSelectMock).toHaveBeenCalledTimes(1)
+
+    nowSpy.mockRestore()
+  })
+
+  it("clears the single-flight guard and skips the freshness window after a network failure", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    writingsOrderMock
+      .mockRejectedValueOnce(new Error("network failure"))
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "writing-1",
+            author_id: "user-1",
+            title: "Alpha",
+            slug: "alpha",
+            status: "draft",
+            visibility: "private",
+            parent_id: null,
+            correspondence_id: null,
+            version: 1,
+            deleted_at: null,
+            created_at: "2026-06-01T00:00:00.000Z",
+            updated_at: "2026-06-02T00:00:00.000Z",
+            body_json: { type: "doc", content: [] },
+            body_text: "Alpha body",
+          },
+        ],
+        error: null,
+      })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const first = await desktopSyncService.hydrateWritings()
+    expect(first.error).not.toBeNull()
+    expect(writingsOrderMock).toHaveBeenCalledTimes(1)
+
+    // Immediately retry: the failed hydration must not mark the window fresh,
+    // so the next call issues a real request.
+    const second = await desktopSyncService.hydrateWritings()
+    expect(second.error).toBeNull()
+    expect(second.data?.appliedCount).toBe(1)
+    expect(writingsOrderMock).toHaveBeenCalledTimes(2)
   })
 })

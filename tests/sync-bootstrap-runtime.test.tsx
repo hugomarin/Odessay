@@ -156,4 +156,47 @@ describe("SyncBootstrap runtime split", () => {
     expect(hydrateWritingsMock).toHaveBeenCalled()
     expect(scheduleFlushMock).toHaveBeenCalled()
   })
+
+  it("web auth listener re-hydrates only when the user id changes", async () => {
+    isTauriRuntimeMock.mockReturnValue(false)
+    supabaseGetUserMock.mockResolvedValue({ data: { user: null } })
+
+    await renderBootstrap()
+    await act(async () => {})
+
+    const callback = onAuthStateChangeMock.mock.calls[0]?.[0]
+    expect(typeof callback).toBe("function")
+
+    // Restore resolved implementations in case a previous test left a pending
+    // hydrateWritings implementation behind.
+    hydrateWritingsMock.mockReset().mockResolvedValue({ data: null })
+    hydrateCollectionsMock.mockReset().mockResolvedValue({ data: null })
+
+    // First auth event with a real user triggers hydration and records the user.
+    callback?.("INITIAL_SESSION", { user: { id: "user-1" } })
+    await act(async () => {})
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(setLocalDBScopeMock).toHaveBeenCalledWith("user-1")
+    expect(hydrateWritingsMock).toHaveBeenCalled()
+    expect(hydrateCollectionsMock).toHaveBeenCalled()
+
+    hydrateWritingsMock.mockClear()
+    hydrateCollectionsMock.mockClear()
+
+    // Same user: must not trigger another hydration.
+    callback?.("INITIAL_SESSION", { user: { id: "user-1" } })
+    await act(async () => {})
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(hydrateWritingsMock).not.toHaveBeenCalled()
+    expect(hydrateCollectionsMock).not.toHaveBeenCalled()
+
+    // Different user: must hydrate the new scope.
+    callback?.("SIGNED_IN", { user: { id: "user-2" } })
+    await act(async () => {})
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(setLocalDBScopeMock).toHaveBeenCalledWith("user-2")
+    expect(hydrateWritingsMock).toHaveBeenCalledTimes(1)
+    expect(hydrateCollectionsMock).toHaveBeenCalledTimes(1)
+  })
 })

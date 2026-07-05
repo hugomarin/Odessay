@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { setLocalDBScope } from "@/lib/local-db";
 import { createDesktopClient } from "@/lib/supabase/desktop-client";
 import { createClient } from "@/lib/supabase/client";
@@ -9,15 +9,18 @@ import { getAuthService } from "@/lib/services/auth-service-factory";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
 
 export function SyncBootstrap() {
+  const lastHydratedUserIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     let isMounted = true;
     const desktop = isTauriRuntime();
     const syncService = getSyncService();
 
-    const hydrateFromRemote = async () => {
+    const hydrateFromRemote = async (userId: string) => {
       try {
         await syncService.hydrateWritings();
         await syncService.hydrateCollections();
+        lastHydratedUserIdRef.current = userId;
         return true;
       } catch (error) {
         console.error("[sync:bootstrap]", error);
@@ -37,7 +40,7 @@ export function SyncBootstrap() {
       setLocalDBScope(userId);
 
       if (userId) {
-        await hydrateFromRemote();
+        await hydrateFromRemote(userId);
       }
 
       await syncService.start();
@@ -46,6 +49,7 @@ export function SyncBootstrap() {
       const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
           setLocalDBScope(undefined);
+          lastHydratedUserIdRef.current = null;
           return;
         }
 
@@ -58,8 +62,16 @@ export function SyncBootstrap() {
           return;
         }
 
+        // Re-hydrate only when the authenticated user actually changed. Without
+        // this guard, INITIAL_SESSION / SIGNED_IN events for the same user
+        // trigger a second full hydration after bootstrap has already hydrated.
+        if (nextUserId === lastHydratedUserIdRef.current) {
+          return;
+        }
+
         setLocalDBScope(nextUserId);
-        void hydrateFromRemote();
+        lastHydratedUserIdRef.current = nextUserId;
+        void hydrateFromRemote(nextUserId);
         void syncService.scheduleFlush();
       });
 
@@ -74,7 +86,7 @@ export function SyncBootstrap() {
       setLocalDBScope(userId);
 
       if (userId) {
-        await hydrateFromRemote();
+        await hydrateFromRemote(userId);
       }
 
       await syncService.start();
@@ -82,6 +94,7 @@ export function SyncBootstrap() {
       const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
           setLocalDBScope(undefined);
+          lastHydratedUserIdRef.current = null;
           return;
         }
 
@@ -92,8 +105,13 @@ export function SyncBootstrap() {
           return;
         }
 
+        if (nextUserId === lastHydratedUserIdRef.current) {
+          return;
+        }
+
         setLocalDBScope(nextUserId);
-        void hydrateFromRemote();
+        lastHydratedUserIdRef.current = nextUserId;
+        void hydrateFromRemote(nextUserId);
         void syncService.scheduleFlush();
       });
       return () => authListener.subscription.unsubscribe();
