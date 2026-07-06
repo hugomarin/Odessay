@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-05",
+  "last_updated": "2026-07-06",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -90,6 +90,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(db): inline writings SELECT RLS policy to remove per-row function calls. Adds public.has_writing_share(target_writing_id) security-definer helper that only touches writing_shares (avoiding 42P17 recursion); replaces writings_select_accessible with inline predicate owner/public/shared using (select auth.uid()) initplan; leaves can_read_writing untouched for INSERT/UPDATE/correspondence/collection policies. [ODE-355]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-355",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-355/inline-writings-select-rls-policy-to-remove-per-row-function-calls",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "a7eb83c",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-355 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/ODE-354). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 883 vitest tests PASS. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-353-deduplicate-startup-hydration. Required staging evidence (explain analyze before/after, access-parity matrix, T-A re-verification) must be captured via Supabase MCP against staging before merge/acceptance."
+    },
     {
       "what": "feat(auth): cache keychain token reads in memory for the desktop Supabase client. Adds process-memory write-through cache to keychainStorage: getItem serves from cache after first native read; setItem updates cache only after native write succeeds; removeItem invalidates cache even if native delete fails. Preserves ODE-219 security contract (token never in localStorage/disk/logs). [ODE-354]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
