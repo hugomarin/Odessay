@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "feat(desktop): register Tauri menu event listeners once via global menu-event-bus. Adds lib/services/desktop/menu-event-bus.ts singleton that registers each menu:{action} Tauri channel only once per process; exposes subscribe(action, handler) with stack semantics (last subscriber wins, previous restored on unsubscribe). Refactors hooks/useTauriMenuEvents.ts, hooks/useTauriEditorMenuEvents.ts and hooks/useGlobalOpenFileMenu.ts to consume the bus while preserving public hook signatures. Adds tests/menu-event-bus.test.ts covering single registration, stack semantics, retry on failed listen, async handler rejection handling and desktop-adapter-boundary compliance. [ODE-356]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-356",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-356/register-tauri-menu-event-listeners-once-via-global-event-bus",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "584a1e6",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-356 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/ODE-354/ODE-355). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 890 vitest tests PASS. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-353-deduplicate-startup-hydration and GITHUB_HEAD_REF override. Performance Contract waterfall evidence (0 listen/unlisten after startup when navigating Desk→Write→Studio→Write) and manual menu checklist in build pending real desktop session capture."
+    },
+    {
       "what": "feat(db): inline writings SELECT RLS policy to remove per-row function calls. Adds public.has_writing_share(target_writing_id) security-definer helper that only touches writing_shares (avoiding 42P17 recursion); replaces writings_select_accessible with inline predicate owner/public/shared using (select auth.uid()) initplan; leaves can_read_writing untouched for INSERT/UPDATE/correspondence/collection policies. [ODE-355]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-355",
