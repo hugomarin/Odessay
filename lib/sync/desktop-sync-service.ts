@@ -31,8 +31,12 @@ import {
 import { emitSyncStatusChange } from "@/lib/sync/events"
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry"
 import {
+  applyRemoteSoftDelete,
   mapRemoteWritingToLocal,
+  mergeRemoteWriting,
+  needsBodyFetch,
   shouldApplyRemoteWriting,
+  type RemoteWritingListRecord,
   type RemoteWritingRecord,
 } from "@/lib/sync/remote-bootstrap"
 
@@ -52,6 +56,7 @@ type RemoteWritingCollectionRecord = {
   added_at: string | null
 }
 
+const MANIFEST_SELECT = "id, updated_at, content_hash, deleted_at, version"
 const WRITING_SELECT =
   "id, author_id, title, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, content_hash, body_json, body_text"
 const COLLECTION_SELECT = "id, owner_id, name, description, visibility, created_at, updated_at"
@@ -565,28 +570,24 @@ async function doHydrateWritingsForUser(userId: string): Promise<ServiceResponse
 
   try {
     const supabase = createDesktopClient()
-    const { data, error } = await supabase
+
+    // Phase 1: manifest — fetch only the metadata needed to decide what changed.
+    const { data: manifestData, error: manifestError } = await supabase
       .from("writings")
-      .select(WRITING_SELECT)
+      .select(MANIFEST_SELECT)
       .eq("author_id", userId)
       .order("updated_at", { ascending: false })
 
-    if (error) {
-      throw new Error(error.message)
+    if (manifestError) {
+      throw new Error(manifestError.message)
     }
 
-    const remoteWritings = (data ?? []) as RemoteWritingRecord[]
+    const manifest = (manifestData ?? []) as RemoteWritingListRecord[]
 
-    if (shouldShowProgress) {
-      beginHydrationProgress(userId, remoteWritings.length)
-    }
+    const changedIds: string[] = []
+    const deleteEntries: RemoteWritingListRecord[] = []
 
-    let appliedCount = 0
-    const hydratedIds: string[] = []
-
-    for (let index = 0; index < remoteWritings.length; index += 1) {
-      const remoteWriting = remoteWritings[index]
-
+    for (const remoteWriting of manifest) {
       // Race: sign-out or user switch during hydration. Discard writes for a
       // scope that is no longer active to avoid leaking one user's data into
       // another (T-E / failure mode: sign-out during in-flight hydration).
@@ -598,23 +599,134 @@ async function doHydrateWritingsForUser(userId: string): Promise<ServiceResponse
         if (shouldShowProgress) {
           failHydrationProgress("User changed during hydration")
         }
-        return ok({ appliedCount, hydratedIds })
+        return ok({ appliedCount: 0, hydratedIds: [] })
       }
 
       const localWriting = await localDB.writings.get(remoteWriting.id)
 
-      if (shouldApplyRemoteWriting(localWriting, remoteWriting)) {
-        await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting))
+      if (remoteWriting.deleted_at) {
+        if (localWriting && shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+          deleteEntries.push(remoteWriting)
+        }
+        continue
+      }
+
+      if (needsBodyFetch(localWriting, remoteWriting)) {
+        changedIds.push(remoteWriting.id)
+      }
+    }
+
+    const totalWorkItems = changedIds.length + deleteEntries.length
+
+    if (shouldShowProgress) {
+      beginHydrationProgress(userId, totalWorkItems)
+    }
+
+    // Phase 2: fetch full bodies only for writings that actually changed.
+    // On a clean machine (first startup) changedIds equals the manifest length,
+    // so we fetch the full list in a single request instead of building a huge
+    // .in(...) URL.
+    let remoteBodies: RemoteWritingRecord[] = []
+    if (changedIds.length > 0) {
+      const allChanged = changedIds.length === manifest.length
+      const bodiesQuery = allChanged
+        ? supabase
+            .from("writings")
+            .select(WRITING_SELECT)
+            .eq("author_id", userId)
+            .order("updated_at", { ascending: false })
+        : supabase
+            .from("writings")
+            .select(WRITING_SELECT)
+            .eq("author_id", userId)
+            .in("id", changedIds)
+
+      const { data: bodiesData, error: bodiesError } = await bodiesQuery
+
+      if (bodiesError) {
+        throw new Error(bodiesError.message)
+      }
+
+      remoteBodies = (bodiesData ?? []) as RemoteWritingRecord[]
+    }
+
+    let appliedCount = 0
+    const hydratedIds: string[] = []
+
+    // Apply remote deletes first — they need no body and the manifest already
+    // carries enough information (deleted_at + version + updated_at).
+    for (const deleteEntry of deleteEntries) {
+      if (!isExpectedScopeStillActive(userId)) {
+        logDesktopSyncInfo("hydrateWritings aborted: scope changed during hydration", {
+          expectedUserId: userId,
+          currentScope: getLocalDBScope(),
+        })
+        if (shouldShowProgress) {
+          failHydrationProgress("User changed during hydration")
+        }
+        return ok({ appliedCount, hydratedIds })
+      }
+
+      const localWriting = await localDB.writings.get(deleteEntry.id)
+      if (!localWriting) {
+        continue
+      }
+
+      if (await applyRemoteSoftDelete(localWriting, deleteEntry)) {
+        appliedCount += 1
+        hydratedIds.push(deleteEntry.id)
+      }
+
+      if (shouldShowProgress) {
+        updateHydrationProgress(hydratedIds.length, totalWorkItems)
+      }
+    }
+
+    const requestedIds = new Set(changedIds)
+
+    for (let index = 0; index < remoteBodies.length; index += 1) {
+      const remoteWriting = remoteBodies[index]
+
+      if (!requestedIds.has(remoteWriting.id)) {
+        // Defensive: the server returned an id we did not request (deleted
+        // between phases or RLS change). Log and skip; do not collapse the
+        // batch.
+        logDesktopSyncInfo("hydrateWritings: phase-2 response omitted requested id", {
+          writingId: remoteWriting.id,
+        })
+        continue
+      }
+
+      requestedIds.delete(remoteWriting.id)
+
+      if (!isExpectedScopeStillActive(userId)) {
+        logDesktopSyncInfo("hydrateWritings aborted: scope changed during hydration", {
+          expectedUserId: userId,
+          currentScope: getLocalDBScope(),
+        })
+        if (shouldShowProgress) {
+          failHydrationProgress("User changed during hydration")
+        }
+        return ok({ appliedCount, hydratedIds })
+      }
+
+      if (await mergeRemoteWriting(remoteWriting)) {
         appliedCount += 1
         hydratedIds.push(remoteWriting.id)
       }
 
       if (
         shouldShowProgress &&
-        (index === remoteWritings.length - 1 || (index + 1) % 10 === 0)
+        (index === remoteBodies.length - 1 || (deleteEntries.length + index + 1) % 10 === 0)
       ) {
-        updateHydrationProgress(index + 1, remoteWritings.length)
+        updateHydrationProgress(deleteEntries.length + index + 1, totalWorkItems)
       }
+    }
+
+    for (const missingId of requestedIds) {
+      logDesktopSyncInfo("hydrateWritings: phase-2 response missing requested id", {
+        writingId: missingId,
+      })
     }
 
     if (shouldShowProgress) {
