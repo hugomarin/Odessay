@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "feat(auth): cache keychain token reads in memory for the desktop Supabase client. Adds process-memory write-through cache to keychainStorage: getItem serves from cache after first native read; setItem updates cache only after native write succeeds; removeItem invalidates cache even if native delete fails. Preserves ODE-219 security contract (token never in localStorage/disk/logs). [ODE-354]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-354",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-354/cache-keychain-token-reads-in-memory-for-the-desktop-supabase-client",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "90ed302",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-354 on branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 875 vitest tests PASS. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-353-deduplicate-startup-hydration and GITHUB_HEAD_REF override to include ODE-354. Performance Contract waterfall evidence (≤2 keychain_read_token per Desk→Studio→Write flow) pending manual capture from real desktop session."
+    },
+    {
       "what": "feat(sync): deduplicate startup hydration with single-flight guard and freshness window. Adds per-user in-flight promise coalescing and a 45 s freshness window to desktop hydrateWritings/hydrateCollections; prevents auth listener re-hydration for the same user; preserves force-refresh bypass in Desk; adds scope-active guard to discard writes on sign-out/switch. [ODE-353]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-353",
