@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "feat(sync): deduplicate startup hydration with single-flight guard and freshness window. Adds per-user in-flight promise coalescing and a 45 s freshness window to desktop hydrateWritings/hydrateCollections; prevents auth listener re-hydration for the same user; preserves force-refresh bypass in Desk; adds scope-active guard to discard writes on sign-out/switch. [ODE-353]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-353",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-353/deduplicate-startup-hydration-with-single-flight-guard-and-single",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "5a0ad51",
+      "date": "2026-07-05",
+      "notes": "Shipped via /wf-ship ODE-353 on branch codex/ode-353-deduplicate-startup-hydration. Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 867 tests PASS. ops:delivery:gate PASS. Performance Contract: required — Network waterfall before/after pending manual capture from real desktop/web session; unit tests for guard and window PASS."
+    },
+    {
       "what": "feat(editor): add automatic table of contents to the editor. Adds @tiptap/extension-table-of-contents to the live editor extension set, a left-side TOC panel with H1/H2/H3 hierarchy and indentation, empty state, scrollspy active highlighting, click-to-caret navigation via setTextSelection, and a topbar toggle independent of the global navigation sidebar. [ODE-340]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-340",
