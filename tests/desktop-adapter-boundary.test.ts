@@ -28,6 +28,7 @@ const forbiddenGlobalPatterns = [
 
 const allowedImports = new Set([
   "@tauri-apps/api/core",
+  "@tauri-apps/api/event",
   "@tauri-apps/api/path",
   "@tauri-apps/plugin-dialog",
   "@/lib/runtime/detect",
