@@ -2,8 +2,8 @@
 
 import { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { listen } from "@tauri-apps/api/event"
 import { open } from "@tauri-apps/plugin-dialog"
+import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { setPendingOpenFile } from "@/lib/editor/pending-open-file"
 
@@ -21,10 +21,7 @@ export function useGlobalOpenFileMenu() {
   useEffect(() => {
     if (!isDesktopRuntime() || isWriteRoute) return
 
-    let cancelled = false
-    let unlisten: (() => void) | null = null
-
-    listen("menu:open-file", async () => {
+    const unsubscribe = subscribeMenuAction("open-file", async () => {
       const selected = await open({
         multiple: false,
         filters: [{ name: "Markdown", extensions: ["md"] }],
@@ -35,14 +32,10 @@ export function useGlobalOpenFileMenu() {
       const content = await invoke<string>("open_file", { path })
       setPendingOpenFile({ path, content })
       router.push("/write")
-    }).then((ul) => {
-      if (cancelled) { ul(); return }
-      unlisten = ul
     })
 
     return () => {
-      cancelled = true
-      unlisten?.()
+      unsubscribe()
     }
   }, [isWriteRoute, router])
 }

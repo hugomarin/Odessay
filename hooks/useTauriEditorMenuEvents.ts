@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { listen } from "@tauri-apps/api/event"
+import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 
@@ -46,24 +46,14 @@ export function useTauriEditorMenuEvents(onRunAction: (action: EditorShortcutAct
   useEffect(() => {
     if (!isDesktopRuntime()) return
 
-    let cancelled = false
-    const unlisteners: Array<() => void> = []
-
-    const promises = EDITOR_MENU_ACTIONS.map((action) =>
-      listen(`menu:${action}`, () => {
+    const unsubscribers = EDITOR_MENU_ACTIONS.map((action) =>
+      subscribeMenuAction(action, () => {
         onRunActionRef.current(action)
-      }).then((ul) => {
-        if (cancelled) {
-          ul()
-          return
-        }
-        unlisteners.push(ul)
       }),
     )
 
     return () => {
-      cancelled = true
-      unlisteners.forEach((ul) => ul())
+      unsubscribers.forEach((unsub) => unsub())
     }
-  }, []) // register once on mount — callbacks accessed via refs
+  }, []) // subscribe via global bus once on mount — callback accessed via ref
 }
