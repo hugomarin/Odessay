@@ -29,7 +29,8 @@ const getSessionMock = vi.fn()
 const tauriOpenFileMock = vi.fn()
 
 const writingsOrderMock = vi.fn()
-const writingsEqMock = vi.fn(() => ({ order: writingsOrderMock }))
+const writingsInMock = vi.fn()
+const writingsEqMock = vi.fn(() => ({ order: writingsOrderMock, in: writingsInMock }))
 const writingsSelectMock = vi.fn(() => ({ eq: writingsEqMock }))
 const writingsInsertMock = vi.fn(() => Promise.resolve({ error: null }))
 const writingsUpdateEqAuthorMock = vi.fn(() => Promise.resolve({ error: null }))
@@ -110,6 +111,7 @@ describe("desktopSyncService", () => {
     getSessionMock.mockReset()
 
     writingsOrderMock.mockReset()
+    writingsInMock.mockReset()
     writingsEqMock.mockReset()
     writingsSelectMock.mockReset()
     writingsInsertMock.mockReset()
@@ -121,7 +123,7 @@ describe("desktopSyncService", () => {
     writingCollectionsSelectMock.mockReset()
     tauriOpenFileMock.mockReset()
 
-    writingsEqMock.mockImplementation(() => ({ order: writingsOrderMock }))
+    writingsEqMock.mockImplementation(() => ({ order: writingsOrderMock, in: writingsInMock }))
     writingsSelectMock.mockImplementation(() => ({ eq: writingsEqMock }))
     writingsInsertMock.mockImplementation(() => Promise.resolve({ error: null }))
     writingsUpdateEqAuthorMock.mockImplementation(() => Promise.resolve({ error: null }))
@@ -186,6 +188,313 @@ describe("desktopSyncService", () => {
     })
     expect(localDBMock.writings.save).toHaveBeenCalledTimes(2)
     expect(window.localStorage.getItem("odessay.desktop.hydrated.user-1")).toBe("1")
+  })
+
+  it("fetches zero bodies on a second startup when nothing changed (manifest only)", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    // Local already has both writings, synced, with matching content hashes and
+    // up-to-date timestamps.
+    const localById: Record<string, unknown> = {
+      "writing-1": {
+        id: "writing-1",
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: "hash-1",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      },
+      "writing-2": {
+        id: "writing-2",
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: "hash-2",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      },
+    }
+    localDBMock.writings.get.mockImplementation((id: string) =>
+      Promise.resolve(localById[id] ?? null),
+    )
+
+    // Manifest carries only metadata — no body columns.
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          content_hash: "hash-1",
+          deleted_at: null,
+          version: 1,
+        },
+        {
+          id: "writing-2",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          content_hash: "hash-2",
+          deleted_at: null,
+          version: 1,
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const result = await desktopSyncService.hydrateWritings()
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual({ appliedCount: 0, hydratedIds: [] })
+    // Only the manifest request was issued — no body fetch of any kind.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    expect(writingsInMock).not.toHaveBeenCalled()
+    expect(localDBMock.writings.save).not.toHaveBeenCalled()
+  })
+
+  it("fetches exactly the changed ids when a subset changed (2 of N)", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    // writing-1 unchanged; writing-2 and writing-3 have new remote hashes.
+    const localById: Record<string, unknown> = {
+      "writing-1": {
+        id: "writing-1",
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: "hash-1",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      },
+      "writing-2": {
+        id: "writing-2",
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: "hash-2-old",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      },
+      "writing-3": {
+        id: "writing-3",
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: "hash-3-old",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      },
+    }
+    localDBMock.writings.get.mockImplementation((id: string) =>
+      Promise.resolve(localById[id] ?? null),
+    )
+
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          updated_at: "2026-06-02T00:00:00.000Z",
+          content_hash: "hash-1",
+          deleted_at: null,
+          version: 1,
+        },
+        {
+          id: "writing-2",
+          updated_at: "2026-06-03T00:00:00.000Z",
+          content_hash: "hash-2-new",
+          deleted_at: null,
+          version: 2,
+        },
+        {
+          id: "writing-3",
+          updated_at: "2026-06-03T00:00:00.000Z",
+          content_hash: "hash-3-new",
+          deleted_at: null,
+          version: 2,
+        },
+      ],
+      error: null,
+    })
+
+    // Phase 2 batch fetch (.in) returns full bodies for the requested ids only.
+    writingsInMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-2",
+          author_id: "user-1",
+          title: "Beta",
+          slug: "beta",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 2,
+          content_hash: "hash-2-new",
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-03T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Beta body v2",
+        },
+        {
+          id: "writing-3",
+          author_id: "user-1",
+          title: "Gamma",
+          slug: "gamma",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 2,
+          content_hash: "hash-3-new",
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-03T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Gamma body v2",
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const result = await desktopSyncService.hydrateWritings()
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual({
+      appliedCount: 2,
+      hydratedIds: ["writing-2", "writing-3"],
+    })
+    // Phase 2 asked for exactly the two changed ids via a bounded .in(...) query.
+    expect(writingsInMock).toHaveBeenCalledTimes(1)
+    expect(writingsInMock).toHaveBeenCalledWith("id", ["writing-2", "writing-3"])
+    expect(localDBMock.writings.save).toHaveBeenCalledTimes(2)
+  })
+
+  it("reflects a remote soft-delete surfaced only in the manifest", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    localDBMock.writings.get.mockImplementation((id: string) =>
+      Promise.resolve(
+        id === "writing-1"
+          ? {
+              id: "writing-1",
+              author_id: "user-1",
+              sync_status: "synced",
+              version: 1,
+              content_hash: "hash-1",
+              updated_at: "2026-06-02T00:00:00.000Z",
+              deleted_at: null,
+            }
+          : null,
+      ),
+    )
+
+    // Manifest reports writing-1 as remotely soft-deleted (deleted_at + bumped
+    // version). No body fetch is needed to reflect this.
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          updated_at: "2026-06-04T00:00:00.000Z",
+          content_hash: "hash-1",
+          deleted_at: "2026-06-04T00:00:00.000Z",
+          version: 2,
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const result = await desktopSyncService.hydrateWritings()
+
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual({
+      appliedCount: 1,
+      hydratedIds: ["writing-1"],
+    })
+    // Delete is applied from manifest metadata alone — no body fetch.
+    expect(writingsInMock).not.toHaveBeenCalled()
+    expect(localDBMock.writings.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "writing-1",
+        sync_status: "deleted",
+        deleted_at: "2026-06-04T00:00:00.000Z",
+      }),
+    )
+  })
+
+  it("lets a concurrent local edit win over the phase-2 body (race)", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    // First read (manifest decision) sees a clean synced row → schedule a body
+    // fetch. Second read (merge) sees the row the user just edited locally
+    // (pending) → shouldApplyRemoteWriting must reject the remote body.
+    localDBMock.writings.get
+      .mockResolvedValueOnce({
+        id: "writing-1",
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: "hash-1-old",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      })
+      .mockResolvedValueOnce({
+        id: "writing-1",
+        author_id: "user-1",
+        sync_status: "pending",
+        version: 1,
+        content_hash: "hash-1-local-edit",
+        updated_at: "2026-06-05T00:00:00.000Z",
+        deleted_at: null,
+      })
+
+    writingsOrderMock.mockResolvedValue({
+      data: [
+        {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Alpha",
+          slug: "alpha",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 2,
+          content_hash: "hash-1-remote",
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-03T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: "Alpha body remote",
+        },
+      ],
+      error: null,
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const result = await desktopSyncService.hydrateWritings()
+
+    expect(result.error).toBeNull()
+    // The locally-edited (pending) row wins; the remote body is discarded.
+    expect(result.data).toEqual({ appliedCount: 0, hydratedIds: [] })
+    expect(localDBMock.writings.save).not.toHaveBeenCalled()
   })
 
   it("does not start remote sync work on desktop when there is no authenticated user", async () => {
@@ -391,7 +700,9 @@ Body from markdown truth.`)
       desktopSyncService.hydrateWritings(),
     ])
 
-    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    // Single-flight still collapses the 3 callers into one hydration; that one
+    // hydration issues exactly 2 writings requests (manifest + bodies).
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
     expect(r1.data?.appliedCount).toBe(1)
     expect(r2.data?.appliedCount).toBe(1)
     expect(r3.data?.appliedCount).toBe(1)
@@ -434,13 +745,15 @@ Body from markdown truth.`)
 
     const first = await desktopSyncService.hydrateWritings()
     expect(first.data?.appliedCount).toBe(1)
-    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    // First hydration: manifest + bodies = 2 requests.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
 
     // Advance time but stay inside the 45 s freshness window.
     nowSpy.mockReturnValue(baseTime + 30_000)
     const second = await desktopSyncService.hydrateWritings()
     expect(second.data?.appliedCount).toBe(0)
-    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    // Reused from the freshness window — no new requests.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
 
     nowSpy.mockRestore()
   })
@@ -481,11 +794,13 @@ Body from markdown truth.`)
     const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
 
     await desktopSyncService.hydrateWritings()
-    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    // First hydration: manifest + bodies = 2 requests.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
 
     nowSpy.mockReturnValue(baseTime + 50_000)
     await desktopSyncService.hydrateWritings()
-    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
+    // Window expired: a second full hydration issues 2 more requests.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(4)
 
     nowSpy.mockRestore()
   })
@@ -522,7 +837,8 @@ Body from markdown truth.`)
     const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
 
     await desktopSyncService.hydrateWritings()
-    expect(writingsSelectMock).toHaveBeenCalledTimes(1)
+    // First user hydration: manifest + bodies = 2 requests.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
 
     // Switch to a different user. The freshness window of user-1 must not apply.
     getSessionMock.mockResolvedValue({
@@ -533,7 +849,8 @@ Body from markdown truth.`)
 
     const result = await desktopSyncService.hydrateWritings()
     expect(result.data?.appliedCount).toBe(1)
-    expect(writingsSelectMock).toHaveBeenCalledTimes(2)
+    // Second user hydrates fresh: 2 more requests.
+    expect(writingsSelectMock).toHaveBeenCalledTimes(4)
   })
 
   it("aborts hydration when the local scope is no longer active", async () => {
@@ -666,7 +983,7 @@ Body from markdown truth.`)
 
     writingsOrderMock
       .mockRejectedValueOnce(new Error("network failure"))
-      .mockResolvedValueOnce({
+      .mockResolvedValue({
         data: [
           {
             id: "writing-1",
@@ -692,13 +1009,14 @@ Body from markdown truth.`)
 
     const first = await desktopSyncService.hydrateWritings()
     expect(first.error).not.toBeNull()
+    // Phase 1 (manifest) failed before phase 2 ran: exactly 1 request issued.
     expect(writingsOrderMock).toHaveBeenCalledTimes(1)
 
     // Immediately retry: the failed hydration must not mark the window fresh,
-    // so the next call issues a real request.
+    // so the next call issues real requests (manifest + bodies).
     const second = await desktopSyncService.hydrateWritings()
     expect(second.error).toBeNull()
     expect(second.data?.appliedCount).toBe(1)
-    expect(writingsOrderMock).toHaveBeenCalledTimes(2)
+    expect(writingsOrderMock).toHaveBeenCalledTimes(3)
   })
 })

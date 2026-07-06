@@ -83,7 +83,10 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
 
     const [r1, r2, r3, r4] = await Promise.all([p1, p2, p3, p4])
 
-    expect(fetchCount).toBe(1)
+    // Single-flight collapses the 4 callers into one hydration. That hydration
+    // is two-phase (manifest + selective body fetch), so it issues exactly 2
+    // network requests — not 8.
+    expect(fetchCount).toBe(2)
     expect(r1).toBe(1)
     expect(r2).toBe(1)
     expect(r3).toBe(1)
@@ -151,11 +154,15 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
       }),
     )
 
-    await hydrateLocalWritingsFromRemote()
-    expect(fetchCount).toBe(1)
-
+    // First hydration on an empty local DB is two-phase: manifest + bodies.
     await hydrateLocalWritingsFromRemote()
     expect(fetchCount).toBe(2)
+
+    // The in-flight guard was released, so a subsequent call fetches again.
+    // Nothing changed remotely now, so phase 2 is skipped — only the manifest
+    // request is issued (the whole point of incremental hydration).
+    await hydrateLocalWritingsFromRemote()
+    expect(fetchCount).toBe(3)
 
   })
 })
