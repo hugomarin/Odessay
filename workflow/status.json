@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-06",
+  "last_updated": "2026-07-07",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -90,6 +90,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "chore(workflow): register corrections documentation inventory. Adds canonical docs.json entries for the AI writing assist improvements doc, AI annotations legacy doc, the 2026-07 corrections/annotations review, and skill-corrections; updates the AI writing assist registry description to remove stale streaming-only wording. [ODE-343]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-343",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-343/ship-planning-skill-hardening-and-corrections-documentation",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "3ed00a9",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-343 on shared branch codex/ode-343-344-345-346-347. Branch name intentionally mentions ODE-343, ODE-344, ODE-345, ODE-346 and ODE-347; this PR only closes ODE-343, with the rest reserved for separate sessions. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (140 files / 889 tests). ops:delivery:gate PASS. Context Gaps Detected: yes — the brief said the docs/skills content was applied but uncommitted; in this checkout that content was already present in the base branch, so the shipped diff completes the remaining docs inventory traceability."
+    },
     {
       "what": "feat(desktop): register Tauri menu event listeners once via global menu-event-bus. Adds lib/services/desktop/menu-event-bus.ts singleton that registers each menu:{action} Tauri channel only once per process; exposes subscribe(action, handler) with stack semantics (last subscriber wins, previous restored on unsubscribe). Refactors hooks/useTauriMenuEvents.ts, hooks/useTauriEditorMenuEvents.ts and hooks/useGlobalOpenFileMenu.ts to consume the bus while preserving public hook signatures. Adds tests/menu-event-bus.test.ts covering single registration, stack semantics, retry on failed listen, async handler rejection handling and desktop-adapter-boundary compliance. [ODE-356]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
