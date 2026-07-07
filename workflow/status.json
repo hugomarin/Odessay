@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "fix(corrections): stabilize correction fingerprints. Adds lib/corrections/engine/identity.ts as the pure identity module for correction memory; changes fingerprints to type|originalText|replacementText without blockId/hash/position; keeps legacy localStorage entries working by comparing their stable tail; updates server memory filtering, canonical suggestion adaptation and editor fallback fingerprints; documents the stable memory contract. [ODE-345]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-345",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-345/make-correction-fingerprints-stable-across-edits-identity-vs-location",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "30ad137",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-345 --branch codex/ode-343-344-345-346-347 on shared PR #317. Test-first reproduction confirmed C2: old fingerprints changed when blockId hash/position changed. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npx vitest run PASS (142 files / 898 tests). Targeted identity/matching/hydration/stale/persistence tests PASS. Performance Contract not required. Visual/UX Contract not required. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-343-344-345-346-347. Context Gaps Detected: no — brief included complete Reference docs and Architecture Contract."
+    },
+    {
       "what": "fix(corrections): share token-boundary matching. Adds lib/corrections/engine/matching.ts as the single token-boundary resolver for correction location; migrates server normalization, markdown apply/stale invalidation and ProseMirror decoration ranges to the shared matcher; rejects partial matches inside larger tokens with apostrophes, hyphens or diacritics; logs skipped overlapping decorations; updates corrections docs/skill enforcement to tests/corrections-matching.test.ts. [ODE-344]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-344",
