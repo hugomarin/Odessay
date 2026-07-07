@@ -2850,6 +2850,15 @@
       "commit": "edcd221",
       "date": "2026-07-06",
       "notes": "Shipped via /wf-ship ODE-357 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/354/355/356). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 894 vitest tests PASS (incl. 4 new ODE-357 cases). ops:delivery:gate PASS with GITHUB_BASE_REF=67b7ba4 and GITHUB_HEAD_REF=codex/ode-353-357-two-phase-incremental-hydration (traceability OK for ODE-353, ODE-357). Performance Contract Payload weight: required — second-startup Network capture (< 50 KB vs ~1.8 MB) + edited/deleted-on-another-machine walkthrough + Workspace hash-rebind check pending manual capture in a real desktop/web session."
+    },
+    {
+      "issue": "ODE-346",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-346/route-all-suggestion-entry-points-through-a-single-admission-filter",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "0b4bdd2",
+      "date": "2026-07-07",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Shipped via wf-ship ODE-346 on shared branch codex/ode-343-344-345-346-347 / PR #317. Added lib/corrections/engine/admission.ts as the single visible-suggestion admission path for analysis, hydrated cache, learn-word and late learned-word loading; filters learned words, rejected memory, token-boundary validity and dedupe. Added tests/corrections-admission.test.ts (C3 cached learned word, C6 late re-admission, memory, boundaries, dedupe, malformed cache). Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 904 vitest tests PASS. Performance Contract required: artifacts/perf/ode-346-editor-after.json.gz, perf gate PASS required_failures=0 (13 pass, 1 warn, 1 skip). ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-343-344-345-346-347 and OPS_PERF_TRACE_PATH."
     }
   ]
 }
