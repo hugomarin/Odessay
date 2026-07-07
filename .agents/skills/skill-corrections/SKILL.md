@@ -51,7 +51,7 @@ Anti-patrón: aplicar los filtros en el punto de análisis y mostrar sin filtrar
 
 Corolario: cuando el estado de los filtros cambia (llega la lista de learned words, el usuario aprende una palabra), la admisión se **re-ejecuta sobre las sugerencias visibles** — no solo sobre las futuras.
 
-`enforced by: no enforcement — el test llega con Fix 3 del plan (sugerencia cacheada de palabra aprendida no sobrevive la hidratación)`
+`enforced by: tests/corrections-admission.test.ts`
 
 ## Regla 3 — Todo estado tiene salida
 

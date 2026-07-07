@@ -251,10 +251,13 @@ El motor admite una tercera acción por sugerencia ortográfica — **Learn word
 
 **Normalización.** Las palabras se normalizan case-insensitive y accent-insensitive antes de guardar y antes de filtrar, de modo que aprender "Odéssay" también proteja "odessay" y "ODESSAY".
 
-**Exclusión en dos capas.** Para no depender solo de que el modelo obedezca la instrucción:
+**Exclusión en tres capas.** Para no depender solo de que el modelo obedezca la instrucción:
 
 1. El prompt (`buildMechanicalCorrectionsPrompt`) incluye una lista de "User learned words to always preserve".
 2. La normalización canónica (`normalizeCanonicalCorrections`) descarta cualquier corrección cuyo `originalText` normalizado coincida con una palabra aprendida.
+3. La admisión del cliente (`admitSuggestions`) filtra toda sugerencia antes de hacerla visible, venga del análisis, cache hidratado o re-admisión tras cambios en learned words.
+
+Enforced by: `tests/corrections-admission.test.ts`.
 
 **Relación con `correction-memory-client.ts`.** La memoria de Reject existente guarda un fingerprint por instancia de corrección y coexiste con el diccionario de palabras. Learn word generaliza por palabra; Reject sigue siendo por ocurrencia específica.
 

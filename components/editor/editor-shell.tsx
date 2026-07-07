@@ -78,7 +78,11 @@ import {
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
 import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
-import { createStableFingerprint } from "@/lib/corrections/engine/identity"
+import { admitSuggestions, type AdmissionContext } from "@/lib/corrections/engine/admission"
+import {
+  createStableFingerprint,
+  stableFingerprintFromStoredFingerprint,
+} from "@/lib/corrections/engine/identity"
 import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
 import {
   createBlankDraftIdentity,
@@ -112,7 +116,7 @@ import {
   persistCorrectionBlockRemotely,
   reconcileHydratedCorrectionBlocks,
 } from "@/lib/corrections/persistence"
-import { normalizeLearnedWord } from "@/lib/corrections/learned-words"
+import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
@@ -515,6 +519,46 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
     return [...suggestionsById.values()]
   }, [])
+
+  const createCorrectionAdmissionContext = useCallback(
+    (blocks?: CorrectionTriggerBlock[]): AdmissionContext => {
+      const editorBlocks = blocks ?? (editorInstanceRef.current ? collectCorrectionBlocks(editorInstanceRef.current.state.doc) : [])
+      const blocksById = new Map(editorBlocks.map((block) => [block.id, block]))
+      const blocksByLogicalId = new Map(
+        editorBlocks
+          .map((block) => [parseCorrectionBlockLogicalId(block.id), block] as const)
+          .filter((entry): entry is [string, CorrectionTriggerBlock] => entry[0] !== null),
+      )
+      const rejectedFingerprints = new Set(
+        readCorrectionMemory()
+          .filter((entry) => entry.decision === "rejected")
+          .map((entry) => stableFingerprintFromStoredFingerprint(entry.fingerprint))
+          .filter((fingerprint): fingerprint is string => Boolean(fingerprint)),
+      )
+
+      return {
+        learnedWords: createLearnedWordSet(learnedWordsRef.current.map((item) => item.word)),
+        rejectedFingerprints,
+        blockText: (blockId) => {
+          const block = blocksById.get(blockId)
+
+          if (block) {
+            return block.text
+          }
+
+          const logicalId = parseCorrectionBlockLogicalId(blockId)
+          return logicalId ? blocksByLogicalId.get(logicalId)?.text ?? null : null
+        },
+      }
+    },
+    [],
+  )
+
+  const admitCorrectionSuggestions = useCallback(
+    (candidates: PublicationSuggestion[], blocks?: CorrectionTriggerBlock[]) =>
+      admitSuggestions(candidates, createCorrectionAdmissionContext(blocks)),
+    [createCorrectionAdmissionContext],
+  )
 
   const syncPersistedCorrectionBlock = useCallback(async (block: LocalCorrectionBlock) => {
     persistedCorrectionBlocksRef.current.set(block.blockHash, block)
@@ -1544,7 +1588,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
         localCorrectionBlocks = hydratedReconciliation.fresh
         setPersistedCorrectionBlocks(localCorrectionBlocks)
-        applyCorrectionSuggestionUpdate(() => flattenPersistedSuggestions(localCorrectionBlocks), {
+        applyCorrectionSuggestionUpdate(() => admitCorrectionSuggestions(
+          flattenPersistedSuggestions(localCorrectionBlocks),
+          currentDocBlocks,
+        ), {
           immediate: true,
         })
 
@@ -1725,6 +1772,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
   }, [
     applyCorrectionSuggestionUpdate,
+    admitCorrectionSuggestions,
     currentWritingId,
     editor,
     editorSession.tabs,
@@ -2049,7 +2097,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     const sourceHashes = [
       ...new Set(
         automaticCorrectionSuggestionsRef.current
-          .filter((item) => targetIds.includes(item.id))
           .map((item) => item.source_hash ?? "")
           .filter(Boolean),
       ),
@@ -2074,10 +2121,19 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       .filter((item) => targetIds.includes(item.id))
       .forEach((item) => rememberCorrectionDecision(item.correction_fingerprint, "rejected"))
 
-    const nextSuggestions = updateSuggestionStatuses(
-      automaticCorrectionSuggestionsRef.current,
-      targetIds,
-      "rejected",
+    const nextSuggestions = admitSuggestions(
+      updateSuggestionStatuses(
+        automaticCorrectionSuggestionsRef.current,
+        targetIds,
+        "rejected",
+      ),
+      {
+        ...createCorrectionAdmissionContext(),
+        learnedWords: createLearnedWordSet([
+          normalizedWord,
+          ...learnedWordsRef.current.map((item) => item.word),
+        ]),
+      },
     )
     applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
     void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
@@ -2104,6 +2160,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     })
   }, [
     applyCorrectionSuggestionUpdate,
+    createCorrectionAdmissionContext,
     handleRejectCorrection,
     updatePersistedBlocksFromSuggestions,
   ])
@@ -3318,12 +3375,33 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       setLearnedWords(result.data.items)
       setLearnedWordsDeferred(Boolean(result.data.nextCursor))
+      const sourceHashes = [
+        ...new Set(
+          automaticCorrectionSuggestionsRef.current
+            .map((suggestion) => suggestion.source_hash ?? "")
+            .filter(Boolean),
+        ),
+      ]
+      const nextSuggestions = admitSuggestions(
+        automaticCorrectionSuggestionsRef.current,
+        {
+          ...createCorrectionAdmissionContext(),
+          learnedWords: createLearnedWordSet(result.data.items.map((item) => item.word)),
+        },
+      )
+      applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
+      void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
     }).catch((error) => {
       console.info(`[learned-words] load skipped message=${error instanceof Error ? error.message : String(error)}`)
     }).finally(() => {
       setLearnedWordsLoading(false)
     })
-  }, [currentWritingId])
+  }, [
+    applyCorrectionSuggestionUpdate,
+    createCorrectionAdmissionContext,
+    currentWritingId,
+    updatePersistedBlocksFromSuggestions,
+  ])
 
   const normalizeAutomaticSuggestion = useCallback(
     (block: CorrectionTriggerBlock, suggestion: PublicationSuggestion): PublicationSuggestion => {
@@ -3512,7 +3590,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           continue
         }
 
-        const normalizedSuggestions = suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion))
+        const normalizedSuggestions = admitCorrectionSuggestions(
+          suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion)),
+          [stillCurrentBlock],
+        )
         const nextCorrectionBlock: LocalCorrectionBlock | null = currentWritingIdRef.current
           ? {
               id: createCorrectionBlockRecordId(currentWritingIdRef.current, block.hash),
@@ -3587,6 +3668,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
   }, [
     applyCorrectionSuggestionUpdate,
+    admitCorrectionSuggestions,
     editor,
     finishCorrectionQueueIfIdle,
     getBlockSuggestions,
