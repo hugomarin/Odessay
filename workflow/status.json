@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "fix(corrections): share token-boundary matching. Adds lib/corrections/engine/matching.ts as the single token-boundary resolver for correction location; migrates server normalization, markdown apply/stale invalidation and ProseMirror decoration ranges to the shared matcher; rejects partial matches inside larger tokens with apostrophes, hyphens or diacritics; logs skipped overlapping decorations; updates corrections docs/skill enforcement to tests/corrections-matching.test.ts. [ODE-344]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-344",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-344/create-shared-token-boundary-matching-module-for-ai-corrections",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "793774f",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-344 --branch codex/ode-343-344-345-346-347 on shared PR #317. Test-first reproduction confirmed C1 before fix: tests/corrections-matching.test.ts initially matched como inside comodidad at start 3 instead of isolated start 16. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npx vitest run PASS (141 files / 893 tests). Targeted corrections tests PASS. Performance Contract required: ops:perf:capture + ops:perf:gate PASS on artifacts/perf/ode-344-editor-after-rerun.json.gz (required_failures=0; editor_inputs_p95=23.96ms). First local perf capture had noisy click_dispatch failures; rerun passed all required metrics. Context Gaps Detected: no — brief included complete Reference docs and Architecture Contract."
+    },
+    {
       "what": "chore(workflow): register corrections documentation inventory. Adds canonical docs.json entries for the AI writing assist improvements doc, AI annotations legacy doc, the 2026-07 corrections/annotations review, and skill-corrections; updates the AI writing assist registry description to remove stale streaming-only wording. [ODE-343]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-343",
