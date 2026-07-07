@@ -1,3 +1,5 @@
+import { stableFingerprintFromStoredFingerprint } from "@/lib/corrections/engine/identity"
+
 type CorrectionMemoryEntry = {
   fingerprint: string
   decision: "accepted" | "rejected"
@@ -28,7 +30,14 @@ export const rememberCorrectionDecision = (
     return
   }
 
-  const entries = readCorrectionMemory().filter((entry) => entry.fingerprint !== fingerprint)
+  const stableFingerprint = stableFingerprintFromStoredFingerprint(fingerprint)
+  const entries = readCorrectionMemory().filter((entry) => {
+    if (entry.fingerprint === fingerprint) {
+      return false
+    }
+
+    return stableFingerprintFromStoredFingerprint(entry.fingerprint) !== stableFingerprint
+  })
   entries.push({
     fingerprint,
     decision,

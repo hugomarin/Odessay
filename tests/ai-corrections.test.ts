@@ -238,7 +238,7 @@ describe("AI corrections", () => {
         status: "pending",
       },
     ]);
-    expect(legacy.suggestions[0]?.correction_fingerprint).toContain("block-1|duplication|the the|the");
+    expect(legacy.suggestions[0]?.correction_fingerprint).toBe("duplication|the the|the");
     expect(legacy.checklist[0]?.target_text).toBe("Artifact Studio");
   });
 

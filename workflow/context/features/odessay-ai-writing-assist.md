@@ -337,7 +337,10 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 ### Memoria de decisiones
 
-- **Reject:** fingerprint se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+- **Reject:** fingerprint estable se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+  - Formato canónico: `type|originalText|replacementText`, con partes normalizadas (`trim`, lowercase, whitespace colapsado).
+  - La identidad nunca incluye `blockId`, hash de texto ni posición. `blockId` sigue siendo ubicación opaca para invalidación/decoraciones.
+  - Compatibilidad legacy: entradas antiguas `blockId|type|originalText|replacementText` siguen filtrando por su cola estable `type|originalText|replacementText`.
 - **Accept:** se aplica al markdown y se marca como `accepted`.
 - **Learn word:** registra la palabra en el diccionario por usuario (`learned_words`) y la descarta del set visible.
 - **Edición manual:** invalida sugerencias del bloque afectado.

@@ -78,6 +78,7 @@ import {
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
 import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
+import { createStableFingerprint } from "@/lib/corrections/engine/identity"
 import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
 import {
   createBlankDraftIdentity,
@@ -3330,7 +3331,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const occurrence = suggestion.occurrence ?? 0
       const fingerprint =
         suggestion.correction_fingerprint ??
-        [block.id, suggestion.kind, suggestion.original_text, suggestion.replacement_text].join("|")
+        createStableFingerprint({
+          type: suggestion.mechanical_type ?? suggestion.kind,
+          originalText: suggestion.original_text,
+          replacementText: suggestion.replacement_text,
+        })
       const id = [
         "auto-correction",
         block.hash,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createCorrectionFingerprint } from "@/lib/ai/correction-memory";
+import { createStableFingerprint } from "@/lib/corrections/engine/identity";
 import type {
   PublicationChecklistItem,
   PublicationSuggestion,
@@ -172,7 +172,7 @@ const canonicalToLegacy = (canonical: MechanicalCorrectionsContract): LegacyPubl
     )
     .map((correction) => {
       const kind = toSuggestionKind(correction.type);
-      const correctionFingerprint = createCorrectionFingerprint(correction);
+      const correctionFingerprint = createStableFingerprint(correction);
       const occurrence = suggestionCounts.get(correctionFingerprint) ?? 0;
       suggestionCounts.set(correctionFingerprint, occurrence + 1);
       const id = [
