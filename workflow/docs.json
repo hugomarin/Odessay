@@ -74,7 +74,21 @@
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
-      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas en streaming (trigger, guardrails, memoria de reject/manual-fix, stale handling por block hash) y sugerencia de título con invocación explícita."
+      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
+    },
+    {
+      "path": "workflow/context/features/odessay-ai-writing-assist-mejoras.md",
+      "type": "feature",
+      "scope": "ai-writing-assist-improvement-plan",
+      "state": "historical-plan-with-current-state-warnings",
+      "description": "Plan histórico de mejoras para AI Writing Assist: observabilidad, persistencia, batching, smart invalidation, métricas, limpieza legacy y panel de correcciones. Contiene advertencias de estado actual; no debe leerse como lista de trabajo pendiente sin reconciliar contra el código."
+    },
+    {
+      "path": "workflow/context/features/odessay-anotaciones-ai.md",
+      "type": "feature",
+      "scope": "annotations-ai-expanded-legacy",
+      "state": "legacy-context-requires-reconciliation",
+      "description": "Documento histórico de anotaciones expandidas para lectura, AI y síntesis. Extiende odessay-margenes.md pero contiene drift conocido sobre tipos de anotación; usar solo con verificación contra el código y los docs actuales."
     },
     {
       "path": "workflow/context/features/odessay-margenes.md",
@@ -193,6 +207,11 @@
       "path": "docs/plan-mejoras-network-sync-2026-07.md",
       "type": "ops",
       "description": "Auditoría del waterfall de red (2026-07) y plan de mejoras en formato pre-brief para /wf-define: hidratación triplicada, sync no incremental, IPC keychain por request, listeners de menú por mount y RLS por fila. Cada trabajo (M1-M6 → ODE-353..ODE-358) trae Files affected, failure modes, consumers, evidencia y DoD. Su §Parte 0 lista las contradicciones/trampas conocidas del codebase (42501 sin upsert, dos clientes Supabase, can_read_writing multi-consumer, single-flight web existente) y es lectura obligatoria antes de ejecutar issues del track."
+    },
+    {
+      "path": "docs/revision-correcciones-anotaciones-2026-07.md",
+      "type": "ops",
+      "description": "Revisión 2026-07 del subsistema de correcciones y anotaciones: protocolo anti-alucinación para fixes, 19 hallazgos de correcciones, hallazgos de anotaciones, recomendación de CorrectionsEngine, plan de fixes y auditoría de context rot en skills/docs."
     },
     {
       "path": "workflow/status.json",
@@ -353,6 +372,11 @@
       "path": ".agents/skills/skill-product-manager/SKILL.md",
       "type": "skill",
       "description": "Workflow de PM en Linear: cómo escribir issues ejecutables, jerarquía de proyectos/milestones, template con areas_affected y proof of work requerido. Incluye §Verificación de definición (reconciliar el spec citado contra el código antes del brief; contradicción = bloqueante, consistencia ≠ corrección), §Visual / UX Contract (paridad visual verificable para UI) y aceptación de resultado del dueño (demo de outcome además del proof of work de código). Leer antes de crear o modificar issues."
+    },
+    {
+      "path": ".agents/skills/skill-corrections/SKILL.md",
+      "type": "skill",
+      "description": "Reglas del subsistema de correcciones AI: identidad de sugerencias separada de ubicación, admisión única, estados con salida garantizada, matching con límites de token, degradación por item, learned words, memoria de decisiones y checklist de review."
     },
     {
       "path": ".agents/skills/skill-audit-planning/SKILL.md",

@@ -321,7 +321,9 @@ No se aplica un máximo absoluto de bloques. El batching colectivo (Mejora 2) ab
 ## Mejora 4: Smart invalidation
 
 ### Objetivo
-Las sugerencias no desaparecen inmediatamente al editar. Solo se invalidan si el texto editado ya no contiene `originalText`.
+Las sugerencias no desaparecen inmediatamente al editar. Solo se invalidan si el texto editado ya no contiene `originalText` como rango limpio seleccionable con límites de token.
+
+Enforced by: `tests/corrections-matching.test.ts`.
 
 ### Cambios
 
@@ -335,11 +337,15 @@ setAutomaticCorrectionSuggestions(current =>
   current.filter(s => s.block_id !== block.id)
 );
 
-// Después: mantener las cuyo originalText sigue presente
+// Después: mantener las cuyo originalText sigue presente con límites de token
 setAutomaticCorrectionSuggestions(current =>
   current.map(s => {
     if (s.block_id !== block.id) return s;
-    const stillRelevant = block.text.includes(s.original_text);
+    const stillRelevant = findTokenBoundaryMatch(
+      block.text,
+      s.original_text,
+      s.replacement_text,
+    ) !== null;
     return stillRelevant ? s : null;
   }).filter(Boolean)
 );

@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-06",
+  "last_updated": "2026-07-07",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -90,6 +90,46 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "fix(corrections): guarantee stale suggestion exits. Adds lib/corrections/engine/lifecycle.ts with pure stale lifecycle transitions; stamps pending-stale suggestions with staleSince; drops stale suggestions on analysis error/current-block mismatch and after 10 s; re-admits cache hits back to pending; defers dirty blocks during the post-hydration suppression window; documents the timeout enforcement. [ODE-347]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-347",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-347/guarantee-exit-transitions-for-stale-correction-suggestions",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "1731d57",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-347 --branch codex/ode-343-344-345-346-347 on shared PR #317. Follow-up fix 1731d57 closes the review blocker: disabled-mid-request now drops stale suggestions before continuing. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (144 files / 908 tests). Targeted lifecycle/admission/matching/suggestion/decorations tests PASS (5 files / 28 tests). Performance Contract required: ops:perf:capture + ops:perf:gate PASS on artifacts/perf/editor-trace.json.gz (required_failures=0; 13 pass, 1 warn, 1 skip). ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-343-344-345-346-347 and OPS_PERF_TRACE_PATH. Context Gaps Detected: no."
+    },
+    {
+      "what": "fix(corrections): stabilize correction fingerprints. Adds lib/corrections/engine/identity.ts as the pure identity module for correction memory; changes fingerprints to type|originalText|replacementText without blockId/hash/position; keeps legacy localStorage entries working by comparing their stable tail; updates server memory filtering, canonical suggestion adaptation and editor fallback fingerprints; documents the stable memory contract. [ODE-345]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-345",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-345/make-correction-fingerprints-stable-across-edits-identity-vs-location",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "30ad137",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-345 --branch codex/ode-343-344-345-346-347 on shared PR #317. Test-first reproduction confirmed C2: old fingerprints changed when blockId hash/position changed. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npx vitest run PASS (142 files / 898 tests). Targeted identity/matching/hydration/stale/persistence tests PASS. Performance Contract not required. Visual/UX Contract not required. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-343-344-345-346-347. Context Gaps Detected: no — brief included complete Reference docs and Architecture Contract."
+    },
+    {
+      "what": "fix(corrections): share token-boundary matching. Adds lib/corrections/engine/matching.ts as the single token-boundary resolver for correction location; migrates server normalization, markdown apply/stale invalidation and ProseMirror decoration ranges to the shared matcher; rejects partial matches inside larger tokens with apostrophes, hyphens or diacritics; logs skipped overlapping decorations; updates corrections docs/skill enforcement to tests/corrections-matching.test.ts. [ODE-344]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-344",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-344/create-shared-token-boundary-matching-module-for-ai-corrections",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "793774f",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-344 --branch codex/ode-343-344-345-346-347 on shared PR #317. Test-first reproduction confirmed C1 before fix: tests/corrections-matching.test.ts initially matched como inside comodidad at start 3 instead of isolated start 16. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npx vitest run PASS (141 files / 893 tests). Targeted corrections tests PASS. Performance Contract required: ops:perf:capture + ops:perf:gate PASS on artifacts/perf/ode-344-editor-after-rerun.json.gz (required_failures=0; editor_inputs_p95=23.96ms). First local perf capture had noisy click_dispatch failures; rerun passed all required metrics. Context Gaps Detected: no — brief included complete Reference docs and Architecture Contract."
+    },
+    {
+      "what": "chore(workflow): register corrections documentation inventory. Adds canonical docs.json entries for the AI writing assist improvements doc, AI annotations legacy doc, the 2026-07 corrections/annotations review, and skill-corrections; updates the AI writing assist registry description to remove stale streaming-only wording. [ODE-343]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-343",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-343/ship-planning-skill-hardening-and-corrections-documentation",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "3ed00a9",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-343 on shared branch codex/ode-343-344-345-346-347. Branch name intentionally mentions ODE-343, ODE-344, ODE-345, ODE-346 and ODE-347; this PR only closes ODE-343, with the rest reserved for separate sessions. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS (140 files / 889 tests). ops:delivery:gate PASS. Context Gaps Detected: yes — the brief said the docs/skills content was applied but uncommitted; in this checkout that content was already present in the base branch, so the shipped diff completes the remaining docs inventory traceability."
+    },
     {
       "what": "feat(desktop): register Tauri menu event listeners once via global menu-event-bus. Adds lib/services/desktop/menu-event-bus.ts singleton that registers each menu:{action} Tauri channel only once per process; exposes subscribe(action, handler) with stack semantics (last subscriber wins, previous restored on unsubscribe). Refactors hooks/useTauriMenuEvents.ts, hooks/useTauriEditorMenuEvents.ts and hooks/useGlobalOpenFileMenu.ts to consume the bus while preserving public hook signatures. Adds tests/menu-event-bus.test.ts covering single registration, stack semantics, retry on failed listen, async handler rejection handling and desktop-adapter-boundary compliance. [ODE-356]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
@@ -2820,6 +2860,15 @@
       "commit": "edcd221",
       "date": "2026-07-06",
       "notes": "Shipped via /wf-ship ODE-357 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/354/355/356). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 894 vitest tests PASS (incl. 4 new ODE-357 cases). ops:delivery:gate PASS with GITHUB_BASE_REF=67b7ba4 and GITHUB_HEAD_REF=codex/ode-353-357-two-phase-incremental-hydration (traceability OK for ODE-353, ODE-357). Performance Contract Payload weight: required — second-startup Network capture (< 50 KB vs ~1.8 MB) + edited/deleted-on-another-machine walkthrough + Workspace hash-rebind check pending manual capture in a real desktop/web session."
+    },
+    {
+      "issue": "ODE-346",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-346/route-all-suggestion-entry-points-through-a-single-admission-filter",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/317",
+      "commit": "0b4bdd2",
+      "date": "2026-07-07",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "notes": "Shipped via wf-ship ODE-346 on shared branch codex/ode-343-344-345-346-347 / PR #317. Added lib/corrections/engine/admission.ts as the single visible-suggestion admission path for analysis, hydrated cache, learn-word and late learned-word loading; filters learned words, rejected memory, token-boundary validity and dedupe. Added tests/corrections-admission.test.ts (C3 cached learned word, C6 late re-admission, memory, boundaries, dedupe, malformed cache). Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 904 vitest tests PASS. Performance Contract required: artifacts/perf/ode-346-editor-after.json.gz, perf gate PASS required_failures=0 (13 pass, 1 warn, 1 skip). ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-343-344-345-346-347 and OPS_PERF_TRACE_PATH."
     }
   ]
 }

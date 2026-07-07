@@ -1,4 +1,8 @@
 import type { CanonicalCorrection } from "@/lib/ai/corrections";
+import {
+  createStableFingerprint,
+  stableFingerprintFromStoredFingerprint,
+} from "@/lib/corrections/engine/identity";
 
 export type CorrectionDecision = "accepted" | "rejected";
 
@@ -12,17 +16,9 @@ export type CorrectionMemory = {
   entries: CorrectionMemoryEntry[];
 };
 
-const normalizeFingerprintPart = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
-
 export const createCorrectionFingerprint = (
   correction: Pick<CanonicalCorrection, "blockId" | "originalText" | "replacementText" | "type">,
-) =>
-  [
-    normalizeFingerprintPart(correction.blockId),
-    correction.type,
-    normalizeFingerprintPart(correction.originalText),
-    normalizeFingerprintPart(correction.replacementText),
-  ].join("|");
+) => createStableFingerprint(correction);
 
 export const filterCorrectionsByMemory = (
   corrections: CanonicalCorrection[],
@@ -31,7 +27,8 @@ export const filterCorrectionsByMemory = (
   const rejected = new Set(
     (memory?.entries ?? [])
       .filter((entry) => entry.decision === "rejected")
-      .map((entry) => entry.fingerprint),
+      .map((entry) => stableFingerprintFromStoredFingerprint(entry.fingerprint))
+      .filter((fingerprint): fingerprint is string => Boolean(fingerprint)),
   );
 
   if (rejected.size === 0) {

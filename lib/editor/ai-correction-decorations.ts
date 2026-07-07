@@ -2,6 +2,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
 import { collectDocumentTextMap } from "@/lib/editor/find-replace"
 import { findSuggestionMatch } from "@/lib/editor/suggestion-engine"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
+import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 
 export type ResolvedCorrectionDecoration = {
   suggestion: PublicationSuggestion
@@ -124,6 +125,13 @@ export const resolveCorrectionDecorationRanges = (
     const overlapsExistingRange = occupiedRanges.some((range) => from < range.to && to > range.from)
 
     if (overlapsExistingRange) {
+      logCorrectionEvent({
+        type: "decoration:overlap-skip",
+        blockId: suggestion.block_id,
+        suggestionId: suggestion.id,
+        from,
+        to,
+      })
       continue
     }
 

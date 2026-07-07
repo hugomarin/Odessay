@@ -69,12 +69,14 @@ El trigger de activación no debe depender de la longitud del texto.
 Las sugerencias no se destruyen preventivamente.
 
 - Cuando un bloque se edita, el sistema compara el hash nuevo vs el hash de la sugerencia pendiente.
-- Si el texto editado todavía contiene `originalText` de la sugerencia, esta se mantiene visible como "pendiente" hasta que llegue la nueva respuesta del modelo.
-- Solo se invalidan sugerencias cuyo `originalText` ya no existe en el bloque.
+- Si el texto editado todavía contiene `originalText` como match válido de límites de token, esta se mantiene visible como "pendiente" hasta que llegue la nueva respuesta del modelo.
+- Solo se invalidan sugerencias cuyo `originalText` ya no existe como rango limpio seleccionable con límites de token.
 - Esto evita el parpadeo de decoraciones mientras el usuario escribe.
+- Enforced by: `tests/corrections-matching.test.ts`.
 - A nivel de cache persistido, la invalidación ya no depende solo de posición exacta. El sistema invalida por **identidad lógica del bloque** y usa una **ventana posicional pequeña** como fallback para filas legacy que aún no tienen identidad lógica estable.
 - Invariante persistido: Supabase e IndexedDB deben converger al **cache activo actual** del writing; versiones lógicas stale del mismo párrafo no se conservan como historial activo cuando cambia `source_hash`.
 - Cuando el párrafo lógico sigue existiendo pero su hash cambia, el write-through de persistencia debe reconstruir la fila con el `blockId`/`blockHash` actuales, reescribir `suggestions[*].source_hash`, y enviar `deletedBlockIds` para retirar la fila stale remota.
+- Las sugerencias en estado `pending-stale` llevan `staleSince` y expiran tras 10 s si el re-análisis no las resuelve; error de análisis, cache-hit y ventana de supresión post-hidratación deben tener salida explícita. Enforced by: `tests/corrections-lifecycle.test.ts`.
 
 ### 5. Observabilidad integrada
 
@@ -250,10 +252,13 @@ El motor admite una tercera acción por sugerencia ortográfica — **Learn word
 
 **Normalización.** Las palabras se normalizan case-insensitive y accent-insensitive antes de guardar y antes de filtrar, de modo que aprender "Odéssay" también proteja "odessay" y "ODESSAY".
 
-**Exclusión en dos capas.** Para no depender solo de que el modelo obedezca la instrucción:
+**Exclusión en tres capas.** Para no depender solo de que el modelo obedezca la instrucción:
 
 1. El prompt (`buildMechanicalCorrectionsPrompt`) incluye una lista de "User learned words to always preserve".
 2. La normalización canónica (`normalizeCanonicalCorrections`) descarta cualquier corrección cuyo `originalText` normalizado coincida con una palabra aprendida.
+3. La admisión del cliente (`admitSuggestions`) filtra toda sugerencia antes de hacerla visible, venga del análisis, cache hidratado o re-admisión tras cambios en learned words.
+
+Enforced by: `tests/corrections-admission.test.ts`.
 
 **Relación con `correction-memory-client.ts`.** La memoria de Reject existente guarda un fingerprint por instancia de corrección y coexiste con el diccionario de palabras. Learn word generaliza por palabra; Reject sigue siendo por ocurrencia específica.
 
@@ -336,7 +341,10 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 ### Memoria de decisiones
 
-- **Reject:** fingerprint se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+- **Reject:** fingerprint estable se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+  - Formato canónico: `type|originalText|replacementText`, con partes normalizadas (`trim`, lowercase, whitespace colapsado).
+  - La identidad nunca incluye `blockId`, hash de texto ni posición. `blockId` sigue siendo ubicación opaca para invalidación/decoraciones.
+  - Compatibilidad legacy: entradas antiguas `blockId|type|originalText|replacementText` siguen filtrando por su cola estable `type|originalText|replacementText`.
 - **Accept:** se aplica al markdown y se marca como `accepted`.
 - **Learn word:** registra la palabra en el diccionario por usuario (`learned_words`) y la descarta del set visible.
 - **Edición manual:** invalida sugerencias del bloque afectado.

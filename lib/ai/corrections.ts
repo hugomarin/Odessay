@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { detectCorrectionLanguage } from "@/lib/ai/language-detection";
 import type { CorrectionLanguage } from "@/lib/ai/language-detection";
+import { findTokenBoundaryMatch } from "@/lib/corrections/engine/matching";
 import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words";
 
 export type CorrectionBlock = {
@@ -47,45 +48,8 @@ export type CanonicalCorrection = z.infer<typeof canonicalCorrectionSchema>;
 export type CanonicalCorrectionsResponse = z.infer<typeof canonicalCorrectionsResponseSchema>;
 export type UncertainCorrection = z.infer<typeof uncertainCorrectionSchema>;
 
-const TOKEN_CHAR_PATTERN = /[\p{L}\p{N}\p{M}'’-]/u;
-
-const isTokenChar = (value: string) => TOKEN_CHAR_PATTERN.test(value);
-
-const hasTokenBoundaryMatch = (source: string, originalText: string) => {
-  if (!originalText) {
-    return false;
-  }
-
-  let searchIndex = 0;
-
-  while (searchIndex <= source.length - originalText.length) {
-    const matchIndex = source.indexOf(originalText, searchIndex);
-
-    if (matchIndex === -1) {
-      return false;
-    }
-
-    const previousChar = matchIndex > 0 ? source[matchIndex - 1] : "";
-    const nextChar = source[matchIndex + originalText.length] ?? "";
-    const startsAtBoundary = previousChar.length === 0 || !isTokenChar(previousChar);
-    const endsAtBoundary = nextChar.length === 0 || !isTokenChar(nextChar);
-
-    if (startsAtBoundary && endsAtBoundary) {
-      return true;
-    }
-
-    searchIndex = matchIndex + originalText.length;
-  }
-
-  return false;
-};
-
 const isValidCorrectionMatch = (blockText: string, correction: CanonicalCorrection) => {
-  if (!blockText.includes(correction.originalText)) {
-    return false;
-  }
-
-  return hasTokenBoundaryMatch(blockText, correction.originalText);
+  return findTokenBoundaryMatch(blockText, correction.originalText, correction.replacementText) !== null;
 };
 
 export const hashCorrectionBlock = (text: string) => {

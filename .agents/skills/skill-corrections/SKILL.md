@@ -51,7 +51,7 @@ Anti-patrón: aplicar los filtros en el punto de análisis y mostrar sin filtrar
 
 Corolario: cuando el estado de los filtros cambia (llega la lista de learned words, el usuario aprende una palabra), la admisión se **re-ejecuta sobre las sugerencias visibles** — no solo sobre las futuras.
 
-`enforced by: no enforcement — el test llega con Fix 3 del plan (sugerencia cacheada de palabra aprendida no sobrevive la hidratación)`
+`enforced by: tests/corrections-admission.test.ts`
 
 ## Regla 3 — Todo estado tiene salida
 
@@ -73,7 +73,7 @@ La respuesta a "¿dónde está esta corrección en este texto?" vive en **un sol
 
 Este es el mismo guardrail de `skill-frontend §ProseMirror/Decorations` ("evitar lógica final basada solo en primer match de string"), que existía en prosa y se violó en producción — por eso aquí lleva enforcement.
 
-`enforced by: no enforcement — el test llega con Fix 1 del plan (tests/corrections-matching.test.ts); hasta entonces, verificar manualmente en review todo diff que toque matching`
+`enforced by: tests/corrections-matching.test.ts`
 
 ## Regla 5 — Output de LLM degrada por item, nunca colapsa
 
