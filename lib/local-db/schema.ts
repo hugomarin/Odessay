@@ -215,6 +215,7 @@ export type PublicationSuggestion = {
   source_hash?: string | null;
   correction_fingerprint?: string | null;
   status: PublicationSuggestionStatus;
+  staleSince?: number;
 };
 
 export type PublicationChecklistItem = {

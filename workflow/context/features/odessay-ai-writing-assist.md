@@ -76,6 +76,7 @@ Las sugerencias no se destruyen preventivamente.
 - A nivel de cache persistido, la invalidación ya no depende solo de posición exacta. El sistema invalida por **identidad lógica del bloque** y usa una **ventana posicional pequeña** como fallback para filas legacy que aún no tienen identidad lógica estable.
 - Invariante persistido: Supabase e IndexedDB deben converger al **cache activo actual** del writing; versiones lógicas stale del mismo párrafo no se conservan como historial activo cuando cambia `source_hash`.
 - Cuando el párrafo lógico sigue existiendo pero su hash cambia, el write-through de persistencia debe reconstruir la fila con el `blockId`/`blockHash` actuales, reescribir `suggestions[*].source_hash`, y enviar `deletedBlockIds` para retirar la fila stale remota.
+- Las sugerencias en estado `pending-stale` llevan `staleSince` y expiran tras 10 s si el re-análisis no las resuelve; error de análisis, cache-hit y ventana de supresión post-hidratación deben tener salida explícita. Enforced by: `tests/corrections-lifecycle.test.ts`.
 
 ### 5. Observabilidad integrada
 

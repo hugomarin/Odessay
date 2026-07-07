@@ -80,6 +80,15 @@ import {
 import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
 import { admitSuggestions, type AdmissionContext } from "@/lib/corrections/engine/admission"
 import {
+  CORRECTION_STALE_TIMEOUT_MS,
+  consumeDeferredCorrectionBlocks,
+  deferCorrectionBlocks,
+  dropExpiredStaleSuggestions,
+  dropStaleSuggestionsForBlock,
+  restorePendingSuggestions,
+  type DeferredCorrectionBlocksState,
+} from "@/lib/corrections/engine/lifecycle"
+import {
   createStableFingerprint,
   stableFingerprintFromStoredFingerprint,
 } from "@/lib/corrections/engine/identity"
@@ -441,8 +450,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionQueueTotalRef = useRef(0)
   const correctionQueueCompletedRef = useRef(0)
   const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
+  const correctionStaleTimersRef = useRef(new Map<string, number>())
   const correctionToastDismissRef = useRef<number | null>(null)
   const suppressCorrectionAnalysisUntilRef = useRef(0)
+  const deferredSuppressedCorrectionBlocksRef = useRef<DeferredCorrectionBlocksState<CorrectionTriggerBlock>>({
+    blocksById: new Map(),
+    flushAt: null,
+  })
+  const suppressedCorrectionFlushTimerRef = useRef<number | null>(null)
   const editorInstanceRef = useRef<Editor | null>(null)
   const getTableOfContentsScrollParent = useCallback(() => {
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
@@ -1184,7 +1199,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       window.clearTimeout(timer)
     }
 
+    for (const timer of correctionStaleTimersRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+
+    if (suppressedCorrectionFlushTimerRef.current !== null) {
+      window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
+      suppressedCorrectionFlushTimerRef.current = null
+    }
+
     correctionTimersRef.current.clear()
+    correctionStaleTimersRef.current.clear()
+    deferredSuppressedCorrectionBlocksRef.current = {
+      blocksById: new Map(),
+      flushAt: null,
+    }
     correctionQueueRef.current = []
     correctionQueueTotalRef.current = 0
     correctionQueueCompletedRef.current = 0
@@ -3466,6 +3495,25 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }, 2000)
   }, [])
 
+  const dropStaleSuggestionsForQueuedBlock = useCallback(
+    (blockId: string) => {
+      applyCorrectionSuggestionUpdate((current) => {
+        const transition = dropStaleSuggestionsForBlock(current, blockId)
+
+        for (const suggestionId of transition.droppedIds) {
+          logCorrectionEvent({
+            type: "stale:drop",
+            blockId,
+            suggestionId,
+          })
+        }
+
+        return transition.suggestions
+      }, { immediate: true })
+    },
+    [applyCorrectionSuggestionUpdate],
+  )
+
   const processCorrectionQueue = useCallback(async () => {
     if (correctionProcessingRef.current || !editor) {
       return
@@ -3548,7 +3596,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
         if (result.error || !result.data) {
           console.info(`[corrections] block analysis skipped code=${result.error?.code ?? "unknown"}`)
-          correctionQueueCompletedRef.current += 1
+          dropStaleSuggestionsForQueuedBlock(block.id)
           continue
         }
 
@@ -3572,13 +3620,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
         if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
-          for (const suggestion of getBlockSuggestions(block.id, block.hash)) {
-            logCorrectionEvent({
-              type: "stale:drop",
-              blockId: block.id,
-              suggestionId: suggestion.id,
-            })
-          }
+          dropStaleSuggestionsForQueuedBlock(block.id)
           logCorrectionEvent({
             type: "request:end",
             batchId,
@@ -3586,7 +3628,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             suggestions: 0,
             missing: [block.id],
           })
-          correctionQueueCompletedRef.current += 1
           continue
         }
 
@@ -3615,6 +3656,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           block.id,
           normalizedSuggestions,
         )
+
+        const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
+
+        if (existingStaleTimer) {
+          window.clearTimeout(existingStaleTimer)
+          correctionStaleTimersRef.current.delete(block.id)
+        }
 
         for (const suggestionId of replacement.replacedIds) {
           logCorrectionEvent({
@@ -3649,6 +3697,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       } catch (error) {
         const message = error instanceof Error ? error.message : "block correction failed"
         console.info(`[corrections] block analysis skipped message=${message}`)
+        dropStaleSuggestionsForQueuedBlock(block.id)
       } finally {
         correctionQueueCompletedRef.current += 1
 
@@ -3671,9 +3720,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     admitCorrectionSuggestions,
     editor,
     finishCorrectionQueueIfIdle,
-    getBlockSuggestions,
     normalizeAutomaticSuggestion,
     persistCorrectionBlockWriteThrough,
+    dropStaleSuggestionsForQueuedBlock,
   ])
 
   const enqueueCorrectionBlock = useCallback(
@@ -3691,6 +3740,23 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           blockId: block.id,
           source: cachedBlock.syncedAt ? "supabase" : "idb",
         })
+
+        const cachedSuggestions = admitCorrectionSuggestions(
+          restorePendingSuggestions(cachedBlock.suggestions),
+          [block],
+        )
+
+        applyCorrectionSuggestionUpdate((current) =>
+          replaceBlockSuggestions(current, block.id, cachedSuggestions).suggestions,
+        )
+
+        const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
+
+        if (existingStaleTimer) {
+          window.clearTimeout(existingStaleTimer)
+          correctionStaleTimersRef.current.delete(block.id)
+        }
+
         return
       }
 
@@ -3727,7 +3793,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       void processCorrectionQueue()
     },
-    [getBlockSuggestions, processCorrectionQueue],
+    [admitCorrectionSuggestions, applyCorrectionSuggestionUpdate, getBlockSuggestions, processCorrectionQueue],
   )
 
   useEffect(() => {
@@ -3739,19 +3805,66 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    const handleDirtyBlocks = (event: Event) => {
-      const blocks = ((event as CustomEvent<{ blocks?: CorrectionTriggerBlock[] }>).detail?.blocks ?? [])
-
-      acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
-
-      if (
-        Date.now() < suppressCorrectionAnalysisUntilRef.current ||
-        modeRef.current !== "rich" ||
-        !correctionsEnabledRef.current
-      ) {
+    const scheduleDeferredSuppressedFlush = () => {
+      if (suppressedCorrectionFlushTimerRef.current !== null) {
         return
       }
 
+      const flushAt = deferredSuppressedCorrectionBlocksRef.current.flushAt
+
+      if (flushAt === null) {
+        return
+      }
+
+      suppressedCorrectionFlushTimerRef.current = window.setTimeout(() => {
+        suppressedCorrectionFlushTimerRef.current = null
+
+        if (modeRef.current !== "rich" || !correctionsEnabledRef.current) {
+          deferredSuppressedCorrectionBlocksRef.current = {
+            blocksById: new Map(),
+            flushAt: null,
+          }
+          return
+        }
+
+        const consumed = consumeDeferredCorrectionBlocks(deferredSuppressedCorrectionBlocksRef.current)
+        deferredSuppressedCorrectionBlocksRef.current = consumed.state
+        processDirtyCorrectionBlocks(
+          consumed.blocks
+            .map((block) => getCurrentCorrectionBlock(editor.state.doc, block.id) ?? block)
+            .filter((block) => block.text.trim().length > 0),
+        )
+      }, Math.max(0, flushAt - Date.now()))
+    }
+
+    const scheduleStaleTimeout = (block: CorrectionTriggerBlock) => {
+      const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
+
+      if (existingStaleTimer) {
+        window.clearTimeout(existingStaleTimer)
+      }
+
+      const staleTimer = window.setTimeout(() => {
+        correctionStaleTimersRef.current.delete(block.id)
+        applyCorrectionSuggestionUpdate((current) => {
+          const transition = dropExpiredStaleSuggestions(current, Date.now())
+
+          for (const suggestionId of transition.droppedIds) {
+            logCorrectionEvent({
+              type: "stale:drop",
+              blockId: block.id,
+              suggestionId,
+            })
+          }
+
+          return transition.suggestions
+        }, { immediate: true })
+      }, CORRECTION_STALE_TIMEOUT_MS)
+
+      correctionStaleTimersRef.current.set(block.id, staleTimer)
+    }
+
+    const processDirtyCorrectionBlocks = (blocks: CorrectionTriggerBlock[]) => {
       for (const block of blocks) {
         if (currentWritingIdRef.current) {
           void deletePersistedBlocksForPosition(currentWritingIdRef.current, block)
@@ -3794,6 +3907,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
 
         applyStaleInvalidation()
+        scheduleStaleTimeout(block)
 
         const timer = window.setTimeout(() => {
           correctionTimersRef.current.delete(block.id)
@@ -3810,10 +3924,36 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
     }
 
+    const handleDirtyBlocks = (event: Event) => {
+      const blocks = ((event as CustomEvent<{ blocks?: CorrectionTriggerBlock[] }>).detail?.blocks ?? [])
+
+      acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
+
+      if (modeRef.current !== "rich" || !correctionsEnabledRef.current) {
+        return
+      }
+
+      if (Date.now() < suppressCorrectionAnalysisUntilRef.current) {
+        deferredSuppressedCorrectionBlocksRef.current = deferCorrectionBlocks(
+          deferredSuppressedCorrectionBlocksRef.current,
+          blocks,
+          suppressCorrectionAnalysisUntilRef.current,
+        )
+        scheduleDeferredSuppressedFlush()
+        return
+      }
+
+      processDirtyCorrectionBlocks(blocks)
+    }
+
     editor.view.dom.addEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
 
     return () => {
       editor.view.dom.removeEventListener("odessay:correction-dirty-blocks", handleDirtyBlocks)
+      if (suppressedCorrectionFlushTimerRef.current !== null) {
+        window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
+        suppressedCorrectionFlushTimerRef.current = null
+      }
     }
   }, [applyCorrectionSuggestionUpdate, deletePersistedBlocksForPosition, editor, enqueueCorrectionBlock, getBlockSuggestions])
 

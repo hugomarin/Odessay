@@ -4,6 +4,7 @@ import type {
   PublicationSuggestionStatus,
 } from "@/lib/local-db/schema";
 import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation";
+import { markSuggestionStale } from "@/lib/corrections/engine/lifecycle";
 import {
   countTokenBoundaryMatchesBefore,
   findTokenBoundaryMatch,
@@ -195,6 +196,7 @@ const isSameBlock = (suggestionBlockId: string | null | undefined, blockId: stri
 export const invalidateBlockSuggestions = (
   suggestions: PublicationSuggestion[],
   block: { id: string; text: string },
+  staleSince = Date.now(),
 ): StaleInvalidationResult => {
   const keptIds: string[] = [];
   const droppedIds: string[] = [];
@@ -216,7 +218,7 @@ export const invalidateBlockSuggestions = (
       )
     ) {
       keptIds.push(suggestion.id);
-      return [{ ...suggestion, status: "pending-stale" as const }];
+      return [markSuggestionStale(suggestion, staleSince)];
     }
 
     droppedIds.push(suggestion.id);
