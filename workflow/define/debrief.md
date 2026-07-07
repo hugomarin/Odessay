@@ -149,3 +149,6 @@ _(sin entradas aún)_
 
 - IMP-2026-06-18-04 | deuda-tecnica | Docs + testability cleanup: documentar sintaxis inline canónica `|id` en odessay-anotaciones-ai.md (ODE-299 P3); unificar TooltipProvider + data-testid en document-state-badge + comentar import dinámico de localDB (ODE-307 P3); parámetro legacy ignorado en serializeDocumentFile y título vacío en buildInitialWorkspaceMarkdown (ODE-303 P3). | backlog | ODE-314
   - **Origin**: wf-debrief Fase 8 — consolida ODE-299 + ODE-307 + ODE-303
+
+- IMP-2026-07-07-05 | deuda-tecnica | Consolidate `parseBlockPosition` logic: function exists in 4 places (lib/corrections/engine/lifecycle.ts, lib/corrections/block-invalidation.ts, lib/editor/suggestion-engine.ts, lib/editor/ai-correction-decorations.ts) with no shared test of parity. Maintenance burden and source of subtle bugs if logic needs to change. Pattern identical to ODE-344 (token-boundary consolidation). Fix: lifecycle.ts should import and reuse `parseCorrectionBlockPosition` from block-invalidation.ts (already imported). | backlog | ODE-362
+  - **Origin**: wf-review-ships ODE-343-347, code-review finding #2 (non-blocking architectural debt)
