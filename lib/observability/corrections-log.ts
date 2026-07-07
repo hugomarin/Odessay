@@ -47,6 +47,14 @@ type CorrectionStaleDropEvent = {
   suggestionId: string
 }
 
+type CorrectionDecorationOverlapEvent = {
+  type: "decoration:overlap-skip"
+  blockId?: string | null
+  suggestionId: string
+  from: number
+  to: number
+}
+
 export type CorrectionEvent =
   | CorrectionQueueEnqueueEvent
   | CorrectionQueueFlushEvent
@@ -56,6 +64,7 @@ export type CorrectionEvent =
   | CorrectionCacheMissEvent
   | CorrectionStaleKeepEvent
   | CorrectionStaleDropEvent
+  | CorrectionDecorationOverlapEvent
 
 const isProduction = process.env.NODE_ENV === "production"
 

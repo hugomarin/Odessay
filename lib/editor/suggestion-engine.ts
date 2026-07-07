@@ -4,11 +4,13 @@ import type {
   PublicationSuggestionStatus,
 } from "@/lib/local-db/schema";
 import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation";
+import {
+  countTokenBoundaryMatchesBefore,
+  findTokenBoundaryMatch,
+  type TokenMatch,
+} from "@/lib/corrections/engine/matching";
 
-type SuggestionMatch = {
-  start: number;
-  end: number;
-};
+type SuggestionMatch = TokenMatch;
 
 type SuggestionApplyResult = {
   markdown: string;
@@ -47,139 +49,6 @@ const normalizeSearchValue = (value: string) =>
     .replace(/\r\n/g, "\n")
     .trim();
 
-const countOccurrencesBefore = (source: string, value: string, endIndex: number) => {
-  if (!value) {
-    return 0;
-  }
-
-  let count = 0;
-  let cursor = 0;
-
-  while (cursor <= endIndex) {
-    const index = source.indexOf(value, cursor);
-
-    if (index === -1 || index >= endIndex) {
-      break;
-    }
-
-    count += 1;
-    cursor = index + value.length;
-  }
-
-  return count;
-};
-
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-const buildLooseContextPattern = (value: string) => {
-  const normalized = normalizeSearchValue(value);
-
-  if (!normalized) {
-    return null;
-  }
-
-  const tokens = normalized.split(/\s+/).filter(Boolean);
-
-  if (tokens.length === 0) {
-    return null;
-  }
-
-  return new RegExp(tokens.map((token) => escapeRegex(token)).join("\\s+"), "i");
-};
-
-const isRedundantSuggestionMatch = (
-  source: string,
-  match: SuggestionMatch,
-  originalText: string,
-  replacementText: string,
-) => {
-  const normalizedOriginal = normalizeSearchValue(originalText);
-  const normalizedReplacement = normalizeSearchValue(replacementText);
-
-  if (!normalizedOriginal || !normalizedReplacement) {
-    return false;
-  }
-
-  if (
-    normalizedReplacement === normalizedOriginal ||
-    normalizedReplacement.length < normalizedOriginal.length
-  ) {
-    return false;
-  }
-
-  return source.slice(match.start, match.start + normalizedReplacement.length) === normalizedReplacement;
-};
-
-const findContextAwareMatch = (
-  source: string,
-  originalText: string,
-  replacementText: string,
-  contextBefore?: string | null,
-  contextAfter?: string | null,
-  occurrence?: number | null,
-) => {
-  const normalizedOriginal = normalizeSearchValue(originalText);
-
-  if (!normalizedOriginal) {
-    return null;
-  }
-
-  const matches: SuggestionMatch[] = [];
-  let cursor = 0;
-
-  while (cursor <= source.length - normalizedOriginal.length) {
-    const index = source.indexOf(normalizedOriginal, cursor);
-
-    if (index === -1) {
-      break;
-    }
-
-    const match = { start: index, end: index + normalizedOriginal.length };
-
-    if (!isRedundantSuggestionMatch(source, match, originalText, replacementText)) {
-      matches.push(match);
-    }
-
-    cursor = index + normalizedOriginal.length;
-  }
-
-  if (matches.length === 0) {
-    return null;
-  }
-
-  if (matches.length === 1) {
-    return matches[0];
-  }
-
-  if (typeof occurrence === "number" && occurrence >= 0 && occurrence < matches.length) {
-    return matches[occurrence];
-  }
-
-  const beforePattern = buildLooseContextPattern(contextBefore ?? "");
-  const afterPattern = buildLooseContextPattern(contextAfter ?? "");
-
-  if (!beforePattern && !afterPattern) {
-    return matches[0];
-  }
-
-  return (
-    matches.find((match) => {
-      const beforeWindow = source.slice(Math.max(0, match.start - 160), match.start);
-      const afterWindow = source.slice(match.end, Math.min(source.length, match.end + 160));
-
-      if (beforePattern && !beforePattern.test(beforeWindow)) {
-        return false;
-      }
-
-      if (afterPattern && !afterPattern.test(afterWindow)) {
-        return false;
-      }
-
-      return true;
-    }) ?? null
-  );
-};
-
 export const hashPublicationSource = (source: string) => {
   let hash = 2166136261;
 
@@ -195,7 +64,7 @@ export const createPublicationReviewId = (writingId: string, sourceHash: string)
   `publication-review:${writingId}:${sourceHash}`;
 
 export const findSuggestionMatch = (source: string, suggestion: PublicationSuggestion) =>
-  findContextAwareMatch(
+  findTokenBoundaryMatch(
     source,
     suggestion.original_text,
     suggestion.replacement_text,
@@ -337,7 +206,7 @@ export const invalidateBlockSuggestions = (
 
     if (
       (suggestion.status === "pending" || suggestion.status === "pending-stale") &&
-      findContextAwareMatch(
+      findTokenBoundaryMatch(
         block.text,
         suggestion.original_text,
         suggestion.replacement_text,
@@ -445,7 +314,7 @@ export const deriveSuggestionContexts = (source: string, originalText: string, p
   return {
     context_before: contextBefore || null,
     context_after: contextAfter || null,
-    occurrence: countOccurrencesBefore(source, normalizedOriginal, firstIndex),
+    occurrence: countTokenBoundaryMatchesBefore(source, normalizedOriginal, firstIndex),
   };
 };
 
@@ -454,5 +323,5 @@ export const findChecklistMatch = (source: string, item: PublicationChecklistIte
     return null;
   }
 
-  return findContextAwareMatch(source, item.target_text, item.target_text, null, null);
+  return findTokenBoundaryMatch(source, item.target_text, item.target_text, null, null);
 };

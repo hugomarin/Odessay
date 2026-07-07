@@ -69,9 +69,10 @@ El trigger de activación no debe depender de la longitud del texto.
 Las sugerencias no se destruyen preventivamente.
 
 - Cuando un bloque se edita, el sistema compara el hash nuevo vs el hash de la sugerencia pendiente.
-- Si el texto editado todavía contiene `originalText` de la sugerencia, esta se mantiene visible como "pendiente" hasta que llegue la nueva respuesta del modelo.
-- Solo se invalidan sugerencias cuyo `originalText` ya no existe en el bloque.
+- Si el texto editado todavía contiene `originalText` como match válido de límites de token, esta se mantiene visible como "pendiente" hasta que llegue la nueva respuesta del modelo.
+- Solo se invalidan sugerencias cuyo `originalText` ya no existe como rango limpio seleccionable con límites de token.
 - Esto evita el parpadeo de decoraciones mientras el usuario escribe.
+- Enforced by: `tests/corrections-matching.test.ts`.
 - A nivel de cache persistido, la invalidación ya no depende solo de posición exacta. El sistema invalida por **identidad lógica del bloque** y usa una **ventana posicional pequeña** como fallback para filas legacy que aún no tienen identidad lógica estable.
 - Invariante persistido: Supabase e IndexedDB deben converger al **cache activo actual** del writing; versiones lógicas stale del mismo párrafo no se conservan como historial activo cuando cambia `source_hash`.
 - Cuando el párrafo lógico sigue existiendo pero su hash cambia, el write-through de persistencia debe reconstruir la fila con el `blockId`/`blockHash` actuales, reescribir `suggestions[*].source_hash`, y enviar `deletedBlockIds` para retirar la fila stale remota.
