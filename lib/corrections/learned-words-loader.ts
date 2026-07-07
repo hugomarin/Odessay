@@ -7,6 +7,7 @@ import type {
 
 const LEARNED_WORDS_PAGE_LIMIT = 100
 const LEARNED_WORDS_RETRY_DELAY_MS = 5000
+const LEARNED_WORDS_ADDITIONAL_PAGE_DELAY_MS = 3000
 
 type Timer = {
   setTimeout(callback: () => void, delayMs: number): unknown
@@ -55,18 +56,25 @@ export const loadLearnedWordsPages = async (
   options: {
     limit?: number
     retryDelayMs?: number
+    additionalPageDelayMs?: number
     timer?: Timer
   } = {},
 ): Promise<LearnedWordsLoadResult> => {
   const limit = options.limit ?? LEARNED_WORDS_PAGE_LIMIT
   const retryDelayMs = options.retryDelayMs ?? LEARNED_WORDS_RETRY_DELAY_MS
+  const additionalPageDelayMs = options.additionalPageDelayMs ?? LEARNED_WORDS_ADDITIONAL_PAGE_DELAY_MS
   const timer = options.timer ?? globalThis
 
   const loadOnce = async () => {
     const items: LearnedWordEntry[] = []
     let cursor: ListLearnedWordsInput["cursor"] = null
+    let loadedPages = 0
 
     do {
+      if (loadedPages > 0 && additionalPageDelayMs > 0) {
+        await wait(timer, additionalPageDelayMs)
+      }
+
       const result = await service.listLearnedWords({ limit, cursor })
 
       if (result.error || !result.data) {
@@ -75,6 +83,7 @@ export const loadLearnedWordsPages = async (
 
       items.push(...result.data.items)
       cursor = result.data.nextCursor
+      loadedPages += 1
     } while (cursor)
 
     return items

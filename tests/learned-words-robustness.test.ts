@@ -106,13 +106,22 @@ describe("learned words robustness", () => {
         data: makePage(entries.slice(100), null),
         error: null,
       })
+    const setTimeout = vi.fn((callback: () => void) => {
+      callback()
+    })
 
-    const result = await loadLearnedWordsPages({ listLearnedWords })
+    const result = await loadLearnedWordsPages(
+      { listLearnedWords },
+      {
+        timer: { setTimeout },
+      },
+    )
 
     expect(result).toEqual({
       ok: true,
       items: entries,
     })
+    expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 3000)
     expect(listLearnedWords).toHaveBeenNthCalledWith(1, { limit: 100, cursor: null })
     expect(listLearnedWords).toHaveBeenNthCalledWith(2, { limit: 100, cursor: "cursor-100" })
   })

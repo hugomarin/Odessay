@@ -264,7 +264,7 @@ Enforced by: `tests/corrections-admission.test.ts`.
 
 **UI.** Learn word aparece en la burbuja inline y en el panel de correcciones para sugerencias de tipo `spelling`/`accent`. El panel también expone una lista mínima de palabras aprendidas con acción de remover.
 
-**Performance.** La lista de palabras aprendidas se carga una sola vez por sesión de documento (`useEffect` en `EditorShell` con guarda `learnedWordsLoadedRef`), no por bloque. El endpoint de lista usa paginación cursor-based con límite configurable; el cliente solicita páginas de `limit=100` y pagina en background hasta agotar `nextCursor`, sin estados visibles intermedios.
+**Performance.** La lista de palabras aprendidas se carga una sola vez por sesión de documento (`useEffect` en `EditorShell` con guarda `learnedWordsLoadedRef`), no por bloque. El endpoint de lista usa paginación cursor-based con límite configurable; el cliente solicita páginas de `limit=100` y pagina en background hasta agotar `nextCursor`, difiriendo las páginas adicionales fuera de los primeros 3 s del bootstrap y sin estados visibles intermedios.
 
 ---
 
