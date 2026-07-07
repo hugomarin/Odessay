@@ -215,7 +215,7 @@ La lógica de rebind por hash de web (`remote-bootstrap.ts:204`, `findUniqueHash
 - tests/ (nuevo o modifica — verificación de paridad de accesos, ver DoD)
 - workflow/status.json (modifica)
 
-**Política nueva (referencia):**
+**Política nueva (referencia — necesaria pero NO suficiente por sí sola, ver Trampa #2):**
 ```sql
 using (
   deleted_at is null and (
@@ -227,6 +227,8 @@ using (
 ```
 
 **Trampa de recursión (por qué NO un `exists` inline a `writing_shares`):** la policy de SELECT de `writing_shares` (`writing_shares_select_related`, `20260317145743:688`) contiene un `exists` de vuelta a `writings`. Un `exists` inline sobre `writing_shares` dentro de la policy de `writings` crea el ciclo writings→writing_shares→writings y Postgres lo rechaza con `42P17 infinite recursion detected in policy`. Esta recursión es la razón histórica de la función security-definer. La solución que conserva el perf win: un helper mínimo `public.has_writing_share(target_writing_id uuid)` — security definer, stable, que consulta **solo** `writing_shares` (`exists(select 1 from writing_shares where writing_id = $1 and shared_with_id = auth.uid())`), sin tocar `writings`. El executor evalúa el OR de izquierda a derecha, así que para el caso dominante (dueño) la rama `author_id = (select auth.uid())` corta antes de invocar la función; la función solo corre para filas no-propias no-públicas.
+
+**⚠️ Trampa #2 — interacción con las policies de escritura (ACTUALIZACIÓN 2026-07-07, confirmada en producción):** el snippet de arriba, aplicado tal cual (intento v1 de ODE-355), **rompió los UPDATEs de `writings` con `42P17` en la base real**. Causa: las policies `writings_update_author`/`writings_insert_author` (migración `20260603175221`) contienen subconsultas inline sobre `writings` y `correspondences` en su `WITH CHECK`; en combinación con la policy inline de SELECT, el rewriter de Postgres detecta recursión **solo en el camino de escritura** (los SELECT funcionan, los UPDATE fallan — por eso la matriz de paridad de solo-lectura no lo habría atrapado). El incidente, el estado verificado de la base y el rollback están documentados en los comentarios de ODE-355 del 2026-07-07. El rediseño vive en **ODE-360**: reproducir primero en staging, matriz de paridad ampliada a SELECT+INSERT+UPDATE, y producción intocable sin aprobación explícita del dueño. **Ningún BUILD debe aplicar el snippet de arriba directamente — el camino es ODE-360.**
 
 **Contratos y trampas:** T-D es EL riesgo de este issue: `can_read_writing()` **no se borra ni se modifica** — la usan las policies de INSERT/UPDATE de writings (parent_id) y la policy de `writing_collections`. Solo se reemplaza el gate de la policy de SELECT. T-A: después de migrar, re-verificar que el INSERT plano del sync desktop sigue pasando y que upsert sigue fallando igual (no "aprovechar" para arreglarlo). Semántica de `deleted_at`: la función actual excluye filas borradas del SELECT; la policy nueva conserva ese comportamiento — verificar que ningún flujo legítimo lee writings con `deleted_at` puesto (el sync desktop marca deletes vía UPDATE, que usa la policy de UPDATE, no la de SELECT — pero si algún flujo re-lee el row tras el soft-delete para confirmación, se rompe; buscar callers antes de migrar).
 
