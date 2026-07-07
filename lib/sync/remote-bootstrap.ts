@@ -263,6 +263,10 @@ export const needsBodyFetch = (
   return parseTimestamp(remoteWriting.updated_at) > parseTimestamp(localWriting.updated_at)
 }
 
+// Must match MAX_BATCH_IDS in app/api/writings/route.ts: the API rejects
+// requests with more ids, so phase 2 fetches bodies in chunks of this size.
+const BODY_FETCH_BATCH_SIZE = 200
+
 let inFlightWritingsHydration: Promise<number> | null = null
 
 export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
@@ -296,15 +300,17 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
       }
     }
 
-    // Phase 2: fetch full bodies only for writings that actually changed.
-    let remoteBodies: RemoteWritingRecord[] = []
-    if (changedIds.length > 0) {
-      const idsParam = changedIds.join(",")
+    // Phase 2: fetch full bodies only for writings that actually changed,
+    // chunked so no request exceeds the API's batch id limit.
+    const remoteBodies: RemoteWritingRecord[] = []
+    for (let start = 0; start < changedIds.length; start += BODY_FETCH_BATCH_SIZE) {
+      const chunk = changedIds.slice(start, start + BODY_FETCH_BATCH_SIZE)
+      const idsParam = chunk.join(",")
       const bodiesResponse = await fetch(`/api/writings?ids=${encodeURIComponent(idsParam)}`, {
         method: "GET",
         cache: "no-store",
       })
-      remoteBodies = await parseEnvelope<RemoteWritingRecord[]>(bodiesResponse)
+      remoteBodies.push(...(await parseEnvelope<RemoteWritingRecord[]>(bodiesResponse)))
     }
 
     let appliedCount = 0
@@ -327,7 +333,7 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
         // Defensive: the server returned an id we did not request (deleted
         // between phases or RLS change). Log and skip rather than failing the
         // whole batch.
-        console.warn("[remote-bootstrap] phase-2 response omitted requested id", {
+        console.warn("[remote-bootstrap] phase-2 response returned an id that was not requested", {
           writingId: remoteWriting.id,
         })
         continue

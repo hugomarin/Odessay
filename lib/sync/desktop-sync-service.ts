@@ -57,6 +57,9 @@ type RemoteWritingCollectionRecord = {
 }
 
 const MANIFEST_SELECT = "id, updated_at, content_hash, deleted_at, version"
+// Cap for phase-2 .in(...) batches: keeps the request URL bounded (PostgREST
+// receives ids in the query string) and mirrors the /api/writings batch limit.
+const BODY_FETCH_BATCH_SIZE = 200
 const WRITING_SELECT =
   "id, author_id, title, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, content_hash, body_json, body_text"
 const COLLECTION_SELECT = "id, owner_id, name, description, visibility, created_at, updated_at"
@@ -625,29 +628,40 @@ async function doHydrateWritingsForUser(userId: string): Promise<ServiceResponse
     // Phase 2: fetch full bodies only for writings that actually changed.
     // On a clean machine (first startup) changedIds equals the manifest length,
     // so we fetch the full list in a single request instead of building a huge
-    // .in(...) URL.
+    // .in(...) URL. Partial subsets are chunked so the .in(...) URL stays
+    // bounded regardless of how many writings changed.
     let remoteBodies: RemoteWritingRecord[] = []
     if (changedIds.length > 0) {
       const allChanged = changedIds.length === manifest.length
-      const bodiesQuery = allChanged
-        ? supabase
+
+      if (allChanged) {
+        const { data: bodiesData, error: bodiesError } = await supabase
+          .from("writings")
+          .select(WRITING_SELECT)
+          .eq("author_id", userId)
+          .order("updated_at", { ascending: false })
+
+        if (bodiesError) {
+          throw new Error(bodiesError.message)
+        }
+
+        remoteBodies = (bodiesData ?? []) as RemoteWritingRecord[]
+      } else {
+        for (let start = 0; start < changedIds.length; start += BODY_FETCH_BATCH_SIZE) {
+          const chunk = changedIds.slice(start, start + BODY_FETCH_BATCH_SIZE)
+          const { data: bodiesData, error: bodiesError } = await supabase
             .from("writings")
             .select(WRITING_SELECT)
             .eq("author_id", userId)
-            .order("updated_at", { ascending: false })
-        : supabase
-            .from("writings")
-            .select(WRITING_SELECT)
-            .eq("author_id", userId)
-            .in("id", changedIds)
+            .in("id", chunk)
 
-      const { data: bodiesData, error: bodiesError } = await bodiesQuery
+          if (bodiesError) {
+            throw new Error(bodiesError.message)
+          }
 
-      if (bodiesError) {
-        throw new Error(bodiesError.message)
+          remoteBodies.push(...((bodiesData ?? []) as RemoteWritingRecord[]))
+        }
       }
-
-      remoteBodies = (bodiesData ?? []) as RemoteWritingRecord[]
     }
 
     let appliedCount = 0
@@ -691,7 +705,7 @@ async function doHydrateWritingsForUser(userId: string): Promise<ServiceResponse
         // Defensive: the server returned an id we did not request (deleted
         // between phases or RLS change). Log and skip; do not collapse the
         // batch.
-        logDesktopSyncInfo("hydrateWritings: phase-2 response omitted requested id", {
+        logDesktopSyncInfo("hydrateWritings: phase-2 response returned an id that was not requested", {
           writingId: remoteWriting.id,
         })
         continue

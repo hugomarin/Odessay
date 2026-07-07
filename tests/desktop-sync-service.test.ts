@@ -378,6 +378,77 @@ describe("desktopSyncService", () => {
     expect(localDBMock.writings.save).toHaveBeenCalledTimes(2)
   })
 
+  it("chunks the phase-2 .in(...) fetch when a large subset changed", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    // writing-0 is unchanged so this is a partial subset (not the all-changed
+    // single-list fallback); the remaining 250 have new remote hashes and
+    // exceed the 200-id batch cap.
+    const total = 251
+    const manifest = Array.from({ length: total }, (_, index) => ({
+      id: `writing-${index}`,
+      updated_at: index === 0 ? "2026-06-02T00:00:00.000Z" : "2026-06-03T00:00:00.000Z",
+      content_hash: index === 0 ? "hash-0" : `hash-${index}-new`,
+      deleted_at: null,
+      version: 2,
+    }))
+
+    localDBMock.writings.get.mockImplementation((id: string) => {
+      const index = Number(id.split("-")[1])
+      return Promise.resolve({
+        id,
+        author_id: "user-1",
+        sync_status: "synced",
+        version: 1,
+        content_hash: `hash-${index}`,
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+      })
+    })
+
+    writingsOrderMock.mockResolvedValue({ data: manifest, error: null })
+
+    const inCalls: string[][] = []
+    writingsInMock.mockImplementation((_column: string, ids: string[]) => {
+      inCalls.push(ids)
+      return Promise.resolve({
+        data: ids.map((id) => ({
+          id,
+          author_id: "user-1",
+          title: id,
+          slug: id,
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 2,
+          content_hash: `${id.replace("writing-", "hash-")}-new`,
+          deleted_at: null,
+          created_at: "2026-06-01T00:00:00.000Z",
+          updated_at: "2026-06-03T00:00:00.000Z",
+          body_json: { type: "doc", content: [] },
+          body_text: `${id} body`,
+        })),
+        error: null,
+      })
+    })
+
+    const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+
+    const result = await desktopSyncService.hydrateWritings()
+
+    expect(result.error).toBeNull()
+    expect(result.data?.appliedCount).toBe(250)
+    // 250 changed ids with a 200-id cap ⇒ two .in(...) batches (200 + 50).
+    expect(inCalls).toHaveLength(2)
+    expect(inCalls[0]).toHaveLength(200)
+    expect(inCalls[1]).toHaveLength(50)
+    expect(localDBMock.writings.save).toHaveBeenCalledTimes(250)
+  })
+
   it("reflects a remote soft-delete surfaced only in the manifest", async () => {
     getSessionMock.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },
