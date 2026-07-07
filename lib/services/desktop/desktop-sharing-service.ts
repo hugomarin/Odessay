@@ -20,10 +20,8 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 // RLS makes the read paths safe without the service-role key:
 //   - writing_shares_select_related: a user can read shares where
 //     shared_with_id = auth.uid().
-//   - writings_select_accessible: inline predicate owner/public/shared; the
-//     shared branch uses security-definer helper has_writing_share to avoid
-//     RLS recursion. can_read_writing is kept untouched for INSERT/UPDATE and
-//     correspondence/collection policies.
+//   - writings_select_accessible (can_read_writing): a user can read writings
+//     shared with them.
 //   - profiles_select_public: profiles are world-readable.
 
 const MAX_BATCH_SHARE_IDS = 50
