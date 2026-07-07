@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "fix(corrections): harden learned words flow. Adds tested learned-word pagination/retry helpers, cursor-loads all learned words in background, rolls back failed learnWord optimistic entries plus rejected-memory side effects, restores affected suggestions to pending with a user-facing error toast, removes deferred learned-word panel copy, and updates the AI writing assist contract. [ODE-348]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-348",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-348/harden-learned-words-rollback-on-failure-retry-load-full-pagination",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "a7d3f04",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-348 on shared branch codex/ode-348-349-350-351-352-corrections-hardening. PR scope closes ODE-348 only; ODE-349/350/351/352 remain reserved for later sessions. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (145 files / 912 tests). Targeted learned-words/admission/lifecycle/stale/API tests PASS (5 files / 25 tests). Performance Contract waterfall shape required: Network snapshot PASS for /perf/editor-harness first 3s (1 total request, 0 fetch/XHR, 0 learned-word requests; bootstrap <= 6). Generic ops:perf:gate trace captured but interaction dispatch keydown_p95 failed; interaction latency was not required for this issue. ops:delivery:gate PASS. Context Gaps Detected: no."
+    },
+    {
       "what": "fix(corrections): guarantee stale suggestion exits. Adds lib/corrections/engine/lifecycle.ts with pure stale lifecycle transitions; stamps pending-stale suggestions with staleSince; drops stale suggestions on analysis error/current-block mismatch and after 10 s; re-admits cache hits back to pending; defers dirty blocks during the post-hydration suppression window; documents the timeout enforcement. [ODE-347]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-347",
