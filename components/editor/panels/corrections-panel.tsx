@@ -20,7 +20,6 @@ type CorrectionsPanelProps = {
   learnedWords: LearnedWordEntry[];
   learnedWordsLoading: boolean;
   onRemoveLearnedWord: (id: string) => void;
-  learnedWordsDeferred?: boolean;
   onCorrectionsEnabledChange: (enabled: boolean) => void;
   onShowCorrectionsChange: (show: boolean) => void;
   onClose: () => void;
@@ -39,7 +38,6 @@ export function CorrectionsPanel({
   learnedWords,
   learnedWordsLoading,
   onRemoveLearnedWord,
-  learnedWordsDeferred = false,
   onCorrectionsEnabledChange,
   onShowCorrectionsChange,
   onClose,
@@ -260,7 +258,7 @@ export function CorrectionsPanel({
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Learned words</p>
             <p className="text-[11px] text-ink-4">
-              {learnedWordsDeferred ? "Advanced management deferred; latest saved words are listed here." : "Saved across your documents."}
+              Saved across your documents.
             </p>
           </div>
           {learnedWords.length > 0 ? (

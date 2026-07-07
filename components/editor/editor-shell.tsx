@@ -77,7 +77,7 @@ import {
   replaceBlockSuggestions,
   updateSuggestionStatuses,
 } from "@/lib/editor/suggestion-engine"
-import { readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
+import { forgetCorrectionDecision, readCorrectionMemory, rememberCorrectionDecision } from "@/lib/editor/correction-memory-client"
 import { admitSuggestions, type AdmissionContext } from "@/lib/corrections/engine/admission"
 import {
   CORRECTION_STALE_TIMEOUT_MS,
@@ -126,6 +126,8 @@ import {
   reconcileHydratedCorrectionBlocks,
 } from "@/lib/corrections/persistence"
 import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words"
+import { loadLearnedWordsPages, mergeLearnedWordEntries } from "@/lib/corrections/learned-words-loader"
+import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
   ArtifactType,
@@ -235,6 +237,7 @@ type CorrectionToastState = {
   phase: "running" | "complete"
   completed: number
   total: number
+  message?: string
 }
 
 type ExternalFileNotice =
@@ -374,7 +377,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const [showCorrections, setShowCorrections] = useState(true)
   const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
-  const [learnedWordsDeferred, setLearnedWordsDeferred] = useState(false)
 
   const [renameModalOpen, setRenameModalOpen] = useState(false)
   const [renameModalSnapshot, setRenameModalSnapshot] = useState<RenameWritingSnapshot | null>(null)
@@ -2090,6 +2092,19 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     [applyCorrectionSuggestionUpdate, applyCorrectionSuggestions, updatePersistedBlocksFromSuggestions],
   )
 
+  const showCorrectionToast = useCallback((toast: CorrectionToastState, durationMs: number) => {
+    setCorrectionToast(toast)
+
+    if (correctionToastDismissRef.current !== null) {
+      window.clearTimeout(correctionToastDismissRef.current)
+    }
+
+    correctionToastDismissRef.current = window.setTimeout(() => {
+      setCorrectionToast(null)
+      correctionToastDismissRef.current = null
+    }, durationMs)
+  }, [])
+
   const handleRejectCorrection = useCallback((suggestionId: string) => {
     const suggestion = automaticCorrectionSuggestionsRef.current.find((item) => item.id === suggestionId)
 
@@ -2186,11 +2201,32 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       })
     }).catch((error) => {
       console.error("[learned-words] persist failed", error)
+      automaticCorrectionSuggestionsRef.current
+        .filter((item) => targetIds.includes(item.id))
+        .forEach((item) => forgetCorrectionDecision(item.correction_fingerprint))
+
+      const rollbackState = buildLearnWordRollbackState({
+        learnedWords: learnedWordsRef.current,
+        optimisticEntryId: optimisticEntry.id,
+        suggestions: automaticCorrectionSuggestionsRef.current,
+        targetIds,
+        admissionContext: createCorrectionAdmissionContext(),
+      })
+      setLearnedWords(rollbackState.learnedWords)
+      applyCorrectionSuggestionUpdate(() => rollbackState.suggestions, { immediate: true })
+      void updatePersistedBlocksFromSuggestions(rollbackState.suggestions, sourceHashes)
+      showCorrectionToast({
+        phase: "complete",
+        completed: 0,
+        total: 0,
+        message: "We couldn't save that word. Try again.",
+      }, 4000)
     })
   }, [
     applyCorrectionSuggestionUpdate,
     createCorrectionAdmissionContext,
     handleRejectCorrection,
+    showCorrectionToast,
     updatePersistedBlocksFromSuggestions,
   ])
 
@@ -3393,17 +3429,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    learnedWordsLoadedRef.current = true
     setLearnedWordsLoading(true)
 
-    void getAIService().listLearnedWords({ limit: 100 }).then((result) => {
-      if (result.error || !result.data) {
-        console.info(`[learned-words] load skipped code=${result.error?.code ?? "unknown"}`)
+    void loadLearnedWordsPages(getAIService()).then((result) => {
+      if (!result.ok) {
+        console.info(`[learned-words] load skipped message=${result.message}`)
         return
       }
 
-      setLearnedWords(result.data.items)
-      setLearnedWordsDeferred(Boolean(result.data.nextCursor))
+      learnedWordsLoadedRef.current = true
+      const nextLearnedWords = mergeLearnedWordEntries(learnedWordsRef.current, result.items)
+      setLearnedWords(nextLearnedWords)
       const sourceHashes = [
         ...new Set(
           automaticCorrectionSuggestionsRef.current
@@ -3415,13 +3451,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         automaticCorrectionSuggestionsRef.current,
         {
           ...createCorrectionAdmissionContext(),
-          learnedWords: createLearnedWordSet(result.data.items.map((item) => item.word)),
+          learnedWords: createLearnedWordSet(nextLearnedWords.map((item) => item.word)),
         },
       )
       applyCorrectionSuggestionUpdate(() => nextSuggestions, { immediate: true })
       void updatePersistedBlocksFromSuggestions(nextSuggestions, sourceHashes)
-    }).catch((error) => {
-      console.info(`[learned-words] load skipped message=${error instanceof Error ? error.message : String(error)}`)
     }).finally(() => {
       setLearnedWordsLoading(false)
     })
@@ -3477,23 +3511,16 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    setCorrectionToast({
+    showCorrectionToast({
       phase: "complete",
       completed: correctionQueueCompletedRef.current,
       total: correctionQueueTotalRef.current,
-    })
-
-    if (correctionToastDismissRef.current !== null) {
-      window.clearTimeout(correctionToastDismissRef.current)
-    }
-
-    correctionToastDismissRef.current = window.setTimeout(() => {
-      setCorrectionToast(null)
-      correctionToastDismissRef.current = null
+    }, 2000)
+    window.setTimeout(() => {
       correctionQueueTotalRef.current = 0
       correctionQueueCompletedRef.current = 0
     }, 2000)
-  }, [])
+  }, [showCorrectionToast])
 
   const dropStaleSuggestionsForQueuedBlock = useCallback(
     (blockId: string) => {
@@ -5298,7 +5325,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 learnedWords={learnedWords}
                 learnedWordsLoading={learnedWordsLoading}
                 onRemoveLearnedWord={handleRemoveLearnedWord}
-                learnedWordsDeferred={learnedWordsDeferred}
                 onCorrectionsEnabledChange={setCorrectionsEnabled}
                 onShowCorrectionsChange={setShowCorrections}
                 onClose={closeActivePanel}
@@ -5315,15 +5341,15 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       {correctionToast ? (
         <div
-          className="fixed bottom-12 right-6 z-50 rounded-[8px] border-[0.5px] border-border bg-sb px-3 py-2 text-[11px] text-ink-3 shadow-float-md"
+          className="fixed bottom-12 left-1/2 z-50 -translate-x-1/2 rounded-[8px] border-[0.5px] border-border bg-sb px-3 py-2 text-[11px] text-ink-3 shadow-float-md"
           role="status"
           aria-live="polite"
         >
-          {correctionToast.phase === "complete"
+          {correctionToast.message ?? (correctionToast.phase === "complete"
             ? "✓ Revisión completada"
             : correctionToast.completed === 0
               ? "Revisando documento..."
-              : `${correctionToast.completed} de ${correctionToast.total} bloques revisados`}
+              : `${correctionToast.completed} de ${correctionToast.total} bloques revisados`)}
         </div>
       ) : null}
 

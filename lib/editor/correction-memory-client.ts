@@ -46,3 +46,20 @@ export const rememberCorrectionDecision = (
 
   window.localStorage.setItem(CORRECTION_MEMORY_STORAGE_KEY, JSON.stringify(entries.slice(-200)))
 }
+
+export const forgetCorrectionDecision = (fingerprint: string | null | undefined) => {
+  if (!fingerprint || typeof window === "undefined") {
+    return
+  }
+
+  const stableFingerprint = stableFingerprintFromStoredFingerprint(fingerprint)
+  const entries = readCorrectionMemory().filter((entry) => {
+    if (entry.fingerprint === fingerprint) {
+      return false
+    }
+
+    return stableFingerprintFromStoredFingerprint(entry.fingerprint) !== stableFingerprint
+  })
+
+  window.localStorage.setItem(CORRECTION_MEMORY_STORAGE_KEY, JSON.stringify(entries))
+}
