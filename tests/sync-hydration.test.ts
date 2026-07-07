@@ -78,7 +78,9 @@ describe("sync hydration through SyncService", () => {
 
     const [r1, r2, r3] = await Promise.all([p1, p2, p3])
 
-    expect(fetchCount).toBe(1)
+    // Single-flight collapses the 3 callers into one hydration; that hydration
+    // is two-phase (manifest + selective body fetch) = 2 requests, not 6.
+    expect(fetchCount).toBe(2)
     expect(r1.data?.appliedCount).toBe(1)
     expect(r2.data?.appliedCount).toBe(1)
     expect(r3.data?.appliedCount).toBe(1)

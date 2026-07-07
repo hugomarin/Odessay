@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { listen } from "@tauri-apps/api/event"
 import { open, save } from "@tauri-apps/plugin-dialog"
+import { subscribeMenuAction } from "@/lib/services/desktop/menu-event-bus"
 import type { EditorShortcutAction } from "@/lib/editor/shortcuts"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 
@@ -74,47 +74,43 @@ export function useTauriMenuEvents({
   useEffect(() => {
     if (!isDesktopRuntime()) return
 
-    let cancelled = false
-    const unlisteners: Array<() => void> = []
+    const unsubscribers: Array<() => void> = []
 
-    listen("menu:open-file", async () => {
-      const selected = await open({
-        multiple: false,
-        filters: [{ name: "Markdown", extensions: ["md"] }],
-      })
-      if (!selected) return
-      const path = typeof selected === "string" ? selected : selected[0]
-      const { invoke } = await import("@tauri-apps/api/core")
-      const content = await invoke<string>("open_file", { path })
-      onOpenFileRef.current(path, content)
-    }).then((ul) => {
-      if (cancelled) { ul(); return }
-      unlisteners.push(ul)
-    })
+    unsubscribers.push(
+      subscribeMenuAction("open-file", async () => {
+        const selected = await open({
+          multiple: false,
+          filters: [{ name: "Markdown", extensions: ["md"] }],
+        })
+        if (!selected) return
+        const path = typeof selected === "string" ? selected : selected[0]
+        const { invoke } = await import("@tauri-apps/api/core")
+        const content = await invoke<string>("open_file", { path })
+        onOpenFileRef.current(path, content)
+      }),
+    )
 
-    listen("menu:new-file", async () => {
-      const path = await save({
-        defaultPath: "Untitled.md",
-        filters: [{ name: "Markdown", extensions: ["md"] }],
-      })
-      if (!path) return
-      const { invoke } = await import("@tauri-apps/api/core")
-      const dir = path.substring(0, path.lastIndexOf("/"))
-      const filename = path.substring(path.lastIndexOf("/") + 1)
-      await invoke<string>("create_file", { dir, filename })
-      onNewFileRef.current(path)
-    }).then((ul) => {
-      if (cancelled) { ul(); return }
-      unlisteners.push(ul)
-    })
+    unsubscribers.push(
+      subscribeMenuAction("new-file", async () => {
+        const path = await save({
+          defaultPath: "Untitled.md",
+          filters: [{ name: "Markdown", extensions: ["md"] }],
+        })
+        if (!path) return
+        const { invoke } = await import("@tauri-apps/api/core")
+        const dir = path.substring(0, path.lastIndexOf("/"))
+        const filename = path.substring(path.lastIndexOf("/") + 1)
+        await invoke<string>("create_file", { dir, filename })
+        onNewFileRef.current(path)
+      }),
+    )
 
     for (const action of EDITOR_MENU_ACTION_IDS) {
-      listen(`menu:${action}`, () => {
-        onEditorActionRef.current?.(action)
-      }).then((ul) => {
-        if (cancelled) { ul(); return }
-        unlisteners.push(ul)
-      })
+      unsubscribers.push(
+        subscribeMenuAction(action, () => {
+          onEditorActionRef.current?.(action)
+        }),
+      )
     }
 
     async function writeDocumentToDisk(forcePicker: boolean) {
@@ -152,15 +148,12 @@ export function useTauriMenuEvents({
       }
     }
 
-    listen("menu:save-to-disk", () => writeDocumentToDisk(false)).then((ul) => {
-      if (cancelled) { ul(); return }
-      unlisteners.push(ul)
-    })
-
-    listen("menu:save-as", () => writeDocumentToDisk(true)).then((ul) => {
-      if (cancelled) { ul(); return }
-      unlisteners.push(ul)
-    })
+    unsubscribers.push(
+      subscribeMenuAction("save-to-disk", () => writeDocumentToDisk(false)),
+    )
+    unsubscribers.push(
+      subscribeMenuAction("save-as", () => writeDocumentToDisk(true)),
+    )
 
     const preventBrowserSaveShortcuts = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -170,9 +163,8 @@ export function useTauriMenuEvents({
     window.addEventListener('keydown', preventBrowserSaveShortcuts, true)
 
     return () => {
-      cancelled = true
-      unlisteners.forEach((ul) => ul())
+      unsubscribers.forEach((unsub) => unsub())
       window.removeEventListener('keydown', preventBrowserSaveShortcuts, true)
     }
-  }, []) // register once on mount — callbacks accessed via refs
+  }, []) // subscribe via global bus once on mount — callbacks accessed via refs
 }

@@ -2,7 +2,10 @@ import "fake-indexeddb/auto"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { localDB, setLocalDBScope } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
-import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
+import {
+  hydrateLocalWritingsFromRemote,
+  invalidateWebWritingsHydrationFreshness,
+} from "@/lib/sync/remote-bootstrap"
 
 const makeLocalWriting = (overrides: Partial<LocalWriting> = {}): LocalWriting => ({
   id: "writing-1",
@@ -83,7 +86,10 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
 
     const [r1, r2, r3, r4] = await Promise.all([p1, p2, p3, p4])
 
-    expect(fetchCount).toBe(1)
+    // Single-flight collapses the 4 callers into one hydration. That hydration
+    // is two-phase (manifest + selective body fetch), so it issues exactly 2
+    // network requests — not 8.
+    expect(fetchCount).toBe(2)
     expect(r1).toBe(1)
     expect(r2).toBe(1)
     expect(r3).toBe(1)
@@ -151,11 +157,83 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
       }),
     )
 
-    await hydrateLocalWritingsFromRemote()
-    expect(fetchCount).toBe(1)
-
+    // First hydration on an empty local DB is two-phase: manifest + bodies.
     await hydrateLocalWritingsFromRemote()
     expect(fetchCount).toBe(2)
 
+    // A sequential caller inside the freshness window reuses local state
+    // without touching the network (Desk mounting after bootstrap).
+    await hydrateLocalWritingsFromRemote()
+    expect(fetchCount).toBe(2)
+
+    // Explicit refresh flows (force) invalidate the window and fetch again.
+    // Nothing changed remotely now, so phase 2 is skipped — only the manifest
+    // request is issued (the whole point of incremental hydration).
+    invalidateWebWritingsHydrationFreshness()
+    await hydrateLocalWritingsFromRemote()
+    expect(fetchCount).toBe(3)
+
+  })
+
+  it("chunks phase-2 body fetches so no request exceeds the API batch limit", async () => {
+    const total = 250
+
+    const makeRemote = (index: number) => ({
+      id: `writing-${index}`,
+      author_id: "user-1",
+      title: `Remote ${index}`,
+      slug: `remote-${index}`,
+      status: "draft",
+      visibility: "private",
+      parent_id: null,
+      correspondence_id: null,
+      version: 1,
+      sync_status: "synced",
+      deleted_at: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-03T00:00:00.000Z",
+      content_hash: `hash-${index}`,
+    })
+
+    const manifest = Array.from({ length: total }, (_, index) => makeRemote(index))
+    const idsRequests: string[][] = []
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+
+        let data: unknown
+        if (url.includes("fields=manifest")) {
+          data = manifest
+        } else {
+          const idsParam = decodeURIComponent(url.split("ids=")[1] ?? "")
+          const ids = idsParam.split(",").filter(Boolean)
+          idsRequests.push(ids)
+          data = manifest
+            .filter((record) => ids.includes(record.id))
+            .map((record) => ({
+              ...record,
+              body_json: { type: "doc", content: [] },
+              body_text: `Body ${record.id}`,
+            }))
+        }
+
+        return Promise.resolve(
+          new Response(JSON.stringify({ data, error: null }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }),
+    )
+
+    const applied = await hydrateLocalWritingsFromRemote()
+
+    expect(applied).toBe(total)
+    // 250 changed ids with a 200-id API cap ⇒ two body batches (200 + 50).
+    expect(idsRequests).toHaveLength(2)
+    expect(idsRequests[0]).toHaveLength(200)
+    expect(idsRequests[1]).toHaveLength(50)
   })
 })

@@ -39,6 +39,10 @@ import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { getSyncService } from "@/lib/sync"
+import { invalidateHydrationFreshness } from "@/lib/sync/desktop-sync-service"
+import { invalidateWebWritingsHydrationFreshness } from "@/lib/sync/remote-bootstrap"
+import { invalidateWebCollectionsHydrationFreshness } from "@/lib/collections/remote-bootstrap"
+import { getAuthService } from "@/lib/services/auth-service-factory"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import {
@@ -200,6 +204,21 @@ export default function DeskPage() {
       if (isTauriRuntime() && getLocalDBScope() === "anonymous") {
         hasHydratedRemoteRef.current = true
         return
+      }
+
+      // Explicit refresh flows (window focus / online / scope change with force)
+      // must bypass the freshness window on both runtimes.
+      if (force) {
+        if (isTauriRuntime()) {
+          const sessionResult = await getAuthService().getSession()
+          const userId = sessionResult.data?.user?.id
+          if (userId) {
+            invalidateHydrationFreshness(userId)
+          }
+        } else {
+          invalidateWebWritingsHydrationFreshness()
+          invalidateWebCollectionsHydrationFreshness()
+        }
       }
 
       const hydrated = await syncRemoteWritings()

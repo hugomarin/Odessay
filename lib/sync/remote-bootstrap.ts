@@ -1,4 +1,5 @@
-import { localDB } from "@/lib/local-db"
+import { getLocalDBScope, localDB } from "@/lib/local-db"
+import { createHydrationFreshness } from "@/lib/sync/hydration-freshness"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
 import { normalizeWritingStatus } from "@/lib/writings/status"
@@ -44,7 +45,7 @@ const EMPTY_BODY_JSON: Record<string, unknown> = {
   content: [],
 }
 
-const parseTimestamp = (value: string | null | undefined) => {
+export const parseTimestamp = (value: string | null | undefined) => {
   if (!value) {
     return 0
   }
@@ -53,7 +54,7 @@ const parseTimestamp = (value: string | null | undefined) => {
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
-const normalizeVersion = (value: number | null | undefined) => {
+export const normalizeVersion = (value: number | null | undefined) => {
   if (!Number.isInteger(value) || (value ?? 0) < 1) {
     return 1
   }
@@ -140,7 +141,7 @@ const parseEnvelope = async <T>(response: Response): Promise<T> => {
   return envelope.data
 }
 
-const normalizeContentHash = (value: string | null | undefined) => {
+export const normalizeContentHash = (value: string | null | undefined) => {
   const trimmed = value?.trim()
   return trimmed || null
 }
@@ -199,7 +200,27 @@ const retireReboundLocalWriting = async (writing: LocalWriting) => {
   })
 }
 
-const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
+export const applyRemoteSoftDelete = async (
+  localWriting: LocalWriting,
+  remoteWriting: RemoteWritingListRecord,
+): Promise<boolean> => {
+  if (!shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+    return false
+  }
+
+  await localDB.writings.save({
+    ...localWriting,
+    sync_status: "deleted",
+    deleted_at: remoteWriting.deleted_at,
+    updated_at: remoteWriting.updated_at,
+    version: normalizeVersion(remoteWriting.version),
+    local_updated_at: Date.now(),
+  })
+
+  return true
+}
+
+export const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
   const localWriting = await localDB.writings.get(remoteWriting.id)
   const hashRebindCandidate = localWriting ? null : await findUniqueHashRebindCandidate(remoteWriting)
   const existingLocalWriting = localWriting ?? hashRebindCandidate
@@ -217,27 +238,143 @@ const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
   return true
 }
 
+export const needsBodyFetch = (
+  localWriting: LocalWriting | null,
+  remoteWriting: RemoteWritingListRecord,
+): boolean => {
+  if (!localWriting) {
+    return true
+  }
+
+  if (remoteWriting.deleted_at) {
+    return false
+  }
+
+  if (localWriting.sync_status !== "synced") {
+    return false
+  }
+
+  const localHash = normalizeContentHash(localWriting.content_hash)
+  const remoteHash = normalizeContentHash(remoteWriting.content_hash)
+
+  if (localHash && remoteHash && localHash !== remoteHash) {
+    return true
+  }
+
+  return parseTimestamp(remoteWriting.updated_at) > parseTimestamp(localWriting.updated_at)
+}
+
+// Must match MAX_BATCH_IDS in app/api/writings/route.ts: the API rejects
+// requests with more ids, so phase 2 fetches bodies in chunks of this size.
+const BODY_FETCH_BATCH_SIZE = 200
+
 let inFlightWritingsHydration: Promise<number> | null = null
+
+const writingsHydrationFreshness = createHydrationFreshness()
+
+/**
+ * Clear the web writings freshness window so the next hydrate call hits the
+ * network. Used by explicit refresh flows (window focus / online) that must
+ * bypass the window — mirrors invalidateHydrationFreshness on desktop.
+ */
+export const invalidateWebWritingsHydrationFreshness = (scope?: string): void => {
+  writingsHydrationFreshness.invalidate(scope)
+}
 
 export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
   if (inFlightWritingsHydration) {
     return inFlightWritingsHydration
   }
 
+  // Sequential callers inside the freshness window reuse local state without
+  // issuing another request (single-flight only covers concurrent callers).
+  const scope = getLocalDBScope()
+  if (writingsHydrationFreshness.isFresh(scope)) {
+    return Promise.resolve(0)
+  }
+
   const promise = (async () => {
-    const response = await fetch("/api/writings", {
+    // Phase 1: manifest — lightweight metadata for every accessible writing.
+    const manifestResponse = await fetch("/api/writings?fields=manifest", {
       method: "GET",
       cache: "no-store",
     })
-    const remoteWritings = await parseEnvelope<RemoteWritingListRecord[]>(response)
+    const manifest = await parseEnvelope<RemoteWritingListRecord[]>(manifestResponse)
+
+    const changedIds: string[] = []
+    const deleteEntries: RemoteWritingListRecord[] = []
+
+    for (const remoteWriting of manifest) {
+      const localWriting = await localDB.writings.get(remoteWriting.id)
+
+      if (remoteWriting.deleted_at) {
+        if (localWriting && shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+          deleteEntries.push(remoteWriting)
+        }
+        continue
+      }
+
+      if (needsBodyFetch(localWriting, remoteWriting)) {
+        changedIds.push(remoteWriting.id)
+      }
+    }
+
+    // Phase 2: fetch full bodies only for writings that actually changed,
+    // chunked so no request exceeds the API's batch id limit.
+    const remoteBodies: RemoteWritingRecord[] = []
+    for (let start = 0; start < changedIds.length; start += BODY_FETCH_BATCH_SIZE) {
+      const chunk = changedIds.slice(start, start + BODY_FETCH_BATCH_SIZE)
+      const idsParam = chunk.join(",")
+      const bodiesResponse = await fetch(`/api/writings?ids=${encodeURIComponent(idsParam)}`, {
+        method: "GET",
+        cache: "no-store",
+      })
+      remoteBodies.push(...(await parseEnvelope<RemoteWritingRecord[]>(bodiesResponse)))
+    }
 
     let appliedCount = 0
 
-    for (const remoteWriting of remoteWritings) {
-      const applied = await mergeRemoteWriting(remoteWriting)
-      if (applied) {
+    for (const deleteEntry of deleteEntries) {
+      const localWriting = await localDB.writings.get(deleteEntry.id)
+      if (!localWriting) {
+        continue
+      }
+
+      if (await applyRemoteSoftDelete(localWriting, deleteEntry)) {
         appliedCount += 1
       }
+    }
+
+    const requestedIds = new Set(changedIds)
+
+    for (const remoteWriting of remoteBodies) {
+      if (!requestedIds.has(remoteWriting.id)) {
+        // Defensive: the server returned an id we did not request (deleted
+        // between phases or RLS change). Log and skip rather than failing the
+        // whole batch.
+        console.warn("[remote-bootstrap] phase-2 response returned an id that was not requested", {
+          writingId: remoteWriting.id,
+        })
+        continue
+      }
+
+      requestedIds.delete(remoteWriting.id)
+
+      if (await mergeRemoteWriting(remoteWriting)) {
+        appliedCount += 1
+      }
+    }
+
+    for (const missingId of requestedIds) {
+      console.warn("[remote-bootstrap] phase-2 response missing requested id", {
+        writingId: missingId,
+      })
+    }
+
+    // Only a successful hydration for a still-active scope counts as fresh;
+    // failures reject before reaching this line, so the next attempt retries.
+    if (getLocalDBScope() === scope) {
+      writingsHydrationFreshness.markFresh(scope)
     }
 
     return appliedCount

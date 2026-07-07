@@ -13,7 +13,7 @@ import type {
 } from "@/lib/services/contracts/sync-service"
 import type { LocalCollection, SyncMutation } from "@/lib/local-db/schema"
 import type { ServiceResponse } from "@/lib/services/contracts/service-types"
-import { localDB } from "@/lib/local-db"
+import { getLocalDBScope, localDB } from "@/lib/local-db"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
@@ -31,8 +31,12 @@ import {
 import { emitSyncStatusChange } from "@/lib/sync/events"
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry"
 import {
+  applyRemoteSoftDelete,
   mapRemoteWritingToLocal,
+  mergeRemoteWriting,
+  needsBodyFetch,
   shouldApplyRemoteWriting,
+  type RemoteWritingListRecord,
   type RemoteWritingRecord,
 } from "@/lib/sync/remote-bootstrap"
 
@@ -52,14 +56,35 @@ type RemoteWritingCollectionRecord = {
   added_at: string | null
 }
 
+const MANIFEST_SELECT = "id, updated_at, content_hash, deleted_at, version"
+// Cap for phase-2 .in(...) batches: keeps the request URL bounded (PostgREST
+// receives ids in the query string) and mirrors the /api/writings batch limit.
+const BODY_FETCH_BATCH_SIZE = 200
 const WRITING_SELECT =
   "id, author_id, title, slug, status, artifact_type, visibility, parent_id, correspondence_id, version, deleted_at, created_at, updated_at, content_hash, body_json, body_text"
 const COLLECTION_SELECT = "id, owner_id, name, description, visibility, created_at, updated_at"
 const DESKTOP_FLUSH_DEBOUNCE_MS = 1500
+// Freshness window for sequential hydration callers. Desk and Collections mount
+// after bootstrap has already hydrated, so a single-flight guard alone would
+// still let them fire a second request. Calls inside this window reuse the
+// local state without a network round-trip. Value chosen within the 30–60 s
+// range suggested by the sync improvement plan.
+const HYDRATION_FRESHNESS_WINDOW_MS = 45_000
 
 let scheduledFlushId: number | null = null
 let desktopSyncStarted = false
 let lastSyncedAt: string | null = null
+
+type InFlightHydration<T> = {
+  userId: string
+  promise: Promise<ServiceResponse<T>>
+}
+
+let inFlightWritingsHydration: InFlightHydration<HydrateWritingsResult> | null = null
+const lastWritingsHydrationByUserId = new Map<string, number>()
+
+let inFlightCollectionsHydration: InFlightHydration<HydrateCollectionsResult> | null = null
+const lastCollectionsHydrationByUserId = new Map<string, number>()
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -146,6 +171,38 @@ function isOnline() {
   return typeof navigator === "undefined" || navigator.onLine
 }
 
+function isExpectedScopeStillActive(expectedUserId: string): boolean {
+  return getLocalDBScope() === expectedUserId
+}
+
+/**
+ * Clear the freshness window so the next hydrate call hits the network.
+ * Used by explicit refresh flows (e.g. window focus / online) that must bypass
+ * the freshness window. Passing a userId limits invalidation to that user;
+ * omitting it clears all users.
+ */
+export function invalidateHydrationFreshness(userId?: string): void {
+  if (userId) {
+    lastWritingsHydrationByUserId.delete(userId)
+    lastCollectionsHydrationByUserId.delete(userId)
+  } else {
+    lastWritingsHydrationByUserId.clear()
+    lastCollectionsHydrationByUserId.clear()
+  }
+}
+
+function clearInFlightWritingsHydration(userId: string) {
+  if (inFlightWritingsHydration?.userId === userId) {
+    inFlightWritingsHydration = null
+  }
+}
+
+function clearInFlightCollectionsHydration(userId: string) {
+  if (inFlightCollectionsHydration?.userId === userId) {
+    inFlightCollectionsHydration = null
+  }
+}
+
 function clearScheduledFlush() {
   if (scheduledFlushId !== null && typeof window !== "undefined") {
     window.clearTimeout(scheduledFlushId)
@@ -188,6 +245,14 @@ async function hydrateCollectionsForUser(userId: string): Promise<number> {
   let appliedCount = 0
 
   for (const collection of (collectionsResult.data ?? []) as RemoteCollectionRecord[]) {
+    if (!isExpectedScopeStillActive(userId)) {
+      logDesktopSyncInfo("hydrateCollections aborted: scope changed during hydration", {
+        expectedUserId: userId,
+        currentScope: getLocalDBScope(),
+      })
+      return appliedCount
+    }
+
     const localCollection = await localDB.collections.get(collection.id)
     const hasPendingMutation = await localDB.syncQueue.getCurrentForEntity("collection", collection.id)
 
@@ -218,6 +283,14 @@ async function hydrateCollectionsForUser(userId: string): Promise<number> {
   }
 
   for (const writingId of writingIds) {
+    if (!isExpectedScopeStillActive(userId)) {
+      logDesktopSyncInfo("hydrateCollections aborted: scope changed during hydration", {
+        expectedUserId: userId,
+        currentScope: getLocalDBScope(),
+      })
+      return appliedCount
+    }
+
     const pendingMutation = await localDB.syncQueue.getCurrentForEntity("writing-collections", writingId)
     if (pendingMutation) {
       continue
@@ -495,6 +568,205 @@ async function buildRuntimeState(input?: QuerySyncStatusInput): Promise<SyncRunt
   }
 }
 
+async function doHydrateWritingsForUser(userId: string): Promise<ServiceResponse<HydrateWritingsResult>> {
+  const shouldShowProgress = !hasHydratedUserOnDevice(userId)
+
+  try {
+    const supabase = createDesktopClient()
+
+    // Phase 1: manifest — fetch only the metadata needed to decide what changed.
+    const { data: manifestData, error: manifestError } = await supabase
+      .from("writings")
+      .select(MANIFEST_SELECT)
+      .eq("author_id", userId)
+      .order("updated_at", { ascending: false })
+
+    if (manifestError) {
+      throw new Error(manifestError.message)
+    }
+
+    const manifest = (manifestData ?? []) as RemoteWritingListRecord[]
+
+    const changedIds: string[] = []
+    const deleteEntries: RemoteWritingListRecord[] = []
+
+    for (const remoteWriting of manifest) {
+      // Race: sign-out or user switch during hydration. Discard writes for a
+      // scope that is no longer active to avoid leaking one user's data into
+      // another (T-E / failure mode: sign-out during in-flight hydration).
+      if (!isExpectedScopeStillActive(userId)) {
+        logDesktopSyncInfo("hydrateWritings aborted: scope changed during hydration", {
+          expectedUserId: userId,
+          currentScope: getLocalDBScope(),
+        })
+        if (shouldShowProgress) {
+          failHydrationProgress("User changed during hydration")
+        }
+        return ok({ appliedCount: 0, hydratedIds: [] })
+      }
+
+      const localWriting = await localDB.writings.get(remoteWriting.id)
+
+      if (remoteWriting.deleted_at) {
+        if (localWriting && shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+          deleteEntries.push(remoteWriting)
+        }
+        continue
+      }
+
+      if (needsBodyFetch(localWriting, remoteWriting)) {
+        changedIds.push(remoteWriting.id)
+      }
+    }
+
+    const totalWorkItems = changedIds.length + deleteEntries.length
+
+    if (shouldShowProgress) {
+      beginHydrationProgress(userId, totalWorkItems)
+    }
+
+    // Phase 2: fetch full bodies only for writings that actually changed.
+    // On a clean machine (first startup) changedIds equals the manifest length,
+    // so we fetch the full list in a single request instead of building a huge
+    // .in(...) URL. Partial subsets are chunked so the .in(...) URL stays
+    // bounded regardless of how many writings changed.
+    let remoteBodies: RemoteWritingRecord[] = []
+    if (changedIds.length > 0) {
+      const allChanged = changedIds.length === manifest.length
+
+      if (allChanged) {
+        const { data: bodiesData, error: bodiesError } = await supabase
+          .from("writings")
+          .select(WRITING_SELECT)
+          .eq("author_id", userId)
+          .order("updated_at", { ascending: false })
+
+        if (bodiesError) {
+          throw new Error(bodiesError.message)
+        }
+
+        remoteBodies = (bodiesData ?? []) as RemoteWritingRecord[]
+      } else {
+        for (let start = 0; start < changedIds.length; start += BODY_FETCH_BATCH_SIZE) {
+          const chunk = changedIds.slice(start, start + BODY_FETCH_BATCH_SIZE)
+          const { data: bodiesData, error: bodiesError } = await supabase
+            .from("writings")
+            .select(WRITING_SELECT)
+            .eq("author_id", userId)
+            .in("id", chunk)
+
+          if (bodiesError) {
+            throw new Error(bodiesError.message)
+          }
+
+          remoteBodies.push(...((bodiesData ?? []) as RemoteWritingRecord[]))
+        }
+      }
+    }
+
+    let appliedCount = 0
+    const hydratedIds: string[] = []
+
+    // Apply remote deletes first — they need no body and the manifest already
+    // carries enough information (deleted_at + version + updated_at).
+    for (const deleteEntry of deleteEntries) {
+      if (!isExpectedScopeStillActive(userId)) {
+        logDesktopSyncInfo("hydrateWritings aborted: scope changed during hydration", {
+          expectedUserId: userId,
+          currentScope: getLocalDBScope(),
+        })
+        if (shouldShowProgress) {
+          failHydrationProgress("User changed during hydration")
+        }
+        return ok({ appliedCount, hydratedIds })
+      }
+
+      const localWriting = await localDB.writings.get(deleteEntry.id)
+      if (!localWriting) {
+        continue
+      }
+
+      if (await applyRemoteSoftDelete(localWriting, deleteEntry)) {
+        appliedCount += 1
+        hydratedIds.push(deleteEntry.id)
+      }
+
+      if (shouldShowProgress) {
+        updateHydrationProgress(hydratedIds.length, totalWorkItems)
+      }
+    }
+
+    const requestedIds = new Set(changedIds)
+
+    for (let index = 0; index < remoteBodies.length; index += 1) {
+      const remoteWriting = remoteBodies[index]
+
+      if (!requestedIds.has(remoteWriting.id)) {
+        // Defensive: the server returned an id we did not request (deleted
+        // between phases or RLS change). Log and skip; do not collapse the
+        // batch.
+        logDesktopSyncInfo("hydrateWritings: phase-2 response returned an id that was not requested", {
+          writingId: remoteWriting.id,
+        })
+        continue
+      }
+
+      requestedIds.delete(remoteWriting.id)
+
+      if (!isExpectedScopeStillActive(userId)) {
+        logDesktopSyncInfo("hydrateWritings aborted: scope changed during hydration", {
+          expectedUserId: userId,
+          currentScope: getLocalDBScope(),
+        })
+        if (shouldShowProgress) {
+          failHydrationProgress("User changed during hydration")
+        }
+        return ok({ appliedCount, hydratedIds })
+      }
+
+      if (await mergeRemoteWriting(remoteWriting)) {
+        appliedCount += 1
+        hydratedIds.push(remoteWriting.id)
+      }
+
+      if (
+        shouldShowProgress &&
+        (index === remoteBodies.length - 1 || (deleteEntries.length + index + 1) % 10 === 0)
+      ) {
+        updateHydrationProgress(deleteEntries.length + index + 1, totalWorkItems)
+      }
+    }
+
+    for (const missingId of requestedIds) {
+      logDesktopSyncInfo("hydrateWritings: phase-2 response missing requested id", {
+        writingId: missingId,
+      })
+    }
+
+    if (shouldShowProgress) {
+      markHydratedUserOnDevice(userId)
+      completeHydrationProgress()
+    }
+
+    return ok({ appliedCount, hydratedIds })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Desktop hydration failed"
+    if (shouldShowProgress) {
+      failHydrationProgress(message)
+    }
+    return err(message)
+  }
+}
+
+async function doHydrateCollectionsForUser(userId: string): Promise<ServiceResponse<HydrateCollectionsResult>> {
+  try {
+    const appliedCount = await hydrateCollectionsForUser(userId)
+    return ok({ appliedCount })
+  } catch (error) {
+    return err(error instanceof Error ? error.message : "Desktop collection hydration failed")
+  }
+}
+
 export const desktopSyncService: SyncService = {
   async enqueueMutation(input) {
     const { webSyncService } = await import("@/lib/services/web-sync-service")
@@ -509,60 +781,33 @@ export const desktopSyncService: SyncService = {
       return ok({ appliedCount: 0, hydratedIds: [] })
     }
 
-    const shouldShowProgress = !hasHydratedUserOnDevice(userId)
-
-    try {
-      const supabase = createDesktopClient()
-      const { data, error } = await supabase
-        .from("writings")
-        .select(WRITING_SELECT)
-        .eq("author_id", userId)
-        .order("updated_at", { ascending: false })
-
-      if (error) {
-        throw new Error(error.message)
-      }
-
-      const remoteWritings = (data ?? []) as RemoteWritingRecord[]
-
-      if (shouldShowProgress) {
-        beginHydrationProgress(userId, remoteWritings.length)
-      }
-
-      let appliedCount = 0
-      const hydratedIds: string[] = []
-
-      for (let index = 0; index < remoteWritings.length; index += 1) {
-        const remoteWriting = remoteWritings[index]
-        const localWriting = await localDB.writings.get(remoteWriting.id)
-
-        if (shouldApplyRemoteWriting(localWriting, remoteWriting)) {
-          await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting))
-          appliedCount += 1
-          hydratedIds.push(remoteWriting.id)
-        }
-
-        if (
-          shouldShowProgress &&
-          (index === remoteWritings.length - 1 || (index + 1) % 10 === 0)
-        ) {
-          updateHydrationProgress(index + 1, remoteWritings.length)
-        }
-      }
-
-      if (shouldShowProgress) {
-        markHydratedUserOnDevice(userId)
-        completeHydrationProgress()
-      }
-
-      return ok({ appliedCount, hydratedIds })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Desktop hydration failed"
-      if (shouldShowProgress) {
-        failHydrationProgress(message)
-      }
-      return err(message)
+    // Freshness window: sequential callers (e.g. Desk mounting after bootstrap)
+    // reuse the local state without issuing another request.
+    const lastHydratedAt = lastWritingsHydrationByUserId.get(userId)
+    if (lastHydratedAt && Date.now() - lastHydratedAt < HYDRATION_FRESHNESS_WINDOW_MS) {
+      return ok({ appliedCount: 0, hydratedIds: [] })
     }
+
+    // Single-flight: concurrent callers share the same in-flight promise.
+    if (inFlightWritingsHydration?.userId === userId) {
+      return inFlightWritingsHydration.promise
+    }
+
+    const promise = doHydrateWritingsForUser(userId).finally(() => {
+      clearInFlightWritingsHydration(userId)
+    })
+
+    inFlightWritingsHydration = { userId, promise }
+    const result = await promise
+
+    // Only treat the hydration as fresh on a successful result. A network or
+    // scope-change failure must not mark the window, so the next attempt can
+    // retry.
+    if (!result.error) {
+      lastWritingsHydrationByUserId.set(userId, Date.now())
+    }
+
+    return result
   },
 
   async hydrateWriting(
@@ -606,12 +851,27 @@ export const desktopSyncService: SyncService = {
       return ok({ appliedCount: 0 })
     }
 
-    try {
-      const appliedCount = await hydrateCollectionsForUser(userId)
-      return ok({ appliedCount })
-    } catch (error) {
-      return err(error instanceof Error ? error.message : "Desktop collection hydration failed")
+    const lastHydratedAt = lastCollectionsHydrationByUserId.get(userId)
+    if (lastHydratedAt && Date.now() - lastHydratedAt < HYDRATION_FRESHNESS_WINDOW_MS) {
+      return ok({ appliedCount: 0 })
     }
+
+    if (inFlightCollectionsHydration?.userId === userId) {
+      return inFlightCollectionsHydration.promise
+    }
+
+    const promise = doHydrateCollectionsForUser(userId).finally(() => {
+      clearInFlightCollectionsHydration(userId)
+    })
+
+    inFlightCollectionsHydration = { userId, promise }
+    const result = await promise
+
+    if (!result.error) {
+      lastCollectionsHydrationByUserId.set(userId, Date.now())
+    }
+
+    return result
   },
 
   async flushPending() {

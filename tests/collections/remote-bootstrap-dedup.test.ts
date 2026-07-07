@@ -1,6 +1,9 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { hydrateLocalCollectionsFromRemote } from "@/lib/collections/remote-bootstrap";
+import {
+  hydrateLocalCollectionsFromRemote,
+  invalidateWebCollectionsHydrationFreshness,
+} from "@/lib/collections/remote-bootstrap";
 import { localDB, setLocalDBScope } from "@/lib/local-db";
 
 beforeEach(() => {
@@ -125,6 +128,12 @@ describe("hydrateLocalCollectionsFromRemote — in-flight dedup", () => {
     await hydrateLocalCollectionsFromRemote();
     expect(fetchCount).toBe(1);
 
+    // A sequential caller inside the freshness window reuses local state.
+    await hydrateLocalCollectionsFromRemote();
+    expect(fetchCount).toBe(1);
+
+    // Explicit refresh flows (force) invalidate the window and fetch again.
+    invalidateWebCollectionsHydrationFreshness();
     await hydrateLocalCollectionsFromRemote();
     expect(fetchCount).toBe(2);
 

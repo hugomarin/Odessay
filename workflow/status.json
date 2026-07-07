@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-05",
+  "last_updated": "2026-07-06",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -90,6 +90,46 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "feat(desktop): register Tauri menu event listeners once via global menu-event-bus. Adds lib/services/desktop/menu-event-bus.ts singleton that registers each menu:{action} Tauri channel only once per process; exposes subscribe(action, handler) with stack semantics (last subscriber wins, previous restored on unsubscribe). Refactors hooks/useTauriMenuEvents.ts, hooks/useTauriEditorMenuEvents.ts and hooks/useGlobalOpenFileMenu.ts to consume the bus while preserving public hook signatures. Adds tests/menu-event-bus.test.ts covering single registration, stack semantics, retry on failed listen, async handler rejection handling and desktop-adapter-boundary compliance. [ODE-356]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-356",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-356/register-tauri-menu-event-listeners-once-via-global-event-bus",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "584a1e6",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-356 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/ODE-354/ODE-355). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 890 vitest tests PASS. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-353-deduplicate-startup-hydration and GITHUB_HEAD_REF override. Performance Contract waterfall evidence (0 listen/unlisten after startup when navigating Desk→Write→Studio→Write) and manual menu checklist in build pending real desktop session capture."
+    },
+    {
+      "what": "feat(db): inline writings SELECT RLS policy to remove per-row function calls. Adds public.has_writing_share(target_writing_id) security-definer helper that only touches writing_shares (avoiding 42P17 recursion); replaces writings_select_accessible with inline predicate owner/public/shared using (select auth.uid()) initplan; leaves can_read_writing untouched for INSERT/UPDATE/correspondence/collection policies. [ODE-355]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-355",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-355/inline-writings-select-rls-policy-to-remove-per-row-function-calls",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "a7eb83c",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-355 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/ODE-354). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 883 vitest tests PASS. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-353-deduplicate-startup-hydration. Required staging evidence (explain analyze before/after, access-parity matrix, T-A re-verification) must be captured via Supabase MCP against staging before merge/acceptance."
+    },
+    {
+      "what": "feat(auth): cache keychain token reads in memory for the desktop Supabase client. Adds process-memory write-through cache to keychainStorage: getItem serves from cache after first native read; setItem updates cache only after native write succeeds; removeItem invalidates cache even if native delete fails. Preserves ODE-219 security contract (token never in localStorage/disk/logs). [ODE-354]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-354",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-354/cache-keychain-token-reads-in-memory-for-the-desktop-supabase-client",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "90ed302",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-354 on branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 875 vitest tests PASS. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-353-deduplicate-startup-hydration and GITHUB_HEAD_REF override to include ODE-354. Performance Contract waterfall evidence (≤2 keychain_read_token per Desk→Studio→Write flow) pending manual capture from real desktop session."
+    },
+    {
+      "what": "feat(sync): deduplicate startup hydration with single-flight guard and freshness window. Adds per-user in-flight promise coalescing and a 45 s freshness window to desktop hydrateWritings/hydrateCollections; prevents auth listener re-hydration for the same user; preserves force-refresh bypass in Desk; adds scope-active guard to discard writes on sign-out/switch. [ODE-353]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-353",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-353/deduplicate-startup-hydration-with-single-flight-guard-and-single",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "5a0ad51",
+      "date": "2026-07-05",
+      "notes": "Shipped via /wf-ship ODE-353 on branch codex/ode-353-deduplicate-startup-hydration. Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 867 tests PASS. ops:delivery:gate PASS. Performance Contract: required — Network waterfall before/after pending manual capture from real desktop/web session; unit tests for guard and window PASS."
+    },
     {
       "what": "feat(editor): add automatic table of contents to the editor. Adds @tiptap/extension-table-of-contents to the live editor extension set, a left-side TOC panel with H1/H2/H3 hierarchy and indentation, empty state, scrollspy active highlighting, click-to-caret navigation via setTextSelection, and a topbar toggle independent of the global navigation sidebar. [ODE-340]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
@@ -2770,6 +2810,16 @@
       "date": "2026-07-03",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Added per-user learned_words dictionary for orthography corrections. Learn word action in inline bubble and CorrectionsPanel; prompt injection + canonical post-filter; desktop/web service adapters; migration + RLS + tests. Typecheck PASS. Lint PASS with 6 pre-existing warnings. Tests PASS (138/856). Performance Contract required: trace captured, ops:perf:gate 13 pass/1 warn/1 skip (required_failures:0), ops:delivery:gate OK. Review score: 8.5/10."
+    },
+    {
+      "what": "feat(sync): two-phase incremental startup hydration. Phase 1 fetches a metadata-only manifest (id, updated_at, content_hash, deleted_at, version); phase 2 fetches full bodies only for writings whose persisted content_hash/updated_at differs from local. Nothing changed => zero body fetches. Remote soft-deletes reflected from the manifest alone. app/api/writings/route.ts gains additive ?fields=manifest and ?ids= modes (web/cloud); lib/sync/desktop-sync-service.ts and lib/sync/remote-bootstrap.ts implement the two-phase path (T-C boundary preserved, no re-serialization to compare hashes per ADR D1/D11). Adds 4 required tests (nothing-changed => 0 fetches; 2-of-N => exact ids; manifest soft-delete; local-edit race) and updates ODE-353 dedup counters to the two-phase request shape. [ODE-357]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-357",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-357/implement-two-phase-incremental-hydration-manifest-selective-body",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/316",
+      "commit": "edcd221",
+      "date": "2026-07-06",
+      "notes": "Shipped via /wf-ship ODE-357 --branch codex/ode-353-deduplicate-startup-hydration (shared PR #316 with ODE-353/354/355/356). Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). 894 vitest tests PASS (incl. 4 new ODE-357 cases). ops:delivery:gate PASS with GITHUB_BASE_REF=67b7ba4 and GITHUB_HEAD_REF=codex/ode-353-357-two-phase-incremental-hydration (traceability OK for ODE-353, ODE-357). Performance Contract Payload weight: required — second-startup Network capture (< 50 KB vs ~1.8 MB) + edited/deleted-on-another-machine walkthrough + Workspace hash-rebind check pending manual capture in a real desktop/web session."
     }
   ]
 }
