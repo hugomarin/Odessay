@@ -1,6 +1,9 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { hydrateLocalCollectionsFromRemote } from "../lib/collections/remote-bootstrap";
+import {
+  hydrateLocalCollectionsFromRemote,
+  invalidateWebCollectionsHydrationFreshness,
+} from "../lib/collections/remote-bootstrap";
 import { createEntityKey, localDB, setLocalDBScope } from "../lib/local-db";
 import type {
   LocalCollection,
@@ -90,6 +93,41 @@ describe("hydrateLocalCollectionsFromRemote", () => {
     expect(stored?.name).toBe("Local pending name");
     expect(stored?.visibility).toBe("private");
     expect(stored?.sync_status).toBe("pending");
+  });
+
+  it("skips the network for sequential callers inside the freshness window", async () => {
+    let fetchCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        fetchCount += 1;
+        return new Response(
+          JSON.stringify({
+            data: { collections: [], writingCollections: [] },
+            error: null,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+
+    await hydrateLocalCollectionsFromRemote();
+    expect(fetchCount).toBe(1);
+
+    // Sequential caller inside the window (e.g. Collections view mounting
+    // after bootstrap) reuses local state without a request.
+    await hydrateLocalCollectionsFromRemote();
+    expect(fetchCount).toBe(1);
+
+    // A user switch never reuses another scope's freshness.
+    setLocalDBScope(`collections-bootstrap-${crypto.randomUUID()}`);
+    await hydrateLocalCollectionsFromRemote();
+    expect(fetchCount).toBe(2);
+
+    // Explicit refresh flows (force) invalidate the window and fetch again.
+    invalidateWebCollectionsHydrationFreshness();
+    await hydrateLocalCollectionsFromRemote();
+    expect(fetchCount).toBe(3);
   });
 
   it("does not overwrite pending writing-collection assignments", async () => {

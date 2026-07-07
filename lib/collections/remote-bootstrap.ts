@@ -1,4 +1,5 @@
-import { localDB } from "@/lib/local-db";
+import { getLocalDBScope, localDB } from "@/lib/local-db";
+import { createHydrationFreshness } from "@/lib/sync/hydration-freshness";
 import type {
   CollectionVisibility,
   LocalCollection,
@@ -72,9 +73,31 @@ const toLocalCollection = (remote: RemoteCollectionRecord): LocalCollection => {
 
 let inFlightCollectionsHydration: Promise<RemoteCollectionsBootstrap> | null = null;
 
+const collectionsHydrationFreshness = createHydrationFreshness();
+
+const EMPTY_COLLECTIONS_BOOTSTRAP: RemoteCollectionsBootstrap = {
+  collections: [],
+  writingCollections: [],
+};
+
+/**
+ * Clear the web collections freshness window so the next hydrate call hits
+ * the network — mirrors invalidateHydrationFreshness on desktop.
+ */
+export const invalidateWebCollectionsHydrationFreshness = (scope?: string): void => {
+  collectionsHydrationFreshness.invalidate(scope);
+};
+
 export const hydrateLocalCollectionsFromRemote = (): Promise<RemoteCollectionsBootstrap> => {
   if (inFlightCollectionsHydration) {
     return inFlightCollectionsHydration;
+  }
+
+  // Sequential callers inside the freshness window reuse local state without
+  // issuing another request (single-flight only covers concurrent callers).
+  const scope = getLocalDBScope();
+  if (collectionsHydrationFreshness.isFresh(scope)) {
+    return Promise.resolve(EMPTY_COLLECTIONS_BOOTSTRAP);
   }
 
   const promise = (async () => {
@@ -131,6 +154,12 @@ export const hydrateLocalCollectionsFromRemote = (): Promise<RemoteCollectionsBo
         writingId,
         assignmentsByWriting.get(writingId) ?? [],
       );
+    }
+
+    // Only a successful hydration for a still-active scope counts as fresh;
+    // failures reject before reaching this line, so the next attempt retries.
+    if (getLocalDBScope() === scope) {
+      collectionsHydrationFreshness.markFresh(scope);
     }
 
     return payload;

@@ -2,7 +2,10 @@ import "fake-indexeddb/auto"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { localDB, setLocalDBScope } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
-import { hydrateLocalWritingsFromRemote } from "@/lib/sync/remote-bootstrap"
+import {
+  hydrateLocalWritingsFromRemote,
+  invalidateWebWritingsHydrationFreshness,
+} from "@/lib/sync/remote-bootstrap"
 
 const makeLocalWriting = (overrides: Partial<LocalWriting> = {}): LocalWriting => ({
   id: "writing-1",
@@ -158,9 +161,15 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
     await hydrateLocalWritingsFromRemote()
     expect(fetchCount).toBe(2)
 
-    // The in-flight guard was released, so a subsequent call fetches again.
+    // A sequential caller inside the freshness window reuses local state
+    // without touching the network (Desk mounting after bootstrap).
+    await hydrateLocalWritingsFromRemote()
+    expect(fetchCount).toBe(2)
+
+    // Explicit refresh flows (force) invalidate the window and fetch again.
     // Nothing changed remotely now, so phase 2 is skipped — only the manifest
     // request is issued (the whole point of incremental hydration).
+    invalidateWebWritingsHydrationFreshness()
     await hydrateLocalWritingsFromRemote()
     expect(fetchCount).toBe(3)
 

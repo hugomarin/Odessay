@@ -1,4 +1,5 @@
-import { localDB } from "@/lib/local-db"
+import { getLocalDBScope, localDB } from "@/lib/local-db"
+import { createHydrationFreshness } from "@/lib/sync/hydration-freshness"
 import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
 import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
 import { normalizeWritingStatus } from "@/lib/writings/status"
@@ -269,9 +270,27 @@ const BODY_FETCH_BATCH_SIZE = 200
 
 let inFlightWritingsHydration: Promise<number> | null = null
 
+const writingsHydrationFreshness = createHydrationFreshness()
+
+/**
+ * Clear the web writings freshness window so the next hydrate call hits the
+ * network. Used by explicit refresh flows (window focus / online) that must
+ * bypass the window — mirrors invalidateHydrationFreshness on desktop.
+ */
+export const invalidateWebWritingsHydrationFreshness = (scope?: string): void => {
+  writingsHydrationFreshness.invalidate(scope)
+}
+
 export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
   if (inFlightWritingsHydration) {
     return inFlightWritingsHydration
+  }
+
+  // Sequential callers inside the freshness window reuse local state without
+  // issuing another request (single-flight only covers concurrent callers).
+  const scope = getLocalDBScope()
+  if (writingsHydrationFreshness.isFresh(scope)) {
+    return Promise.resolve(0)
   }
 
   const promise = (async () => {
@@ -350,6 +369,12 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
       console.warn("[remote-bootstrap] phase-2 response missing requested id", {
         writingId: missingId,
       })
+    }
+
+    // Only a successful hydration for a still-active scope counts as fresh;
+    // failures reject before reaching this line, so the next attempt retries.
+    if (getLocalDBScope() === scope) {
+      writingsHydrationFreshness.markFresh(scope)
     }
 
     return appliedCount
