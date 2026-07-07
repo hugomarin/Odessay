@@ -3601,6 +3601,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
 
         if (!correctionsEnabledRef.current) {
+          dropStaleSuggestionsForQueuedBlock(block.id)
           continue
         }
 
