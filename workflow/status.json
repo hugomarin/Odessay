@@ -99,6 +99,16 @@
   },
   "built": [
     {
+      "what": "fix(api): add CORS support to desktop sharing web routes. Adds DELETE to lib/cors.ts allowed methods, OPTIONS handlers and withCorsHeaders wrappers to /api/writings/[id]/shares and /api/writings/[id]/share-test-link for all success and error responses, and regression coverage in tests/api/sharing-cors.test.ts proving tauri://localhost preflight and actual responses include correct CORS headers. [ODE-364]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-364",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-364/add-cors-support-to-desktop-sharing-web-routes",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/321",
+      "commit": "d16b779",
+      "date": "2026-07-08",
+      "notes": "Typecheck PASS. Lint PASS (pre-existing editor-shell warnings only). npm test PASS. ops:delivery:gate PASS (Performance Contract not required for CORS route fix). Vercel Preview SUCCESS. QualityScore 8.25/10 (non-blocking P2×3: Performance Contract not explicitly declared in PR body, missing desktop/Web Inspector evidence capture, missing Architecture Contract in brief; P3×1: test base URL uses app.odessay.com instead of odessay.vercel.app). Reviewed and merged via /wf-review ODE-364."
+    },
+    {
       "what": "fix(corrections): preserve accents in learned word normalization. Changes learned-word normalization from accent-insensitive to accent-sensitive so learning a typo with an accent no longer silences corrections for the correct unaccented form; documents the three ODE-352 product decisions (spellcheck native left as-is, rejection memory kept in localStorage, accents preserved) in the AI writing assist contract and the 2026-07 corrections review. [ODE-352]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-352",
