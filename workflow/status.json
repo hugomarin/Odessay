@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-08",
+  "last_updated": "2026-07-07",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -90,6 +90,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "fix(corrections): preserve accents in learned word normalization. Changes learned-word normalization from accent-insensitive to accent-sensitive so learning a typo with an accent no longer silences corrections for the correct unaccented form; documents the three ODE-352 product decisions (spellcheck native left as-is, rejection memory kept in localStorage, accents preserved) in the AI writing assist contract and the 2026-07 corrections review. [ODE-352]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-352",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-352/decide-corrections-product-policies-native-spellcheck-accent",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "bb2b074",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-352 --branch codex/ode-348-349-350-351-352-corrections-hardening on shared PR #318. Owner decisions: (1) native spellcheck left as-is; (2) learned-word normalization preserves accents; (3) rejection memory stays in localStorage. Only decision (2) required code changes. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (146 files / 922 tests). Targeted corrections-admission and learned-words tests PASS (2 files / 14 tests). node scripts/validate-workflow-json.mjs PASS. GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening npm run ops:delivery:gate PASS. Context Gaps Detected: no — brief explicitly required owner confirmation; all three decisions were provided in Linear."
+    },
     {
       "what": "fix(corrections): batch correction block review. Adds correctionBlocks[] batches of up to five blocks through AIService and publication-review, scales correction max_tokens by batch size, processes editor correction queue in batches, retries partial batch misses once per block, clears queue/timers/counters on writing changes, and reconciles batching docs. [ODE-351]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
