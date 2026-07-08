@@ -303,6 +303,16 @@
       "description": "Contrato de performance del editor con baseline versionado y umbrales pass/warn/fail por métrica (EventDispatch, EventTiming, latencia de interacción y long tasks) para gates automáticos."
     },
     {
+      "path": "workflow/perf-budgets-network.json",
+      "type": "ops",
+      "description": "Contrato de performance de red/runtime para auditorias transversales: presupuestos de requests y bytes de arranque, duplicados identicos y churn de listeners Tauri evaluados con scripts/check-network-budget.mjs."
+    },
+    {
+      "path": "scripts/check-network-budget.mjs",
+      "type": "ops",
+      "description": "CLI de gate de red/runtime: evalua un HAR contra workflow/perf-budgets-network.json, escribe metrics/report JSON y falla ante duplicados de arranque, exceso de requests/bytes o churn de listeners Tauri."
+    },
+    {
       "path": "workflow/perf-budgets-reading.json",
       "type": "ops",
       "description": "Contrato de performance para reading view: budgets de keydown/click/latencia/long tasks, con input y paste marcados como no aplicables para superficies de lectura."
