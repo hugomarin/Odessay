@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "fix(annotations): color highlights by mark type. Adds annotationType attrs to annotation highlight marks, re-derives those attrs from inline markdown during canonical parse without changing ==...== syntax, colors shared editor/reading marks by data-annotation-type instead of paragraph heuristics, unifies highlight amber to #C07B2A, and rewrites the annotations doc around the real footnote/personal/ai/highlight types. [ODE-350]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-350",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-350/color-annotation-highlights-by-mark-type-not-paragraph-heuristics",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "2693cb7",
+      "date": "2026-07-08",
+      "notes": "Shipped via /wf-ship ODE-350 on shared branch codex/ode-348-349-350-351-352-corrections-hardening / PR #318. Test-first regression confirmed annotation highlight marks had no annotationType attr and canonical markdown round-trip needed re-derivation from the annotationReference sibling. Functional commit 2693cb7 stamps attrs in applyAnnotationToBody and addAnnotation/updateAnnotationType, extends Highlight rendering/parsing with data-annotation-type, replaces p:has(sup.annotation-ref-*) mark CSS with mark[data-annotation-type=*] rules, keeps manual highlights as default amber, and updates odessay-anotaciones-ai.md/docs.json. Visual evidence committed under output/playwright/ode-350: before-after-mark-colors.png, cross-surface-parity.png, computed-colors.json. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (145 files / 913 tests). Targeted highlight/document serialization tests PASS (2 files / 30 tests). Performance Contract not required. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening. Context Gaps Detected: no."
+    },
+    {
       "what": "fix(corrections): degrade malformed model items. Parses LLM correction and uncertain arrays item-by-item with safeParse, logs dropped invalid items with counts, preserves valid suggestions through existing learned-word/boundary/memory filters, removes the unused NDJSON streaming route branch, and documents publication-review as JSON request/response. [ODE-349]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-349",
