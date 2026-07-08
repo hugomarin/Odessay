@@ -253,7 +253,7 @@ El motor admite una tercera acción por sugerencia ortográfica — **Learn word
 
 **Persistencia.** La tabla `learned_words` vive en Supabase con RLS owner-only (`user_id = auth.uid()`), FK a `profiles(id) on delete cascade`, y un índice único sobre `(user_id, language, word)`.
 
-**Normalización.** Las palabras se normalizan case-insensitive y accent-insensitive antes de guardar y antes de filtrar, de modo que aprender "Odéssay" también proteja "odessay" y "ODESSAY".
+**Normalización.** Las palabras se normalizan case-insensitive pero **accent-sensitive** antes de guardar y antes de filtrar, de modo que aprender "Odéssay" proteja "odessay" y "ODESSAY" pero no la versión sin acento "odessay". La decisión de conservar acentos (ODE-352, 2026-07-07) prioriza la precisión ortográfica en español: un typo con acento como "probabilídad" no debe silenciar la corrección de la forma correcta "probabilidad". Las palabras aprendidas antes del cambio siguen vigentes bajo su forma guardada.
 
 **Exclusión en tres capas.** Para no depender solo de que el modelo obedezca la instrucción:
 
@@ -297,6 +297,12 @@ Sugerir un único título útil, corto y coherente con el contenido, bajo invoca
 La API ya no mantiene una rama `document` ni helpers de partición de texto como `buildCorrectionBlocks()`. El contrato válido exige `correctionBlocks[]` en cada request; `correctionBlock` singular se tolera solo como compatibilidad de transición.
 
 **Decisión:** mantener la API acotada a modo `block-batch`. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block-batch`.
+
+### Spellcheck nativo del navegador
+
+El editor rich expone el spellcheck nativo del navegador (`spellcheck="true"`, lenguaje `es-MX` por defecto) en paralelo a las correcciones AI. Eso produce dos sistemas de subrayado con señales visuales distintas, y el spellcheck nativo no conoce las palabras aprendidas por el usuario.
+
+**Decisión (ODE-352, 2026-07-07):** dejar el spellcheck nativo como está. El usuario puede desactivarlo con el toggle existente (`lib/editor/spellcheck.ts`); no se apaga por defecto ni se unifica la señal visual en esta etapa.
 
 ### Estado actual vs principios
 
@@ -344,7 +350,7 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 ### Memoria de decisiones
 
-- **Reject:** fingerprint estable se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+- **Reject:** fingerprint estable se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes. La decisión de ODE-352 (2026-07-07) mantuvo el rechazo en localStorage: no se migra a Supabase en esta etapa.
   - Formato canónico: `type|originalText|replacementText`, con partes normalizadas (`trim`, lowercase, whitespace colapsado).
   - La identidad nunca incluye `blockId`, hash de texto ni posición. `blockId` sigue siendo ubicación opaca para invalidación/decoraciones.
   - Compatibilidad legacy: entradas antiguas `blockId|type|originalText|replacementText` siguen filtrando por su cola estable `type|originalText|replacementText`.

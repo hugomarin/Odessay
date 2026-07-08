@@ -6,7 +6,10 @@ import {
 } from "@/lib/corrections/learned-words-loader"
 import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
 import { createStableFingerprint } from "@/lib/corrections/engine/identity"
-import { createLearnedWordSet } from "@/lib/corrections/learned-words"
+import {
+  createLearnedWordSet,
+  normalizeLearnedWord,
+} from "@/lib/corrections/learned-words"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
 import type {
   LearnedWordEntry,
@@ -133,8 +136,28 @@ describe("learned words robustness", () => {
     )
 
     expect(merged).toEqual([
-      makeEntry("odessay", "remote:odessay"),
+      makeEntry("Odéssay", "pending:odessay"),
       makeEntry("otra"),
+      makeEntry("odessay", "remote:odessay"),
     ])
+  })
+
+  it("preserves accents when normalizing learned words", () => {
+    expect(normalizeLearnedWord("Odéssay")).toBe("odéssay")
+    expect(normalizeLearnedWord("probabilídad")).toBe("probabilídad")
+    expect(normalizeLearnedWord("  PRUÉVA  ")).toBe("pruéva")
+  })
+
+  it("still folds case and curly quotes when normalizing learned words", () => {
+    expect(normalizeLearnedWord("’Odessay’")).toBe("'odessay'")
+    expect(normalizeLearnedWord("ODESSAY")).toBe("odessay")
+  })
+
+  it("treats accented and unaccented forms as distinct learned words", () => {
+    const set = createLearnedWordSet(["odéssay", "odessay"])
+
+    expect(set.has("odéssay")).toBe(true)
+    expect(set.has("odessay")).toBe(true)
+    expect(set.size).toBe(2)
   })
 })

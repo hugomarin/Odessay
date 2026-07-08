@@ -287,6 +287,12 @@ Cada fix sigue el protocolo del §0: localizar por símbolo, reproducir, test pr
 
 Los pasos 8 (spellcheck nativo), 9 (batching/cola) y 10 (acentos en learned words, memoria a Supabase) **requieren decisión humana antes de implementar** — no ejecutar por agente sin confirmación explícita del owner. Para el 9, la referencia de batching es `buildMechanicalCorrectionsPrompt(blocks[])` que ya acepta múltiples bloques; el cambio es agrupar la cola por tanda (3-5 bloques) manteniendo la invalidación por bloque individual.
 
+**Decisiones registradas en ODE-352 (2026-07-07):**
+
+- **Fix 8 — Spellcheck nativo (C11):** dejarlo como está. El usuario puede desactivarlo con el toggle existente (`lib/editor/spellcheck.ts`); no se apaga por defecto ni se unifica la señal visual.
+- **Fix 10a — Acentos en learned words (C19):** conservar acentos en la normalización. `normalizeLearnedWord` deja de quitar diacríticos (ODE-352). Aprender "probabilídad" ya no silencia correcciones sobre "probabilidad". Las palabras aprendidas antes del cambio siguen vigentes bajo su forma guardada.
+- **Fix 10b — Memoria de rechazos (C16):** mantener en `localStorage`. No se migra a Supabase en esta etapa; el fingerprint estable sigue viviendo en `correction-memory-client.ts`.
+
 ---
 
 ## 7. Auditoría de documentación (`workflow/`) — sesgos, contradicciones y context rot
