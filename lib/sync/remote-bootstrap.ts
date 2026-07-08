@@ -1,6 +1,11 @@
 import { getLocalDBScope, localDB } from "@/lib/local-db"
 import { createHydrationFreshness } from "@/lib/sync/hydration-freshness"
-import type { LocalWriting, WritingStatus, WritingVisibility } from "@/lib/local-db/schema"
+import type {
+  LocalWriting,
+  RemoteBodyRejection,
+  WritingStatus,
+  WritingVisibility,
+} from "@/lib/local-db/schema"
 import { normalizeArtifactType, type ArtifactType } from "@/lib/writings/artifact-type"
 import { normalizeWritingStatus } from "@/lib/writings/status"
 
@@ -146,6 +151,31 @@ export const normalizeContentHash = (value: string | null | undefined) => {
   return trimmed || null
 }
 
+const createRemoteBodyRejection = (
+  remoteWriting: RemoteWritingListRecord,
+): RemoteBodyRejection => ({
+  content_hash: normalizeContentHash(remoteWriting.content_hash),
+  version: normalizeVersion(remoteWriting.version),
+  updated_at: remoteWriting.updated_at ?? null,
+})
+
+export const hasRejectedRemoteBody = (
+  localWriting: LocalWriting,
+  remoteWriting: RemoteWritingListRecord,
+): boolean => {
+  const rejection = localWriting.remote_body_rejection
+  if (!rejection) {
+    return false
+  }
+
+  const remoteFingerprint = createRemoteBodyRejection(remoteWriting)
+  return (
+    normalizeContentHash(rejection.content_hash) === remoteFingerprint.content_hash &&
+    normalizeVersion(rejection.version) === remoteFingerprint.version &&
+    (rejection.updated_at ?? null) === remoteFingerprint.updated_at
+  )
+}
+
 const hasMaterializedPath = (writing: LocalWriting) => Boolean(writing.canonical_path?.trim())
 
 const isEligibleHashRebindCandidate = async (
@@ -246,6 +276,13 @@ export const mergeRemoteWriting = async (
   const existingLocalWriting = localWriting ?? hashRebindCandidate
 
   if (localWriting && !shouldApplyRemoteWriting(localWriting, remoteWriting)) {
+    const remoteBodyRejection = createRemoteBodyRejection(remoteWriting)
+    if (localWriting.sync_status === "synced" && !hasRejectedRemoteBody(localWriting, remoteWriting)) {
+      await localDB.writings.save({
+        ...localWriting,
+        remote_body_rejection: remoteBodyRejection,
+      })
+    }
     return false
   }
 
@@ -277,6 +314,10 @@ export const needsBodyFetch = (
   }
 
   if (localWriting.sync_status !== "synced") {
+    return false
+  }
+
+  if (hasRejectedRemoteBody(localWriting, remoteWriting)) {
     return false
   }
 

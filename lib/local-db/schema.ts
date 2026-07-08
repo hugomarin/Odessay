@@ -22,6 +22,12 @@ export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed";
 export type SyncOperation = "upsert" | "delete" | "set";
 export type SyncEntityKind = "writing" | "collection" | "writing-collections";
 
+export type RemoteBodyRejection = {
+  content_hash: string | null;
+  version: number;
+  updated_at: string | null;
+};
+
 export type LocalWriting = {
   id: string;
   author_id?: string | null;
@@ -49,6 +55,7 @@ export type LocalWriting = {
   updated_at: string;
   content_updated_at?: string | null;
   metadata_updated_at?: string | null;
+  remote_body_rejection?: RemoteBodyRejection | null;
   local_updated_at: number;
 };
 

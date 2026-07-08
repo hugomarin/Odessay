@@ -236,4 +236,76 @@ describe("hydrateLocalWritingsFromRemote — in-flight dedup", () => {
     expect(idsRequests[0]).toHaveLength(200)
     expect(idsRequests[1]).toHaveLength(50)
   })
+
+  it("does not repeatedly fetch a body that was downloaded but rejected by local merge policy", async () => {
+    await localDB.writings.save(makeLocalWriting({
+      version: 3,
+      updated_at: "2026-01-03T00:00:00.000Z",
+      content_hash: "local-hash",
+      body_text: "Local version wins",
+    }))
+
+    let manifestHash = "remote-hash-a"
+    let manifestUpdatedAt = "2026-01-04T00:00:00.000Z"
+    let bodyFetchCount = 0
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = String(input)
+        const remote = {
+          id: "writing-1",
+          author_id: "user-1",
+          title: "Remote Title",
+          slug: "remote-title",
+          status: "draft",
+          visibility: "private",
+          parent_id: null,
+          correspondence_id: null,
+          version: 2,
+          sync_status: "synced",
+          deleted_at: null,
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: manifestUpdatedAt,
+          content_hash: manifestHash,
+        }
+
+        if (!url.includes("fields=manifest")) {
+          bodyFetchCount += 1
+        }
+
+        const data = url.includes("fields=manifest")
+          ? [remote]
+          : [{ ...remote, body_json: { type: "doc", content: [] }, body_text: "Remote body" }]
+
+        return Promise.resolve(
+          new Response(JSON.stringify({ data, error: null }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }),
+    )
+
+    expect(await hydrateLocalWritingsFromRemote()).toBe(0)
+    expect(bodyFetchCount).toBe(1)
+    expect((await localDB.writings.get("writing-1"))?.body_text).toBe("Local version wins")
+    expect((await localDB.writings.get("writing-1"))?.remote_body_rejection).toEqual({
+      content_hash: "remote-hash-a",
+      version: 2,
+      updated_at: "2026-01-04T00:00:00.000Z",
+    })
+
+    invalidateWebWritingsHydrationFreshness()
+    expect(await hydrateLocalWritingsFromRemote()).toBe(0)
+    expect(bodyFetchCount).toBe(1)
+
+    manifestHash = "remote-hash-b"
+    manifestUpdatedAt = "2026-01-05T00:00:00.000Z"
+    invalidateWebWritingsHydrationFreshness()
+    expect(await hydrateLocalWritingsFromRemote()).toBe(0)
+    expect(bodyFetchCount).toBe(2)
+
+    vi.unstubAllGlobals()
+  })
 })
