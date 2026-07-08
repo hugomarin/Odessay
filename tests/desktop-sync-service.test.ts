@@ -255,6 +255,125 @@ describe("desktopSyncService", () => {
     expect(localDBMock.writings.save).not.toHaveBeenCalled()
   })
 
+  it("does not repeatedly fetch a body rejected by merge policy on desktop", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "user-1" } } },
+      error: null,
+    })
+
+    let remoteHash = "remote-hash-a"
+    let remoteUpdatedAt = "2026-06-04T00:00:00.000Z"
+    const localById: Record<string, unknown> = {
+      "writing-1": {
+        id: "writing-1",
+        author_id: "user-1",
+        sync_status: "synced",
+        lifecycle: "server-confirmed",
+        version: 3,
+        content_hash: "local-hash",
+        updated_at: "2026-06-03T00:00:00.000Z",
+        deleted_at: null,
+        body_json: { type: "doc", content: [] },
+        body_text: "Local version wins",
+      },
+      "writing-2": {
+        id: "writing-2",
+        author_id: "user-1",
+        sync_status: "synced",
+        lifecycle: "server-confirmed",
+        version: 1,
+        content_hash: "stable-hash",
+        updated_at: "2026-06-02T00:00:00.000Z",
+        deleted_at: null,
+        body_json: { type: "doc", content: [] },
+        body_text: "Already current",
+      },
+    }
+
+    localDBMock.writings.get.mockImplementation((id: string) =>
+      Promise.resolve(localById[id] ?? null),
+    )
+    localDBMock.writings.save.mockImplementation((writing: { id: string }) => {
+      localById[writing.id] = writing
+      return Promise.resolve()
+    })
+    writingsOrderMock.mockImplementation(() =>
+      Promise.resolve({
+        data: [
+          {
+            id: "writing-1",
+            updated_at: remoteUpdatedAt,
+            content_hash: remoteHash,
+            deleted_at: null,
+            version: 2,
+          },
+          {
+            id: "writing-2",
+            updated_at: "2026-06-02T00:00:00.000Z",
+            content_hash: "stable-hash",
+            deleted_at: null,
+            version: 1,
+          },
+        ],
+        error: null,
+      }),
+    )
+    writingsInMock.mockImplementation(() =>
+      Promise.resolve({
+        data: [
+          {
+            id: "writing-1",
+            author_id: "user-1",
+            title: "Remote",
+            slug: "remote",
+            status: "draft",
+            visibility: "private",
+            parent_id: null,
+            correspondence_id: null,
+            version: 2,
+            content_hash: remoteHash,
+            deleted_at: null,
+            created_at: "2026-06-01T00:00:00.000Z",
+            updated_at: remoteUpdatedAt,
+            body_json: { type: "doc", content: [] },
+            body_text: "Remote body",
+          },
+        ],
+        error: null,
+      }),
+    )
+
+    const { desktopSyncService, invalidateHydrationFreshness } = await import(
+      "@/lib/sync/desktop-sync-service"
+    )
+
+    const first = await desktopSyncService.hydrateWritings()
+    expect(first.error).toBeNull()
+    expect(first.data).toEqual({ appliedCount: 0, hydratedIds: [] })
+    expect(writingsInMock).toHaveBeenCalledTimes(1)
+    expect(localById["writing-1"]).toMatchObject({
+      body_text: "Local version wins",
+      remote_body_rejection: {
+        content_hash: "remote-hash-a",
+        version: 2,
+        updated_at: "2026-06-04T00:00:00.000Z",
+      },
+    })
+
+    invalidateHydrationFreshness("user-1")
+    const second = await desktopSyncService.hydrateWritings()
+    expect(second.error).toBeNull()
+    expect(writingsSelectMock).toHaveBeenCalledTimes(3)
+    expect(writingsInMock).toHaveBeenCalledTimes(1)
+
+    remoteHash = "remote-hash-b"
+    remoteUpdatedAt = "2026-06-05T00:00:00.000Z"
+    invalidateHydrationFreshness("user-1")
+    const third = await desktopSyncService.hydrateWritings()
+    expect(third.error).toBeNull()
+    expect(writingsInMock).toHaveBeenCalledTimes(2)
+  })
+
   it("fetches exactly the changed ids when a subset changed (2 of N)", async () => {
     getSessionMock.mockResolvedValue({
       data: { session: { user: { id: "user-1" } } },

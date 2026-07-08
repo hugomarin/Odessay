@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import {
+  hasRejectedRemoteBody,
   mapRemoteWritingToLocal,
+  needsBodyFetch,
   shouldApplyRemoteWriting,
   type RemoteWritingRecord,
 } from "@/lib/sync/remote-bootstrap"
@@ -108,5 +110,33 @@ describe("remote bootstrap merge policy", () => {
     const local = mapRemoteWritingToLocal(createRemoteWriting({ status: "finished" as const }))
 
     expect(local.status).toBe("done")
+  })
+
+  it("does not refetch a remote body that was already rejected until the manifest changes", () => {
+    const local = createLocalWriting({
+      version: 3,
+      updated_at: "2026-03-21T10:00:00.000Z",
+      content_hash: "local-hash",
+      remote_body_rejection: {
+        content_hash: "remote-hash-a",
+        version: 2,
+        updated_at: "2026-03-22T10:00:00.000Z",
+      },
+    })
+    const rejectedRemote = createRemoteWriting({
+      version: 2,
+      updated_at: "2026-03-22T10:00:00.000Z",
+      content_hash: "remote-hash-a",
+    })
+    const changedRemote = createRemoteWriting({
+      version: 2,
+      updated_at: "2026-03-23T10:00:00.000Z",
+      content_hash: "remote-hash-b",
+    })
+
+    expect(hasRejectedRemoteBody(local, rejectedRemote)).toBe(true)
+    expect(needsBodyFetch(local, rejectedRemote)).toBe(false)
+    expect(hasRejectedRemoteBody(local, changedRemote)).toBe(false)
+    expect(needsBodyFetch(local, changedRemote)).toBe(true)
   })
 })
