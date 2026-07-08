@@ -2933,10 +2933,10 @@
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-363",
       "linear_url": "https://linear.app/z9ne/issue/ODE-363/fix-desktop-ai-corrections-502-failure-and-retry-loop",
-      "pr_url": "https://github.com/hugomarin/Odessay/pull/319",
-      "commit": "b84a9f9",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/319 + https://github.com/hugomarin/Odessay/pull/320",
+      "commit": "227fbd4",
       "date": "2026-07-08",
-      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings. npm test PASS (147 files / 932 tests). Targeted tests PASS. ops:delivery:gate PASS (Performance Contract not required). CI Traceability PASS after reviewer-added exceptions for preexisting ODE-360/ODE-362 drift. Vercel Preview PASS. QualityScore 9.3/10 (3 P3 findings)."
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings. npm test PASS (147 files / 932 tests). Targeted tests PASS. ops:delivery:gate PASS (Performance Contract not required). CI Traceability PASS after reviewer-added exceptions for preexisting ODE-360/ODE-362 drift. Vercel Preview PASS. QualityScore 9.3/10 (3 P3 findings). Follow-up PR #320 added 30s circuit breaker after final retry failure, cleared pending queue work, blocked immediate re-enqueues during cooldown, and extended structured-output fallback to provider 5xx."
     }
   ]
 }
