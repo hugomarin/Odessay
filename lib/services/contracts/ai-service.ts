@@ -100,7 +100,8 @@ export type PublicationReviewRequest = {
   markdown: string
   bodyText: string
   sourceHash: string
-  correctionBlock: CorrectionBlockInput
+  correctionBlock?: CorrectionBlockInput
+  correctionBlocks: CorrectionBlockInput[]
   correctionMemory?: {
     entries: CorrectionMemoryEntry[]
   }
@@ -204,8 +205,8 @@ export const AI_SERVICE_CONTRACT = {
     {
       name: "reviewPublication",
       kind: "stream",
-      summary: "Run the mechanical publication-review flow for a correction block and return normalized corrections.",
-      input: ["PublicationReviewRequest including correction memory and optional stream flag"],
+      summary: "Run the mechanical publication-review flow for up to one correction-block batch and return normalized corrections.",
+      input: ["PublicationReviewRequest including correctionBlocks, correction memory, and optional stream flag"],
       output: ["PublicationReviewResult"],
       errorCodes: ["UNAUTHORIZED", "INVALID_INPUT", "RATE_LIMITED", "TIMEOUT", "AI_REQUEST_FAILED"],
     },

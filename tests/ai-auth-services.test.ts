@@ -60,9 +60,7 @@ describe("webAIService", () => {
   })
 
   it("normalizes publication review payloads into the contract shape", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
+    const fetchMock = vi.fn(async () =>
         new Response(
           JSON.stringify({
             data: {
@@ -91,22 +89,34 @@ describe("webAIService", () => {
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
-      ),
-    )
+      )
+    vi.stubGlobal("fetch", fetchMock)
 
     const result = await webAIService.reviewPublication({
       title: "Test",
       markdown: "Esta es una prueva.",
       bodyText: "Esta es una prueva.",
       sourceHash: "hash-1",
-      correctionBlock: {
-        id: "block-1",
-        text: "Esta es una prueva.",
-        hash: "hash-1",
-      },
+      correctionBlocks: [
+        {
+          id: "block-1",
+          text: "Esta es una prueva.",
+          hash: "hash-1",
+        },
+      ],
     })
 
     expect(result.error).toBeNull()
+    const fetchCalls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+    const requestInit = fetchCalls[0]?.[1]
+    expect(JSON.parse(String(requestInit?.body))).toMatchObject({
+      correctionBlocks: [
+        {
+          id: "block-1",
+          hash: "hash-1",
+        },
+      ],
+    })
     expect(result.data).toMatchObject({
       summary: "One correction.",
       language: "es",

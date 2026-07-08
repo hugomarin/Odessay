@@ -4,6 +4,10 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  BLOCK_CORRECTIONS_MAX_TOKENS,
+  CORRECTION_BLOCK_BATCH_SIZE,
+} from "@/lib/ai/corrections-config";
+import {
   buildMechanicalCorrectionsPrompt,
   normalizeCanonicalCorrections,
   type CanonicalCorrectionsResponse,
@@ -34,7 +38,12 @@ const requestSchema = z.object({
     id: z.string().trim().min(1),
     text: z.string().trim().min(1),
     hash: z.string().trim().min(1),
-  }),
+  }).optional(),
+  correctionBlocks: z.array(z.object({
+    id: z.string().trim().min(1),
+    text: z.string().trim().min(1),
+    hash: z.string().trim().min(1),
+  })).min(1).max(CORRECTION_BLOCK_BATCH_SIZE).optional(),
   correctionMemory: z.object({
     entries: z.array(memoryEntrySchema).default([]),
   }).optional(),
@@ -46,9 +55,15 @@ const requestSchema = z.object({
       }),
     ).default([]),
   }).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.correctionBlock && !value.correctionBlocks) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Either correctionBlock or correctionBlocks is required.",
+      path: ["correctionBlocks"],
+    });
+  }
 });
-
-const BLOCK_CORRECTIONS_MAX_TOKENS = 768;
 
 type CorrectionsUsage = {
   promptTokens: number | null;
@@ -127,24 +142,26 @@ const mechanicalCorrectionsResponseFormat = {
   },
 } as const;
 
-const getCorrectionsMaxTokens = () => BLOCK_CORRECTIONS_MAX_TOKENS;
+const getCorrectionsMaxTokens = (blockCount: number) => BLOCK_CORRECTIONS_MAX_TOKENS * Math.max(1, blockCount);
 
 async function callCorrectionsModel({
   config,
   promptText,
+  blockCount,
   strictJson,
   structuredOutput = true,
   _retries = 0,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
+  blockCount: number;
   strictJson: boolean;
   structuredOutput?: boolean;
   _retries?: number;
 }): Promise<{ text: string; usage: CorrectionsUsage }> {
   const requestBody = {
     model: config.model,
-    max_tokens: getCorrectionsMaxTokens(),
+    max_tokens: getCorrectionsMaxTokens(blockCount),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
     ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
@@ -180,12 +197,12 @@ async function callCorrectionsModel({
       const retryAfterMs = Number(response.headers.get("retry-after") ?? 0) * 1000 || 3000 * (_retries + 1);
       console.info(`[corrections] rate limited; retrying after ${retryAfterMs}ms (attempt ${_retries + 1})`);
       await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-      return callCorrectionsModel({ config, promptText, strictJson, structuredOutput, _retries: _retries + 1 });
+      return callCorrectionsModel({ config, promptText, blockCount, strictJson, structuredOutput, _retries: _retries + 1 });
     }
 
     if (structuredOutput && (response.status === 400 || response.status === 422)) {
       console.info("[corrections] structured output rejected; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
 
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
@@ -203,7 +220,7 @@ async function callCorrectionsModel({
   if (!text) {
     if (structuredOutput) {
       console.info("[corrections] model returned empty content with structured output; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
     throw new Error("AI returned an empty response.");
   }
@@ -228,6 +245,9 @@ const applyMemory = (
 const getLearnedWordsFromRequest = (requestBody: z.infer<typeof requestSchema>) =>
   [...createLearnedWordSet((requestBody.learnedWords?.entries ?? []).map((entry) => entry.word))];
 
+const getCorrectionBlocksFromRequest = (requestBody: z.infer<typeof requestSchema>): CorrectionBlock[] =>
+  requestBody.correctionBlocks ?? (requestBody.correctionBlock ? [requestBody.correctionBlock] : []);
+
 const normalizeCorrectionModelText = ({
   text,
   blocks,
@@ -250,14 +270,8 @@ const normalizeCorrectionModelText = ({
 async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
-  const sourceText = requestBody.correctionBlock.text;
-  const blocks = [
-    {
-      id: requestBody.correctionBlock.id,
-      text: requestBody.correctionBlock.text,
-      hash: requestBody.correctionBlock.hash,
-    },
-  ] satisfies CorrectionBlock[];
+  const blocks = getCorrectionBlocksFromRequest(requestBody);
+  const sourceText = blocks.map((block) => block.text).join("\n\n");
   const fallbackLanguage = detectCorrectionLanguage(sourceText);
   const learnedWords = getLearnedWordsFromRequest(requestBody);
   const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
@@ -266,7 +280,12 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
   );
 
-  const firstResponse = await callCorrectionsModel({ config, promptText, strictJson: false });
+  const firstResponse = await callCorrectionsModel({
+    config,
+    promptText,
+    blockCount: blocks.length,
+    strictJson: false,
+  });
   const t1 = Date.now();
   console.info(`[corrections] first response latencyMs=${t1 - t0}`);
 
@@ -291,7 +310,12 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     console.info(`[corrections] first parse failed. textLength=${firstJsonText.length}`);
     console.info("[corrections] retrying with strict JSON mode");
 
-    const retryResponse = await callCorrectionsModel({ config, promptText, strictJson: true });
+    const retryResponse = await callCorrectionsModel({
+      config,
+      promptText,
+      blockCount: blocks.length,
+      strictJson: true,
+    });
     const retryJsonText = extractJsonPayload(retryResponse.text);
 
     try {
@@ -407,7 +431,7 @@ export async function POST(request: Request) {
     const result = await requestCorrections(parsedRequest.data);
     const tEnd = Date.now();
     logRequestMetrics({
-      batchId: parsedRequest.data.correctionBlock.id,
+      batchId: getCorrectionBlocksFromRequest(parsedRequest.data).map((block) => block.id).join(","),
       blockCount: result.blocks.length,
       model: result.model,
       latencyMs: tEnd - tStart,

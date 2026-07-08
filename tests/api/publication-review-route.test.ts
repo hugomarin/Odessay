@@ -139,6 +139,56 @@ describe("POST /api/ai/publication-review", () => {
     })
   })
 
+  it("accepts batched correction blocks and scales the token budget by block count", async () => {
+    const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.max_tokens).toBe(1536)
+      expect(body.messages[1].content).toContain("[correction-block:blk-test:1]")
+      expect(body.messages[1].content).toContain("[correction-block:blk-test:2]")
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content:
+                  '{"summary":"Two corrections.","language":"es","corrections":[{"blockId":"correction-block:blk-test:1","type":"spelling","originalText":"prueva","replacementText":"prueba"},{"blockId":"correction-block:blk-test:2","type":"accent","originalText":"asi","replacementText":"así"}],"uncertain":[]}',
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      )
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({
+      markdown: "Esta es una prueva.\n\nSolo asi.",
+      bodyText: "Esta es una prueva.\n\nSolo asi.",
+      sourceHash: "batch-test",
+      correctionBlock: undefined,
+      correctionBlocks: [
+        {
+          id: "correction-block:blk-test:1",
+          text: "Esta es una prueva.",
+          hash: "blk-test-1",
+        },
+        {
+          id: "correction-block:blk-test:2",
+          text: "Solo asi.",
+          hash: "blk-test-2",
+        },
+      ],
+    }))
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(payload.data.corrections).toEqual([
+      expect.objectContaining({ blockId: "correction-block:blk-test:1", replacementText: "prueba" }),
+      expect.objectContaining({ blockId: "correction-block:blk-test:2", replacementText: "así" }),
+    ])
+  })
+
   it("injects learned words into the prompt and filters them defensively from the response", async () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

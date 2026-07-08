@@ -3,7 +3,7 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-editor.md`, `workflow/context/features/odessay-sync.md`, `workflow/context/core/odessay-modelo-datos.md` y `workflow/context/core/odessay-stack.md` antes de implementar.
 
-Última actualización: 2026-07-01.
+Última actualización: 2026-07-08.
 
 ---
 
@@ -61,7 +61,7 @@ Un documento de 400 palabras distribuido en ~12 párrafos no debe generar 12 lla
 El trigger de activación no debe depender de la longitud del texto.
 
 - **Qué:** todo bloque con texto válido (`paragraph`, `heading`, `listItem`, `taskItem`, excluyendo `codeBlock`) es candidato a corrección.
-- **Cuándo:** se controla por debounce de inactividad (2s para escritura normal, 5s para paste masivo).
+- **Cuándo:** se controla por debounce de inactividad de 2s. El debounce extendido de 5s para paste masivo fue retirado del spec en ODE-351; batching absorbe el volumen sin introducir una segunda ventana temporal.
 - No hay umbral mínimo de palabras. Un párrafo de 3 palabras con un typo mecánico se corrige igual que uno de 30.
 
 ### 4. Smart invalidation
@@ -90,17 +90,18 @@ Cada corrección lleva métricas para poder optimizar costos y detectar degradac
 
 ## Arquitectura actual (contexto)
 
-### Sistema puro `block`
+### Sistema batch de `block`
 
-El endpoint `/api/ai/publication-review` opera exclusivamente en modo `block`.
+El endpoint `/api/ai/publication-review` opera en modo `block-batch`.
 
 | Modo | Cómo se activa | Estado |
 |------|----------------|--------|
-| `block` | Frontend envía `correctionBlock: {id, text, hash}` | **Activo — único contrato válido** |
+| `block-batch` | Frontend envía `correctionBlocks: [{id, text, hash}]` con máximo 5 bloques | **Activo — contrato válido** |
+| `block` legacy | Consumidores externos pueden enviar `correctionBlock: {id, text, hash}` durante transición | **Tolerado — se normaliza internamente a batch de 1** |
 
 El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Corrections" y abre `CorrectionsPanel` (`components/editor/panels/corrections-panel.tsx`), que consume el estado de correcciones automáticas por bloque.
 
-**Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block` existente.
+**Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block-batch` existente.
 
 ### Flujo de corrección automática
 
@@ -122,11 +123,13 @@ El backend no conoce ProseMirror. El contrato usa `blockId` como string opaco:
 
 ```ts
 // Frontend envía
-correctionBlock: {
-  id: "correction-block:${logicalId}:${hash}:${pos}",  // opaco para el backend
-  text: "...",
-  hash: "blk-..."
-}
+correctionBlocks: [
+  {
+    id: "correction-block:${logicalId}:${hash}:${pos}",  // opaco para el backend
+    text: "...",
+    hash: "blk-..."
+  }
+]
 
 // Backend responde
 corrections: [
@@ -291,9 +294,9 @@ Sugerir un único título útil, corto y coherente con el contenido, bajo invoca
 
 ### Modo `document` — eliminado
 
-La API ya no mantiene una rama `document` ni helpers de partición de texto como `buildCorrectionBlocks()`. El contrato válido exige `correctionBlock` en cada request.
+La API ya no mantiene una rama `document` ni helpers de partición de texto como `buildCorrectionBlocks()`. El contrato válido exige `correctionBlocks[]` en cada request; `correctionBlock` singular se tolera solo como compatibilidad de transición.
 
-**Decisión:** mantener la API acotada a modo `block`. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block`.
+**Decisión:** mantener la API acotada a modo `block-batch`. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block-batch`.
 
 ### Estado actual vs principios
 
@@ -302,7 +305,7 @@ El sistema actual no cumple aún todos los principios de construcción. Estos so
 | Principio | Estado actual | Gap |
 |-----------|--------------|-----|
 | Persistir para no reprocesar | Persistencia IndexedDB + Supabase con write-through | Completado en ODE-165 |
-| Velocidad mediante batching | 1 bloque = 1 llamada HTTP secuencial | Sin batching ni paralelismo |
+| Velocidad mediante batching | `correctionBlocks[]` de hasta 5 bloques por llamada | Completado en ODE-351; fallback legacy singular tolerado durante transición |
 | Separar qué/cuándo | Todo bloque válido con texto es elegible; debounce controla cuándo se analiza | Completado en ODE-327 |
 | Smart invalidation | Stale invalidation con keep/drop/replace | Mejorado en ODE-163 |
 | Observabilidad | `logCorrectionEvent` con discriminated union de 8 eventos | Completado en ODE-161 |
@@ -368,7 +371,7 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 ## Referencias de implementación
 
 ### Activos
-- `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block`)
+- `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block-batch`)
 - `app/api/corrections/learned-words/route.ts` — diccionario de palabras aprendidas (list/create/delete)
 - `lib/ai/corrections.ts` — schema, prompt builder, normalización
 - `lib/ai/corrections-contract-adapter.ts` — adaptador de contrato legacy

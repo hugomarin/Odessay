@@ -78,7 +78,8 @@ test("orthography regression harness preserves apply, invalidation, and persiste
   await page.route("**/api/ai/publication-review", async (route) => {
     const body = route.request().postDataJSON() as PublicationReviewRequest
     reviewBodies.push(body)
-    const corrections = buildOrthographyRegressionCorrections(body.correctionBlock.id, body.correctionBlock.text)
+    const blocks = body.correctionBlocks ?? (body.correctionBlock ? [body.correctionBlock] : [])
+    const corrections = blocks.flatMap((block) => buildOrthographyRegressionCorrections(block.id, block.text))
 
     await route.fulfill({
       status: 200,

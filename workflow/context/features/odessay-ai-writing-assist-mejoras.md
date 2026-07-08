@@ -35,7 +35,9 @@ Si el modelo responde sugerencias para `k` de los `n` `blockId` enviados, **solo
 Una sugerencia cuyo `originalText` sobrevive a un edit se conserva visualmente con estado `pending-stale`, pero **no es aceptable hasta que llegue la nueva respuesta del modelo**. Esto evita aplicar correcciones obsoletas.
 
 ### Paste masivo
-**No hay techo duro en la cola de correcciones.** El batching colectivo (Mejora 2) absorbe el caso: 30 bloques pendientes se resuelven en 6 requests de 5, no en 30 individuales. El debounce extendido (Mejora 3) evita disparar mientras el usuario aún organiza el texto.
+**No hay techo duro en la cola de correcciones.** El batching colectivo (Mejora 2) absorbe el caso: 30 bloques pendientes se resuelven en 6 requests de 5, no en 30 individuales.
+
+Estado ODE-351: el debounce extendido de 5s para paste masivo queda retirado del spec. La ventana vigente es 2s; el batching es el mecanismo para absorber paste masivo.
 
 ### Estado actual del proyecto
 - **"Sin usuarios en producción" — autorización caducada (revisión 2026-07).** Esta premisa databa del inicio del plan y no tiene fecha de verificación. Antes de cualquier migración destructiva de IndexedDB o Supabase, confirmar con el dueño si ya existen usuarios/datos reales; sin esa confirmación explícita, toda migración debe incluir backfill.
@@ -43,6 +45,8 @@ Una sugerencia cuyo `originalText` sobrevive a un edit se conserva visualmente c
 ---
 
 ## Mejora 0: Observabilidad mínima
+
+Estado: completado en ODE-161. Mantener esta sección como contexto histórico.
 
 ### Objetivo
 Antes de tocar el flujo de correcciones, instrumentar lo suficiente para validar que las mejoras no regresionan métricas hoy invisibles.
@@ -88,6 +92,8 @@ export const logCorrectionEvent = (event: CorrectionEvent) => {
 ---
 
 ## Mejora 1: Persistencia de correcciones automáticas (Supabase + IndexedDB)
+
+Estado: completado en ODE-165. Mantener esta sección como contexto histórico.
 
 ### Objetivo
 Eliminar el reprocesamiento completo al recargar la página, cambiar de pestaña o cambiar de dispositivo. Supabase guarda el origen, IndexedDB acelera la lectura.
@@ -198,6 +204,8 @@ Como IDB es cache, se aplica LRU agresiva:
 
 ## Mejora 2: Batching de bloques dirty
 
+Estado: completado en ODE-351. Esta sección describe el contrato vigente.
+
 ### Objetivo
 Reducir de N llamadas API a ⌈N/BATCH_SIZE⌉, eliminando overhead de HTTP y reduciendo latencia total.
 
@@ -218,7 +226,7 @@ Valor inicial justificado en *Decisiones de diseño*. Parametrizable.
 // Antes (singular)
 correctionBlock: z.object({ id, text, hash }).optional()
 
-// Después (array, máx. BATCH_SIZE)
+// Después (array, máx. BATCH_SIZE; correctionBlock singular se tolera como legacy)
 correctionBlocks: z.array(z.object({ id, text, hash })).max(BATCH_SIZE).optional()
 ```
 
@@ -299,9 +307,9 @@ if (block.wordCount < 8) { continue; }
 if (block.wordCount === 0 || block.text.trim().length === 0) { continue; }
 ```
 
-**Ajuste de debounce para paste masivo**
+**Debounce único**
 
-Si se detecta un paste de >10 bloques nuevos, usar debounce extendido de 5s (en lugar de 2s) antes del primer batch. Esto evita que la corrección se dispare mientras el usuario aún está organizando el texto pegado.
+Se conserva el debounce de inactividad de 2s para escritura y paste. La promesa histórica de 5s para paste masivo fue retirada en ODE-351 para evitar un segundo timing observable; el batching es el mecanismo vigente para absorber paste masivo.
 
 **Sin techo duro en la cola**
 
@@ -313,12 +321,14 @@ No se aplica un máximo absoluto de bloques. El batching colectivo (Mejora 2) ab
 ### Criterio de aceptación
 - [ ] Un párrafo de 3 palabras con un typo se corrige.
 - [ ] Un texto de 20 palabras en 3 párrafos cortos genera correcciones.
-- [ ] Al pegar texto masivo, la primera corrección espera 5s, no 2s.
+- [ ] Al pegar texto masivo, la corrección usa el debounce único de 2s y se procesa en batches.
 - [ ] Pegar 30 párrafos genera 6 batches de 5, no 30 requests individuales.
 
 ---
 
 ## Mejora 4: Smart invalidation
+
+Estado: completado en ODE-163 y endurecido por ODE-344/347. Mantener esta sección como contexto histórico.
 
 ### Objetivo
 Las sugerencias no desaparecen inmediatamente al editar. Solo se invalidan si el texto editado ya no contiene `originalText` como rango limpio seleccionable con límites de token.
@@ -374,6 +384,8 @@ Las sugerencias mantenidas se marcan con `status: "pending-stale"` (nuevo estado
 
 ## Mejora 5: Métricas de tokens y latencia
 
+Estado: completado junto con persistencia de correction blocks. Mantener esta sección como contexto histórico.
+
 ### Objetivo
 Cada corrección lleva métricas para optimizar costos y detectar degradación del proveedor.
 
@@ -417,6 +429,8 @@ Medir `latencyMs = Date.now() - t0` en el frontend (desde fetch hasta respuesta 
 
 ## Mejora 6: Limpiar código legacy del modo `document`
 
+Estado: completado en ODE-349 para la route activa; el endpoint conserva solo tolerancia legacy de `stream` y `correctionBlock` singular durante transición.
+
 ### Objetivo
 Eliminar código muerto que confunde la lectura y los tests.
 
@@ -457,6 +471,8 @@ No requiere migración: la store `publicationReviews` solo existía en IndexedDB
 ---
 
 ## Mejora 7: Panel de Ortografía sin filtro `kind`
+
+Estado: completado. El archivo activo es `components/editor/panels/corrections-panel.tsx`.
 
 ### Objetivo
 Mostrar todas las correcciones pendientes en el panel, no solo ortografía.

@@ -93,6 +93,11 @@ import {
   stableFingerprintFromStoredFingerprint,
 } from "@/lib/corrections/engine/identity"
 import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
+import { CORRECTION_BLOCK_BATCH_SIZE } from "@/lib/ai/corrections-config"
+import {
+  getMissingCorrectionBlockIds,
+  takeCorrectionBatch,
+} from "@/lib/corrections/engine/batching"
 import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
@@ -451,6 +456,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionProcessingRef = useRef(false)
   const correctionQueueTotalRef = useRef(0)
   const correctionQueueCompletedRef = useRef(0)
+  const correctionBatchRetryRef = useRef(new Set<string>())
   const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
   const correctionStaleTimersRef = useRef(new Map<string, number>())
   const correctionToastDismissRef = useRef<number | null>(null)
@@ -461,6 +467,35 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   })
   const suppressedCorrectionFlushTimerRef = useRef<number | null>(null)
   const editorInstanceRef = useRef<Editor | null>(null)
+
+  const resetCorrectionQueueState = useCallback(() => {
+    for (const { timer } of correctionTimersRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+
+    for (const timer of correctionStaleTimersRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+
+    if (suppressedCorrectionFlushTimerRef.current !== null) {
+      window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
+      suppressedCorrectionFlushTimerRef.current = null
+    }
+
+    correctionTimersRef.current.clear()
+    correctionStaleTimersRef.current.clear()
+    correctionBatchRetryRef.current.clear()
+    deferredSuppressedCorrectionBlocksRef.current = {
+      blocksById: new Map(),
+      flushAt: null,
+    }
+    correctionQueueRef.current = []
+    correctionQueueTotalRef.current = 0
+    correctionQueueCompletedRef.current = 0
+    correctionProcessingRef.current = false
+    setCorrectionToast(null)
+  }, [])
+
   const getTableOfContentsScrollParent = useCallback(() => {
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
     return editorViewport ?? window
@@ -1197,31 +1232,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    for (const { timer } of correctionTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
+    resetCorrectionQueueState()
+  }, [correctionsEnabled, resetCorrectionQueueState])
 
-    for (const timer of correctionStaleTimersRef.current.values()) {
-      window.clearTimeout(timer)
-    }
-
-    if (suppressedCorrectionFlushTimerRef.current !== null) {
-      window.clearTimeout(suppressedCorrectionFlushTimerRef.current)
-      suppressedCorrectionFlushTimerRef.current = null
-    }
-
-    correctionTimersRef.current.clear()
-    correctionStaleTimersRef.current.clear()
-    deferredSuppressedCorrectionBlocksRef.current = {
-      blocksById: new Map(),
-      flushAt: null,
-    }
-    correctionQueueRef.current = []
-    correctionQueueTotalRef.current = 0
-    correctionQueueCompletedRef.current = 0
-    correctionProcessingRef.current = false
-    setCorrectionToast(null)
-  }, [correctionsEnabled])
+  useEffect(() => {
+    resetCorrectionQueueState()
+  }, [currentWritingId, resetCorrectionQueueState])
 
   useEffect(() => {
     titleRef.current = title
@@ -3570,16 +3586,21 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     })
 
     while (correctionQueueRef.current.length > 0) {
-      const block = correctionQueueRef.current.shift()
+      const queuedBatch = takeCorrectionBatch(correctionQueueRef.current, CORRECTION_BLOCK_BATCH_SIZE)
+      const currentBatch: CorrectionTriggerBlock[] = []
 
-      if (!block) {
-        continue
+      for (const block of queuedBatch) {
+        const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+
+        if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
+          correctionQueueCompletedRef.current += 1
+          continue
+        }
+
+        currentBatch.push(currentBlock)
       }
 
-      const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-      if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-        correctionQueueCompletedRef.current += 1
+      if (currentBatch.length === 0) {
         continue
       }
 
@@ -3589,27 +3610,29 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         total: correctionQueueTotalRef.current,
       })
 
+      const batchId = currentBatch.map((block) => `${block.id}:${block.hash}`).join("|")
+      const requestStartedAt = Date.now()
+      const requestWritingId = currentWritingIdRef.current
+
       try {
-        const batchId = `${block.id}:${block.hash}`
-        const requestStartedAt = Date.now()
         logCorrectionEvent({
           type: "request:start",
           batchId,
-          blockIds: [block.id],
+          blockIds: currentBatch.map((block) => block.id),
         })
 
         const result = await getAIService().reviewPublication({
-          writingId: currentWritingIdRef.current ?? undefined,
+          writingId: requestWritingId ?? undefined,
           title: titleRef.current,
-          markdown: block.text,
-          bodyText: block.text,
-          sourceHash: block.hash,
+          markdown: currentBatch.map((block) => block.text).join("\n\n"),
+          bodyText: currentBatch.map((block) => block.text).join("\n\n"),
+          sourceHash: hashPublicationSource(currentBatch.map((block) => block.hash).join("|")),
           stream: false,
-          correctionBlock: {
+          correctionBlocks: currentBatch.map((block) => ({
             id: block.id,
             text: block.text,
             hash: block.hash,
-          },
+          })),
           correctionMemory: {
             entries: readCorrectionMemory(),
           },
@@ -3623,12 +3646,30 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
         if (result.error || !result.data) {
           console.info(`[corrections] block analysis skipped code=${result.error?.code ?? "unknown"}`)
-          dropStaleSuggestionsForQueuedBlock(block.id)
+          for (const block of currentBatch) {
+            dropStaleSuggestionsForQueuedBlock(block.id)
+          }
           continue
         }
 
         if (!correctionsEnabledRef.current) {
-          dropStaleSuggestionsForQueuedBlock(block.id)
+          for (const block of currentBatch) {
+            dropStaleSuggestionsForQueuedBlock(block.id)
+          }
+          continue
+        }
+
+        if (currentWritingIdRef.current !== requestWritingId) {
+          for (const block of currentBatch) {
+            dropStaleSuggestionsForQueuedBlock(block.id)
+          }
+          logCorrectionEvent({
+            type: "request:end",
+            batchId,
+            latencyMs: Date.now() - requestStartedAt,
+            suggestions: 0,
+            missing: currentBatch.map((block) => block.id),
+          })
           continue
         }
 
@@ -3644,90 +3685,120 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           corrections: result.data.corrections,
           uncertain: result.data.uncertain,
         })
-        const suggestions = adapted.legacy.suggestions
-        const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
-
-        if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
-          dropStaleSuggestionsForQueuedBlock(block.id)
-          logCorrectionEvent({
-            type: "request:end",
-            batchId,
-            latencyMs: Date.now() - requestStartedAt,
-            suggestions: 0,
-            missing: [block.id],
-          })
-          continue
+        const suggestionsByBlockId = new Map<string, PublicationSuggestion[]>()
+        for (const suggestion of adapted.legacy.suggestions) {
+          if (!suggestion.block_id) continue
+          const blockSuggestions = suggestionsByBlockId.get(suggestion.block_id) ?? []
+          blockSuggestions.push(suggestion)
+          suggestionsByBlockId.set(suggestion.block_id, blockSuggestions)
         }
+        const missingBlockIds = getMissingCorrectionBlockIds(currentBatch, result.data.corrections)
+        const missingBlockIdSet = new Set(missingBlockIds)
+        let persistedSuggestionsCount = 0
 
-        const normalizedSuggestions = admitCorrectionSuggestions(
-          suggestions.map((suggestion) => normalizeAutomaticSuggestion(block, suggestion)),
-          [stillCurrentBlock],
-        )
-        const nextCorrectionBlock: LocalCorrectionBlock | null = currentWritingIdRef.current
-          ? {
-              id: createCorrectionBlockRecordId(currentWritingIdRef.current, block.hash),
-              writingId: currentWritingIdRef.current,
-              blockId: block.id,
-              blockHash: block.hash,
-              suggestions: normalizedSuggestions,
-              model: result.data.usage?.model ?? "web-route",
-              createdAt: new Date().toISOString(),
-              latencyMs: Date.now() - requestStartedAt,
-              promptTokens: result.data.usage?.promptTokens ?? null,
-              completionTokens: result.data.usage?.completionTokens ?? null,
-              syncedAt: null,
+        for (const block of currentBatch) {
+          const stillCurrentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+
+          if (!stillCurrentBlock || stillCurrentBlock.hash !== block.hash || stillCurrentBlock.text !== block.text) {
+            dropStaleSuggestionsForQueuedBlock(block.id)
+            continue
+          }
+
+          if (missingBlockIdSet.has(block.id)) {
+            const retryKey = `${block.id}:${block.hash}`
+
+            if (!correctionBatchRetryRef.current.has(retryKey)) {
+              correctionBatchRetryRef.current.add(retryKey)
+              correctionQueueRef.current.push(block)
+              correctionQueueTotalRef.current += 1
+              logCorrectionEvent({
+                type: "queue:enqueue",
+                blockId: block.id,
+                reason: "edit",
+              })
+              continue
             }
-          : null
+          }
 
-        const replacement = replaceBlockSuggestions(
-          automaticCorrectionSuggestionsRef.current,
-          block.id,
-          normalizedSuggestions,
-        )
+          correctionBatchRetryRef.current.delete(`${block.id}:${block.hash}`)
 
-        const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
+          const normalizedSuggestions = admitCorrectionSuggestions(
+            (suggestionsByBlockId.get(block.id) ?? []).map((suggestion) =>
+              normalizeAutomaticSuggestion(block, suggestion),
+            ),
+            [stillCurrentBlock],
+          )
+          const nextCorrectionBlock: LocalCorrectionBlock | null = requestWritingId
+            ? {
+                id: createCorrectionBlockRecordId(requestWritingId, block.hash),
+                writingId: requestWritingId,
+                blockId: block.id,
+                blockHash: block.hash,
+                suggestions: normalizedSuggestions,
+                model: result.data.usage?.model ?? "web-route",
+                createdAt: new Date().toISOString(),
+                latencyMs: Date.now() - requestStartedAt,
+                promptTokens: result.data.usage?.promptTokens ?? null,
+                completionTokens: result.data.usage?.completionTokens ?? null,
+                syncedAt: null,
+              }
+            : null
 
-        if (existingStaleTimer) {
-          window.clearTimeout(existingStaleTimer)
-          correctionStaleTimersRef.current.delete(block.id)
+          const replacement = replaceBlockSuggestions(
+            automaticCorrectionSuggestionsRef.current,
+            block.id,
+            normalizedSuggestions,
+          )
+
+          const existingStaleTimer = correctionStaleTimersRef.current.get(block.id)
+
+          if (existingStaleTimer) {
+            window.clearTimeout(existingStaleTimer)
+            correctionStaleTimersRef.current.delete(block.id)
+          }
+
+          for (const suggestionId of replacement.replacedIds) {
+            logCorrectionEvent({
+              type: "stale:drop",
+              blockId: block.id,
+              suggestionId,
+            })
+          }
+
+          for (const suggestion of normalizedSuggestions) {
+            logCorrectionEvent({
+              type: "stale:keep",
+              blockId: block.id,
+              suggestionId: suggestion.id,
+            })
+          }
+
+          applyCorrectionSuggestionUpdate((current) =>
+            replaceBlockSuggestions(current, block.id, normalizedSuggestions).suggestions,
+          )
+
+          if (nextCorrectionBlock) {
+            await persistCorrectionBlockWriteThrough(nextCorrectionBlock)
+          }
+
+          persistedSuggestionsCount += normalizedSuggestions.length
         }
 
-        for (const suggestionId of replacement.replacedIds) {
-          logCorrectionEvent({
-            type: "stale:drop",
-            blockId: block.id,
-            suggestionId,
-          })
-        }
-
-        for (const suggestion of normalizedSuggestions) {
-          logCorrectionEvent({
-            type: "stale:keep",
-            blockId: block.id,
-            suggestionId: suggestion.id,
-          })
-        }
-
-        applyCorrectionSuggestionUpdate((current) =>
-          replaceBlockSuggestions(current, block.id, normalizedSuggestions).suggestions,
-        )
-
-        if (nextCorrectionBlock) {
-          await persistCorrectionBlockWriteThrough(nextCorrectionBlock)
-        }
         logCorrectionEvent({
           type: "request:end",
           batchId,
           latencyMs: Date.now() - requestStartedAt,
-          suggestions: normalizedSuggestions.length,
-          missing: [],
+          suggestions: persistedSuggestionsCount,
+          missing: missingBlockIds,
         })
       } catch (error) {
         const message = error instanceof Error ? error.message : "block correction failed"
         console.info(`[corrections] block analysis skipped message=${message}`)
-        dropStaleSuggestionsForQueuedBlock(block.id)
+        for (const block of currentBatch) {
+          dropStaleSuggestionsForQueuedBlock(block.id)
+        }
       } finally {
-        correctionQueueCompletedRef.current += 1
+        correctionQueueCompletedRef.current += currentBatch.length
 
         if (correctionsEnabledRef.current) {
           setCorrectionToast({
