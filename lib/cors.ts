@@ -25,7 +25,7 @@ export function withCorsHeaders(
   if (origin && isAllowedOrigin(origin)) {
     response.headers.set("Access-Control-Allow-Origin", origin)
     response.headers.set("Access-Control-Allow-Credentials", "true")
-    response.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    response.headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
   }
 
@@ -42,7 +42,7 @@ export function handleCorsPreflight(request: Request): Response | null {
         headers: {
           "Access-Control-Allow-Origin": origin,
           "Access-Control-Allow-Credentials": "true",
-          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
       })
