@@ -27,19 +27,22 @@ Cuando el usuario anota, no está corrigiendo ni editando. Está dejando constan
 
 ---
 
-## Tres tipos de anotación
+## Tipos de anotación reales
 
-El sistema introduce un campo `type` que define la **audiencia** de cada anotación:
+El sistema actual usa un único nodo TipTap `annotationReference` con cuatro valores reales de `type`.
+`collaborative` ya no es un tipo de producto vigente; entradas legacy con prefijo `@c` se tratan como
+`personal` para compatibilidad.
 
 | Tipo | Audiencia | Significado |
 |------|-----------|-------------|
+| `footnote` | Cualquier lector | Aclaración o referencia contextual |
 | `personal` | El autor | "Esto es relevante para mí" — para mi propia referencia y reflexión |
 | `ai` | La AI | Instrucciones inline para la próxima consulta AI sobre ese pasaje |
-| `collaborative` | Otros lectores | Notas para colaboradores o revisores |
+| `highlight` | El autor | Pasaje marcado sin obligación de nota textual |
 
 ### Sobre `personal`
 
-`personal` no significa privado ni secreto. Significa que la anotación es para el beneficio propio del autor — sus dudas, conexiones, ideas que surgieron al leer. En v1 no hay distinción de control de acceso entre `personal` y `collaborative`. La distinción es semántica: define para quién es relevante la nota, no quién puede verla técnicamente.
+`personal` no significa privado ni secreto. Significa que la anotación es para el beneficio propio del autor — sus dudas, conexiones, ideas que surgieron al leer. En v1 no hay distinción de control de acceso por tipo. La distinción es semántica: define para quién es relevante la nota, no quién puede verla técnicamente.
 
 ### Anotaciones `ai`
 
@@ -51,9 +54,9 @@ Son el tipo más relevante para el flujo de trabajo con AI. El usuario seleccion
 
 Estas anotaciones no modifican el texto — son instrucciones pendientes que viajan como contexto cuando el usuario decide consultarle a la AI.
 
-### Anotaciones `collaborative`
+### Anotaciones `highlight`
 
-Para notas destinadas a que otros lean. En v1 no hay edición simultánea — el autor crea anotaciones que otros pueden ver al compartir el writing. La colaboración en tiempo real es una versión futura.
+Son marcas de lectura sin texto obligatorio. Usan el mismo anclaje inline que las demás anotaciones para que el pasaje marcado viaje con el documento, pero su `text` puede estar vacío.
 
 ---
 
@@ -88,7 +91,7 @@ Un único tipo de nodo TipTap `annotationReference` cubre todos los tipos (inclu
 ```ts
 {
   id: string       // UUID estable, generado en creación, nunca cambia
-  type: 'footnote' | 'personal' | 'ai' | 'collaborative'
+  type: 'footnote' | 'personal' | 'ai' | 'highlight'
   index: number    // índice de display, recalculado al serializar por tipo
   text: string     // contenido de la anotación
 }
@@ -106,7 +109,7 @@ La tabla `margins` recibe datos extraídos de `body_json` en cada save. Su `id` 
 id          uuid PRIMARY KEY  -- mismo UUID que el nodo en body_json
 writing_id  uuid
 author_id   uuid
-type        text CHECK (type IN ('personal', 'ai', 'collaborative'))
+type        text CHECK (type IN ('footnote', 'personal', 'ai', 'highlight'))
 text        text
 archived    boolean DEFAULT false
 resolved    boolean DEFAULT false
@@ -127,7 +130,7 @@ Cada tipo de anotación tiene un sigil distinto en `body_text`:
 | footnote | `[^n: texto]` | `[^1: Ver referencia p.42]` |
 | ai | `[@n: texto]` | `[@1: Claude: simplificar esto]` |
 | personal | `[@pn: texto]` | `[@p1: revisar después]` |
-| collaborative | `[@cn: texto]` | `[@c1: este tono funciona bien]` |
+| highlight | `[@hn: texto]` | `[@h1: guardar este pasaje]` |
 
 Patrón de anclaje sobre texto resaltado:
 
@@ -217,7 +220,7 @@ El ciclo de escritura colaborativa con AI no termina cuando la AI produce el tex
 Al seleccionar texto en la vista de lectura, el popup muestra cuatro opciones:
 - **Personal** — nota para mí
 - **AI** — instrucción para la AI
-- **Collaborative** — nota para colaboradores
+- **Highlight** — marcar pasaje
 - **Footnote** — referencia o aclaración
 
 ### Indicador de tipo en el margen
@@ -226,13 +229,27 @@ Cada anotación en el sidebar muestra un indicador visual:
 
 - `personal` — tono neutro (`#999990`)
 - `ai` — indigo (`#5B5BD6`)
-- `collaborative` — amber (`#C07B2A`)
+- `highlight` — amber (`#C07B2A`)
+- `footnote` — tono neutro (`#999990`)
 
 El usuario puede cambiar el tipo desde la anotación antes de guardar.
 
+### Color del anclaje inline
+
+El color del subrayado/fondo se decide por marca, no por heurística de párrafo:
+
+- El mark `highlight` que ancla una anotación puede portar `data-annotation-type`.
+- `mark[data-annotation-type="ai"]` se renderiza lila (`#5B5BD6`).
+- `mark[data-annotation-type="highlight"]` se renderiza ámbar (`#C07B2A`), igual que el superíndice.
+- `mark[data-annotation-type="personal"]` y `mark[data-annotation-type="footnote"]` usan neutro (`#999990`).
+- Marks sin `data-annotation-type` son highlights manuales y conservan el estilo default ámbar.
+
+La sintaxis markdown no cambia: `==texto==[@tipo...]`. Al parsear markdown, el rich parser re-deriva
+`data-annotation-type` desde el `annotationReference` hermano que sigue al mark.
+
 ### Panel de anotaciones filtrado
 
-Tabs de filtro: Todas / Personal / AI / Collaborative.
+Tabs de filtro: Todas / Personal / AI / Highlight / Footnote.
 
 ### "Copiar para AI"
 
@@ -280,7 +297,7 @@ ALTER TABLE margins ALTER COLUMN id SET NOT NULL;
 -- Agregar type
 ALTER TABLE margins
   ADD COLUMN type text NOT NULL DEFAULT 'personal'
-    CHECK (type IN ('personal', 'ai', 'collaborative'));
+    CHECK (type IN ('footnote', 'personal', 'ai', 'highlight'));
 
 -- Agregar campos de estado para colaboración futura
 ALTER TABLE margins
@@ -294,7 +311,7 @@ ALTER TABLE margins
 // annotationReference node attrs
 {
   id: string        // UUID, estable, fuente de verdad de identidad
-  type: 'footnote' | 'personal' | 'ai' | 'collaborative'
+  type: 'footnote' | 'personal' | 'ai' | 'highlight'
   index: number     // solo para display en markdown
   text: string
 }

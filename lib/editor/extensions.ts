@@ -31,7 +31,7 @@ import Text from "@tiptap/extension-text"
 import { Markdown } from "tiptap-markdown"
 import { FindReplaceExtension } from "@/lib/editor/find-replace"
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
-import { AnnotationReferenceNode } from "@/lib/editor/footnote-node"
+import { AnnotationReferenceNode, type AnnotationType } from "@/lib/editor/footnote-node"
 import { CorrectionTriggerExtension } from "@/lib/editor/correction-trigger-plugin"
 import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
 import { PublicationSuggestionExtension } from "@/lib/editor/publication-suggestion-extension"
@@ -44,6 +44,14 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
   tableOfContentsScrollParent?: () => HTMLElement | Window
+}
+
+const coerceHighlightAnnotationType = (value: unknown): AnnotationType | null => {
+  if (value === "footnote" || value === "personal" || value === "ai" || value === "highlight") {
+    return value
+  }
+
+  return null
 }
 
 export const createEditorExtensions = (options: CreateEditorExtensionsOptions = {}): Extensions => {
@@ -74,7 +82,22 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     Bold.extend({ addKeyboardShortcuts: () => ({}) }),
     Italic.extend({ addKeyboardShortcuts: () => ({}) }),
     Strike.extend({ addKeyboardShortcuts: () => ({}) }),
-    Highlight.extend({ addKeyboardShortcuts: () => ({}) }),
+    Highlight.extend({
+      addAttributes() {
+        return {
+          annotationType: {
+            default: null,
+            parseHTML: (element) =>
+              coerceHighlightAnnotationType(element.getAttribute("data-annotation-type")),
+            renderHTML: (attrs) => {
+              const annotationType = coerceHighlightAnnotationType(attrs.annotationType)
+              return annotationType ? { "data-annotation-type": annotationType } : {}
+            },
+          },
+        }
+      },
+      addKeyboardShortcuts: () => ({}),
+    }),
     Image.extend({ addKeyboardShortcuts: () => ({}) }).configure({
       allowBase64: false,
       inline: false,

@@ -1,6 +1,8 @@
 import { Extension, getMarkRange } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
 import type { JSONContent } from "@tiptap/core"
+import type { MarkType } from "@tiptap/pm/model"
+import type { Transaction } from "@tiptap/pm/state"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 
 export type MarkdownAnnotation = {
@@ -28,6 +30,20 @@ const ANNOTATION_NOTATION_COMMENT =
   "<!-- Anotaciones del autor embebidas en el texto. Formato: ==texto citado==[@N: instrucción] — el fragmento entre == es el pasaje al que refiere la instrucción entre corchetes. Son directivas del autor para ti; no forman parte del documento publicable. Tenlas en cuenta al procesar el texto. -->"
 
 const annotationTypeOrder: AnnotationType[] = ["footnote", "ai", "personal", "highlight"]
+
+const stampHighlightBeforeRef = (
+  tr: Transaction,
+  pos: number,
+  highlightMarkType: MarkType,
+  type: AnnotationType,
+) => {
+  const $beforeRef = tr.doc.resolve(pos)
+  const range = getMarkRange($beforeRef, highlightMarkType)
+  if (!range) return
+
+  tr.removeMark(range.from, range.to, highlightMarkType)
+  tr.addMark(range.from, range.to, highlightMarkType.create({ annotationType: type }))
+}
 
 const annotationSigil = (type: AnnotationType, index: number, text: string, id?: string) => {
   const trimmedText = text.trim()
@@ -441,6 +457,10 @@ export const FootnoteExtension = Extension.create({
             index: maxIndex + 1,
             text: trimmedText,
           })
+          const highlightMarkType = editor.schema.marks.highlight
+          if (highlightMarkType) {
+            stampHighlightBeforeRef(tr, insertPos, highlightMarkType, type)
+          }
           tr.setSelection(TextSelection.create(tr.doc, insertPos))
           tr.insert(insertPos, refNode)
 
@@ -578,6 +598,10 @@ export const FootnoteExtension = Extension.create({
             if (node) {
               const nextText = newText !== undefined ? newText.trim() : (node.attrs.text as string) ?? ""
               tr.setNodeMarkup(pos, undefined, { ...node.attrs, type: newType, text: nextText })
+              const highlightMarkType = editor.schema.marks.highlight
+              if (highlightMarkType) {
+                stampHighlightBeforeRef(tr, pos, highlightMarkType, newType)
+              }
             }
           }
           // Reindex all nodes of newType to ensure unique sequential indices

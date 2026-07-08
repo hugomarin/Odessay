@@ -460,29 +460,35 @@
 
   .odessay-editor-content mark,
   .prose-odessay mark {
-    background: #e7af0233;
+    background: #C07B2A33;
     border-radius: 2px;
     padding: 0;
     color: inherit;
     box-shadow: none;
     border-bottom: none;
-    text-decoration: underline dotted #e7af02;
+    text-decoration: underline dotted #C07B2A;
     text-underline-offset: 3px;
     text-decoration-thickness: 1px;
   }
 
-  /* AI annotations: fondo lila + underline lila */
-  .odessay-editor-content p:has(sup.annotation-ref-ai) mark,
-  .prose-odessay p:has(sup.annotation-ref-ai) mark {
+  .odessay-editor-content mark[data-annotation-type="ai"],
+  .prose-odessay mark[data-annotation-type="ai"] {
     background: #5B5BD620;
     text-decoration: underline dotted #5B5BD6;
   }
 
-  /* Highlight annotations: fondo ámbar + underline ámbar */
-  .odessay-editor-content p:has(sup.annotation-ref-highlight) mark,
-  .prose-odessay p:has(sup.annotation-ref-highlight) mark {
-    background: #e7af0233;
-    text-decoration: underline dotted #e7af02;
+  .odessay-editor-content mark[data-annotation-type="highlight"],
+  .prose-odessay mark[data-annotation-type="highlight"] {
+    background: #C07B2A33;
+    text-decoration: underline dotted #C07B2A;
+  }
+
+  .odessay-editor-content mark[data-annotation-type="personal"],
+  .odessay-editor-content mark[data-annotation-type="footnote"],
+  .prose-odessay mark[data-annotation-type="personal"],
+  .prose-odessay mark[data-annotation-type="footnote"] {
+    background: #99999020;
+    text-decoration: underline dotted #999990;
   }
 
   /* Cuando un mark contiene una corrección, quitar su propia decoración

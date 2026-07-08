@@ -12,11 +12,13 @@ import {
   normalizeMarkdownFootnotes,
 } from "@/lib/editor/footnote-extension"
 import { AnnotationReferenceNode } from "@/lib/editor/footnote-node"
+import { applyAnnotationToBody } from "@/lib/editor/annotation-document"
 import {
   marginRecordSchema,
   createMarginSchema,
   countTypedAnnotations,
 } from "@/lib/margins/margins"
+import { parseMarkdownToSnapshot, serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
 
 function createTestEditor(content = "") {
   return new Editor({
@@ -27,6 +29,35 @@ function createTestEditor(content = "") {
 
 describe("highlight annotation", () => {
   describe("markdown serialization", () => {
+    it("keeps annotation highlight mark type through canonical markdown round-trip", () => {
+      const parsed = parseMarkdownToSnapshot(
+        "==AI span==[@1|ann-ai: AI note] and ==highlight span==[@h1|ann-h: saved]",
+      )
+      const markdown = serializeDocumentToMarkdown(parsed.bodyJson)
+      const reparsed = parseMarkdownToSnapshot(markdown)
+
+      const collectHighlightTypes = (node: unknown, result: string[] = []) => {
+        if (!node || typeof node !== "object") return result
+        const current = node as {
+          marks?: Array<{ type?: string; attrs?: { annotationType?: string | null } }>
+          content?: unknown[]
+        }
+        for (const mark of current.marks ?? []) {
+          if (mark.type === "highlight") {
+            if (mark.attrs?.annotationType) result.push(mark.attrs.annotationType)
+          }
+        }
+        for (const child of current.content ?? []) {
+          collectHighlightTypes(child, result)
+        }
+        return result
+      }
+
+      expect(markdown).toBe("==AI span==[@1|ann-ai: AI note] and ==highlight span==[@h1|ann-h: saved]")
+      expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["ai", "highlight"])
+      expect(collectHighlightTypes(reparsed.bodyJson)).toEqual(["ai", "highlight"])
+    })
+
     it("serializes highlight annotation with a stable inline id", () => {
       const editor = createTestEditor("Hello world")
       editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("highlight", "my note").run()
@@ -112,6 +143,42 @@ describe("highlight annotation", () => {
   })
 
   describe("TipTap commands", () => {
+    it("applyAnnotationToBody stamps the highlight mark with the annotation type", () => {
+      const result = applyAnnotationToBody({
+        bodyJson: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "Alpha beta" }] }],
+        },
+        bodyText: "Alpha beta",
+        anchorStart: 0,
+        anchorEnd: 5,
+        type: "ai",
+        text: "AI note",
+      })
+
+      const paragraph = result.bodyJson.content?.[0]
+      const textNode = paragraph?.content?.[0]
+      expect(textNode).toMatchObject({
+        type: "text",
+        text: "Alpha",
+        marks: [{ type: "highlight", attrs: { annotationType: "ai" } }],
+      })
+    })
+
+    it("manual highlights keep no annotation type attribute", () => {
+      const editor = createTestEditor("Hello world")
+      editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().run()
+
+      const paragraph = editor.getJSON().content?.[0]
+      const textNode = paragraph?.content?.[0]
+      expect(textNode).toMatchObject({
+        type: "text",
+        text: "Hello",
+        marks: [{ type: "highlight", attrs: { annotationType: null } }],
+      })
+      editor.destroy()
+    })
+
     it("addAnnotation allows empty text for highlight type", () => {
       const editor = createTestEditor("Hello world")
       const result = editor.chain().setTextSelection({ from: 1, to: 6 }).setHighlight().addAnnotation("highlight", "").run()

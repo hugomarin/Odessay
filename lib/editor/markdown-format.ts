@@ -222,8 +222,25 @@ export const normalizeMarkdownForRoundTrip = (markdown: string): string =>
     ),
   )
 
+const annotationTypeFromInlineMarker = (marker: string) => {
+  if (marker.startsWith("[^")) return "footnote"
+  if (marker.startsWith("[@p") || marker.startsWith("[@c")) return "personal"
+  if (marker.startsWith("[@h")) return "highlight"
+  return "ai"
+}
+
+const materializeAnnotationHighlightTypes = (markdown: string): string =>
+  markdown.replace(
+    /==([^=\n]+)==((?:\[\^(?:\d+)(?:\|[^\]:|]+)?:\s*[^\]]*?\])|(?:\[@(?:p|c|h)?(?:\d+)(?:\|[^\]:|]+)?:\s*[^\]]*?\]))/g,
+    (_match, highlightedText: string, marker: string) =>
+      `<mark data-annotation-type="${annotationTypeFromInlineMarker(marker)}">${highlightedText}</mark>${marker}`,
+  )
+
 export const materializeMarkdownForRichParser = (markdown: string): string =>
-  normalizeMarkdownForRoundTrip(markdown).replace(/==([^=\n]+)==/g, "<mark>$1</mark>")
+  materializeAnnotationHighlightTypes(normalizeMarkdownForRoundTrip(markdown)).replace(
+    /==([^=\n]+)==/g,
+    "<mark>$1</mark>",
+  )
 
 const escapeHtml = (value: string) =>
   value
