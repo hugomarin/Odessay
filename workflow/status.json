@@ -91,6 +91,16 @@
   },
   "built": [
     {
+      "what": "fix(corrections): degrade malformed model items. Parses LLM correction and uncertain arrays item-by-item with safeParse, logs dropped invalid items with counts, preserves valid suggestions through existing learned-word/boundary/memory filters, removes the unused NDJSON streaming route branch, and documents publication-review as JSON request/response. [ODE-349]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-349",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-349/parse-llm-corrections-per-item-and-unify-streamingnon-streaming-route",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "e453ff8",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-349 on shared branch codex/ode-348-349-350-351-352-corrections-hardening / PR #318. Test-first regression confirmed C5: one malformed correction item previously emptied the whole batch. Functional commit e453ff8 parses model output per item, logs { dropped: n }, centralizes model-response normalization, removes the unused NDJSON streaming branch, keeps stream as tolerated legacy input, and updates ai-writing-assist docs/docs.json to JSON request/response. D5 verification searched editor-shell, web-ai-service, desktop-ai-service, flags, NDJSON and stream consumers; product consumers use JSON only, stream:true existed only in route tests. Fireworks Serverless Quickstart and Structured Outputs docs consulted. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (145 files / 910 tests). Targeted ai-corrections/publication-review route tests PASS (2 files / 11 tests). Performance Contract not required. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening. Context Gaps Detected: no."
+    },
+    {
       "what": "fix(corrections): harden learned words flow. Adds tested learned-word pagination/retry helpers, cursor-loads all learned words in background, rolls back failed learnWord optimistic entries plus rejected-memory side effects, restores affected suggestions to pending with a user-facing error toast, removes deferred learned-word panel copy, and updates the AI writing assist contract. [ODE-348]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-348",
