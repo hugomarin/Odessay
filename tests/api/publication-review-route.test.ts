@@ -5,6 +5,10 @@ const supabaseMock = vi.hoisted(() => ({
   getUser: vi.fn(),
 }))
 
+const providerConfigMock = vi.hoisted(() => ({
+  getAIProviderConfig: vi.fn(),
+}))
+
 vi.mock("@/lib/supabase/request-auth", () => ({
   getCurrentUserFromRequest: vi.fn(async () => {
     const result = await supabaseMock.getUser()
@@ -13,14 +17,7 @@ vi.mock("@/lib/supabase/request-auth", () => ({
 }))
 
 vi.mock("@/lib/ai/provider-config", () => ({
-  getAIProviderConfig: () => ({
-    baseUrl: "https://provider.test",
-    apiKey: "test-key",
-    model: "test-model",
-    chatCompletionsUrl: "https://provider.test/chat/completions",
-    maxTokens: 1000,
-    topP: 0.95,
-  }),
+  getAIProviderConfig: providerConfigMock.getAIProviderConfig,
 }))
 
 const createRequest = (body: Record<string, unknown>) =>
@@ -44,6 +41,15 @@ describe("POST /api/ai/publication-review", () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
     supabaseMock.getUser.mockReset()
+    providerConfigMock.getAIProviderConfig.mockReset()
+    providerConfigMock.getAIProviderConfig.mockReturnValue({
+      baseUrl: "https://provider.test",
+      apiKey: "test-key",
+      model: "test-model",
+      chatCompletionsUrl: "https://provider.test/chat/completions",
+      maxTokens: 1000,
+      topP: 0.95,
+    })
     supabaseMock.getUser.mockResolvedValue({
       data: {
         user: {
@@ -227,6 +233,151 @@ describe("POST /api/ai/publication-review", () => {
     expect(response.status).toBe(200)
     expect(payload.data.corrections).toEqual([])
     expect(payload.data.suggestions).toEqual([])
+  })
+
+  it("returns a non-retryable missing config error without calling the provider", async () => {
+    providerConfigMock.getAIProviderConfig.mockImplementation(() => {
+      throw new Error("Missing FIREWORKS_MODEL environment variable.")
+    })
+    const providerFetch = vi.fn()
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(providerFetch).not.toHaveBeenCalled()
+    expect(payload).toMatchObject({
+      data: null,
+      error: {
+        code: "MISSING_CONFIG",
+        retryable: false,
+        details: { phase: "config" },
+      },
+    })
+  })
+
+  it("classifies provider rate limits as retryable 429 errors", async () => {
+    const providerFetch = vi.fn(async () =>
+      new Response("quota exceeded", { status: 429 }),
+    )
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(429)
+    expect(providerFetch).toHaveBeenCalledTimes(1)
+    expect(payload).toMatchObject({
+      data: null,
+      error: {
+        code: "RATE_LIMITED",
+        retryable: true,
+        details: {
+          phase: "provider",
+          providerStatus: 429,
+          providerBodyClass: "rate_limit",
+        },
+      },
+    })
+    expect(payload.error.message).not.toContain("quota exceeded")
+  })
+
+  it("classifies provider 5xx as retryable unavailable errors without leaking the body", async () => {
+    const providerFetch = vi.fn(async () =>
+      new Response("provider secret stack trace", { status: 502 }),
+    )
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(503)
+    expect(payload).toMatchObject({
+      data: null,
+      error: {
+        code: "UNAVAILABLE",
+        retryable: true,
+        details: {
+          phase: "provider",
+          providerStatus: 502,
+        },
+      },
+    })
+    expect(payload.error.message).not.toContain("secret")
+  })
+
+  it("classifies provider aborts as retryable timeout errors", async () => {
+    const abortError = new Error("The operation was aborted")
+    abortError.name = "AbortError"
+    const providerFetch = vi.fn(async () => {
+      throw abortError
+    })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(504)
+    expect(payload).toMatchObject({
+      data: null,
+      error: {
+        code: "TIMEOUT",
+        retryable: true,
+        details: {
+          phase: "provider",
+        },
+      },
+    })
+  })
+
+  it("falls back when structured output is rejected, then classifies repeated 4xx contract errors", async () => {
+    const providerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("response_format schema invalid", { status: 400 }))
+      .mockResolvedValueOnce(new Response("request contract invalid", { status: 422 }))
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(422)
+    expect(providerFetch).toHaveBeenCalledTimes(2)
+    expect(payload).toMatchObject({
+      data: null,
+      error: {
+        code: "AI_PROVIDER_CONTRACT_ERROR",
+        retryable: false,
+        details: {
+          phase: "provider",
+          providerStatus: 422,
+          providerBodyClass: "provider_contract",
+        },
+      },
+    })
+  })
+
+  it("classifies invalid provider JSON responses as retryable parse failures", async () => {
+    const providerFetch = vi.fn(async () =>
+      new Response("not json", { status: 200, headers: { "content-type": "text/plain" } }),
+    )
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(502)
+    expect(payload).toMatchObject({
+      data: null,
+      error: {
+        code: "AI_RESPONSE_PARSE_FAILED",
+        retryable: true,
+        details: {
+          phase: "parse",
+          providerStatus: 200,
+        },
+      },
+    })
   })
 
 })

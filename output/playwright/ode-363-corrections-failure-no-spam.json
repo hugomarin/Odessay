@@ -1,0 +1,68 @@
+{
+  "url": "http://127.0.0.1:3011/perf/orthography-harness?run-corrections=1",
+  "publicationReviewRequestCount": 2,
+  "expectedBound": 2,
+  "toastText": "Corrections are temporarily unavailable. Try again in a moment.",
+  "consoleMessages": [
+    {
+      "type": "debug",
+      "text": "[corrections] {type: stale:keep, blockId: correction-block:2:blk-30d64f14:345, suggestionId: correction:correction-block:2:blk-dcef6c9c:345:4cc51250:3ff45c0e:0}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: stale:keep, blockId: correction-block:2:blk-30d64f14:345, suggestionId: correction:correction-block:2:blk-dcef6c9c:345:4cc51250:3ff45c0e:0}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: cache:hit, blockId: correction-block:0:blk-f63e4aff:0, source: supabase}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: cache:hit, blockId: correction-block:1:blk-692b2a9e:237, source: supabase}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: cache:miss, blockId: correction-block:2:blk-30d64f14:345}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: queue:enqueue, blockId: correction-block:2:blk-30d64f14:345, reason: edit}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: queue:flush, batchSize: 1, blockIds: Array(1)}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: request:start, batchId: correction-block:2:blk-30d64f14:345:blk-30d64f14, blockIds: Array(1)}"
+    },
+    {
+      "type": "info",
+      "text": "[corrections] block analysis failed code=UNAVAILABLE retryable=true decision=retry attempt=1"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: stale:drop, blockId: correction-block:2:blk-30d64f14:345, suggestionId: correction:correction-block:2:blk-dcef6c9c:345:4cc51250:3ff45c0e:0}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: stale:drop, blockId: correction-block:2:blk-30d64f14:345, suggestionId: correction:correction-block:2:blk-dcef6c9c:345:4cc51250:3ff45c0e:0}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: queue:flush, batchSize: 1, blockIds: Array(1)}"
+    },
+    {
+      "type": "debug",
+      "text": "[corrections] {type: request:start, batchId: correction-block:2:blk-30d64f14:345:blk-30d64f14, blockIds: Array(1)}"
+    },
+    {
+      "type": "info",
+      "text": "[corrections] block analysis failed code=UNAVAILABLE retryable=true decision=fail attempt=1"
+    }
+  ],
+  "requestBlockCounts": [
+    1,
+    1
+  ]
+}
