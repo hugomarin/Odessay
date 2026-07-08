@@ -29,10 +29,6 @@
         "reason": "wf-debrief Fase 8 traceability issue: captures post-delivery follow-ups for ODE-295..309 in workflow/define/debrief.md and spawns ODE-311..314. Process/docs only, not product-code delivery, so it is intentionally excluded from built[]; ignored for status drift (same pattern as ODE-310)."
       },
       {
-        "issue": "ODE-331",
-        "reason": "Referenced by workflow/docs commit 86ae47b on main (wf-audit fixes for ODE-331..342) before product-code delivery. Planned Fase 8 issue, not yet built."
-      },
-      {
         "issue": "ODE-335",
         "reason": "Referenced by workflow/docs commits f6be22b and 1c1d607 on main (Fase 8 DoD/roadmap formalization and ODE-292/ODE-337 complementarity note) before product-code delivery. Planned Fase 8 issue, not yet built."
       },
