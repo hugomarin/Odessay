@@ -241,7 +241,7 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 
 - El flujo vigente de correcciones mecánicas es request/response JSON: `POST /api/ai/publication-review` devuelve el envelope estándar `{ data, error }`.
 - En fallo, `error` conserva `code` y `message`, y puede incluir `retryable` + `details` no sensibles. La route clasifica al menos `MISSING_CONFIG`, `AI_PROVIDER_CONTRACT_ERROR`, `RATE_LIMITED`, `UNAVAILABLE`, `TIMEOUT` y `AI_RESPONSE_PARSE_FAILED`; nunca expone secrets ni cuerpo crudo del proveedor.
-- El editor aplica retry acotado solo cuando `error.retryable === true`; al agotar el límite, limpia stale state y muestra un fallo recuperable en vez de re-encolar indefinidamente.
+- El editor aplica retry acotado solo cuando `error.retryable === true`; al agotar el límite, limpia stale state, abre un cooldown de circuito para bloquear re-encolados inmediatos y muestra un fallo recuperable en vez de reintentar indefinidamente.
 - Los consumidores activos (`editor-shell`, `web-ai-service`, `desktop-ai-service`) usan `stream: false` o no envían `stream`.
 - El endpoint conserva el campo `stream` como input legacy tolerado, pero ya no expone NDJSON ni eventos parciales; la route mantiene una sola normalización canónica para la respuesta del modelo.
 
