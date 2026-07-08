@@ -650,7 +650,7 @@ const softDeleteWriting = async (id: string) => {
 const detachWritingLocalFile = async (id: string) => {
   const existing = await getWriting(id);
 
-  if (!existing || existing.sync_status === "deleted") {
+  if (!existing || existing.sync_status === "deleted" || existing.canonical_path == null) {
     return;
   }
 

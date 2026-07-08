@@ -82,6 +82,15 @@ La parte "local" del estado es **por-máquina**; la parte "nube" es global. La U
 
 **Regla de borrado:** borrar el archivo físico **NO** borra el documento de la nube — solo quita la copia local (pasa a "solo nube"). Borrar de la nube es una **acción explícita y separada** dentro de la app. Nunca se destruyen datos de la nube por inferir un borrado a partir de un archivo ausente (puede ser disco desmontado, movido fuera de carpetas vigiladas, accidente). Los dos borrados son procesos independientes.
 
+**Semántica de borrado por runtime:**
+
+- **Web:** no hay archivo local. `DocumentService.deleteWriting` realiza un soft-delete del registro de nube, encolado para sync. Es la única operación de borrado expuesta en la UI.
+- **Desktop:** coexisten dos operaciones de borrado con autoridad distinta:
+  1. **Borrado del archivo local** (disparado por el watcher cuando un `.md` desaparece del filesystem, o por un comando explícito futuro de "eliminar copia local"): mueve/retira el archivo y llama a `detachLocalFile`, dejando el writing en estado "solo nube". **No** borra el registro cloud.
+  2. **Borrado del registro cloud** (acción por defecto en la UI): `DocumentService.deleteWriting` hace soft-delete del registro de nube, encolado para sync, igual que en web. No toca archivos locales.
+- **Paridad de interfaz:** `DocumentService.deleteWriting` tiene la misma semántica en web y desktop: borra el registro cloud. El borrado físico de archivo es una operación separada, reflejada en este contrato, y queda bajo responsabilidad del watcher/fs-event (o un comando desktop explícito futuro).
+- **UI:** el diálogo de borrado por defecto usa `scope="writing"` para no arrastrar la explicación desktop (archivo local vs nube) al runtime web. Los consumidores que necesiten la explicación cloud/desktop pueden optar por `scope="cloud"`.
+
 ### D10 — Cada almacén tiene un solo rol y una sola autoridad
 
 - **`.md` en disco:** autoridad del **contenido** (cuando está materializado).

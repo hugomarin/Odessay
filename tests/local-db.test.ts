@@ -196,6 +196,22 @@ describe("localDB", () => {
     expect(await localDB.correctionBlocks.getByWriting("writing-b")).toHaveLength(1);
   });
 
+  it("does not rewrite local_updated_at when detaching an already detached file", async () => {
+    setLocalDBScope("detach-noop-user");
+
+    await localDB.writings.save({
+      ...createWriting("writing-detached", 1),
+      canonical_path: null,
+      local_updated_at: 1000,
+    });
+
+    await localDB.writings.detachLocalFile("writing-detached");
+
+    const writing = await localDB.writings.get("writing-detached");
+    expect(writing?.canonical_path).toBeNull();
+    expect(writing?.local_updated_at).toBe(1000);
+  });
+
   it("does not throw when correction blocks have undefined createdAt", async () => {
     setLocalDBScope("corrections-undefined-user");
 

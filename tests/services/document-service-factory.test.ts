@@ -367,7 +367,7 @@ describe("document-service-factory", () => {
     expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
   })
 
-  it("desktop deleteWriting removes the local file binding without deleting the cloud record", async () => {
+  it("desktop deleteWriting aligns with web semantics and enqueues cloud delete", async () => {
     const beforeDelete = {
       id: "writing-cloud",
       author_id: "user-1",
@@ -388,7 +388,12 @@ describe("document-service-factory", () => {
       updated_at: "2026-06-04T00:00:00.000Z",
       local_updated_at: 1,
     }
-    const afterDelete = { ...beforeDelete, canonical_path: null }
+    const afterDelete = {
+      ...beforeDelete,
+      sync_status: "deleted" as const,
+      deleted_at: "2026-06-05T00:00:00.000Z",
+      updated_at: "2026-06-05T00:00:00.000Z",
+    }
 
     mocks.getMock
       .mockResolvedValueOnce(beforeDelete)
@@ -404,16 +409,10 @@ describe("document-service-factory", () => {
     })
 
     expect(result.error).toBeNull()
-    expect(result.data?.deletedAt).toBeNull()
-    expect(result.data?.content.canonicalSource).toBe("rich-text")
-    expect(mocks.deleteWritingMock).toHaveBeenCalledWith({
-      writingId: "/tmp/documents/Artifact Studio/cloud-backed.md",
-      version: 4,
-      updatedAt: "2026-06-05T00:00:00.000Z",
-      deletedAt: "2026-06-05T00:00:00.000Z",
-    })
-    expect(mocks.detachLocalFileMock).toHaveBeenCalledWith("writing-cloud")
-    expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
+    expect(result.data?.deletedAt).toBe("2026-06-05T00:00:00.000Z")
+    expect(mocks.enqueueWritingDeleteMock).toHaveBeenCalledWith("writing-cloud")
+    expect(mocks.deleteWritingMock).not.toHaveBeenCalled()
+    expect(mocks.detachLocalFileMock).not.toHaveBeenCalled()
   })
 
   it("uses IndexedDB metadata instead of legacy file frontmatter when opening desktop markdown", async () => {

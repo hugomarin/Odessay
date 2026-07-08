@@ -14,7 +14,7 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 import { localDB } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
-import { enqueueWritingUpsert } from "@/lib/sync/queue"
+import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
@@ -405,29 +405,17 @@ class DesktopDocumentService implements DocumentService {
     try {
       await this.ensureMigrated()
       const existing = await localDB.writings.get(input.writingId)
-      if (!existing?.canonical_path) {
+      if (!existing) {
         return err("NOT_FOUND", `Writing ${input.writingId} not found`)
       }
 
-      const fileDeleteResult = await this.runtime.filesystem.deleteWriting({
-        writingId: existing.canonical_path,
-        version: input.version,
-        updatedAt: input.updatedAt,
-        deletedAt: input.deletedAt,
-      })
-
-      if (fileDeleteResult.error) {
-        return err("UNAVAILABLE", fileDeleteResult.error.message)
+      await enqueueWritingDelete(input.writingId)
+      const deleted = await localDB.writings.get(input.writingId)
+      if (!deleted) {
+        return err("NOT_FOUND", `Writing ${input.writingId} not found after delete`)
       }
 
-      await localDB.writings.detachLocalFile(existing.id)
-      const detached = await localDB.writings.get(existing.id)
-
-      if (!detached) {
-        return err("NOT_FOUND", `Writing ${existing.id} not found after local file delete`)
-      }
-
-      return ok(toCanonicalRecord(detached))
+      return ok(toCanonicalRecord(deleted))
     } catch (error) {
       return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
     }
