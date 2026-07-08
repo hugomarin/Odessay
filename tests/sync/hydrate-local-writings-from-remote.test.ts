@@ -360,6 +360,78 @@ describe("hydrateLocalWritingsFromRemote — list response integration", () => {
     vi.unstubAllGlobals()
   })
 
+  it("builds the hash candidate index once and avoids N×M scans", async () => {
+    const makeHash = (i: number) => `blake3:${String(i).repeat(64).slice(0, 64)}`
+
+    for (let i = 0; i < 5; i++) {
+      await localDB.writings.save(
+        makeLocalWriting({
+          id: `local-copy-${i}`,
+          canonical_path: `/Users/test/Documents/${i}.md`,
+          content_hash: makeHash(i),
+          lifecycle: "local-only",
+        }),
+      )
+    }
+
+    const listResponse = {
+      data: Array.from({ length: 5 }, (_, i) => ({
+        id: `remote-writing-${i}`,
+        author_id: "user-1",
+        title: `Remote Title ${i}`,
+        slug: `remote-title-${i}`,
+        status: "draft",
+        visibility: "private",
+        parent_id: null,
+        correspondence_id: null,
+        version: 3,
+        sync_status: "synced",
+        deleted_at: null,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-03T00:00:00.000Z",
+        content_hash: makeHash(i),
+      })),
+      error: null,
+    }
+
+    const bodiesResponse = {
+      data: listResponse.data.map((remote) => ({
+        ...remote,
+        body_json: { type: "doc", content: [] },
+        body_text: "",
+      })),
+      error: null,
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        const body = url.includes("fields=manifest") ? listResponse : bodiesResponse
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }),
+    )
+
+    const getAllSpy = vi.spyOn(localDB.writings, "getAll")
+
+    await hydrateLocalWritingsFromRemote()
+
+    expect(getAllSpy).toHaveBeenCalledTimes(1)
+
+    for (let i = 0; i < 5; i++) {
+      expect((await localDB.writings.get(`remote-writing-${i}`))?.canonical_path).toBe(
+        `/Users/test/Documents/${i}.md`,
+      )
+    }
+
+    getAllSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
   it("does not overwrite local body when remote has older version", async () => {
     const existing = makeLocalWriting({ version: 5 })
     await localDB.writings.save(existing)
@@ -406,4 +478,92 @@ describe("hydrateLocalWritingsFromRemote — list response integration", () => {
 
     vi.unstubAllGlobals()
   })
+
+  it("rebinds each local candidate at most once per batch even when multiple remotes share the same content_hash", async () => {
+    const hash = "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+    await localDB.writings.save(
+      makeLocalWriting({
+        id: "local-copy",
+        canonical_path: "/Users/test/Documents/letter.md",
+        content_hash: hash,
+        lifecycle: "local-only",
+      }),
+    )
+
+    const manifest = [
+      {
+        id: "remote-a",
+        author_id: "user-1",
+        title: "Remote A",
+        slug: "remote-a",
+        status: "draft",
+        visibility: "private",
+        parent_id: null,
+        correspondence_id: null,
+        version: 3,
+        sync_status: "synced",
+        deleted_at: null,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-03T00:00:00.000Z",
+        content_hash: hash,
+      },
+      {
+        id: "remote-b",
+        author_id: "user-1",
+        title: "Remote B",
+        slug: "remote-b",
+        status: "draft",
+        visibility: "private",
+        parent_id: null,
+        correspondence_id: null,
+        version: 3,
+        sync_status: "synced",
+        deleted_at: null,
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-03T00:00:00.000Z",
+        content_hash: hash,
+      },
+    ]
+
+    const listResponse = { data: manifest, error: null }
+    const bodiesResponse = {
+      data: manifest.map((remote) => ({
+        ...remote,
+        body_json: { type: "doc", content: [] },
+        body_text: "",
+      })),
+      error: null,
+    }
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        const body = url.includes("fields=manifest") ? listResponse : bodiesResponse
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        )
+      }),
+    )
+
+    const applied = await hydrateLocalWritingsFromRemote()
+    expect(applied).toBe(2)
+
+    const localCopy = await localDB.writings.get("local-copy")
+    expect(localCopy?.sync_status).toBe("deleted")
+    expect(localCopy?.canonical_path).toBeNull()
+
+    const remoteA = await localDB.writings.get("remote-a")
+    const remoteB = await localDB.writings.get("remote-b")
+    const paths = [remoteA?.canonical_path, remoteB?.canonical_path].filter(Boolean)
+
+    // Exactly one remote should have inherited the unique local path
+    expect(paths).toHaveLength(1)
+    expect(paths[0]).toBe("/Users/test/Documents/letter.md")
+
+    vi.unstubAllGlobals()
+  })
+
 })

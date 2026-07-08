@@ -93,6 +93,10 @@ export async function tauriWorkspaceSync(
   return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath, selectedPaths })
 }
 
+export async function tauriComputeContentHash(markdown: string): Promise<string> {
+  return invoke<string>("workspace_compute_content_hash", { markdown })
+}
+
 // ─── Local Index ──────────────────────────────────────────────────────────────
 
 export async function tauriIndexUpsert(

@@ -25,7 +25,7 @@ export function DeleteWritingDialog({
   onConfirm,
   count = 1,
   title,
-  scope = "cloud",
+  scope = "writing",
 }: DeleteWritingDialogProps) {
   const displayTitle = title?.trim()
   const targetLabel = count === 1 ? "writing" : `${count} writings`

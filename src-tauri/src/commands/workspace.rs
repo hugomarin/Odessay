@@ -383,6 +383,13 @@ fn extract_writing_id_from_frontmatter(path: &Path) -> Option<String> {
     None
 }
 
+#[tauri::command]
+pub fn workspace_compute_content_hash(markdown: String) -> Result<String, String> {
+    let canonical_bytes = canonical_markdown_hash_bytes(&markdown);
+    let digest = blake3::hash(&canonical_bytes);
+    Ok(format!("{CONTENT_HASH_PREFIX}:{}", digest.to_hex()))
+}
+
 fn content_hash_for_markdown_file(path: &Path) -> Result<String, String> {
     let bytes =
         fs::read(path).map_err(|e| format!("workspace_sync read markdown for hash: {e}"))?;
@@ -688,6 +695,36 @@ mod tests {
         assert_eq!(snapshot.files[0].id, "existing-index-id");
 
         cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_compute_content_hash_matches_ts_vectors() {
+        let cases = [
+            (
+                "# Title\n\nBody\n",
+                "blake3:1d214c1dbb2fa2352037849f6940df8d404c107b13e0215d3ccc87ffc13d6d43",
+            ),
+            (
+                "# Title\r\n\r\nBody\r\n",
+                "blake3:1d214c1dbb2fa2352037849f6940df8d404c107b13e0215d3ccc87ffc13d6d43",
+            ),
+            (
+                "---\nid: test\n---\n\nContent\r\n",
+                "blake3:cbc79e12c09e950b1cc84e9d751bfa1c3f3d2d3ff65fdc15ccd7cbcc7460d0b8",
+            ),
+            (
+                "Hello\rworld\r\n",
+                "blake3:d1181dae26b0e3028befceb503c34f7b917ac51fe27f84dc501f1d4799d35860",
+            ),
+        ];
+
+        for (markdown, expected) in cases {
+            assert_eq!(
+                workspace_compute_content_hash(markdown.to_string()).unwrap(),
+                *expected,
+                "hash mismatch for {markdown:?}",
+            );
+        }
     }
 
     #[test]
