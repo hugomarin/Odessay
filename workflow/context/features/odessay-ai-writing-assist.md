@@ -234,11 +234,11 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 - Las sugerencias persistidas se reconcilian por bloque lógico primero y por ventana posicional legacy solo como fallback.
 - Si una sugerencia aceptada cambia el hash del mismo párrafo lógico, el cache persistido debe remapearse a la nueva identidad antes de exponer la siguiente hidratación.
 
-### Streaming
+### Publication-review response mode
 
-- Backend emite NDJSON (`application/x-ndjson`).
-- Frontend consume eventos `suggestion` parciales y los acumula en estado.
-- Decoraciones inline se actualizan vía TipTap plugin sin bloquear el editor.
+- El flujo vigente de correcciones mecánicas es request/response JSON: `POST /api/ai/publication-review` devuelve el envelope estándar `{ data, error }`.
+- Los consumidores activos (`editor-shell`, `web-ai-service`, `desktop-ai-service`) usan `stream: false` o no envían `stream`.
+- El endpoint conserva el campo `stream` como input legacy tolerado, pero ya no expone NDJSON ni eventos parciales; la route mantiene una sola normalización canónica para la respuesta del modelo.
 
 ### Learned words
 

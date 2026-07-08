@@ -74,7 +74,7 @@
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
-      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
+      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas vía endpoint JSON request/response, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
     },
     {
       "path": "workflow/context/features/odessay-ai-writing-assist-mejoras.md",

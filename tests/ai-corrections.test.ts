@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildMechanicalCorrectionsPrompt,
   hashCorrectionBlock,
@@ -85,6 +85,58 @@ describe("AI corrections", () => {
     expect(canonical.corrections).toHaveLength(1);
     expect(canonical.corrections[0]?.blockId).toBe("block-1");
     expect(canonical.uncertain).toHaveLength(1);
+  });
+
+  it("drops malformed correction items without discarding the valid correction batch", () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    const blockText = "Esta prueva esta mal escrita y tambien falta acento aqui.";
+
+    try {
+      const canonical = normalizeCanonicalCorrections(
+        {
+          summary: "Three valid corrections and one malformed item.",
+          language: "es",
+          corrections: [
+            {
+              blockId: "block-1",
+              type: "spelling",
+              originalText: "prueva",
+              replacementText: "prueba",
+            },
+            {
+              blockId: "block-1",
+              type: "invented_type",
+              originalText: "esta",
+              replacementText: "está",
+            },
+            {
+              blockId: "block-1",
+              type: "accent",
+              originalText: "tambien",
+              replacementText: "también",
+            },
+            {
+              blockId: "block-1",
+              type: "accent",
+              originalText: "aqui",
+              replacementText: "aquí",
+            },
+          ],
+          uncertain: [],
+        },
+        [{ id: "block-1", hash: hashCorrectionBlock(blockText), text: blockText }],
+      );
+
+      expect(canonical.corrections).toHaveLength(3);
+      expect(canonical.corrections.map((correction) => correction.originalText)).toEqual([
+        "prueva",
+        "tambien",
+        "aqui",
+      ]);
+      expect(infoSpy).toHaveBeenCalledWith("[corrections] dropped invalid correction items", { dropped: 1 });
+    } finally {
+      infoSpy.mockRestore();
+    }
   });
 
   it("rejects partial-word spelling matches but keeps phrase, spacing, and punctuation corrections", () => {
