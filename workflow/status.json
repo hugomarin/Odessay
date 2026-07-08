@@ -2973,6 +2973,16 @@
       "commit": "2ef7654",
       "date": "2026-07-08",
       "notes": "DesktopDocumentService no longer opens UUID-looking writingIds as filesystem paths without local binding; editor session store reconciles unavailable writing tabs idempotently; EditorShell handles NOT_FOUND hydration by moving to the next valid tab or draft fallback. Typecheck PASS. Lint PASS with pre-existing editor-shell find/replace warnings. Vitest 956 PASS. ops:delivery:gate PASS. CI Traceability SUCCESS. Vercel SUCCESS. Performance Contract not required. Architecture Contract compliant. Review score 9/10."
+    },
+    {
+      "what": "fix(sync): cache rejected remote body manifests to stop non-converging phase-2 refetch [ODE-361]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-361",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-361/investigate-and-fix-non-converging-phase-2-body-refetch-2-writings-re",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/324",
+      "commit": "b54b45c",
+      "date": "2026-07-08",
+      "notes": "Added LocalWriting.remote_body_rejection manifest fingerprint; needsBodyFetch skips phase-2 body fetches for matching rejected manifests; invalidates on content_hash/version/updated_at change. Pending/failed local edits still win. T-A untouched. Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. Vitest 959 PASS. ops:delivery:gate PASS. Vercel preview SUCCESS. Review score 9.8/10."
     }
   ]
 }
