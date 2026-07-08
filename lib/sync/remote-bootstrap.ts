@@ -189,6 +189,7 @@ const buildLocalCandidateIndex = async (): Promise<Map<string, LocalWriting[]>> 
 const findUniqueHashRebindCandidate = async (
   remoteWriting: RemoteWritingListRecord,
   candidates?: LocalWriting[],
+  rebindedCandidateIds?: Set<string>,
 ): Promise<LocalWriting | null> => {
   const hash = normalizeContentHash(remoteWriting.content_hash)
   if (remoteWriting.deleted_at || !hash) {
@@ -199,6 +200,10 @@ const findUniqueHashRebindCandidate = async (
   const eligibleCandidates: LocalWriting[] = []
 
   for (const writing of candidateList) {
+    if (rebindedCandidateIds?.has(writing.id)) {
+      continue
+    }
+
     if (await isEligibleHashRebindCandidate(writing, remoteWriting)) {
       eligibleCandidates.push(writing)
     }
@@ -230,13 +235,14 @@ export const applyRemoteSoftDelete = async (
 export const mergeRemoteWriting = async (
   remoteWriting: RemoteWritingListRecord,
   candidateIndex?: Map<string, LocalWriting[]>,
+  rebindedCandidateIds?: Set<string>,
 ) => {
   const localWriting = await localDB.writings.get(remoteWriting.id)
   const hash = normalizeContentHash(remoteWriting.content_hash)
   const candidates = hash ? candidateIndex?.get(hash) : undefined
   const hashRebindCandidate = localWriting
     ? null
-    : await findUniqueHashRebindCandidate(remoteWriting, candidates)
+    : await findUniqueHashRebindCandidate(remoteWriting, candidates, rebindedCandidateIds)
   const existingLocalWriting = localWriting ?? hashRebindCandidate
 
   if (localWriting && !shouldApplyRemoteWriting(localWriting, remoteWriting)) {
@@ -250,6 +256,7 @@ export const mergeRemoteWriting = async (
       remoteWriting: mappedRemote,
       candidate: hashRebindCandidate,
     })
+    rebindedCandidateIds?.add(hashRebindCandidate.id)
   } else {
     await localDB.writings.save(mappedRemote)
   }
@@ -323,6 +330,7 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
     const changedIds: string[] = []
     const deleteEntries: RemoteWritingListRecord[] = []
     const candidateIndex = await buildLocalCandidateIndex()
+    const rebindedCandidateIds = new Set<string>()
 
     for (const remoteWriting of manifest) {
       const localWriting = await localDB.writings.get(remoteWriting.id)
@@ -380,7 +388,7 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
 
       requestedIds.delete(remoteWriting.id)
 
-      if (await mergeRemoteWriting(remoteWriting, candidateIndex)) {
+      if (await mergeRemoteWriting(remoteWriting, candidateIndex, rebindedCandidateIds)) {
         appliedCount += 1
       }
     }
