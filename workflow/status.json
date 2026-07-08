@@ -2937,6 +2937,26 @@
       "commit": "227fbd4",
       "date": "2026-07-08",
       "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings. npm test PASS (147 files / 932 tests). Targeted tests PASS. ops:delivery:gate PASS (Performance Contract not required). CI Traceability PASS after reviewer-added exceptions for preexisting ODE-360/ODE-362 drift. Vercel Preview PASS. QualityScore 9.3/10 (3 P3 findings). Follow-up PR #320 added 30s circuit breaker after final retry failure, cleared pending queue work, blocked immediate re-enqueues during cooldown, and extended structured-output fallback to provider 5xx."
+    },
+    {
+      "what": "fix(deletion): align desktop deleteWriting with web semantics, detach no-op, ADR D9 [ODE-312]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-312",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-312/d9-paridad-de-semantica-de-borrado-webdesktop",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/322",
+      "commit": "76b6fbe",
+      "date": "2026-07-08",
+      "notes": "Shipped via /wf-ship ODE-311,ODE-312 on PR #322. DesktopDocumentService.deleteWriting now enqueues cloud delete like web; detachLocalFile skips when canonical_path already null; DeleteWritingDialog default scope changed to writing; ADR D9 documents runtime-specific deletion contract. Typecheck PASS. Lint PASS (pre-existing editor-shell warnings). Vitest 937 PASS. Cargo 9 PASS. OPS_PERF_TRACE_PATH=artifacts/perf/editor-trace.json.gz delivery gate PASS."
+    },
+    {
+      "what": "fix(sync): content_hash Rust↔TS parity, atomic rebind, indexed hash lookup [ODE-311]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-311",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-311/content-hash-test-de-paridad-rustts-re-bind-atomico",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/322",
+      "commit": "76b6fbe",
+      "date": "2026-07-08",
+      "notes": "Shipped via /wf-ship ODE-311,ODE-312 on PR #322. Added workspace_compute_content_hash Tauri command + TS wrapper; versioned Rust↔TS parity corpus tests; IndexedDB v15 with by-content-hash index; saveWithRebind atomic transaction; hydrateLocalWritingsFromRemote builds a single hash candidate index. Vitest 937 PASS. Cargo 9 PASS. Performance gate 13 pass/1 warn/1 skip with required_failures=0."
     }
   ]
 }
