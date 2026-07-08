@@ -310,6 +310,7 @@ pub fn run() {
             commands::settings::settings_list_keys,
             commands::workspace::workspace_create,
             commands::workspace::workspace_sync,
+            commands::workspace::workspace_compute_content_hash,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

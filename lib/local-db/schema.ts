@@ -2,7 +2,7 @@ import type { ArtifactType } from "@/lib/writings/artifact-type";
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 14;
+export const LOCAL_DB_VERSION = 15;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",

@@ -168,36 +168,43 @@ const isEligibleHashRebindCandidate = async (
   return !activeMutation
 }
 
+const buildLocalCandidateIndex = async (): Promise<Map<string, LocalWriting[]>> => {
+  const localWritings = await localDB.writings.getAll({ includeDeleted: false })
+  const index = new Map<string, LocalWriting[]>()
+
+  for (const writing of localWritings) {
+    const hash = normalizeContentHash(writing.content_hash)
+    if (!hash || !hasMaterializedPath(writing)) {
+      continue
+    }
+
+    const list = index.get(hash) ?? []
+    list.push(writing)
+    index.set(hash, list)
+  }
+
+  return index
+}
+
 const findUniqueHashRebindCandidate = async (
   remoteWriting: RemoteWritingListRecord,
+  candidates?: LocalWriting[],
 ): Promise<LocalWriting | null> => {
-  if (remoteWriting.deleted_at || !normalizeContentHash(remoteWriting.content_hash)) {
+  const hash = normalizeContentHash(remoteWriting.content_hash)
+  if (remoteWriting.deleted_at || !hash) {
     return null
   }
 
-  const localWritings = await localDB.writings.getAll({ includeDeleted: true })
-  const candidates: LocalWriting[] = []
+  const candidateList = candidates ?? (await localDB.writings.getByContentHash(hash))
+  const eligibleCandidates: LocalWriting[] = []
 
-  for (const writing of localWritings) {
+  for (const writing of candidateList) {
     if (await isEligibleHashRebindCandidate(writing, remoteWriting)) {
-      candidates.push(writing)
+      eligibleCandidates.push(writing)
     }
   }
 
-  return candidates.length === 1 ? candidates[0] : null
-}
-
-const retireReboundLocalWriting = async (writing: LocalWriting) => {
-  const nowIso = new Date().toISOString()
-  await localDB.writings.save({
-    ...writing,
-    canonical_path: null,
-    sync_status: "deleted",
-    deleted_at: nowIso,
-    updated_at: nowIso,
-    version: writing.version + 1,
-    local_updated_at: Date.now(),
-  })
+  return eligibleCandidates.length === 1 ? eligibleCandidates[0] : null
 }
 
 export const applyRemoteSoftDelete = async (
@@ -220,19 +227,31 @@ export const applyRemoteSoftDelete = async (
   return true
 }
 
-export const mergeRemoteWriting = async (remoteWriting: RemoteWritingListRecord) => {
+export const mergeRemoteWriting = async (
+  remoteWriting: RemoteWritingListRecord,
+  candidateIndex?: Map<string, LocalWriting[]>,
+) => {
   const localWriting = await localDB.writings.get(remoteWriting.id)
-  const hashRebindCandidate = localWriting ? null : await findUniqueHashRebindCandidate(remoteWriting)
+  const hash = normalizeContentHash(remoteWriting.content_hash)
+  const candidates = hash ? candidateIndex?.get(hash) : undefined
+  const hashRebindCandidate = localWriting
+    ? null
+    : await findUniqueHashRebindCandidate(remoteWriting, candidates)
   const existingLocalWriting = localWriting ?? hashRebindCandidate
 
   if (localWriting && !shouldApplyRemoteWriting(localWriting, remoteWriting)) {
     return false
   }
 
-  await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, existingLocalWriting))
+  const mappedRemote = mapRemoteWritingToLocal(remoteWriting, existingLocalWriting)
 
   if (hashRebindCandidate) {
-    await retireReboundLocalWriting(hashRebindCandidate)
+    await localDB.writings.saveWithRebind({
+      remoteWriting: mappedRemote,
+      candidate: hashRebindCandidate,
+    })
+  } else {
+    await localDB.writings.save(mappedRemote)
   }
 
   return true
@@ -303,6 +322,7 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
 
     const changedIds: string[] = []
     const deleteEntries: RemoteWritingListRecord[] = []
+    const candidateIndex = await buildLocalCandidateIndex()
 
     for (const remoteWriting of manifest) {
       const localWriting = await localDB.writings.get(remoteWriting.id)
@@ -360,7 +380,7 @@ export const hydrateLocalWritingsFromRemote = (): Promise<number> => {
 
       requestedIds.delete(remoteWriting.id)
 
-      if (await mergeRemoteWriting(remoteWriting)) {
+      if (await mergeRemoteWriting(remoteWriting, candidateIndex)) {
         appliedCount += 1
       }
     }

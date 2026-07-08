@@ -74,9 +74,11 @@ const createLocalDbMock = () => {
       save: vi.fn(async (_nextWriting: LocalWriting) => undefined),
       get: vi.fn(async () => writing),
       getByCanonicalPath: vi.fn(async () => null),
+      getByContentHash: vi.fn(async () => []),
       getAll: vi.fn(async () => [writing]),
       detachLocalFile: vi.fn(async () => undefined),
       delete: vi.fn(async () => undefined),
+      saveWithRebind: vi.fn(async () => undefined),
     },
     collections: {
       save: vi.fn(async () => undefined),

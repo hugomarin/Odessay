@@ -24,9 +24,14 @@ type LocalDB = {
     save: (writing: LocalWriting) => Promise<void>;
     get: (id: string) => Promise<LocalWriting | null>;
     getByCanonicalPath: (canonicalPath: string) => Promise<LocalWriting | null>;
+    getByContentHash: (contentHash: string) => Promise<LocalWriting[]>;
     getAll: (filters?: WritingListFilters) => Promise<LocalWriting[]>;
     detachLocalFile: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
+    saveWithRebind: (input: {
+      remoteWriting: LocalWriting;
+      candidate: LocalWriting;
+    }) => Promise<void>;
   };
   collections: {
     save: (collection: LocalCollection) => Promise<void>;
@@ -204,6 +209,7 @@ const openDatabase = () => {
           keyPath: "id",
         });
         writingStore.createIndex("by-canonical-path", "canonical_path", { unique: false });
+        writingStore.createIndex("by-content-hash", "content_hash", { unique: false });
       } else {
         const transaction = request.transaction;
 
@@ -212,6 +218,10 @@ const openDatabase = () => {
 
           if (!store.indexNames.contains("by-canonical-path")) {
             store.createIndex("by-canonical-path", "canonical_path", { unique: false });
+          }
+
+          if (!store.indexNames.contains("by-content-hash")) {
+            store.createIndex("by-content-hash", "content_hash", { unique: false });
           }
         }
       }
@@ -596,6 +606,38 @@ const saveWriting = async (writing: LocalWriting) => {
   emitLocalDBChange();
 };
 
+const saveWritingWithRebind = async ({
+  remoteWriting,
+  candidate,
+}: {
+  remoteWriting: LocalWriting;
+  candidate: LocalWriting;
+}) => {
+  const nowIso = new Date().toISOString();
+  const retiredCandidate: LocalWriting = {
+    ...candidate,
+    canonical_path: null,
+    sync_status: "deleted",
+    deleted_at: nowIso,
+    updated_at: nowIso,
+    version: candidate.version + 1,
+    local_updated_at: Date.now(),
+  };
+
+  await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
+    await runRequest(store.put({
+      ...remoteWriting,
+      artifact_type: normalizeArtifactType(remoteWriting.artifact_type),
+    }));
+    await runRequest(store.put({
+      ...retiredCandidate,
+      artifact_type: normalizeArtifactType(retiredCandidate.artifact_type),
+    }));
+  });
+
+  emitLocalDBChange();
+};
+
 const getWriting = async (id: string) =>
   withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
     const writing = await runRequest(store.get(id));
@@ -616,6 +658,17 @@ const getWritingByCanonicalPath = async (canonicalPath: string) =>
           artifact_type: normalizeArtifactType((writing as LocalWriting).artifact_type),
         }
       : null;
+  });
+
+const getWritingByContentHash = async (contentHash: string) =>
+  withStore(LOCAL_DB_STORES.writings, "readonly", async (store) => {
+    const writings = (await runRequest(
+      store.index("by-content-hash").getAll(IDBKeyRange.only(contentHash)),
+    )) as LocalWriting[];
+    return writings.map((writing) => ({
+      ...writing,
+      artifact_type: normalizeArtifactType(writing.artifact_type),
+    }));
   });
 
 const getAllWritings = async (filters?: WritingListFilters) =>
@@ -1099,9 +1152,11 @@ const localDBInstance: LocalDB = {
     save: saveWriting,
     get: getWriting,
     getByCanonicalPath: getWritingByCanonicalPath,
+    getByContentHash: getWritingByContentHash,
     getAll: getAllWritings,
     detachLocalFile: detachWritingLocalFile,
     delete: softDeleteWriting,
+    saveWithRebind: saveWritingWithRebind,
   },
   collections: {
     save: saveCollection,
