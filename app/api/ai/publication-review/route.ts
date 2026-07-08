@@ -4,6 +4,10 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  BLOCK_CORRECTIONS_MAX_TOKENS,
+  CORRECTION_BLOCK_BATCH_SIZE,
+} from "@/lib/ai/corrections-config";
+import {
   buildMechanicalCorrectionsPrompt,
   normalizeCanonicalCorrections,
   type CanonicalCorrectionsResponse,
@@ -34,7 +38,12 @@ const requestSchema = z.object({
     id: z.string().trim().min(1),
     text: z.string().trim().min(1),
     hash: z.string().trim().min(1),
-  }),
+  }).optional(),
+  correctionBlocks: z.array(z.object({
+    id: z.string().trim().min(1),
+    text: z.string().trim().min(1),
+    hash: z.string().trim().min(1),
+  })).min(1).max(CORRECTION_BLOCK_BATCH_SIZE).optional(),
   correctionMemory: z.object({
     entries: z.array(memoryEntrySchema).default([]),
   }).optional(),
@@ -46,9 +55,15 @@ const requestSchema = z.object({
       }),
     ).default([]),
   }).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.correctionBlock && !value.correctionBlocks) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Either correctionBlock or correctionBlocks is required.",
+      path: ["correctionBlocks"],
+    });
+  }
 });
-
-const BLOCK_CORRECTIONS_MAX_TOKENS = 768;
 
 type CorrectionsUsage = {
   promptTokens: number | null;
@@ -127,24 +142,26 @@ const mechanicalCorrectionsResponseFormat = {
   },
 } as const;
 
-const getCorrectionsMaxTokens = () => BLOCK_CORRECTIONS_MAX_TOKENS;
+const getCorrectionsMaxTokens = (blockCount: number) => BLOCK_CORRECTIONS_MAX_TOKENS * Math.max(1, blockCount);
 
 async function callCorrectionsModel({
   config,
   promptText,
+  blockCount,
   strictJson,
   structuredOutput = true,
   _retries = 0,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
+  blockCount: number;
   strictJson: boolean;
   structuredOutput?: boolean;
   _retries?: number;
 }): Promise<{ text: string; usage: CorrectionsUsage }> {
   const requestBody = {
     model: config.model,
-    max_tokens: getCorrectionsMaxTokens(),
+    max_tokens: getCorrectionsMaxTokens(blockCount),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
     ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
@@ -180,12 +197,12 @@ async function callCorrectionsModel({
       const retryAfterMs = Number(response.headers.get("retry-after") ?? 0) * 1000 || 3000 * (_retries + 1);
       console.info(`[corrections] rate limited; retrying after ${retryAfterMs}ms (attempt ${_retries + 1})`);
       await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-      return callCorrectionsModel({ config, promptText, strictJson, structuredOutput, _retries: _retries + 1 });
+      return callCorrectionsModel({ config, promptText, blockCount, strictJson, structuredOutput, _retries: _retries + 1 });
     }
 
     if (structuredOutput && (response.status === 400 || response.status === 422)) {
       console.info("[corrections] structured output rejected; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
 
     throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
@@ -203,7 +220,7 @@ async function callCorrectionsModel({
   if (!text) {
     if (structuredOutput) {
       console.info("[corrections] model returned empty content with structured output; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
     throw new Error("AI returned an empty response.");
   }
@@ -217,142 +234,6 @@ async function callCorrectionsModel({
   };
 }
 
-async function callCorrectionsModelStreaming({
-  config,
-  promptText,
-  onText,
-}: {
-  config: ReturnType<typeof getAIProviderConfig>;
-  promptText: string;
-  onText: (text: string) => void;
-}) {
-  const requestBody = {
-    model: config.model,
-    max_tokens: getCorrectionsMaxTokens(),
-    temperature: 0,
-    top_p: config.topP,
-    stream: true,
-    response_format: mechanicalCorrectionsResponseFormat,
-    messages: [
-      {
-        role: "system",
-        content: buildStrictJsonSystemPrompt(),
-      },
-      {
-        role: "user",
-        content: promptText,
-      },
-    ],
-  };
-
-  const response = await fetch(config.chatCompletionsUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "ArtifactStudio/1.0",
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorPayload = await response.text();
-    console.info(`[corrections] stream error body=${errorPayload.slice(0, 500)}`);
-
-    if (response.status === 400 || response.status === 422) {
-      console.info("[corrections] streaming structured output rejected; falling back to non-stream strict JSON");
-      const fallbackResponse = await callCorrectionsModel({
-        config,
-        promptText,
-        strictJson: true,
-        structuredOutput: false,
-      });
-      onText(fallbackResponse.text);
-      return fallbackResponse.text;
-    }
-
-    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
-  }
-
-  if (!response.body) {
-    throw new Error("AI streaming response did not include a body.");
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let fullText = "";
-
-  const consumeLine = (line: string) => {
-    const trimmed = line.trim();
-
-    if (!trimmed || !trimmed.startsWith("data:")) {
-      return;
-    }
-
-    const data = trimmed.slice(5).trim();
-
-    if (!data || data === "[DONE]") {
-      return;
-    }
-
-    try {
-      const event = JSON.parse(data) as {
-        choices?: Array<{
-          delta?: { content?: string };
-          message?: { content?: string };
-          text?: string;
-        }>;
-      };
-      const content =
-        event.choices?.[0]?.delta?.content ??
-        event.choices?.[0]?.message?.content ??
-        event.choices?.[0]?.text ??
-        "";
-
-      if (content) {
-        fullText += content;
-        onText(fullText);
-      }
-    } catch {
-      // Ignore malformed provider stream lines; final JSON validation below is authoritative.
-    }
-  };
-
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      consumeLine(line);
-    }
-
-    if (done) {
-      break;
-    }
-  }
-
-  if (buffer.trim()) {
-    consumeLine(buffer);
-  }
-
-  if (!fullText.trim()) {
-    console.info("[corrections] provider stream ended without content; falling back to non-stream strict JSON");
-    const fallbackResponse = await callCorrectionsModel({
-      config,
-      promptText,
-      strictJson: true,
-      structuredOutput: true,
-    });
-    onText(fallbackResponse.text);
-    return fallbackResponse.text;
-  }
-
-  return fullText;
-}
-
 const applyMemory = (
   canonical: CanonicalCorrectionsResponse,
   correctionMemory: z.infer<typeof requestSchema>["correctionMemory"],
@@ -364,17 +245,33 @@ const applyMemory = (
 const getLearnedWordsFromRequest = (requestBody: z.infer<typeof requestSchema>) =>
   [...createLearnedWordSet((requestBody.learnedWords?.entries ?? []).map((entry) => entry.word))];
 
+const getCorrectionBlocksFromRequest = (requestBody: z.infer<typeof requestSchema>): CorrectionBlock[] =>
+  requestBody.correctionBlocks ?? (requestBody.correctionBlock ? [requestBody.correctionBlock] : []);
+
+const normalizeCorrectionModelText = ({
+  text,
+  blocks,
+  fallbackLanguage,
+  learnedWords,
+  correctionMemory,
+}: {
+  text: string;
+  blocks: CorrectionBlock[];
+  fallbackLanguage: ReturnType<typeof detectCorrectionLanguage>;
+  learnedWords: string[];
+  correctionMemory: z.infer<typeof requestSchema>["correctionMemory"];
+}) => {
+  const parsedJson = parseModelJson(text);
+  const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
+
+  return applyMemory(canonical, correctionMemory);
+};
+
 async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
-  const sourceText = requestBody.correctionBlock.text;
-  const blocks = [
-    {
-      id: requestBody.correctionBlock.id,
-      text: requestBody.correctionBlock.text,
-      hash: requestBody.correctionBlock.hash,
-    },
-  ] satisfies CorrectionBlock[];
+  const blocks = getCorrectionBlocksFromRequest(requestBody);
+  const sourceText = blocks.map((block) => block.text).join("\n\n");
   const fallbackLanguage = detectCorrectionLanguage(sourceText);
   const learnedWords = getLearnedWordsFromRequest(requestBody);
   const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
@@ -383,19 +280,29 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
   );
 
-  const firstResponse = await callCorrectionsModel({ config, promptText, strictJson: false });
+  const firstResponse = await callCorrectionsModel({
+    config,
+    promptText,
+    blockCount: blocks.length,
+    strictJson: false,
+  });
   const t1 = Date.now();
   console.info(`[corrections] first response latencyMs=${t1 - t0}`);
 
   try {
-    const parsedJson = parseModelJson(firstResponse.text);
-    const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
+    const canonical = normalizeCorrectionModelText({
+      text: firstResponse.text,
+      blocks,
+      fallbackLanguage,
+      learnedWords,
+      correctionMemory: requestBody.correctionMemory,
+    });
     const t2 = Date.now();
     console.info(`[corrections] first parse ok totalLatencyMs=${t2 - t0}`);
     return {
       model: config.model,
       blocks,
-      canonical: applyMemory(canonical, requestBody.correctionMemory),
+      canonical,
       usage: firstResponse.usage,
     };
   } catch {
@@ -403,18 +310,28 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     console.info(`[corrections] first parse failed. textLength=${firstJsonText.length}`);
     console.info("[corrections] retrying with strict JSON mode");
 
-    const retryResponse = await callCorrectionsModel({ config, promptText, strictJson: true });
+    const retryResponse = await callCorrectionsModel({
+      config,
+      promptText,
+      blockCount: blocks.length,
+      strictJson: true,
+    });
     const retryJsonText = extractJsonPayload(retryResponse.text);
 
     try {
-      const parsedJson = parseModelJson(retryResponse.text);
-      const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
+      const canonical = normalizeCorrectionModelText({
+        text: retryResponse.text,
+        blocks,
+        fallbackLanguage,
+        learnedWords,
+        correctionMemory: requestBody.correctionMemory,
+      });
       const t2 = Date.now();
       console.info(`[corrections] retry parse ok totalLatencyMs=${t2 - t0}`);
       return {
         model: config.model,
         blocks,
-        canonical: applyMemory(canonical, requestBody.correctionMemory),
+        canonical,
         usage: retryResponse.usage,
       };
     } catch (retryErr) {
@@ -458,59 +375,6 @@ const createJsonResponsePayload = ({
   };
 };
 
-const encodeNdjson = (value: unknown) => `${JSON.stringify(value)}\n`;
-
-const createSuggestionEvents = ({
-  requestBody,
-  blocks,
-  canonical,
-}: {
-  requestBody: z.infer<typeof requestSchema>;
-  blocks: CorrectionBlock[];
-  canonical: CanonicalCorrectionsResponse;
-}) => {
-  const adapted = adaptCorrectionsContract(canonical);
-  const blockHashById = new Map(blocks.map((block) => [block.id, block.hash]));
-
-  return adapted.legacy.suggestions.map((suggestion, index) => ({
-    type: "suggestion" as const,
-    sourceHash: requestBody.sourceHash,
-    blockId: suggestion.block_id,
-    blockHash: suggestion.block_id ? blockHashById.get(suggestion.block_id) ?? null : null,
-    suggestion,
-    index,
-  }));
-};
-
-const createUncertainEvents = ({
-  requestBody,
-  canonical,
-}: {
-  requestBody: z.infer<typeof requestSchema>;
-  canonical: CanonicalCorrectionsResponse;
-}) => {
-  const adapted = adaptCorrectionsContract(canonical);
-
-  return adapted.legacy.checklist.map((item, index) => ({
-    type: "uncertain" as const,
-    sourceHash: requestBody.sourceHash,
-    item,
-    index,
-  }));
-};
-
-const suggestionEventKey = (event: ReturnType<typeof createSuggestionEvents>[number]) =>
-  [
-    event.blockId ?? "",
-    event.suggestion.kind,
-    event.suggestion.original_text,
-    event.suggestion.replacement_text,
-    event.suggestion.reason,
-  ].join("|");
-
-const uncertainEventKey = (event: ReturnType<typeof createUncertainEvents>[number]) =>
-  [event.item.target_text ?? "", event.item.detail].join("|");
-
 const logRequestMetrics = ({
   batchId,
   blockCount,
@@ -531,201 +395,6 @@ const logRequestMetrics = ({
     latencyMs,
     promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage?.completionTokens ?? null,
-  });
-};
-
-const streamCorrectionsFromModel = ({
-  requestBody,
-}: {
-  requestBody: z.infer<typeof requestSchema>;
-}) => {
-  const encoder = new TextEncoder();
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const enqueue = (value: unknown) => {
-        controller.enqueue(encoder.encode(encodeNdjson(value)));
-      };
-
-      try {
-        const t0 = Date.now();
-        const config = getAIProviderConfig();
-        const sourceText = requestBody.correctionBlock.text;
-        const blocks = [
-          {
-            id: requestBody.correctionBlock.id,
-            text: requestBody.correctionBlock.text,
-            hash: requestBody.correctionBlock.hash,
-          },
-        ] satisfies CorrectionBlock[];
-        const batchId = requestBody.correctionBlock.id;
-        const fallbackLanguage = detectCorrectionLanguage(sourceText);
-        const learnedWords = getLearnedWordsFromRequest(requestBody);
-        const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
-        const emittedCorrections = new Set<string>();
-        const emittedUncertain = new Set<string>();
-
-        enqueue({
-          type: "status",
-          sourceHash: requestBody.sourceHash,
-          status: "started",
-        });
-
-        const emitPartial = (text: string) => {
-          try {
-            const parsedJson = parseModelJson(text);
-            const canonical = applyMemory(
-              normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords),
-              requestBody.correctionMemory,
-            );
-
-            for (const correction of canonical.corrections) {
-              const singleCanonical = {
-                ...canonical,
-                corrections: [correction],
-                uncertain: [],
-              } satisfies CanonicalCorrectionsResponse;
-              const [event] = createSuggestionEvents({ requestBody, blocks, canonical: singleCanonical });
-
-              if (event) {
-                const key = suggestionEventKey(event);
-
-                if (emittedCorrections.has(key)) {
-                  continue;
-                }
-
-                emittedCorrections.add(key);
-                enqueue(event);
-              }
-            }
-
-            for (const uncertain of canonical.uncertain) {
-              const singleCanonical = {
-                ...canonical,
-                corrections: [],
-                uncertain: [uncertain],
-              } satisfies CanonicalCorrectionsResponse;
-              const [event] = createUncertainEvents({ requestBody, canonical: singleCanonical });
-
-              if (event) {
-                const key = uncertainEventKey(event);
-
-                if (emittedUncertain.has(key)) {
-                  continue;
-                }
-
-                emittedUncertain.add(key);
-                enqueue(event);
-              }
-            }
-          } catch {
-            // Partial JSON is expected to be invalid until enough chunks have arrived.
-          }
-        };
-
-        console.info(
-          `[corrections] stream start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
-        );
-
-        const streamedText = await callCorrectionsModelStreaming({ config, promptText, onText: emitPartial });
-        let parsedJson: unknown;
-
-        try {
-          parsedJson = parseModelJson(streamedText);
-        } catch (streamParseErr) {
-          console.info(
-            `[corrections] streamed JSON parse failed; falling back to non-stream strict JSON. error=${
-              streamParseErr instanceof Error ? streamParseErr.message : String(streamParseErr)
-            }`,
-          );
-          try {
-            const fallbackResponse = await callCorrectionsModel({
-              config,
-              promptText,
-              strictJson: true,
-              structuredOutput: true,
-            });
-            emitPartial(fallbackResponse.text);
-            parsedJson = parseModelJson(fallbackResponse.text);
-          } catch (fallbackParseErr) {
-            console.info(
-              `[corrections] fallback JSON parse failed. error=${
-                fallbackParseErr instanceof Error ? fallbackParseErr.message : String(fallbackParseErr)
-              }`,
-            );
-            throw new Error("AI did not return valid correction JSON after retry.");
-          }
-        }
-
-        const canonical = applyMemory(
-          normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords),
-          requestBody.correctionMemory,
-        );
-        const payload = createJsonResponsePayload({
-          requestBody,
-          model: config.model,
-          canonical,
-        });
-
-        enqueue({
-          type: "meta",
-          sourceHash: requestBody.sourceHash,
-          sourceMarkdown: requestBody.markdown,
-          model: config.model,
-          language: payload.language,
-          summary: payload.summary,
-        });
-
-        for (const event of createSuggestionEvents({ requestBody, blocks, canonical })) {
-          const key = suggestionEventKey(event);
-
-          if (!emittedCorrections.has(key)) {
-            emittedCorrections.add(key);
-            enqueue(event);
-          }
-        }
-
-        for (const event of createUncertainEvents({ requestBody, canonical })) {
-          const key = uncertainEventKey(event);
-
-          if (!emittedUncertain.has(key)) {
-            emittedUncertain.add(key);
-            enqueue(event);
-          }
-        }
-
-        enqueue({
-          type: "done",
-          data: payload,
-        });
-        logRequestMetrics({
-          batchId,
-          blockCount: blocks.length,
-          model: config.model,
-          latencyMs: Date.now() - t0,
-        });
-        console.info(`[corrections] stream success totalLatencyMs=${Date.now() - t0}`);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Publication review request failed.";
-        console.info(`[corrections] stream error message=${message}`);
-        enqueue({
-          type: "error",
-          sourceHash: requestBody.sourceHash,
-          code: "AI_REVIEW_FAILED",
-          message,
-        });
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "cache-control": "no-store",
-    },
   });
 };
 
@@ -759,16 +428,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (parsedRequest.data.stream) {
-      return withCorsHeaders(streamCorrectionsFromModel({
-        requestBody: parsedRequest.data,
-      }), request);
-    }
-
     const result = await requestCorrections(parsedRequest.data);
     const tEnd = Date.now();
     logRequestMetrics({
-      batchId: parsedRequest.data.correctionBlock.id,
+      batchId: getCorrectionBlocksFromRequest(parsedRequest.data).map((block) => block.id).join(","),
       blockCount: result.blocks.length,
       model: result.model,
       latencyMs: tEnd - tStart,

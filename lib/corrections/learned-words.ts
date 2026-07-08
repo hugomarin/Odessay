@@ -9,12 +9,8 @@ export type LearnedWordRecord = {
   createdAt: string;
 };
 
-const LEARNED_WORD_DIACRITICS_PATTERN = /[\u0300-\u036f]/g;
-
 export const normalizeLearnedWord = (value: string) =>
   value
-    .normalize("NFD")
-    .replace(LEARNED_WORD_DIACRITICS_PATTERN, "")
     .replace(/[’']/g, "'")
     .trim()
     .toLowerCase()

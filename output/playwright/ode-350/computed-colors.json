@@ -1,0 +1,58 @@
+{
+  "beforeAfter": {
+    "beforeAiMixed": {
+      "backgroundColor": "rgba(231, 175, 2, 0.2)",
+      "textDecorationColor": "rgb(231, 175, 2)"
+    },
+    "beforeHighlightMixed": {
+      "backgroundColor": "rgba(231, 175, 2, 0.2)",
+      "textDecorationColor": "rgb(231, 175, 2)"
+    },
+    "beforeManualAi": {
+      "backgroundColor": "rgba(91, 91, 214, 0.125)",
+      "textDecorationColor": "rgb(91, 91, 214)"
+    },
+    "afterAiMixed": {
+      "backgroundColor": "rgba(231, 175, 2, 0.2)",
+      "textDecorationColor": "rgb(231, 175, 2)"
+    },
+    "afterHighlightMixed": {
+      "backgroundColor": "rgba(231, 175, 2, 0.2)",
+      "textDecorationColor": "rgb(231, 175, 2)"
+    },
+    "afterManualAi": {
+      "backgroundColor": "rgba(91, 91, 214, 0.125)",
+      "textDecorationColor": "rgb(91, 91, 214)"
+    }
+  },
+  "parity": {
+    "writeAi": {
+      "backgroundColor": "rgba(91, 91, 214, 0.125)",
+      "textDecorationColor": "rgb(91, 91, 214)"
+    },
+    "writeHighlight": {
+      "backgroundColor": "rgba(192, 123, 42, 0.2)",
+      "textDecorationColor": "rgb(192, 123, 42)"
+    },
+    "writeManual": {
+      "backgroundColor": "rgba(192, 123, 42, 0.2)",
+      "textDecorationColor": "rgb(192, 123, 42)"
+    },
+    "writePersonal": {
+      "backgroundColor": "rgba(153, 153, 144, 0.125)",
+      "textDecorationColor": "rgb(153, 153, 144)"
+    },
+    "previewAi": {
+      "backgroundColor": "rgba(91, 91, 214, 0.125)",
+      "textDecorationColor": "rgb(91, 91, 214)"
+    },
+    "sharedAi": {
+      "backgroundColor": "rgba(91, 91, 214, 0.125)",
+      "textDecorationColor": "rgb(91, 91, 214)"
+    },
+    "publicAi": {
+      "backgroundColor": "rgba(91, 91, 214, 0.125)",
+      "textDecorationColor": "rgb(91, 91, 214)"
+    }
+  }
+}

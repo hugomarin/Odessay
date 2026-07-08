@@ -134,7 +134,7 @@ export const applyAnnotationToBody = ({
     const nextFrom = resolveTextOffset(tr.doc, anchorStart, false)
     const nextTo = resolveTextOffset(tr.doc, anchorEnd, true)
 
-    tr.addMark(nextFrom, nextTo, highlightMark.create())
+    tr.addMark(nextFrom, nextTo, highlightMark.create({ annotationType: type }))
     tr.insert(
       nextTo,
       nodeType.create({

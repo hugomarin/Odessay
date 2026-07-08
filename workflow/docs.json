@@ -74,7 +74,7 @@
     {
       "path": "workflow/context/features/odessay-ai-writing-assist.md",
       "type": "feature",
-      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
+      "description": "Contrato operativo del AI assist del editor: correcciones mecánicas vía endpoint JSON request/response, learned words, persistencia de correction blocks, guardrails de matching/admisión, memoria de reject/manual-fix, stale handling y sugerencia de título con invocación explícita."
     },
     {
       "path": "workflow/context/features/odessay-ai-writing-assist-mejoras.md",
@@ -86,9 +86,8 @@
     {
       "path": "workflow/context/features/odessay-anotaciones-ai.md",
       "type": "feature",
-      "scope": "annotations-ai-expanded-legacy",
-      "state": "legacy-context-requires-reconciliation",
-      "description": "Documento histórico de anotaciones expandidas para lectura, AI y síntesis. Extiende odessay-margenes.md pero contiene drift conocido sobre tipos de anotación; usar solo con verificación contra el código y los docs actuales."
+      "scope": "annotations-ai-expanded",
+      "description": "Contrato de anotaciones expandidas para lectura, AI y síntesis: tipos reales footnote/personal/ai/highlight, sintaxis markdown inline, attrs de highlight por tipo, relación con margins y flujo de copia para AI."
     },
     {
       "path": "workflow/context/features/odessay-margenes.md",

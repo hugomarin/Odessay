@@ -36,10 +36,33 @@ const makeContext = (override: Partial<AdmissionContext> = {}): AdmissionContext
 describe("corrections admission", () => {
   it("filters learned words before a cached suggestion becomes visible", () => {
     const admitted = admitSuggestions([makeSuggestion()], makeContext({
-      learnedWords: createLearnedWordSet(["pruéva"]),
+      learnedWords: createLearnedWordSet(["prueva"]),
     }))
 
     expect(admitted).toEqual([])
+  })
+
+  it("preserves accents in learned word matching", () => {
+    const accented = admitSuggestions([
+      makeSuggestion({
+        original_text: "pruéva",
+        correction_fingerprint: createStableFingerprint({
+          type: "spelling",
+          originalText: "pruéva",
+          replacementText: "prueba",
+        }),
+      }),
+    ], makeContext({
+      learnedWords: createLearnedWordSet(["pruéva"]),
+    }))
+
+    expect(accented).toEqual([])
+
+    const unaccented = admitSuggestions([makeSuggestion()], makeContext({
+      learnedWords: createLearnedWordSet(["pruéva"]),
+    }))
+
+    expect(unaccented).toHaveLength(1)
   })
 
   it("re-admits visible suggestions when learned words arrive later", () => {

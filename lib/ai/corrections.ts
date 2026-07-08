@@ -37,19 +37,49 @@ export const uncertainCorrectionSchema = z.object({
   possibleReplacement: z.string().trim().min(1).nullable().catch(null),
 });
 
-export const canonicalCorrectionsResponseSchema = z.object({
+const rawCanonicalCorrectionsResponseSchema = z.object({
   summary: z.string().trim().default(""),
   language: z.enum(["es", "en", "mixed", "unknown"]),
-  corrections: z.array(canonicalCorrectionSchema).catch([]),
-  uncertain: z.array(uncertainCorrectionSchema).catch([]),
+  corrections: z.array(z.unknown()).catch([]),
+  uncertain: z.array(z.unknown()).catch([]),
 });
 
 export type CanonicalCorrection = z.infer<typeof canonicalCorrectionSchema>;
-export type CanonicalCorrectionsResponse = z.infer<typeof canonicalCorrectionsResponseSchema>;
 export type UncertainCorrection = z.infer<typeof uncertainCorrectionSchema>;
+export type CanonicalCorrectionsResponse = {
+  summary: string;
+  language: "es" | "en" | "mixed" | "unknown";
+  corrections: CanonicalCorrection[];
+  uncertain: UncertainCorrection[];
+};
 
 const isValidCorrectionMatch = (blockText: string, correction: CanonicalCorrection) => {
   return findTokenBoundaryMatch(blockText, correction.originalText, correction.replacementText) !== null;
+};
+
+const parseItems = <T>(
+  items: unknown[],
+  schema: z.ZodType<T>,
+  logMessage: string,
+) => {
+  const parsedItems: T[] = [];
+  let dropped = 0;
+
+  for (const item of items) {
+    const parsed = schema.safeParse(item);
+
+    if (parsed.success) {
+      parsedItems.push(parsed.data);
+    } else {
+      dropped += 1;
+    }
+  }
+
+  if (dropped > 0) {
+    console.info(logMessage, { dropped });
+  }
+
+  return parsedItems;
 };
 
 export const hashCorrectionBlock = (text: string) => {
@@ -71,7 +101,21 @@ export const normalizeCanonicalCorrections = (
 ): CanonicalCorrectionsResponse => {
   const blockById = new Map(blocks.map((block) => [block.id, block]));
   const learnedWordSet = createLearnedWordSet(learnedWords);
-  const response = canonicalCorrectionsResponseSchema.parse(parsed);
+  const rawResponse = rawCanonicalCorrectionsResponseSchema.parse(parsed);
+  const response: CanonicalCorrectionsResponse = {
+    summary: rawResponse.summary,
+    language: rawResponse.language,
+    corrections: parseItems(
+      rawResponse.corrections,
+      canonicalCorrectionSchema,
+      "[corrections] dropped invalid correction items",
+    ),
+    uncertain: parseItems(
+      rawResponse.uncertain,
+      uncertainCorrectionSchema,
+      "[corrections] dropped invalid uncertain items",
+    ),
+  };
   const language = response.language === "unknown"
     ? fallbackLanguage ?? detectCorrectionLanguage(blocks.map((block) => block.text).join("\n\n"))
     : response.language;

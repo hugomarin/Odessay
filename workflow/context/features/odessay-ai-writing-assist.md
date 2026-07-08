@@ -3,7 +3,7 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-editor.md`, `workflow/context/features/odessay-sync.md`, `workflow/context/core/odessay-modelo-datos.md` y `workflow/context/core/odessay-stack.md` antes de implementar.
 
-Última actualización: 2026-07-01.
+Última actualización: 2026-07-08.
 
 ---
 
@@ -61,7 +61,7 @@ Un documento de 400 palabras distribuido en ~12 párrafos no debe generar 12 lla
 El trigger de activación no debe depender de la longitud del texto.
 
 - **Qué:** todo bloque con texto válido (`paragraph`, `heading`, `listItem`, `taskItem`, excluyendo `codeBlock`) es candidato a corrección.
-- **Cuándo:** se controla por debounce de inactividad (2s para escritura normal, 5s para paste masivo).
+- **Cuándo:** se controla por debounce de inactividad de 2s. El debounce extendido de 5s para paste masivo fue retirado del spec en ODE-351; batching absorbe el volumen sin introducir una segunda ventana temporal.
 - No hay umbral mínimo de palabras. Un párrafo de 3 palabras con un typo mecánico se corrige igual que uno de 30.
 
 ### 4. Smart invalidation
@@ -90,17 +90,18 @@ Cada corrección lleva métricas para poder optimizar costos y detectar degradac
 
 ## Arquitectura actual (contexto)
 
-### Sistema puro `block`
+### Sistema batch de `block`
 
-El endpoint `/api/ai/publication-review` opera exclusivamente en modo `block`.
+El endpoint `/api/ai/publication-review` opera en modo `block-batch`.
 
 | Modo | Cómo se activa | Estado |
 |------|----------------|--------|
-| `block` | Frontend envía `correctionBlock: {id, text, hash}` | **Activo — único contrato válido** |
+| `block-batch` | Frontend envía `correctionBlocks: [{id, text, hash}]` con máximo 5 bloques | **Activo — contrato válido** |
+| `block` legacy | Consumidores externos pueden enviar `correctionBlock: {id, text, hash}` durante transición | **Tolerado — se normaliza internamente a batch de 1** |
 
 El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Corrections" y abre `CorrectionsPanel` (`components/editor/panels/corrections-panel.tsx`), que consume el estado de correcciones automáticas por bloque.
 
-**Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block` existente.
+**Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block-batch` existente.
 
 ### Flujo de corrección automática
 
@@ -122,11 +123,13 @@ El backend no conoce ProseMirror. El contrato usa `blockId` como string opaco:
 
 ```ts
 // Frontend envía
-correctionBlock: {
-  id: "correction-block:${logicalId}:${hash}:${pos}",  // opaco para el backend
-  text: "...",
-  hash: "blk-..."
-}
+correctionBlocks: [
+  {
+    id: "correction-block:${logicalId}:${hash}:${pos}",  // opaco para el backend
+    text: "...",
+    hash: "blk-..."
+  }
+]
 
 // Backend responde
 corrections: [
@@ -234,11 +237,11 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 - Las sugerencias persistidas se reconcilian por bloque lógico primero y por ventana posicional legacy solo como fallback.
 - Si una sugerencia aceptada cambia el hash del mismo párrafo lógico, el cache persistido debe remapearse a la nueva identidad antes de exponer la siguiente hidratación.
 
-### Streaming
+### Publication-review response mode
 
-- Backend emite NDJSON (`application/x-ndjson`).
-- Frontend consume eventos `suggestion` parciales y los acumula en estado.
-- Decoraciones inline se actualizan vía TipTap plugin sin bloquear el editor.
+- El flujo vigente de correcciones mecánicas es request/response JSON: `POST /api/ai/publication-review` devuelve el envelope estándar `{ data, error }`.
+- Los consumidores activos (`editor-shell`, `web-ai-service`, `desktop-ai-service`) usan `stream: false` o no envían `stream`.
+- El endpoint conserva el campo `stream` como input legacy tolerado, pero ya no expone NDJSON ni eventos parciales; la route mantiene una sola normalización canónica para la respuesta del modelo.
 
 ### Learned words
 
@@ -250,7 +253,7 @@ El motor admite una tercera acción por sugerencia ortográfica — **Learn word
 
 **Persistencia.** La tabla `learned_words` vive en Supabase con RLS owner-only (`user_id = auth.uid()`), FK a `profiles(id) on delete cascade`, y un índice único sobre `(user_id, language, word)`.
 
-**Normalización.** Las palabras se normalizan case-insensitive y accent-insensitive antes de guardar y antes de filtrar, de modo que aprender "Odéssay" también proteja "odessay" y "ODESSAY".
+**Normalización.** Las palabras se normalizan case-insensitive pero **accent-sensitive** antes de guardar y antes de filtrar, de modo que aprender "Odéssay" proteja "odessay" y "ODESSAY" pero no la versión sin acento "odessay". La decisión de conservar acentos (ODE-352, 2026-07-07) prioriza la precisión ortográfica en español: un typo con acento como "probabilídad" no debe silenciar la corrección de la forma correcta "probabilidad". Las palabras aprendidas antes del cambio siguen vigentes bajo su forma guardada.
 
 **Exclusión en tres capas.** Para no depender solo de que el modelo obedezca la instrucción:
 
@@ -264,7 +267,7 @@ Enforced by: `tests/corrections-admission.test.ts`.
 
 **UI.** Learn word aparece en la burbuja inline y en el panel de correcciones para sugerencias de tipo `spelling`/`accent`. El panel también expone una lista mínima de palabras aprendidas con acción de remover.
 
-**Performance.** La lista de palabras aprendidas se carga una sola vez por sesión de documento (`useEffect` en `EditorShell` con guarda `learnedWordsLoadedRef`), no por bloque. El endpoint de lista usa paginación cursor-based con límite configurable; el cliente solicita `limit=100` y muestra un indicador si existen más páginas.
+**Performance.** La lista de palabras aprendidas se carga una sola vez por sesión de documento (`useEffect` en `EditorShell` con guarda `learnedWordsLoadedRef`), no por bloque. El endpoint de lista usa paginación cursor-based con límite configurable; el cliente solicita páginas de `limit=100` y pagina en background hasta agotar `nextCursor`, difiriendo las páginas adicionales fuera de los primeros 3 s del bootstrap y sin estados visibles intermedios.
 
 ---
 
@@ -291,9 +294,15 @@ Sugerir un único título útil, corto y coherente con el contenido, bajo invoca
 
 ### Modo `document` — eliminado
 
-La API ya no mantiene una rama `document` ni helpers de partición de texto como `buildCorrectionBlocks()`. El contrato válido exige `correctionBlock` en cada request.
+La API ya no mantiene una rama `document` ni helpers de partición de texto como `buildCorrectionBlocks()`. El contrato válido exige `correctionBlocks[]` en cada request; `correctionBlock` singular se tolera solo como compatibilidad de transición.
 
-**Decisión:** mantener la API acotada a modo `block`. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block`.
+**Decisión:** mantener la API acotada a modo `block-batch`. Si en el futuro se necesita revisión completa del documento, diseñarla como batch de bloques sobre modo `block-batch`.
+
+### Spellcheck nativo del navegador
+
+El editor rich expone el spellcheck nativo del navegador (`spellcheck="true"`, lenguaje `es-MX` por defecto) en paralelo a las correcciones AI. Eso produce dos sistemas de subrayado con señales visuales distintas, y el spellcheck nativo no conoce las palabras aprendidas por el usuario.
+
+**Decisión (ODE-352, 2026-07-07):** dejar el spellcheck nativo como está. El usuario puede desactivarlo con el toggle existente (`lib/editor/spellcheck.ts`); no se apaga por defecto ni se unifica la señal visual en esta etapa.
 
 ### Estado actual vs principios
 
@@ -302,7 +311,7 @@ El sistema actual no cumple aún todos los principios de construcción. Estos so
 | Principio | Estado actual | Gap |
 |-----------|--------------|-----|
 | Persistir para no reprocesar | Persistencia IndexedDB + Supabase con write-through | Completado en ODE-165 |
-| Velocidad mediante batching | 1 bloque = 1 llamada HTTP secuencial | Sin batching ni paralelismo |
+| Velocidad mediante batching | `correctionBlocks[]` de hasta 5 bloques por llamada | Completado en ODE-351; fallback legacy singular tolerado durante transición |
 | Separar qué/cuándo | Todo bloque válido con texto es elegible; debounce controla cuándo se analiza | Completado en ODE-327 |
 | Smart invalidation | Stale invalidation con keep/drop/replace | Mejorado en ODE-163 |
 | Observabilidad | `logCorrectionEvent` con discriminated union de 8 eventos | Completado en ODE-161 |
@@ -341,7 +350,7 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 ### Memoria de decisiones
 
-- **Reject:** fingerprint estable se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes.
+- **Reject:** fingerprint estable se guarda en `localStorage` (`correction-memory-client.ts`) para no re-sugerir equivalentes. La decisión de ODE-352 (2026-07-07) mantuvo el rechazo en localStorage: no se migra a Supabase en esta etapa.
   - Formato canónico: `type|originalText|replacementText`, con partes normalizadas (`trim`, lowercase, whitespace colapsado).
   - La identidad nunca incluye `blockId`, hash de texto ni posición. `blockId` sigue siendo ubicación opaca para invalidación/decoraciones.
   - Compatibilidad legacy: entradas antiguas `blockId|type|originalText|replacementText` siguen filtrando por su cola estable `type|originalText|replacementText`.
@@ -368,7 +377,7 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 ## Referencias de implementación
 
 ### Activos
-- `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block`)
+- `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block-batch`)
 - `app/api/corrections/learned-words/route.ts` — diccionario de palabras aprendidas (list/create/delete)
 - `lib/ai/corrections.ts` — schema, prompt builder, normalización
 - `lib/ai/corrections-contract-adapter.ts` — adaptador de contrato legacy

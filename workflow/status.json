@@ -91,6 +91,56 @@
   },
   "built": [
     {
+      "what": "fix(corrections): preserve accents in learned word normalization. Changes learned-word normalization from accent-insensitive to accent-sensitive so learning a typo with an accent no longer silences corrections for the correct unaccented form; documents the three ODE-352 product decisions (spellcheck native left as-is, rejection memory kept in localStorage, accents preserved) in the AI writing assist contract and the 2026-07 corrections review. [ODE-352]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-352",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-352/decide-corrections-product-policies-native-spellcheck-accent",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "bb2b074",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-352 --branch codex/ode-348-349-350-351-352-corrections-hardening on shared PR #318. Owner decisions: (1) native spellcheck left as-is; (2) learned-word normalization preserves accents; (3) rejection memory stays in localStorage. Only decision (2) required code changes. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (146 files / 922 tests). Targeted corrections-admission and learned-words tests PASS (2 files / 14 tests). node scripts/validate-workflow-json.mjs PASS. GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening npm run ops:delivery:gate PASS. Context Gaps Detected: no — brief explicitly required owner confirmation; all three decisions were provided in Linear."
+    },
+    {
+      "what": "fix(corrections): batch correction block review. Adds correctionBlocks[] batches of up to five blocks through AIService and publication-review, scales correction max_tokens by batch size, processes editor correction queue in batches, retries partial batch misses once per block, clears queue/timers/counters on writing changes, and reconciles batching docs. [ODE-351]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-351",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-351/batch-correction-blocks-per-request-and-clean-queue-lifecycle",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "aca1b98",
+      "date": "2026-07-08",
+      "notes": "Shipped via /wf-ship ODE-351 on shared branch codex/ode-348-349-350-351-352-corrections-hardening / PR #318. Functional commit aca1b98 introduces CORRECTION_BLOCK_BATCH_SIZE=5 and shared batching helpers, updates AIService.reviewPublication to correctionBlocks[] with legacy correctionBlock tolerance, updates web/desktop route contract consumers, makes editor-shell process correction queue in batches, reenqueue partial block misses once, preserve per-block cache persistence, clear queue/timers/counters on writing changes, and guard in-flight batches by writingId. Docs reconciled: ai-writing-assist now documents block-batch as active, mejoras marks completed states, and D8 is resolved by retiring the 5s paste debounce promise. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace warnings only. npm test PASS (146 files / 918 tests). Targeted corrections batching/route/service/admission/lifecycle tests PASS (6 files / 33 tests). Performance Contract required PASS on artifacts/perf/ode-351-editor-trace.json.gz with required_failures=0 (13 pass, 1 warn, 1 skip); ops:delivery:gate PASS with OPS_PERF_TRACE_PATH and GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening. Context Gaps Detected: no."
+    },
+    {
+      "what": "fix(annotations): color highlights by mark type. Adds annotationType attrs to annotation highlight marks, re-derives those attrs from inline markdown during canonical parse without changing ==...== syntax, colors shared editor/reading marks by data-annotation-type instead of paragraph heuristics, unifies highlight amber to #C07B2A, and rewrites the annotations doc around the real footnote/personal/ai/highlight types. [ODE-350]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-350",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-350/color-annotation-highlights-by-mark-type-not-paragraph-heuristics",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "2693cb7",
+      "date": "2026-07-08",
+      "notes": "Shipped via /wf-ship ODE-350 on shared branch codex/ode-348-349-350-351-352-corrections-hardening / PR #318. Test-first regression confirmed annotation highlight marks had no annotationType attr and canonical markdown round-trip needed re-derivation from the annotationReference sibling. Functional commit 2693cb7 stamps attrs in applyAnnotationToBody and addAnnotation/updateAnnotationType, extends Highlight rendering/parsing with data-annotation-type, replaces p:has(sup.annotation-ref-*) mark CSS with mark[data-annotation-type=*] rules, keeps manual highlights as default amber, and updates odessay-anotaciones-ai.md/docs.json. Visual evidence committed under output/playwright/ode-350: before-after-mark-colors.png, cross-surface-parity.png, computed-colors.json. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (145 files / 913 tests). Targeted highlight/document serialization tests PASS (2 files / 30 tests). Performance Contract not required. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening. Context Gaps Detected: no."
+    },
+    {
+      "what": "fix(corrections): degrade malformed model items. Parses LLM correction and uncertain arrays item-by-item with safeParse, logs dropped invalid items with counts, preserves valid suggestions through existing learned-word/boundary/memory filters, removes the unused NDJSON streaming route branch, and documents publication-review as JSON request/response. [ODE-349]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-349",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-349/parse-llm-corrections-per-item-and-unify-streamingnon-streaming-route",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "e453ff8",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-349 on shared branch codex/ode-348-349-350-351-352-corrections-hardening / PR #318. Test-first regression confirmed C5: one malformed correction item previously emptied the whole batch. Functional commit e453ff8 parses model output per item, logs { dropped: n }, centralizes model-response normalization, removes the unused NDJSON streaming branch, keeps stream as tolerated legacy input, and updates ai-writing-assist docs/docs.json to JSON request/response. D5 verification searched editor-shell, web-ai-service, desktop-ai-service, flags, NDJSON and stream consumers; product consumers use JSON only, stream:true existed only in route tests. Fireworks Serverless Quickstart and Structured Outputs docs consulted. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (145 files / 910 tests). Targeted ai-corrections/publication-review route tests PASS (2 files / 11 tests). Performance Contract not required. ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-348-349-350-351-352-corrections-hardening. Context Gaps Detected: no."
+    },
+    {
+      "what": "fix(corrections): harden learned words flow. Adds tested learned-word pagination/retry helpers, cursor-loads all learned words in background, rolls back failed learnWord optimistic entries plus rejected-memory side effects, restores affected suggestions to pending with a user-facing error toast, removes deferred learned-word panel copy, and updates the AI writing assist contract. [ODE-348]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-348",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-348/harden-learned-words-rollback-on-failure-retry-load-full-pagination",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/318",
+      "commit": "5e6ca8b",
+      "date": "2026-07-07",
+      "notes": "Shipped via /wf-ship ODE-348 on shared branch codex/ode-348-349-350-351-352-corrections-hardening. PR scope closes ODE-348 only; ODE-349/350/351/352 remain reserved for later sessions. Functional commits a7d3f04 and 5e6ca8b. Typecheck PASS. Lint PASS with pre-existing editor-shell Find/Replace react-hooks warnings only. npx vitest run PASS (145 files / 912 tests). Targeted learned-words/admission/lifecycle/stale/API tests PASS (5 files / 25 tests). Performance Contract waterfall shape required: learned-word pagination beyond the first page is deferred 3 s and covered by tests; Network snapshot for /perf/editor-harness first 3s PASS (bootstrap <= 6). Generic ops:perf:gate trace captured but interaction dispatch keydown_p95 failed; interaction latency was not required for this issue. ops:delivery:gate PASS. Context Gaps Detected: no."
+    },
+    {
       "what": "fix(corrections): guarantee stale suggestion exits. Adds lib/corrections/engine/lifecycle.ts with pure stale lifecycle transitions; stamps pending-stale suggestions with staleSince; drops stale suggestions on analysis error/current-block mismatch and after 10 s; re-admits cache hits back to pending; defers dirty blocks during the post-hydration suppression window; documents the timeout enforcement. [ODE-347]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-347",
