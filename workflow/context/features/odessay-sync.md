@@ -138,9 +138,10 @@ El código actual ya prueba esta prioridad: `workspace_sync` busca `existing_at_
 ### Estado real verificado y brechas
 
 - El write path desktop principal ya cumple el orden `.md` antes de IndexedDB/sync en `DesktopDocumentService.saveWriting()` (`lib/services/document-service-factory.ts:346-362`).
-- El adapter bajo `FilesystemDocumentService` aún documenta “Uses the file path as the stable writingId” (`lib/services/desktop/filesystem-document-service.ts:133-145`). Ese contrato es legacy de adapter bajo nivel: el contrato objetivo mantiene UUID único en `LocalWriting.id` y usa `canonical_path` como binding.
-- `rehomeProtectedCanonicalPaths()` todavía mueve archivos protegidos hacia almacenamiento interno (`lib/services/document-service-factory.ts:187-208`), comportamiento marcado por el ADR D7 como pendiente de repliegue.
+- El adapter bajo `FilesystemDocumentService` aún documenta “Uses the file path as the storage address” (`lib/services/desktop/filesystem-document-service.ts:120-140`). Ese contrato es **legacy del adapter de bajo nivel**: el contrato objetivo mantiene UUID único en `LocalWriting.id` y usa `canonical_path` como binding. `DesktopDocumentService` es el encargado de traducir path ↔ UUID; la UI no debe asumir que el path es identidad estable.
+- **`rehomeProtectedCanonicalPaths()` fue removida** (ya no aparece en `lib/services/document-service-factory.ts`). El comportamiento de mover archivos protegidos a almacenamiento interno fue repliegado; los archivos del usuario se mantienen en su lugar (D7).
 - `content_hash` ya viaja en payload cloud (`lib/sync/queue.ts:22-42`) y la API lo valida (`app/api/writings/[id]/route.ts:9-25`), pero la portabilidad completa depende de ODE-296/ODE-297 y del backfill correspondiente.
+- **Escritorios cloud-only sin `canonical_path`:** un `LocalWriting` con UUID válido pero sin `canonical_path` es un estado recuperable (*solo nube* en D9). `DesktopDocumentService.openWriting` debe servirlo desde el espejo local sin intentar abrir el UUID como ruta de filesystem (ver ODE-331).
 
 ---
 

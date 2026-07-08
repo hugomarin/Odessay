@@ -48,3 +48,6 @@
 
 ## Pendiente runtime (no estático)
 - Conteo real de ids en conflicto frontmatter↔índice de workspace (requiere script).
+
+## Gap descubierto durante ODE-331
+El estado de sesión del editor (pestañas activas, `recent_writings`) es una **capa de cache/UI** separada del documento. La documentación de desktop/sync no trataba explícitamente la reconciliación de esa cache cuando un `writing_id` de sesión deja de tener `LocalWriting` o `canonical_path`. Se agregaron notas en `odessay-sync.md`, `odessay-desktop-migration-diagnostic.md` y `odessay-desktop-migration-plan.md` para que futuros BUILD no reintroduzcan el error de tratar un UUID de sesión como ruta de filesystem.

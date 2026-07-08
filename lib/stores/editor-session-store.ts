@@ -397,6 +397,52 @@ export function closeTab(tabId: string) {
   return nextActiveTabId;
 }
 
+export type ReconcileUnavailableTabResult = {
+  removed: boolean;
+  removedActive: boolean;
+  fallbackTabId: string | null;
+};
+
+export function reconcileUnavailableWritingTab(writingId: string): ReconcileUnavailableTabResult {
+  let result: ReconcileUnavailableTabResult = {
+    removed: false,
+    removedActive: false,
+    fallbackTabId: null,
+  };
+
+  setSessionState((current) => {
+    const staleIndex = findTabIndexByWritingId(current.tabs, writingId);
+    if (staleIndex < 0) {
+      return current;
+    }
+
+    const staleTab = current.tabs[staleIndex]!;
+    const remainingTabs = current.tabs.filter((_, index) => index !== staleIndex);
+    const removedActive = current.active_tab_id === staleTab.id;
+
+    const nextActiveTabId = removedActive
+      ? remainingTabs[staleIndex]?.id ?? remainingTabs[staleIndex - 1]?.id ?? null
+      : current.active_tab_id;
+
+    const fallbackTabId = getFallbackActiveTabId(remainingTabs, nextActiveTabId);
+
+    result = {
+      removed: true,
+      removedActive,
+      fallbackTabId,
+    };
+
+    return {
+      ...current,
+      active_tab_id: fallbackTabId,
+      tabs: remainingTabs,
+      recent_writings: current.recent_writings.filter((item) => item.writing_id !== writingId),
+    };
+  });
+
+  return result;
+}
+
 export function reorderTab(tabId: string, targetTabId: string) {
   setSessionState((current) => {
     const nextTabs = reorderEditorSessionTabs(current.tabs, tabId, targetTabId);

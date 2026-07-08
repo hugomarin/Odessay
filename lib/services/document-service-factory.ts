@@ -246,6 +246,14 @@ class DesktopDocumentService implements DocumentService {
         return ok(toCanonicalRecord(existing))
       }
 
+      // A UUID-looking identifier is identity, not a filesystem path. If there
+      // is no local binding (neither by id nor by canonical path), refuse to
+      // treat the UUID itself as a path. This prevents stale editor session
+      // tabs from repeatedly hitting the filesystem with a bare UUID.
+      if (isUuidLikeWritingIdentifier(writingId) && !existingRecord) {
+        return err("NOT_FOUND", `Writing ${writingId} not found`)
+      }
+
       const canonicalPath = mappedCanonicalPath ?? writingId
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 

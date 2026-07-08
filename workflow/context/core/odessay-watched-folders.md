@@ -6,6 +6,8 @@
 > - **Metadata NO va en un sidecar `meta.json` en disco** — va en el **registro de nube** (writing + espejo IndexedDB) (D4). En disco solo vive un **índice de binding delgado** (ruta + inode + content_hash + UUID), no metadata.
 > - **`content_hash` es objetivo/pendiente**, no estado actual: hoy el índice implementado solo guarda inode + size, y la nube no guarda hash (D6/D11). El UUID del índice debe ser el **mismo de la nube** (D5), no un `Uuid::new_v4` propio.
 > - Nombre de la carpeta: **`.odessay/`** (no `.odyssey`, D8).
+>
+> **Convención de este documento:** las secciones marcadas como **HISTÓRICO / SUPERSEDED** describen el MVP de ODE-245 o ideas tempranas que ya no son contrato runtime vigente. No deben usarse como autoridad para implementar el comportamiento actual.
 
 ## Resumen
 
@@ -144,7 +146,7 @@ Usa macOS FSEvents vía `tauri-plugin-fs watch()`. El OS notifica al proceso cua
 | `Create` | Indexa el archivo nuevo, crea entrada en IndexedDB |
 | `Modify` | Debounce 500ms → sync contenido → snapshot opcional |
 | `Rename` | Compara inodes → actualiza `canonical_path` en index + IndexedDB |
-| `Delete` | Marca documento como `orphaned` en IndexedDB |
+| `Delete` | ~~Marca documento como `orphaned` en IndexedDB~~ **SUPERSEDED (D9):** un archivo ausente pasa el writing a *solo nube* vía `detachLocalFile`; no implica borrado ni estado `orphaned`. |
 
 **Reglas:**
 - El directorio `.odessay/` se excluye del watch (evita loops)

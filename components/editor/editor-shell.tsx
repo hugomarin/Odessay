@@ -172,10 +172,12 @@ import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
   focusTab,
+  getEditorSessionState,
   initializeEditorSessionStore,
   openDraftTab,
   openWritingTab,
   publishTabState,
+  reconcileUnavailableWritingTab,
   reorderTab,
   saveTabViewState,
   useEditorSessionStore,
@@ -1581,6 +1583,34 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       try {
         const openResult = await (await getDocumentService()).openWriting(targetWritingId)
         if (openResult.error) {
+          if (openResult.error.code === "NOT_FOUND") {
+            console.info(`[editor] unavailable writing ${targetWritingId}; reconciling session`)
+            const { removedActive, fallbackTabId } = reconcileUnavailableWritingTab(targetWritingId)
+            setHydrationWritingId(null)
+
+            if (removedActive) {
+              const fallbackTab = fallbackTabId
+                ? getEditorSessionState().session.tabs.find((tab) => tab.id === fallbackTabId)
+                : null
+
+              if (fallbackTab?.writing_id) {
+                currentWritingIdRef.current = fallbackTab.writing_id
+                setCurrentWritingId(fallbackTab.writing_id)
+                setHydrationWritingId(fallbackTab.writing_id)
+                replaceEditorHistory(
+                  buildWritingRouteHref("/write", { id: fallbackTab.writing_id, slug: fallbackTab.slug }),
+                )
+              } else {
+                currentWritingIdRef.current = null
+                setCurrentWritingId(null)
+                openDraftTab()
+                replaceEditorHistory("/write")
+              }
+            }
+
+            return
+          }
+
           console.error(`[editor] openWriting failed for ${targetWritingId}`, openResult.error)
           return
         }

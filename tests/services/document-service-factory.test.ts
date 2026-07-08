@@ -493,6 +493,85 @@ version: 2
     )
   })
 
+  it("does not open a UUID-looking writingId as a filesystem path when there is no local binding", async () => {
+    const uuid = "f80b2dce-1262-403a-87e2-4ad17a881234"
+    mocks.getMock.mockResolvedValueOnce(null)
+    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting(uuid)
+
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(result.error?.message).toContain(`Writing ${uuid} not found`)
+    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
+    expect(mocks.saveMock).not.toHaveBeenCalled()
+    expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
+  })
+
+  it("opens a UUID with a canonical_path binding using the path and preserving the UUID", async () => {
+    const uuid = "53991a81-0766-4972-8610-b2946cd385ee"
+    mocks.getMock.mockResolvedValueOnce({
+      id: uuid,
+      author_id: null,
+      title: "Carta",
+      canonical_path: "/tmp/documents/Artifact Studio/Carta.md",
+      body_json: { type: "doc", content: [] },
+      body_text: "",
+      slug: "carta",
+      status: "draft",
+      visibility: "private",
+      parent_id: null,
+      correspondence_id: null,
+      version: 2,
+      sync_status: "synced",
+      lifecycle: "local-only",
+      deleted_at: null,
+      created_at: "2026-06-01T00:00:00.000Z",
+      updated_at: "2026-06-02T00:00:00.000Z",
+      local_updated_at: 1,
+    })
+    mocks.openWritingMock.mockResolvedValueOnce({
+      data: {
+        id: "/tmp/documents/Artifact Studio/Carta.md",
+        authorId: null,
+        title: "Carta",
+        content: {
+          markdown: "# Carta\n\nHola",
+          richText: null,
+          plainText: "Hola",
+          canonicalSource: "markdown",
+        },
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parentId: null,
+        correspondenceId: null,
+        version: 1,
+        deletedAt: null,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        updatedAt: "2026-06-04T00:00:00.000Z",
+      },
+      error: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting(uuid)
+
+    expect(result.error).toBeNull()
+    expect(result.data?.id).toBe(uuid)
+    expect(result.data?.slug).toBe("carta")
+    expect(mocks.openWritingMock).toHaveBeenCalledWith("/tmp/documents/Artifact Studio/Carta.md")
+    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
+    expect(mocks.saveMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: uuid,
+        canonical_path: "/tmp/documents/Artifact Studio/Carta.md",
+      }),
+    )
+  })
+
   it("opens cloud-only desktop records from body_json without treating the writing id as a file path", async () => {
     mocks.getMock.mockResolvedValueOnce({
       id: "cloud-only-writing",

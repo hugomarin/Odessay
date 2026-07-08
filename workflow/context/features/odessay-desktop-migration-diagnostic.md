@@ -203,6 +203,7 @@ Lectura:
 - es el mejor candidato para empezar a extraer use cases
 - no conviene intentar “reducirlo” de golpe
 - conviene sacar primero capacidades completas: save, sync, AI, share/export
+- **las pestañas de sesión del editor son cache/UI state, nunca autoridad de existencia del documento**. Antes de hidratar un documento desktop, el shell debe validar la cadena `tab.writing_id → LocalWriting → canonical_path/cloud-only → filesystem/cloud`; un UUID sin binding local no debe pasarse al filesystem adapter como ruta (ver ODE-331).
 
 ### 2. `lib/sync/worker.ts`
 
