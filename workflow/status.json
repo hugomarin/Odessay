@@ -2967,6 +2967,16 @@
       "commit": "76b6fbe",
       "date": "2026-07-08",
       "notes": "Shipped via /wf-ship ODE-311,ODE-312 on PR #322. Added workspace_compute_content_hash Tauri command + TS wrapper; versioned Rust↔TS parity corpus tests; IndexedDB v15 with by-content-hash index; saveWithRebind atomic transaction; hydrateLocalWritingsFromRemote builds a single hash candidate index. Vitest 937 PASS. Cargo 9 PASS. Performance gate 13 pass/1 warn/1 skip with required_failures=0."
+    },
+    {
+      "what": "fix(editor): stale editor session tabs opening missing desktop writings [ODE-331]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-331",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-331/fix-stale-editor-session-tabs-opening-missing-desktop-writings",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/323",
+      "commit": "2ef7654",
+      "date": "2026-07-08",
+      "notes": "DesktopDocumentService no longer opens UUID-looking writingIds as filesystem paths without local binding; editor session store reconciles unavailable writing tabs idempotently; EditorShell handles NOT_FOUND hydration by moving to the next valid tab or draft fallback. Typecheck PASS. Lint PASS with pre-existing editor-shell find/replace warnings. Vitest 956 PASS. ops:delivery:gate PASS. CI Traceability SUCCESS. Vercel SUCCESS. Performance Contract not required. Architecture Contract compliant. Review score 9/10."
     }
   ]
 }
