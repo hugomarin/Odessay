@@ -9,6 +9,7 @@ import {
   openDraftTab,
   openWritingTab,
   publishTabState,
+  reconcileUnavailableWritingTab,
   reorderTab,
   resetEditorSessionStoreForTests,
   saveTabViewState,
@@ -158,5 +159,72 @@ describe("editorSessionStore", () => {
       "writing-1",
       "writing-2",
     ]);
+  });
+
+  describe("reconcileUnavailableWritingTab", () => {
+    it("removes a background stale tab without changing the active tab", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-1", title: "First" });
+      openWritingTab({ writingId: "writing-2", title: "Second" });
+      openWritingTab({ writingId: "writing-3", title: "Third" });
+
+      const result = reconcileUnavailableWritingTab("writing-1");
+
+      expect(result).toMatchObject({ removed: true, removedActive: false, fallbackTabId: "writing-3" });
+      const session = getEditorSessionState().session;
+      expect(session.tabs.map((tab) => tab.writing_id)).toEqual(["writing-2", "writing-3"]);
+      expect(session.active_tab_id).toBe("writing-3");
+    });
+
+    it("removes the active stale tab and moves to the next valid tab", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-1", title: "First" });
+      openWritingTab({ writingId: "writing-2", title: "Second" });
+      openWritingTab({ writingId: "writing-3", title: "Third" });
+
+      const result = reconcileUnavailableWritingTab("writing-3");
+
+      expect(result).toMatchObject({ removed: true, removedActive: true, fallbackTabId: "writing-2" });
+      const session = getEditorSessionState().session;
+      expect(session.tabs.map((tab) => tab.writing_id)).toEqual(["writing-1", "writing-2"]);
+      expect(session.active_tab_id).toBe("writing-2");
+    });
+
+    it("removes the only tab and leaves the session empty for the caller to fall back", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-1", title: "Only" });
+
+      const result = reconcileUnavailableWritingTab("writing-1");
+
+      expect(result).toMatchObject({ removed: true, removedActive: true, fallbackTabId: null });
+      const session = getEditorSessionState().session;
+      expect(session.tabs).toHaveLength(0);
+      expect(session.active_tab_id).toBeNull();
+    });
+
+    it("removes the stale writing from recent_writings", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-1", title: "First" });
+      openWritingTab({ writingId: "writing-2", title: "Second" });
+
+      reconcileUnavailableWritingTab("writing-1");
+
+      const session = getEditorSessionState().session;
+      expect(session.recent_writings.some((item) => item.writing_id === "writing-1")).toBe(false);
+      expect(session.recent_writings.some((item) => item.writing_id === "writing-2")).toBe(true);
+    });
+
+    it("is idempotent", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "writing-1", title: "First" });
+      openWritingTab({ writingId: "writing-2", title: "Second" });
+
+      reconcileUnavailableWritingTab("writing-1");
+      reconcileUnavailableWritingTab("writing-1");
+
+      const session = getEditorSessionState().session;
+      expect(session.tabs.map((tab) => tab.writing_id)).toEqual(["writing-2"]);
+      expect(session.active_tab_id).toBe("writing-2");
+    });
   });
 });
