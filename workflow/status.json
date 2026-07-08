@@ -2927,6 +2927,16 @@
       "date": "2026-07-07",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "notes": "Shipped via wf-ship ODE-346 on shared branch codex/ode-343-344-345-346-347 / PR #317. Added lib/corrections/engine/admission.ts as the single visible-suggestion admission path for analysis, hydrated cache, learn-word and late learned-word loading; filters learned words, rejected memory, token-boundary validity and dedupe. Added tests/corrections-admission.test.ts (C3 cached learned word, C6 late re-admission, memory, boundaries, dedupe, malformed cache). Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. 904 vitest tests PASS. Performance Contract required: artifacts/perf/ode-346-editor-after.json.gz, perf gate PASS required_failures=0 (13 pass, 1 warn, 1 skip). ops:delivery:gate PASS with GITHUB_BASE_REF=origin/codex/ode-343-344-345-346-347 and OPS_PERF_TRACE_PATH."
+    },
+    {
+      "what": "fix(corrections): classify AI review failures and bound retries. Adds structured error classification to /api/ai/publication-review (MISSING_CONFIG, AI_PROVIDER_CONTRACT_ERROR, RATE_LIMITED, UNAVAILABLE, TIMEOUT, AI_RESPONSE_PARSE_FAILED), preserves CORS and { data, error } envelope, propagates retryable/details through parseServiceEnvelope, and adds bounded editor retry/backoff with stale cleanup and a recoverable failure toast. Updates AI writing assist contract and adds route + retry policy tests. [ODE-363]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-363",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-363/fix-desktop-ai-corrections-502-failure-and-retry-loop",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/319",
+      "commit": "b84a9f9",
+      "date": "2026-07-08",
+      "notes": "Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings. npm test PASS (147 files / 932 tests). Targeted tests PASS. ops:delivery:gate PASS (Performance Contract not required). CI Traceability PASS after reviewer-added exceptions for preexisting ODE-360/ODE-362 drift. Vercel Preview PASS. QualityScore 9.3/10 (3 P3 findings)."
     }
   ]
 }
