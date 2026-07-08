@@ -99,6 +99,7 @@ import {
   takeCorrectionBatch,
 } from "@/lib/corrections/engine/batching"
 import {
+  CORRECTION_REVIEW_FAILURE_COOLDOWN_MS,
   buildCorrectionReviewRetryKey,
   CORRECTION_REVIEW_MAX_RETRIES,
   decideCorrectionReviewRetry,
@@ -466,6 +467,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const correctionQueueCompletedRef = useRef(0)
   const correctionBatchRetryRef = useRef(new Set<string>())
   const correctionQueueFailureVisibleRef = useRef(false)
+  const correctionReviewCircuitOpenUntilRef = useRef(0)
   const correctionFailureRetryRef = useRef(new Map<string, number>())
   const correctionFailureRetryTimersRef = useRef(new Map<string, number>())
   const correctionTimersRef = useRef(new Map<string, { timer: number; pos: number }>())
@@ -501,6 +503,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     correctionStaleTimersRef.current.clear()
     correctionBatchRetryRef.current.clear()
     correctionQueueFailureVisibleRef.current = false
+    correctionReviewCircuitOpenUntilRef.current = 0
     correctionFailureRetryRef.current.clear()
     correctionFailureRetryTimersRef.current.clear()
     deferredSuppressedCorrectionBlocksRef.current = {
@@ -3595,6 +3598,22 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }, 5000)
   }, [showCorrectionToast])
 
+  const clearPendingCorrectionReviewWork = useCallback(() => {
+    correctionQueueRef.current = []
+
+    for (const timer of correctionFailureRetryTimersRef.current.values()) {
+      window.clearTimeout(timer)
+    }
+    correctionFailureRetryTimersRef.current.clear()
+  }, [])
+
+  const openCorrectionFailureCircuit = useCallback((message: string) => {
+    correctionReviewCircuitOpenUntilRef.current = Date.now() + CORRECTION_REVIEW_FAILURE_COOLDOWN_MS
+    correctionQueueFailureVisibleRef.current = true
+    clearPendingCorrectionReviewWork()
+    showCorrectionFailureToast(message)
+  }, [clearPendingCorrectionReviewWork, showCorrectionFailureToast])
+
   const scheduleCorrectionFailureRetry = useCallback(
     ({
       batchKey,
@@ -3614,7 +3633,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const retryTimer = window.setTimeout(() => {
         correctionFailureRetryTimersRef.current.delete(batchKey)
 
-        if (!correctionsEnabledRef.current || currentWritingIdRef.current === null || !editor) {
+        if (
+          !correctionsEnabledRef.current ||
+          currentWritingIdRef.current === null ||
+          !editor ||
+          Date.now() < correctionReviewCircuitOpenUntilRef.current
+        ) {
           correctionFailureRetryRef.current.delete(batchKey)
           return
         }
@@ -3665,7 +3689,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
+    if (Date.now() < correctionReviewCircuitOpenUntilRef.current) {
+      clearPendingCorrectionReviewWork()
+      showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
+      return
+    }
+
     correctionQueueFailureVisibleRef.current = false
+    correctionReviewCircuitOpenUntilRef.current = 0
     correctionProcessingRef.current = true
     logCorrectionEvent({
       type: "queue:flush",
@@ -3748,6 +3779,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
           if (retryDecision.action === "retry") {
             correctionFailureRetryRef.current.set(batchId, retryDecision.attempt)
+            correctionQueueRef.current = []
             scheduleCorrectionFailureRetry({
               batchKey: batchId,
               blocks: currentBatch,
@@ -3755,8 +3787,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             })
           } else {
             correctionFailureRetryRef.current.delete(batchId)
-            correctionQueueFailureVisibleRef.current = true
-            showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
+            openCorrectionFailureCircuit("Corrections are temporarily unavailable. Try again in a moment.")
           }
           continue
         }
@@ -3914,8 +3945,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           dropStaleSuggestionsForQueuedBlock(block.id)
         }
         correctionFailureRetryRef.current.delete(batchId)
-        correctionQueueFailureVisibleRef.current = true
-        showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
+        openCorrectionFailureCircuit("Corrections are temporarily unavailable. Try again in a moment.")
       } finally {
         correctionQueueCompletedRef.current += currentBatch.length
 
@@ -3941,6 +3971,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     normalizeAutomaticSuggestion,
     persistCorrectionBlockWriteThrough,
     dropStaleSuggestionsForQueuedBlock,
+    clearPendingCorrectionReviewWork,
+    openCorrectionFailureCircuit,
     scheduleCorrectionFailureRetry,
     showCorrectionFailureToast,
   ])
@@ -3960,6 +3992,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const enqueueCorrectionBlock = useCallback(
     (block: CorrectionTriggerBlock, reason: "edit" | "hydrate-miss" = "edit") => {
       if (!correctionsEnabledRef.current) {
+        return
+      }
+
+      if (Date.now() < correctionReviewCircuitOpenUntilRef.current) {
+        dropStaleSuggestionsForQueuedBlock(block.id)
+        showCorrectionFailureToast("Corrections are temporarily unavailable. Try again in a moment.")
         return
       }
 
@@ -4025,7 +4063,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       void processCorrectionQueue()
     },
-    [admitCorrectionSuggestions, applyCorrectionSuggestionUpdate, getBlockSuggestions, processCorrectionQueue],
+    [
+      admitCorrectionSuggestions,
+      applyCorrectionSuggestionUpdate,
+      dropStaleSuggestionsForQueuedBlock,
+      getBlockSuggestions,
+      processCorrectionQueue,
+      showCorrectionFailureToast,
+    ],
   )
 
   useEffect(() => {

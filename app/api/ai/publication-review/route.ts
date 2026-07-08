@@ -279,8 +279,10 @@ async function callCorrectionsModel({
       });
     }
 
-    if (structuredOutput && (response.status === 400 || response.status === 422)) {
-      console.info("[corrections] structured output rejected; retrying without response_format");
+    if (structuredOutput && (response.status === 400 || response.status === 422 || response.status >= 500)) {
+      console.info(
+        `[corrections] structured output provider failure status=${response.status}; retrying without response_format`,
+      );
       return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
 

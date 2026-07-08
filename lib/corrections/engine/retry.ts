@@ -2,6 +2,7 @@ import type { ServiceError } from "@/lib/services/contracts/service-types";
 
 export const CORRECTION_REVIEW_MAX_RETRIES = 1;
 export const CORRECTION_REVIEW_RETRY_DELAY_MS = 1_500;
+export const CORRECTION_REVIEW_FAILURE_COOLDOWN_MS = 30_000;
 
 export type CorrectionReviewRetryDecision =
   | {

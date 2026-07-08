@@ -307,6 +307,42 @@ describe("POST /api/ai/publication-review", () => {
     expect(payload.error.message).not.toContain("secret")
   })
 
+  it("falls back without response_format when structured output returns provider 5xx", async () => {
+    const providerFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("provider internal response_format failure", { status: 500 }))
+      .mockImplementationOnce(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body))
+        expect(body.response_format).toBeUndefined()
+        expect(body.messages[0].content).toContain("The first character of your response must be {")
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content:
+                    '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:pub-test:1","type":"spelling","originalText":"prueva","replacementText":"prueba"}],"uncertain":[]}',
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )
+      })
+    vi.stubGlobal("fetch", providerFetch)
+
+    const response = await POST(createRequest({}))
+    const payload = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(providerFetch).toHaveBeenCalledTimes(2)
+    expect(payload.error).toBeNull()
+    expect(payload.data.corrections).toEqual([
+      expect.objectContaining({ blockId: "correction-block:pub-test:1", replacementText: "prueba" }),
+    ])
+  })
+
   it("classifies provider aborts as retryable timeout errors", async () => {
     const abortError = new Error("The operation was aborted")
     abortError.name = "AbortError"
