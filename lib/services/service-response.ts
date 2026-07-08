@@ -3,6 +3,8 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 type EnvelopeError = {
   code: string
   message: string
+  retryable?: boolean
+  details?: Record<string, unknown>
 }
 
 type ApiEnvelope<T> = {
@@ -35,7 +37,10 @@ export async function parseServiceEnvelope<T>(
     return err({
       code: envelope?.error?.code ?? fallbackCode,
       message: envelope?.error?.message ?? fallbackMessage,
-      retryable: response.status >= 500,
+      retryable: typeof envelope?.error?.retryable === "boolean"
+        ? envelope.error.retryable
+        : response.status >= 500 || response.status === 429,
+      details: envelope?.error?.details,
     })
   }
 

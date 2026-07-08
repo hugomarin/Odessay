@@ -70,13 +70,68 @@ type CorrectionsUsage = {
   completionTokens: number | null;
 };
 
-const jsonError = (status: number, code: string, message: string) =>
+type CorrectionRouteErrorDetails = {
+  providerStatus?: number;
+  providerBodyClass?: string;
+  phase?: "provider" | "parse" | "config" | "request";
+};
+
+class CorrectionRouteError extends Error {
+  status: number;
+  code: string;
+  retryable: boolean;
+  details: CorrectionRouteErrorDetails;
+
+  constructor({
+    status,
+    code,
+    message,
+    retryable,
+    details = {},
+  }: {
+    status: number;
+    code: string;
+    message: string;
+    retryable: boolean;
+    details?: CorrectionRouteErrorDetails;
+  }) {
+    super(message);
+    this.name = "CorrectionRouteError";
+    this.status = status;
+    this.code = code;
+    this.retryable = retryable;
+    this.details = details;
+  }
+}
+
+const PROVIDER_REQUEST_TIMEOUT_MS = 45_000;
+
+const classifyProviderBody = (body: string) => {
+  const normalized = body.toLowerCase();
+
+  if (!body.trim()) return "empty";
+  if (normalized.includes("rate") || normalized.includes("quota")) return "rate_limit";
+  if (normalized.includes("timeout") || normalized.includes("timed out")) return "timeout";
+  if (normalized.includes("schema") || normalized.includes("response_format")) return "structured_output_contract";
+  if (normalized.includes("context") || normalized.includes("token")) return "token_budget_or_context";
+  if (normalized.includes("invalid") || normalized.includes("bad request")) return "provider_contract";
+  return "provider_error";
+};
+
+const jsonError = (
+  status: number,
+  code: string,
+  message: string,
+  options: { retryable?: boolean; details?: CorrectionRouteErrorDetails } = {},
+) =>
   NextResponse.json(
     {
       data: null,
       error: {
         code,
         message,
+        retryable: options.retryable ?? (status >= 500 || status === 429),
+        ...(options.details ? { details: options.details } : {}),
       },
     },
     { status },
@@ -150,14 +205,12 @@ async function callCorrectionsModel({
   blockCount,
   strictJson,
   structuredOutput = true,
-  _retries = 0,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
   blockCount: number;
   strictJson: boolean;
   structuredOutput?: boolean;
-  _retries?: number;
 }): Promise<{ text: string; usage: CorrectionsUsage }> {
   const requestBody = {
     model: config.model,
@@ -179,25 +232,51 @@ async function callCorrectionsModel({
     ],
   };
 
-  const response = await fetch(config.chatCompletionsUrl, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${config.apiKey}`,
-      "user-agent": "ArtifactStudio/1.0",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), PROVIDER_REQUEST_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await fetch(config.chatCompletionsUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "authorization": `Bearer ${config.apiKey}`,
+        "user-agent": "ArtifactStudio/1.0",
+      },
+      body: JSON.stringify(requestBody),
+      signal: abortController.signal,
+    });
+  } catch (error) {
+    const isAbort = error instanceof Error && error.name === "AbortError";
+    throw new CorrectionRouteError({
+      status: isAbort ? 504 : 503,
+      code: isAbort ? "TIMEOUT" : "UNAVAILABLE",
+      message: isAbort
+        ? "AI provider timed out while reviewing corrections."
+        : "AI provider is unavailable for correction review.",
+      retryable: true,
+      details: { phase: "provider" },
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     const errorPayload = await response.text();
-    console.info(`[corrections] error body=${errorPayload.slice(0, 500)}`);
+    const providerBodyClass = classifyProviderBody(errorPayload);
+    console.info(
+      `[corrections] provider error status=${response.status} bodyClass=${providerBodyClass}`,
+    );
 
-    if (response.status === 429 && _retries < 3) {
-      const retryAfterMs = Number(response.headers.get("retry-after") ?? 0) * 1000 || 3000 * (_retries + 1);
-      console.info(`[corrections] rate limited; retrying after ${retryAfterMs}ms (attempt ${_retries + 1})`);
-      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-      return callCorrectionsModel({ config, promptText, blockCount, strictJson, structuredOutput, _retries: _retries + 1 });
+    if (response.status === 429) {
+      throw new CorrectionRouteError({
+        status: 429,
+        code: "RATE_LIMITED",
+        message: "AI provider rate limited correction review.",
+        retryable: true,
+        details: { phase: "provider", providerStatus: response.status, providerBodyClass },
+      });
     }
 
     if (structuredOutput && (response.status === 400 || response.status === 422)) {
@@ -205,10 +284,36 @@ async function callCorrectionsModel({
       return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
 
-    throw new Error(`AI request failed (${response.status}): ${errorPayload}`);
+    if (response.status === 400 || response.status === 422) {
+      throw new CorrectionRouteError({
+        status: 422,
+        code: "AI_PROVIDER_CONTRACT_ERROR",
+        message: "AI provider rejected the correction review contract.",
+        retryable: false,
+        details: { phase: "provider", providerStatus: response.status, providerBodyClass },
+      });
+    }
+
+    if (response.status >= 500) {
+      throw new CorrectionRouteError({
+        status: 503,
+        code: "UNAVAILABLE",
+        message: "AI provider is unavailable for correction review.",
+        retryable: true,
+        details: { phase: "provider", providerStatus: response.status, providerBodyClass },
+      });
+    }
+
+    throw new CorrectionRouteError({
+      status: 502,
+      code: "AI_PROVIDER_ERROR",
+      message: "AI provider failed correction review.",
+      retryable: response.status >= 500,
+      details: { phase: "provider", providerStatus: response.status, providerBodyClass },
+    });
   }
 
-  const payload = await response.json() as {
+  let payload: {
     choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
     usage?: {
       prompt_tokens?: number;
@@ -216,13 +321,31 @@ async function callCorrectionsModel({
     };
   };
 
+  try {
+    payload = await response.json();
+  } catch {
+    throw new CorrectionRouteError({
+      status: 502,
+      code: "AI_RESPONSE_PARSE_FAILED",
+      message: "AI provider returned an invalid JSON response.",
+      retryable: true,
+      details: { phase: "parse", providerStatus: response.status },
+    });
+  }
+
   const text = payload.choices?.[0]?.message?.content ?? "";
   if (!text) {
     if (structuredOutput) {
       console.info("[corrections] model returned empty content with structured output; retrying without response_format");
       return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
     }
-    throw new Error("AI returned an empty response.");
+    throw new CorrectionRouteError({
+      status: 502,
+      code: "AI_RESPONSE_PARSE_FAILED",
+      message: "AI provider returned an empty correction response.",
+      retryable: true,
+      details: { phase: "parse", providerStatus: response.status },
+    });
   }
 
   return {
@@ -339,7 +462,13 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
       console.info(
         `[corrections] retry parse error=${retryErr instanceof Error ? retryErr.message : String(retryErr)}`,
       );
-      throw new Error("AI did not return valid correction JSON after retry.");
+      throw new CorrectionRouteError({
+        status: 502,
+        code: "AI_RESPONSE_PARSE_FAILED",
+        message: "AI did not return valid correction JSON after retry.",
+        retryable: true,
+        details: { phase: "parse" },
+      });
     }
   }
 }
@@ -417,14 +546,30 @@ export async function POST(request: Request) {
     getAIProviderConfig();
   } catch (configErr) {
     const message = configErr instanceof Error ? configErr.message : "AI provider not configured.";
-    return withCorsHeaders(jsonError(500, "MISSING_CONFIG", message), request);
+    return withCorsHeaders(jsonError(500, "MISSING_CONFIG", message, {
+      retryable: false,
+      details: { phase: "config" },
+    }), request);
   }
 
-  const rawBody = await request.json();
+  let rawBody: unknown;
+
+  try {
+    rawBody = await request.json();
+  } catch {
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", "Request body must be valid JSON.", {
+      retryable: false,
+      details: { phase: "request" },
+    }), request);
+  }
+
   const parsedRequest = requestSchema.safeParse(rawBody);
 
   if (!parsedRequest.success) {
-    return withCorsHeaders(jsonError(400, "INVALID_INPUT", parsedRequest.error.message), request);
+    return withCorsHeaders(jsonError(400, "INVALID_INPUT", parsedRequest.error.message, {
+      retryable: false,
+      details: { phase: "request" },
+    }), request);
   }
 
   try {
@@ -453,10 +598,27 @@ export async function POST(request: Request) {
     ), request);
   } catch (error) {
     const tEnd = Date.now();
-    const message = error instanceof Error ? error.message : "Publication review request failed.";
-    console.info(`[corrections] error totalRouteMs=${tEnd - tStart} message=${message}`);
+    const routeError = error instanceof CorrectionRouteError
+      ? error
+      : new CorrectionRouteError({
+          status: 502,
+          code: "AI_REVIEW_FAILED",
+          message: error instanceof Error ? error.message : "Publication review request failed.",
+          retryable: true,
+          details: { phase: "provider" },
+        });
 
-    return withCorsHeaders(jsonError(502, "AI_REVIEW_FAILED", message), request);
+    console.info(
+      `[corrections] error totalRouteMs=${tEnd - tStart} code=${routeError.code} retryable=${routeError.retryable} message=${routeError.message}`,
+    );
+
+    return withCorsHeaders(
+      jsonError(routeError.status, routeError.code, routeError.message, {
+        retryable: routeError.retryable,
+        details: routeError.details,
+      }),
+      request,
+    );
   }
 }
 
