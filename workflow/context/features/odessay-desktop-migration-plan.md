@@ -142,6 +142,8 @@ Hacer que el flujo de guardar writings deje de estar acoplado directamente a:
 
 La UI puede guardar un writing sin construir ni conocer un `fetch("/api/writings/...")` directamente.
 
+**Nota de robustez (ODE-331):** el flujo de apertura (`OpenWriting`) debe validar la cadena `UUID → LocalWriting → canonical_path / cloud-only → filesystem / cloud` antes de hidratar. Las pestañas de sesión son cache/UI state: un `writingId` sin binding local en desktop no debe intentar abrirse como ruta de filesystem.
+
 ---
 
 ## Fase 2 — Extraer sync como servicio explícito
