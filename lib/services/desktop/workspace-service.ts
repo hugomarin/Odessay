@@ -1,23 +1,26 @@
-"use client"
+"use client";
 
-import { appConfigDir } from "@tauri-apps/api/path"
-import { open } from "@tauri-apps/plugin-dialog"
-import { filenameToTitle } from "@/lib/desktop/document-naming"
-import { localDB } from "@/lib/local-db"
-import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
-import { getDocumentService } from "@/lib/services/document-service-factory"
+import { appConfigDir } from "@tauri-apps/api/path";
+import { open } from "@tauri-apps/plugin-dialog";
+import {
+  filenameToTitle,
+  UNTITLED_DOCUMENT_NAME,
+} from "@/lib/desktop/document-naming";
+import { localDB } from "@/lib/local-db";
+import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions";
+import { getDocumentService } from "@/lib/services/document-service-factory";
 import {
   markDesktopWritingDeletedByCanonicalPath,
   relocateDesktopWritingByCanonicalPath,
-} from "@/lib/services/document-service-factory"
-import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
+} from "@/lib/services/document-service-factory";
+import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
 import {
   isOdessayInternalPath,
   isOdessaySelfWriteEvent,
   watchFsPaths,
   type TauriWatchEvent,
   type UnwatchFn,
-} from "@/lib/services/desktop/tauri-fs-watch"
+} from "@/lib/services/desktop/tauri-fs-watch";
 import {
   tauriCreateFile,
   tauriOpenFile,
@@ -25,7 +28,7 @@ import {
   tauriWorkspaceCreate,
   tauriWorkspaceSync,
   type DesktopWorkspaceSnapshot,
-} from "@/lib/services/desktop/tauri-commands"
+} from "@/lib/services/desktop/tauri-commands";
 import type {
   WorkspaceDetail,
   WorkspaceFile,
@@ -33,7 +36,7 @@ import type {
   WorkspaceRecord,
   WorkspaceStatus,
   WorkspaceSummary,
-} from "@/lib/workspace/types"
+} from "@/lib/workspace/types";
 import {
   pruneAssignments,
   readAssignmentSlug,
@@ -41,26 +44,28 @@ import {
   withoutAssignment,
   type WorkspaceAssignmentMap,
   type WorkspaceAssignmentOption,
-} from "@/lib/workspace/assignment"
+} from "@/lib/workspace/assignment";
 
-const MAX_PREVIEW_LENGTH = 420
+const MAX_PREVIEW_LENGTH = 420;
 
-let workspaceServicePromise: Promise<DesktopWorkspaceService> | null = null
+let workspaceServicePromise: Promise<DesktopWorkspaceService> | null = null;
 
 function slugifyWorkspaceName(value: string) {
   const slug = value
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
+    .replace(/^-+|-+$/g, "");
 
-  return slug || "workspace"
+  return slug || "workspace";
 }
 
 function joinDesktopPath(basePath: string, relativePath: string) {
-  const normalizedBase = basePath.replace(/[\\/]+$/, "")
-  const normalizedRelative = relativePath.replace(/^[\\/]+/, "")
-  return normalizedRelative ? `${normalizedBase}/${normalizedRelative}` : normalizedBase
+  const normalizedBase = basePath.replace(/[\\/]+$/, "");
+  const normalizedRelative = relativePath.replace(/^[\\/]+/, "");
+  return normalizedRelative
+    ? `${normalizedBase}/${normalizedRelative}`
+    : normalizedBase;
 }
 
 function formatWorkspaceFromSnapshot(
@@ -89,7 +94,7 @@ function formatWorkspaceFromSnapshot(
       size: file.size,
       inode: file.inode,
     })),
-  }
+  };
 }
 
 function formatMissingWorkspace(
@@ -111,25 +116,25 @@ function formatMissingWorkspace(
     folderCount: 0,
     updatedAt: null,
     files: [],
-  }
+  };
 }
 
 function buildInitialWorkspaceMarkdown(title: string): string {
-  const heading = title ? `# ${title}\n\n` : ""
-  return heading
+  const heading = `# ${title.trim() || UNTITLED_DOCUMENT_NAME}\n\n`;
+  return heading;
 }
 
 function ensureMarkdownName(fileName: string) {
-  const trimmed = fileName.trim()
+  const trimmed = fileName.trim();
   if (!trimmed) {
-    return ""
+    return "";
   }
 
   if (trimmed.endsWith(".md") || trimmed.endsWith(".txt")) {
-    return trimmed
+    return trimmed;
   }
 
-  return `${trimmed}.md`
+  return `${trimmed}.md`;
 }
 
 async function reconcileWorkspaceSnapshot(
@@ -137,21 +142,26 @@ async function reconcileWorkspaceSnapshot(
   nextSnapshot: DesktopWorkspaceSnapshot,
 ) {
   if (!previousSnapshot) {
-    return
+    return;
   }
 
-  const nextFilesById = new Map(nextSnapshot.files.map((file) => [file.id, file]))
+  const nextFilesById = new Map(
+    nextSnapshot.files.map((file) => [file.id, file]),
+  );
 
   for (const previousFile of previousSnapshot.files) {
-    const nextFile = nextFilesById.get(previousFile.id)
+    const nextFile = nextFilesById.get(previousFile.id);
 
     if (nextFile && nextFile.path !== previousFile.path) {
-      await relocateDesktopWritingByCanonicalPath(previousFile.path, nextFile.path)
-      continue
+      await relocateDesktopWritingByCanonicalPath(
+        previousFile.path,
+        nextFile.path,
+      );
+      continue;
     }
 
     if (!nextFile) {
-      await markDesktopWritingDeletedByCanonicalPath(previousFile.path)
+      await markDesktopWritingDeletedByCanonicalPath(previousFile.path);
     }
   }
 }
@@ -160,56 +170,65 @@ export class DesktopWorkspaceService {
   constructor(private readonly settingsService: DesktopSettingsService) {}
 
   async pickExistingWorkspaceRoot(): Promise<string | null> {
-    const selected = await open({ directory: true, multiple: false })
-    return selected && typeof selected === "string" ? selected : null
+    const selected = await open({ directory: true, multiple: false });
+    return selected && typeof selected === "string" ? selected : null;
   }
 
   async inspectWorkspace(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
-    return tauriWorkspaceSync(rootPath)
+    return tauriWorkspaceSync(rootPath);
   }
 
   private async readRecords(): Promise<WorkspaceRecord[]> {
-    const result = await this.settingsService.getDesktopSettings()
-    const workspaces = result.data?.workspaces ?? []
-    return Array.isArray(workspaces) ? workspaces : []
+    const result = await this.settingsService.getDesktopSettings();
+    const workspaces = result.data?.workspaces ?? [];
+    return Array.isArray(workspaces) ? workspaces : [];
   }
 
   private async writeRecords(records: WorkspaceRecord[]) {
-    await this.settingsService.updateDesktopSettings({ workspaces: records })
+    await this.settingsService.updateDesktopSettings({ workspaces: records });
   }
 
   async getLayout(): Promise<WorkspaceLayout> {
-    const result = await this.settingsService.getDesktopSettings()
-    return result.data?.workspaceLayout === "list" ? "list" : "grid"
+    const result = await this.settingsService.getDesktopSettings();
+    return result.data?.workspaceLayout === "list" ? "list" : "grid";
   }
 
   async setLayout(layout: WorkspaceLayout) {
-    await this.settingsService.updateDesktopSettings({ workspaceLayout: layout })
+    await this.settingsService.updateDesktopSettings({
+      workspaceLayout: layout,
+    });
   }
 
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
-    const records = await this.readRecords()
+    const records = await this.readRecords();
     const snapshots = await Promise.all(
       records.map(async (record) => {
         try {
-          const snapshot = await tauriWorkspaceSync(record.rootPath)
-          return formatWorkspaceFromSnapshot(record, snapshot)
+          const snapshot = await tauriWorkspaceSync(record.rootPath);
+          return formatWorkspaceFromSnapshot(record, snapshot);
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Workspace folder is unavailable"
-          return formatMissingWorkspace(record, message)
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Workspace folder is unavailable";
+          return formatMissingWorkspace(record, message);
         }
       }),
-    )
+    );
 
     return snapshots
       .sort((left, right) => {
         if (left.status !== right.status) {
-          return left.status === "ready" ? -1 : 1
+          return left.status === "ready" ? -1 : 1;
         }
 
-        const leftValue = left.lastOpenedAt ? new Date(left.lastOpenedAt).getTime() : left.updatedAt ?? 0
-        const rightValue = right.lastOpenedAt ? new Date(right.lastOpenedAt).getTime() : right.updatedAt ?? 0
-        return rightValue - leftValue
+        const leftValue = left.lastOpenedAt
+          ? new Date(left.lastOpenedAt).getTime()
+          : (left.updatedAt ?? 0);
+        const rightValue = right.lastOpenedAt
+          ? new Date(right.lastOpenedAt).getTime()
+          : (right.updatedAt ?? 0);
+        return rightValue - leftValue;
       })
       .map((workspace) => ({
         slug: workspace.slug,
@@ -224,49 +243,61 @@ export class DesktopWorkspaceService {
         fileCount: workspace.fileCount,
         folderCount: workspace.folderCount,
         updatedAt: workspace.updatedAt,
-      }))
+      }));
   }
 
   async getWorkspace(slug: string): Promise<WorkspaceDetail | null> {
-    const records = await this.readRecords()
-    const record = records.find((candidate) => candidate.slug === slug)
+    const records = await this.readRecords();
+    const record = records.find((candidate) => candidate.slug === slug);
     if (!record) {
-      return null
+      return null;
     }
 
     try {
-      const snapshot = await tauriWorkspaceSync(record.rootPath)
-      return formatWorkspaceFromSnapshot(record, snapshot)
+      const snapshot = await tauriWorkspaceSync(record.rootPath);
+      return formatWorkspaceFromSnapshot(record, snapshot);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace folder is unavailable"
-      return formatMissingWorkspace(record, message)
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Workspace folder is unavailable";
+      return formatMissingWorkspace(record, message);
     }
   }
 
   async addExistingWorkspace(): Promise<WorkspaceRecord | null> {
-    const rootPath = await this.pickExistingWorkspaceRoot()
+    const rootPath = await this.pickExistingWorkspaceRoot();
     if (!rootPath) {
-      return null
+      return null;
     }
 
-    return this.registerWorkspace(rootPath, "existing-folder")
+    return this.registerWorkspace(rootPath, "existing-folder");
   }
 
   async addExistingWorkspaceWithSelection(
     rootPath: string,
     selectedPaths: string[],
   ): Promise<WorkspaceRecord | null> {
-    return this.registerWorkspace(rootPath, "existing-folder", undefined, selectedPaths)
+    return this.registerWorkspace(
+      rootPath,
+      "existing-folder",
+      undefined,
+      selectedPaths,
+    );
   }
 
   async createWorkspace(name: string): Promise<WorkspaceRecord | null> {
-    const selected = await open({ directory: true, multiple: false, title: "Choose location" })
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose location",
+    });
     if (!selected || typeof selected !== "string") {
-      return null
+      return null;
     }
 
-    const rootPath = await tauriWorkspaceCreate(selected, name.trim())
-    return this.registerWorkspace(rootPath, "scratch", name.trim())
+    const rootPath = await tauriWorkspaceCreate(selected, name.trim());
+    return this.registerWorkspace(rootPath, "scratch", name.trim());
   }
 
   private async registerWorkspace(
@@ -275,25 +306,25 @@ export class DesktopWorkspaceService {
     explicitName?: string,
     selectedPaths?: string[],
   ): Promise<WorkspaceRecord> {
-    const records = await this.readRecords()
-    const existing = records.find((record) => record.rootPath === rootPath)
-    const snapshot = await tauriWorkspaceSync(rootPath, selectedPaths)
+    const records = await this.readRecords();
+    const existing = records.find((record) => record.rootPath === rootPath);
+    const snapshot = await tauriWorkspaceSync(rootPath, selectedPaths);
 
     if (existing) {
-      return existing
+      return existing;
     }
 
-    const baseName = explicitName?.trim() || snapshot.name
-    const baseSlug = slugifyWorkspaceName(baseName)
-    let slug = baseSlug
-    let suffix = 2
+    const baseName = explicitName?.trim() || snapshot.name;
+    const baseSlug = slugifyWorkspaceName(baseName);
+    let slug = baseSlug;
+    let suffix = 2;
 
     while (records.some((record) => record.slug === slug)) {
-      slug = `${baseSlug}-${suffix}`
-      suffix += 1
+      slug = `${baseSlug}-${suffix}`;
+      suffix += 1;
     }
 
-    const nowIso = new Date().toISOString()
+    const nowIso = new Date().toISOString();
     const nextRecord: WorkspaceRecord = {
       slug,
       name: baseName,
@@ -301,26 +332,29 @@ export class DesktopWorkspaceService {
       source,
       addedAt: nowIso,
       lastOpenedAt: null,
-    }
+    };
 
-    await this.writeRecords([...records, nextRecord])
-    return nextRecord
+    await this.writeRecords([...records, nextRecord]);
+    return nextRecord;
   }
 
-  async openFileInEditor(filePath: string, workspaceFileId: string): Promise<string> {
+  async openFileInEditor(
+    filePath: string,
+    workspaceFileId: string,
+  ): Promise<string> {
     // Old desktop builds could enqueue sync mutations keyed by canonical_path
     // instead of the stable workspace UUID. Clear those stale path-keyed
     // mutations before rebinding/opening so they do not keep the writing stuck
     // in failed/pending forever.
-    await localDB.syncQueue.deleteForEntity("writing", filePath)
-    await localDB.syncQueue.deleteForEntity("writing-collections", filePath)
+    await localDB.syncQueue.deleteForEntity("writing", filePath);
+    await localDB.syncQueue.deleteForEntity("writing-collections", filePath);
 
     // Seed a local writing record with the workspace index ID before opening.
     // This ensures the DocumentService treats the workspace UUID as the
     // canonical writing ID; the markdown file itself remains content-only.
-    const existingByPath = await localDB.writings.getByCanonicalPath(filePath)
+    const existingByPath = await localDB.writings.getByCanonicalPath(filePath);
     if (!existingByPath) {
-      const nowIso = new Date().toISOString()
+      const nowIso = new Date().toISOString();
       await localDB.writings.save({
         id: workspaceFileId,
         canonical_path: filePath,
@@ -334,102 +368,113 @@ export class DesktopWorkspaceService {
         created_at: nowIso,
         updated_at: nowIso,
         local_updated_at: Date.now(),
-      })
+      });
     } else if (existingByPath.id !== workspaceFileId) {
-      await localDB.syncQueue.deleteForEntity("writing", existingByPath.id)
-      await localDB.syncQueue.deleteForEntity("writing-collections", existingByPath.id)
-      await localDB.writings.delete(existingByPath.id)
+      await localDB.syncQueue.deleteForEntity("writing", existingByPath.id);
+      await localDB.syncQueue.deleteForEntity(
+        "writing-collections",
+        existingByPath.id,
+      );
+      await localDB.writings.delete(existingByPath.id);
       await localDB.writings.save({
         ...existingByPath,
         id: workspaceFileId,
         canonical_path: filePath,
         local_updated_at: Date.now(),
-      })
+      });
     }
 
-    const documentService = await getDocumentService()
-    const openResult = await documentService.openWriting(workspaceFileId)
+    const documentService = await getDocumentService();
+    const openResult = await documentService.openWriting(workspaceFileId);
     if (openResult.error) {
-      throw new Error(openResult.error.message)
+      throw new Error(openResult.error.message);
     }
 
-    return workspaceFileId
+    return workspaceFileId;
   }
 
   async readFilePreview(filePath: string) {
-    const content = await tauriOpenFile(filePath)
-    const preview = content.trim().slice(0, MAX_PREVIEW_LENGTH)
-    return { content, preview }
+    const content = await tauriOpenFile(filePath);
+    const preview = content.trim().slice(0, MAX_PREVIEW_LENGTH);
+    return { content, preview };
   }
 
-  async createFile(workspace: WorkspaceDetail, fileName: string): Promise<WorkspaceFile> {
-    const normalizedName = ensureMarkdownName(fileName)
+  async createFile(
+    workspace: WorkspaceDetail,
+    fileName: string,
+  ): Promise<WorkspaceFile> {
+    const normalizedName = ensureMarkdownName(fileName);
     if (!normalizedName) {
-      throw new Error("File name is required")
+      throw new Error("File name is required");
     }
 
-    const expectedPath = joinDesktopPath(workspace.rootPath, normalizedName)
-    const title = filenameToTitle(normalizedName)
-    const initialMarkdown = buildInitialWorkspaceMarkdown(title)
+    const expectedPath = joinDesktopPath(workspace.rootPath, normalizedName);
+    const title = filenameToTitle(normalizedName);
+    const initialMarkdown = buildInitialWorkspaceMarkdown(title);
 
-    await tauriCreateFile(workspace.rootPath, normalizedName)
-    await tauriWriteFile(expectedPath, initialMarkdown)
+    await tauriCreateFile(workspace.rootPath, normalizedName);
+    await tauriWriteFile(expectedPath, initialMarkdown);
 
-    const refreshed = await this.getWorkspace(workspace.slug)
+    const refreshed = await this.getWorkspace(workspace.slug);
     if (!refreshed) {
-      throw new Error("Workspace not found after creating file")
+      throw new Error("Workspace not found after creating file");
     }
 
-    const file = refreshed.files.find((candidate) => candidate.path === expectedPath)
+    const file = refreshed.files.find(
+      (candidate) => candidate.path === expectedPath,
+    );
     if (!file) {
-      throw new Error(`New file was not found after refresh: ${expectedPath}`)
+      throw new Error(`New file was not found after refresh: ${expectedPath}`);
     }
 
-    return file
+    return file;
   }
 
   async markWorkspaceOpened(slug: string): Promise<void> {
-    const records = await this.readRecords()
-    const nowIso = new Date().toISOString()
+    const records = await this.readRecords();
+    const nowIso = new Date().toISOString();
     const nextRecords = records.map((record) =>
       record.slug === slug ? { ...record, lastOpenedAt: nowIso } : record,
-    )
-    await this.writeRecords(nextRecords)
+    );
+    await this.writeRecords(nextRecords);
   }
 
-  async renameWorkspace(slug: string, nextName: string): Promise<WorkspaceRecord> {
-    const normalizedName = nextName.trim()
+  async renameWorkspace(
+    slug: string,
+    nextName: string,
+  ): Promise<WorkspaceRecord> {
+    const normalizedName = nextName.trim();
     if (!normalizedName) {
-      throw new Error("Workspace name is required")
+      throw new Error("Workspace name is required");
     }
 
-    const records = await this.readRecords()
-    const target = records.find((record) => record.slug === slug)
+    const records = await this.readRecords();
+    const target = records.find((record) => record.slug === slug);
     if (!target) {
-      throw new Error("Workspace not found")
+      throw new Error("Workspace not found");
     }
 
     const nextRecords = records.map((record) =>
       record.slug === slug ? { ...record, name: normalizedName } : record,
-    )
-    await this.writeRecords(nextRecords)
+    );
+    await this.writeRecords(nextRecords);
 
-    return { ...target, name: normalizedName }
+    return { ...target, name: normalizedName };
   }
 
   async removeWorkspace(slug: string): Promise<void> {
-    const records = await this.readRecords()
-    const nextRecords = records.filter((record) => record.slug !== slug)
-    await this.writeRecords(nextRecords)
+    const records = await this.readRecords();
+    const nextRecords = records.filter((record) => record.slug !== slug);
+    await this.writeRecords(nextRecords);
 
     // Keep assignments honest: a writing can no longer point at a removed
     // workspace. The file itself is untouched ("files in place").
-    const assignments = await this.readAssignments()
+    const assignments = await this.readAssignments();
     const pruned = pruneAssignments(
       assignments,
       nextRecords.map((record) => record.slug),
-    )
-    await this.writeAssignments(pruned)
+    );
+    await this.writeAssignments(pruned);
   }
 
   // ─── Document ↔ workspace assignment (contextual ownership) ─────────────────
@@ -438,19 +483,21 @@ export class DesktopWorkspaceService {
   // belongs to without moving the underlying file or exposing local paths.
 
   private async readAssignments(): Promise<WorkspaceAssignmentMap> {
-    const result = await this.settingsService.getDesktopSettings()
-    const assignments = result.data?.workspaceAssignments
-    return assignments && typeof assignments === "object" ? assignments : {}
+    const result = await this.settingsService.getDesktopSettings();
+    const assignments = result.data?.workspaceAssignments;
+    return assignments && typeof assignments === "object" ? assignments : {};
   }
 
   private async writeAssignments(assignments: WorkspaceAssignmentMap) {
-    await this.settingsService.updateDesktopSettings({ workspaceAssignments: assignments })
+    await this.settingsService.updateDesktopSettings({
+      workspaceAssignments: assignments,
+    });
   }
 
   /** Lists registered workspaces as lightweight assignment targets (no FS sync). */
   async listAssignableWorkspaces(): Promise<WorkspaceAssignmentOption[]> {
-    const records = await this.readRecords()
-    return records.map((record) => ({ slug: record.slug, name: record.name }))
+    const records = await this.readRecords();
+    return records.map((record) => ({ slug: record.slug, name: record.name }));
   }
 
   /** Returns the full writing id → workspace slug map for the current account. */
@@ -458,19 +505,19 @@ export class DesktopWorkspaceService {
     const [assignments, records] = await Promise.all([
       this.readAssignments(),
       this.readRecords(),
-    ])
+    ]);
 
     // Never surface assignments that point at workspaces that no longer exist.
     return pruneAssignments(
       assignments,
       records.map((record) => record.slug),
-    )
+    );
   }
 
   /** Returns the current workspace slug for a writing, or null when unassigned. */
   async getAssignment(writingId: string): Promise<string | null> {
-    const assignments = await this.readAssignments()
-    return readAssignmentSlug(assignments, writingId)
+    const assignments = await this.readAssignments();
+    return readAssignmentSlug(assignments, writingId);
   }
 
   /**
@@ -478,19 +525,19 @@ export class DesktopWorkspaceService {
    * move simply replaces the previous slug. Does not touch the file on disk.
    */
   async assignToWorkspace(writingId: string, slug: string): Promise<void> {
-    const records = await this.readRecords()
+    const records = await this.readRecords();
     if (!records.some((record) => record.slug === slug)) {
-      throw new Error(`Unknown workspace: ${slug}`)
+      throw new Error(`Unknown workspace: ${slug}`);
     }
 
-    const assignments = await this.readAssignments()
-    await this.writeAssignments(withAssignment(assignments, writingId, slug))
+    const assignments = await this.readAssignments();
+    await this.writeAssignments(withAssignment(assignments, writingId, slug));
   }
 
   /** Removes any workspace assignment for a writing. The file stays in place. */
   async clearAssignment(writingId: string): Promise<void> {
-    const assignments = await this.readAssignments()
-    await this.writeAssignments(withoutAssignment(assignments, writingId))
+    const assignments = await this.readAssignments();
+    await this.writeAssignments(withoutAssignment(assignments, writingId));
   }
 
   async watchWorkspace(
@@ -498,51 +545,62 @@ export class DesktopWorkspaceService {
     selectedPaths: string[],
     onChange: () => void,
   ): Promise<UnwatchFn> {
-    let previousSnapshot: DesktopWorkspaceSnapshot | null = null
-    let reconcilePromise = Promise.resolve()
+    let previousSnapshot: DesktopWorkspaceSnapshot | null = null;
+    let reconcilePromise = Promise.resolve();
 
     try {
-      previousSnapshot = await tauriWorkspaceSync(rootPath)
+      previousSnapshot = await tauriWorkspaceSync(rootPath);
     } catch {
-      previousSnapshot = null
+      previousSnapshot = null;
     }
 
-    const watchedPaths = await resolveWorkspaceWatchPaths(rootPath, selectedPaths)
+    const watchedPaths = await resolveWorkspaceWatchPaths(
+      rootPath,
+      selectedPaths,
+    );
 
-    console.log("[workspace:watch] starting watcher for", watchedPaths)
+    console.log("[workspace:watch] starting watcher for", watchedPaths);
 
     return watchFsPaths(
       watchedPaths,
       (event) => {
         if (shouldIgnoreWorkspaceWatchEvent(event)) {
-          console.log("[workspace:watch] ignored event", event.type, event.paths)
-          return
+          console.log(
+            "[workspace:watch] ignored event",
+            event.type,
+            event.paths,
+          );
+          return;
         }
 
-        console.log("[workspace:watch] event received", event.type, event.paths)
+        console.log(
+          "[workspace:watch] event received",
+          event.type,
+          event.paths,
+        );
 
         reconcilePromise = reconcilePromise
           .catch(() => undefined)
           .then(async () => {
-            let nextSnapshot: DesktopWorkspaceSnapshot | null = null
+            let nextSnapshot: DesktopWorkspaceSnapshot | null = null;
 
             try {
-              nextSnapshot = await tauriWorkspaceSync(rootPath)
+              nextSnapshot = await tauriWorkspaceSync(rootPath);
             } catch {
-              nextSnapshot = null
+              nextSnapshot = null;
             }
 
             if (nextSnapshot) {
-              await reconcileWorkspaceSnapshot(previousSnapshot, nextSnapshot)
+              await reconcileWorkspaceSnapshot(previousSnapshot, nextSnapshot);
             }
 
-            previousSnapshot = nextSnapshot
-            console.log("[workspace:watch] calling onChange after sync")
-            onChange()
-          })
+            previousSnapshot = nextSnapshot;
+            console.log("[workspace:watch] calling onChange after sync");
+            onChange();
+          });
       },
       { recursive: true, delayMs: 300 },
-    )
+    );
   }
 
   async watchWorkspaces(
@@ -555,106 +613,119 @@ export class DesktopWorkspaceService {
           .filter((workspace) => workspace.rootPath)
           .map((workspace) => [workspace.rootPath, workspace]),
       ).values(),
-    )
-    const rootPaths = uniqueWorkspaces.map((workspace) => workspace.rootPath)
-    const snapshotByRoot = new Map<string, DesktopWorkspaceSnapshot | null>()
-    let reconcilePromise = Promise.resolve()
+    );
+    const rootPaths = uniqueWorkspaces.map((workspace) => workspace.rootPath);
+    const snapshotByRoot = new Map<string, DesktopWorkspaceSnapshot | null>();
+    let reconcilePromise = Promise.resolve();
 
     await Promise.all(
       rootPaths.map(async (rootPath) => {
         try {
-          snapshotByRoot.set(rootPath, await tauriWorkspaceSync(rootPath))
+          snapshotByRoot.set(rootPath, await tauriWorkspaceSync(rootPath));
         } catch {
-          snapshotByRoot.set(rootPath, null)
+          snapshotByRoot.set(rootPath, null);
         }
       }),
-    )
+    );
 
     const watchedPaths = (
       await Promise.all(
         uniqueWorkspaces.map((workspace) =>
-          resolveWorkspaceWatchPaths(workspace.rootPath, workspace.selectedPaths),
+          resolveWorkspaceWatchPaths(
+            workspace.rootPath,
+            workspace.selectedPaths,
+          ),
         ),
       )
-    ).flat()
+    ).flat();
 
     return watchFsPaths(
       Array.from(new Set(watchedPaths)),
       (event) => {
         if (shouldIgnoreWorkspaceWatchEvent(event)) {
-          return
+          return;
         }
 
         reconcilePromise = reconcilePromise
           .catch(() => undefined)
           .then(async () => {
             const changedRoots = rootPaths.filter((rootPath) =>
-              event.paths.some((path) => path === rootPath || path.startsWith(`${rootPath}/`)),
-            )
+              event.paths.some(
+                (path) => path === rootPath || path.startsWith(`${rootPath}/`),
+              ),
+            );
 
             await Promise.all(
               changedRoots.map(async (rootPath) => {
-                const previousSnapshot = snapshotByRoot.get(rootPath) ?? null
-                let nextSnapshot: DesktopWorkspaceSnapshot | null = null
+                const previousSnapshot = snapshotByRoot.get(rootPath) ?? null;
+                let nextSnapshot: DesktopWorkspaceSnapshot | null = null;
 
                 try {
-                  nextSnapshot = await tauriWorkspaceSync(rootPath)
+                  nextSnapshot = await tauriWorkspaceSync(rootPath);
                 } catch {
-                  nextSnapshot = null
+                  nextSnapshot = null;
                 }
 
                 if (nextSnapshot) {
-                  await reconcileWorkspaceSnapshot(previousSnapshot, nextSnapshot)
+                  await reconcileWorkspaceSnapshot(
+                    previousSnapshot,
+                    nextSnapshot,
+                  );
                 }
 
-                snapshotByRoot.set(rootPath, nextSnapshot)
+                snapshotByRoot.set(rootPath, nextSnapshot);
               }),
-            )
+            );
 
-            onChange()
-          })
+            onChange();
+          });
       },
       { recursive: true, delayMs: 700 },
-    )
+    );
   }
 }
 
-async function resolveWorkspaceWatchPaths(rootPath: string, selectedPaths: string[]) {
+async function resolveWorkspaceWatchPaths(
+  rootPath: string,
+  selectedPaths: string[],
+) {
   if (!selectedPaths.length) {
-    return [rootPath]
+    return [rootPath];
   }
 
-  const watchedPaths = selectedPaths.map((selectedPath) => joinDesktopPath(rootPath, selectedPath))
-  return Array.from(new Set(watchedPaths))
+  const watchedPaths = selectedPaths.map((selectedPath) =>
+    joinDesktopPath(rootPath, selectedPath),
+  );
+  return Array.from(new Set(watchedPaths));
 }
 
 function shouldIgnoreWorkspaceWatchEvent(event: TauriWatchEvent) {
   if (!event.paths.some((path) => !isOdessayInternalPath(path))) {
-    return true
+    return true;
   }
 
   if (isOdessaySelfWriteEvent(event)) {
-    return true
+    return true;
   }
 
   if (event.type === "any" || event.type === "other") {
-    return false
+    return false;
   }
 
   if ("access" in event.type) {
-    const accessKind = event.type.access.kind
-    return accessKind === "open" || accessKind === "close"
+    const accessKind = event.type.access.kind;
+    return accessKind === "open" || accessKind === "close";
   }
 
-  return false
+  return false;
 }
 
 export async function getDesktopWorkspaceService() {
   if (!workspaceServicePromise) {
     workspaceServicePromise = appConfigDir().then((configDir) => {
-      return new DesktopWorkspaceService(new DesktopSettingsService(configDir))
-    })
+      return new DesktopWorkspaceService(new DesktopSettingsService(configDir));
+    });
   }
 
-  return workspaceServicePromise
+  return workspaceServicePromise;
 }

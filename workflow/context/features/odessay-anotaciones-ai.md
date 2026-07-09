@@ -33,12 +33,12 @@ El sistema actual usa un único nodo TipTap `annotationReference` con cuatro val
 `collaborative` ya no es un tipo de producto vigente; entradas legacy con prefijo `@c` se tratan como
 `personal` para compatibilidad.
 
-| Tipo | Audiencia | Significado |
-|------|-----------|-------------|
-| `footnote` | Cualquier lector | Aclaración o referencia contextual |
-| `personal` | El autor | "Esto es relevante para mí" — para mi propia referencia y reflexión |
-| `ai` | La AI | Instrucciones inline para la próxima consulta AI sobre ese pasaje |
-| `highlight` | El autor | Pasaje marcado sin obligación de nota textual |
+| Tipo        | Audiencia        | Significado                                                         |
+| ----------- | ---------------- | ------------------------------------------------------------------- |
+| `footnote`  | Cualquier lector | Aclaración o referencia contextual                                  |
+| `personal`  | El autor         | "Esto es relevante para mí" — para mi propia referencia y reflexión |
+| `ai`        | La AI            | Instrucciones inline para la próxima consulta AI sobre ese pasaje   |
+| `highlight` | El autor         | Pasaje marcado sin obligación de nota textual                       |
 
 ### Sobre `personal`
 
@@ -66,7 +66,7 @@ Son marcas de lectura sin texto obligatorio. Usan el mismo anclaje inline que la
 
 ### Las anotaciones viven inline en el documento canónico
 
-Todas las anotaciones viven como **notación inline dentro del documento** (`==texto==[@n: comentario]`): la marca Highlight (`==..==`) define el rango y el marcador lleva el comentario. No son una capa aparte ni dependen de `body_json` como verdad. Al editar, se materializan como nodos `annotationReference` en la copia de trabajo `body_json`; al guardar, se re-serializan al `.md`/`body_text`.
+Todas las anotaciones viven como **notación inline dentro del documento** (`==texto==[@n|id: comentario]`): la marca Highlight (`==..==`) define el rango y el marcador lleva el comentario. No son una capa aparte ni dependen de `body_json` como verdad. Al editar, se materializan como nodos `annotationReference` en la copia de trabajo `body_json`; al guardar, se re-serializan al `.md`/`body_text`.
 
 ```
 Usuario anota en reading view
@@ -78,11 +78,12 @@ Guardar → serializa al .md canónico (+ body_text derivado)
 ```
 
 **Por qué inline y no una capa aparte:**
+
 1. **Versionamiento**: una sola fuente de verdad (el documento). `margins` se reconstruye del documento; restaurar una versión no deja anotaciones huérfanas.
 2. **Portabilidad**: la anotación viaja con el texto en el propio `.md`, sin sidecar ni metadata de sistema.
 3. **Copy semantics**: las anotaciones viajan con el texto en cualquier Cmd+C — el usuario copia su writing anotado directamente a Claude sin un paso de exportación separado.
 
-> **Riesgo bloqueante hoy (D3):** el `id` de la anotación NO se codifica inline y el round-trip `.md → body_json → .md` lo regenera (`crypto.randomUUID` en `footnote-node.ts`). Como `margins` se reconstruye por `id` en cada save (borrando filas cuyo id ya no existe), cada round-trip **destruye** el estado de colaboración (`resolved/shared/shared_at`). Codificar el `id` estable inline es prerrequisito de tratar el `.md` como verdad.
+> **Contrato vigente (D3):** el `id` estable de la anotación se codifica inline en el marcador canónico (`|id`) y debe preservarse en todo round-trip `.md → body_json → .md`. `margins` se reconstruye por ese mismo `id`; si el parser o serializer lo pierde, rompe el estado de colaboración (`resolved/shared/shared_at`).
 
 ### Nodo unificado annotationReference
 
@@ -90,10 +91,10 @@ Un único tipo de nodo TipTap `annotationReference` cubre todos los tipos (inclu
 
 ```ts
 {
-  id: string       // UUID estable, generado en creación, nunca cambia
-  type: 'footnote' | 'personal' | 'ai' | 'highlight'
-  index: number    // índice de display, recalculado al serializar por tipo
-  text: string     // contenido de la anotación
+  id: string; // UUID estable, generado en creación, nunca cambia
+  type: "footnote" | "personal" | "ai" | "highlight";
+  index: number; // índice de display, recalculado al serializar por tipo
+  text: string; // contenido de la anotación
 }
 ```
 
@@ -125,23 +126,23 @@ created_at  timestamptz
 
 Cada tipo de anotación tiene un sigil distinto en `body_text`:
 
-| Tipo | Sigil | Ejemplo |
-|------|-------|---------|
-| footnote | `[^n: texto]` | `[^1: Ver referencia p.42]` |
-| ai | `[@n: texto]` | `[@1: Claude: simplificar esto]` |
-| personal | `[@pn: texto]` | `[@p1: revisar después]` |
-| highlight | `[@hn: texto]` | `[@h1: guardar este pasaje]` |
+| Tipo      | Sigil | Ejemplo     |
+| --------- | ----- | ----------- |
+| footnote  | `[^n  | id: texto]` | `[^1  | ann-1: Ver referencia p.42]`      |
+| ai        | `[@n  | id: texto]` | `[@1  | ann-2: Claude: simplificar esto]` |
+| personal  | `[@pn | id: texto]` | `[@p1 | ann-3: revisar después]`          |
+| highlight | `[@hn | id: texto]` | `[@h1 | ann-4: guardar este pasaje]`      |
 
 Patrón de anclaje sobre texto resaltado:
 
 ```md
-Cuando quitas el gluten de una torta ==no solo cambias el sabor==[@1: esta
+Cuando quitas el gluten de una torta ==no solo cambias el sabor==[@1|ann-2: esta
 explicación es demasiado técnica para el lector objetivo, simplificar],
 cambias la física de la masa.
 
-El resultado inevitable[^1: Ver Bread Science, p. 42] son texturas gomosas.
+El resultado inevitable[^1|ann-1: Ver Bread Science, p. 42] son texturas gomosas.
 
-==Las versiones sin gluten quedan apretadas==[@p1: revisar si aplica también
+==Las versiones sin gluten quedan apretadas==[@p1|ann-3: revisar si aplica también
 sin azúcar — pendiente confirmar]
 ```
 
@@ -159,12 +160,12 @@ El mark `==highlight==` y el nodo de anotación son hermanos en el párrafo TipT
 El markdown exportado:
 
 ```md
-Cuando quitas el gluten de una torta ==no solo cambias el sabor==[@1: esta
+Cuando quitas el gluten de una torta ==no solo cambias el sabor==[@1|ann-2: esta
 explicación es demasiado técnica para el lector objetivo, simplificar],
 cambias la física de la masa.
 ```
 
-Es legible y parseable por cualquier AI sin instrucciones especiales. El `[@n: instrucción]` es suficientemente descriptivo como para que el modelo entienda que es una instrucción sobre el texto anterior.
+Es legible y parseable por cualquier AI sin instrucciones especiales. El `[@n|id: instrucción]` mantiene identidad estable y sigue siendo suficientemente descriptivo como para que el modelo entienda que es una instrucción sobre el texto anterior.
 
 ### Etiquetas rápidas
 
@@ -218,6 +219,7 @@ El ciclo de escritura colaborativa con AI no termina cuando la AI produce el tex
 ### Popup de selección
 
 Al seleccionar texto en la vista de lectura, el popup muestra cuatro opciones:
+
 - **Personal** — nota para mí
 - **AI** — instrucción para la AI
 - **Highlight** — marcar pasaje
@@ -244,7 +246,7 @@ El color del subrayado/fondo se decide por marca, no por heurística de párrafo
 - `mark[data-annotation-type="personal"]` y `mark[data-annotation-type="footnote"]` usan neutro (`#999990`).
 - Marks sin `data-annotation-type` son highlights manuales y conservan el estilo default ámbar.
 
-La sintaxis markdown no cambia: `==texto==[@tipo...]`. Al parsear markdown, el rich parser re-deriva
+La sintaxis markdown canónica incluye `|id`: `==texto==[@tipo...|id: ...]`. Al parsear markdown, el rich parser re-deriva
 `data-annotation-type` desde el `annotationReference` hermano que sigue al mark.
 
 ### Panel de anotaciones filtrado
@@ -254,6 +256,7 @@ Tabs de filtro: Todas / Personal / AI / Highlight / Footnote.
 ### "Copiar para AI"
 
 Footer section en el sidebar cuando hay al menos una anotación `ai`. Dos acciones:
+
 - **Anotaciones**: copia solo las AI con su texto citado
 - **Texto completo**: copia el `body_text` con solo las anotaciones `ai` incluidas
 
@@ -310,10 +313,10 @@ ALTER TABLE margins
 ```ts
 // annotationReference node attrs
 {
-  id: string        // UUID, estable, fuente de verdad de identidad
-  type: 'footnote' | 'personal' | 'ai' | 'highlight'
-  index: number     // solo para display en markdown
-  text: string
+  id: string; // UUID, estable, fuente de verdad de identidad
+  type: "footnote" | "personal" | "ai" | "highlight";
+  index: number; // solo para display en markdown
+  text: string;
 }
 ```
 
@@ -323,7 +326,7 @@ ALTER TABLE margins
 
 1. `personal` **no implica privacidad técnica** en v1 — es una etiqueta de audiencia semántica. Control de acceso diferenciado es trabajo futuro.
 2. El flujo de exportación es **copiar/pegar** en v1 — no integración directa con la API de Claude.
-3. El formato de embedding en markdown usa **sigils inline** (`[@n: texto]`) — no comentarios HTML. Es más compacto, legible y compatible con el modelo TipTap.
+3. El formato de embedding en markdown usa **sigils inline** (`[@n|id: texto]`) — no comentarios HTML. Es más compacto, legible y compatible con el modelo TipTap.
 4. La síntesis multi-texto no entra en v1 — el valor en v1 es el filtro de perspectiva por anotación, no la automatización del resumen.
 5. Las etiquetas rápidas son shortcuts de texto, no tipos especiales — insertan texto libre en el campo de anotación.
 6. **El documento canónico (`.md` anotado inline) es la fuente de verdad** (ADR D1/D3); `body_json` es la copia de trabajo y `margins` es el payload/índice en la nube, atado al `id` estable de cada anotación y reconstruible desde el documento.
