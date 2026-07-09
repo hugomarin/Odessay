@@ -1,5 +1,8 @@
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
-import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation"
+import {
+  parseCorrectionBlockLogicalId,
+  parseCorrectionBlockPosition,
+} from "@/lib/corrections/block-invalidation"
 
 export const CORRECTION_STALE_TIMEOUT_MS = 10_000
 
@@ -17,12 +20,6 @@ export type DeferredCorrectionBlocksState<TBlock extends BlockIdentity> = {
   flushAt: number | null
 }
 
-const parseBlockPosition = (blockId: string): number | null => {
-  const raw = blockId.split(":").at(-1)
-  const pos = raw ? Number.parseInt(raw, 10) : Number.NaN
-  return Number.isFinite(pos) ? pos : null
-}
-
 export const isSameCorrectionBlock = (
   suggestionBlockId: string | null | undefined,
   blockId: string,
@@ -37,8 +34,8 @@ export const isSameCorrectionBlock = (
     return suggestionLogicalId === blockLogicalId
   }
 
-  const suggestionPos = parseBlockPosition(suggestionBlockId)
-  const blockPos = parseBlockPosition(blockId)
+  const suggestionPos = parseCorrectionBlockPosition(suggestionBlockId)
+  const blockPos = parseCorrectionBlockPosition(blockId)
   return suggestionPos !== null && blockPos !== null && suggestionPos === blockPos
 }
 
