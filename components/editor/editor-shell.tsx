@@ -435,6 +435,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const desktopWebHandoffAppliedRef = useRef(false)
   const forceNewWritingRequestedRef = useRef(false)
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
+  const isCreatingWorkspaceTabRef = useRef(false)
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
@@ -1510,6 +1511,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     return () => {
       cancelled = true
       unsubscribe()
+      // Reset the canonical-path tracker when the watched writing changes.
+      // Otherwise the next writing's first sync sees the previous writing's path
+      // as the "previous" value and flashes a false "file moved" notice.
+      currentCanonicalPathRef.current = null
     }
   }, [currentWritingId])
 
@@ -4382,12 +4387,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    // Guard: don't publish tab state with a stale title while hydration is in progress.
-    // During tab switching, displayTitle may still derive from the previous writing's
-    // bodyText until hydration settles. Skipping publishTabState here prevents both
-    // the transient title flash in the tab bar and session-store corruption from
-    // desynchronized routeWritingId/currentWritingId pairs.
-    if (hydrationWritingId !== null) {
+    // Guard: don't publish tab state with a stale title while hydration is in progress
+    // or while a new workspace tab is being created. During tab switching, displayTitle
+    // may still derive from the previous writing's bodyText until hydration settles.
+    // During + creation in desktop, hydrationWritingId is not set to the placeholder id,
+    // so this guard also blocks publishTabState from running with the stale displayTitle
+    // and corrupting/replacing an existing tab.
+    if (hydrationWritingId !== null || isCreatingWorkspaceTabRef.current) {
       return
     }
 
@@ -4876,6 +4882,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
     }
 
+    // Block publishTabState while we are mid-creation. In desktop we do not set
+    // hydrationWritingId to the placeholder id (the real id comes from createDesktopDraft),
+    // so publishTabState would otherwise run with the stale displayTitle from the
+    // previous writing and corrupt/replace an existing tab.
+    isCreatingWorkspaceTabRef.current = true
+
     persistCurrentWorkspaceViewState()
     const activeDraftTabId = currentWritingId ?? EDITOR_DRAFT_TAB_ID
     const isActiveDraft =
@@ -4898,6 +4910,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     if (!isDesktopRuntime()) {
       setHydrationWritingId(nextWritingId)
       replaceEditorHistory(`/write/${nextWritingId}`)
+    }
+
+    const finishCreation = () => {
+      isCreatingWorkspaceTabRef.current = false
     }
 
     const blankDraftRecord: WritingRecord = {
@@ -4944,6 +4960,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         setCurrentWritingId(null)
         setHydrationWritingId(null)
         return
+      } finally {
+        finishCreation()
       }
 
       openWritingTab({
@@ -4980,6 +4998,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       setCurrentWritingId(null)
       setHydrationWritingId(null)
       return
+    } finally {
+      finishCreation()
     }
 
     openWritingTab({

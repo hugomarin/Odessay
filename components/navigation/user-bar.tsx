@@ -29,12 +29,11 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
         <Link
           href="/settings"
           className={cn(
-            "flex items-center rounded-md border-[0.5px] border-transparent px-2 py-[6px] text-ink-2 transition-colors hover:border-border hover:bg-muted/70 hover:text-ink",
-            collapsed ? "justify-center px-0" : "justify-between",
+            "flex w-full items-center justify-between rounded-md border-[0.5px] border-transparent px-2 py-[6px] text-ink-2 transition-colors hover:border-border hover:bg-muted/70 hover:text-ink",
           )}
           aria-label="Settings"
         >
-          <div className={cn("flex min-w-0 items-center", collapsed ? "justify-center" : "gap-2")}>
+          <div className="flex min-w-0 items-center gap-2">
             <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-semibold text-bg">
               {initials || "OD"}
             </span>
