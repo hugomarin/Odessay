@@ -3,6 +3,8 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace. El **spec de implementación** de carpetas vigiladas vive en `workflow/context/core/odessay-watched-folders.md`; el catálogo compartido con Desk y la apertura única viven en `workflow/context/features/odessay-desktop-document-catalog.md`.
 
+Antes de cambiar scan, watcher, apertura, sincronización o identidad de Workspace, leer también `workflow/context/features/odessay-workspace-diagnostic.md`. Ese diagnóstico separa el contrato objetivo del ADR de los caminos legacy aún presentes y exige un protocolo único de binding archivo↔UUID.
+
 Este documento fija el contrato actual de **Workspace** en Odessay: qué existe en desktop, qué no existe en web y cuál debe ser el comportamiento explícito de la UI cuando el runtime no puede ofrecer acceso al filesystem local.
 
 ---
@@ -100,7 +102,7 @@ Ese documento puede incluir:
 - inode, `content_hash`, tamaño y `lastSeen` como pistas de binding;
 - `selectedPaths` para recordar qué carpetas/archivos forman parte del workspace.
 
-No contiene metadata de producto. El watcher/reconciliador global proyecta sus bindings al catálogo SQLite; Workspace y Desk consultan ese catálogo, no el JSON directamente.
+No incluye metadata de Odessay (`status`, `visibility`, `slug`, versiones o tags). El watcher/reconciliador global proyecta sus bindings al catálogo SQLite; Workspace y Desk consultan ese catálogo, no el JSON directamente. El índice no puede inventar ni reemplazar un UUID por ruta sin agotar la reconciliación definida en `odessay-desktop-document-catalog.md`.
 
 `selectedPaths` es configuración **local** del workspace. No vive en Supabase.
 

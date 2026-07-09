@@ -154,6 +154,13 @@
       "description": "Contrato normativo de Workspace por runtime: capacidad desktop-first de carpeta/ubicación sobre el mismo DocumentCatalog que Desk, límites explícitos del runtime web y persistencia de `selectedPaths`/bindings en `.odessay/index.json`. No define un pipeline documental separado."
     },
     {
+      "path": "workflow/context/features/odessay-workspace-diagnostic.md",
+      "type": "feature",
+      "scope": "workspace-binding-diagnostic",
+      "state": "architecture-diagnostic-2026-07-09",
+      "description": "Diagnóstico de Workspace que contrasta filesystem, índice `.odessay/`, IndexedDB y nube contra el ADR de identidad. Documenta riesgos de UUIDs divergentes, rebinding destructivo y ausencias por scope; fija el contrato de binding que debe aprobarse antes de cambiar scan, watcher, apertura o sync."
+    },
+    {
       "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",
       "type": "feature",
       "scope": "runtime-coexistence-policy",
@@ -283,6 +290,11 @@
       "path": "workflow/define/dod-fase-7-1.md",
       "type": "ops",
       "description": "Gate de cierre de Fase 7.1 — Exploración de Workspace Local / Watched Folders: checklist para separar la exploración post-convergencia del cierre de Fase 7, validar flujo mínimo sobre carpetas locales existentes y producir una decisión explícita de promoción, recorte o cancelación."
+    },
+    {
+      "path": "workflow/define/dod-fase-9.md",
+      "type": "ops",
+      "description": "Gate de cierre de Fase 9 — Workspace: Filesystem y Nube. Define Workspace desktop-first como integración segura entre archivos locales canónicos y capacidades cloud mediante UUID, binding, estados locales/cloud, sync opt-in y migración legacy."
     },
     {
       "path": "workflow/define/validacion-fase-4.md",
