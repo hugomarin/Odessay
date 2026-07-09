@@ -18,6 +18,7 @@
     "ops:status:drift:strict": "node scripts/check-status-drift.mjs --strict",
     "ops:perf:capture": "node scripts/capture-editor-trace.mjs",
     "ops:perf:gate": "node scripts/check-performance-gate.mjs",
+    "ops:network:gate": "node scripts/check-network-budget.mjs",
     "ops:workflow:validate": "node scripts/validate-workflow-json.mjs",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
     "test:parity": "node scripts/run-parity-tests.mjs",

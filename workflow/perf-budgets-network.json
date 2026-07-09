@@ -1,0 +1,88 @@
+{
+  "_description": "Contrato de performance de red/runtime para auditorias transversales de arranque y navegacion (ODE-358).",
+  "version": "2026-07-08",
+  "scope": "network-runtime",
+  "source_trace": "baseline pendiente de captura real con /wf-audit-runtime; este budget fija el instrumento post ODE-353/ODE-357.",
+  "generated_with": "node scripts/check-network-budget.mjs",
+  "evaluation": {
+    "pass_rule": "pass if value <= warn_lte",
+    "warn_rule": "warn if warn_lte < value <= fail_lte, or if a required metric has a small overrun up to grace_lte",
+    "fail_rule": "fail if value > grace_lte when grace_lte exists, otherwise if value > fail_lte",
+    "approval_rule": "A network audit is approved when every required metric is pass or warn and no required metric is fail.",
+    "rejection_rule": "A network audit is rejected when at least one required metric is fail or a required metric is missing."
+  },
+  "capture": {
+    "startup_window_ms": 5000,
+    "navigation_flow": "Desk -> Studio -> Write",
+    "duplicate_identity": "method + exact URL within startup_window_ms",
+    "listener_churn_match": "plugin:event|listen or plugin:event|unlisten after startup_window_ms"
+  },
+  "budgets": {
+    "startup": {
+      "total_requests": {
+        "required": true,
+        "warn_lte": 80,
+        "fail_lte": 100,
+        "grace_lte": 120,
+        "note": "Post ODE-353/357 startup should stay bounded; legitimate product expansion must justify budget updates in the PR."
+      },
+      "transfer_bytes": {
+        "required": true,
+        "warn_lte": 1000000,
+        "fail_lte": 1250000,
+        "grace_lte": 1500000,
+        "note": "Target from docs/plan-mejoras-network-sync-2026-07.md is under 1 MB after M1-M3."
+      },
+      "duplicate_identical_requests": {
+        "required": true,
+        "warn_lte": 0,
+        "fail_lte": 0,
+        "note": "Identical startup requests are never acceptable; they indicate lost single-flight/dedup behavior."
+      },
+      "duplicate_groups": {
+        "required": true,
+        "warn_lte": 0,
+        "fail_lte": 0,
+        "note": "Counts unique method+URL groups with more than one startup request."
+      },
+      "writings_requests": {
+        "required": false,
+        "warn_lte": 2,
+        "fail_lte": 3,
+        "note": "Informational guard: second startup should be manifest plus at most one body batch."
+      },
+      "collections_requests": {
+        "required": false,
+        "warn_lte": 1,
+        "fail_lte": 2,
+        "note": "Informational guard for collection hydration fan-out."
+      },
+      "writing_collections_requests": {
+        "required": false,
+        "warn_lte": 1,
+        "fail_lte": 2,
+        "note": "Informational guard for collection membership hydration fan-out."
+      }
+    },
+    "navigation": {
+      "listener_churn_requests": {
+        "required": true,
+        "warn_lte": 0,
+        "fail_lte": 0,
+        "note": "After startup, Desk->Studio->Write navigation must not register/unregister Tauri menu listeners."
+      },
+      "listen_requests": {
+        "required": false,
+        "warn_lte": 0,
+        "fail_lte": 0,
+        "note": "Breakdown of listener_churn_requests."
+      },
+      "unlisten_requests": {
+        "required": false,
+        "warn_lte": 0,
+        "fail_lte": 0,
+        "note": "Breakdown of listener_churn_requests."
+      }
+    }
+  }
+}

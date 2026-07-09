@@ -137,7 +137,13 @@ import {
   reconcileHydratedCorrectionBlocks,
 } from "@/lib/corrections/persistence"
 import { createLearnedWordSet, normalizeLearnedWord } from "@/lib/corrections/learned-words"
-import { loadLearnedWordsPages, mergeLearnedWordEntries } from "@/lib/corrections/learned-words-loader"
+import {
+  loadCachedLearnedWordsPages,
+  mergeLearnedWordEntries,
+  primeLearnedWordsCache,
+  removeCachedLearnedWord,
+  upsertCachedLearnedWord,
+} from "@/lib/corrections/learned-words-loader"
 import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
 import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDBScopeChanges } from "@/lib/local-db"
 import type {
@@ -2263,6 +2269,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         throw new Error(result.error?.message ?? "Could not save learned word.")
       }
 
+      upsertCachedLearnedWord(result.data)
       setLearnedWords((current) => {
         const withoutOptimistic = current.filter((item) => item.id !== optimisticEntry.id)
 
@@ -2306,6 +2313,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const handleRemoveLearnedWord = useCallback((id: string) => {
     const previous = learnedWordsRef.current
     setLearnedWords(previous.filter((item) => item.id !== id))
+    removeCachedLearnedWord(id)
 
     void getAIService().deleteLearnedWord(id).then((result) => {
       if (result.error) {
@@ -2313,6 +2321,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
     }).catch((error) => {
       console.error("[learned-words] delete failed", error)
+      primeLearnedWordsCache(previous)
       setLearnedWords(previous)
     })
   }, [])
@@ -3504,7 +3513,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
     setLearnedWordsLoading(true)
 
-    void loadLearnedWordsPages(getAIService()).then((result) => {
+    void loadCachedLearnedWordsPages(getAIService()).then((result) => {
       if (!result.ok) {
         console.info(`[learned-words] load skipped message=${result.message}`)
         return
@@ -3512,6 +3521,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       learnedWordsLoadedRef.current = true
       const nextLearnedWords = mergeLearnedWordEntries(learnedWordsRef.current, result.items)
+      primeLearnedWordsCache(nextLearnedWords)
       setLearnedWords(nextLearnedWords)
       const sourceHashes = [
         ...new Set(

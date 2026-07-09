@@ -95,6 +95,8 @@ Cada endpoint declara y respeta una clase de respuesta. La clase decide qué cam
 | **Detail** (`GET /api/{recurso}/:id`) | Devuelve el recurso completo. | Documentar p95 esperado en la cabecera del archivo de la route. | — |
 | **Summary opcional** (`?include=body`) | Permite a un cliente específico pedir más, sin penalizar al caso general. | Opt-in explícito por query param. | — |
 
+**Instrumento de red.** Los presupuestos numericos de peso y waterfall se miden con `workflow/perf-budgets-network.json` y `npm run ops:network:gate -- --har <captura.har>`. Si un PR toca sync, bootstrap, listados o rutas que participan en arranque/navegacion, el proof of work debe incluir una captura Network o justificar por que el instrumento no aplica.
+
 **Afirmación positiva.** Un endpoint de lista es un índice, no un dump. Si una vista necesita el body de N writings al mismo tiempo, ese es síntoma de que la vista está mal modelada, no de que el endpoint deba devolver bodies.
 
 ```ts
@@ -370,6 +372,7 @@ Este checklist cubre lo específico de backend durante la implementación. Antes
 - [ ] ¿Cada endpoint nuevo declara su clase de respuesta (list / detail / summary opt-in) en la cabecera?
 - [ ] Si es `list`, ¿la respuesta queda ≤ 50 kB ungzip y no incluye `body_json` / `body_text` / blobs?
 - [ ] Si la vista que consume este endpoint puede pedirlo varias veces durante bootstrap, ¿hay paginación / dedup / cache que evite repetir el viaje?
+- [ ] Si toca sync, bootstrap o listados, ¿hay captura HAR evaluada con `npm run ops:network:gate -- --har <captura.har>` o justificación explícita de no aplicabilidad?
 - [ ] ¿Cada endpoint AI respeta su contrato por scope (AI editor residente vs AI writing assist)?
 - [ ] Si el issue toca rutas AI: ¿se leyó la documentación del proveedor para el modo de salida usado?
 - [ ] ¿`max_tokens` cubre el peor caso de output (mínimo 4096 para correcciones estructuradas)?

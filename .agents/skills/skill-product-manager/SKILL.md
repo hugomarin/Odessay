@@ -363,7 +363,7 @@ El contrato de performance no se reduce a la latencia del teclado. La velocidad 
 | **Latencia de interacción** | Toca editor (`keydown`/`input`/`paste`), click en superficie de escritura, panel que se abre durante escritura, auto-save, sync o AI competiendo por main thread. | Trace + `check-performance-gate` + `ops:delivery:gate` con `OPS_PERF_TRACE_PATH`. Budgets en `workflow/perf-budgets.json`. |
 | **Tiempo a interactivo** | Toca `app/**/page.tsx`, layout, bootstrap de vista, hidratación inicial. | Medición navegacional en DevTools (`performance.timing` o `PerformanceNavigationTiming`) o snapshot Playwright. Editor < 1 s; Desk/Collections/Reading < 1.5 s. |
 | **Peso transferido** | Toca `app/api/**/route.ts` que devuelve listas, schemas Supabase con columnas grandes, o hidratación cliente. | Tamaño ungzip del response medido en DevTools Network. Lista ≤ 50 kB; detalle documenta p95. |
-| **Forma del waterfall** | Toca bootstrap de una vista, hidratación, fetch desde múltiples componentes hacia el mismo endpoint. | Snapshot del Network panel: conteo de requests en los primeros 3 s, conteo de duplicados en los primeros 5 s. ≤ 6 distintos, 0 duplicados. |
+| **Forma del waterfall** | Toca bootstrap de una vista, hidratación, fetch desde múltiples componentes hacia el mismo endpoint. | `npm run ops:network:gate -- --har <captura.har> --report <report.json> --metrics <metrics.json>` o `--resources <resource-timing.json>` con `required_failures = 0`. Si el input raw contiene sesión o datos sensibles, procesarlo localmente con `--redact` y adjuntar solo report/metrics sanitizados + output del gate. |
 | **Fan-out reactivo** | Toca `lib/local-db/*`, suscriptores a stores, listeners de cambios. | Test que demuestra que una operación bulk emite un único evento de cambio, y que los suscriptores hacen debounce. |
 
 **Formato del Performance Contract en el brief:**
@@ -555,6 +555,12 @@ Pegar el output de estos tres comandos en la descripción del PR. Sin este outpu
 - Evalúa budgets (`node scripts/check-performance-gate.mjs --trace <trace>`).
 - Corre delivery gate con `OPS_PERF_TRACE_PATH=<trace>`.
 - Adjunta en PR output de ambos comandos + rutas de artefactos generados.
+
+**Si el issue toca sync, bootstrap, hidratación remota, listados de alto tráfico o listeners/subscriptions de runtime:**
+- Captura el waterfall real del flujo declarado en el brief y evalúalo con `npm run ops:network:gate`.
+- Si el HAR contiene tokens, cookies, IDs privados o URLs sensibles, no lo adjuntes al PR. Ejecuta el gate con `--redact`, conserva el HAR solo localmente y adjunta únicamente `report.json`, `metrics.json` y output de consola.
+- Si no se debe exportar HAR, usa `--resources <resource-timing.json> --redact` con un export local de Resource Timing; conserva ese input raw localmente cuando contenga URLs sensibles.
+- El brief debe declarar qué flujo se midió y qué artefactos sanitizados prueban `required_failures = 0`.
 
 **Si el issue toca base de datos:**
 - Usa Supabase MCP para verificar que el schema resultante coincide con lo especificado.

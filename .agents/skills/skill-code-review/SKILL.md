@@ -68,6 +68,18 @@ Mínimo esperado en la descripción del PR:
 
 Si el contrato es `not required`, el PR debe incluir una sección corta: "Performance contract: not required — {justificación}".
 
+### Proof of work de red
+
+Si el PR toca sync, bootstrap, hidratacion remota, listados de alto trafico o listeners/subscriptions de runtime, debe incluir evidencia de waterfall con el instrumento versionado:
+
+```bash
+npm run ops:network:gate -- --har artifacts/perf/network.har --report artifacts/perf/network-report.json --metrics artifacts/perf/network-metrics.json
+```
+
+El revisor debe exigir `required_failures: 0` en el reporte cuando el issue declare presupuesto de red requerido. Si el PR declara que no aplica, la justificacion debe explicar por que el cambio no puede alterar requests, bytes, duplicados o listener churn.
+
+Los HAR crudos pueden contener cookies, tokens, IDs privados o URLs sensibles. Si la captura no es segura para adjuntar, el PR debe procesarla localmente con `--redact` y adjuntar solo `report.json`, `metrics.json` y output de consola sanitizados. Si no se debe exportar HAR, el PR puede usar `--resources <resource-timing.json> --redact` con un export local de Resource Timing. El revisor no debe exigir el HAR crudo ni el resource export raw cuando los artefactos sanitizados prueban `required_failures: 0`.
+
 ---
 
 ## Contrato de arquitectura — criterio bloqueante cuando aplica
@@ -131,6 +143,7 @@ Si el issue requería ese contrato y no existe, está incompleto o el diff lo co
 - [ ] ¿No se agregaron dependencias pesadas sin justificación?
 - [ ] ¿Los paneles secundarios nuevos se cargan con lazy load?
 - [ ] ¿La app puede abrir y editar documentos sin conexión a red?
+- [ ] Si el PR toca sync/bootstrap/listados/listeners, ¿adjunta HAR + output de `ops:network:gate` o justifica no aplicabilidad?
 - [ ] ¿El PR declara `Performance Contract` (`required` o `not required`) con justificación?
 - [ ] Si es `required`, ¿hay trace + gate report + delivery gate con `OPS_PERF_TRACE_PATH`?
 - [ ] Si es `required`, ¿`required_failures` es `0` y no hay métricas requeridas faltantes?

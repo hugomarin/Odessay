@@ -146,6 +146,54 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 
 ---
 
+## `/wf-audit-runtime [har?]` o `wf-audit-runtime [har?]` — RUNTIME AUDIT
+
+**Objetivo:** medir el waterfall real de arranque y navegacion para detectar regresiones acumulativas de red, payload y listeners que no aparecen en el diff de un PR aislado.
+
+**Estado Linear:** no mueve issues. Es una auditoria periodica o post-milestone.
+
+**Contexto a cargar:**
+1. `workflow/perf-budgets-network.json` — presupuesto vigente de red/runtime.
+2. `docs/plan-mejoras-network-sync-2026-07.md` §Parte 4 — motivacion y criterio de interpretacion.
+3. `workflow/review-history.jsonl` — solo para append del evento final si la auditoria se ejecuta como mantenimiento, no desde una rama BUILD.
+
+**Captura requerida:**
+1. Web dev: arrancar la app con sesion activa y capturar HAR del arranque + navegacion Desk → Studio → Write.
+2. Desktop dev: repetir la misma captura en `tauri dev` con DevTools Network habilitado.
+3. El primer tramo de cada HAR es el arranque; `workflow/perf-budgets-network.json.capture.startup_window_ms` define la ventana de arranque. Las entradas posteriores se interpretan como navegacion.
+
+**Evaluacion:**
+1. Ejecutar el gate para cada HAR:
+   ```bash
+   npm run ops:network:gate -- --har artifacts/perf/network-web.har --report artifacts/perf/network-web-report.json --metrics artifacts/perf/network-web-metrics.json
+   npm run ops:network:gate -- --har artifacts/perf/network-desktop.har --report artifacts/perf/network-desktop-report.json --metrics artifacts/perf/network-desktop-metrics.json
+   ```
+2. El gate rechaza HAR malformados, requests identicos duplicados en arranque, exceso de requests/bytes de arranque, y cualquier `plugin:event|listen`/`plugin:event|unlisten` despues del arranque.
+3. Si la captura falla (app no arranca, timeout de Playwright/Browser, sesion no disponible), registrar `audit_failed` con causa; no registrar un pass vacio.
+4. Si el HAR contiene cookies, tokens, IDs privados o URLs sensibles, procesarlo localmente con `--redact`; el HAR crudo no se adjunta al PR. La evidencia publicable son report/metrics sanitizados y el output de consola del gate.
+5. Si no se puede o no se debe exportar HAR, usar un export local de Resource Timing con `--resources artifacts/perf/resources.json --redact`. El archivo raw de recursos tampoco se adjunta si contiene URLs sensibles; se adjuntan solo report/metrics sanitizados.
+
+**Registro append-only:**
+1. Si la auditoria corre como mantenimiento en `main`, appendear un evento `runtime_audit` a `workflow/review-history.jsonl` con:
+   - `ts`
+   - `type: "runtime_audit"`
+   - `scope: "web" | "desktop" | "web+desktop"`
+   - `gate_result: "PASS" | "FAIL" | "audit_failed"`
+   - `budget_version`
+   - `artifacts` con rutas de HAR, report y metrics
+   - `notes` con resumen de requests, bytes, duplicados y listener churn
+2. Validar antes de commitear:
+   ```bash
+   node scripts/validate-workflow-json.mjs
+   git add workflow/review-history.jsonl
+   git commit -m "chore(workflow): append runtime audit"
+   ```
+3. Si esta auditoria se ejecuta dentro de `/wf-build`, no tocar `workflow/review-history.jsonl` ni `workflow/status.json`; adjuntar los artefactos en el PR y dejar el append para REVIEW/mantenimiento, respetando la restriccion anti-conflicto de BUILD.
+
+**Gate de salida:** `ops:network:gate` ejecutado contra los HAR capturados + reportes guardados. Si corre en mantenimiento, evento `runtime_audit` append-only validado.
+
+---
+
 ## `/wf-review [issue-id?]` o `wf-review [issue-id?]` — REVIEW
 
 **Objetivo:** verificar calidad del PR y cerrar la trazabilidad del issue.
