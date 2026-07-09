@@ -3,6 +3,8 @@
 **Documento de referencia para agentes de desarrollo.**
 Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace. El **spec de implementación** de carpetas vigiladas (índice de binding `.odessay/`, watcher, sync, snapshots) vive en `workflow/context/core/odessay-watched-folders.md`.
 
+Antes de cambiar scan, watcher, apertura, sincronización o identidad de Workspace, leer también `workflow/context/features/odessay-workspace-diagnostic.md`. Ese diagnóstico separa el contrato objetivo del ADR de los caminos legacy aún presentes y exige un protocolo único de binding archivo↔UUID.
+
 Este documento fija el contrato actual de **Workspace** en Odessay: qué existe en desktop, qué no existe en web y cuál debe ser el comportamiento explícito de la UI cuando el runtime no puede ofrecer acceso al filesystem local.
 
 ---
@@ -97,8 +99,10 @@ Workspace persiste configuración local en `.odessay/index.json`.
 Ese documento puede incluir:
 
 - ids estables por archivo visto;
-- metadata derivada del índice;
+- pistas de binding (`ruta`, `inode`, `content_hash`, UUID) y caches regenerables;
 - `selectedPaths` para recordar qué carpetas/archivos forman parte del workspace.
+
+No incluye metadata de Odessay (`status`, `visibility`, `slug`, versiones o tags). Esa metadata pertenece al registro cloud y a su espejo IndexedDB una vez que existe un binding válido; el índice no puede inventar ni resolver un UUID por ruta.
 
 `selectedPaths` es configuración **local** del workspace. No vive en Supabase.
 
