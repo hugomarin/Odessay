@@ -19,6 +19,25 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
+      - name: Resolve performance contract
+        id: perf_contract
+        run: |
+          set -euo pipefail
+
+          PR_BODY="$(node -e 'const fs = require("node:fs"); const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, "utf8")); process.stdout.write(event.pull_request?.body || "");')"
+
+          if printf '%s' "$PR_BODY" | grep -Eiq 'Performance Contract:[[:space:]]*required\b'; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if printf '%s' "$PR_BODY" | grep -Eiq 'Performance Contract:[[:space:]]*not required\b'; then
+            echo "required=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "required=true" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -32,6 +51,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Build app for perf capture
+        if: steps.perf_contract.outputs.required == 'true'
         run: npm run build
 
       - name: Check process docs sync
@@ -41,6 +61,7 @@ jobs:
         run: npm run ops:status:drift:strict
 
       - name: Capture editor trace
+        if: steps.perf_contract.outputs.required == 'true'
         run: |
           set -euo pipefail
 
@@ -65,15 +86,20 @@ jobs:
 
           npm run ops:perf:capture -- --base-url http://127.0.0.1:4010 --output artifacts/perf/editor-ci-trace.json.gz
 
-      - name: Check delivery gate
+      - name: Check delivery gate (perf required)
+        if: steps.perf_contract.outputs.required == 'true'
         env:
           OPS_PERF_TRACE_PATH: artifacts/perf/editor-ci-trace.json.gz
           OPS_PERF_REPORT_PATH: artifacts/perf/editor-ci-report.json
           OPS_PERF_METRICS_PATH: artifacts/perf/editor-ci-metrics.json
         run: npm run ops:delivery:gate
 
+      - name: Check delivery gate (perf not required)
+        if: steps.perf_contract.outputs.required != 'true'
+        run: npm run ops:delivery:gate
+
       - name: Upload perf artifacts
-        if: always()
+        if: always() && steps.perf_contract.outputs.required == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: editor-perf-gate-${{ github.run_id }}
