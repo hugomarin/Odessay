@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model"
+import { parseCorrectionBlockPosition } from "@/lib/corrections/block-invalidation"
 import { collectDocumentTextMap } from "@/lib/editor/find-replace"
 import { findSuggestionMatch } from "@/lib/editor/suggestion-engine"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
@@ -11,16 +12,6 @@ export type ResolvedCorrectionDecoration = {
 }
 
 type TextMap = ReturnType<typeof collectDocumentTextMap>
-
-const parseBlockPosition = (blockId: string | null | undefined): number | null => {
-  if (!blockId) {
-    return null
-  }
-
-  const raw = blockId.split(":").at(-1)
-  const pos = raw ? Number.parseInt(raw, 10) : Number.NaN
-  return Number.isFinite(pos) ? pos : null
-}
 
 const resolveTextMapRange = (
   textMap: TextMap,
@@ -86,7 +77,7 @@ const resolveSuggestionRange = (
   doc: ProseMirrorNode,
   suggestion: PublicationSuggestion,
 ) => {
-  const blockPos = parseBlockPosition(suggestion.block_id)
+  const blockPos = suggestion.block_id ? parseCorrectionBlockPosition(suggestion.block_id) : null
   const blockTextMap = blockPos !== null ? collectBlockTextMap(doc, blockPos) : null
   const textMap = blockTextMap ?? docTextMap
   const match = findSuggestionMatch(textMap.text, suggestion)

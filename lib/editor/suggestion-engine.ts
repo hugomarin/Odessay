@@ -3,7 +3,10 @@ import type {
   PublicationSuggestion,
   PublicationSuggestionStatus,
 } from "@/lib/local-db/schema";
-import { parseCorrectionBlockLogicalId } from "@/lib/corrections/block-invalidation";
+import {
+  parseCorrectionBlockLogicalId,
+  parseCorrectionBlockPosition,
+} from "@/lib/corrections/block-invalidation";
 import { markSuggestionStale } from "@/lib/corrections/engine/lifecycle";
 import {
   countTokenBoundaryMatchesBefore,
@@ -172,12 +175,6 @@ export const applyPublicationSuggestionGroup = (
   };
 };
 
-const parseBlockPosition = (blockId: string): number | null => {
-  const raw = blockId.split(":").at(-1);
-  const pos = raw ? Number.parseInt(raw, 10) : Number.NaN;
-  return Number.isFinite(pos) ? pos : null;
-};
-
 const isSameBlock = (suggestionBlockId: string | null | undefined, blockId: string): boolean => {
   if (!suggestionBlockId) return false;
   if (suggestionBlockId === blockId) return true;
@@ -188,8 +185,8 @@ const isSameBlock = (suggestionBlockId: string | null | undefined, blockId: stri
     return suggestionLogicalId === blockLogicalId;
   }
 
-  const suggestionPos = parseBlockPosition(suggestionBlockId);
-  const blockPos = parseBlockPosition(blockId);
+  const suggestionPos = parseCorrectionBlockPosition(suggestionBlockId);
+  const blockPos = parseCorrectionBlockPosition(blockId);
   return suggestionPos !== null && blockPos !== null && suggestionPos === blockPos;
 };
 
