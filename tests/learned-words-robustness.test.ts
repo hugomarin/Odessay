@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
+  loadCachedLearnedWordsPages,
   loadLearnedWordsPages,
   mergeLearnedWordEntries,
+  primeLearnedWordsCache,
+  removeCachedLearnedWord,
+  resetLearnedWordsCacheForTest,
+  upsertCachedLearnedWord,
 } from "@/lib/corrections/learned-words-loader"
 import { buildLearnWordRollbackState } from "@/lib/corrections/learned-words-rollback"
 import { createStableFingerprint } from "@/lib/corrections/engine/identity"
@@ -48,6 +53,10 @@ const makeSuggestion = (override: Partial<PublicationSuggestion> = {}): Publicat
 })
 
 describe("learned words robustness", () => {
+  beforeEach(() => {
+    resetLearnedWordsCacheForTest()
+  })
+
   it("rolls back a failed optimistic learn-word mutation", () => {
     const rollback = buildLearnWordRollbackState({
       learnedWords: [makeEntry("prueva", "pending:prueva")],
@@ -127,6 +136,39 @@ describe("learned words robustness", () => {
     expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 3000)
     expect(listLearnedWords).toHaveBeenNthCalledWith(1, { limit: 100, cursor: null })
     expect(listLearnedWords).toHaveBeenNthCalledWith(2, { limit: 100, cursor: "cursor-100" })
+  })
+
+  it("shares one learned words load across editor remounts", async () => {
+    const listLearnedWords = vi.fn().mockResolvedValue({
+      data: makePage([makeEntry("odessay")], null),
+      error: null,
+    })
+
+    const [first, second] = await Promise.all([
+      loadCachedLearnedWordsPages({ listLearnedWords }),
+      loadCachedLearnedWordsPages({ listLearnedWords }),
+    ])
+    const third = await loadCachedLearnedWordsPages({ listLearnedWords })
+
+    expect(first).toEqual({ ok: true, items: [makeEntry("odessay")] })
+    expect(second).toEqual(first)
+    expect(third).toEqual(first)
+    expect(listLearnedWords).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the session cache aligned with learn and delete mutations", async () => {
+    primeLearnedWordsCache([makeEntry("odessay", "remote:odessay")])
+    upsertCachedLearnedWord(makeEntry("prueva", "remote:prueva"))
+    removeCachedLearnedWord("remote:odessay")
+
+    const listLearnedWords = vi.fn()
+    const result = await loadCachedLearnedWordsPages({ listLearnedWords })
+
+    expect(result).toEqual({
+      ok: true,
+      items: [makeEntry("prueva", "remote:prueva")],
+    })
+    expect(listLearnedWords).not.toHaveBeenCalled()
   })
 
   it("merges background pages without dropping optimistic learned words", () => {

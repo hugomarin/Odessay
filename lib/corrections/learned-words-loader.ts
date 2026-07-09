@@ -9,6 +9,9 @@ const LEARNED_WORDS_PAGE_LIMIT = 100
 const LEARNED_WORDS_RETRY_DELAY_MS = 5000
 const LEARNED_WORDS_ADDITIONAL_PAGE_DELAY_MS = 3000
 
+let learnedWordsCache: LearnedWordEntry[] | null = null
+let learnedWordsLoadPromise: Promise<LearnedWordsLoadResult> | null = null
+
 type Timer = {
   setTimeout(callback: () => void, delayMs: number): unknown
 }
@@ -49,6 +52,29 @@ export const mergeLearnedWordEntries = (
   }
 
   return [...byWord.values()]
+}
+
+export const getCachedLearnedWords = () => learnedWordsCache
+
+export const primeLearnedWordsCache = (items: readonly LearnedWordEntry[]) => {
+  learnedWordsCache = [...items]
+}
+
+export const upsertCachedLearnedWord = (entry: LearnedWordEntry) => {
+  learnedWordsCache = mergeLearnedWordEntries(learnedWordsCache ?? [], [entry])
+}
+
+export const removeCachedLearnedWord = (id: string) => {
+  if (!learnedWordsCache) {
+    return
+  }
+
+  learnedWordsCache = learnedWordsCache.filter((item) => item.id !== id)
+}
+
+export const resetLearnedWordsCacheForTest = () => {
+  learnedWordsCache = null
+  learnedWordsLoadPromise = null
 }
 
 export const loadLearnedWordsPages = async (
@@ -109,4 +135,32 @@ export const loadLearnedWordsPages = async (
       message: error instanceof Error ? error.message : String(error),
     }
   }
+}
+
+export const loadCachedLearnedWordsPages = (
+  service: Pick<AIService, "listLearnedWords">,
+  options: Parameters<typeof loadLearnedWordsPages>[1] = {},
+) => {
+  if (learnedWordsCache) {
+    return Promise.resolve<LearnedWordsLoadResult>({
+      ok: true,
+      items: learnedWordsCache,
+    })
+  }
+
+  if (learnedWordsLoadPromise) {
+    return learnedWordsLoadPromise
+  }
+
+  learnedWordsLoadPromise = loadLearnedWordsPages(service, options).then((result) => {
+    if (result.ok) {
+      primeLearnedWordsCache(result.items)
+    }
+
+    return result
+  }).finally(() => {
+    learnedWordsLoadPromise = null
+  })
+
+  return learnedWordsLoadPromise
 }
