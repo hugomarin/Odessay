@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 
 const DEFAULT_BUDGETS_PATH = "workflow/perf-budgets-network.json";
@@ -15,12 +16,14 @@ function fail(message) {
 function parseArgs(argv) {
   const options = {
     harPath: process.env.OPS_NETWORK_HAR_PATH?.trim() || "",
+    resourcesPath: process.env.OPS_NETWORK_RESOURCES_PATH?.trim() || "",
     budgetsPath:
       process.env.OPS_NETWORK_BUDGETS_PATH?.trim() || DEFAULT_BUDGETS_PATH,
     reportPath:
       process.env.OPS_NETWORK_REPORT_PATH?.trim() || DEFAULT_REPORT_PATH,
     metricsPath:
       process.env.OPS_NETWORK_METRICS_PATH?.trim() || DEFAULT_METRICS_PATH,
+    redact: process.env.OPS_NETWORK_REDACT === "1",
   };
 
   const args = argv.slice(2);
@@ -35,6 +38,13 @@ function parseArgs(argv) {
     if (arg === "--har") {
       if (!value) fail("Missing value for --har.");
       options.harPath = value;
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--resources") {
+      if (!value) fail("Missing value for --resources.");
+      options.resourcesPath = value;
       index += 1;
       continue;
     }
@@ -60,11 +70,22 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--redact") {
+      options.redact = true;
+      continue;
+    }
+
     fail(`Unknown option "${arg}".`);
   }
 
-  if (!options.harPath) {
-    fail("HAR path is required. Use --har <path> or set OPS_NETWORK_HAR_PATH.");
+  if (!options.harPath && !options.resourcesPath) {
+    fail(
+      "Network capture path is required. Use --har <path>, --resources <path>, OPS_NETWORK_HAR_PATH, or OPS_NETWORK_RESOURCES_PATH.",
+    );
+  }
+
+  if (options.harPath && options.resourcesPath) {
+    fail("Use only one capture input: --har or --resources.");
   }
 
   return options;
@@ -95,6 +116,39 @@ function readHar(path) {
   return entries;
 }
 
+function readResourceTimingExport(path) {
+  const parsed = readJson(path, "Resource Timing");
+  const timeOrigin =
+    typeof parsed?.timeOrigin === "number" ? parsed.timeOrigin : Date.now();
+  const entries = Array.isArray(parsed) ? parsed : parsed?.entries;
+  if (!Array.isArray(entries)) {
+    fail(`Invalid Resource Timing file "${path}": missing entries array.`);
+  }
+
+  return entries.map((entry) => ({
+    startedDateTime: new Date(timeOrigin + (entry.startTime ?? 0)).toISOString(),
+    request: {
+      method: entry.method ?? "GET",
+      url: entry.name ?? entry.url ?? "",
+      postData:
+        typeof entry.postData === "string"
+          ? { text: entry.postData, mimeType: "text/plain" }
+          : undefined,
+    },
+    response: {
+      status: entry.status ?? 0,
+      headersSize: 0,
+      bodySize:
+        typeof entry.encodedBodySize === "number" ? entry.encodedBodySize : 0,
+      _transferSize:
+        typeof entry.transferSize === "number" ? entry.transferSize : 0,
+      _encodedBodySize:
+        typeof entry.encodedBodySize === "number" ? entry.encodedBodySize : 0,
+    },
+    time: entry.duration ?? 0,
+  }));
+}
+
 function startedAtMs(entry) {
   const started = Date.parse(entry?.startedDateTime ?? "");
   return Number.isFinite(started) ? started : null;
@@ -110,6 +164,22 @@ function requestUrl(entry) {
 
 function requestIdentity(entry) {
   return `${requestMethod(entry)} ${requestUrl(entry)}`;
+}
+
+function isStaticAssetRequest(entry) {
+  const url = requestUrl(entry);
+  return (
+    url.includes("/_next/static/") ||
+    url.includes("/_next/image") ||
+    url.includes("/_next/webpack-hmr") ||
+    url.includes("/__nextjs") ||
+    /\/(?:favicon|icon)\.(?:ico|png|svg)(?:[?#].*)?$/i.test(url) ||
+    /\.(?:css|js|map|woff2?|ttf|otf|png|jpe?g|gif|svg|webp|avif)(?:[?#].*)?$/i.test(url)
+  );
+}
+
+function isRuntimeBudgetRequest(entry) {
+  return !isStaticAssetRequest(entry);
 }
 
 function transferBytes(entry) {
@@ -181,7 +251,8 @@ function analyzeNetworkHar(entries, budgets) {
     .map((item) => item.entry);
 
   const duplicateCounts = new Map();
-  for (const entry of startupEntries) {
+  const startupRuntimeEntries = startupEntries.filter(isRuntimeBudgetRequest);
+  for (const entry of startupRuntimeEntries) {
     const identity = requestIdentity(entry);
     duplicateCounts.set(identity, (duplicateCounts.get(identity) ?? 0) + 1);
   }
@@ -203,7 +274,7 @@ function analyzeNetworkHar(entries, budgets) {
     },
     startup: {
       total_requests: startupEntries.length,
-      transfer_bytes: startupEntries.reduce(
+      transfer_bytes: startupRuntimeEntries.reduce(
         (total, entry) => total + transferBytes(entry),
         0,
       ),
@@ -265,10 +336,31 @@ function writeJson(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2), "utf8");
 }
 
+function shortHash(value) {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function redactDuplicateGroups(duplicateGroups) {
+  return duplicateGroups.map((group) => ({
+    identity_hash: shortHash(group.identity),
+    count: group.count,
+    duplicates: group.duplicates,
+  }));
+}
+
+function redactMetrics(metrics) {
+  return {
+    ...metrics,
+    duplicate_groups: redactDuplicateGroups(metrics.duplicate_groups),
+  };
+}
+
 function main() {
   const options = parseArgs(process.argv);
   const budgets = readBudgets(options.budgetsPath);
-  const entries = readHar(options.harPath);
+  const entries = options.resourcesPath
+    ? readResourceTimingExport(options.resourcesPath)
+    : readHar(options.harPath);
   const metrics = analyzeNetworkHar(entries, budgets);
 
   const evaluations = [];
@@ -325,15 +417,19 @@ function main() {
 
   const report = {
     generated_at_utc: new Date().toISOString(),
-    har_path: options.harPath,
+    input_type: options.resourcesPath ? "resource-timing" : "har",
+    input_path: options.redact
+      ? "[redacted]"
+      : options.resourcesPath || options.harPath,
     budgets_path: options.budgetsPath,
     budget_version: budgets.version ?? null,
+    redacted: options.redact,
     summary,
     evaluations,
-    metrics,
+    metrics: options.redact ? redactMetrics(metrics) : metrics,
   };
 
-  writeJson(options.metricsPath, metrics);
+  writeJson(options.metricsPath, options.redact ? redactMetrics(metrics) : metrics);
   writeJson(options.reportPath, report);
 
   if (invalidBudgetEntries.length > 0) {

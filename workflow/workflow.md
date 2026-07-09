@@ -170,6 +170,8 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
    ```
 2. El gate rechaza HAR malformados, requests identicos duplicados en arranque, exceso de requests/bytes de arranque, y cualquier `plugin:event|listen`/`plugin:event|unlisten` despues del arranque.
 3. Si la captura falla (app no arranca, timeout de Playwright/Browser, sesion no disponible), registrar `audit_failed` con causa; no registrar un pass vacio.
+4. Si el HAR contiene cookies, tokens, IDs privados o URLs sensibles, procesarlo localmente con `--redact`; el HAR crudo no se adjunta al PR. La evidencia publicable son report/metrics sanitizados y el output de consola del gate.
+5. Si no se puede o no se debe exportar HAR, usar un export local de Resource Timing con `--resources artifacts/perf/resources.json --redact`. El archivo raw de recursos tampoco se adjunta si contiene URLs sensibles; se adjuntan solo report/metrics sanitizados.
 
 **Registro append-only:**
 1. Si la auditoria corre como mantenimiento en `main`, appendear un evento `runtime_audit` a `workflow/review-history.jsonl` con:

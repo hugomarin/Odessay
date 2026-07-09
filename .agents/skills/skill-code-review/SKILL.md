@@ -78,6 +78,8 @@ npm run ops:network:gate -- --har artifacts/perf/network.har --report artifacts/
 
 El revisor debe exigir `required_failures: 0` en el reporte cuando el issue declare presupuesto de red requerido. Si el PR declara que no aplica, la justificacion debe explicar por que el cambio no puede alterar requests, bytes, duplicados o listener churn.
 
+Los HAR crudos pueden contener cookies, tokens, IDs privados o URLs sensibles. Si la captura no es segura para adjuntar, el PR debe procesarla localmente con `--redact` y adjuntar solo `report.json`, `metrics.json` y output de consola sanitizados. Si no se debe exportar HAR, el PR puede usar `--resources <resource-timing.json> --redact` con un export local de Resource Timing. El revisor no debe exigir el HAR crudo ni el resource export raw cuando los artefactos sanitizados prueban `required_failures: 0`.
+
 ---
 
 ## Contrato de arquitectura — criterio bloqueante cuando aplica
