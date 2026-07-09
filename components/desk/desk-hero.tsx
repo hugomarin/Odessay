@@ -1,77 +1,92 @@
-import Link from "next/link"
-import { Plus } from "lucide-react"
-import { DocumentStateIcon } from "@/components/ui/document-state-icon"
-import type { DeskHeroDraft } from "@/lib/queries/desk-activity"
-import { buildWritingRouteHref } from "@/lib/writings/writing-route"
-import { cn } from "@/lib/utils"
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
+import { DocumentStateIcon } from "@/components/ui/document-state-icon";
+import type { DeskHeroDraft } from "@/lib/queries/desk-activity";
+import { buildWritingRouteHref } from "@/lib/writings/writing-route";
+import { cn } from "@/lib/utils";
 
 type DeskHeroProps = {
-  drafts: DeskHeroDraft[]
-}
+  drafts: DeskHeroDraft[];
+};
 
-export function DeskHero({
-  drafts,
-}: DeskHeroProps) {
+export function DeskHero({ drafts }: DeskHeroProps) {
   return (
-    <div
-      id="desk-hero"
-      data-section="desk-hero"
-      data-testid="desk-hero"
-      className="DeskHero border-b-[0.5px] border-border bg-transparent px-9 py-7"
-    >
-      <div className="mb-4 flex items-center gap-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-4">Recent Writings</p>
-      </div>
+    <DocumentStateTooltipProvider>
+      <div
+        id="desk-hero"
+        data-section="desk-hero"
+        data-testid="desk-hero"
+        className="DeskHero border-b-[0.5px] border-border bg-transparent px-9 py-7"
+      >
+        <div className="mb-4 flex items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-4">
+            Recent Writings
+          </p>
+        </div>
 
-      <div className="flex gap-[10px] overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {drafts.map((draft) => (
-          <article
-            key={draft.id}
-            id={`desk-hero-draft-card-${draft.id}`}
-            data-section="desk-hero-draft-card"
-            data-testid="desk-hero-draft-card"
-            className={cn(
-              "DeskHeroDraftCard flex h-[190px] w-[220px] shrink-0 snap-start flex-col rounded-lg border-[0.5px] border-border bg-sb p-[14px] shadow-float transition-[border-color,box-shadow] duration-200 hover:border-ink-4/35",
-              draft.isActive && "border-cursor/35 shadow-float-md",
-            )}
-          >
-            <Link
-              href={buildWritingRouteHref("/write", draft)}
-              className="group/card min-h-0 flex-1 outline-none focus-visible:rounded-md focus-visible:ring-1 focus-visible:ring-ink-3"
-              aria-label={`Open ${draft.title}`}
+        <div className="flex gap-[10px] overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {drafts.map((draft) => (
+            <article
+              key={draft.id}
+              id={`desk-hero-draft-card-${draft.id}`}
+              data-section="desk-hero-draft-card"
+              data-testid="desk-hero-draft-card"
+              className={cn(
+                "DeskHeroDraftCard flex h-[190px] w-[220px] shrink-0 snap-start flex-col rounded-lg border-[0.5px] border-border bg-sb p-[14px] shadow-float transition-[border-color,box-shadow] duration-200 hover:border-ink-4/35",
+                draft.isActive && "border-cursor/35 shadow-float-md",
+              )}
             >
-              <div className="flex min-w-0 items-start gap-1.5">
-                <p className="line-clamp-2 min-w-0 flex-1 font-lora text-[15px] font-medium leading-[1.3] text-ink">{draft.title}</p>
-                <DocumentStateIcon state={draft.documentState} className="mt-0.5" />
+              <Link
+                href={buildWritingRouteHref("/write", draft)}
+                className="group/card min-h-0 flex-1 outline-none focus-visible:rounded-md focus-visible:ring-1 focus-visible:ring-ink-3"
+                aria-label={`Open ${draft.title}`}
+              >
+                <div className="flex min-w-0 items-start gap-1.5">
+                  <p className="line-clamp-2 min-w-0 flex-1 font-lora text-[15px] font-medium leading-[1.3] text-ink">
+                    {draft.title}
+                  </p>
+                  <DocumentStateIcon
+                    state={draft.documentState}
+                    className="mt-0.5"
+                  />
+                </div>
+                {draft.excerpt ? (
+                  <p className="mt-2 line-clamp-2 text-[12px] leading-[1.55] text-ink-3">
+                    {draft.excerpt}
+                  </p>
+                ) : null}
+              </Link>
+              <div className="border-t-[0.5px] border-border pt-2">
+                <div className="flex items-center justify-between text-[11px] text-ink-4">
+                  <span>{draft.createdLabel}</span>
+                  <span>{draft.wordCount} words</span>
+                </div>
               </div>
-              {draft.excerpt ? (
-                <p className="mt-2 line-clamp-2 text-[12px] leading-[1.55] text-ink-3">{draft.excerpt}</p>
-              ) : null}
-            </Link>
-            <div className="border-t-[0.5px] border-border pt-2">
-              <div className="flex items-center justify-between text-[11px] text-ink-4">
-                <span>{draft.createdLabel}</span>
-                <span>{draft.wordCount} words</span>
-              </div>
-            </div>
-          </article>
-        ))}
+            </article>
+          ))}
 
-        <Link
-          href="/write?new=1"
-          id="desk-hero-draft-card-new"
-          data-section="desk-hero-draft-card-new"
-          data-testid="desk-hero-draft-card-new"
-          className="DeskHeroDraftCardNew flex h-[170px] w-[220px] shrink-0 flex-col items-center rounded-lg border-[0.5px] border-dashed border-border bg-white px-4 pb-[14px] pt-7 text-center text-[12px] text-ink-4 transition-colors hover:border-ink-3 hover:bg-muted hover:text-ink-2"
-        >
-          <p className="font-lora text-[17px] font-medium text-ink-3">Start a new note</p>
-          <p className="mt-2 text-[13px] leading-[1.6] text-ink-4">Keep the draft rail airy, with no top terracotta border on the cards.</p>
-          <div className="mt-auto flex w-full items-center justify-between border-t-[0.5px] border-border pt-2 text-[12px] text-ink-4">
-            <span>Draft space</span>
-            <Plus className="h-[13px] w-[13px]" strokeWidth={1.5} />
-          </div>
-        </Link>
+          <Link
+            href="/write?new=1"
+            id="desk-hero-draft-card-new"
+            data-section="desk-hero-draft-card-new"
+            data-testid="desk-hero-draft-card-new"
+            className="DeskHeroDraftCardNew flex h-[170px] w-[220px] shrink-0 flex-col items-center rounded-lg border-[0.5px] border-dashed border-border bg-white px-4 pb-[14px] pt-7 text-center text-[12px] text-ink-4 transition-colors hover:border-ink-3 hover:bg-muted hover:text-ink-2"
+          >
+            <p className="font-lora text-[17px] font-medium text-ink-3">
+              Start a new note
+            </p>
+            <p className="mt-2 text-[13px] leading-[1.6] text-ink-4">
+              Keep the draft rail airy, with no top terracotta border on the
+              cards.
+            </p>
+            <div className="mt-auto flex w-full items-center justify-between border-t-[0.5px] border-border pt-2 text-[12px] text-ink-4">
+              <span>Draft space</span>
+              <Plus className="h-[13px] w-[13px]" strokeWidth={1.5} />
+            </div>
+          </Link>
+        </div>
       </div>
-    </div>
-  )
+    </DocumentStateTooltipProvider>
+  );
 }
