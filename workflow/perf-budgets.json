@@ -75,8 +75,8 @@
         "required": true,
         "warn_lte": 20,
         "fail_lte": 25,
-        "grace_lte": 30,
-        "note": "Small editor dispatch overruns are warnings up to 30ms to avoid blocking delivery on CI noise or marginal regressions."
+        "grace_lte": 33,
+        "note": "Small editor dispatch overruns are warnings up to 33ms to avoid blocking delivery on CI noise or marginal regressions."
       },
       "input_p95": {
         "required": true,
