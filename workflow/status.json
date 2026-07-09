@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-08",
+  "last_updated": "2026-07-09",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -2983,6 +2983,16 @@
       "commit": "b54b45c",
       "date": "2026-07-08",
       "notes": "Added LocalWriting.remote_body_rejection manifest fingerprint; needsBodyFetch skips phase-2 body fetches for matching rejected manifests; invalidates on content_hash/version/updated_at change. Pending/failed local edits still win. T-A untouched. Typecheck PASS. Lint PASS with pre-existing editor-shell warnings. Vitest 959 PASS. ops:delivery:gate PASS. Vercel preview SUCCESS. Review score 9.8/10."
+    },
+    {
+      "what": "feat(workflow): add network runtime audit gate and learned-words duplicate guard [ODE-358]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-358",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-358/add-network-performance-budget-and-runtime-audit-gate-wf-audit-runtime",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/325",
+      "commit": "383966e",
+      "date": "2026-07-09",
+      "notes": "Added workflow/perf-budgets-network.json, ops:network:gate, HAR + Resource Timing inputs, redacted reports, static asset exclusion, wf-audit-runtime protocol, docs/skill sync, and learned-words session cache/single-flight fix surfaced by the live audit. Validation: typecheck PASS; lint PASS with pre-existing editor-shell warnings; targeted vitest 16 PASS; ops:process:sync PASS; ops:delivery:gate PASS; CI traceability SUCCESS; Vercel preview SUCCESS; live authenticated web baseline PASS required budgets with one non-blocking writings_requests WARN. Review score 9.8/10."
     }
   ]
 }
