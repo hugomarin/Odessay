@@ -55,7 +55,6 @@ export function EditorTabItem({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => onSelect(tab.id)}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault()
@@ -73,8 +72,20 @@ export function EditorTabItem({
         {active ? (
           <button
             type="button"
-            onClick={() => {
+            // Route through pointerup (not click): WKWebView drops the
+            // synthesized click for these buttons inside the pointer-capture
+            // tab. stopPropagation keeps the parent from treating it as a
+            // tab select. onKeyDown preserves keyboard activation.
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => {
+              event.stopPropagation();
               onRename(tab.id);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onRename(tab.id);
+              }
             }}
             data-tab-action="true"
             className="pointer-events-auto inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-[background-color,color] duration-100 ease-out hover:bg-muted hover:text-ink"
@@ -85,8 +96,16 @@ export function EditorTabItem({
         ) : null}
         <button
           type="button"
-          onClick={() => {
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => {
+            event.stopPropagation();
             onClose(tab.id);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onClose(tab.id);
+            }
           }}
           data-tab-action="true"
           className={cn(
