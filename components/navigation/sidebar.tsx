@@ -308,8 +308,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 className={cn(
                   `flex h-8 items-center rounded-[8px] text-[15px] font-medium ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
                   isIconOnly
-                    ? "mx-auto w-8 justify-center bg-ink px-0 text-bg hover:bg-ink-2"
-                    : "w-full gap-2 px-2 text-ink hover:bg-muted",
+                    ? "w-8 justify-start bg-ink pl-2 pr-0 text-bg hover:bg-ink-2"
+                    : "w-full justify-start gap-2 px-2 text-ink hover:bg-muted",
                 )}
                 aria-label="New writing"
               >
@@ -331,7 +331,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 onClick={() => setSearchOpen(true)}
                 className={cn(
                   `mt-3 flex h-8 items-center rounded-[8px] text-[15px] text-ink-2 hover:bg-muted hover:text-ink ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
-                  isIconOnly ? "mx-auto w-8 justify-center px-0" : "w-full gap-2 px-2",
+                  isIconOnly ? "w-8 justify-start pl-2 pr-0" : "w-full justify-start gap-2 px-2",
                 )}
                 aria-label="Search"
               >
@@ -374,7 +374,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       className={cn(
                         `flex h-10 items-center rounded-[8px] text-[15px] ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
                         isActive ? "bg-muted font-medium text-ink" : "text-ink-2 hover:bg-muted-hover hover:text-ink",
-                        isIconOnly ? "mx-auto w-8 justify-center px-0" : "w-full gap-2 px-2",
+                        isIconOnly ? "w-8 justify-start pl-2 pr-0" : "w-full justify-start gap-2 px-2",
                       )}
                       aria-label={item.label}
                     >
