@@ -158,7 +158,7 @@
       "type": "feature",
       "scope": "workspace-binding-diagnostic",
       "state": "architecture-diagnostic-2026-07-09",
-      "description": "Diagnóstico de Workspace que contrasta filesystem, índice `.odessay/`, IndexedDB y nube contra el ADR de identidad. Documenta riesgos de UUIDs divergentes, rebinding destructivo y ausencias por scope; fija el contrato de binding que debe aprobarse antes de cambiar scan, watcher, apertura o sync."
+      "description": "Diagnóstico de la brecha entre los pipelines actuales de Desk/Workspace/Open Document y el catálogo desktop aceptado. Contrasta filesystem, manifest `.odessay/`, SQLite mínimo, IndexedDB y nube; documenta UUIDs divergentes, rebinding destructivo, scopes y secuencia de retiro."
     },
     {
       "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",
@@ -294,7 +294,7 @@
     {
       "path": "workflow/define/dod-fase-9.md",
       "type": "ops",
-      "description": "Gate de cierre de Fase 9 — Workspace: Filesystem y Nube. Define Workspace desktop-first como integración segura entre archivos locales canónicos y capacidades cloud mediante UUID, binding, estados locales/cloud, sync opt-in y migración legacy."
+      "description": "Gate de cierre de Fase 9 — Workspace: Filesystem y Nube. Exige un catálogo SQLite y una apertura únicos para desktop, manifest v2 y reconciliador global, paridad Desk/Workspace, migración de IndexedDB, materialización cloud-only y resiliencia validada en DMG."
     },
     {
       "path": "workflow/define/validacion-fase-4.md",

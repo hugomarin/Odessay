@@ -1,13 +1,13 @@
 # ODESSAY — Fase 9 Definition of Done (DoD)
 
 Este documento define el gate de cierre de **Fase 9 — Workspace: Filesystem y Nube**.
-Si un punto no está cumplido, Workspace no se considera una capacidad estable del producto.
+Si un punto no está cumplido, el catálogo documental desktop no se considera una capacidad estable del producto.
 
-Fase 7.1 validó la exploración de carpetas locales. Fase 9 convierte esa evidencia en un contrato de producto: Odessay puede agregar proyectos y carpetas existentes, trabajar con sus archivos Markdown in-place y habilitar metadata y capacidades cloud sin trasladar la autoridad del contenido al servidor.
+Fase 7.1 validó carpetas locales. Fase 9 elimina las tres personalidades documentales que aún sobreviven en desktop: Desk sobre IndexedDB, Workspace sobre `.odessay/index.json` y Open Document como importación directa por ruta. El resultado debe ser un solo catálogo y un solo caso de uso de apertura; las diferencias legítimas pasan a ser los estados `local-only`, `synced`, `pending`, `cloud-only` y `conflict`.
 
 Referencias:
 
-- `workflow/define/roadmap.md`
+- `workflow/context/features/odessay-desktop-document-catalog.md` — contrato normativo de esta fase.
 - `workflow/context/core/odessay-adr-identidad.md`
 - `workflow/context/core/odessay-watched-folders.md`
 - `workflow/context/features/odessay-workspace.md`
@@ -16,52 +16,79 @@ Referencias:
 - `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 - `workflow/context/features/odessay-desktop-target-architecture.md`
 - `workflow/context/features/odessay-desktop-migration-plan.md`
+- `workflow/context/features/odessay-sync.md`
+- `workflow/define/roadmap.md`
 
 ---
 
-## 1) Workspace es una capacidad estable desktop-first
+## 1) Cada hecho tiene una sola autoridad
 
-- El usuario puede agregar un proyecto o carpeta existente desde la app desktop y limitar el scope a carpetas o archivos concretos.
-- Odessay lista y abre archivos Markdown reales dentro del scope sin moverlos a un directorio interno ni modificar su frontmatter.
-- Web no finge acceso al filesystem local: presenta el límite de runtime y dirige a desktop cuando corresponde.
-- Quitar un Workspace elimina su registro local y observación, no mueve ni borra los archivos del usuario.
+- El `.md` materializado es la autoridad del contenido local.
+- `.odessay/index.json` v2 es el ledger durable del binding local `ruta relativa ↔ UUID ↔ inode ↔ content_hash`; no guarda contenido ni metadata de producto.
+- SQLite es el único catálogo operacional consultable por la aplicación desktop y contiene una cola de sync durable; no sustituye al `.md`, al manifest ni a Supabase.
+- Supabase es la autoridad de metadata y existencia cloud y conserva una copia sincronizada del contenido.
+- IndexedDB permanece como adapter de catálogo/sync en web, pero no como catálogo de writings en desktop después de la migración.
+- El catálogo SQLite no se particiona por usuario. Logout o un fallo de sesión no oculta ni mueve documentos con archivo local.
 
-## 2) Contrato único de binding archivo↔documento
+## 2) BindingRoots, manifest y reconciliador global preservan identidad
 
-- Scan, watcher, apertura, guardado y bootstrap remoto usan un mismo resolver de binding con resultados explícitos: `bound`, `unbound-local`, `ambiguous-hash`, `identity-conflict` u `out-of-scope`.
-- Un writing creado por Odessay recibe un único UUID de cliente, adoptado sin cambios por el registro cloud y el índice `.odessay/index.json`.
-- Workspace no lee `frontmatter.id` durante su operación normal ni acuña UUIDs en Rust para resolver archivos externos.
-- Un archivo externo queda `unbound-local` hasta una acción explícita de adopción/sincronización; un conflicto de identidad nunca borra cola, metadata local ni bindings silenciosamente.
-- El índice `.odessay/index.json` contiene solo pistas de binding y configuración local (`ruta`, `inode`, `content_hash`, UUID, `selectedPaths`); no contiene metadata de Odessay.
+- Existe un `BindingRoot managed` para drafts nuevos y materialización cloud-only y `BindingRoots external` para carpetas consentidas por el usuario; registrar un root no lo convierte automáticamente en Workspace visible.
+- El manifest v2 contiene `bindingRootId`, `selectedPaths` y bindings por ruta relativa, y se escribe mediante temporal + rename atómico antes de confirmar la proyección SQLite.
+- El watcher se monta a nivel de `DesktopAppShell`. Desk, Write y cualquier ruta desktop reciben reconciliación sin necesidad de visitar Workspace.
+- La prioridad de resolución es ruta en el mismo root → inode/movimiento correlacionado → hash local único → hash cloud único → `ambiguous`; solo sin matches se acuña UUID.
+- Rename, move y save atómico conservan UUID. Scope excluido, permisos perdidos o volumen desmontado no se interpretan como borrado.
+- Un archivo abierto fuera de un root requiere confirmar el registro de su carpeta padre; al aceptar, `selectedPaths` incluye inicialmente solo el archivo elegido.
 
-## 3) Estados locales y cloud preservan su significado
+## 3) Existe una sola apertura documental
 
-- `local-only`, `cloud-only`, `synced` y `pending` son estados distinguibles en Workspace y no se confunden por la ruta o la sesión del editor.
-- Un writing `cloud-only` no crea una copia local por abrir/listar/hidratar; materializarlo requiere una acción explícita o un flujo de pull declarado.
-- Una ausencia física confirmada dentro de un path observado retira solo la copia local; excluir un path, desmontar un volumen o perder permisos no equivale a borrar el archivo.
-- Borrar un archivo local no borra su metadata ni writing cloud; borrar cloud es una acción explícita separada.
+- `openDocument({ kind: "id", id })` y `openDocument({ kind: "path", path })` convergen a un UUID antes de hidratar el editor.
+- Desk, Workspace, Search, Recent, sidebar y Open Document invocan el mismo caso de uso; ninguna superficie hace seed manual de IndexedDB ni usa otro `DocumentService`.
+- Abrir el mismo archivo por cualquiera de las entradas produce el mismo UUID y no crea duplicados.
+- Un documento `cloud-only` se materializa en un BindingRoot antes de editarse; listar o hidratar metadata no materializa por sí solo.
+- `conflict`, `ambiguous`, binding huérfano y errores de filesystem producen resultados recuperables y visibles. Ningún `NOT_FOUND` ni fallo de apertura crea un draft como fallback.
 
-## 4) Sincronización cloud añade capacidades, no autoridad de contenido
+## 4) Desk y Workspace son vistas del mismo catálogo
 
-- El usuario puede adoptar/sincronizar un archivo local sin moverlo; el flujo explica que se crea o vincula un registro cloud para metadata, colaboración, publicación, AI y acceso entre dispositivos.
-- El save path desktop escribe primero el `.md`, actualiza caches/índice y encola sync como operación asíncrona con retry.
-- `content_hash` se calcula sobre el mismo Markdown canónico en Rust, TypeScript y payload cloud; hay prueba de paridad sobre fixtures compartidos y rebind solo ante una coincidencia única.
-- Renombres, guardados atómicos y copias verbatim conservan o recuperan el binding sin producir duplicados; hash ambiguo y contenido divergente quedan en estado resoluble, no se asignan arbitrariamente.
+- Desk y Workspace consultan `DocumentCatalog`; Desk agrupa por actividad/estado y Workspace por carpeta/BindingRoot.
+- El mismo documento conserva UUID, estado y metadata básica en ambas superficies.
+- Un archivo detectado por watcher aparece en ambas vistas sin entrar primero a Workspace.
+- `local-only`, `synced`, `pending`, `cloud-only`, `conflict`, `ambiguous`, `stale` y `rebuilding` tienen estados comprensibles, accesibles y no destructivos.
+- Web no finge acceso al filesystem local y comunica el límite desktop cuando corresponde.
 
-## 5) Migración y legado se cierran de forma segura
+## 5) Guardado y sincronización son local-first y durables
 
-- Las carpetas legacy `.odyssey/` migran a `.odessay/` preservando bindings existentes.
-- Los ids históricos de frontmatter se cosechan/migran mediante un flujo explícito y auditable antes de dejar de consultarlos en runtime.
-- El mapa de caminos legacy (path-as-id, índice Rust, IndexedDB, frontmatter, filas cloud y migraciones) queda documentado con owner, consumidor y plan de retiro.
-- No queda documentación normativa que describa como estado actual un comportamiento ya retirado; cada decisión distingue contrato objetivo, implementación actual y trabajo pendiente.
+- El orden desktop es: escribir `.md` atómicamente → escribir manifest atómicamente → transacción SQLite + enqueue → estado `saved-local` → sync cloud en background.
+- Una escritura `.md` confirmada nunca se reporta como pérdida de contenido si falla manifest, SQLite o red; el trabajo posterior queda pendiente/reintentable.
+- `content_hash` se calcula sobre el mismo Markdown canónico en Rust, TypeScript, manifest y payload cloud; fixtures compartidos prueban paridad.
+- El schema/índice cloud de `content_hash` se valida contra la base viva y el backfill queda cerrado o explícitamente acotado; rebind por hash solo ocurre con un candidato elegible único.
+- Borrar o perder un archivo local marca `local_present=false`; no borra metadata ni writing cloud. El borrado cloud sigue siendo una acción explícita separada.
 
-## 6) Evidencia de aceptación
+## 6) Migración y retiro de compatibilidad no pierden estado
 
-- Demo desktop: agregar carpeta existente → seleccionar scope → abrir archivo externo → adoptarlo/sincronizarlo → editar localmente sin red → completar sync cuando vuelve la conexión.
-- Demo de lifecycle: cloud-only permanece sin archivo local; retirar archivo físico conserva cloud; un conflicto de UUID o hash no pierde datos ni se resuelve en silencio.
-- Cobertura automatizada de los escenarios de binding, watcher, sync y migración definidos arriba; typecheck, lint, tests y `ops:delivery:gate` verdes.
-- El dueño acepta el demo de outcome antes del cierre de fase.
+- El schema SQLite v2 entra de forma aditiva, con dual-write detrás de feature flag y rollback hasta completar el gate.
+- La migración cosecha writings, bindings y mutaciones pendientes de todos los scopes IndexedDB conocidos; deduplica por UUID/ruta/hash y conserva la cola.
+- IndexedDB desktop queda read-only durante una versión antes de retirar lecturas/escrituras.
+- `.odyssey/index.json`, ids históricos de frontmatter, path-as-id y `writings_index` se migran o aíslan mediante caminos explícitos, auditables y recuperables; no se consultan como identidad en runtime normal al cierre.
+- No se elimina un store legacy mientras pueda contener una mutación no cosechada o un UUID local-only no preservado en manifest/SQLite.
+
+## 7) Resiliencia, observabilidad y performance son verificables
+
+- SQLite se puede reconstruir desde manifests, filesystem y nube sin red para los documentos locales y sin perder UUIDs local-only.
+- Corrupción de manifest no provoca acuñación masiva; falla de watcher muestra catálogo `stale` y reintenta/rescanea.
+- Operaciones bulk de scan, migración, hidratación y watcher emiten una actualización lógica, no N refetches visibles.
+- Se emiten eventos estructurados de rebuild, binding, manifest, transacción y apertura sin contenido, tokens ni rutas completas en telemetría remota.
+- Hay evidencia de arranque, fan-out y consultas de catálogo dentro de los presupuestos definidos; el DMG/release desktop, no solo `tauri dev`, pasa los flujos críticos.
+
+## 8) Evidencia de aceptación
+
+- Matriz trazable desde cada bullet de este DoD a test automatizado, prueba manual reproducible o aceptación explícita del dueño.
+- E2E DMG: rename/move en Finder mientras la app está en Desk; watcher reconcilia sin duplicar ni perder UUID.
+- E2E DMG: Open Document fuera de root → confirmación → mismo UUID/estado en Desk y Workspace.
+- E2E DMG: offline open/save/restart → contenido y binding sobreviven → sync posterior converge.
+- E2E DMG: cloud-only se materializa en el root managed antes de editar; conflicto/hash ambiguo no se resuelve en silencio.
+- Typecheck, lint, tests, Cargo tests, `validate-workflow-json`, performance/network gates aplicables y `ops:delivery:gate` verdes.
+- El dueño acepta el outcome completo antes del cierre de fase.
 
 ## Gate de cierre de fase
 
-Fase 9 se marca `Done` solo si se cumplen los seis bloques anteriores, no quedan issues bloqueantes abiertos en el proyecto Linear de Fase 9 y roadmap, DoD, docs de Workspace y código describen el mismo contrato operativo.
+Fase 9 se marca `Done` solo si los ocho bloques anteriores están evidenciados, no quedan issues bloqueantes abiertos en el proyecto Linear de Fase 9 y roadmap, DoD, spec de catálogo, docs de Workspace y código describen el mismo contrato operativo.

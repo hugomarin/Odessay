@@ -507,53 +507,61 @@ Referencia: `workflow/context/core/odessay-watched-folders.md`, `workflow/contex
 
 ## Fase 9 — Workspace: Filesystem y Nube
 
-Al terminar esta fase: Workspace deja de ser una exploración de carpetas locales y se convierte en una capacidad estable de Artifact Studio. El usuario puede agregar proyectos y folders existentes, trabajar sobre sus Markdown in-place y sincronizarlos con la nube para obtener metadata y capacidades remotas, sin que la nube sustituya al filesystem como autoridad del contenido.
+Al terminar esta fase: Odessay desktop deja de tener tres personalidades documentales. Desk, Workspace, Search, Recent y Open Document consultan un solo `DocumentCatalog` respaldado por SQLite y abren mediante un solo `openDocument({ id | path })`. Las diferencias visibles corresponden al estado local/cloud del documento, no a pipelines de persistencia distintos.
 
 DoD formal: `workflow/define/dod-fase-9.md`.
 
 ---
 
 **Hito**
-Workspace integra filesystem y nube mediante un binding documental único, observable y seguro.
+Artifact Studio integra filesystem y nube mediante un catálogo, un binding y una apertura documentales únicos, observables y seguros.
 
 **Al cierre de esta fase debe ser verdad que:**
 
-- los archivos `.md` permanecen en la carpeta del usuario y son la fuente de verdad del contenido en desktop;
-- un UUID único vincula archivo, índice local, espejo IndexedDB y registro cloud sin usar frontmatter ni paths como identidad;
-- el usuario puede adoptar un archivo local para habilitar metadata, sync, AI, publicación y colaboración sin moverlo;
-- `local-only`, `cloud-only`, `synced` y `pending` tienen semántica estable y visible;
-- scan, watcher, apertura, save y sync usan el mismo contrato de binding y no destruyen estado ante conflictos;
-- la documentación describe con precisión qué está implementado, qué es legacy y qué resta por retirar.
+- el `.md` sigue gobernando el contenido materializado y `.odessay/index.json` v2 conserva el binding durable por `BindingRoot`;
+- SQLite es el catálogo operacional y la cola durable únicos de desktop; IndexedDB queda limitado al adapter web tras la migración;
+- un UUID estable vincula manifest, catálogo, editor y registro cloud sin usar frontmatter ni paths como identidad;
+- un reconciliador global mantiene filesystem, manifest y SQLite alineados desde cualquier ruta desktop;
+- Desk y Workspace muestran el mismo conjunto base y los mismos estados, variando solo filtro, agrupación y presentación;
+- Open Document reconcilia antes de acuñar identidad y ningún fallo de apertura crea drafts;
+- `local-only`, `cloud-only`, `synced`, `pending` y `conflict` tienen semántica estable y visible;
+- auth controla capacidades cloud, nunca la existencia de archivos locales.
 
 **Temas que entran en esta fase**
 
-- reconciliación documental y mapeo de todos los caminos legacy de identidad;
-- resolver único de binding archivo↔UUID y migración segura de frontmatter/índices legacy;
-- lifecycle local/cloud, watcher y manejo de rename/delete/scope;
-- sincronización opt-in de archivos Workspace y UX de adopción/estado;
-- paridad de `content_hash` entre filesystem, editor y nube, con pruebas de rebind y conflicto.
+- contratos `DocumentCatalog`/`DocumentBindingStore` y schema SQLite v2 con dual-write reversible;
+- `BindingRoot managed` y externos, manifest v2 y reconciliador global en `DesktopAppShell`;
+- apertura unificada por UUID o ruta para todas las superficies desktop;
+- Desk y Workspace como vistas del mismo catálogo;
+- migración de todos los scopes, bindings y mutaciones pendientes de IndexedDB desktop;
+- materialización cloud-only, paridad/backfill de `content_hash` y retiro de rutas legacy;
+- migración auditable de `.odyssey`, frontmatter histórico y path-as-id.
 
 **Temas que no son objetivo de esta fase**
 
 - convertir Workspace web en un explorador de filesystem;
 - mover o reubicar archivos del usuario para que encajen en una carpeta interna;
 - usar metadata en frontmatter o sidecars por documento;
-- implementar merge automático de contenido divergente entre dispositivos.
+- implementar merge automático de contenido divergente entre dispositivos;
+- convertir SQLite en autoridad del contenido o `.odessay/index.json` en una caché descartable del UUID local-only;
+- mantener pipelines de apertura distintos por superficie.
 
 **Secuencia de ejecución**
 
-1. `ODE-366` — reconciliar documentación y mapear todos los caminos legacy de identidad; fija el inventario verificable antes de modificar contratos.
-2. `ODE-367` — definir el resolver de binding y eliminar la lectura/acuñación de identidad en runtime; ningún conflicto puede borrar estado local.
-3. En paralelo después de `ODE-367`:
-   - `ODE-370` — preservar el lifecycle del filesystem: scope, watcher, rename y ausencia física confirmada;
-   - `ODE-371` — preservar cloud-only y cerrar la paridad de `content_hash` entre Markdown, índice, sync y nube.
-4. `ODE-373` — exponer adopción y sincronización explícitas en la UX de Workspace una vez estables sus estados y operaciones.
-5. `ODE-374` — migrar `.odyssey`, frontmatter histórico y compatibilidades legacy mediante un flujo auditable y reversible.
-6. `ODE-372` — ejecutar el gate de cierre: matriz de evidencia del DoD, demo desktop y aceptación explícita del dueño.
+0. `ODE-366` — reconciliar documentación/código y fijar el mapa de caminos actuales/legacy contra el spec aceptado.
+1. **M1 — `ODE-367`:** introducir contratos `DocumentCatalog`/`DocumentBindingStore`, schema SQLite v2 y dual-write detrás de feature flag.
+2. **M2 — `ODE-370`:** migrar manifest a v2 y montar el reconciliador global; cubrir rename, move, delete, save atómico y roots no disponibles.
+3. **M3 — `ODE-375`:** implementar `openDocument({ id | path })` y migrar Desk, Workspace, sidebar, Search, Recent y Open Document sin seed de IndexedDB.
+4. **M4 — `ODE-373`:** hacer que Desk y Workspace consuman el mismo catálogo y presenten estados/errores coherentes.
+5. **M5 — `ODE-376`:** cosechar todos los scopes, bindings y mutaciones de IndexedDB desktop; dejar compatibilidad read-only por una versión.
+6. **M6 — cierre de reconciliación y compatibilidad:**
+   - `ODE-371` — materialización cloud-only, validación/backfill de `content_hash` y convergencia cloud;
+   - `ODE-374` — cosecha histórica y retiro de frontmatter/path-as-id/compatibilidades una vez preservados los datos.
+7. `ODE-372` — ejecutar el gate final: matriz de evidencia del DoD, E2E en DMG y aceptación explícita del dueño.
 
 `ODE-368` y `ODE-369` son auditorías transversales: alimentan la reconciliación y el plan de retiro, pero no sustituyen ninguna entrega de producto.
 
-Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-workspace.md`, `workflow/context/features/odessay-workspace-diagnostic.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/features/odessay-desktop-document-catalog.md`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-workspace.md`, `workflow/context/features/odessay-workspace-diagnostic.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `workflow/context/features/odessay-sync.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
 
 ---
 
