@@ -45,103 +45,82 @@ Usuario escribe
 
 **Write-path principal:** filesystem local con documentos `.md`.
 
-**Persistencia derivada opcional:** SQLite o equivalente puede existir como índice/caché local para recientes, búsqueda, previews y metadata, pero no debe reemplazar al archivo `.md` como fuente canónica.
+**Catálogo operacional objetivo:** SQLite implementa `DocumentCatalog` y la cola durable de desktop para recientes, búsqueda, previews, presencia local/cloud y metadata cacheada. Sigue siendo una proyección reconstruible: nunca reemplaza al `.md` como autoridad de contenido ni a `.odessay/index.json` como ledger durable del binding.
 
 **Implicación:** no asumir que `localDB` será en desktop la misma fuente operativa principal que hoy es en web. En desktop puede convertirse en una capa derivada o en una fachada sobre servicios más explícitos.
 
 ---
 
-## Mini-spec D10: save path entre `.md`, caches locales, IndexedDB y Supabase
+## Mini-spec D10: save path y catálogo por runtime
 
-Este contrato implementa el ADR de identidad D10 para el camino de guardado multi-store. Es un contrato objetivo verificado contra el código actual; las brechas documentadas aquí son trabajo de migración, no permiso para normalizar el modelo legacy.
+Este contrato implementa la enmienda D10 del ADR. El diseño desktop completo vive en `workflow/context/features/odessay-desktop-document-catalog.md`; esta sección resume solo su relación con sync.
 
 ### Clasificación arquitectónica
 
-- **Layer:** dominante `Domain / Architecture`; secundario `Application` porque define la orquestación de `SaveWriting`.
-- **Runtime scope:** `shared-core + desktop + cloud`; web conserva su substrato actual, pero debe converger al mismo contrato documental.
+- **Layer:** dominante `Domain / Architecture`; secundario `Application`.
+- **Runtime scope:** `shared-core + web + desktop + cloud`.
 - **Owner:** `architecture-first`.
-- **Contracts touched:** `DocumentService.saveWriting`, `SyncService.enqueuePush` / `flushPending`, índice local desktop, espejo IndexedDB y adapter cloud de writings.
-- **Invariants:** `.md` es autoridad de contenido cuando está materializado; Supabase es autoridad de metadata; IndexedDB es espejo local del registro de nube; SQLite / JSON de workspace son caches y puente ruta-id-huella; ruta-primero preserva identidad ante guardado atómico.
-- **Boundaries:** aplicación puede depender de contratos de servicio y dominio; adapters pueden depender de Tauri, IndexedDB, HTTP o Supabase; dominio no depende de filesystem, browser, Next ni Supabase.
+- **Contracts touched:** `DocumentCatalog`, `DocumentBindingStore`, `WorkspaceReconciler`, `DocumentService.saveWriting`, `SyncService`.
+- **Invariants:** `.md` gobierna contenido local materializado; `.odessay/index.json` gobierna binding durable por BindingRoot; SQLite es el catálogo/cola operacional desktop; IndexedDB implementa el adapter web; Supabase gobierna metadata y existencia cloud.
 
-### Roles de los cuatro almacenes
+### Roles por runtime
 
 | Almacén | Rol | Autoridad | Reconstrucción |
 |---|---|---|---|
-| `.md` | Bytes canónicos de contenido en desktop. | Contenido del documento. | No aplica: es el documento materializado. |
-| SQLite `writings_index` + JSON `.odessay/index.json` | Caches locales y binding ruta/inode/hash/UUID. | Nunca autoritativo sobre contenido o metadata. | Sí, desde filesystem y nube. |
-| IndexedDB `LocalWriting` + `syncQueue` | Espejo local del registro cloud y cola offline. | Estado operativo local, no verdad independiente. | Parcial: desde `.md` + registro cloud; mutaciones pendientes no sincronizadas no se descartan. |
-| Supabase `writings` | Registro cloud de metadata y copia sincronizada de contenido. | Metadata (`id/slug/status/visibility/version`) y payload colaborativo remoto. | No es derivado local; se actualiza por sync asíncrono. |
+| `.md` | Bytes canónicos desktop. | Contenido local materializado. | Es el documento. |
+| `.odessay/index.json` | Ledger ruta/inode/hash/UUID. | Binding local dentro del BindingRoot. | La estructura sí; UUID local-only no siempre. |
+| SQLite desktop | Catálogo, presencia local/cloud, metadata cacheada y sync queue. | Estado operacional desktop, no contenido/metadata fuente. | Sí desde manifests/files/cloud, excepto mutaciones pendientes. |
+| IndexedDB web | Catálogo y cola local-first del browser. | Estado operacional web. | Parcial; mutaciones pendientes se preservan. |
+| Supabase | Registro cloud y copia sincronizada. | Metadata y existencia cloud. | No es derivado local. |
 
-### Orden de escritura
-
-El orden normativo para desktop es:
+### Orden de escritura desktop objetivo
 
 ```text
 SaveWriting
-  -> 1. escribir `.md` de forma atómica
-  -> 2. actualizar caches locales SQLite / JSON de binding
-  -> 3. actualizar espejo IndexedDB y cola de sync
-  -> 4. sincronizar Supabase en background
+  -> 1. escribir `.md` atómicamente
+  -> 2. escribir `.odessay/index.json` atómicamente
+  -> 3. transacción SQLite + enqueue
+  -> 4. confirmar saved-local
+  -> 5. sincronizar Supabase en background
 ```
 
-**1. `.md` primero.** `DesktopDocumentService.saveWriting()` resuelve el `canonicalPath`, serializa el documento a Markdown y llama `writeCanonicalFile()` antes de tocar IndexedDB (`lib/services/document-service-factory.ts:346-362`). `writeCanonicalFile()` delega en `FilesystemDocumentService.saveWriting()` (`lib/services/document-service-factory.ts:244-263`), que llama `tauriWriteFile()` y solo después actualiza el índice y emite `saved` (`lib/services/desktop/filesystem-document-service.ts:338-350`).
+El código vigente todavía actualiza SQLite legacy e IndexedDB después del archivo. Esa es una brecha de migración, no el contrato final.
 
-**2. Guardado atómico en filesystem.** El comando Tauri `write_file` escribe primero un sibling `*.tmp` y luego ejecuta `fs::rename` sobre el destino (`src-tauri/src/commands/document.rs:37-53`). El promise de `tauriWriteFile()` solo resuelve después del invoke, y marca la ruta como self-write antes y después para que el watcher ignore eventos generados por Odessay (`lib/services/desktop/tauri-commands.ts:49-53`).
-
-**3. Caches locales después del commit de contenido.** El índice SQLite se actualiza por `LocalIndexService.upsert()` (`lib/services/desktop/local-index-service.ts:64-76`), cuyo comando Rust hace `INSERT ... ON CONFLICT(path) DO UPDATE` en `writings_index` (`src-tauri/src/commands/index.rs:50-69`). El JSON de workspace se reescribe en `workspace_sync` con id, inode, `content_hash`, `last_seen` y size por ruta (`src-tauri/src/commands/workspace.rs:267-320`).
-
-**4. IndexedDB + cola después del `.md`.** Tras el archivo, `DesktopDocumentService.saveWriting()` construye `LocalWriting` con `canonical_path`, `body_json` derivado y lifecycle local; luego llama `enqueueWritingUpsert()` (`lib/services/document-service-factory.ts:346-362`). Esa función guarda el writing en IndexedDB con `sync_status: "pending"` y después encola la mutación (`lib/sync/queue.ts:67-74`).
-
-**Nombre simétrico en push (ODE-324).** Cuando una mutación desktop tiene `canonical_path`, el worker relee el `.md` antes de subir y deriva `title` del basename de esa ruta, junto con `body_json`, `body_text` y `content_hash`. Así un rename en Finder o un cache histórico no puede subir un título distinto del filename; el push corrige nube e IndexedDB sin renombrar el archivo.
-
-**5. Supabase en background.** La mutación contiene `content_hash` BLAKE3 calculado desde el Markdown canónico serializado (`lib/sync/queue.ts:22-42`, `lib/content-hash.ts:7-18`). El worker procesa la cola por transporte HTTP actual (`lib/sync/worker.ts:66-77`) y marca la mutación como synced solo después de respuesta remota exitosa (`lib/sync/worker.ts:275-306`). El endpoint cloud valida `content_hash` y hace update-or-insert en `writings` (`app/api/writings/[id]/route.ts:9-25`, `app/api/writings/[id]/route.ts:117-206`).
-
-### Manejo de fallas por etapa
+### Fallas
 
 | Falla | Resultado permitido | Recuperación |
 |---|---|---|
-| Falla antes o durante escritura `.md` | No se actualizan caches, IndexedDB ni cola. El save retorna error de storage. | El usuario conserva el último `.md` confirmado; reintentar save. |
-| `.md` escrito, falla SQLite `writings_index` | El contenido queda guardado; el índice queda stale o incompleto. | Rebuild desde `.md` con `LocalIndexService.rebuildFromDirectory()` (`lib/services/desktop/local-index-service.ts:98-108`) o fallback a listado de archivos (`lib/services/desktop/filesystem-document-service.ts:275-293`). |
-| `.md` escrito, falla JSON `.odessay/index.json` | El contenido queda guardado; binding workspace puede quedar stale. | Re-ejecutar `workspace_sync`; reconciliar por ruta primero, luego inode/hash. |
-| `.md` escrito, falla IndexedDB / enqueue | El contenido local no se pierde, pero el espejo cloud no sabe del cambio. | Reabrir/rescan debe derivar `body_json` desde `.md` y reencolar; este retry explícito es brecha de implementación si no existe en el flujo concreto. |
-| IndexedDB encolado, falla Supabase | El writing queda `pending` / `retrying`; guardar local sigue exitoso. | Retry con backoff y `markFailed` si agota intentos (`lib/sync/worker.ts:307-340`). |
-| Supabase actualizado, falla post-sync local | La nube contiene el último payload, pero el espejo local puede quedar stale. | Hydration posterior debe comparar versión/hash y actualizar IndexedDB sin pisar cambios locales pendientes. |
+| escritura `.md` | no confirmar save ni actualizar stores posteriores | conservar último archivo confirmado; retry |
+| manifest después del `.md` | contenido preservado, binding pendiente | retry atómico; no acuñar otro UUID |
+| SQLite después del manifest | manifest preserva identidad; catálogo stale | reproyectar manifest en SQLite |
+| Supabase offline | local-only/pending | retry con backoff |
+| post-sync local | cloud actualizado, catálogo stale | hydration/hash reconcile sin pisar mutaciones pendientes |
 
-La regla de producto es que ningún fallo de cache, auth, red o Supabase invalida un `.md` ya persistido. En desktop, “guardado” significa commit del archivo; sync es capacidad secundaria.
+Ningún fallo de catálogo, auth o red invalida un `.md` ya persistido.
 
-### Divergencia por `content_hash`
+### Divergencia y reconciliación
 
-La divergencia de contenido entre almacenes se detecta por `content_hash` con prefijo `blake3:`. La normalización mínima del contrato es newline canonicalization (`\r\n` / `\r` -> `\n`) antes de BLAKE3 (`lib/content-hash.ts:7-14`).
+`content_hash` usa prefijo `blake3:` y newline canonicalization (`\r\n` / `\r` → `\n`). La prioridad es:
 
-Reglas:
+1. ruta exacta;
+2. inode;
+3. hash local único;
+4. hash cloud único;
+5. ambigüedad explícita;
+6. acuñar UUID solo sin matches.
 
-1. Si `.md` y IndexedDB difieren, el `.md` gana como contenido canónico en desktop; IndexedDB se rederiva desde parse Markdown.
-2. Si IndexedDB y Supabase difieren y existe mutación pendiente local, no se pisa local con remoto; el estado sigue pending/retrying.
-3. Si no hay mutación pendiente, `content_hash` decide si remote hydration es no-op o debe actualizar el espejo local.
-4. Si un `.md` llega desnudo sin binding local, el re-emparejamiento cross-machine requiere `content_hash` en nube; sin ODE-297, D4 no puede cortar frontmatter de forma portable.
-5. Colisiones o hashes duplicados no son suficientes para identidad: el hash solo re-empareja cuando es único; si no, se exige confirmación o se trata como documento nuevo.
-
-### Guardado atómico, inode y reconciliación ruta-primero
-
-El guardado atómico es obligatorio para evitar archivos truncados: temp sibling + replace. Esa operación puede cambiar inode y hash a la vez. Por eso la identidad no puede depender de inode ni hash como claves primarias.
-
-La reconciliación es:
-
-1. **Ruta exacta primero.** Si la ruta ya existía en `.odessay/index.json`, mantiene el mismo UUID aunque inode y hash hayan cambiado por un save atómico.
-2. **Inode después.** Si la ruta cambió pero inode coincide, se interpreta como rename/move local.
-3. **Hash único al final.** Si ruta e inode no coinciden, un `content_hash` único permite recuperar binding en rename/copia verbatim.
-4. **Sin match confiable.** Si hash falta, es duplicado o el contenido ya divergió, no se infiere identidad destructiva.
-
-El código actual ya prueba esta prioridad: `workspace_sync` busca `existing_at_path` antes de inode y hash (`src-tauri/src/commands/workspace.rs:267-301`), y el test `workspace_sync_keeps_binding_by_path_after_atomic_save` confirma que una escritura temp+rename conserva id por ruta aunque cambie hash (`src-tauri/src/commands/workspace.rs:568-589`).
+El hash no prueba identidad cuando existen duplicados. Un save atómico conserva UUID por ruta aunque cambien inode y hash.
 
 ### Estado real verificado y brechas
 
-- El write path desktop principal ya cumple el orden `.md` antes de IndexedDB/sync en `DesktopDocumentService.saveWriting()` (`lib/services/document-service-factory.ts:346-362`).
-- El adapter bajo `FilesystemDocumentService` aún documenta “Uses the file path as the storage address” (`lib/services/desktop/filesystem-document-service.ts:120-140`). Ese contrato es **legacy del adapter de bajo nivel**: el contrato objetivo mantiene UUID único en `LocalWriting.id` y usa `canonical_path` como binding. `DesktopDocumentService` es el encargado de traducir path ↔ UUID; la UI no debe asumir que el path es identidad estable.
-- **`rehomeProtectedCanonicalPaths()` fue removida** (ya no aparece en `lib/services/document-service-factory.ts`). El comportamiento de mover archivos protegidos a almacenamiento interno fue repliegado; los archivos del usuario se mantienen en su lugar (D7).
-- `content_hash` ya viaja en payload cloud (`lib/sync/queue.ts:22-42`) y la API lo valida (`app/api/writings/[id]/route.ts:9-25`), pero la portabilidad completa depende de ODE-296/ODE-297 y del backfill correspondiente.
-- **Escritorios cloud-only sin `canonical_path`:** un `LocalWriting` con UUID válido pero sin `canonical_path` es un estado recuperable (*solo nube* en D9). `DesktopDocumentService.openWriting` debe servirlo desde el espejo local sin intentar abrir el UUID como ruta de filesystem (ver ODE-331).
+- El write path vigente ya escribe `.md` antes de IndexedDB/sync.
+- `workspace_sync` ya reconcilia ruta → inode → hash y persiste `.odessay/index.json`, pero el watcher está ligado a superficies Workspace y debe moverse al shell global.
+- SQLite `writings_index` solo guarda path/title/timestamps; debe migrar al catálogo UUID/binding/presencia definido en el nuevo spec.
+- Desk consulta IndexedDB y Workspace consulta su snapshot; ambos deben migrar a `DocumentCatalog`.
+- Open Document lee por ruta y acuña UUID antes de reconciliar; debe migrar a `openDocument({kind: "path"})`.
+- `rehomeProtectedCanonicalPaths()` fue removida; los archivos permanecen en su lugar.
+- `content_hash` ya viaja en payload cloud, pero la portabilidad completa requiere schema/backfill verificable.
+- Cloud-only sin ruta es un estado válido y debe materializarse, no tratarse como `NOT_FOUND`.
 
 ---
 

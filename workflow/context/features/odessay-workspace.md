@@ -1,7 +1,7 @@
 # ODESSAY — Workspace
 
 **Documento de referencia para agentes de desarrollo.**
-Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace. El **spec de implementación** de carpetas vigiladas (índice de binding `.odessay/`, watcher, sync, snapshots) vive en `workflow/context/core/odessay-watched-folders.md`.
+Lee `workflow/context/features/odessay-desktop-app.md` y `workflow/context/features/odessay-desktop-target-architecture.md` antes de decidir alcance de runtime para Workspace. El **spec de implementación** de carpetas vigiladas vive en `workflow/context/core/odessay-watched-folders.md`; el catálogo compartido con Desk y la apertura única viven en `workflow/context/features/odessay-desktop-document-catalog.md`.
 
 Este documento fija el contrato actual de **Workspace** en Odessay: qué existe en desktop, qué no existe en web y cuál debe ser el comportamiento explícito de la UI cuando el runtime no puede ofrecer acceso al filesystem local.
 
@@ -9,9 +9,9 @@ Este documento fija el contrato actual de **Workspace** en Odessay: qué existe 
 
 ## Tesis
 
-Workspace es una capacidad **desktop-first**.
+Workspace es una capacidad **desktop-first** y una vista de organización/ubicación sobre el mismo `DocumentCatalog` que consume Desk.
 
-No es una colección cloud ni una vista alternativa de Desk. Es la capa donde Odessay trabaja con carpetas locales, archivos Markdown y watchers del filesystem para mantener un contexto de escritura ligado a documentos reales del usuario.
+No es una colección cloud ni un subsistema documental separado. Aporta contexto de carpetas, jerarquía y BindingRoots sobre documentos que conservan la misma identidad, estado y apertura en todas las superficies.
 
 La regla operativa es esta:
 
@@ -25,13 +25,13 @@ La regla operativa es esta:
 |---|---|---|---|
 | Crear workspace | Sí | No | Desktop puede crear una carpeta nueva y registrarla como workspace. Web no crea workspaces locales. |
 | Añadir carpeta existente | Sí | No | Desktop puede conectar una carpeta local existente. Web solo informa que la acción requiere la app desktop. |
-| Ver lista de workspaces | Sí | Solo mock/prototipo | Desktop lista workspaces reales desde settings locales + `.odessay/index.json`. Web no lista workspaces locales reales. |
+| Ver lista de workspaces | Sí | Solo mock/prototipo | Desktop lista agrupaciones reales desde `DocumentCatalog` + configuración de Workspace; `.odessay/index.json` alimenta el reconciliador, no una base de consulta paralela. |
 | Ver detalle de workspace | Sí | Solo mock/prototipo | Desktop muestra archivos reales del workspace. Web no navega un filesystem local real. |
 | Selección granular de carpetas/archivos | Sí | No | Desktop puede limitar qué paths quedan incluidos. Web no expone árbol de filesystem local. |
 | Lista de archivos del workspace | Sí | No real | Desktop indexa `.md`/`.mdx` visibles dentro del scope elegido. Web no inspecciona carpetas locales del usuario. |
 | Sincronización con filesystem | Sí | No | Desktop relee el workspace desde disco y persiste el **índice de binding** local (ruta↔id, no metadata de Odessay; ver `odessay-adr-identidad.md` D4/D8) en `.odessay/index.json`. |
 | Watcher en tiempo real | Sí | No | Desktop observa cambios del filesystem con `fs:watch`. Web no tiene file events nativos equivalentes. |
-| Abrir archivo en editor | Sí | No real | Desktop abre el archivo local y lo enruta al editor. Web no abre archivos arbitrarios del disco. |
+| Abrir archivo en editor | Sí | No real | Desktop entrega el UUID del catálogo al mismo `OpenDocument` usado por Desk. Web no abre archivos arbitrarios del disco. |
 | Selección de archivos dentro del workspace | Sí | No | Desktop puede incluir/excluir folders o archivos específicos. Web muestra limitación de runtime. |
 
 ---
@@ -66,7 +66,7 @@ Capacidades actuales/esperadas de desktop:
 
 - registrar una carpeta existente o crear una nueva;
 - indexar archivos Markdown visibles dentro del scope elegido;
-- abrir previews y archivos reales;
+- abrir previews y archivos reales mediante el `DocumentCatalog` compartido;
 - persistir `selectedPaths` como configuración local del workspace;
 - observar solo los paths incluidos por el usuario;
 - reconciliar renames/deletes del filesystem con el índice local.
@@ -97,8 +97,10 @@ Workspace persiste configuración local en `.odessay/index.json`.
 Ese documento puede incluir:
 
 - ids estables por archivo visto;
-- metadata derivada del índice;
+- inode, `content_hash`, tamaño y `lastSeen` como pistas de binding;
 - `selectedPaths` para recordar qué carpetas/archivos forman parte del workspace.
+
+No contiene metadata de producto. El watcher/reconciliador global proyecta sus bindings al catálogo SQLite; Workspace y Desk consultan ese catálogo, no el JSON directamente.
 
 `selectedPaths` es configuración **local** del workspace. No vive en Supabase.
 

@@ -31,7 +31,7 @@
       "type": "core",
       "scope": "arquitectura-de-documento",
       "state": "adr-aceptado-fuente-de-verdad",
-      "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube, binding por ruta+inode+content_hash. Prevalece sobre los odessay-desktop-* en arquitectura de documento."
+      "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube y binding por ruta+inode+content_hash. Incluye enmienda D10: `.odessay/index.json` como ledger durable de binding, SQLite como catálogo/cola objetivo de desktop e IndexedDB como adapter web/transición desktop."
     },
     {
       "path": "workflow/context/core/odessay-paginas.md",
@@ -50,7 +50,7 @@
       "type": "core",
       "scope": "workspace-desktop-filesystem-metadata",
       "state": "spec-subordinado-al-adr-identidad",
-      "description": "Spec de Workspace / Watched Folders (ODE-245): carpetas vigiladas, índice de binding en .odessay/, watcher FSEvents, snapshots y sync. Subordinado al ADR de identidad (odessay-adr-identidad.md): la metadata vive en la nube no en meta.json (D4), content_hash es objetivo pendiente (D6/D11), carpeta .odessay no .odyssey (D8). Complementa el contrato de runtime de odessay-workspace.md."
+      "description": "Spec de Workspace / Watched Folders (ODE-245): carpetas vigiladas, ledger de binding en `.odessay/`, watcher, snapshots y sync. Subordinado al ADR de identidad: metadata en nube, binding ruta/inode/content_hash/UUID y migración `.odyssey` → `.odessay`. El catálogo SQLite y reconciliador global se definen en odessay-desktop-document-catalog.md."
     },
     {
       "path": "workflow/context/features/odessay-editor.md",
@@ -109,7 +109,7 @@
       "type": "feature",
       "scope": "runtime-web-local-first",
       "state": "canonical-feature-doc-with-desktop-bounds",
-      "description": "Capa local-first del runtime web actual: LocalDB, auto-save local, sync remoto, debounce, retry, estados del statusbar y contrato de lifecycle operativo. Incluye §Contrato de lifecycle operativo con matriz de operaciones válidas por estado (local-only, pending, synced, conflict, deleted). Para desktop y filesystem `.md`, usar además la secuencia `odessay-desktop-*`."
+      "description": "Capa local-first del runtime web actual: LocalDB, auto-save local, sync remoto, debounce, retry, estados del statusbar y contrato de lifecycle operativo. Incluye resumen de la enmienda D10 por runtime: IndexedDB para web y catálogo SQLite + ledger `.odessay` para desktop. Para el contrato desktop completo, usar `odessay-desktop-document-catalog.md`."
     },
     {
       "path": "workflow/context/features/odessay-desktop-app.md",
@@ -130,7 +130,14 @@
       "type": "feature",
       "scope": "desktop-target-architecture",
       "state": "normative-sequence-step-3",
-      "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio, reglas de dependencia, modelo documental objetivo, orden recomendado de extracción, y §Auth comparativa web vs desktop con gotchas operativas."
+      "description": "Arquitectura objetivo multi-runtime para Odessay: shared core, adapters web/desktop/mobile, contratos de servicio —incluidos DocumentCatalog/DocumentBindingStore/WorkspaceReconciler—, reglas de dependencia, modelo documental objetivo y §Auth comparativa web vs desktop."
+    },
+    {
+      "path": "workflow/context/features/odessay-desktop-document-catalog.md",
+      "type": "feature",
+      "scope": "desktop-document-catalog-and-identity",
+      "state": "accepted-normative-target",
+      "description": "Spec normativo para una sola personalidad documental desktop: `.odessay/index.json` como ledger durable de binding por BindingRoot, SQLite como catálogo operacional y sync queue, watcher/reconciliador global, IndexedDB limitado al adapter web, estados local/cloud derivados y apertura unificada para Desk, Workspace y Open Document."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
@@ -144,7 +151,7 @@
       "type": "feature",
       "scope": "workspace-runtime-contract",
       "state": "desktop-first-runtime-map",
-      "description": "Contrato normativo de Workspace por runtime: qué capacidades existen en desktop, qué comportamiento debe mostrar web ante limitaciones de filesystem local, y cómo persiste `selectedPaths` en `.odessay/index.json`. Subordinado al ADR de identidad (odessay-adr-identidad.md)."
+      "description": "Contrato normativo de Workspace por runtime: capacidad desktop-first de carpeta/ubicación sobre el mismo DocumentCatalog que Desk, límites explícitos del runtime web y persistencia de `selectedPaths`/bindings en `.odessay/index.json`. No define un pipeline documental separado."
     },
     {
       "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",

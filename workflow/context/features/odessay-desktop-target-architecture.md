@@ -6,6 +6,8 @@ Lee `workflow/context/features/odessay-desktop-app.md` para la dirección de pro
 > **Subordinado a `workflow/context/core/odessay-adr-identidad.md` (ADR de identidad)** en fuente de verdad, identidad y metadata del documento (`.md` canónico, `body_json` copia de trabajo, metadata en la nube, un solo UUID cliente=nube). Ante cualquier discrepancia, prevalece el ADR.
 >
 > Spec de implementación del filesystem-tracking (carpetas vigiladas, índice de binding `.odessay/`, watcher): `workflow/context/core/odessay-watched-folders.md`.
+>
+> Spec normativo del catálogo desktop unificado (SQLite operacional, `.odessay/index.json` como ledger de binding, watcher global, Desk/Workspace/Open sobre una sola apertura): `workflow/context/features/odessay-desktop-document-catalog.md`.
 
 Este documento responde la pregunta: **si Odessay va a vivir en web, desktop y eventualmente mobile, cómo debe partirse el sistema para compartir producto sin compartir infraestructura por la fuerza**.
 
@@ -66,7 +68,9 @@ Odessay
 │  └─ Browser runtime bindings
 ├─ Desktop Adapters
 │  ├─ Filesystem document store
-│  ├─ SQLite local index
+│  ├─ SQLite document catalog + sync queue
+│  ├─ `.odessay/index.json` binding manifests
+│  ├─ Global filesystem reconciler
 │  ├─ Secure credential storage
 │  ├─ Native file/asset APIs
 │  └─ Desktop runtime bindings
@@ -145,6 +149,9 @@ Son los puertos del sistema. Permiten que la aplicación pida capacidades sin co
 
 Contratos mínimos:
 
+- `DocumentCatalog`
+- `DocumentBindingStore`
+- `WorkspaceReconciler`
 - `DocumentService`
 - `SyncService`
 - `AIService`
@@ -272,10 +279,11 @@ Desktop debe tratarse como runtime distinto, no como packaging del runtime web.
 
 - abrir/guardar archivos `.md`
 - autosave al filesystem local
-- watch de cambios externos
+- watch/reconciliación global de cambios externos
 - manejo de carpeta/workspace
 - rutas locales de imágenes y assets
-- índice local derivado
+- `.odessay/index.json` como ledger durable de binding por BindingRoot
+- SQLite como catálogo operacional único y cola durable
 - secure storage local
 
 ### Write-path de desktop
@@ -294,10 +302,12 @@ archivo .md persistido
 
 ### Lo local en desktop
 
+- `DocumentCatalog` sobre SQLite
+- `DocumentBindingStore` sobre `.odessay/index.json`
+- `WorkspaceReconciler` global
 - `DocumentService` principal
 - `AssetService` local
 - `SettingsService`
-- `LocalIndexService` o equivalente derivado
 
 ### Lo remoto en desktop
 
@@ -384,6 +394,29 @@ Esta sección documenta las diferencias concretas entre los dos runtimes de aute
 ---
 
 ## Contratos de servicio objetivo
+
+### `DocumentCatalog`
+
+Debe cubrir:
+
+- resolver documento por UUID o ruta
+- listar el mismo conjunto base para Desk y Workspace
+- registrar/detachar bindings
+- proyectar presencia local/cloud y metadata cacheada
+- suscribir cambios del catálogo
+
+Implementaciones:
+
+- web: IndexedDB
+- desktop: SQLite
+
+### `DocumentBindingStore`
+
+En desktop persiste el binding durable por BindingRoot en `.odessay/index.json`. No guarda contenido ni metadata de producto.
+
+### `WorkspaceReconciler`
+
+Vive durante toda la sesión desktop, recibe eventos del watcher, reconcilia por ruta → inode → hash, actualiza manifest + SQLite y nunca depende de que la vista Workspace esté montada.
 
 ### `DocumentService`
 

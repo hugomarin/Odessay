@@ -6,6 +6,7 @@
 > - **Metadata NO va en un sidecar `meta.json` en disco** — va en el **registro de nube** (writing + espejo IndexedDB) (D4). En disco solo vive un **índice de binding delgado** (ruta + inode + content_hash + UUID), no metadata.
 > - **`content_hash` es objetivo/pendiente**, no estado actual: hoy el índice implementado solo guarda inode + size, y la nube no guarda hash (D6/D11). El UUID del índice debe ser el **mismo de la nube** (D5), no un `Uuid::new_v4` propio.
 > - Nombre de la carpeta: **`.odessay/`** (no `.odyssey`, D8).
+> - El contrato objetivo que une watcher, manifest y catálogo SQLite —y elimina la diferencia de consulta entre Desk, Workspace y Open Document— vive en `workflow/context/features/odessay-desktop-document-catalog.md`. Este documento conserva el contrato de filesystem-tracking; no define una base de consulta separada para Workspace.
 >
 > **Convención de este documento:** las secciones marcadas como **HISTÓRICO / SUPERSEDED** describen el MVP de ODE-245 o ideas tempranas que ya no son contrato runtime vigente. No deben usarse como autoridad para implementar el comportamiento actual.
 

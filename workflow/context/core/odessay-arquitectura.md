@@ -17,7 +17,7 @@ Lee `odessay-fundacional.md` primero. Este documento prevalece sobre versiones a
 | Tipografía | Geist Sans + Lora | UI funcional + contenido epistolar |
 | Editor | TipTap (headless, sobre ProseMirror) | Motor de escritura |
 | Base de datos remota | Supabase (PostgreSQL + Auth + Realtime) | Persistencia cloud, auth, sync |
-| Base de datos local | Filesystem `.md` + índice local derivado | En desktop el documento vive en archivos `.md`; SQLite puede usarse como índice/caché. En web, IndexedDB cumple el rol derivado local-first. |
+| Base de datos local | Filesystem `.md` + manifests `.odessay` + catálogo SQLite | En desktop el `.md` gobierna contenido, `.odessay/index.json` preserva bindings y SQLite sirve el catálogo/cola operacional. En web, IndexedDB implementa el adapter local-first. |
 | AI | Provider configurable (server-side) | Editor residente + writing assist |
 | Email | Supabase Auth SMTP + Resend | Supabase Auth envia emails de autenticacion via Resend SMTP en `auth.odessay.com`; Resend app-side queda para notificaciones/invitaciones no-auth |
 | Hosting | Vercel | Deploy web, dominio odessay.com |

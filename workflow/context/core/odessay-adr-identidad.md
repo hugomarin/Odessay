@@ -5,6 +5,7 @@
 - **Decide:** Hugo (esta es la decisión que ningún skill/doc estaba facultado para tomar)
 - **Reemplaza:** el marco "de transición" que aplazaba la polaridad A1/A2/A3
 - **Gobernanza:** este ADR es la **fuente de verdad de la arquitectura de documento**. Los cuatro `odessay-desktop-*` y los skills de arquitectura/backend/database deben referenciarlo.
+- **Enmienda D10 (2026-07-09):** el catálogo operacional desktop y la reconciliación de identidad se especifican en `workflow/context/features/odessay-desktop-document-catalog.md`. SQLite sustituye a IndexedDB como catálogo/cola objetivo de desktop; `.odessay/index.json` se reconoce como ledger durable del binding local, no como caché equivalente a SQLite.
 - **Estado del corpus vs. código:** este ADR y los docs reconciliados son **normativos y van por delante del código**. D3 (id inline), D5 (UUID único), D6/D11 (`content_hash` en índice y nube), D7 (repliegue de `rehome`) describen el **destino**, no el runtime actual (hoy el código corre el modelo A+B). Leer los docs de feature como contrato objetivo, no como descripción del estado vigente; cada brecha doc↔código está marcada como trabajo bloqueante en §Consecuencias.
 
 ---
@@ -95,12 +96,15 @@ La parte "local" del estado es **por-máquina**; la parte "nube" es global. La U
 
 - **`.md` en disco:** autoridad del **contenido** (cuando está materializado).
 - **Registro de nube (Supabase):** autoridad de la **metadata**; guarda copia del contenido.
-- **IndexedDB (`LocalWriting`):** **espejo local** del registro de nube para trabajo offline. No es verdad aparte.
-- **SQLite (`writings_index`) + JSON de identificación:** **caches y puente** (recientes, títulos, mapa ruta↔id). Reconstruibles; **nunca autoritativos**.
+- **`.odessay/index.json`:** ledger durable del **binding local** dentro de un BindingRoot (`ruta relativa + inode + content_hash + UUID`). No guarda contenido ni metadata. Su estructura se puede regenerar, pero el UUID original de un documento local-only no siempre puede recuperarse si se pierde el manifest y no existe registro cloud; por eso no es una caché equivalente a SQLite.
+- **SQLite desktop:** **catálogo operacional único y cola durable** del runtime desktop. Proyecta bindings, presencia local/cloud y metadata cacheada para Desk, Workspace, Search, Recent y Open. Es reconstruible desde filesystem + manifests + nube, salvo mutaciones pendientes que deben preservarse explícitamente.
+- **IndexedDB (`LocalWriting`):** adapter local-first del runtime **web**. En desktop es legado transicional y debe migrarse a SQLite sin descartar writings, bindings ni mutaciones pendientes.
+
+El contrato detallado de catálogo, BindingRoots, watcher global, apertura unificada y migración vive en `workflow/context/features/odessay-desktop-document-catalog.md`.
 
 **Regla de nombre (ODE-324):** en desktop, el nombre humano canónico es el stem del filename (`title = filename` sin `.md`). `title` en IndexedDB, SQLite y nube es un reflejo reconstruible, no una fuente alternativa. Abrir o sincronizar un archivo re-deriva el título desde su ruta; renombrar desde la app renombra primero el archivo y después actualiza caches y cola. Los caracteres ilegales se eliminan al crear/renombrar, preservando mayúsculas, acentos y espacios; una colisión se resuelve como `Nombre 2.md`, cuyo título efectivo es `Nombre 2`. El auto-title desde cuerpo de ODE-38 queda limitado al runtime web y a drafts sin filename materializado.
 
-Orden de guardado: escribir el `.md` (commit del contenido) → actualizar caches locales (SQLite + JSON) → actualizar el espejo (IndexedDB) → encolar sync a Supabase (asíncrono, con reintentos). La divergencia entre lados se detecta con la huella de contenido. Con la huella como puente, el guardado **atómico** (temporal + reemplazo) es seguro aunque cambie el inode (la reconciliación es ruta-primero, ver D6).
+Orden de guardado desktop objetivo: escribir el `.md` (commit del contenido) → actualizar atómicamente `.odessay/index.json` → actualizar SQLite y su cola en transacción → sincronizar Supabase en background. Web conserva IndexedDB como su adapter local-first. La divergencia se detecta con la huella de contenido. Con la huella como puente, el guardado **atómico** (temporal + reemplazo) es seguro aunque cambie el inode (la reconciliación es ruta-primero, ver D6).
 
 ### D11 — Portabilidad de identidad cross-máquina: el `content_hash` también vive en la nube (BLOQUEANTE de D4)
 
@@ -121,6 +125,7 @@ Quitar el `id` del frontmatter (D4) elimina lo único que hoy hace portable la i
 7. Especificar el **camino de guardado** (orden de escritura y manejo de fallas entre `.md`, SQLite, IndexedDB y Supabase) y la detección de divergencia por huella; evaluar guardado atómico (D10).
 8. Exponer en la UI el **estado del documento** (solo-nube / solo-local / sincronizado / pendiente) derivado de las dos señales de D9.
 9. Renombrar carpetas `.odyssey/` → `.odessay/` en workspaces existentes (D8).
+10. Unificar catálogo y apertura desktop según `odessay-desktop-document-catalog.md`: watcher global, BindingRoots, SQLite operacional, Desk/Workspace sobre el mismo `DocumentCatalog`, Open Document con reconciliación previa y retiro gradual de IndexedDB desktop (D10).
 
 ## Pendientes
 
