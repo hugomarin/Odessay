@@ -10,6 +10,7 @@ import type {
 import { computeWritingContentHash } from "@/lib/content-hash";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
+import { scheduleDesktopCatalogDualWrite } from "@/lib/sync/catalog-dual-write";
 
 const createMutationId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -45,7 +46,7 @@ export const enqueueMutation = async (
   writing: LocalWriting,
   operation: Extract<SyncMutation, { entity_kind: "writing" }>["operation"] = "upsert",
 ) => {
-  await localDB.syncQueue.enqueue({
+  const mutation: Extract<SyncMutation, { entity_kind: "writing" }> = {
     id: createMutationId(),
     entity_kind: "writing",
     entity_id: writing.id,
@@ -54,7 +55,11 @@ export const enqueueMutation = async (
     payload: await toRemotePayload(writing),
     created_at: Date.now(),
     attempts: 0,
-  });
+  };
+  await localDB.syncQueue.enqueue(mutation);
+  // M1 is additive: IndexedDB remains the read path and commits first. SQLite
+  // dual-write is non-blocking and reports divergence instead of repairing it.
+  scheduleDesktopCatalogDualWrite(writing, mutation);
 
   emitSyncStatusChange({
     writingId: writing.id,

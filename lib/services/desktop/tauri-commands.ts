@@ -36,6 +36,33 @@ export type IndexEntry = {
   modifiedAt: number
 }
 
+export type DesktopCatalogRow = {
+  id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
+  syncStatus: string; title: string | null; slug: string | null; status: string | null
+  artifactType: string | null; visibility: string | null; version: number | null
+  createdAt: number | null; modifiedAt: number | null; bindingRootId: string | null
+  relativePath: string | null; canonicalPath: string | null; inode: number | null
+  contentHash: string | null; size: number | null; lastSeenAt: number | null
+}
+
+export type DesktopCatalogDualWriteInput = {
+  document: {
+    id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
+    syncStatus: string; title: string | null; slug: string | null; status: string | null
+    artifactType: string | null; visibility: string | null; version: number | null
+    createdAt: number | null; modifiedAt: number | null
+  }
+  binding: null | {
+    bindingRootId: string; rootPath: string; manifestVersion: number; visibleAsWorkspace: boolean
+    relativePath: string; canonicalPath: string; inode: number | null; contentHash: string | null
+    size: number | null; lastSeenAt: number | null
+  }
+  mutation: null | {
+    id: string; operation: string; payloadJson: string; status: string; attemptCount: number
+    nextRetryAt: number | null; createdAt: number; lastError: string | null
+  }
+}
+
 export async function tauriOpenFile(path: string): Promise<string> {
   return invoke<string>("open_file", { path })
 }
@@ -119,6 +146,50 @@ export async function tauriIndexDelete(dbPath: string, path: string): Promise<vo
 
 export async function tauriIndexRebuild(dbPath: string, dir: string): Promise<number> {
   return invoke<number>("index_rebuild", { dbPath, dir })
+}
+
+export async function tauriCatalogSchemaVersion(dbPath: string): Promise<number> {
+  return invoke<number>("catalog_schema_version", { dbPath })
+}
+
+export async function tauriCatalogDualWrite(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
+  return invoke<void>("catalog_dual_write", { dbPath, input })
+}
+
+export async function tauriCatalogGetById(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {
+  return invoke<DesktopCatalogRow | null>("catalog_get_by_id", { dbPath, id })
+}
+
+export async function tauriCatalogResolvePath(dbPath: string, path: string): Promise<DesktopCatalogRow | null> {
+  return invoke<DesktopCatalogRow | null>("catalog_resolve_path", { dbPath, path })
+}
+
+export async function tauriCatalogList(
+  dbPath: string,
+  query: { cloudAccountId?: string | null; includeDeleted?: boolean; localOnly?: boolean; limit?: number } = {},
+): Promise<DesktopCatalogRow[]> {
+  return invoke<DesktopCatalogRow[]>("catalog_list", {
+    dbPath,
+    cloudAccountId: query.cloudAccountId ?? null,
+    includeDeleted: query.includeDeleted ?? false,
+    localOnly: query.localOnly ?? false,
+    limit: query.limit ?? 200,
+  })
+}
+
+export async function tauriCatalogDetachLocalFile(dbPath: string, id: string): Promise<void> {
+  return invoke<void>("catalog_detach_local_file", { dbPath, id })
+}
+
+export async function tauriCatalogUpdateMutationStatus(
+  dbPath: string,
+  mutationId: string,
+  status: "pending" | "synced" | "failed",
+  attemptCount: number,
+  nextRetryAt: number | null,
+  lastError: string | null,
+): Promise<void> {
+  return invoke<void>("catalog_update_mutation_status", { dbPath, mutationId, status, attemptCount, nextRetryAt, lastError })
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
