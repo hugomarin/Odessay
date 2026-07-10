@@ -1,7 +1,7 @@
 {
   "_description": "Registro de decisiones arquitectónicas y técnicas del proyecto. Las decisiones globales aplican a todo el ciclo de vida, mientras que las de fase son específicas al ciclo de trabajo actual.",
   "_maintenance": "Debe actualizarse obligatoriamente mediante `/wf-decision` si se toma una decisión que altera el stack, la arquitectura o políticas globales.",
-  "last_updated": "2026-05-27",
+  "last_updated": "2026-07-10",
   "decisions_global": [
     {
       "decision": "Local-first con IndexedDB en el runtime web actual (no localStorage)",
@@ -46,16 +46,20 @@
     {
       "decision": "El contrato documental canónico del producto es `.md` bajo `odessay-markdown-v1`; `body_json` queda explícitamente como representación rica transicional del runtime web/cloud, no como fuente de verdad universal.",
       "doc": "workflow/context/features/odessay-desktop-app.md"
-    }
-  ],
-  "decisions_phase_active": [
+    },
     {
-      "decision": "Los contratos multi-runtime de Fase 4 viven en `lib/services/contracts/*`: shared core define operaciones, envelope de error, hotspots y ownership; adapters pueden implementar Next/Supabase/filesystem, pero los contratos no importan dependencias de runtime.",
-      "doc": "workflow/context/features/odessay-desktop-target-architecture.md"
+      "decision": "SQLite es el catálogo operacional y la cola durable de desktop; `.odessay/index.json` es el ledger durable del binding por BindingRoot; IndexedDB es el adapter local-first del runtime web y una capa transicional en desktop durante la migración.",
+      "doc": "workflow/context/features/odessay-desktop-document-catalog.md"
     },
     {
       "decision": "FootnoteExtension custom (no existe en ecosistema)",
       "doc": "workflow/context/features/odessay-editor.md"
+    }
+  ],
+  "decisions_phase_active": [
+    {
+      "decision": "Fase 9 — Workspace: Filesystem y Nube: un solo catálogo SQLite, un solo `openDocument({ id | path })`, un reconciliador global y retiro gradual de IndexedDB como catálogo de desktop.",
+      "doc": "workflow/context/features/odessay-desktop-document-catalog.md"
     }
   ]
 }
