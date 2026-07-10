@@ -3031,6 +3031,16 @@
       "commit": "cca8f57",
       "date": "2026-07-10",
       "notes": "Established the accepted desktop catalog spec and current-to-target diagnostic; aligned Fase 9 roadmap, DoD, sync/desktop/workspace context, docs registry, and agent guardrails. Contract: .md owns materialized content; .odessay/index.json owns durable local binding; SQLite is the desktop operational catalog and sync queue; Desk and Workspace query one DocumentCatalog; path/id opening converges to OpenDocument(UUID); IndexedDB remains the web adapter and is harvested before desktop retirement. Typecheck PASS. Lint PASS with six pre-existing warnings. Vitest 974 PASS. ops:delivery:gate PASS. CI traceability SUCCESS. Vercel SUCCESS. Review score 10/10."
+    },
+    {
+      "what": "feat(desktop): add DocumentCatalog/DocumentBindingStore application contracts and additive SQLite v2 dual-write foundation. Desktop SQLite adapter + web IndexedDB adapter behind a runtime-aware factory; transactional versioned migration (catalog_schema/binding_roots/documents/document_bindings/sync_mutations) leaving writings_index intact with documented rollback; feature-flagged non-blocking desktop dual-write with divergence measured not repaired; global non-auth-scoped catalog; one CatalogChange per logical transaction. No UI migration, no IndexedDB harvest, no legacy deletion. [ODE-367]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-367",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-367/build-documentcatalog-contracts-and-sqlite-v2-dual-write-foundation",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/333",
+      "commit": "3a1ce81",
+      "date": "2026-07-10",
+      "notes": "M1 of Fase 9 unified desktop document catalog. Performance Contract required: ops:perf:gate required_failures=0, delivery gate with OPS_PERF_TRACE_PATH PASS. Reviewed by claude, score 9.3/10, 3 P3 informational findings."
     }
   ]
 }
