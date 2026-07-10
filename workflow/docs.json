@@ -204,7 +204,7 @@
     {
       "path": "workflow/agents.md",
       "type": "ops",
-      "description": "Fuente de verdad para todos los LLMs usados en Odessay. Puerta mínima del sistema: identidad del proyecto, qué recursos están disponibles y la regla de mantenimiento de docs.json. CLAUDE.md y AGENTS.md en la raíz son stubs que apuntan aquí."
+      "description": "Fuente de verdad para todos los LLMs usados en Odessay. Define recursos, operación, ramas y el guardrail obligatorio del catálogo documental desktop: precedencia ADR/spec, invariantes de manifest/SQLite/DocumentCatalog/OpenDocument y protocolo de Context Gap ante docs o código contradictorios."
     },
     {
       "path": "workflow/workflow.md",
@@ -416,7 +416,7 @@
       "type": "skill",
       "scope": "architecture-governance",
       "state": "operational-gate-for-architecture-work",
-      "description": "Capa de clasificación arquitectónica de Odessay: separa `Layer`, `Runtime scope` y `Owner`, y define qué contracts/invariants deben fijarse antes de implementar cambios desktop, shared core, save/sync/parser o boundaries entre frontend/backend/database."
+      "description": "Capa de clasificación arquitectónica de Odessay: separa `Layer`, `Runtime scope` y `Owner`, carga explícitamente ADR + spec del catálogo desktop y exige reportar como Context Gap cualquier contradicción de docs, briefs o código antes de implementar arquitectura nueva."
     },
     {
       "path": ".agents/skills/skill-code-review/SKILL.md",
