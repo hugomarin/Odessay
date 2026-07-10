@@ -258,6 +258,17 @@ class DesktopDocumentService implements DocumentService {
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 
       if (fileResult.error || !fileResult.data) {
+        // The canonical file is missing or unreadable (moved, deleted, or a
+        // stale path that never materialized — e.g. an imported writing whose
+        // canonical_path points at a .md that doesn't exist on disk). If we
+        // still hold the writing in the local cache, open it from there instead
+        // of reporting NOT_FOUND. Returning NOT_FOUND makes the editor discard
+        // the tab and spawn a blank draft, which looks like the document failed
+        // to open even though its synced content lives in IndexedDB. The file
+        // re-materializes on the next save.
+        if (existingRecord) {
+          return ok(toCanonicalRecord(existingRecord))
+        }
         return err("NOT_FOUND", fileResult.error?.message ?? `Writing ${writingId} not found`)
       }
 
