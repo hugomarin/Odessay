@@ -95,6 +95,26 @@
   },
   "built": [
     {
+      "what": "fix(desktop): stabilize desktop navigation and editor tabs. Smooths sidebar collapse, prevents transient tab/file-state corruption, replaces unsupported WKWebView HTML5 tab drag-and-drop with pointer events, restores tab select/close/rename in WKWebView, reads packaged-build writing navigation from window.location, and falls back to the cached local record when the canonical Markdown file is missing. Releases app-v0.3.2 through app-v0.3.6. [ODE-365]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-365",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-365/fix-sidebar-collapse-animation-editor-tab-flicker-and-restore-tab-drag",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/329",
+      "commit": "72b34e7",
+      "date": "2026-07-09",
+      "notes": "Delivered across PR #328 (initial sidebar/tab-flicker/pointer-drag fix, merged as babd3b7) and PR #329 (WKWebView tab activation plus packaged-build open-writing fixes, merged as e312daa). Final release app-v0.3.6. Typecheck PASS. npm test PASS (150 files / 974 tests). release-desktop CI PASS. Linear status Done."
+    },
+    {
+      "what": "fix(testability): clean documentation and document-state edges. Documents canonical inline annotation |id syntax, shares one DocumentStateTooltipProvider across document-state surfaces, adds a stable badge test selector, explains the workspace localDB dynamic import, removes the ignored legacy serialization parameter, and emits an Untitled heading for empty workspace titles. [ODE-314]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
+      "issue": "ODE-314",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-314/docs-testability-cleanup-sintaxis-inline-orid-badge-de-estado-edge",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/327",
+      "commit": "cc9b1c3",
+      "date": "2026-07-09",
+      "notes": "PR #327 merged as 2121241. Targeted document serialization and workspace service tests PASS. Typecheck PASS. Lint PASS with pre-existing editor-shell react-hooks warnings only. npm test PASS. ops:delivery:gate PASS. Linear status Done."
+    },
+    {
       "what": "fix(api): add CORS support to desktop sharing web routes. Adds DELETE to lib/cors.ts allowed methods, OPTIONS handlers and withCorsHeaders wrappers to /api/writings/[id]/shares and /api/writings/[id]/share-test-link for all success and error responses, and regression coverage in tests/api/sharing-cors.test.ts proving tauri://localhost preflight and actual responses include correct CORS headers. [ODE-364]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-364",
