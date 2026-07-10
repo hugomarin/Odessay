@@ -505,6 +505,58 @@ Referencia: `workflow/context/core/odessay-watched-folders.md`, `workflow/contex
 
 ---
 
+## Fase 9 — Workspace: Filesystem y Nube
+
+Al terminar esta fase: Workspace deja de ser una exploración de carpetas locales y se convierte en una capacidad estable de Artifact Studio. El usuario puede agregar proyectos y folders existentes, trabajar sobre sus Markdown in-place y sincronizarlos con la nube para obtener metadata y capacidades remotas, sin que la nube sustituya al filesystem como autoridad del contenido.
+
+DoD formal: `workflow/define/dod-fase-9.md`.
+
+---
+
+**Hito**
+Workspace integra filesystem y nube mediante un binding documental único, observable y seguro.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- los archivos `.md` permanecen en la carpeta del usuario y son la fuente de verdad del contenido en desktop;
+- un UUID único vincula archivo, índice local, espejo IndexedDB y registro cloud sin usar frontmatter ni paths como identidad;
+- el usuario puede adoptar un archivo local para habilitar metadata, sync, AI, publicación y colaboración sin moverlo;
+- `local-only`, `cloud-only`, `synced` y `pending` tienen semántica estable y visible;
+- scan, watcher, apertura, save y sync usan el mismo contrato de binding y no destruyen estado ante conflictos;
+- la documentación describe con precisión qué está implementado, qué es legacy y qué resta por retirar.
+
+**Temas que entran en esta fase**
+
+- reconciliación documental y mapeo de todos los caminos legacy de identidad;
+- resolver único de binding archivo↔UUID y migración segura de frontmatter/índices legacy;
+- lifecycle local/cloud, watcher y manejo de rename/delete/scope;
+- sincronización opt-in de archivos Workspace y UX de adopción/estado;
+- paridad de `content_hash` entre filesystem, editor y nube, con pruebas de rebind y conflicto.
+
+**Temas que no son objetivo de esta fase**
+
+- convertir Workspace web en un explorador de filesystem;
+- mover o reubicar archivos del usuario para que encajen en una carpeta interna;
+- usar metadata en frontmatter o sidecars por documento;
+- implementar merge automático de contenido divergente entre dispositivos.
+
+**Secuencia de ejecución**
+
+1. `ODE-366` — reconciliar documentación y mapear todos los caminos legacy de identidad; fija el inventario verificable antes de modificar contratos.
+2. `ODE-367` — definir el resolver de binding y eliminar la lectura/acuñación de identidad en runtime; ningún conflicto puede borrar estado local.
+3. En paralelo después de `ODE-367`:
+   - `ODE-370` — preservar el lifecycle del filesystem: scope, watcher, rename y ausencia física confirmada;
+   - `ODE-371` — preservar cloud-only y cerrar la paridad de `content_hash` entre Markdown, índice, sync y nube.
+4. `ODE-373` — exponer adopción y sincronización explícitas en la UX de Workspace una vez estables sus estados y operaciones.
+5. `ODE-374` — migrar `.odyssey`, frontmatter histórico y compatibilidades legacy mediante un flujo auditable y reversible.
+6. `ODE-372` — ejecutar el gate de cierre: matriz de evidencia del DoD, demo desktop y aceptación explícita del dueño.
+
+`ODE-368` y `ODE-369` son auditorías transversales: alimentan la reconciliación y el plan de retiro, pero no sustituyen ninguna entrega de producto.
+
+Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/core/odessay-adr-identidad.md`, `workflow/context/core/odessay-watched-folders.md`, `workflow/context/features/odessay-workspace.md`, `workflow/context/features/odessay-workspace-diagnostic.md`, `workflow/context/features/odessay-desktop-app.md`, `workflow/context/features/odessay-desktop-migration-diagnostic.md`, `workflow/context/features/odessay-desktop-target-architecture.md`, `workflow/context/features/odessay-desktop-migration-plan.md`, `.agents/skills/skill-architecture/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`.
+
+---
+
 ## Horizonte Posterior — Iniciativas Diferidas
 
 Estas líneas no desaparecen del producto, pero salen del critical path mientras se construye la plataforma multi-runtime.
