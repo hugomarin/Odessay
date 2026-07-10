@@ -100,6 +100,10 @@ export interface DocumentService {
   exportWriting(input: ExportWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>>
 }
 
+// Catalog identity/presence is intentionally a separate application contract.
+// DocumentService owns content operations; DocumentCatalog owns discovery and
+// operational projection so neither adapter can turn storage into content authority.
+
 export const DOCUMENT_SERVICE_CONTRACT = {
   name: "DocumentService",
   summary:

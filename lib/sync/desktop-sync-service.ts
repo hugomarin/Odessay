@@ -12,6 +12,7 @@ import type {
   SyncStatus,
 } from "@/lib/services/contracts/sync-service"
 import type { LocalCollection, SyncMutation } from "@/lib/local-db/schema"
+import { scheduleDesktopCatalogMutationStatus } from "@/lib/sync/catalog-dual-write"
 import type { ServiceResponse } from "@/lib/services/contracts/service-types"
 import { getLocalDBScope, localDB } from "@/lib/local-db"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
@@ -499,6 +500,7 @@ async function processPendingMutation(userId: string, mutation: SyncMutation) {
     }
 
     await localDB.syncQueue.markSynced(mutation.id)
+    if (mutation.entity_kind === "writing") scheduleDesktopCatalogMutationStatus(mutation, "synced")
     lastSyncedAt = new Date().toISOString()
 
     if (mutation.entity_kind === "writing") {
@@ -526,10 +528,13 @@ async function processPendingMutation(userId: string, mutation: SyncMutation) {
 
     if (!canRetryMutation(mutation.attempts + 1)) {
       await localDB.syncQueue.markFailed(mutation.id, message, Number.MAX_SAFE_INTEGER)
+      if (mutation.entity_kind === "writing") scheduleDesktopCatalogMutationStatus(mutation, "failed", Number.MAX_SAFE_INTEGER, message)
       return
     }
 
-    await localDB.syncQueue.markFailed(mutation.id, message, getNextRetryAt(mutation.attempts + 1))
+    const nextRetryAt = getNextRetryAt(mutation.attempts + 1)
+    await localDB.syncQueue.markFailed(mutation.id, message, nextRetryAt)
+    if (mutation.entity_kind === "writing") scheduleDesktopCatalogMutationStatus(mutation, "failed", nextRetryAt, message)
     scheduleDesktopFlush()
   }
 }

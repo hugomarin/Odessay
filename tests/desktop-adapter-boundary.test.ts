@@ -33,6 +33,8 @@ const allowedImports = new Set([
   "@tauri-apps/plugin-dialog",
   "@/lib/runtime/detect",
   "@/lib/services/contracts/document-service",
+  "@/lib/services/contracts/document-catalog",
+  "@/lib/services/contracts/document-binding-store",
   "@/lib/services/contracts/asset-service",
   "@/lib/services/contracts/settings-service",
   "@/lib/services/contracts/sharing-service",

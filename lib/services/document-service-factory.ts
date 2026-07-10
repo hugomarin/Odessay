@@ -25,6 +25,7 @@ import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
 import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
+import { scheduleDesktopCatalogDetach } from "@/lib/sync/catalog-dual-write"
 
 type DesktopRuntimeServices = {
   configDir: string
@@ -542,6 +543,7 @@ export async function markDesktopWritingDeletedByCanonicalPath(
   }
 
   await localDB.writings.detachLocalFile(existing.id)
+  scheduleDesktopCatalogDetach(existing.id)
 }
 
 export async function importDesktopWritingFile(
