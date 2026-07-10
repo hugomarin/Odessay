@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-09",
+  "last_updated": "2026-07-10",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -67,6 +67,14 @@
       {
         "issue": "ODE-362",
         "reason": "Referenced by a wf-debrief consolidation-debt entry on main before product-code delivery. Planned Fase 8 issue, not yet built; ignored for status drift."
+      },
+      {
+        "issue": "ODE-375",
+        "reason": "Referenced by the accepted Fase 9 roadmap/spec commits before implementation. Planned M3 unified OpenDocument issue, not yet built; ignored for status drift until delivery."
+      },
+      {
+        "issue": "ODE-376",
+        "reason": "Referenced by the accepted Fase 9 roadmap/spec commits before implementation. Planned M5 desktop IndexedDB harvest/retirement issue, not yet built; ignored for status drift until delivery."
       }
     ]
   },
