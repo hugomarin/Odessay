@@ -3013,6 +3013,16 @@
       "commit": "383966e",
       "date": "2026-07-09",
       "notes": "Added workflow/perf-budgets-network.json, ops:network:gate, HAR + Resource Timing inputs, redacted reports, static asset exclusion, wf-audit-runtime protocol, docs/skill sync, and learned-words session cache/single-flight fix surfaced by the live audit. Validation: typecheck PASS; lint PASS with pre-existing editor-shell warnings; targeted vitest 16 PASS; ops:process:sync PASS; ops:delivery:gate PASS; CI traceability SUCCESS; Vercel preview SUCCESS; live authenticated web baseline PASS required budgets with one non-blocking writings_requests WARN. Review score 9.8/10."
+    },
+    {
+      "what": "docs(architecture): define the unified desktop Document Catalog and Fase 9 migration contract [ODE-366]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-366",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-366/reconcile-fase-9-docs-and-map-desktop-catalog-migration-paths",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/332",
+      "commit": "cca8f57",
+      "date": "2026-07-10",
+      "notes": "Established the accepted desktop catalog spec and current-to-target diagnostic; aligned Fase 9 roadmap, DoD, sync/desktop/workspace context, docs registry, and agent guardrails. Contract: .md owns materialized content; .odessay/index.json owns durable local binding; SQLite is the desktop operational catalog and sync queue; Desk and Workspace query one DocumentCatalog; path/id opening converges to OpenDocument(UUID); IndexedDB remains the web adapter and is harvested before desktop retirement. Typecheck PASS. Lint PASS with six pre-existing warnings. Vitest 974 PASS. ops:delivery:gate PASS. CI traceability SUCCESS. Vercel SUCCESS. Review score 10/10."
     }
   ]
 }
