@@ -175,7 +175,10 @@ export function EditorTabs({
       return;
     }
 
-    event.preventDefault();
+    // Do NOT call event.preventDefault() here: in WKWebView (Tauri desktop),
+    // canceling pointerdown suppresses the compatibility click event, which
+    // would kill tab selection. Text selection is already blocked by the
+    // `select-none` class on the tab, so preventDefault is unnecessary.
     const element = event.currentTarget;
     element.setPointerCapture(event.pointerId);
 
@@ -253,13 +256,27 @@ export function EditorTabs({
       return;
     }
 
-    if (state.dragging && state.tabId) {
+    const wasDragging = state.dragging;
+    const tabId = state.tabId;
+
+    if (wasDragging && tabId) {
       const targetTabId = findTabIdFromPoint(event.clientX, event.clientY);
-      if (targetTabId && targetTabId !== state.tabId) {
-        onReorderTab(state.tabId, targetTabId);
+      if (targetTabId && targetTabId !== tabId) {
+        onReorderTab(tabId, targetTabId);
       }
     }
 
+    cleanupDrag();
+
+    // Selection is driven from pointerup (not the inner button's click) because
+    // WKWebView suppresses the click when the gesture involves pointer capture.
+    // Only treat it as a select when the pointer did not turn into a drag.
+    if (!wasDragging && tabId) {
+      onSelectTab(tabId);
+    }
+  };
+
+  const handlePointerCancel = () => {
     cleanupDrag();
   };
 
@@ -283,7 +300,7 @@ export function EditorTabs({
               onPointerDown={(event) => handlePointerDown(event, tab.id)}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
-              onPointerCancel={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
               widthStyle={tabWidth}
             />
           ))}

@@ -572,6 +572,51 @@ version: 2
     )
   })
 
+  it("falls back to the cached record when a UUID's canonical file is missing instead of returning NOT_FOUND", async () => {
+    const uuid = "4dc2ea21-9bea-4090-80e6-8627f1ebd615"
+    mocks.getMock.mockResolvedValueOnce({
+      id: uuid,
+      author_id: "user-1",
+      title: "Tokens en todas partes",
+      canonical_path: "/Users/hugo/Documents/Tutoria/Leccion 2/docx/tokens.md",
+      body_json: {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "Synced body" }] }],
+      },
+      body_text: "Synced body",
+      slug: "tokens",
+      status: "draft",
+      visibility: "private",
+      parent_id: null,
+      correspondence_id: null,
+      version: 3,
+      sync_status: "synced",
+      lifecycle: "server-confirmed",
+      deleted_at: null,
+      created_at: "2026-06-01T00:00:00.000Z",
+      updated_at: "2026-06-02T00:00:00.000Z",
+      local_updated_at: 1,
+    })
+    // The canonical .md no longer exists on disk (moved / stale import path).
+    mocks.openWritingMock.mockResolvedValueOnce({
+      data: null,
+      error: { code: "NOT_FOUND", message: "open_file: No such file or directory (os error 2)", retryable: false },
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting(uuid)
+
+    expect(result.error).toBeNull()
+    expect(result.data?.id).toBe(uuid)
+    expect(result.data?.title).toBe("Tokens en todas partes")
+    expect(result.data?.slug).toBe("tokens")
+    expect(result.data?.content.plainText).toBe("Synced body")
+    expect(mocks.openWritingMock).toHaveBeenCalledWith(
+      "/Users/hugo/Documents/Tutoria/Leccion 2/docx/tokens.md",
+    )
+  })
+
   it("opens cloud-only desktop records from body_json without treating the writing id as a file path", async () => {
     mocks.getMock.mockResolvedValueOnce({
       id: "cloud-only-writing",
