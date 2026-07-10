@@ -64,7 +64,7 @@ Nunca mezclar Geist Sans y Lora en el mismo elemento.
 | Tecnología | Rol | Notas |
 |-----------|-----|-------|
 | Supabase | Base de datos remota, Auth, Realtime, Storage | PostgreSQL. RLS en todas las tablas. Realtime para notificaciones. **Es la capa remota, no la operativa.** |
-| SQLite | Índice local / persistencia derivada | En desktop sirve como índice, caché o metadata operativa. El documento canónico vive en archivos `.md` del filesystem local. IndexedDB cumple ese rol derivado en web. |
+| SQLite | Catálogo operacional desktop / persistencia derivada | En desktop sirve `DocumentCatalog`, presencia local/cloud, metadata cacheada y sync queue; se reconstruye desde filesystem + manifests + nube. El `.md` sigue canónico y `.odessay/index.json` preserva el binding. IndexedDB cumple el adapter local-first en web. |
 | AI Provider API (configurable) | Agente editor residente + writing assist | Siempre server-side. Proveedor/modelo se resuelven por configuración (env), sin hardcode de modelo en rutas de negocio. |
 | Resend | SMTP / email transaccional | SMTP provider para Supabase Auth en `auth.odessay.com`; app-side solo para emails no-auth como invitaciones o notificaciones de writings. |
 | Vercel | Hosting web | Deploy desde `main`. Branch previews para PRs. |

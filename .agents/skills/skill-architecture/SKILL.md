@@ -10,6 +10,7 @@ Usa este skill cuando la tarea ya no sea solo “frontend”, “backend” o �
 No inventa arquitectura nueva. Opera sobre la arquitectura ya definida en:
 
 0. `workflow/context/core/odessay-adr-identidad.md` — **fuente de verdad de la arquitectura de documento** (identidad, fuente de verdad, metadata). Cierra la polaridad A1/A2/A3 que antes se aplazaba: `.md` canónico, `body_json` copia de trabajo, metadata en la nube, un solo UUID cliente=nube. **Prevalece** sobre los cuatro docs siguientes en cualquier discrepancia de contrato documental.
+0.1. `workflow/context/features/odessay-desktop-document-catalog.md` — **fuente de verdad operacional del catálogo desktop** (BindingRoots, manifest `.odessay`, SQLite, reconciliador global, Desk/Workspace/Open, migración de IndexedDB). Se subordina al ADR y prevalece sobre descripciones históricas del runtime desktop.
 1. `workflow/context/features/odessay-desktop-app.md`
 2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 3. `workflow/context/features/odessay-desktop-target-architecture.md`
@@ -62,6 +63,8 @@ Sin estas respuestas, frontend/backend/database tienden a resolver localmente al
 
 Leer en este orden:
 
+0. `workflow/context/core/odessay-adr-identidad.md`
+0.1. `workflow/context/features/odessay-desktop-document-catalog.md` cuando el cambio toque Desk, Workspace, Open Document, watcher, BindingRoots, SQLite, IndexedDB desktop, identidad o lifecycle local/cloud.
 1. `workflow/context/features/odessay-desktop-app.md`
 2. `workflow/context/features/odessay-desktop-migration-diagnostic.md`
 3. `workflow/context/features/odessay-desktop-target-architecture.md`
@@ -314,9 +317,23 @@ Acción:
 ### Caso 3 — El corpus se contradice
 
 Acción:
-- privilegiar la secuencia desktop
-- dejar explícita la contradicción documental
-- no “promediar” dos arquitecturas incompatibles
+- emitir `Context Gap — Desktop Document Architecture` con fuentes y conducta exactas
+- clasificar el hallazgo como `stale-doc`, `legacy-code`, `incomplete-brief` o `normative-conflict`
+- aplicar precedencia: ADR → spec del catálogo desktop → target architecture/plan/docs de feature → código vigente como evidencia
+- no “promediar” dos arquitecturas incompatibles ni asumir que el código actual gana por existir
+- si ADR y spec del catálogo se contradicen entre sí, detenerse y pedir decisión humana
+- si es código legacy, no expandirlo; solo modificarlo cuando el issue actual posea explícitamente su migración, rollback y evidencia
+
+Reporte mínimo:
+
+```text
+Context Gap — Desktop Document Architecture
+Source: <archivo/brief + sección o líneas>
+Observed behavior: <qué afirma o hace>
+Violated invariant: <invariante exacto>
+Classification: stale-doc | legacy-code | incomplete-brief | normative-conflict
+Required action: <corregir doc | actualizar brief | issue de migración | decisión humana>
+```
 
 ---
 

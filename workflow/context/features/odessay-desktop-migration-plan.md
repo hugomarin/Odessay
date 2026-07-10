@@ -4,6 +4,8 @@
 Lee `workflow/context/features/odessay-desktop-app.md` para la dirección de producto, `workflow/context/features/odessay-desktop-migration-diagnostic.md` para el diagnóstico del codebase actual y `workflow/context/features/odessay-desktop-target-architecture.md` para la arquitectura objetivo.
 
 > **Subordinado a `workflow/context/core/odessay-adr-identidad.md` (ADR de identidad)** en fuente de verdad, identidad y metadata del documento. El orden de implementación de identidad/metadata sigue el ADR (Consecuencias) y debe reconciliarse con `workflow/define/plan-correcciones-contexto.md` y el plan de fases. Ante cualquier discrepancia, prevalece el ADR.
+>
+> **Enmienda de catálogo desktop:** `workflow/context/features/odessay-desktop-document-catalog.md` define el destino aceptado posterior a la shell: SQLite operacional, manifests `.odessay`, watcher global y apertura única. Sus slices M1–M6 gobiernan esa migración específica y prevalecen sobre referencias históricas a IndexedDB como storage operacional desktop.
 
 Este documento responde: **en qué orden conviene cambiar el sistema para llegar a desktop sin convertir el proceso en una refactor abstracta, riesgosa o interminable**.
 
