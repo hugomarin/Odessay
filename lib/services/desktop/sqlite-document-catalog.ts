@@ -18,6 +18,7 @@ import {
   type DesktopCatalogRow,
 } from "@/lib/services/desktop/tauri-commands"
 import type { ReconcileCommit } from "@/lib/services/desktop/workspace-reconciler"
+import { filenameToTitle } from "@/lib/desktop/document-naming"
 
 function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
   return {
@@ -87,6 +88,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
         contentHash: entry.contentHash,
         size: entry.size,
         lastSeenAt: entry.modifiedAt,
+        title: filenameToTitle(entry.relativePath),
         createdAt: entry.modifiedAt,
         modifiedAt: entry.modifiedAt,
       })),

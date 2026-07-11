@@ -340,6 +340,7 @@ pub struct CatalogLocalBindingInput {
     pub content_hash: Option<String>,
     pub size: Option<i64>,
     pub last_seen_at: Option<i64>,
+    pub title: String,
     pub created_at: Option<i64>,
     pub modified_at: Option<i64>,
 }
@@ -375,10 +376,11 @@ pub fn catalog_apply_reconcile(
 
         // Preserve cloud metadata on conflict: only local presence/mtime move.
         tx.execute(
-            "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,created_at,modified_at)
-             VALUES(?1,1,0,NULL,'local-only',?2,?3)
-             ON CONFLICT(id) DO UPDATE SET local_present=1,modified_at=excluded.modified_at",
-            params![b.document_id, b.created_at, b.modified_at],
+            "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,created_at,modified_at)
+             VALUES(?1,1,0,NULL,'local-only',?2,?3,?4)
+             ON CONFLICT(id) DO UPDATE SET local_present=1,modified_at=excluded.modified_at,
+             title_cache=COALESCE(documents.title_cache,excluded.title_cache)",
+            params![b.document_id, b.title, b.created_at, b.modified_at],
         )
         .map_err(|e| format!("catalog reconcile document: {e}"))?;
 
@@ -613,6 +615,56 @@ mod catalog_tests {
     }
 
     #[test]
+    fn catalog_apply_reconcile_backfills_missing_filename_title_for_local_document() {
+        let path = temp_db();
+
+        // Reproduce a record created by the pre-ODE-373 reconciler: identity and
+        // binding exist, but the derived title cache is null.
+        let mut seed = input(
+            "doc-local-new",
+            "/tmp/local/My Local Note.md",
+            "mutation-local-new",
+        );
+        seed.document.title = None;
+        seed.document.cloud_present = false;
+        seed.document.sync_status = "local-only".into();
+        catalog_dual_write(path.clone(), seed).unwrap();
+
+        catalog_apply_reconcile(
+            path.clone(),
+            CatalogReconcileInput {
+                upserts: vec![CatalogLocalBindingInput {
+                    binding_root_id: "root-local".into(),
+                    root_path: "/tmp/local".into(),
+                    manifest_version: 2,
+                    visible_as_workspace: true,
+                    document_id: "doc-local-new".into(),
+                    relative_path: "My Local Note.md".into(),
+                    canonical_path: "/tmp/local/My Local Note.md".into(),
+                    inode: Some(7),
+                    content_hash: Some("blake3:local".into()),
+                    size: Some(12),
+                    last_seen_at: Some(10),
+                    title: "My Local Note".into(),
+                    created_at: Some(10),
+                    modified_at: Some(10),
+                }],
+                detached: vec![],
+            },
+        )
+        .unwrap();
+
+        let row = catalog_get_by_id(path.clone(), "doc-local-new".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.title.as_deref(), Some("My Local Note"));
+        assert!(row.local_present);
+        assert!(!row.cloud_present);
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn catalog_apply_reconcile_preserves_cloud_metadata_and_detaches_without_cloud_delete() {
         let path = temp_db();
 
@@ -640,6 +692,7 @@ mod catalog_tests {
                     content_hash: Some("blake3:xyz".into()),
                     size: Some(10),
                     last_seen_at: Some(99),
+                    title: "a".into(),
                     created_at: Some(1),
                     modified_at: Some(99),
                 }],

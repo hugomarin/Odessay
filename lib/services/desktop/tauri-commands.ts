@@ -186,7 +186,7 @@ export type DesktopCatalogLocalBinding = {
   bindingRootId: string; rootPath: string; manifestVersion: number; visibleAsWorkspace: boolean
   documentId: string; relativePath: string; canonicalPath: string; inode: number | null
   contentHash: string | null; size: number | null; lastSeenAt: number | null
-  createdAt: number | null; modifiedAt: number | null
+  title: string; createdAt: number | null; modifiedAt: number | null
 }
 
 export type DesktopCatalogReconcileInput = {
