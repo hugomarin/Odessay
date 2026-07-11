@@ -2,10 +2,14 @@
 
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Cloud,
   Clock3,
   HardDrive,
+  History,
+  Loader,
+  Split,
 } from "lucide-react";
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import {
@@ -70,6 +74,34 @@ export const DOCUMENT_STATE_BADGE_COPY: Record<
       "This document could not be synced. Its local copy remains available.",
     icon: AlertCircle,
     className: "bg-[hsl(0,72%,96%)] text-destructive",
+  },
+  conflict: {
+    label: "Conflict",
+    tooltip:
+      "This document has local and cloud changes that conflict. Resolve them before editing — nothing is overwritten automatically.",
+    icon: AlertTriangle,
+    className: "bg-[hsl(0,72%,96%)] text-destructive",
+  },
+  ambiguous: {
+    label: "Needs review",
+    tooltip:
+      "This file matches more than one document. Pick which one to open before editing.",
+    icon: Split,
+    className: "bg-[hsl(45,60%,91%)] text-[hsl(35,55%,32%)]",
+  },
+  stale: {
+    label: "Reconnecting",
+    tooltip:
+      "The file watcher is catching up. This record is shown from the last known catalog state and will refresh automatically.",
+    icon: History,
+    className: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
+  },
+  rebuilding: {
+    label: "Rebuilding",
+    tooltip:
+      "The local catalog is being rebuilt from your files and the cloud. Your documents are safe; this view will refresh when it finishes.",
+    icon: Loader,
+    className: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
   },
 };
 
