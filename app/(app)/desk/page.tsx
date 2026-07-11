@@ -51,6 +51,7 @@ import {
   type WorkspaceAssignmentOption,
 } from "@/lib/workspace/assignment"
 import { isTauriRuntime } from "@/lib/runtime/detect"
+import { subscribeToCatalog } from "@/lib/queries/document-catalog"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
@@ -434,6 +435,35 @@ export default function DeskPage() {
     )
 
     const unsubscribe = subscribeToLocalDBChanges(debounced)
+    return () => {
+      unsubscribe()
+      debounced.cancel()
+    }
+  }, [activeView, loadDeskActivity])
+
+  // Desktop: a global WorkspaceReconciler burst (a watcher-discovered file, a
+  // rename, a bulk rescan) emits one DocumentCatalog change. Reacting here keeps
+  // Desk consistent with the catalog without navigating to Workspace first
+  // (ODE-373 req 4). The burst is already coalesced by the reconciler into one
+  // CatalogChange, and the debounce collapses any residual fan-out into a single
+  // reload (Performance Contract: reactive fan-out). Web changes already flow
+  // through the localDB subscription above, so this stays desktop-only.
+  useEffect(() => {
+    if (!isTauriRuntime()) {
+      return
+    }
+
+    const debounced = debounce(
+      () => {
+        if (activeView === "mine") {
+          void loadDeskActivity()
+        }
+      },
+      100,
+      { leading: false, trailing: true },
+    )
+
+    const unsubscribe = subscribeToCatalog(debounced)
     return () => {
       unsubscribe()
       debounced.cancel()

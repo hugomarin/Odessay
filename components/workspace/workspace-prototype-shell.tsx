@@ -83,6 +83,7 @@ import type {
   WorkspaceSummary,
 } from "@/lib/workspace/types";
 import { buildWorkspaceHref } from "@/lib/workspace/workspace-route";
+import { subscribeToCatalog } from "@/lib/queries/document-catalog";
 import type { LocalWriting } from "@/lib/local-db/schema";
 import {
   deriveDocumentStateForLocalWriting,
@@ -1066,6 +1067,32 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     const handleFocus = () => void loadWorkspace();
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
+  }, [loadWorkspace]);
+
+  // Keep this Workspace consistent with the global DocumentCatalog: a reconciler
+  // burst that touches any document (including this root) triggers one coalesced
+  // reload so Workspace and Desk share the same base set and states (ODE-373
+  // parity + reactive fan-out). Desktop-only — the web boundary never mounts this.
+  useEffect(() => {
+    if (!isDesktopRuntime()) {
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToCatalog(() => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void loadWorkspace();
+      }, 100);
+    });
+
+    return () => {
+      unsubscribe();
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [loadWorkspace]);
 
   const openInEditor = useCallback(
