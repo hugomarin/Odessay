@@ -85,4 +85,15 @@ describe("DocumentCatalog contract", () => {
     expect(changes).toHaveLength(1)
     expect(mocks.catalogWrite).toHaveBeenCalledTimes(1)
   })
+
+  it("does not list records that exist in neither local nor cloud storage", async () => {
+    mocks.catalogList.mockResolvedValue([
+      nativeRow,
+      { ...nativeRow, id: "detached-tombstone", localPresent: false, cloudPresent: false },
+    ])
+
+    const records = await new SqliteDocumentCatalog("/tmp/catalog.db").list()
+
+    expect(records.map((record) => record.id)).toEqual(["doc-1"])
+  })
 })

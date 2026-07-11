@@ -47,7 +47,11 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
   }
   async getById(id: string) { const row = await tauriCatalogGetById(this.dbPath, id); return row ? toRecord(row) : null }
   async resolvePath(path: string): Promise<PathResolution> { const row = await tauriCatalogResolvePath(this.dbPath, path); return row ? { kind: "resolved", record: toRecord(row) } : { kind: "unbound", path } }
-  async list(query?: DocumentCatalogQuery) { return (await tauriCatalogList(this.dbPath, query)).map(toRecord) }
+  async list(query?: DocumentCatalogQuery) {
+    return (await tauriCatalogList(this.dbPath, query))
+      .map(toRecord)
+      .filter((record) => record.localPresent || record.cloudPresent)
+  }
   async registerBinding(input: RegisterBindingInput) {
     const { document: catalogDocument } = input
     const documentId = catalogDocument.id

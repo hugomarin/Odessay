@@ -406,7 +406,7 @@ function DesktopWorkspaceIndex() {
     Set<string>
   >(new Set());
 
-  const loadIndex = async () => {
+  const loadIndex = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -425,11 +425,11 @@ function DesktopWorkspaceIndex() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadIndex();
-  }, []);
+  }, [loadIndex]);
 
   const visibleWorkspaces = useMemo(() => {
     return workspaces.filter((workspace) =>
@@ -438,34 +438,20 @@ function DesktopWorkspaceIndex() {
   }, [deferredQuery, workspaces]);
 
   useEffect(() => {
-    const readyWorkspaces = workspaces.filter(
-      (workspace) => workspace.status === "ready",
-    );
-    if (!isDesktopRuntime() || readyWorkspaces.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    let stopWatching: (() => Promise<void>) | null = null;
-
-    void getDesktopWorkspaceService().then(async (service) => {
-      stopWatching = await service.watchWorkspaces(readyWorkspaces, () => {
-        if (!cancelled) {
-          void loadIndex();
-        }
-      });
-      if (cancelled && stopWatching) {
-        void stopWatching();
-      }
+    if (!isDesktopRuntime()) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToCatalog(() => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void loadIndex();
+      }, 100);
     });
-
     return () => {
-      cancelled = true;
-      if (stopWatching) {
-        void stopWatching();
-      }
+      unsubscribe();
+      if (timer) clearTimeout(timer);
     };
-  }, [workspaces]);
+  }, [loadIndex]);
 
   const handleLayoutChange = (nextLayout: WorkspaceLayout) => {
     startTransition(() => {
@@ -1015,43 +1001,6 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       items,
     }));
   }, [fileGroupBy, visibleFiles]);
-
-  const watchedWorkspace = workspace?.status === "ready" ? workspace : null;
-
-  useEffect(() => {
-    if (!watchedWorkspace) {
-      return;
-    }
-
-    let cancelled = false;
-    let stopWatching: (() => Promise<void>) | null = null;
-
-    void getDesktopWorkspaceService()
-      .then(async (service) => {
-        stopWatching = await service.watchWorkspace(
-          watchedWorkspace.rootPath,
-          watchedWorkspace.selectedPaths,
-          () => {
-            if (!cancelled) {
-              void loadWorkspace();
-            }
-          },
-        );
-        if (cancelled && stopWatching) {
-          void stopWatching();
-        }
-      })
-      .catch((error) => {
-        console.warn("[workspace] file watcher setup failed:", error);
-      });
-
-    return () => {
-      cancelled = true;
-      if (stopWatching) {
-        void stopWatching();
-      }
-    };
-  }, [loadWorkspace, watchedWorkspace]);
 
   useEffect(() => {
     const handleFocus = () => void loadWorkspace();

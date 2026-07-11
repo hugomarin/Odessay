@@ -379,7 +379,8 @@ pub fn catalog_apply_reconcile(
             "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,created_at,modified_at)
              VALUES(?1,1,0,NULL,'local-only',?2,?3,?4)
              ON CONFLICT(id) DO UPDATE SET local_present=1,modified_at=excluded.modified_at,
-             title_cache=COALESCE(documents.title_cache,excluded.title_cache)",
+             title_cache=CASE WHEN documents.cloud_present=0 THEN excluded.title_cache
+                              ELSE COALESCE(documents.title_cache,excluded.title_cache) END",
             params![b.document_id, b.title, b.created_at, b.modified_at],
         )
         .map_err(|e| format!("catalog reconcile document: {e}"))?;
@@ -660,6 +661,35 @@ mod catalog_tests {
         assert_eq!(row.title.as_deref(), Some("My Local Note"));
         assert!(row.local_present);
         assert!(!row.cloud_present);
+
+        catalog_apply_reconcile(
+            path.clone(),
+            CatalogReconcileInput {
+                upserts: vec![CatalogLocalBindingInput {
+                    binding_root_id: "root-local".into(),
+                    root_path: "/tmp/local".into(),
+                    manifest_version: 2,
+                    visible_as_workspace: true,
+                    document_id: "doc-local-new".into(),
+                    relative_path: "Renamed Local Note.md".into(),
+                    canonical_path: "/tmp/local/Renamed Local Note.md".into(),
+                    inode: Some(7),
+                    content_hash: Some("blake3:local".into()),
+                    size: Some(12),
+                    last_seen_at: Some(11),
+                    title: "Renamed Local Note".into(),
+                    created_at: Some(10),
+                    modified_at: Some(11),
+                }],
+                detached: vec![],
+            },
+        )
+        .unwrap();
+
+        let renamed = catalog_get_by_id(path.clone(), "doc-local-new".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(renamed.title.as_deref(), Some("Renamed Local Note"));
 
         let _ = fs::remove_file(path);
     }
