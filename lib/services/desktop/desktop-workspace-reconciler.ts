@@ -36,7 +36,7 @@ const MANAGED_ROOT_DIRNAME = "artifact-studio-managed"
 
 type Runtime = {
   reconciler: WorkspaceReconciler
-  unwatch: UnwatchFn | null
+  unwatch: UnwatchFn[]
   disposed: boolean
 }
 
@@ -46,29 +46,38 @@ async function configureRootWatcher(
   runtime: Runtime,
   roots: ReconcilerRoot[],
 ): Promise<void> {
-  if (runtime.unwatch) {
-    await runtime.unwatch()
-    runtime.unwatch = null
+  for (const stopWatching of runtime.unwatch) {
+    try {
+      await stopWatching()
+    } catch {
+      // Continue closing/replacing the remaining root watchers.
+    }
   }
+  runtime.unwatch = []
 
-  const watchPaths = roots.flatMap((root) =>
-    root.selectedPaths.length > 0
-      ? root.selectedPaths.map((selected) => `${root.rootPath}/${selected}`)
-      : [root.rootPath],
-  )
   const rootRefs = roots.map((root) => ({ id: root.id, rootPath: root.rootPath }))
+  if (runtime.disposed) return
 
-  if (watchPaths.length === 0 || runtime.disposed) return
-
-  runtime.unwatch = await watchFsPaths(
-    watchPaths,
-    (event) => {
-      for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
-        runtime.reconciler.notifyRootChanged(rootId)
-      }
-    },
-    { recursive: true, delayMs: 300 },
-  )
+  // Isolate native watcher permissions per root. One historical/out-of-scope
+  // folder must not prevent healthy roots from being observed. Watch the root
+  // itself so an exact-file selection can follow a Finder rename.
+  for (const root of roots) {
+    try {
+      const stopWatching = await watchFsPaths(
+        [root.rootPath],
+        (event) => {
+          for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
+            runtime.reconciler.notifyRootChanged(rootId)
+          }
+        },
+        { recursive: true, delayMs: 300 },
+      )
+      runtime.unwatch.push(stopWatching)
+    } catch {
+      // Continue configuring the remaining roots. Readiness is handled by scans;
+      // this root can recover on restart/rescan after permissions change.
+    }
+  }
 }
 
 function toReconcilerRoot(record: {
@@ -108,7 +117,20 @@ async function buildRuntime(): Promise<Runtime | null> {
     async scanRoot(root) {
       let observed: ObservedFile[] | null
       try {
-        const snapshot = await tauriWorkspaceSync(root.rootPath, root.selectedPaths)
+        // The manifest is the durable scope ledger. Omitting selectedPaths lets a
+        // rename-correlated manifest update take effect instead of overwriting it
+        // with a stale Settings path.
+        const snapshot = await tauriWorkspaceSync(root.rootPath)
+        if (
+          snapshot.selectedPaths.length !== root.selectedPaths.length ||
+          snapshot.selectedPaths.some((path, index) => path !== root.selectedPaths[index])
+        ) {
+          root.selectedPaths = snapshot.selectedPaths
+          const current = (await settings.getBindingRoots()).find((entry) => entry.id === root.id)
+          if (current) {
+            await settings.upsertBindingRoot({ ...current, selectedPaths: snapshot.selectedPaths })
+          }
+        }
         observed = snapshot.files.map((file) => ({
           relativePath: file.relativePath,
           canonicalPath: file.path,
@@ -144,7 +166,7 @@ async function buildRuntime(): Promise<Runtime | null> {
     },
   })
 
-  const runtime: Runtime = { reconciler, unwatch: null, disposed: false }
+  const runtime: Runtime = { reconciler, unwatch: [], disposed: false }
 
   await reconciler.start()
 
@@ -201,7 +223,13 @@ export async function disposeWorkspaceReconciler(): Promise<void> {
   if (runtime) {
     runtime.disposed = true
     runtime.reconciler.dispose()
-    if (runtime.unwatch) await runtime.unwatch()
+    for (const stopWatching of runtime.unwatch) {
+      try {
+        await stopWatching()
+      } catch {
+        // Best-effort teardown; the native process owns final resource cleanup.
+      }
+    }
   }
   runtimePromise = null
 }
