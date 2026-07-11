@@ -43,6 +43,11 @@ const allowedImports = new Set([
   "@/lib/services/desktop/tauri-fs-watch",
   "@/lib/services/desktop/local-index-service",
   "@/lib/services/desktop/desktop-settings-service",
+  // ODE-370 — desktop catalog reconciliation (M2)
+  "@/lib/services/desktop/workspace-reconciler",
+  "@/lib/services/desktop/catalog-feature-flag",
+  "@/lib/services/desktop/runtime-detection",
+  "@/lib/services/desktop/sqlite-document-catalog",
   "@/lib/services/document-service-factory",
   // Desktop-only: this module uses @supabase/supabase-js (JWT auth, no cookies/SSR)
   "@/lib/supabase/desktop-client",

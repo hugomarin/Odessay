@@ -307,6 +307,7 @@ pub fn run() {
             commands::index::catalog_resolve_path,
             commands::index::catalog_list,
             commands::index::catalog_detach_local_file,
+            commands::index::catalog_apply_reconcile,
             commands::index::catalog_update_mutation_status,
             commands::keychain::keychain_write_token,
             commands::keychain::keychain_read_token,

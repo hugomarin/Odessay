@@ -29,6 +29,8 @@ pub struct WorkspaceFileSnapshot {
 pub struct WorkspaceSnapshot {
     #[serde(rename = "rootPath")]
     pub root_path: String,
+    #[serde(rename = "bindingRootId")]
+    pub binding_root_id: String,
     pub name: String,
     #[serde(rename = "fileCount")]
     pub file_count: usize,
@@ -41,9 +43,19 @@ pub struct WorkspaceSnapshot {
     pub files: Vec<WorkspaceFileSnapshot>,
 }
 
+const WORKSPACE_INDEX_VERSION: u8 = 2;
+
 #[derive(Debug, Serialize, Deserialize, Default)]
 struct WorkspaceIndexDocument {
     version: u8,
+    /// Manifest v2 durable BindingRoot identity. Absent in v1 manifests; a fresh
+    /// id is minted the first time a v1 manifest is written back as v2.
+    #[serde(
+        rename = "bindingRootId",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    binding_root_id: Option<String>,
     #[serde(rename = "selectedPaths", default)]
     selected_paths: Vec<String>,
     files: HashMap<String, WorkspaceIndexEntry>,
@@ -240,9 +252,17 @@ pub fn workspace_sync(
     files.retain(|file| matches_selected_paths(&file.relative_path, &effective_selected_paths));
     folder_count = count_included_folders(&files);
 
+    // Manifest v2: the BindingRoot id is durable evidence and survives v1→v2
+    // migration. Reuse the existing id, else mint one now (first write-back).
+    let binding_root_id = existing_index
+        .binding_root_id
+        .clone()
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+
     let mut files_with_ids = Vec::new();
     let mut next_index = WorkspaceIndexDocument {
-        version: 1,
+        version: WORKSPACE_INDEX_VERSION,
+        binding_root_id: Some(binding_root_id.clone()),
         selected_paths: effective_selected_paths.clone(),
         files: HashMap::new(),
     };
@@ -322,9 +342,7 @@ pub fn workspace_sync(
         files_with_ids.push(file);
     }
 
-    let index_json = serde_json::to_string_pretty(&next_index)
-        .map_err(|e| format!("workspace_sync serialize: {e}"))?;
-    fs::write(&index_path, index_json).map_err(|e| format!("workspace_sync write index: {e}"))?;
+    write_workspace_index_atomic(&workspace_dir, &next_index)?;
 
     files_with_ids.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
     let updated_at = files_with_ids.first().map(|file| file.modified_at);
@@ -336,6 +354,7 @@ pub fn workspace_sync(
 
     Ok(WorkspaceSnapshot {
         root_path: root_path.clone(),
+        binding_root_id,
         name,
         file_count: files_with_ids.len(),
         folder_count,
@@ -427,10 +446,44 @@ fn prepare_workspace_index_dir(canonical_root: &Path) -> Result<PathBuf, String>
     Ok(workspace_dir)
 }
 
+/// Persist the manifest with crash-safe semantics: serialize to a sibling
+/// temp file inside `.odessay/`, then atomically rename it over `index.json`.
+/// If the temp write fails the previous manifest is left intact (spec §Reglas de
+/// escritura + §Fallas: manifest write failure preserves the previous manifest).
+/// The temp file is a dotfile ending in `.tmp` inside the ignored `.odessay`
+/// directory, so it never triggers a watcher self-write loop.
+fn write_workspace_index_atomic(
+    workspace_dir: &Path,
+    index: &WorkspaceIndexDocument,
+) -> Result<(), String> {
+    let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
+    let tmp_path = workspace_dir.join(format!(
+        ".{}.{}.tmp",
+        WORKSPACE_INDEX_FILE_NAME,
+        Uuid::new_v4()
+    ));
+
+    let index_json = serde_json::to_string_pretty(index)
+        .map_err(|e| format!("workspace_sync serialize index: {e}"))?;
+
+    if let Err(e) = fs::write(&tmp_path, index_json) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(format!("workspace_sync write temp index: {e}"));
+    }
+
+    if let Err(e) = fs::rename(&tmp_path, &index_path) {
+        let _ = fs::remove_file(&tmp_path);
+        return Err(format!("workspace_sync atomic rename index: {e}"));
+    }
+
+    Ok(())
+}
+
 fn read_workspace_index(index_path: &Path) -> Result<WorkspaceIndexDocument, String> {
     if !index_path.exists() {
         return Ok(WorkspaceIndexDocument {
             version: 1,
+            binding_root_id: None,
             selected_paths: Vec::new(),
             files: HashMap::new(),
         });
@@ -725,6 +778,81 @@ mod tests {
                 "hash mismatch for {markdown:?}",
             );
         }
+    }
+
+    #[test]
+    fn workspace_sync_writes_manifest_v2_with_binding_root_id() {
+        let root = temp_workspace_root("manifest-v2-shape");
+        fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync workspace");
+
+        assert!(!snapshot.binding_root_id.is_empty());
+
+        let index_path = root.join(WORKSPACE_DIR_NAME).join(WORKSPACE_INDEX_FILE_NAME);
+        let index_json = fs::read_to_string(&index_path).expect("read index");
+        assert!(index_json.contains("\"version\": 2"));
+        assert!(index_json.contains(&format!("\"bindingRootId\": \"{}\"", snapshot.binding_root_id)));
+
+        // No leftover temp files after a successful atomic write.
+        let leftovers: Vec<_> = fs::read_dir(root.join(WORKSPACE_DIR_NAME))
+            .expect("read workspace dir")
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp file left behind: {leftovers:?}");
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_migrates_v1_manifest_to_v2_preserving_ids() {
+        let root = temp_workspace_root("migrate-v1-to-v2");
+        let workspace_dir = root.join(WORKSPACE_DIR_NAME);
+        fs::create_dir_all(&workspace_dir).expect("create workspace dir");
+        // A legacy v1 manifest: no version bump, no bindingRootId.
+        fs::write(
+            workspace_dir.join(WORKSPACE_INDEX_FILE_NAME),
+            r#"{
+  "version": 1,
+  "selectedPaths": [],
+  "files": {
+    "letter.md": { "id": "v1-doc-id", "inode": 0, "lastSeen": 0, "size": 0 }
+  }
+}"#,
+        )
+        .expect("write v1 index");
+        fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync migrates v1 manifest");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].id, "v1-doc-id");
+        assert!(!snapshot.binding_root_id.is_empty());
+
+        let index_json = fs::read_to_string(workspace_dir.join(WORKSPACE_INDEX_FILE_NAME))
+            .expect("read migrated index");
+        assert!(index_json.contains("\"version\": 2"));
+        assert!(index_json.contains("v1-doc-id"));
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_binding_root_id_is_stable_across_syncs() {
+        let root = temp_workspace_root("stable-binding-root-id");
+        fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
+
+        let first = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("first sync");
+        let second = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("second sync");
+
+        assert_eq!(first.binding_root_id, second.binding_root_id);
+
+        cleanup(&root);
     }
 
     #[test]
