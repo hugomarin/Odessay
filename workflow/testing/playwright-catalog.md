@@ -224,37 +224,44 @@ Regla:
 
 ---
 
-### 6) DocumentCatalog view parity (Desk/Workspace)
+### 6) DocumentCatalog view consumption (Desk/Workspace)
 
-Familia de contrato introducida en Fase 9 M4 (ODE-373). No es Playwright: es un
-test de contrato aislado, que es la forma preferida por este catálogo para
-invariantes de servicio (ver §"Regla de mapeo servicio-contrato").
+Familia introducida en Fase 9 M4 (ODE-373). Combina un test de integración que
+**monta los consumidores reales** (Desk y Workspace) sobre un DocumentCatalog
+mockeado, más tests de contrato del derivador de estado.
 
-- [tests/desk-workspace-catalog-parity.test.tsx](tests/desk-workspace-catalog-parity.test.tsx)
+- [tests/desk-workspace-catalog-integration.test.tsx](tests/desk-workspace-catalog-integration.test.tsx)
 - [tests/document-state.test.ts](tests/document-state.test.ts)
 
 Qué cubren:
 
+- **producción real:** monta el `DeskPage` y el `WorkspaceDetailPrototype` reales
+  sobre un catálogo mockeado y verifica que la membresía y el estado salen del
+  catálogo (un writing solo-en-IndexedDB que no está en el catálogo NO se
+  renderiza; un record solo-en-catálogo SÍ);
+- **paridad:** el mismo UUID muestra el mismo estado derivado del catálogo en Desk
+  y en Workspace;
+- **descubrimiento por watcher:** un burst de cambio del catálogo actualiza Desk
+  sin navegar a Workspace;
+- **Performance Contract (automatable):** un burst de N cambios coalescen en un
+  solo reload (reactive fan-out = 1); Desk renderiza el catálogo local sin esperar
+  la hidratación cloud (local-first / TTI);
 - derivación única de estado desde `DocumentCatalogRecord` (local-only, synced,
-  cloud-only, pending, sync-failed, conflict, ambiguous, stale, rebuilding);
-- prioridad de estados operativos sobre estados de presencia/sync;
-- paridad Desk↔Workspace: el mismo conjunto base produce el mismo mapa
-  UUID→estado y la misma metadata cacheada en ambas vistas;
-- agrupación Desk (por estado, todos los records) vs Workspace (por BindingRoot,
-  con bucket cloud-only) sin cambiar identidad ni estado.
+  cloud-only, pending, sync-failed, conflict, ambiguous, stale, rebuilding) y
+  prioridad de estados operativos sobre presencia/sync.
 
 Clasificación:
 
-- `usable as-is` para regresiones del view-model del catálogo.
+- `usable as-is` para regresiones del consumo de catálogo en Desk/Workspace.
 
-Por qué no se agregó un E2E desktop nuevo:
+Evidencia que NO corre en esta suite (paso de hardware/app viva):
 
-- el catálogo SQLite y el WorkspaceReconciler viven en el runtime Tauri; el
-  `webServer` de `playwright.config.ts` levanta `npm run dev` (web), no el DMG,
-  así que un E2E de catálogo desktop no correría en CI y caería en Playwright
-  exploratorio (justo lo que este catálogo evita). La evidencia visual
-  side-by-side y el flujo desktop se capturan sobre el DMG empaquetado como paso
-  de hardware desktop, no como suite web.
+- el **trace de performance** y el **HAR de red** (waterfall Desk→Studio→Write)
+  requieren la app autenticada corriendo; el catálogo SQLite y el
+  WorkspaceReconciler además viven en el runtime Tauri (el `webServer` de
+  `playwright.config.ts` levanta `npm run dev` web, no el DMG). La evidencia visual
+  side-by-side Desk/Workspace y el flujo desktop se capturan sobre el DMG
+  empaquetado. Ver `workflow/testing/ode-373-desktop-capture.md`.
 
 ---
 
