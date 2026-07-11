@@ -98,6 +98,13 @@ export interface DocumentService {
   listWritingCollections(writingId: string): Promise<ServiceResponse<WritingCollectionMembership[]>>
   setWritingCollections(input: SetWritingCollectionsInput): Promise<ServiceResponse<WritingCollectionMembership[]>>
   exportWriting(input: ExportWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>>
+  /**
+   * Materialize a cloud-only record into a local `.md` before editing (ODE-375
+   * M3, spec §Drafts nuevos y cloud-only). Optional: ODE-371 owns the cloud
+   * adapter/backfill that implements it. Named here so no opener may reinterpret
+   * a cloud-only document as missing or spawn an empty draft.
+   */
+  materializeCloudOnly?(input: { writingId: string }): Promise<ServiceResponse<WritingRecord>>
 }
 
 // Catalog identity/presence is intentionally a separate application contract.
@@ -187,6 +194,18 @@ export const DOCUMENT_SERVICE_CONTRACT = {
       input: ["writingId", "format=pdf|docx"],
       output: ["ExportedDocumentArtifact"],
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "INVALID_INPUT", "UNAVAILABLE"],
+    },
+    {
+      // ODE-375 (Fase 9 M3): cloud-only is a named operation so no opener may ever
+      // reinterpret a cloud-only record as missing or spawn an empty draft. The
+      // desktop opener (`lib/services/open-document`) consumes this through the
+      // `materializeCloudOnly` port; ODE-371 owns the final cloud adapter/backfill.
+      name: "materializeCloudOnly",
+      kind: "command",
+      summary: "Materialize a cloud-only record into a local `.md` inside a BindingRoot before editing, so cloud-only opens converge to the same UUID as any other open.",
+      input: ["writingId"],
+      output: ["WritingRecord with a materialized local canonical file"],
+      errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "NOT_FOUND", "CONFLICT", "UNAVAILABLE"],
     },
   ],
   hotspots: [

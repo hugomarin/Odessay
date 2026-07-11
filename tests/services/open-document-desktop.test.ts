@@ -1,0 +1,167 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  workspaceSync: vi.fn(),
+  getBindingRoots: vi.fn(),
+  getDesktopSettings: vi.fn(),
+  upsertBindingRoot: vi.fn(),
+  catalogGetById: vi.fn(),
+  catalogResolvePath: vi.fn(),
+  catalogRegisterBinding: vi.fn(),
+  catalogList: vi.fn(),
+  localGet: vi.fn(),
+  localSave: vi.fn(),
+}))
+
+vi.mock("@tauri-apps/api/path", () => ({
+  appConfigDir: vi.fn(async () => "/config"),
+  join: vi.fn(async (...parts: string[]) => parts.join("/")),
+}))
+
+vi.mock("@/lib/services/desktop/tauri-commands", () => ({
+  tauriWorkspaceSync: mocks.workspaceSync,
+}))
+
+vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
+  DesktopSettingsService: class {
+    getBindingRoots = mocks.getBindingRoots
+    getDesktopSettings = mocks.getDesktopSettings
+    upsertBindingRoot = mocks.upsertBindingRoot
+  },
+}))
+
+vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
+  SqliteDocumentCatalog: class {
+    constructor(readonly dbPath: string) {}
+    getById = mocks.catalogGetById
+    resolvePath = mocks.catalogResolvePath
+    registerBinding = mocks.catalogRegisterBinding
+    list = mocks.catalogList
+  },
+}))
+
+vi.mock("@/lib/local-db", () => ({
+  localDB: { writings: { get: mocks.localGet, save: mocks.localSave } },
+}))
+
+function catalogRecord(overrides: Record<string, unknown>) {
+  return {
+    id: "id",
+    localPresent: true,
+    cloudPresent: false,
+    cloudAccountId: null,
+    syncStatus: "local-only",
+    title: "Doc",
+    slug: null,
+    status: null,
+    artifactType: null,
+    visibility: null,
+    version: null,
+    createdAt: 1,
+    modifiedAt: 1,
+    binding: null,
+    ...overrides,
+  }
+}
+
+describe("open-document-desktop", () => {
+  beforeEach(() => {
+    vi.resetModules()
+    Object.values(mocks).forEach((m) => m.mockReset())
+    mocks.getBindingRoots.mockResolvedValue([])
+    mocks.getDesktopSettings.mockResolvedValue({ data: { workspaces: [] }, error: null })
+    mocks.catalogList.mockResolvedValue([])
+    mocks.localGet.mockResolvedValue(undefined)
+    mocks.catalogRegisterBinding.mockImplementation(async (input: { document: { id: string }; binding: unknown }) =>
+      catalogRecord({ id: input.document.id, binding: input.binding }),
+    )
+  })
+
+  it("registers the external root with the manifest's bindingRootId, not a fresh UUID", async () => {
+    const path = "/Users/me/Notes/note.md"
+    mocks.catalogResolvePath.mockResolvedValue({ kind: "unbound", path })
+    // File is outside every registered root/workspace.
+    mocks.getBindingRoots.mockResolvedValue([])
+    // The manifest mints and persists the durable bindingRootId.
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/Notes",
+      bindingRootId: "manifest-root-id",
+      name: "Notes",
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: 1,
+      selectedPaths: ["note.md"],
+      files: [
+        { id: "manifest-doc-id", path, relativePath: "note.md", name: "note.md", modifiedAt: 1, size: 10, inode: 5, contentHash: "h" },
+      ],
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "path", path, confirmRegisterRoot: true })
+
+    expect(result.status).toBe("opened")
+    // Settings, catalog binding and manifest all agree on the SAME id.
+    expect(mocks.upsertBindingRoot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "manifest-root-id", selectedPaths: ["note.md"], kind: "external" }),
+    )
+    expect(mocks.catalogRegisterBinding).toHaveBeenCalledWith(
+      expect.objectContaining({ binding: expect.objectContaining({ bindingRootId: "manifest-root-id" }) }),
+    )
+    // The manifest is written before Settings (ordering guarantee).
+    const syncOrder = mocks.workspaceSync.mock.invocationCallOrder[0]
+    const upsertOrder = mocks.upsertBindingRoot.mock.invocationCallOrder[0]
+    expect(syncOrder).toBeLessThan(upsertOrder)
+    // No empty draft is ever seeded into IndexedDB by the opener.
+    expect(mocks.localSave).not.toHaveBeenCalled()
+  })
+
+  it("does not seed IndexedDB when opening an already-bound path", async () => {
+    const path = "/root/a.md"
+    mocks.catalogResolvePath.mockResolvedValue({
+      kind: "resolved",
+      record: catalogRecord({ id: "doc-1", binding: { canonicalPath: path } }),
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "path", path })
+
+    expect(result).toMatchObject({ status: "opened", documentId: "doc-1" })
+    expect(mocks.localSave).not.toHaveBeenCalled()
+    expect(mocks.catalogRegisterBinding).not.toHaveBeenCalled()
+  })
+
+  it("projects a legacy IndexedDB writing for an id the catalog does not know yet", async () => {
+    mocks.catalogGetById.mockResolvedValue(null)
+    mocks.localGet.mockResolvedValue({
+      id: "legacy-1",
+      canonical_path: "/root/legacy.md",
+      title: "Legacy",
+      status: "draft",
+      visibility: "private",
+      version: 1,
+      lifecycle: "local-only",
+      created_at: "2026-06-01T00:00:00.000Z",
+      updated_at: "2026-06-02T00:00:00.000Z",
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "legacy-1" })
+
+    expect(result).toMatchObject({ status: "opened", documentId: "legacy-1", strategy: "existing" })
+    // Read-only projection: nothing is written back.
+    expect(mocks.localSave).not.toHaveBeenCalled()
+  })
+
+  it("returns orphaned for an id absent from both catalog and IndexedDB", async () => {
+    mocks.catalogGetById.mockResolvedValue(null)
+    mocks.localGet.mockResolvedValue(undefined)
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "ghost" })
+
+    expect(result).toEqual({ status: "orphaned", id: "ghost" })
+  })
+})

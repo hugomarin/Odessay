@@ -170,6 +170,12 @@ import {
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
+import {
+  describeOpenOutcome,
+  isUnifiedOpenEnabled,
+  openDocumentById,
+  openDocumentByPath,
+} from "@/lib/services/open-document-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
@@ -1591,34 +1597,57 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
       }, 200)
 
+      // Recovers the tab for an unavailable/unopenable writing WITHOUT persisting
+      // a new draft (invariant #10 / requirement 7): drop the invalid tab and
+      // fall back to a sibling tab or an in-memory blank draft tab.
+      const recoverUnavailableTab = () => {
+        console.info(`[editor] unavailable writing ${targetWritingId}; reconciling session`)
+        const { removedActive, fallbackTabId } = reconcileUnavailableWritingTab(targetWritingId)
+        setHydrationWritingId(null)
+
+        if (removedActive) {
+          const fallbackTab = fallbackTabId
+            ? getEditorSessionState().session.tabs.find((tab) => tab.id === fallbackTabId)
+            : null
+
+          if (fallbackTab?.writing_id) {
+            currentWritingIdRef.current = fallbackTab.writing_id
+            setCurrentWritingId(fallbackTab.writing_id)
+            setHydrationWritingId(fallbackTab.writing_id)
+            replaceEditorHistory(
+              buildWritingRouteHref("/write", { id: fallbackTab.writing_id, slug: fallbackTab.slug }),
+            )
+          } else {
+            currentWritingIdRef.current = null
+            setCurrentWritingId(null)
+            openDraftTab()
+            replaceEditorHistory("/write")
+          }
+        }
+      }
+
       try {
+        // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
+        // Recent and the sidebar all navigate to /write?id= and funnel through
+        // this hydration — resolves identity through the DocumentCatalog first
+        // and consumes the opener's explicit outcomes. `orphaned`/`failed`
+        // recover the tab without a draft; `conflict` opens the local copy
+        // (visible conflict UX is owned by ODE-373); `opened` continues to
+        // content hydration below.
+        if (isDesktopRuntime() && isUnifiedOpenEnabled()) {
+          const outcome = await openDocumentById(targetWritingId)
+          if (outcome.status === "orphaned" || outcome.status === "failed") {
+            clearTimeout(skeletonTimer)
+            if (!cancelled) setIsBodyHydrating(false)
+            recoverUnavailableTab()
+            return
+          }
+        }
+
         const openResult = await (await getDocumentService()).openWriting(targetWritingId)
         if (openResult.error) {
           if (openResult.error.code === "NOT_FOUND") {
-            console.info(`[editor] unavailable writing ${targetWritingId}; reconciling session`)
-            const { removedActive, fallbackTabId } = reconcileUnavailableWritingTab(targetWritingId)
-            setHydrationWritingId(null)
-
-            if (removedActive) {
-              const fallbackTab = fallbackTabId
-                ? getEditorSessionState().session.tabs.find((tab) => tab.id === fallbackTabId)
-                : null
-
-              if (fallbackTab?.writing_id) {
-                currentWritingIdRef.current = fallbackTab.writing_id
-                setCurrentWritingId(fallbackTab.writing_id)
-                setHydrationWritingId(fallbackTab.writing_id)
-                replaceEditorHistory(
-                  buildWritingRouteHref("/write", { id: fallbackTab.writing_id, slug: fallbackTab.slug }),
-                )
-              } else {
-                currentWritingIdRef.current = null
-                setCurrentWritingId(null)
-                openDraftTab()
-                replaceEditorHistory("/write")
-              }
-            }
-
+            recoverUnavailableTab()
             return
           }
 
@@ -5045,6 +5074,45 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const handleMenuOpenFile = useCallback(
     async (_path: string, content: string) => {
       persistCurrentWorkspaceViewState()
+
+      // Unified opener (ODE-375 M3): desktop Open Document converges path → UUID
+      // through the catalog before hydration and never mints a fresh id per open,
+      // so reopening the same file is idempotent. A file outside every BindingRoot
+      // asks for explicit consent before its parent folder is registered; cancel
+      // leaves no UUID, manifest row or draft.
+      if (isDesktopRuntime() && isUnifiedOpenEnabled()) {
+        let result = await openDocumentByPath(_path)
+        if (result.status === "needs-binding-root-confirmation") {
+          const accept = window.confirm(
+            `Register “${result.parentDir}” so Odessay can keep this file’s identity across moves and renames?`,
+          )
+          if (!accept) return
+          result = await openDocumentByPath(_path, { confirmRegisterRoot: true })
+        }
+        if (result.status !== "opened") {
+          // Explicit, keyboard-dismissible outcome; never a silent draft. Full
+          // ambiguous/conflict UX is owned by ODE-373.
+          if (typeof window !== "undefined") {
+            window.alert(describeOpenOutcome(result))
+          }
+          return
+        }
+
+        const openedId = result.documentId
+        currentWritingIdRef.current = openedId
+        setCurrentWritingId(openedId)
+        setHydrationWritingId(openedId)
+        const openedTitle = result.record.title ?? filenameToTitle(_path)
+        setTitle(openedTitle)
+        openWritingTab({
+          writingId: openedId,
+          title: titleRef.current || openedTitle,
+          saveState: "saved-local",
+          hasPendingSync: false,
+        })
+        return
+      }
+
       const nowIso = new Date().toISOString()
       const nextWritingId = createWritingId()
       const parseResult = desktopDocumentEngine.sourceToRich(content)

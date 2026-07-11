@@ -232,6 +232,49 @@ export function reconcileRoot(input: ReconcileRootInput): ReconcileRootResult {
   }
 }
 
+/**
+ * Single-file identity resolution for the unified opener (ODE-375 M3).
+ *
+ * `reconcileRoot` diffs a whole root scan (and derives detaches); opening one
+ * file must never imply the rest of the root disappeared. This reuses the exact
+ * same priority ladder (`resolveFile`) for one observed file against the root's
+ * known bindings, and only ever yields that file's `ResolvedBinding` — it emits
+ * no detaches. Identity is still exhausted (manifest → path → inode → local hash
+ * → cloud hash → ambiguous) before a UUID is minted.
+ */
+export function reconcileSingleFile(input: {
+  file: ObservedFile
+  bindingRootId: string
+  knownBindings: KnownBinding[]
+  cloudHashLookup?: CloudHashLookup
+  mintId?: () => string
+}): ResolvedBinding {
+  const byPath = new Map<string, KnownBinding>()
+  const byInode = new Map<number, KnownBinding>()
+  const byHash = new Map<string, KnownBinding[]>()
+
+  for (const binding of input.knownBindings) {
+    byPath.set(binding.relativePath, binding)
+    if (typeof binding.inode === "number" && binding.inode > 0) {
+      byInode.set(binding.inode, binding)
+    }
+    if (binding.contentHash) {
+      const bucket = byHash.get(binding.contentHash)
+      if (bucket) bucket.push(binding)
+      else byHash.set(binding.contentHash, [binding])
+    }
+  }
+
+  return resolveFile(input.file, input.bindingRootId, {
+    byPath,
+    byInode,
+    byHash,
+    consumed: new Set<string>(),
+    cloudHashLookup: input.cloudHashLookup,
+    mintId: input.mintId ?? DEFAULT_MINT,
+  })
+}
+
 function resolveFile(
   file: ObservedFile,
   bindingRootId: string,
