@@ -14,6 +14,7 @@ import {
   relocateDesktopWritingByCanonicalPath,
 } from "@/lib/services/document-service-factory";
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
+import { refreshWorkspaceReconcilerRoots } from "@/lib/services/desktop/desktop-workspace-reconciler";
 import {
   isOdessayInternalPath,
   isOdessaySelfWriteEvent,
@@ -310,7 +311,24 @@ export class DesktopWorkspaceService {
     const existing = records.find((record) => record.rootPath === rootPath);
     const snapshot = await tauriWorkspaceSync(rootPath, selectedPaths);
 
+    const nowIso = new Date().toISOString();
+    const bindingRoots = await this.settingsService.getBindingRoots();
+    const existingBindingRoot = bindingRoots.find(
+      (root) =>
+        root.id === snapshot.bindingRootId || root.rootPath === snapshot.rootPath,
+    );
+    await this.settingsService.upsertBindingRoot({
+      id: snapshot.bindingRootId,
+      rootPath: snapshot.rootPath,
+      kind: "external",
+      visibleAsWorkspace: true,
+      selectedPaths: snapshot.selectedPaths,
+      consentedAt: existingBindingRoot?.consentedAt ?? nowIso,
+      createdAt: existingBindingRoot?.createdAt ?? nowIso,
+    });
+
     if (existing) {
+      await refreshWorkspaceReconcilerRoots();
       return existing;
     }
 
@@ -324,7 +342,6 @@ export class DesktopWorkspaceService {
       suffix += 1;
     }
 
-    const nowIso = new Date().toISOString();
     const nextRecord: WorkspaceRecord = {
       slug,
       name: baseName,
@@ -335,6 +352,7 @@ export class DesktopWorkspaceService {
     };
 
     await this.writeRecords([...records, nextRecord]);
+    await refreshWorkspaceReconcilerRoots();
     return nextRecord;
   }
 

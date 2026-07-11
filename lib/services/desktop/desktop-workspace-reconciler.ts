@@ -42,6 +42,35 @@ type Runtime = {
 
 let runtimePromise: Promise<Runtime | null> | null = null
 
+async function configureRootWatcher(
+  runtime: Runtime,
+  roots: ReconcilerRoot[],
+): Promise<void> {
+  if (runtime.unwatch) {
+    await runtime.unwatch()
+    runtime.unwatch = null
+  }
+
+  const watchPaths = roots.flatMap((root) =>
+    root.selectedPaths.length > 0
+      ? root.selectedPaths.map((selected) => `${root.rootPath}/${selected}`)
+      : [root.rootPath],
+  )
+  const rootRefs = roots.map((root) => ({ id: root.id, rootPath: root.rootPath }))
+
+  if (watchPaths.length === 0 || runtime.disposed) return
+
+  runtime.unwatch = await watchFsPaths(
+    watchPaths,
+    (event) => {
+      for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
+        runtime.reconciler.notifyRootChanged(rootId)
+      }
+    },
+    { recursive: true, delayMs: 300 },
+  )
+}
+
 function toReconcilerRoot(record: {
   id: string
   rootPath: string
@@ -122,24 +151,7 @@ async function buildRuntime(): Promise<Runtime | null> {
   // Watch every registered root scope and coalesce bursts per affected root.
   try {
     const roots = await loadRoots()
-    const watchPaths = roots.flatMap((root) =>
-      root.selectedPaths.length > 0
-        ? root.selectedPaths.map((selected) => `${root.rootPath}/${selected}`)
-        : [root.rootPath],
-    )
-    const rootRefs = roots.map((root) => ({ id: root.id, rootPath: root.rootPath }))
-
-    if (watchPaths.length > 0 && !runtime.disposed) {
-      runtime.unwatch = await watchFsPaths(
-        watchPaths,
-        (event) => {
-          for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
-            reconciler.notifyRootChanged(rootId)
-          }
-        },
-        { recursive: true, delayMs: 300 },
-      )
-    }
+    await configureRootWatcher(runtime, roots)
   } catch {
     // A watcher that fails to start leaves the catalog visible-but-stale; the
     // startup projection already ran, and rescanAll can recover on focus.
@@ -155,6 +167,28 @@ export async function ensureWorkspaceReconciler(): Promise<WorkspaceReconciler |
   }
   const runtime = await runtimePromise
   return runtime?.reconciler ?? null
+}
+
+/**
+ * Reload roots after Workspace adoption, project them to SQLite immediately,
+ * and rebuild the global watcher so the new root is observed on every route.
+ */
+export async function refreshWorkspaceReconcilerRoots(): Promise<void> {
+  const runtime = runtimePromise ? await runtimePromise : null
+  if (!runtime || runtime.disposed) return
+
+  await runtime.reconciler.rescanAll()
+
+  const configDir = await appConfigDir()
+  const settings = new DesktopSettingsService(configDir)
+  const roots = (await settings.getBindingRoots()).map(toReconcilerRoot)
+  try {
+    await configureRootWatcher(runtime, roots)
+  } catch {
+    // The root is already projected to SQLite. A watcher restart failure leaves
+    // it visible-but-stale and must not make the completed adoption look failed;
+    // the next app start or explicit rescan can recover observation.
+  }
 }
 
 /** Tear down the reconciler and its watcher (used only in tests / full teardown). */

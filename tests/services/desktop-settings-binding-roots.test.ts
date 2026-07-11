@@ -97,4 +97,33 @@ describe("DesktopSettingsService BindingRoots (ODE-370)", () => {
     expect(roots).toHaveLength(1)
     expect(roots[0]).toMatchObject({ visibleAsWorkspace: true, selectedPaths: ["Notes"] })
   })
+
+  it("converges an older id for the same path to the manifest bindingRootId", async () => {
+    await service.upsertBindingRoot({
+      id: "legacy-root-id",
+      rootPath: "/Users/h/Letters",
+      kind: "external",
+      visibleAsWorkspace: false,
+      selectedPaths: ["Letter.md"],
+      consentedAt: "2026-07-01T00:00:00.000Z",
+      createdAt: "2026-07-01T00:00:00.000Z",
+    })
+    await service.upsertBindingRoot({
+      id: "manifest-root-id",
+      rootPath: "/Users/h/Letters",
+      kind: "external",
+      visibleAsWorkspace: true,
+      selectedPaths: ["Letter.md"],
+      consentedAt: "2026-07-01T00:00:00.000Z",
+      createdAt: "2026-07-01T00:00:00.000Z",
+    })
+
+    const roots = await service.getBindingRoots()
+    expect(roots).toHaveLength(1)
+    expect(roots[0]).toMatchObject({
+      id: "manifest-root-id",
+      rootPath: "/Users/h/Letters",
+      visibleAsWorkspace: true,
+    })
+  })
 })
