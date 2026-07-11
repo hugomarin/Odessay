@@ -35,11 +35,10 @@ const CATALOG_LIST_LIMIT = 10_000
  * Whether Desk/Workspace read their base set from the DocumentCatalog.
  *
  * Web always reads through the catalog — its adapter wraps the same IndexedDB
- * store, so the cutover is behaviour-preserving. Desktop reads the SQLite catalog
- * once dual-write has populated it (the same flag that gates M1–M3); until then it
- * keeps the legacy read path as the documented, reversible fallback (spec
- * `odessay-desktop-document-catalog.md` §Gates de BUILD — additive/reversible
- * until M6). This is the read cutover, not a data migration (Requirement 10).
+ * store, so the cutover is behaviour-preserving. M4 makes the SQLite catalog the
+ * default desktop read path. The same flag remains as an explicit `false` rollback
+ * switch, preserving the reversible fallback required until M6. This is the read
+ * cutover, not a data migration (Requirement 10).
  */
 export function isCatalogReadEnabled(): boolean {
   if (!isDesktopRuntime()) return true

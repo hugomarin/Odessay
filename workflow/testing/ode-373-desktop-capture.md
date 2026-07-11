@@ -12,11 +12,13 @@ machine and attach them to PR #338 / ODE-373 before re-review.
 Goal: show the **same document** with the **same UUID and the same state badge**
 in both surfaces, sourced from the DocumentCatalog.
 
-1. Build/run the desktop app with the catalog read enabled:
+1. Build/run the desktop app using the shipped default configuration:
    ```bash
-   NEXT_PUBLIC_DESKTOP_CATALOG_DUAL_WRITE=true npm run desktop:dev
+   npm run desktop:dev
    ```
-   (or the signed DMG build with the same env baked in).
+   (or the signed DMG). The catalog is default-on in M4; setting
+   `NEXT_PUBLIC_DESKTOP_CATALOG_DUAL_WRITE=false` is reserved for explicit rollback
+   validation and must not be used for acceptance capture.
 2. Add a BindingRoot/Workspace folder with at least one `.md` file and sign in so
    at least one document is `synced` and one is `local-only`.
 3. Screenshot **Desk** showing the documents with their state badges.
