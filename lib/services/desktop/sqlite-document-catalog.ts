@@ -8,6 +8,7 @@ import type {
   RegisterBindingInput,
 } from "@/lib/services/contracts/document-catalog"
 import {
+  tauriCatalogApplyReconcile,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
   tauriCatalogGetById,
@@ -16,6 +17,7 @@ import {
   type DesktopCatalogDualWriteInput,
   type DesktopCatalogRow,
 } from "@/lib/services/desktop/tauri-commands"
+import type { ReconcileCommit } from "@/lib/services/desktop/workspace-reconciler"
 
 function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
   return {
@@ -63,6 +65,45 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     const documentId = catalogDocument.id
     await tauriCatalogDualWrite(this.dbPath, input)
     this.emit([documentId], "upsert")
+  }
+
+  /**
+   * Apply one WorkspaceReconciler burst (ODE-370). Projects local bindings and
+   * confirmed-absent detaches in a single SQLite transaction, then emits exactly
+   * ONE CatalogChange for every document touched by the burst. Cloud metadata is
+   * never written here — only local presence and the binding move.
+   */
+  async applyReconcileTransaction(commit: ReconcileCommit): Promise<CatalogChange> {
+    await tauriCatalogApplyReconcile(this.dbPath, {
+      upserts: commit.upserts.map((entry) => ({
+        bindingRootId: commit.bindingRootId,
+        rootPath: commit.rootPath,
+        manifestVersion: 2,
+        visibleAsWorkspace: commit.visibleAsWorkspace,
+        documentId: entry.documentId!,
+        relativePath: entry.relativePath,
+        canonicalPath: entry.canonicalPath,
+        inode: entry.inode,
+        contentHash: entry.contentHash,
+        size: entry.size,
+        lastSeenAt: entry.modifiedAt,
+        createdAt: entry.modifiedAt,
+        modifiedAt: entry.modifiedAt,
+      })),
+      detached: commit.detached,
+    })
+    const documentIds = [
+      ...commit.upserts.map((entry) => entry.documentId!),
+      ...commit.detached,
+    ]
+    const change = {
+      transactionId: commit.transactionId,
+      documentIds,
+      reason: "bulk",
+      occurredAt: Date.now(),
+    } satisfies CatalogChange
+    this.listeners.forEach((listener) => listener(change))
+    return change
   }
 }
 

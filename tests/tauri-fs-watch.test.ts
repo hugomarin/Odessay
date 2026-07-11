@@ -3,6 +3,7 @@ import {
   clearOdessaySelfWritePathsForTests,
   isOdessaySelfWriteEvent,
   markOdessaySelfWritePath,
+  resolveActionableRootIds,
   type TauriWatchEvent,
 } from "@/lib/services/desktop/tauri-fs-watch"
 
@@ -51,5 +52,34 @@ describe("tauri fs watcher self-write suppression", () => {
         1_500,
       ),
     ).toBe(true)
+  })
+})
+
+describe("resolveActionableRootIds", () => {
+  const roots = [
+    { id: "root-a", rootPath: "/Users/h/A" },
+    { id: "root-b", rootPath: "/Users/h/B" },
+  ]
+
+  it("maps a burst to only the roots it touches", () => {
+    expect(resolveActionableRootIds(["/Users/h/A/letter.md"], roots)).toEqual(["root-a"])
+  })
+
+  it("dedupes multiple paths under the same root to one entry", () => {
+    expect(
+      resolveActionableRootIds(["/Users/h/A/x.md", "/Users/h/A/y.md"], roots),
+    ).toEqual(["root-a"])
+  })
+
+  it("returns an empty list for internal .odessay manifest writes (no self-loop)", () => {
+    expect(
+      resolveActionableRootIds(["/Users/h/A/.odessay/index.json"], roots),
+    ).toEqual([])
+  })
+
+  it("returns every affected root when a burst spans two roots", () => {
+    expect(
+      resolveActionableRootIds(["/Users/h/A/x.md", "/Users/h/B/y.md"], roots).sort(),
+    ).toEqual(["root-a", "root-b"])
   })
 })

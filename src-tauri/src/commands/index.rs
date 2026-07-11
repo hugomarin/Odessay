@@ -319,6 +319,97 @@ pub fn catalog_list(
         .map_err(|e| format!("catalog_list row: {e}"))
 }
 
+/// A single local binding projected by the WorkspaceReconciler (ODE-370).
+///
+/// Unlike `catalog_dual_write`, this NEVER writes cloud metadata: the reconciler
+/// owns local existence and the binding, while Supabase owns cloud presence and
+/// the metadata caches. On an existing document only `local_present`/`modified_at`
+/// move; `cloud_present`, `cloud_account_id`, `sync_status` and every `*_cache`
+/// column are preserved untouched.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogLocalBindingInput {
+    pub binding_root_id: String,
+    pub root_path: String,
+    pub manifest_version: i64,
+    pub visible_as_workspace: bool,
+    pub document_id: String,
+    pub relative_path: String,
+    pub canonical_path: String,
+    pub inode: Option<i64>,
+    pub content_hash: Option<String>,
+    pub size: Option<i64>,
+    pub last_seen_at: Option<i64>,
+    pub created_at: Option<i64>,
+    pub modified_at: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogReconcileInput {
+    pub upserts: Vec<CatalogLocalBindingInput>,
+    pub detached: Vec<String>,
+}
+
+/// Apply one reconciliation burst as a single SQLite transaction. Every observed
+/// upsert and every confirmed-absent detach for the burst commit atomically, so
+/// the TS catalog can emit exactly one CatalogChange (Performance Contract:
+/// reactive fan-out — one logical update per affected transaction).
+#[tauri::command]
+pub fn catalog_apply_reconcile(
+    db_path: String,
+    input: CatalogReconcileInput,
+) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog reconcile begin: {e}"))?;
+
+    for b in &input.upserts {
+        tx.execute(
+            "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)
+             ON CONFLICT(id) DO UPDATE SET root_path=excluded.root_path,manifest_version=excluded.manifest_version,visible_as_workspace=excluded.visible_as_workspace",
+            params![b.binding_root_id, b.root_path, b.manifest_version, b.visible_as_workspace as i64],
+        )
+        .map_err(|e| format!("catalog reconcile root: {e}"))?;
+
+        // Preserve cloud metadata on conflict: only local presence/mtime move.
+        tx.execute(
+            "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,created_at,modified_at)
+             VALUES(?1,1,0,NULL,'local-only',?2,?3)
+             ON CONFLICT(id) DO UPDATE SET local_present=1,modified_at=excluded.modified_at",
+            params![b.document_id, b.created_at, b.modified_at],
+        )
+        .map_err(|e| format!("catalog reconcile document: {e}"))?;
+
+        tx.execute(
+            "INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+             ON CONFLICT(document_id) DO UPDATE SET binding_root_id=excluded.binding_root_id,relative_path=excluded.relative_path,
+             canonical_path=excluded.canonical_path,inode=excluded.inode,content_hash=excluded.content_hash,size=excluded.size,last_seen_at=excluded.last_seen_at",
+            params![b.document_id, b.binding_root_id, b.relative_path, b.canonical_path, b.inode, b.content_hash, b.size, b.last_seen_at],
+        )
+        .map_err(|e| format!("catalog reconcile binding: {e}"))?;
+    }
+
+    for id in &input.detached {
+        tx.execute(
+            "DELETE FROM document_bindings WHERE document_id=?1",
+            params![id],
+        )
+        .map_err(|e| format!("catalog reconcile detach binding: {e}"))?;
+        // Confirmed physical absence never deletes cloud metadata (spec §Fallas).
+        tx.execute(
+            "UPDATE documents SET local_present=0 WHERE id=?1",
+            params![id],
+        )
+        .map_err(|e| format!("catalog reconcile detach document: {e}"))?;
+    }
+
+    tx.commit()
+        .map_err(|e| format!("catalog reconcile commit: {e}"))
+}
+
 #[tauri::command]
 pub fn catalog_detach_local_file(db_path: String, id: String) -> Result<(), String> {
     let mut conn = open_db(&db_path)?;
@@ -518,6 +609,73 @@ mod catalog_tests {
         assert!(record.local_present);
         assert!(!record.cloud_present);
         assert_eq!(record.sync_status, "local-only");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn catalog_apply_reconcile_preserves_cloud_metadata_and_detaches_without_cloud_delete() {
+        let path = temp_db();
+
+        // Seed a synced cloud document with cloud metadata.
+        let mut seed = input("doc-a", "/tmp/root/a.md", "mut-a");
+        seed.document.cloud_present = true;
+        seed.document.cloud_account_id = Some("acct-1".into());
+        seed.document.sync_status = "synced".into();
+        seed.document.title = Some("Cloud Title".into());
+        catalog_dual_write(path.clone(), seed).unwrap();
+
+        // Reconciler re-projects the local binding: cloud metadata is untouched.
+        catalog_apply_reconcile(
+            path.clone(),
+            CatalogReconcileInput {
+                upserts: vec![CatalogLocalBindingInput {
+                    binding_root_id: "root-1".into(),
+                    root_path: "/tmp/root".into(),
+                    manifest_version: 2,
+                    visible_as_workspace: false,
+                    document_id: "doc-a".into(),
+                    relative_path: "a.md".into(),
+                    canonical_path: "/tmp/root/a.md".into(),
+                    inode: Some(42),
+                    content_hash: Some("blake3:xyz".into()),
+                    size: Some(10),
+                    last_seen_at: Some(99),
+                    created_at: Some(1),
+                    modified_at: Some(99),
+                }],
+                detached: vec![],
+            },
+        )
+        .unwrap();
+
+        let row = catalog_get_by_id(path.clone(), "doc-a".into())
+            .unwrap()
+            .unwrap();
+        assert!(row.local_present);
+        assert!(row.cloud_present, "cloud presence must be preserved");
+        assert_eq!(row.cloud_account_id.as_deref(), Some("acct-1"));
+        assert_eq!(row.title.as_deref(), Some("Cloud Title"));
+        assert_eq!(row.sync_status, "synced");
+        assert_eq!(row.inode, Some(42));
+
+        // Confirmed absence detaches locally but never deletes cloud metadata.
+        catalog_apply_reconcile(
+            path.clone(),
+            CatalogReconcileInput {
+                upserts: vec![],
+                detached: vec!["doc-a".into()],
+            },
+        )
+        .unwrap();
+
+        let row = catalog_get_by_id(path.clone(), "doc-a".into())
+            .unwrap()
+            .unwrap();
+        assert!(!row.local_present, "local presence cleared on detach");
+        assert!(row.binding_root_id.is_none(), "binding removed on detach");
+        assert!(row.cloud_present, "cloud metadata survives a local detach");
+        assert_eq!(row.title.as_deref(), Some("Cloud Title"));
+
         let _ = fs::remove_file(path);
     }
 }

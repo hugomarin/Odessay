@@ -21,6 +21,7 @@ export type DesktopWorkspaceFile = {
 
 export type DesktopWorkspaceSnapshot = {
   rootPath: string
+  bindingRootId: string
   name: string
   fileCount: number
   folderCount: number
@@ -179,6 +180,25 @@ export async function tauriCatalogList(
 
 export async function tauriCatalogDetachLocalFile(dbPath: string, id: string): Promise<void> {
   return invoke<void>("catalog_detach_local_file", { dbPath, id })
+}
+
+export type DesktopCatalogLocalBinding = {
+  bindingRootId: string; rootPath: string; manifestVersion: number; visibleAsWorkspace: boolean
+  documentId: string; relativePath: string; canonicalPath: string; inode: number | null
+  contentHash: string | null; size: number | null; lastSeenAt: number | null
+  createdAt: number | null; modifiedAt: number | null
+}
+
+export type DesktopCatalogReconcileInput = {
+  upserts: DesktopCatalogLocalBinding[]
+  detached: string[]
+}
+
+export async function tauriCatalogApplyReconcile(
+  dbPath: string,
+  input: DesktopCatalogReconcileInput,
+): Promise<void> {
+  return invoke<void>("catalog_apply_reconcile", { dbPath, input })
 }
 
 export async function tauriCatalogUpdateMutationStatus(

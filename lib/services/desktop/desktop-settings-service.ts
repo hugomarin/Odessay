@@ -11,6 +11,24 @@ import {
 } from "@/lib/services/desktop/tauri-commands"
 import type { WorkspaceAssignmentMap } from "@/lib/workspace/assignment"
 import type { WorkspaceLayout, WorkspaceRecord } from "@/lib/workspace/types"
+import type { BindingRootKind } from "@/lib/services/desktop/workspace-reconciler"
+
+/**
+ * A registered BindingRoot (ODE-370). `managed` is Artifact Studio's private root
+ * for drafts / cloud-only materialization: exactly one exists and it is never a
+ * user Workspace. `external` roots are user folders registered with consent, and
+ * they track `visibleAsWorkspace` and scope (`selectedPaths`) independently.
+ */
+export type BindingRootSettingRecord = {
+  id: string
+  rootPath: string
+  kind: BindingRootKind
+  visibleAsWorkspace: boolean
+  selectedPaths: string[]
+  /** ISO timestamp of explicit consent for external roots; null for managed. */
+  consentedAt: string | null
+  createdAt: string
+}
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -35,7 +53,15 @@ export type DesktopSettings = {
    * synced field on the writing record.
    */
   workspaceAssignments?: WorkspaceAssignmentMap
+  /**
+   * Registered BindingRoots for the desktop catalog (ODE-370). Distinct from
+   * `workspaces` (a presentation grouping): a BindingRoot is filesystem
+   * infrastructure and may exist without being a visible Workspace.
+   */
+  bindingRoots?: BindingRootSettingRecord[]
 } & UserSettings
+
+const MANAGED_ROOT_ID = "managed-root"
 
 const SETTINGS_KEY = "desktop_settings_v1"
 
@@ -116,6 +142,46 @@ export class DesktopSettingsService implements SettingsService {
     } catch (e) {
       return err("UNAVAILABLE", e instanceof Error ? e.message : "Failed to write desktop settings")
     }
+  }
+
+  // ─── BindingRoots (ODE-370) ────────────────────────────────────────────────
+
+  async getBindingRoots(): Promise<BindingRootSettingRecord[]> {
+    const store = await this.readStore()
+    return Array.isArray(store.bindingRoots) ? store.bindingRoots : []
+  }
+
+  /**
+   * Guarantees exactly one `managed` root exists (spec §BindingRoot: "siempre
+   * existe y no aparece como Workspace"). Returns the managed record. The caller
+   * supplies the resolved managed directory path since path resolution is a
+   * Tauri concern kept out of this adapter.
+   */
+  async ensureManagedRoot(rootPath: string): Promise<BindingRootSettingRecord> {
+    const roots = await this.getBindingRoots()
+    const existing = roots.find((root) => root.kind === "managed")
+    if (existing) return existing
+
+    const managed: BindingRootSettingRecord = {
+      id: MANAGED_ROOT_ID,
+      rootPath,
+      kind: "managed",
+      visibleAsWorkspace: false,
+      selectedPaths: [],
+      consentedAt: null,
+      createdAt: new Date().toISOString(),
+    }
+    await this.updateDesktopSettings({ bindingRoots: [...roots, managed] })
+    return managed
+  }
+
+  /** Upserts a BindingRoot record by id (external roots preserve their consent). */
+  async upsertBindingRoot(record: BindingRootSettingRecord): Promise<void> {
+    const roots = await this.getBindingRoots()
+    const next = roots.some((root) => root.id === record.id)
+      ? roots.map((root) => (root.id === record.id ? record : root))
+      : [...roots, record]
+    await this.updateDesktopSettings({ bindingRoots: next })
   }
 
   async clearAllSettings(): Promise<ServiceResponse<void>> {

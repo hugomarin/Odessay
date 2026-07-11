@@ -88,6 +88,29 @@ export function clearOdessaySelfWritePathsForTests() {
   selfWriteExpiresAtByPath.clear()
 }
 
+/**
+ * Map a watcher burst to the BindingRoots it actually touches (ODE-370). Internal
+ * `.odessay` paths are ignored so a self-generated manifest write never triggers
+ * reconciliation. Used by the reconciler wiring to coalesce a burst into one
+ * reconcile call per affected root.
+ */
+export function resolveActionableRootIds(
+  paths: string[],
+  roots: Array<{ id: string; rootPath: string }>,
+): string[] {
+  const actionable = paths.filter((path) => !isOdessayInternalPath(path))
+  if (actionable.length === 0) return []
+
+  const affected = new Set<string>()
+  for (const root of roots) {
+    const matches = actionable.some(
+      (path) => path === root.rootPath || path.startsWith(`${root.rootPath}/`),
+    )
+    if (matches) affected.add(root.id)
+  }
+  return Array.from(affected)
+}
+
 function pruneExpiredSelfWritePaths(now: number) {
   for (const [path, expiresAt] of selfWriteExpiresAtByPath) {
     if (expiresAt < now) {
