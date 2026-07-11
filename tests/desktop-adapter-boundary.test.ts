@@ -49,6 +49,8 @@ const allowedImports = new Set([
   "@/lib/services/desktop/runtime-detection",
   "@/lib/services/desktop/sqlite-document-catalog",
   "@/lib/services/document-service-factory",
+  // ODE-375 — unified opener application use case (pure shared-core module)
+  "@/lib/services/open-document",
   // Desktop-only: this module uses @supabase/supabase-js (JWT auth, no cookies/SSR)
   "@/lib/supabase/desktop-client",
   "@/lib/workspace/types",
