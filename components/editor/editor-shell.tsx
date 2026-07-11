@@ -170,6 +170,11 @@ import {
 } from "@/lib/desktop/document-naming"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { consumePendingOpenFile } from "@/lib/editor/pending-open-file"
+import {
+  describeOpenOutcome,
+  isUnifiedOpenEnabled,
+  openDocumentByPath,
+} from "@/lib/services/open-document-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
@@ -5045,6 +5050,45 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const handleMenuOpenFile = useCallback(
     async (_path: string, content: string) => {
       persistCurrentWorkspaceViewState()
+
+      // Unified opener (ODE-375 M3): desktop Open Document converges path → UUID
+      // through the catalog before hydration and never mints a fresh id per open,
+      // so reopening the same file is idempotent. A file outside every BindingRoot
+      // asks for explicit consent before its parent folder is registered; cancel
+      // leaves no UUID, manifest row or draft.
+      if (isDesktopRuntime() && isUnifiedOpenEnabled()) {
+        let result = await openDocumentByPath(_path)
+        if (result.status === "needs-binding-root-confirmation") {
+          const accept = window.confirm(
+            `Register “${result.parentDir}” so Odessay can keep this file’s identity across moves and renames?`,
+          )
+          if (!accept) return
+          result = await openDocumentByPath(_path, { confirmRegisterRoot: true })
+        }
+        if (result.status !== "opened") {
+          // Explicit, keyboard-dismissible outcome; never a silent draft. Full
+          // ambiguous/conflict UX is owned by ODE-373.
+          if (typeof window !== "undefined") {
+            window.alert(describeOpenOutcome(result))
+          }
+          return
+        }
+
+        const openedId = result.documentId
+        currentWritingIdRef.current = openedId
+        setCurrentWritingId(openedId)
+        setHydrationWritingId(openedId)
+        const openedTitle = result.record.title ?? filenameToTitle(_path)
+        setTitle(openedTitle)
+        openWritingTab({
+          writingId: openedId,
+          title: titleRef.current || openedTitle,
+          saveState: "saved-local",
+          hasPendingSync: false,
+        })
+        return
+      }
+
       const nowIso = new Date().toISOString()
       const nextWritingId = createWritingId()
       const parseResult = desktopDocumentEngine.sourceToRich(content)
