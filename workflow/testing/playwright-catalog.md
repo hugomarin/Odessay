@@ -224,6 +224,40 @@ Regla:
 
 ---
 
+### 6) DocumentCatalog view parity (Desk/Workspace)
+
+Familia de contrato introducida en Fase 9 M4 (ODE-373). No es Playwright: es un
+test de contrato aislado, que es la forma preferida por este catálogo para
+invariantes de servicio (ver §"Regla de mapeo servicio-contrato").
+
+- [tests/desk-workspace-catalog-parity.test.tsx](tests/desk-workspace-catalog-parity.test.tsx)
+- [tests/document-state.test.ts](tests/document-state.test.ts)
+
+Qué cubren:
+
+- derivación única de estado desde `DocumentCatalogRecord` (local-only, synced,
+  cloud-only, pending, sync-failed, conflict, ambiguous, stale, rebuilding);
+- prioridad de estados operativos sobre estados de presencia/sync;
+- paridad Desk↔Workspace: el mismo conjunto base produce el mismo mapa
+  UUID→estado y la misma metadata cacheada en ambas vistas;
+- agrupación Desk (por estado, todos los records) vs Workspace (por BindingRoot,
+  con bucket cloud-only) sin cambiar identidad ni estado.
+
+Clasificación:
+
+- `usable as-is` para regresiones del view-model del catálogo.
+
+Por qué no se agregó un E2E desktop nuevo:
+
+- el catálogo SQLite y el WorkspaceReconciler viven en el runtime Tauri; el
+  `webServer` de `playwright.config.ts` levanta `npm run dev` (web), no el DMG,
+  así que un E2E de catálogo desktop no correría en CI y caería en Playwright
+  exploratorio (justo lo que este catálogo evita). La evidencia visual
+  side-by-side y el flujo desktop se capturan sobre el DMG empaquetado como paso
+  de hardware desktop, no como suite web.
+
+---
+
 ## Solapamientos actuales que conviene vigilar
 
 ### Write lifecycle
