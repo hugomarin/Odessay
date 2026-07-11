@@ -3071,6 +3071,16 @@
       "commit": "316aef5",
       "date": "2026-07-11",
       "notes": "M2 of Fase 9 unified desktop document catalog. Manifest v2 with durable bindingRootId and atomic crash-safe writes; v1→v2 migration preserving ids. WorkspaceReconciler as global application-layer resolver with priority path→inode→local hash→cloud hash→ambiguous→mint; confirmed-absence detach, out-of-scope keep, unobservable stale. Single app-lifetime singleton mounted in DesktopAppShell, gated by NEXT_PUBLIC_DESKTOP_CATALOG_DUAL_WRITE. SQLite catalog_apply_reconcile transaction preserves cloud metadata. Performance Contract required: reactive fan-out unit-tested, TTI by design. Review score 7.0/10 (4 P2, 4 P3)."
+    },
+    {
+      "what": "feat(desktop): unify document opening across id and path [ODE-375]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-375",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-375/unify-desktop-document-opening-across-id-and-path",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/337",
+      "commit": "cb8d26e485e26c0d30b348d9eeb0546d3695911b",
+      "date": "2026-07-11",
+      "notes": "M3 of Fase 9 unified desktop document catalog. One application opener accepts id or path and converges to UUID before editor hydration through DocumentCatalog; explicit recoverable outcomes; external BindingRoot registration persists manifest first and reuses one durable bindingRootId across Settings and SQLite; no empty-draft fallback; Desk/Search/Recent/sidebar, Workspace and native Open Document converge through the use case. Performance Contract PASS (14 pass, 0 warn, 1 skip; delivery gate with trace PASS). Packaged DMG 0.3.6 validation PASS: manifest/Settings/SQLite identity convergence, exact-file selectedPaths, Desk same UUID, restart persistence and zero external network requests. Review score 10.0/10 after two corrective rounds. Workspace adoption remains ODE-373; legacy IndexedDB harvest remains ODE-376; final cross-entry acceptance remains ODE-372."
     }
   ]
 }
