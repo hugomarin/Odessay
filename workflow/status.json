@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-10",
+  "last_updated": "2026-07-11T00:40:00Z",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3051,6 +3051,16 @@
       "commit": "21e2f1c",
       "date": "2026-07-10",
       "notes": "Transversal documentation-governance audit within Fase 9 (non-blocking). Performance Contract not required. Reviewed by claude, score 9.8/10, 1 P3 informational finding. active_phase unchanged — ODE-368 is a cross-cutting audit, not a milestone gate."
+    },
+    {
+      "what": "docs(architecture): audit desktop catalog legacy paths and retirement order [ODE-369]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-369",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-369/audit-desktop-catalog-legacy-paths-and-retirement-order",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/335",
+      "commit": "2f2bc854a9cb32772a020f3c7baad06c69e844f8",
+      "date": "2026-07-11",
+      "notes": "Transverse read-only retirement audit of desktop catalog legacy paths. Produced workflow/context/features/odessay-desktop-catalog-retirement-audit.md + docs.json entry. Maps each candidate module/command/flag/fixture to live callers with file:line evidence, classifies retain/adapt/migrate/isolate/delete with data risk, rollback, prerequisite, test gate and owner (ODE-367/370/375/373/376/371/374). Flags foundation ODE-367 as retain (not dead code) and writings_index read + orphan commands as dead-but-safe. No production code or schema changes. Performance Contract not required. Review score 8.5/10, 2 P3 process findings."
     }
   ]
 }
