@@ -40,7 +40,7 @@ Un test, helper o script cuenta como buen punto de partida si cumple la mayoría
 
 ### Config base
 
-- [playwright.config.ts](/Users/hugomarin/Documents/App/Odessay/playwright.config.ts:1)
+- [playwright.config.ts](playwright.config.ts)
 
 Puntos importantes:
 
@@ -57,7 +57,7 @@ Implicación:
 
 ### Helper central actual
 
-- [tests/playwright/helpers/editor.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/helpers/editor.ts:1)
+- [tests/playwright/helpers/editor.ts](tests/playwright/helpers/editor.ts)
 
 Este helper ya resuelve:
 
@@ -79,19 +79,19 @@ Regla:
 
 Estos tests viven sobre harnesses estables y suelen ser la mejor base para cambios editoriales:
 
-- [tests/playwright/markdown-bold-toggle.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/markdown-bold-toggle.e2e.ts:1)
-- [tests/playwright/markdown-table-html-conversion.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/markdown-table-html-conversion.e2e.ts:1)
-- [tests/playwright/markdown-visual-semantics.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/markdown-visual-semantics.e2e.ts:1)
-- [tests/playwright/editor-find-replace.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/editor-find-replace.e2e.ts:1)
-- [tests/playwright/editor-image-upload.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/editor-image-upload.e2e.ts:1)
-- [tests/playwright/editor-selection-metrics.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/editor-selection-metrics.e2e.ts:1)
-- [tests/playwright/editor-shortcuts.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/editor-shortcuts.e2e.ts:1)
-- [tests/playwright/editor-tab-scroll-restore.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/editor-tab-scroll-restore.e2e.ts:1)
-- [tests/playwright/format-scroll-stability.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/format-scroll-stability.e2e.ts:1)
-- [tests/playwright/rich-bold-selection-boundary.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/rich-bold-selection-boundary.e2e.ts:1)
-- [tests/playwright/footnote-roundtrip.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/footnote-roundtrip.e2e.ts:1)
-- [tests/playwright/highlight-roundtrip.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/highlight-roundtrip.e2e.ts:1)
-- [tests/playwright/orthography-regression-harness.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/orthography-regression-harness.e2e.ts:1)
+- [tests/playwright/markdown-bold-toggle.e2e.ts](tests/playwright/markdown-bold-toggle.e2e.ts)
+- [tests/playwright/markdown-table-html-conversion.e2e.ts](tests/playwright/markdown-table-html-conversion.e2e.ts)
+- [tests/playwright/markdown-visual-semantics.e2e.ts](tests/playwright/markdown-visual-semantics.e2e.ts)
+- [tests/playwright/editor-find-replace.e2e.ts](tests/playwright/editor-find-replace.e2e.ts)
+- [tests/playwright/editor-image-upload.e2e.ts](tests/playwright/editor-image-upload.e2e.ts)
+- [tests/playwright/editor-selection-metrics.e2e.ts](tests/playwright/editor-selection-metrics.e2e.ts)
+- [tests/playwright/editor-shortcuts.e2e.ts](tests/playwright/editor-shortcuts.e2e.ts)
+- [tests/playwright/editor-tab-scroll-restore.e2e.ts](tests/playwright/editor-tab-scroll-restore.e2e.ts)
+- [tests/playwright/format-scroll-stability.e2e.ts](tests/playwright/format-scroll-stability.e2e.ts)
+- [tests/playwright/rich-bold-selection-boundary.e2e.ts](tests/playwright/rich-bold-selection-boundary.e2e.ts)
+- [tests/playwright/footnote-roundtrip.e2e.ts](tests/playwright/footnote-roundtrip.e2e.ts)
+- [tests/playwright/highlight-roundtrip.e2e.ts](tests/playwright/highlight-roundtrip.e2e.ts)
+- [tests/playwright/orthography-regression-harness.e2e.ts](tests/playwright/orthography-regression-harness.e2e.ts)
 
 Clasificación:
 
@@ -120,11 +120,11 @@ Nota:
 
 Assets principales:
 
-- [tests/playwright/write-new-first-paste.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/write-new-first-paste.e2e.ts:1)
-- [tests/playwright/write-blank-lifecycle.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/write-blank-lifecycle.e2e.ts:1)
-- [tests/playwright/write-transient-race.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/write-transient-race.e2e.ts:1)
-- [tests/playwright/write-mobile-gate.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/write-mobile-gate.e2e.ts:1)
-- [tests/playwright/writing-route-canonical.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/writing-route-canonical.e2e.ts:1)
+- [tests/playwright/write-new-first-paste.e2e.ts](tests/playwright/write-new-first-paste.e2e.ts)
+- [tests/playwright/write-blank-lifecycle.e2e.ts](tests/playwright/write-blank-lifecycle.e2e.ts)
+- [tests/playwright/write-transient-race.e2e.ts](tests/playwright/write-transient-race.e2e.ts)
+- [tests/playwright/write-mobile-gate.e2e.ts](tests/playwright/write-mobile-gate.e2e.ts)
+- [tests/playwright/writing-route-canonical.e2e.ts](tests/playwright/writing-route-canonical.e2e.ts)
 
 Clasificación:
 
@@ -153,15 +153,15 @@ Regla:
 
 Assets principales:
 
-- [tests/playwright/preview-valid-token.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/preview-valid-token.e2e.ts:1)
-- [tests/playwright/preview-invalid-token.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/preview-invalid-token.e2e.ts:1)
-- [tests/playwright/preview-revoked-token.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/preview-revoked-token.e2e.ts:1)
-- [tests/playwright/preview-unavailable-operational.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/preview-unavailable-operational.e2e.ts:1)
-- [tests/playwright/preview-overflow-containment.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/preview-overflow-containment.e2e.ts:1)
-- [tests/playwright/preview-shared-margins.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/preview-shared-margins.e2e.ts:1)
-- [tests/playwright/desk-shared-tab.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/desk-shared-tab.e2e.ts:1)
-- [tests/playwright/public-author-mobile.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/public-author-mobile.e2e.ts:1)
-- [tests/playwright/reading-mobile.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/reading-mobile.e2e.ts:1)
+- [tests/playwright/preview-valid-token.e2e.ts](tests/playwright/preview-valid-token.e2e.ts)
+- [tests/playwright/preview-invalid-token.e2e.ts](tests/playwright/preview-invalid-token.e2e.ts)
+- [tests/playwright/preview-revoked-token.e2e.ts](tests/playwright/preview-revoked-token.e2e.ts)
+- [tests/playwright/preview-unavailable-operational.e2e.ts](tests/playwright/preview-unavailable-operational.e2e.ts)
+- [tests/playwright/preview-overflow-containment.e2e.ts](tests/playwright/preview-overflow-containment.e2e.ts)
+- [tests/playwright/preview-shared-margins.e2e.ts](tests/playwright/preview-shared-margins.e2e.ts)
+- [tests/playwright/desk-shared-tab.e2e.ts](tests/playwright/desk-shared-tab.e2e.ts)
+- [tests/playwright/public-author-mobile.e2e.ts](tests/playwright/public-author-mobile.e2e.ts)
+- [tests/playwright/reading-mobile.e2e.ts](tests/playwright/reading-mobile.e2e.ts)
 
 Clasificación:
 
@@ -186,11 +186,11 @@ Overlap conocido:
 
 Estos no son tests de producto general. Son scripts operativos para captura de traces:
 
-- [scripts/capture-editor-trace.mjs](/Users/hugomarin/Documents/App/Odessay/scripts/capture-editor-trace.mjs:1)
-- [scripts/capture-editor-image-trace.mjs](/Users/hugomarin/Documents/App/Odessay/scripts/capture-editor-image-trace.mjs:1)
-- [scripts/capture-tab-switch-trace.mjs](/Users/hugomarin/Documents/App/Odessay/scripts/capture-tab-switch-trace.mjs:1)
-- [scripts/capture-reading-trace.mjs](/Users/hugomarin/Documents/App/Odessay/scripts/capture-reading-trace.mjs:1)
-- [scripts/capture-collections-trace.mjs](/Users/hugomarin/Documents/App/Odessay/scripts/capture-collections-trace.mjs:1)
+- [scripts/capture-editor-trace.mjs](scripts/capture-editor-trace.mjs)
+- [scripts/capture-editor-image-trace.mjs](scripts/capture-editor-image-trace.mjs)
+- [scripts/capture-tab-switch-trace.mjs](scripts/capture-tab-switch-trace.mjs)
+- [scripts/capture-reading-trace.mjs](scripts/capture-reading-trace.mjs)
+- [scripts/capture-collections-trace.mjs](scripts/capture-collections-trace.mjs)
 
 Clasificación:
 
@@ -206,7 +206,7 @@ Regla:
 
 ### 5) Patrones históricos que no deberían ser base nueva
 
-- [tests/playwright/ode-126-new-writing-fix.e2e.ts](/Users/hugomarin/Documents/App/Odessay/tests/playwright/ode-126-new-writing-fix.e2e.ts:1)
+- [tests/playwright/ode-126-new-writing-fix.e2e.ts](tests/playwright/ode-126-new-writing-fix.e2e.ts)
 
 Clasificación:
 

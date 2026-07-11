@@ -2,9 +2,10 @@
 
 **Linear:** [ODE-245](https://linear.app/z9ne/issue/ODE-245)
 
-> **Reconciliación con el ADR de identidad (`workflow/context/core/odessay-adr-identidad.md`).** Este spec acertó en lo esencial (trackear en su lugar, no tocar frontmatter, índice con inode), pero el ADR **supersede** dos puntos:
-> - **Metadata NO va en un sidecar `meta.json` en disco** — va en el **registro de nube** (writing + espejo IndexedDB) (D4). En disco solo vive un **índice de binding delgado** (ruta + inode + content_hash + UUID), no metadata.
-> - **`content_hash` es objetivo/pendiente**, no estado actual: hoy el índice implementado solo guarda inode + size, y la nube no guarda hash (D6/D11). El UUID del índice debe ser el **mismo de la nube** (D5), no un `Uuid::new_v4` propio.
+> **Reconciliación con el ADR de identidad (`workflow/context/core/odessay-adr-identidad.md`) y el spec aceptado del catálogo (`workflow/context/features/odessay-desktop-document-catalog.md`).** Este spec acertó en lo esencial (trackear en su lugar, no tocar frontmatter, índice con inode), pero el ADR y la enmienda D10 **supersede** varios puntos:
+> - **Metadata NO va en un sidecar `meta.json` en disco** — va en el **registro de nube** (writing + espejo local) (D4). En disco solo vive un **índice de binding delgado** (ruta + inode + content_hash + UUID), no metadata.
+> - **`content_hash`** es parte del contrato de binding (D6/D11) y, tras ODE-297, también viaja en el registro de nube para re-vincular archivos desnudos cross-máquina. El UUID del índice debe ser el **mismo de la nube** (D5), no un `Uuid::new_v4` propio.
+> - **Catálogo operativo de desktop:** SQLite, no IndexedDB, implementa `DocumentCatalog` y la cola durable (D10). IndexedDB sigue siendo el adapter del runtime web y, durante la migración, una capa transicional en desktop.
 > - Nombre de la carpeta: **`.odessay/`** (no `.odyssey`, D8).
 > - El contrato objetivo que une watcher, manifest y catálogo SQLite —y elimina la diferencia de consulta entre Desk, Workspace y Open Document— vive en `workflow/context/features/odessay-desktop-document-catalog.md`. Este documento conserva el contrato de filesystem-tracking; no define una base de consulta separada para Workspace.
 >
@@ -12,7 +13,7 @@
 
 ## Resumen
 
-Nueva sección **Workspace** en el sidebar izquierdo (debajo de Desk) que permite agregar carpetas de proyectos del filesystem para que Odessay las vigile. Cada archivo `.md` o `.txt` dentro de esas carpetas puede tener metadata en base de datos (status, tipo, etiquetas) y opcionalmente sincronizarse a la nube para acceso web.
+Nueva sección **Workspace** en el sidebar izquierdo (debajo de Desk) que permite agregar carpetas de proyectos del filesystem para que Odessay las vigile. Cada archivo `.md` o `.txt` dentro de esas carpetas puede tener metadata en el **registro de nube** (status, tipo, etiquetas), con proyección/cache local en SQLite sobre desktop, y opcionalmente sincronizarse a la nube para acceso web.
 
 ## Motivación
 
@@ -73,7 +74,7 @@ La página de Workspace es el hub para gestionar carpetas vigiladas y navegar su
 
 ## Prioridades
 
-1. **Metadata en base de datos** — cada archivo puede tener status, tipo, etiquetas en IndexedDB/Supabase
+1. **Metadata en el registro de nube** — cada archivo puede tener status, tipo, etiquetas en Supabase, con caché/proyección local en SQLite sobre desktop
 2. **Sync a la nube** — consecuencia opcional del punto anterior, habilita acceso web
 3. **Versiones simples** — snapshots del texto sin complejidad de Git
 
@@ -144,9 +145,9 @@ Usa macOS FSEvents vía `tauri-plugin-fs watch()`. El OS notifica al proceso cua
 
 | Evento | Acción |
 |--------|--------|
-| `Create` | Indexa el archivo nuevo, crea entrada en IndexedDB |
+| `Create` | Indexa el archivo nuevo, crea/actualiza entrada en el catálogo SQLite |
 | `Modify` | Debounce 500ms → sync contenido → snapshot opcional |
-| `Rename` | Compara inodes → actualiza `canonical_path` en index + IndexedDB |
+| `Rename` | Compara inodes → actualiza `canonical_path` en index + catálogo SQLite |
 | `Delete` | ~~Marca documento como `orphaned` en IndexedDB~~ **SUPERSEDED (D9):** un archivo ausente pasa el writing a *solo nube* vía `detachLocalFile`; no implica borrado ni estado `orphaned`. |
 
 **Reglas:**
@@ -173,7 +174,7 @@ No es Git. Es una línea de tiempo de snapshots del contenido:
 
 Si el usuario activa sync para un documento:
 
-1. IndexedDB primero (offline-first, igual que documentos cloud actuales)
+1. SQLite primero (offline-first sobre desktop; en web el equivalente sigue siendo IndexedDB)
 2. Supabase en background — contenido + metadata
 3. La metadata es **autoritativa en el registro de nube** (no en disco, ADR D4); entre máquinas viaja por Supabase. El `.odessay/` local solo guarda el índice de binding (ruta↔UUID↔inode↔`content_hash`), y el `content_hash` (D11) permite **re-vincular el archivo desnudo** en otra máquina.
 

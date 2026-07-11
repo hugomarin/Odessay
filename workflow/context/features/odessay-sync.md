@@ -116,8 +116,8 @@ El hash no prueba identidad cuando existen duplicados. Un save atómico conserva
 - El write path vigente ya escribe `.md` antes de IndexedDB/sync.
 - `workspace_sync` ya reconcilia ruta → inode → hash y persiste `.odessay/index.json`, pero el watcher está ligado a superficies Workspace y debe moverse al shell global.
 - SQLite `writings_index` solo guarda path/title/timestamps; debe migrar al catálogo UUID/binding/presencia definido en el nuevo spec.
-- Desk consulta IndexedDB y Workspace consulta su snapshot; ambos deben migrar a `DocumentCatalog`.
-- Open Document lee por ruta y acuña UUID antes de reconciliar; debe migrar a `openDocument({kind: "path"})`.
+- **Legacy / estado actual del código (pre-Fase 9):** Desk consulta IndexedDB y Workspace consulta su snapshot; ambos deben migrar a `DocumentCatalog` (SQLite sobre desktop).
+- **Legacy / estado actual del código (pre-Fase 9):** Open Document lee por ruta y acuña UUID antes de reconciliar; debe migrar a `openDocument({kind: "path"})`.
 - `rehomeProtectedCanonicalPaths()` fue removida; los archivos permanecen en su lugar.
 - `content_hash` ya viaja en payload cloud, pero la portabilidad completa requiere schema/backfill verificable.
 - Cloud-only sin ruta es un estado válido y debe materializarse, no tratarse como `NOT_FOUND`.
