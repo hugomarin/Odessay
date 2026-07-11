@@ -26,6 +26,8 @@ import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
 import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
 import { scheduleDesktopCatalogDetach } from "@/lib/sync/catalog-dual-write"
+import { isDesktopCatalogDualWriteEnabled } from "@/lib/services/desktop/catalog-feature-flag"
+import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
 
 type DesktopRuntimeServices = {
   configDir: string
@@ -67,6 +69,24 @@ function createWritingId() {
   }
 
   return `desktop-${Date.now()}`
+}
+
+/**
+ * Resolves a document's canonical `.md` path from the DocumentCatalog (ODE-375
+ * M3). Enables `openWriting(uuid)` to hydrate a catalog-resolved identity by
+ * reading the authoritative file — with no local record and no draft. Returns
+ * null when the catalog is disabled or holds no binding for the id, so callers
+ * fall back to the existing NOT_FOUND recovery.
+ */
+async function resolveCatalogCanonicalPath(id: string): Promise<string | null> {
+  if (!isDesktopCatalogDualWriteEnabled()) return null
+  try {
+    const catalog = await getDocumentCatalog()
+    const record = await catalog.getById(id)
+    return record?.binding?.canonicalPath ?? null
+  } catch {
+    return null
+  }
 }
 
 function toCanonicalRecord(local: LocalWriting): WritingRecord {
@@ -248,14 +268,21 @@ class DesktopDocumentService implements DocumentService {
       }
 
       // A UUID-looking identifier is identity, not a filesystem path. If there
-      // is no local binding (neither by id nor by canonical path), refuse to
-      // treat the UUID itself as a path. This prevents stale editor session
-      // tabs from repeatedly hitting the filesystem with a bare UUID.
+      // is no local binding (neither by id nor by canonical path), resolve the
+      // canonical path from the DocumentCatalog (ODE-375 M3): the unified opener
+      // registers the binding there before hydration, so the editor reads the
+      // authoritative `.md` for a catalog-resolved UUID instead of minting an
+      // empty draft. Only when the catalog has no binding either do we refuse —
+      // treating the bare UUID as a path would repeatedly hit the filesystem.
+      let catalogCanonicalPath: string | null = null
       if (isUuidLikeWritingIdentifier(writingId) && !existingRecord) {
-        return err("NOT_FOUND", `Writing ${writingId} not found`)
+        catalogCanonicalPath = await resolveCatalogCanonicalPath(writingId)
+        if (!catalogCanonicalPath) {
+          return err("NOT_FOUND", `Writing ${writingId} not found`)
+        }
       }
 
-      const canonicalPath = mappedCanonicalPath ?? writingId
+      const canonicalPath = mappedCanonicalPath ?? catalogCanonicalPath ?? writingId
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 
       if (fileResult.error || !fileResult.data) {

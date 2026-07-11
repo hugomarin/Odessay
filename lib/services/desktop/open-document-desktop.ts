@@ -1,7 +1,6 @@
 "use client"
 
 import { appConfigDir, join } from "@tauri-apps/api/path"
-import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { filenameToTitle } from "@/lib/desktop/document-naming"
 import { localDB } from "@/lib/local-db"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
@@ -96,24 +95,37 @@ async function buildDesktopOpenDocumentUseCase() {
     filePath: string
   }): Promise<BindingRootMatch> {
     const relativePath = relativeTo(input.parentDir, input.filePath)
-    const bindingRootId = globalThis.crypto.randomUUID()
+
+    // Manifest first, then projections. `.odessay/index.json` is the durable
+    // binding ledger and mints/persists the authoritative bindingRootId, so it
+    // must exist before Settings or the catalog record so all three agree on ONE
+    // id (spec §Reglas de escritura + §Guardado: manifest before SQLite). Scope
+    // is limited to just this file — never the whole folder (requirement 3).
+    const snapshot = await tauriWorkspaceSync(input.parentDir, [relativePath])
+    const bindingRootId = snapshot.bindingRootId
     const nowIso = new Date().toISOString()
 
-    // Acceptance registers the parent folder as an external root whose scope is
-    // limited to just this file — never the whole folder (spec §Archivo fuera de
-    // un BindingRoot; requirement 3, selectedPaths exact-file).
-    await settings.upsertBindingRoot({
-      id: bindingRootId,
-      rootPath: input.parentDir,
-      kind: "external",
-      visibleAsWorkspace: false,
-      selectedPaths: [relativePath],
-      consentedAt: nowIso,
-      createdAt: nowIso,
-    })
-
-    // Materialize the manifest for the new scope so identity survives restarts.
-    await tauriWorkspaceSync(input.parentDir, [relativePath])
+    try {
+      await settings.upsertBindingRoot({
+        id: bindingRootId,
+        rootPath: input.parentDir,
+        kind: "external",
+        visibleAsWorkspace: false,
+        selectedPaths: [relativePath],
+        consentedAt: nowIso,
+        createdAt: nowIso,
+      })
+    } catch (error) {
+      // The manifest already carries this id, so re-running Open Document on the
+      // same file resolves the same bindingRootId and re-attempts the Settings
+      // upsert idempotently — no divergent id is ever created. Surface the write
+      // failure so the caller yields `failed` instead of a partial open.
+      throw new Error(
+        `Failed to register BindingRoot for ${input.parentDir}: ${
+          error instanceof Error ? error.message : "unknown error"
+        }`,
+      )
+    }
 
     return { bindingRootId, rootPath: input.parentDir, relativePath }
   }
@@ -171,48 +183,46 @@ async function buildDesktopOpenDocumentUseCase() {
 }
 
 /**
- * Non-destructive hydration mapping. The editor still hydrates through
- * DocumentService.openWriting(uuid) in M3 (the SQLite-backed openWriting is M4),
- * so it needs an id → canonical_path mapping to read the `.md`. This upserts that
- * mapping WITHOUT deleting other records or clearing sync-queue state — the exact
- * destructive rebind that ODE-375 removes from Workspace (failure mode: "Workspace
- * deletes pending queue state while rebinding by path"). Body/title come from the
- * file on open, so only the path mapping is seeded here.
+ * Non-authoritative projection of a legacy IndexedDB writing as a catalog record.
+ *
+ * The unified opener resolves identity through the SQLite catalog. During the
+ * migration window (until IndexedDB is retired in ODE-376) a valid writing may
+ * still live only in IndexedDB — e.g. one created before the catalog dual-write
+ * landed. Reading that row lets `openDocument({id})` report `opened` instead of a
+ * false `orphaned`, WITHOUT creating any new record or draft (spec Context Gap
+ * action: keep IndexedDB as transitional, non-authoritative compatibility). It is
+ * never written back and never becomes authoritative.
  */
-async function ensureHydrationMapping(
-  record: DocumentCatalogRecord,
-): Promise<void> {
-  const canonicalPath = record.binding?.canonicalPath
-  if (!canonicalPath) return
-
-  const existing = await localDB.writings.get(record.id)
-  if (existing) {
-    if (existing.canonical_path !== canonicalPath) {
-      await localDB.writings.save({
-        ...existing,
-        canonical_path: canonicalPath,
-        local_updated_at: Date.now(),
-      })
-    }
-    return
+function projectLegacyWriting(local: {
+  id: string
+  canonical_path?: string | null
+  title?: string | null
+  slug?: string | null
+  status?: DocumentCatalogRecord["status"]
+  visibility?: DocumentCatalogRecord["visibility"]
+  version?: number | null
+  lifecycle?: string
+  author_id?: string | null
+  created_at?: string
+  updated_at?: string
+}): DocumentCatalogRecord {
+  const canonicalPath = local.canonical_path?.trim() || null
+  return {
+    id: local.id,
+    localPresent: Boolean(canonicalPath),
+    cloudPresent: local.lifecycle === "server-confirmed",
+    cloudAccountId: local.author_id ?? null,
+    syncStatus: canonicalPath ? "local-only" : "pending",
+    title: local.title ?? null,
+    slug: local.slug ?? null,
+    status: local.status ?? null,
+    artifactType: null,
+    visibility: local.visibility ?? null,
+    version: local.version ?? null,
+    createdAt: local.created_at ? Date.parse(local.created_at) : null,
+    modifiedAt: local.updated_at ? Date.parse(local.updated_at) : null,
+    binding: null,
   }
-
-  const nowIso = new Date().toISOString()
-  await localDB.writings.save({
-    id: record.id,
-    canonical_path: canonicalPath,
-    body_json: EMPTY_EDITOR_JSON,
-    body_text: "",
-    title: record.title ?? filenameToTitle(canonicalPath),
-    status: "draft",
-    visibility: "private",
-    version: 1,
-    sync_status: "synced",
-    lifecycle: "local-only",
-    created_at: nowIso,
-    updated_at: nowIso,
-    local_updated_at: Date.now(),
-  })
 }
 
 let useCasePromise: ReturnType<typeof buildDesktopOpenDocumentUseCase> | null = null
@@ -225,18 +235,30 @@ function getDesktopOpenDocumentUseCase() {
 }
 
 /**
- * Desktop opener bound to the SQLite catalog (ODE-375 M3). Runs the pure use case
- * and, on a successful open, seeds the non-destructive hydration mapping so the
- * editor can read the `.md` for the resolved UUID.
+ * Desktop opener bound to the SQLite catalog (ODE-375 M3). Runs the pure use case;
+ * it never seeds an empty draft — the editor hydrates the resolved UUID by reading
+ * the authoritative `.md` through DocumentService.openWriting, which resolves the
+ * canonical path from the catalog. The only exception is the transitional
+ * IndexedDB read fallback for `id` opens described in `projectLegacyWriting`.
  */
 export async function openDesktopDocument(
   input: OpenDocumentInput,
 ): Promise<OpenDocumentResult> {
   const { openDocument } = await getDesktopOpenDocumentUseCase()
   const result = await openDocument(input)
-  if (result.status === "opened") {
-    await ensureHydrationMapping(result.record)
+
+  if (input.kind === "id" && result.status === "orphaned") {
+    const legacy = await localDB.writings.get(input.id)
+    if (legacy) {
+      return {
+        status: "opened",
+        documentId: legacy.id,
+        record: projectLegacyWriting(legacy),
+        strategy: "existing",
+      }
+    }
   }
+
   return result
 }
 

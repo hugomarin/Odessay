@@ -20,6 +20,16 @@ const mocks = vi.hoisted(() => ({
   openWritingMock: vi.fn(),
   exportWritingMock: vi.fn(),
   joinMock: vi.fn(),
+  catalogFlag: { value: false },
+  catalogGetByIdMock: vi.fn(),
+}))
+
+vi.mock("@/lib/services/desktop/catalog-feature-flag", () => ({
+  isDesktopCatalogDualWriteEnabled: () => mocks.catalogFlag.value,
+}))
+
+vi.mock("@/lib/services/document-catalog-factory", () => ({
+  getDocumentCatalog: async () => ({ getById: mocks.catalogGetByIdMock }),
 }))
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
@@ -105,6 +115,8 @@ describe("document-service-factory", () => {
     mocks.openWritingMock.mockReset()
     mocks.exportWritingMock.mockReset()
     mocks.joinMock.mockReset()
+    mocks.catalogFlag.value = false
+    mocks.catalogGetByIdMock.mockReset().mockResolvedValue(null)
 
     mocks.joinMock.mockImplementation(async (...parts: string[]) => parts.join("/"))
     mocks.getDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Artifact Studio" }, error: null })
@@ -507,6 +519,71 @@ version: 2
     expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
     expect(mocks.saveMock).not.toHaveBeenCalled()
     expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
+  })
+
+  it("hydrates a catalog-resolved UUID from the .md without seeding a draft (ODE-375)", async () => {
+    const uuid = "a1b2c3d4-1234-4a2b-8c9d-0123456789ab"
+    // No IndexedDB record for this id...
+    mocks.getMock.mockResolvedValueOnce(null)
+    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
+    // ...but the unified opener registered its binding in the catalog.
+    mocks.catalogFlag.value = true
+    mocks.catalogGetByIdMock.mockResolvedValueOnce({
+      id: uuid,
+      localPresent: true,
+      cloudPresent: false,
+      binding: { canonicalPath: "/root/Notes/Idea.md" },
+    })
+    mocks.openWritingMock.mockResolvedValueOnce({
+      data: {
+        id: "/root/Notes/Idea.md",
+        authorId: null,
+        title: "Idea",
+        content: { markdown: "# Idea\n\nBody", richText: null, plainText: "Body", canonicalSource: "markdown" },
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parentId: null,
+        correspondenceId: null,
+        version: 1,
+        deletedAt: null,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        updatedAt: "2026-06-04T00:00:00.000Z",
+      },
+      error: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting(uuid)
+
+    expect(result.error).toBeNull()
+    // Content came from the authoritative .md, and the row keeps the catalog UUID.
+    expect(result.data?.id).toBe(uuid)
+    expect(result.data?.content.plainText).toContain("Body")
+    expect(mocks.catalogGetByIdMock).toHaveBeenCalledWith(uuid)
+    expect(mocks.openWritingMock).toHaveBeenCalledWith("/root/Notes/Idea.md")
+    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
+    // The saved row carries real body text — it is not an empty draft seed.
+    expect(mocks.saveMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: uuid, canonical_path: "/root/Notes/Idea.md" }),
+    )
+  })
+
+  it("still returns NOT_FOUND for a UUID absent from both IndexedDB and the catalog", async () => {
+    const uuid = "bbbbbbbb-1234-4a2b-8c9d-0123456789ab"
+    mocks.getMock.mockResolvedValueOnce(null)
+    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
+    mocks.catalogFlag.value = true
+    mocks.catalogGetByIdMock.mockResolvedValueOnce(null)
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting(uuid)
+
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
+    expect(mocks.saveMock).not.toHaveBeenCalled()
   })
 
   it("opens a UUID with a canonical_path binding using the path and preserving the UUID", async () => {
