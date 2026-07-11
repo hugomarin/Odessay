@@ -174,6 +174,10 @@ export async function ensureWorkspaceReconciler(): Promise<WorkspaceReconciler |
  * and rebuild the global watcher so the new root is observed on every route.
  */
 export async function refreshWorkspaceReconcilerRoots(): Promise<void> {
+  // Workspace adoption can run before DesktopAppShell's effect has initialized
+  // this module (and dev/HMR can evaluate the route chunk first). Ensure the
+  // singleton exists instead of silently treating a missing runtime as success.
+  await ensureWorkspaceReconciler()
   const runtime = runtimePromise ? await runtimePromise : null
   if (!runtime || runtime.disposed) return
 
