@@ -467,6 +467,7 @@ export function createWorkspaceReconciler(
 
   async function reconcileRootIds(rootIds: string[]): Promise<void> {
     let anyUnobservable = false
+    let anyFailed = false
     for (const rootId of rootIds) {
       const root = rootsById.get(rootId)
       if (!root) continue
@@ -474,13 +475,13 @@ export function createWorkspaceReconciler(
         const observedOk = await reconcileOneRoot(root)
         if (!observedOk) anyUnobservable = true
       } catch {
-        // A hard scan/commit failure leaves the catalog as-is and surfaces
-        // `failed`; it never fabricates deletes or drafts.
-        setReadiness("failed")
-        return
+        // Isolate failures by root. One unavailable/legacy root must not prevent
+        // newly adopted roots from reaching the shared catalog. The failed root
+        // remains untouched and overall readiness still surfaces the problem.
+        anyFailed = true
       }
     }
-    setReadiness(anyUnobservable ? "stale" : "ready")
+    setReadiness(anyFailed ? "failed" : anyUnobservable ? "stale" : "ready")
   }
 
   async function flushBurst() {
