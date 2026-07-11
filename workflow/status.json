@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-11T00:40:00Z",
+  "last_updated": "2026-07-11T01:17:02.393Z",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3061,6 +3061,16 @@
       "commit": "2f2bc854a9cb32772a020f3c7baad06c69e844f8",
       "date": "2026-07-11",
       "notes": "Transverse read-only retirement audit of desktop catalog legacy paths. Produced workflow/context/features/odessay-desktop-catalog-retirement-audit.md + docs.json entry. Maps each candidate module/command/flag/fixture to live callers with file:line evidence, classifies retain/adapt/migrate/isolate/delete with data risk, rollback, prerequisite, test gate and owner (ODE-367/370/375/373/376/371/374). Flags foundation ODE-367 as retain (not dead code) and writings_index read + orphan commands as dead-but-safe. No production code or schema changes. Performance Contract not required. Review score 8.5/10, 2 P3 process findings."
+    },
+    {
+      "what": "feat(desktop): BindingRoot manifest v2 and global WorkspaceReconciler [ODE-370]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-370",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-370/build-bindingroot-manifest-v2-and-global-workspacereconciler",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/336",
+      "commit": "316aef5",
+      "date": "2026-07-11",
+      "notes": "M2 of Fase 9 unified desktop document catalog. Manifest v2 with durable bindingRootId and atomic crash-safe writes; v1→v2 migration preserving ids. WorkspaceReconciler as global application-layer resolver with priority path→inode→local hash→cloud hash→ambiguous→mint; confirmed-absence detach, out-of-scope keep, unobservable stale. Single app-lifetime singleton mounted in DesktopAppShell, gated by NEXT_PUBLIC_DESKTOP_CATALOG_DUAL_WRITE. SQLite catalog_apply_reconcile transaction preserves cloud metadata. Performance Contract required: reactive fan-out unit-tested, TTI by design. Review score 7.0/10 (4 P2, 4 P3)."
     }
   ]
 }
