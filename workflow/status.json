@@ -3041,6 +3041,16 @@
       "commit": "3a1ce81",
       "date": "2026-07-10",
       "notes": "M1 of Fase 9 unified desktop document catalog. Performance Contract required: ops:perf:gate required_failures=0, delivery gate with OPS_PERF_TRACE_PATH PASS. Reviewed by claude, score 9.3/10, 3 P3 informational findings."
+    },
+    {
+      "what": "docs(workflow): audit workflow context after the Fase 9 catalog decision (D10). Reproducible corpus inventory/classification report (workflow/define/ode-368-audit-report.md) plus unambiguous documentation fixes: registered 9 orphan docs in docs.json + mapped new features/; aligned odessay-watched-folders.md IndexedDB->SQLite catalog language and content_hash cloud claim to ADR/D10/ODE-297; re-framed odessay-sync.md pre-Fase-9 lines as legacy current-state with explicit target; converted 35 absolute links to repo-relative in playwright-catalog.md; added D10 global decision and refreshed decisions_phase_active. Ambiguous/product items deferred to PM/architecture decisions. No product code. [ODE-368]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-368",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-368/audit-workflow-context-after-the-fase-9-catalog-decision",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/334",
+      "commit": "21e2f1c",
+      "date": "2026-07-10",
+      "notes": "Transversal documentation-governance audit within Fase 9 (non-blocking). Performance Contract not required. Reviewed by claude, score 9.8/10, 1 P3 informational finding. active_phase unchanged — ODE-368 is a cross-cutting audit, not a milestone gate."
     }
   ]
 }
