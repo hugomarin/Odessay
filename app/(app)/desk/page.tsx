@@ -20,19 +20,21 @@ import {
   dedupeCollectionIds,
   getWritingCollectionIds,
 } from "@/lib/collections/collections"
-import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
-import {
-  getLocalDBScope,
-  localDB,
-  subscribeToLocalDBChanges,
-  subscribeToLocalDBScopeChanges,
-} from "@/lib/local-db"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import {
   buildDeskActivitySummary,
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
+import {
+  createLocalCollection,
+  getLocalDBScope,
+  getWritingForEdit,
+  loadDeskCatalogData,
+  loadSharedWritingIds,
+  setLocalWritingCollections,
+  subscribeToLocalDBScopeChanges,
+} from "@/lib/queries/desk-catalog-source"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
 import { type RecipientPreview } from "@/lib/services/web-sharing-service"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
@@ -52,6 +54,7 @@ import {
 } from "@/lib/workspace/assignment"
 import { isTauriRuntime } from "@/lib/runtime/detect"
 import { subscribeToCatalog } from "@/lib/queries/document-catalog"
+import type { DocumentState } from "@/lib/writings/document-state"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import { ImportWritingDialog } from "@/components/desk/import-writing-dialog"
 import { buildMarkdownDownloadName, serializeWritingToMarkdown } from "@/lib/export/to-markdown"
@@ -228,17 +231,19 @@ export default function DeskPage() {
     [syncRemoteWritings],
   )
 
+  const documentStateByIdRef = useRef<Record<string, DocumentState>>({})
+
   const loadDeskActivity = useCallback(async () => {
-    const localWritings = await localDB.writings.getAll()
-    const [nextCollections, nextAssignments] = await Promise.all([
-      localDB.collections.getAll(),
-      localDB.writingCollections.listAll(),
-    ])
+    // Base set + authoritative state come from the DocumentCatalog through the
+    // application port; the Desk presentation never reads storage directly.
+    const { writings, documentStateById, collections: nextCollections, writingCollections: nextAssignments } =
+      await loadDeskCatalogData()
     const localScope = getLocalDBScope()
 
-    setRawWritings(localWritings)
+    documentStateByIdRef.current = documentStateById
+    setRawWritings(writings)
     setSummary(
-      buildDeskActivitySummary(localWritings, {
+      buildDeskActivitySummary(writings, {
         filter: "all",
         userId: localScope === "anonymous" ? null : localScope,
         recipientPreviewsByWritingId: recipientPreviewsRef.current,
@@ -248,6 +253,7 @@ export default function DeskPage() {
         sortBy,
         workspaceAssignments: workspaceAssignmentsRef.current,
         workspaceNamesBySlug: workspaceNamesRef.current,
+        documentStateById,
       }),
     )
     setCollections(nextCollections)
@@ -317,10 +323,7 @@ export default function DeskPage() {
   )
 
   const loadRecipientPreviewsAsync = useCallback(async () => {
-    const localWritings = await localDB.writings.getAll()
-    const sharedWritingIds = localWritings
-      .filter((writing) => writing.visibility === "shared" && writing.sync_status !== "deleted")
-      .map((writing) => writing.id)
+    const sharedWritingIds = await loadSharedWritingIds()
 
     if (sharedWritingIds.length === 0) {
       return
@@ -423,36 +426,14 @@ export default function DeskPage() {
     })
   }, [activeView, hydrateRemoteIfNeeded, loadDeskActivity, loadRecipientPreviewsAsync])
 
+  // Desk reacts to DocumentCatalog change bursts. On web the catalog adapter
+  // wraps the same IndexedDB store, so this replaces the old localDB subscription;
+  // on desktop a global WorkspaceReconciler burst (watcher-discovered file,
+  // rename, bulk rescan) emits one CatalogChange, keeping Desk consistent without
+  // navigating to Workspace first (ODE-373 req 4). The reconciler coalesces the
+  // burst and the debounce collapses any residual fan-out into one reload
+  // (Performance Contract: reactive fan-out).
   useEffect(() => {
-    const debounced = debounce(
-      () => {
-        if (activeView === "mine") {
-          void loadDeskActivity()
-        }
-      },
-      100,
-      { leading: false, trailing: true },
-    )
-
-    const unsubscribe = subscribeToLocalDBChanges(debounced)
-    return () => {
-      unsubscribe()
-      debounced.cancel()
-    }
-  }, [activeView, loadDeskActivity])
-
-  // Desktop: a global WorkspaceReconciler burst (a watcher-discovered file, a
-  // rename, a bulk rescan) emits one DocumentCatalog change. Reacting here keeps
-  // Desk consistent with the catalog without navigating to Workspace first
-  // (ODE-373 req 4). The burst is already coalesced by the reconciler into one
-  // CatalogChange, and the debounce collapses any residual fan-out into a single
-  // reload (Performance Contract: reactive fan-out). Web changes already flow
-  // through the localDB subscription above, so this stays desktop-only.
-  useEffect(() => {
-    if (!isTauriRuntime()) {
-      return
-    }
-
     const debounced = debounce(
       () => {
         if (activeView === "mine") {
@@ -531,6 +512,7 @@ export default function DeskPage() {
       sortBy,
       workspaceAssignments,
       workspaceNamesBySlug,
+      documentStateById: documentStateByIdRef.current,
       clientFilter: {
         searchQuery,
         selectedCollectionIds,
@@ -597,7 +579,7 @@ export default function DeskPage() {
   }, [previewIndex, previewWritingId])
 
   const openRenameWriting = useCallback(async (writingId: string) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return
     }
@@ -646,7 +628,7 @@ export default function DeskPage() {
   )
 
   const changeWritingStatus = useCallback(async (writingId: string, status: LocalWriting["status"]) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return
     }
@@ -668,7 +650,7 @@ export default function DeskPage() {
   }, [])
 
   const changeWritingArtifactType = useCallback(async (writingId: string, artifactType: ArtifactType) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted" || writing.artifact_type === artifactType) {
       return
     }
@@ -686,7 +668,7 @@ export default function DeskPage() {
 
   const saveWritingTitleById = useCallback(
     async (writingId: string, nextTitle: string) => {
-      const writing = await localDB.writings.get(writingId)
+      const writing = await getWritingForEdit(writingId)
       if (!writing || writing.sync_status === "deleted") {
         return
       }
