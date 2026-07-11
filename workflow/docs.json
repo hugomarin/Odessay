@@ -161,6 +161,13 @@
       "description": "Diagnóstico de la brecha entre los pipelines actuales de Desk/Workspace/Open Document y el catálogo desktop aceptado. Contrasta filesystem, manifest `.odessay/`, SQLite mínimo, IndexedDB y nube; documenta UUIDs divergentes, rebinding destructivo, scopes y secuencia de retiro."
     },
     {
+      "path": "workflow/context/features/odessay-desktop-catalog-retirement-audit.md",
+      "type": "feature",
+      "scope": "desktop-catalog-retirement-audit",
+      "state": "architecture-audit-2026-07-10",
+      "description": "Auditoría de reachability (ODE-369) de los caminos legacy del catálogo desktop: mapea cada módulo/comando/flag/fixture a callers reales con file:line, clasifica retain/adapt/migrate/isolate/delete con riesgo de datos, rollback, prerequisito y test gate, y define el orden de retiro seguro enrutado a M1–M6 (ODE-367/370/375/373/376/371/374). Marca la fundación ODE-367 dormida como retain y la lectura de writings_index + comandos huérfanos como dead-but-safe."
+    },
+    {
       "path": "workflow/context/features/odessay-runtime-coexistence-policy.md",
       "type": "feature",
       "scope": "runtime-coexistence-policy",
