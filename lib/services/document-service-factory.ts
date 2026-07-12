@@ -21,6 +21,8 @@ import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-doc
 import { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { migrateIndexedDbToFilesystem } from "@/lib/migrations/indexeddb-to-filesystem"
+import { runDesktopCatalogMigrationOnce } from "@/lib/migrations/desktop-catalog-migration"
+import { isDesktopIndexedDbMigrationEnabled } from "@/lib/services/desktop/indexeddb-migration-flag"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
@@ -32,6 +34,7 @@ import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
 type DesktopRuntimeServices = {
   configDir: string
   writingsDir: string
+  dbPath: string
   filesystem: FilesystemDocumentService
 }
 
@@ -157,7 +160,7 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
   const localIndex = new LocalIndexService(indexPath, writingsDir)
   const filesystem = new FilesystemDocumentService(writingsDir, { localIndex })
 
-  return { configDir, writingsDir, filesystem }
+  return { configDir, writingsDir, dbPath: indexPath, filesystem }
 }
 
 class DesktopDocumentService implements DocumentService {
@@ -168,6 +171,18 @@ class DesktopDocumentService implements DocumentService {
   private async ensureMigrated() {
     if (!this.migrationPromise) {
       this.migrationPromise = (async () => {
+        // ODE-376 M5: behind the explicit cutover flag, harvest every IndexedDB
+        // scope into the SQLite catalog/queue and begin the IndexedDB read-only
+        // window. The legacy filesystem migration materializes cloud-only rows
+        // into `.md` files, so it runs ONLY pre-cutover (bounded compatibility);
+        // once the SQLite migration is enabled it is superseded and skipped.
+        if (isDesktopIndexedDbMigrationEnabled()) {
+          await runDesktopCatalogMigrationOnce({
+            configDir: this.runtime.configDir,
+            dbPath: this.runtime.dbPath,
+          })
+          return
+        }
         await migrateIndexedDbToFilesystem({
           filesystem: this.runtime.filesystem,
         })
