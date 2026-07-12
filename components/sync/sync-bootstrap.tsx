@@ -81,8 +81,12 @@ export function SyncBootstrap() {
     const bootstrapDesktop = async () => {
       const supabase = createDesktopClient();
 
-      const sessionResult = await getAuthService().getSession();
-      const userId = sessionResult.data?.user?.id ?? undefined;
+      // The desktop shell already performs the authoritative network validation
+      // through AuthService.getSession(). Bootstrap only needs the locally
+      // persisted session to select the IndexedDB compatibility scope; calling
+      // getUser() here creates a second identical startup request.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user?.id ?? undefined;
       setLocalDBScope(userId);
 
       if (userId) {

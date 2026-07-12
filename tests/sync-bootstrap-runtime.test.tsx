@@ -14,6 +14,7 @@ const hydrateCollectionsMock = vi.fn(() => Promise.resolve({ data: null }))
 const supabaseGetUserMock = vi.fn()
 const onAuthStateChangeMock = vi.fn()
 const desktopOnAuthStateChangeMock = vi.fn()
+const desktopGetSessionMock = vi.fn()
 const isTauriRuntimeMock = vi.fn()
 
 vi.mock("@/lib/local-db", () => ({
@@ -42,6 +43,7 @@ vi.mock("@/lib/supabase/client", () => ({
 vi.mock("@/lib/supabase/desktop-client", () => ({
   createDesktopClient: () => ({
     auth: {
+      getSession: desktopGetSessionMock,
       onAuthStateChange: desktopOnAuthStateChangeMock,
     },
   }),
@@ -72,6 +74,7 @@ beforeEach(() => {
   supabaseGetUserMock.mockReset()
   onAuthStateChangeMock.mockReset()
   desktopOnAuthStateChangeMock.mockReset()
+  desktopGetSessionMock.mockReset().mockResolvedValue({ data: { session: null } })
   isTauriRuntimeMock.mockReset()
   onAuthStateChangeMock.mockReturnValue({
     data: { subscription: { unsubscribe: vi.fn() } },
@@ -99,6 +102,7 @@ describe("SyncBootstrap runtime split", () => {
     await renderBootstrap()
 
     expect(supabaseGetUserMock).not.toHaveBeenCalled()
+    expect(desktopGetSessionMock).toHaveBeenCalledOnce()
     expect(onAuthStateChangeMock).not.toHaveBeenCalled()
     expect(desktopOnAuthStateChangeMock).toHaveBeenCalled()
     expect(hydrateWritingsMock).not.toHaveBeenCalled()
@@ -106,6 +110,21 @@ describe("SyncBootstrap runtime split", () => {
     expect(setLocalDBScopeMock).toHaveBeenCalledWith(undefined)
     expect(startMock).toHaveBeenCalled()
     expect(scheduleFlushMock).toHaveBeenCalled()
+  })
+
+  it("on desktop, reads the local session once and hydrates its user", async () => {
+    isTauriRuntimeMock.mockReturnValue(true)
+    desktopGetSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "desktop-user" } } },
+    })
+
+    await renderBootstrap()
+
+    expect(supabaseGetUserMock).not.toHaveBeenCalled()
+    expect(desktopGetSessionMock).toHaveBeenCalledOnce()
+    expect(setLocalDBScopeMock).toHaveBeenCalledWith("desktop-user")
+    expect(hydrateWritingsMock).toHaveBeenCalledOnce()
+    expect(hydrateCollectionsMock).toHaveBeenCalledOnce()
   })
 
   it("on web without session, calls supabase.auth.getUser but skips remote hydrate", async () => {
