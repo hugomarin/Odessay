@@ -1280,6 +1280,28 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [title])
 
   useEffect(() => {
+    if (!isDesktopRuntime() || hydrationWritingId !== null || !currentWritingId) {
+      return
+    }
+
+    const catalogTitle = editorSession.tabs
+      .find((tab) => tab.writing_id === currentWritingId)
+      ?.title.trim()
+
+    if (!catalogTitle || catalogTitle === titleRef.current) {
+      return
+    }
+
+    // On desktop the filename is the canonical human title. The global
+    // catalog updates the session tab after Finder/app renames; mirror that
+    // projection into the active editor so its local state cannot publish the
+    // previous title back over the tab or seed the rename modal with it.
+    titleRef.current = catalogTitle
+    setTitle(catalogTitle)
+    setHasExplicitTitle(catalogTitle !== UNTITLED_WRITING_TITLE)
+  }, [currentWritingId, editorSession.tabs, hydrationWritingId])
+
+  useEffect(() => {
     hasExplicitTitleRef.current = hasExplicitTitle
   }, [hasExplicitTitle])
 
