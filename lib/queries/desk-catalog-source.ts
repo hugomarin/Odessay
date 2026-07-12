@@ -13,6 +13,7 @@ import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-ca
 import { isDesktopCatalogDualWriteEnabled } from "@/lib/services/desktop/catalog-feature-flag"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { loadCatalogRecords } from "@/lib/queries/document-catalog"
+import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
 import {
   deriveDocumentStateFromCatalogRecord,
   type DocumentState,
@@ -154,7 +155,18 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
 
 /** Single-writing read for edit flows (rename, status, export), routed through the port. */
 export async function getWritingForEdit(id: string): Promise<LocalWriting | undefined> {
-  return (await localDB.writings.get(id)) ?? undefined
+  const local = (await localDB.writings.get(id)) ?? undefined
+  if (!isCatalogReadEnabled()) {
+    return local
+  }
+
+  const catalog = await getDocumentCatalog()
+  const record = await catalog.getById(id)
+  if (!record) {
+    return local
+  }
+
+  return mergeRecordWithLocal(record, local)
 }
 
 /** Ids of shared, non-deleted writings — used to prefetch recipient previews. */

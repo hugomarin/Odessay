@@ -679,6 +679,19 @@ export default function DeskPage() {
       }
 
       const nowIso = new Date().toISOString()
+      if (isTauriRuntime()) {
+        const result = await (await getDocumentService()).renameWriting({
+          writingId: writing.id,
+          title: trimmedTitle,
+          updatedAt: nowIso,
+        })
+        if (result.error) {
+          return
+        }
+        await loadDeskActivity()
+        return
+      }
+
       await enqueueWritingUpsert({
         ...writing,
         title: trimmedTitle,
