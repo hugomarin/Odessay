@@ -1,0 +1,153 @@
+{
+  "generated_at_utc": "2026-07-12T01:58:05.843Z",
+  "input_type": "har",
+  "input_path": "[redacted]",
+  "budgets_path": "workflow/perf-budgets-network.json",
+  "budget_version": "2026-07-08",
+  "redacted": true,
+  "summary": {
+    "total": 10,
+    "pass": 10,
+    "warn": 0,
+    "fail": 0,
+    "missing": 0,
+    "skip": 0,
+    "invalid_budget": 0,
+    "required_failures": 0
+  },
+  "evaluations": [
+    {
+      "section": "startup",
+      "metric": "total_requests",
+      "required": true,
+      "value": 19,
+      "warn_lte": 80,
+      "fail_lte": 100,
+      "grace_lte": 120,
+      "status": "pass",
+      "note": "Post ODE-353/357 startup should stay bounded; legitimate product expansion must justify budget updates in the PR."
+    },
+    {
+      "section": "startup",
+      "metric": "transfer_bytes",
+      "required": true,
+      "value": 35644,
+      "warn_lte": 1000000,
+      "fail_lte": 1250000,
+      "grace_lte": 1500000,
+      "status": "pass",
+      "note": "Target from docs/plan-mejoras-network-sync-2026-07.md is under 1 MB after M1-M3."
+    },
+    {
+      "section": "startup",
+      "metric": "duplicate_identical_requests",
+      "required": true,
+      "value": 0,
+      "warn_lte": 0,
+      "fail_lte": 0,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Identical startup requests are never acceptable; they indicate lost single-flight/dedup behavior."
+    },
+    {
+      "section": "startup",
+      "metric": "duplicate_groups",
+      "required": true,
+      "value": 0,
+      "warn_lte": 0,
+      "fail_lte": 0,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Counts unique method+URL groups with more than one startup request."
+    },
+    {
+      "section": "startup",
+      "metric": "writings_requests",
+      "required": false,
+      "value": 1,
+      "warn_lte": 2,
+      "fail_lte": 3,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Informational guard: second startup should be manifest plus at most one body batch."
+    },
+    {
+      "section": "startup",
+      "metric": "collections_requests",
+      "required": false,
+      "value": 1,
+      "warn_lte": 1,
+      "fail_lte": 2,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Informational guard for collection hydration fan-out."
+    },
+    {
+      "section": "startup",
+      "metric": "writing_collections_requests",
+      "required": false,
+      "value": 1,
+      "warn_lte": 1,
+      "fail_lte": 2,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Informational guard for collection membership hydration fan-out."
+    },
+    {
+      "section": "navigation",
+      "metric": "listener_churn_requests",
+      "required": true,
+      "value": 0,
+      "warn_lte": 0,
+      "fail_lte": 0,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "After startup, Desk->Studio->Write navigation must not register/unregister Tauri menu listeners."
+    },
+    {
+      "section": "navigation",
+      "metric": "listen_requests",
+      "required": false,
+      "value": 0,
+      "warn_lte": 0,
+      "fail_lte": 0,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Breakdown of listener_churn_requests."
+    },
+    {
+      "section": "navigation",
+      "metric": "unlisten_requests",
+      "required": false,
+      "value": 0,
+      "warn_lte": 0,
+      "fail_lte": 0,
+      "grace_lte": null,
+      "status": "pass",
+      "note": "Breakdown of listener_churn_requests."
+    }
+  ],
+  "metrics": {
+    "capture": {
+      "startup_window_ms": 5000,
+      "first_started_at_utc": "2026-07-12T01:56:45.633Z",
+      "startup_cutoff_utc": "2026-07-12T01:56:50.633Z",
+      "total_har_entries": 31
+    },
+    "startup": {
+      "total_requests": 19,
+      "transfer_bytes": 35644,
+      "duplicate_identical_requests": 0,
+      "duplicate_groups": 0,
+      "writings_requests": 1,
+      "collections_requests": 1,
+      "writing_collections_requests": 1
+    },
+    "navigation": {
+      "listener_churn_requests": 0,
+      "listen_requests": 0,
+      "unlisten_requests": 0
+    },
+    "duplicate_groups": []
+  }
+}

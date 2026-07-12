@@ -83,9 +83,12 @@ import type {
   WorkspaceSummary,
 } from "@/lib/workspace/types";
 import { buildWorkspaceHref } from "@/lib/workspace/workspace-route";
-import type { LocalWriting } from "@/lib/local-db/schema";
+import { subscribeToCatalog } from "@/lib/queries/document-catalog";
 import {
-  deriveDocumentStateForLocalWriting,
+  loadWorkspaceDocumentJoin,
+  type WorkspaceDocumentInfo,
+} from "@/lib/queries/workspace-catalog-source";
+import {
   deriveDocumentStateFromSignals,
   type DocumentState,
 } from "@/lib/writings/document-state";
@@ -278,29 +281,18 @@ async function openWorkspaceFileInEditor(
   }
 }
 
-function buildWritingByCanonicalPath(writings: LocalWriting[]) {
-  const map = new Map<string, LocalWriting>();
-
-  for (const writing of writings) {
-    const canonicalPath = writing.canonical_path?.trim();
-    if (canonicalPath) {
-      map.set(canonicalPath, writing);
-    }
-  }
-
-  return map;
-}
-
 function deriveWorkspaceFileDocumentState(
   file: WorkspaceFile,
-  writingByCanonicalPath: Map<string, LocalWriting>,
+  documentJoin: Map<string, WorkspaceDocumentInfo>,
 ): DocumentState {
-  const writing = writingByCanonicalPath.get(file.path);
+  const info = documentJoin.get(file.path);
 
-  if (writing) {
-    return deriveDocumentStateForLocalWriting(writing);
+  if (info) {
+    return info.state;
   }
 
+  // A file present on disk with no catalog record yet is a materialized local
+  // file awaiting reconciliation — render it local-only, never as cloud/synced.
   return deriveDocumentStateFromSignals({
     hasCloudRecord: false,
     hasLocalFile: true,
@@ -414,7 +406,7 @@ function DesktopWorkspaceIndex() {
     Set<string>
   >(new Set());
 
-  const loadIndex = async () => {
+  const loadIndex = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -433,11 +425,11 @@ function DesktopWorkspaceIndex() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void loadIndex();
-  }, []);
+  }, [loadIndex]);
 
   const visibleWorkspaces = useMemo(() => {
     return workspaces.filter((workspace) =>
@@ -446,34 +438,20 @@ function DesktopWorkspaceIndex() {
   }, [deferredQuery, workspaces]);
 
   useEffect(() => {
-    const readyWorkspaces = workspaces.filter(
-      (workspace) => workspace.status === "ready",
-    );
-    if (!isDesktopRuntime() || readyWorkspaces.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-    let stopWatching: (() => Promise<void>) | null = null;
-
-    void getDesktopWorkspaceService().then(async (service) => {
-      stopWatching = await service.watchWorkspaces(readyWorkspaces, () => {
-        if (!cancelled) {
-          void loadIndex();
-        }
-      });
-      if (cancelled && stopWatching) {
-        void stopWatching();
-      }
+    if (!isDesktopRuntime()) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToCatalog(() => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void loadIndex();
+      }, 100);
     });
-
     return () => {
-      cancelled = true;
-      if (stopWatching) {
-        void stopWatching();
-      }
+      unsubscribe();
+      if (timer) clearTimeout(timer);
     };
-  }, [workspaces]);
+  }, [loadIndex]);
 
   const handleLayoutChange = (nextLayout: WorkspaceLayout) => {
     startTransition(() => {
@@ -945,8 +923,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [workspaceAction, setWorkspaceAction] =
     useState<WorkspaceActionState>(null);
   const [workspaceActionValue, setWorkspaceActionValue] = useState("");
-  const [writingByCanonicalPath, setWritingByCanonicalPath] = useState<
-    Map<string, LocalWriting>
+  const [documentJoin, setDocumentJoin] = useState<
+    Map<string, WorkspaceDocumentInfo>
   >(new Map());
   const {
     dateFilter: fileDateFilter,
@@ -963,21 +941,20 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
     try {
       const service = await getDesktopWorkspaceService();
-      // localDB remains the local-first metadata facade while the desktop
-      // service resolves the filesystem-backed workspace snapshot.
-      const [{ localDB }, nextWorkspace] = await Promise.all([
-        import("@/lib/local-db"),
-        service.getWorkspace(workspaceSlug),
-      ]);
+      // The desktop service resolves the filesystem-backed workspace (root,
+      // watched paths, on-disk files). Document identity and state for each file
+      // are joined from the DocumentCatalog through the application port — the
+      // same base set Desk renders — so this component reads no storage directly.
+      const nextWorkspace = await service.getWorkspace(workspaceSlug);
       if (!nextWorkspace) {
         setWorkspace(null);
         setErrorMessage("Workspace not found");
         return;
       }
 
-      const localWritings = await localDB.writings.getAll();
+      const join = await loadWorkspaceDocumentJoin(nextWorkspace.rootPath);
       setWorkspace(nextWorkspace);
-      setWritingByCanonicalPath(buildWritingByCanonicalPath(localWritings));
+      setDocumentJoin(join);
       await service.markWorkspaceOpened(workspaceSlug);
     } catch (error) {
       setErrorMessage(
@@ -1025,47 +1002,36 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     }));
   }, [fileGroupBy, visibleFiles]);
 
-  const watchedWorkspace = workspace?.status === "ready" ? workspace : null;
-
-  useEffect(() => {
-    if (!watchedWorkspace) {
-      return;
-    }
-
-    let cancelled = false;
-    let stopWatching: (() => Promise<void>) | null = null;
-
-    void getDesktopWorkspaceService()
-      .then(async (service) => {
-        stopWatching = await service.watchWorkspace(
-          watchedWorkspace.rootPath,
-          watchedWorkspace.selectedPaths,
-          () => {
-            if (!cancelled) {
-              void loadWorkspace();
-            }
-          },
-        );
-        if (cancelled && stopWatching) {
-          void stopWatching();
-        }
-      })
-      .catch((error) => {
-        console.warn("[workspace] file watcher setup failed:", error);
-      });
-
-    return () => {
-      cancelled = true;
-      if (stopWatching) {
-        void stopWatching();
-      }
-    };
-  }, [loadWorkspace, watchedWorkspace]);
-
   useEffect(() => {
     const handleFocus = () => void loadWorkspace();
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
+  }, [loadWorkspace]);
+
+  // Keep this Workspace consistent with the global DocumentCatalog: a reconciler
+  // burst that touches any document (including this root) triggers one coalesced
+  // reload so Workspace and Desk share the same base set and states (ODE-373
+  // parity + reactive fan-out). Desktop-only — the web boundary never mounts this.
+  useEffect(() => {
+    if (!isDesktopRuntime()) {
+      return;
+    }
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToCatalog(() => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void loadWorkspace();
+      }, 100);
+    });
+
+    return () => {
+      unsubscribe();
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [loadWorkspace]);
 
   const openInEditor = useCallback(
@@ -1095,10 +1061,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 {file.name}
               </p>
               <DocumentStateIcon
-                state={deriveWorkspaceFileDocumentState(
-                  file,
-                  writingByCanonicalPath,
-                )}
+                state={deriveWorkspaceFileDocumentState(file, documentJoin)}
               />
             </div>
             {fileSecondaryLabel(file) !== "Root folder" ? (
@@ -1119,7 +1082,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           // bound document's real status via the binding; a "solo local" file with
           // no record yet defaults to draft until first sync (D9).
           const status = normalizeWritingStatus(
-            writingByCanonicalPath.get(file.path)?.status ?? "draft",
+            documentJoin.get(file.path)?.status ?? "draft",
           );
           return (
             <TablePropertySelector
@@ -1138,7 +1101,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         className: "px-2",
         render: (file) => {
           const artifactType =
-            writingByCanonicalPath.get(file.path)?.artifact_type ?? "general";
+            documentJoin.get(file.path)?.artifactType ?? "general";
           return (
             <TablePropertySelector
               readOnly
@@ -1205,7 +1168,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         ),
       },
     ],
-    [openInEditor, workspace?.name, writingByCanonicalPath],
+    [openInEditor, workspace?.name, documentJoin],
   );
 
   const handleCreateFile = async () => {
@@ -1492,7 +1455,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       <DocumentStateBadge
                         state={deriveWorkspaceFileDocumentState(
                           pinnedFile,
-                          writingByCanonicalPath,
+                          documentJoin,
                         )}
                         variant="compact"
                       />

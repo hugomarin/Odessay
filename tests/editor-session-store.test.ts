@@ -13,6 +13,7 @@ import {
   reorderTab,
   resetEditorSessionStoreForTests,
   saveTabViewState,
+  syncWritingTitlesFromCatalog,
 } from "../lib/stores/editor-session-store";
 import { getStudioSessionState, resetStudioSessionForTests } from "../lib/stores/studio-session-store";
 
@@ -159,6 +160,34 @@ describe("editorSessionStore", () => {
       "writing-1",
       "writing-2",
     ]);
+  });
+
+  it("updates open tabs, recents and Studio when the catalog title changes", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-1", title: "Case4" });
+    openWritingTab({ writingId: "writing-2", title: "Unchanged" });
+
+    const changed = syncWritingTitlesFromCatalog(new Map([
+      ["writing-1", "Case4-renamed"],
+    ]));
+
+    const session = getEditorSessionState().session;
+    expect(changed).toBe(true);
+    expect(session.tabs.find((tab) => tab.writing_id === "writing-1")?.title).toBe("Case4-renamed");
+    expect(session.tabs.find((tab) => tab.writing_id === "writing-2")?.title).toBe("Unchanged");
+    expect(session.recent_writings.find((entry) => entry.writing_id === "writing-1")?.title).toBe("Case4-renamed");
+    expect(getStudioSessionState().artifacts.find((artifact) => artifact.writingId === "writing-1")?.title).toBe("Case4-renamed");
+  });
+
+  it("does not rewrite the session when catalog titles are unchanged", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-1", title: "Case4" });
+
+    const updatedAt = getEditorSessionState().session.updated_at;
+    const changed = syncWritingTitlesFromCatalog(new Map([["writing-1", "Case4"]]));
+
+    expect(changed).toBe(false);
+    expect(getEditorSessionState().session.updated_at).toBe(updatedAt);
   });
 
   describe("reconcileUnavailableWritingTab", () => {

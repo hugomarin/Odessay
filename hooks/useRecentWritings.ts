@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { initializeEditorSessionStore, useEditorSessionStore } from "@/lib/stores/editor-session-store";
-import { getLocalDBScope, localDB, subscribeToLocalDBScopeChanges } from "@/lib/local-db";
 import { subscribeToEditorSessionChanges } from "@/lib/editor/session-persistence";
-import type { LocalWriting } from "@/lib/local-db/schema";
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog";
+import { loadCatalogRecords, subscribeToCatalog } from "@/lib/queries/document-catalog";
 
 export type RecentWritingItem = {
   writingId: string;
@@ -14,17 +14,14 @@ export type RecentWritingItem = {
   isOpen: boolean;
 };
 
-const toTimestamp = (value: string | null | undefined) => {
-  if (!value) {
-    return 0;
-  }
-
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : 0;
-};
-
+/**
+ * Recent writings read from the shared DocumentCatalog (ODE-373). Identity,
+ * title and slug come from the catalog rather than a direct IndexedDB read, so
+ * Recent, Search, Desk and Workspace all resolve the same UUID and metadata. The
+ * editor session still supplies recency ordering and open-tab state.
+ */
 export function useRecentWritings(limit = 8) {
-  const [writings, setWritings] = useState<LocalWriting[]>([]);
+  const [records, setRecords] = useState<DocumentCatalogRecord[]>([]);
   const { session } = useEditorSessionStore();
 
   useEffect(() => {
@@ -35,22 +32,22 @@ export function useRecentWritings(limit = 8) {
     let cancelled = false;
 
     const load = async () => {
-      const nextWritings = await localDB.writings.getAll();
+      const next = await loadCatalogRecords();
       if (cancelled) {
         return;
       }
 
-      setWritings(nextWritings);
+      setRecords(next);
     };
 
     void load();
 
-    const unsubscribeScope = subscribeToLocalDBScopeChanges(() => void load());
+    const unsubscribeCatalog = subscribeToCatalog(() => void load());
     const unsubscribeSession = subscribeToEditorSessionChanges(() => void load());
 
     return () => {
       cancelled = true;
-      unsubscribeScope();
+      unsubscribeCatalog();
       unsubscribeSession();
     };
   }, []);
@@ -61,40 +58,40 @@ export function useRecentWritings(limit = 8) {
   );
 
   return useMemo(() => {
-    const byId = new Map(writings.map((writing) => [writing.id, writing]));
+    const byId = new Map(records.map((record) => [record.id, record]));
     const items = session.recent_writings
       .map((entry) => {
-        const writing = byId.get(entry.writing_id);
-        if (!writing || writing.sync_status === "deleted") {
+        const record = byId.get(entry.writing_id);
+        if (!record) {
           return null;
         }
 
         return {
-          writingId: writing.id,
-          slug: writing.slug ?? entry.slug ?? null,
-          title: entry.title || writing.title?.trim() || "Untitled writing",
-          updatedAt: Math.max(entry.last_touched_at, writing.local_updated_at, toTimestamp(writing.updated_at)),
-          isOpen: openWritingIds.has(writing.id),
+          writingId: record.id,
+          slug: record.slug ?? entry.slug ?? null,
+          title: entry.title || record.title?.trim() || "Untitled writing",
+          updatedAt: Math.max(entry.last_touched_at, record.modifiedAt ?? 0),
+          isOpen: openWritingIds.has(record.id),
         } satisfies RecentWritingItem;
       })
       .filter((item): item is RecentWritingItem => Boolean(item));
 
-    for (const writing of writings) {
-      if (writing.sync_status === "deleted" || items.some((item) => item.writingId === writing.id)) {
+    for (const record of records) {
+      if (items.some((item) => item.writingId === record.id)) {
         continue;
       }
 
       items.push({
-        writingId: writing.id,
-        slug: writing.slug ?? null,
-        title: writing.title?.trim() || "Untitled writing",
-        updatedAt: Math.max(writing.local_updated_at, toTimestamp(writing.updated_at)),
-        isOpen: openWritingIds.has(writing.id),
+        writingId: record.id,
+        slug: record.slug ?? null,
+        title: record.title?.trim() || "Untitled writing",
+        updatedAt: record.modifiedAt ?? 0,
+        isOpen: openWritingIds.has(record.id),
       });
     }
 
     return items
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .slice(0, limit);
-  }, [limit, openWritingIds, session.recent_writings, writings]);
+  }, [limit, openWritingIds, session.recent_writings, records]);
 }

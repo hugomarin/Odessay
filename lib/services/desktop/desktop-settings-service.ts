@@ -175,11 +175,16 @@ export class DesktopSettingsService implements SettingsService {
     return managed
   }
 
-  /** Upserts a BindingRoot record by id (external roots preserve their consent). */
+  /**
+   * Upserts a BindingRoot by durable manifest id, converging an older record for
+   * the same path instead of leaving two identities for one filesystem root.
+   */
   async upsertBindingRoot(record: BindingRootSettingRecord): Promise<void> {
     const roots = await this.getBindingRoots()
-    const next = roots.some((root) => root.id === record.id)
-      ? roots.map((root) => (root.id === record.id ? record : root))
+    const matches = (root: BindingRootSettingRecord) =>
+      root.id === record.id || root.rootPath === record.rootPath
+    const next = roots.some(matches)
+      ? roots.map((root) => (matches(root) ? record : root))
       : [...roots, record]
     await this.updateDesktopSettings({ bindingRoots: next })
   }

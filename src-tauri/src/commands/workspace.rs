@@ -236,7 +236,7 @@ pub fn workspace_sync(
 
     let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
     let existing_index = read_workspace_index(&index_path)?;
-    let effective_selected_paths = match selected_paths {
+    let mut effective_selected_paths = match selected_paths {
         Some(selected_paths) => normalize_selected_paths(selected_paths)?,
         None => normalize_selected_paths(existing_index.selected_paths.clone())?,
     };
@@ -249,6 +249,31 @@ pub fn workspace_sync(
         &mut files,
         &mut folder_count,
     )?;
+
+    // An exact-file selection follows a Finder rename by inode. Update the scope
+    // before filtering so the renamed file remains visible and the manifest
+    // persists the new relative path. Folder selections do not follow files that
+    // move outside their selected subtree.
+    let exact_selected_by_inode: HashMap<u64, String> = existing_index
+        .files
+        .iter()
+        .filter(|(path, entry)| {
+            entry.inode > 0 && effective_selected_paths.iter().any(|selected| selected == *path)
+        })
+        .map(|(path, entry)| (entry.inode, path.clone()))
+        .collect();
+    for file in &files {
+        if matches_selected_paths(&file.relative_path, &effective_selected_paths) {
+            continue;
+        }
+        if let Some(previous_path) = exact_selected_by_inode.get(&file.inode) {
+            for selected in &mut effective_selected_paths {
+                if selected == previous_path {
+                    *selected = file.relative_path.clone();
+                }
+            }
+        }
+    }
     files.retain(|file| matches_selected_paths(&file.relative_path, &effective_selected_paths));
     folder_count = count_included_folders(&files);
 
@@ -684,6 +709,33 @@ mod tests {
         assert_eq!(next_file.relative_path, "letter.md");
         assert_eq!(next_file.id, initial_file.id);
         assert_ne!(next_file.content_hash, initial_file.content_hash);
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_follows_exact_selected_file_rename_by_inode() {
+        let root = temp_workspace_root("selected-file-rename");
+        let original_path = root.join("before.md");
+        let renamed_path = root.join("after.md");
+        fs::write(&original_path, "Unique rename content\n").expect("write selected file");
+
+        let initial_snapshot = workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec!["before.md".into()]),
+        )
+        .expect("initial selected sync");
+        let initial_id = initial_snapshot.files[0].id.clone();
+
+        fs::rename(&original_path, &renamed_path).expect("rename selected file");
+
+        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+            .expect("sync after selected-file rename");
+
+        assert_eq!(next_snapshot.files.len(), 1);
+        assert_eq!(next_snapshot.files[0].relative_path, "after.md");
+        assert_eq!(next_snapshot.files[0].id, initial_id);
+        assert_eq!(next_snapshot.selected_paths, vec!["after.md"]);
 
         cleanup(&root);
     }

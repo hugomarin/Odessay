@@ -262,6 +262,39 @@ describe("createWorkspaceReconciler — orchestrator", () => {
     expect(reconciler.getReadiness()).toBe("failed")
   })
 
+  it("continues reconciling later roots when an earlier root fails", async () => {
+    const committedRootIds: string[] = []
+    const reconciler = createWorkspaceReconciler({
+      loadRoots: async () => [
+        root({ id: "broken-root", rootPath: "/Users/h/Broken" }),
+        root({ id: "new-root", rootPath: "/Users/h/New" }),
+      ],
+      scanRoot: async (candidate) => {
+        if (candidate.id === "broken-root") {
+          throw new Error("legacy root unavailable")
+        }
+        return {
+          observed: [
+            observed({
+              relativePath: "New.md",
+              canonicalPath: "/Users/h/New/New.md",
+              manifestId: "new-document",
+            }),
+          ],
+          knownBindings: [],
+        }
+      },
+      commit: async (commit) => {
+        committedRootIds.push(commit.bindingRootId)
+      },
+    })
+
+    await reconciler.start()
+
+    expect(committedRootIds).toEqual(["new-root"])
+    expect(reconciler.getReadiness()).toBe("failed")
+  })
+
   it("notifies readiness subscribers and stops after dispose", async () => {
     const states: string[] = []
     const reconciler = createWorkspaceReconciler({

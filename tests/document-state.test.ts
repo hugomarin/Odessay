@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
   deriveDocumentStateForLocalWriting,
+  deriveDocumentStateFromCatalogRecord,
   deriveDocumentStateFromSignals,
 } from "@/lib/writings/document-state"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 
 const makeWriting = (partial: Partial<LocalWriting> = {}): LocalWriting => ({
   id: partial.id ?? "writing-1",
@@ -96,5 +98,46 @@ describe("document state derivation", () => {
         isPending: false,
       }),
     ).toBe("local-only")
+  })
+})
+
+const makeRecord = (
+  partial: Partial<DocumentCatalogRecord> = {},
+): Pick<DocumentCatalogRecord, "localPresent" | "cloudPresent" | "syncStatus"> => ({
+  localPresent: partial.localPresent ?? true,
+  cloudPresent: partial.cloudPresent ?? false,
+  syncStatus: partial.syncStatus ?? "local-only",
+})
+
+describe("catalog record state derivation (shared by Desk and Workspace)", () => {
+  it("derives identity states from presence signals", () => {
+    expect(deriveDocumentStateFromCatalogRecord(makeRecord({ localPresent: true, cloudPresent: false }))).toBe(
+      "local-only",
+    )
+    expect(
+      deriveDocumentStateFromCatalogRecord(
+        makeRecord({ localPresent: true, cloudPresent: true, syncStatus: "synced" }),
+      ),
+    ).toBe("synced")
+    expect(
+      deriveDocumentStateFromCatalogRecord(makeRecord({ localPresent: false, cloudPresent: true })),
+    ).toBe("cloud-only")
+  })
+
+  it("surfaces sync queue states", () => {
+    expect(deriveDocumentStateFromCatalogRecord(makeRecord({ syncStatus: "pending" }))).toBe("pending")
+    expect(deriveDocumentStateFromCatalogRecord(makeRecord({ syncStatus: "failed" }))).toBe("sync-failed")
+    expect(deriveDocumentStateFromCatalogRecord(makeRecord({ syncStatus: "conflict" }))).toBe("conflict")
+  })
+
+  it("prioritizes operational recovery states over identity/sync", () => {
+    const synced = makeRecord({ localPresent: true, cloudPresent: true, syncStatus: "synced" })
+    expect(deriveDocumentStateFromCatalogRecord(synced, { rebuilding: true })).toBe("rebuilding")
+    expect(deriveDocumentStateFromCatalogRecord(synced, { ambiguous: true })).toBe("ambiguous")
+    expect(deriveDocumentStateFromCatalogRecord(synced, { stale: true })).toBe("stale")
+    // A hard conflict outranks a list-wide stale overlay.
+    expect(
+      deriveDocumentStateFromCatalogRecord(makeRecord({ syncStatus: "conflict" }), { stale: true }),
+    ).toBe("conflict")
   })
 })

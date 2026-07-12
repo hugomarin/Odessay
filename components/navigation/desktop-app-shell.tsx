@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import type { Session } from "@supabase/supabase-js"
 import { Sidebar } from "@/components/navigation/sidebar"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { useGlobalOpenFileMenu } from "@/hooks/useGlobalOpenFileMenu"
 import { useWorkspaceReconciler } from "@/hooks/useWorkspaceReconciler"
+import { useCatalogEditorSessionSync } from "@/hooks/useCatalogEditorSessionSync"
+import { getAuthService } from "@/lib/services/auth-service-factory"
+import type { AccountIdentity } from "@/lib/services/contracts/auth-service"
 
 type ShellUser = {
   displayName: string | null
@@ -21,6 +23,7 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ShellUser>(ANON_USER)
 
   useGlobalOpenFileMenu()
+  useCatalogEditorSessionSync()
   // Mount the single app-lifetime WorkspaceReconciler (ODE-370). No-op unless the
   // desktop catalog dual-write flag is on; keeps the catalog projecting across
   // every route so a filesystem change is caught from Desk, Write or anywhere.
@@ -30,33 +33,25 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
     const supabase = createDesktopClient()
     let mounted = true
 
-    const applySession = (session: Session | null) => {
-      if (!mounted || !session?.user) return
-      const u = session.user
+    const applyUser = (u: AccountIdentity | null) => {
+      if (!mounted || !u) return
       setUser({
         email: u.email ?? null,
-        displayName: (u.user_metadata?.display_name as string) ?? null,
-        username: (u.user_metadata?.username as string) ?? null,
+        displayName: u.displayName,
+        username: u.username,
       })
     }
 
     // Authoritative initial check: getSession reads from storage, then getUser
     // validates the token against the server. A stored token with a rotated key
     // will pass getSession but fail getUser — we force re-login in that case.
-    void supabase.auth.getSession().then(async ({ data: sessionData }) => {
+    void getAuthService().getSession().then((result) => {
       if (!mounted) return
-      if (!sessionData.session?.user) {
+      if (result.error || !result.data?.user) {
         router.replace("/login")
         return
       }
-      const { error: userError } = await supabase.auth.getUser()
-      if (!mounted) return
-      if (userError) {
-        // Token invalid (e.g., rotated key) — force re-login
-        router.replace("/login")
-        return
-      }
-      applySession(sessionData.session)
+      applyUser(result.data.user)
     })
 
     // Subscribe to subsequent changes. NEVER redirect on INITIAL_SESSION or
@@ -69,7 +64,22 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
         router.replace("/login")
         return
       }
-      applySession(session)
+      if (session?.user) {
+        applyUser({
+          id: session.user.id,
+          email: session.user.email ?? null,
+          pendingEmail: session.user.new_email ?? null,
+          emailConfirmedAt: session.user.email_confirmed_at ?? null,
+          displayName:
+            typeof session.user.user_metadata?.display_name === "string"
+              ? session.user.user_metadata.display_name
+              : null,
+          username:
+            typeof session.user.user_metadata?.username === "string"
+              ? session.user.user_metadata.username
+              : null,
+        })
+      }
     })
 
     return () => {

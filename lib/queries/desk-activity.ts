@@ -96,6 +96,13 @@ type BuildDeskActivityOptions = {
   workspaceAssignments?: Record<string, string>
   /** workspace slug → display name, used to resolve the assigned workspace label. */
   workspaceNamesBySlug?: Record<string, string>
+  /**
+   * Authoritative document state per UUID, derived from the DocumentCatalog
+   * (ODE-373). When provided it overrides the local presence/sync derivation so
+   * Desk renders the same state the catalog reports and the same state Workspace
+   * shows for that UUID.
+   */
+  documentStateById?: Record<string, DocumentState>
 }
 
 type WritingMeta = {
@@ -290,6 +297,7 @@ const buildMetas = (
   sortBy?: DeskSortBy,
   workspaceAssignments?: Record<string, string>,
   workspaceNamesBySlug?: Record<string, string>,
+  documentStateById?: Record<string, DocumentState>,
 ): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
   const childrenByParent = new Map<string, number>()
@@ -333,7 +341,7 @@ const buildMetas = (
       hasResponses: (childrenByParent.get(writing.id) ?? 0) > 0,
       isReceived,
       status: writing.status,
-      documentState: deriveDocumentStateForLocalWriting(writing),
+      documentState: documentStateById?.[writing.id] ?? deriveDocumentStateForLocalWriting(writing),
       visibility: writing.visibility,
       recipientPreviews: recipientPreviewsByWritingId?.[writing.id] ?? [],
       artifactType: normalizeArtifactType(writing.artifact_type),
@@ -617,6 +625,7 @@ export const buildDeskActivitySummary = (
     options.sortBy,
     options.workspaceAssignments,
     options.workspaceNamesBySlug,
+    options.documentStateById,
   )
   let filtered = applyFilter(allWritings, options.filter)
 

@@ -224,6 +224,47 @@ Regla:
 
 ---
 
+### 6) DocumentCatalog view consumption (Desk/Workspace)
+
+Familia introducida en Fase 9 M4 (ODE-373). Combina un test de integración que
+**monta los consumidores reales** (Desk y Workspace) sobre un DocumentCatalog
+mockeado, más tests de contrato del derivador de estado.
+
+- [tests/desk-workspace-catalog-integration.test.tsx](tests/desk-workspace-catalog-integration.test.tsx)
+- [tests/document-state.test.ts](tests/document-state.test.ts)
+
+Qué cubren:
+
+- **producción real:** monta el `DeskPage` y el `WorkspaceDetailPrototype` reales
+  sobre un catálogo mockeado y verifica que la membresía y el estado salen del
+  catálogo (un writing solo-en-IndexedDB que no está en el catálogo NO se
+  renderiza; un record solo-en-catálogo SÍ);
+- **paridad:** el mismo UUID muestra el mismo estado derivado del catálogo en Desk
+  y en Workspace;
+- **descubrimiento por watcher:** un burst de cambio del catálogo actualiza Desk
+  sin navegar a Workspace;
+- **Performance Contract (automatable):** un burst de N cambios coalescen en un
+  solo reload (reactive fan-out = 1); Desk renderiza el catálogo local sin esperar
+  la hidratación cloud (local-first / TTI);
+- derivación única de estado desde `DocumentCatalogRecord` (local-only, synced,
+  cloud-only, pending, sync-failed, conflict, ambiguous, stale, rebuilding) y
+  prioridad de estados operativos sobre presencia/sync.
+
+Clasificación:
+
+- `usable as-is` para regresiones del consumo de catálogo en Desk/Workspace.
+
+Evidencia que NO corre en esta suite (paso de hardware/app viva):
+
+- el **trace de performance** y el **HAR de red** (waterfall Desk→Studio→Write)
+  requieren la app autenticada corriendo; el catálogo SQLite y el
+  WorkspaceReconciler además viven en el runtime Tauri (el `webServer` de
+  `playwright.config.ts` levanta `npm run dev` web, no el DMG). La evidencia visual
+  side-by-side Desk/Workspace y el flujo desktop se capturan sobre el DMG
+  empaquetado. Ver `workflow/testing/ode-373-desktop-capture.md`.
+
+---
+
 ## Solapamientos actuales que conviene vigilar
 
 ### Write lifecycle

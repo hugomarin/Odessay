@@ -136,10 +136,9 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null)
   const [installing, setInstalling] = useState(false)
 
-  // Workspace is hidden from the sidebar while the feature is still rough.
-  const navItems = useMemo(() => {
-    return NAV_ITEMS.filter((item) => item.href !== "/workspace")
-  }, [])
+  // Workspace is a first-class DocumentCatalog view as of ODE-373 and belongs
+  // in the normal navigation alongside Desk and Studio.
+  const navItems = NAV_ITEMS
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()

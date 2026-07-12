@@ -49,6 +49,7 @@ import { downloadBlob } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
+import { getWritingForEdit } from "@/lib/queries/desk-catalog-source"
 import {
   buildWorkspaceNameLookup,
   readAssignmentSlug,
@@ -370,7 +371,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
   const saveWritingTitleById = useCallback(
     async (writingId: string, nextTitle: string) => {
-      const writing = await localDB.writings.get(writingId)
+      const writing = await getWritingForEdit(writingId)
       if (!writing || writing.sync_status === "deleted") {
         return
       }
@@ -471,7 +472,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   }, [])
 
   const openRenameWriting = useCallback(async (writingId: string) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return
     }
@@ -489,7 +490,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
         return
       }
 
-      const writing = await localDB.writings.get(renameWritingTarget.id)
+      const writing = await getWritingForEdit(renameWritingTarget.id)
       if (!writing || writing.sync_status === "deleted") {
         return
       }

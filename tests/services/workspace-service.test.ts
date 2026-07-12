@@ -18,6 +18,7 @@ const tauriMocks = vi.hoisted(() => ({
   tauriWorkspaceCreate: vi.fn(),
   tauriWorkspaceSync: vi.fn(),
 }));
+const reconcilerMocks = vi.hoisted(() => ({ refreshRoots: vi.fn() }));
 
 // The desktop workspace service imports Tauri + local-db modules at the top
 // level. Stub them so the assignment methods (which only touch the injected
@@ -46,6 +47,9 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriWriteFile: tauriMocks.tauriWriteFile,
   tauriWorkspaceCreate: tauriMocks.tauriWorkspaceCreate,
   tauriWorkspaceSync: tauriMocks.tauriWorkspaceSync,
+}));
+vi.mock("@/lib/services/desktop/desktop-workspace-reconciler", () => ({
+  refreshWorkspaceReconcilerRoots: reconcilerMocks.refreshRoots,
 }));
 
 import { DesktopWorkspaceService } from "@/lib/services/desktop/workspace-service";
@@ -92,6 +96,15 @@ describe("workspace assignment helpers", () => {
 type FakeStore = {
   workspaces?: WorkspaceRecord[];
   workspaceAssignments?: WorkspaceAssignmentMap;
+  bindingRoots?: Array<{
+    id: string;
+    rootPath: string;
+    kind: "managed" | "external";
+    visibleAsWorkspace: boolean;
+    selectedPaths: string[];
+    consentedAt: string | null;
+    createdAt: string;
+  }>;
 };
 
 function createFakeSettingsService(initial: FakeStore = {}) {
@@ -101,6 +114,15 @@ function createFakeSettingsService(initial: FakeStore = {}) {
     updateDesktopSettings: vi.fn(async (patch: Partial<FakeStore>) => {
       store = { ...store, ...patch };
       return { data: store, error: null };
+    }),
+    getBindingRoots: vi.fn(async () => store.bindingRoots ?? []),
+    upsertBindingRoot: vi.fn(async (record: NonNullable<FakeStore["bindingRoots"]>[number]) => {
+      const roots = store.bindingRoots ?? [];
+      const matches = (root: NonNullable<FakeStore["bindingRoots"]>[number]) =>
+        root.id === record.id || root.rootPath === record.rootPath;
+      store.bindingRoots = roots.some(matches)
+        ? roots.map((root) => (matches(root) ? record : root))
+        : [...roots, record];
     }),
     get store() {
       return store;
@@ -127,12 +149,53 @@ describe("DesktopWorkspaceService assignments", () => {
     tauriMocks.tauriWriteFile.mockReset();
     tauriMocks.tauriWorkspaceCreate.mockReset();
     tauriMocks.tauriWorkspaceSync.mockReset();
+    reconcilerMocks.refreshRoots.mockReset();
     settings = createFakeSettingsService({
       workspaces: [record("drafts", "Drafts"), record("letters", "Letters")],
     });
     // The constructor only stores the settings service; cast through unknown to
     // satisfy the nominal DesktopSettingsService type for the test double.
     service = new DesktopWorkspaceService(settings as unknown as never);
+  });
+
+  it("registers an adopted Workspace as a visible BindingRoot and refreshes the global reconciler", async () => {
+    tauriMocks.tauriWorkspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/new-workspace",
+      bindingRootId: "binding-root-from-manifest",
+      name: "New Workspace",
+      selectedPaths: ["Included.md"],
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: Date.now(),
+      files: [
+        {
+          id: "document-id",
+          path: "/Users/me/new-workspace/Included.md",
+          relativePath: "Included.md",
+          name: "Included.md",
+          modifiedAt: Date.now(),
+          size: 10,
+          inode: 1,
+          contentHash: "hash",
+        },
+      ],
+    });
+
+    await service.addExistingWorkspaceWithSelection(
+      "/Users/me/new-workspace",
+      ["Included.md"],
+    );
+
+    expect(settings.store.bindingRoots).toEqual([
+      expect.objectContaining({
+        id: "binding-root-from-manifest",
+        rootPath: "/Users/me/new-workspace",
+        kind: "external",
+        visibleAsWorkspace: true,
+        selectedPaths: ["Included.md"],
+      }),
+    ]);
+    expect(reconcilerMocks.refreshRoots).toHaveBeenCalledTimes(1);
   });
 
   it("lists registered workspaces as assignment targets without syncing the FS", async () => {

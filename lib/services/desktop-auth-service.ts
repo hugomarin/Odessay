@@ -65,6 +65,8 @@ function sessionFromUser(user: {
   }
 }
 
+let inFlightSessionRequest: Promise<ServiceResponse<AuthSession>> | null = null
+
 async function checkDesktopUsernameAvailability(
   input: CheckUsernameAvailabilityInput,
 ): Promise<ServiceResponse<UsernameAvailability>> {
@@ -266,25 +268,39 @@ export const desktopAuthService: AuthService = {
     }
   },
 
-  async getSession(): Promise<ServiceResponse<AuthSession>> {
-    try {
-      const supabase = createDesktopClient()
-      const { data, error } = await supabase.auth.getUser()
-
-      if (error) {
-        return err(toServiceError("UNAVAILABLE", error.message, true))
-      }
-
-      return ok(sessionFromUser(data.user))
-    } catch (error) {
-      return err(
-        toServiceError(
-          "UNAVAILABLE",
-          error instanceof Error ? error.message : "Could not read the current session.",
-          true,
-        ),
-      )
+  getSession(): Promise<ServiceResponse<AuthSession>> {
+    if (inFlightSessionRequest) {
+      return inFlightSessionRequest
     }
+
+    const request = (async (): Promise<ServiceResponse<AuthSession>> => {
+      try {
+        const supabase = createDesktopClient()
+        const { data, error } = await supabase.auth.getUser()
+
+        if (error) {
+          return err(toServiceError("UNAVAILABLE", error.message, true))
+        }
+
+        return ok(sessionFromUser(data.user))
+      } catch (error) {
+        return err(
+          toServiceError(
+            "UNAVAILABLE",
+            error instanceof Error ? error.message : "Could not read the current session.",
+            true,
+          ),
+        )
+      }
+    })()
+
+    inFlightSessionRequest = request
+    void request.finally(() => {
+      if (inFlightSessionRequest === request) {
+        inFlightSessionRequest = null
+      }
+    })
+    return request
   },
 
   async updateDisplayName(input: UpdateDisplayNameInput): Promise<ServiceResponse<AccountIdentity>> {

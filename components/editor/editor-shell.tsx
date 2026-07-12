@@ -196,6 +196,7 @@ import {
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
 import { useHydrationProgress } from "@/lib/sync/hydration-progress"
+import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/catalog-title-events"
 
 type EditorShellProps = {
   writingId?: string
@@ -1278,6 +1279,30 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   useEffect(() => {
     titleRef.current = title
   }, [title])
+
+  useEffect(() => {
+    if (!isDesktopRuntime() || hydrationWritingId !== null || !currentWritingId) {
+      return
+    }
+
+    const applyCatalogTitle = () => {
+      const catalogTitle = getLatestCatalogTitle(currentWritingId)?.trim()
+      if (!catalogTitle || catalogTitle === titleRef.current) {
+        return
+      }
+
+      // On desktop the filename is the canonical human title. Mirror the
+      // catalog projection into the active editor without feeding session
+      // writes back into this effect (which would create an update loop).
+      titleRef.current = catalogTitle
+      setTitle(catalogTitle)
+      setHasExplicitTitle(catalogTitle !== UNTITLED_WRITING_TITLE)
+    }
+
+    applyCatalogTitle()
+    window.addEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
+    return () => window.removeEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
+  }, [currentWritingId, hydrationWritingId])
 
   useEffect(() => {
     hasExplicitTitleRef.current = hasExplicitTitle
