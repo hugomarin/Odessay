@@ -191,5 +191,10 @@ describe("desktop sharing service preview-link bridge", () => {
     const [firstResult, secondResult] = await Promise.all([first, second])
     expect(firstResult.data).toEqual({ "writing-1": [], "writing-2": [] })
     expect(secondResult.data).toEqual(firstResult.data)
+
+    const cachedResult = await service.listRecipientPreviews(["writing-2", "writing-1"])
+    expect(cachedResult.data).toEqual(firstResult.data)
+    expect(getSessionMock).toHaveBeenCalledOnce()
+    expect(fromMock).toHaveBeenCalledOnce()
   })
 })

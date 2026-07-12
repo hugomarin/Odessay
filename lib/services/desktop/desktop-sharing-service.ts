@@ -25,6 +25,7 @@ import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/ser
 //   - profiles_select_public: profiles are world-readable.
 
 const MAX_BATCH_SHARE_IDS = 50
+const RECIPIENT_PREVIEW_FRESHNESS_MS = 5_000
 
 type DesktopSupabaseClient = ReturnType<typeof createDesktopClient>
 type RawAuthorProfile = { username: string; display_name: string } | null
@@ -200,6 +201,10 @@ export function createDesktopSharingService(): DesktopSharingService {
     string,
     Promise<ServiceResponse<Record<string, RecipientPreview[]>>>
   >()
+  const recipientPreviewCache = new Map<
+    string,
+    { expiresAt: number; response: ServiceResponse<Record<string, RecipientPreview[]>> }
+  >()
 
   return {
     async listRecipients(writingId) {
@@ -212,7 +217,7 @@ export function createDesktopSharingService(): DesktopSharingService {
     },
 
     async shareWriting(input) {
-      return callWebRoute<ShareRecipient>(
+      const response = await callWebRoute<ShareRecipient>(
         supabase,
         `/api/writings/${input.writingId}/shares`,
         {
@@ -223,6 +228,10 @@ export function createDesktopSharingService(): DesktopSharingService {
         },
         "Could not share this writing right now.",
       )
+      if (!response.error) {
+        recipientPreviewCache.clear()
+      }
+      return response
     },
 
     async revokeShare(input) {
@@ -242,6 +251,7 @@ export function createDesktopSharingService(): DesktopSharingService {
         return result as ServiceResponse<{ writingId: string; sharedWithUserId: string }>
       }
 
+      recipientPreviewCache.clear()
       return ok({ writingId: input.writingId, sharedWithUserId: input.sharedWithUserId })
     },
 
@@ -315,6 +325,14 @@ export function createDesktopSharingService(): DesktopSharingService {
 
       const normalizedWritingIds = [...new Set(writingIds)].sort()
       const requestKey = normalizedWritingIds.join(",")
+      const cached = recipientPreviewCache.get(requestKey)
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.response
+      }
+      if (cached) {
+        recipientPreviewCache.delete(requestKey)
+      }
+
       const existingRequest = inFlightRecipientPreviews.get(requestKey)
       if (existingRequest) {
         return existingRequest
@@ -357,7 +375,12 @@ export function createDesktopSharingService(): DesktopSharingService {
           })
         }
 
-        return ok(result)
+        const response = ok(result)
+        recipientPreviewCache.set(requestKey, {
+          expiresAt: Date.now() + RECIPIENT_PREVIEW_FRESHNESS_MS,
+          response,
+        })
+        return response
       })()
 
       inFlightRecipientPreviews.set(requestKey, request)
