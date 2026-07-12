@@ -461,6 +461,60 @@ export function getEditorSessionState() {
   return state;
 }
 
+/**
+ * Refresh cached presentation metadata for already-open writings without
+ * changing document identity, tab order, focus or editor view state.
+ *
+ * The DocumentCatalog owns the current title projection on desktop. The
+ * session store only caches that title for rendering and persistence, so a
+ * filesystem rename must update every matching tab/recent entry by UUID.
+ */
+export function syncWritingTitlesFromCatalog(titlesByWritingId: ReadonlyMap<string, string>) {
+  if (titlesByWritingId.size === 0) {
+    return false;
+  }
+
+  const normalizedTitles = new Map<string, string>();
+  titlesByWritingId.forEach((title, writingId) => {
+    const normalized = title.trim();
+    if (normalized) {
+      normalizedTitles.set(writingId, normalized);
+    }
+  });
+
+  if (normalizedTitles.size === 0) {
+    return false;
+  }
+
+  const hasChangedTitle =
+    state.session.tabs.some((tab) => {
+      const title = tab.writing_id ? normalizedTitles.get(tab.writing_id) : null;
+      return Boolean(title && title !== tab.title);
+    }) ||
+    state.session.recent_writings.some((entry) => {
+      const title = normalizedTitles.get(entry.writing_id);
+      return Boolean(title && title !== entry.title);
+    });
+
+  if (!hasChangedTitle) {
+    return false;
+  }
+
+  setSessionState((current) => ({
+    ...current,
+    tabs: current.tabs.map((tab) => {
+      const title = tab.writing_id ? normalizedTitles.get(tab.writing_id) : null;
+      return title && title !== tab.title ? { ...tab, title } : tab;
+    }),
+    recent_writings: current.recent_writings.map((entry) => {
+      const title = normalizedTitles.get(entry.writing_id);
+      return title && title !== entry.title ? { ...entry, title } : entry;
+    }),
+  }));
+
+  return true;
+}
+
 export function resetEditorSessionStoreForTests() {
   state = DEFAULT_STATE;
   loadPromise = null;

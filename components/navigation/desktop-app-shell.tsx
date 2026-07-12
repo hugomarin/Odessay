@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/navigation/sidebar"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { useGlobalOpenFileMenu } from "@/hooks/useGlobalOpenFileMenu"
 import { useWorkspaceReconciler } from "@/hooks/useWorkspaceReconciler"
+import { useCatalogEditorSessionSync } from "@/hooks/useCatalogEditorSessionSync"
 
 type ShellUser = {
   displayName: string | null
@@ -21,6 +22,7 @@ export function DesktopAppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<ShellUser>(ANON_USER)
 
   useGlobalOpenFileMenu()
+  useCatalogEditorSessionSync()
   // Mount the single app-lifetime WorkspaceReconciler (ODE-370). No-op unless the
   // desktop catalog dual-write flag is on; keeps the catalog projecting across
   // every route so a filesystem change is caught from Desk, Write or anywhere.
