@@ -3081,6 +3081,16 @@
       "commit": "cb8d26e485e26c0d30b348d9eeb0546d3695911b",
       "date": "2026-07-11",
       "notes": "M3 of Fase 9 unified desktop document catalog. One application opener accepts id or path and converges to UUID before editor hydration through DocumentCatalog; explicit recoverable outcomes; external BindingRoot registration persists manifest first and reuses one durable bindingRootId across Settings and SQLite; no empty-draft fallback; Desk/Search/Recent/sidebar, Workspace and native Open Document converge through the use case. Performance Contract PASS (14 pass, 0 warn, 1 skip; delivery gate with trace PASS). Packaged DMG 0.3.6 validation PASS: manifest/Settings/SQLite identity convergence, exact-file selectedPaths, Desk same UUID, restart persistence and zero external network requests. Review score 10.0/10 after two corrective rounds. Workspace adoption remains ODE-373; legacy IndexedDB harvest remains ODE-376; final cross-entry acceptance remains ODE-372."
+    },
+    {
+      "what": "feat(catalog): unify Desk and Workspace as DocumentCatalog views [ODE-373]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-373",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-373/unify-desk-and-workspace-as-documentcatalog-views",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/338",
+      "commit": "50f16c65548279d1ce1981124255c448f5804816",
+      "date": "2026-07-12",
+      "notes": "M4 of Fase 9 unified desktop document catalog. Desk and Workspace are two views of the same DocumentCatalog through application query ports (desk-catalog-source, workspace-catalog-source): shared identity/state derivation, no storage/runtime import in presentation, per-view FS watchers replaced by subscribeToCatalog (no parallel discovery). Recent + editor tab titles projected from catalog; startup request dedup (auth getSession, sharing recipient-preview cache, sync-bootstrap). Web boundary WorkspaceDesktopRequired instead of fake folder picker. Performance Contract required: waterfall via ops:network:gate required_failures:0 (0 duplicate startup requests, deduped bootstrap), reactive fan-out + local-first TTI via integration test. Visual/UX Contract: side-by-side Desk<->Workspace same document (Case4) + watcher-discovery Case4->Case4-renamed reflected in Desk without navigating to Workspace. Review score 9.5/10 (two informational P3) after one rejected round for missing perf/visual evidence. IndexedDB cutover/removal deferred to ODE-376; cloud adapters to ODE-371; DoD acceptance to ODE-372."
     }
   ]
 }
