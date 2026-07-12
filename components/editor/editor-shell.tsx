@@ -196,6 +196,7 @@ import {
 } from "@/lib/stores/editor-session-store"
 import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
 import { useHydrationProgress } from "@/lib/sync/hydration-progress"
+import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/catalog-title-events"
 
 type EditorShellProps = {
   writingId?: string
@@ -1284,22 +1285,24 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return
     }
 
-    const catalogTitle = editorSession.tabs
-      .find((tab) => tab.writing_id === currentWritingId)
-      ?.title.trim()
+    const applyCatalogTitle = () => {
+      const catalogTitle = getLatestCatalogTitle(currentWritingId)?.trim()
+      if (!catalogTitle || catalogTitle === titleRef.current) {
+        return
+      }
 
-    if (!catalogTitle || catalogTitle === titleRef.current) {
-      return
+      // On desktop the filename is the canonical human title. Mirror the
+      // catalog projection into the active editor without feeding session
+      // writes back into this effect (which would create an update loop).
+      titleRef.current = catalogTitle
+      setTitle(catalogTitle)
+      setHasExplicitTitle(catalogTitle !== UNTITLED_WRITING_TITLE)
     }
 
-    // On desktop the filename is the canonical human title. The global
-    // catalog updates the session tab after Finder/app renames; mirror that
-    // projection into the active editor so its local state cannot publish the
-    // previous title back over the tab or seed the rename modal with it.
-    titleRef.current = catalogTitle
-    setTitle(catalogTitle)
-    setHasExplicitTitle(catalogTitle !== UNTITLED_WRITING_TITLE)
-  }, [currentWritingId, editorSession.tabs, hydrationWritingId])
+    applyCatalogTitle()
+    window.addEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
+    return () => window.removeEventListener(CATALOG_TITLE_CHANGE_EVENT, applyCatalogTitle)
+  }, [currentWritingId, hydrationWritingId])
 
   useEffect(() => {
     hasExplicitTitleRef.current = hasExplicitTitle

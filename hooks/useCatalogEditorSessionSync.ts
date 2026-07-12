@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
 import { subscribeToCatalog } from "@/lib/queries/document-catalog"
+import { emitCatalogTitleChange } from "@/lib/events/catalog-title-events"
 import {
   initializeEditorSessionStore,
   syncWritingTitlesFromCatalog,
@@ -40,6 +41,7 @@ export function useCatalogEditorSessionSync() {
         }
       })
       syncWritingTitlesFromCatalog(titles)
+      emitCatalogTitleChange(titles)
     }
 
     void syncTitles()
