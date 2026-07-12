@@ -252,6 +252,37 @@ describe("desktopAuthService", () => {
     })
   })
 
+  it("deduplicates concurrent desktop session validation", async () => {
+    let resolveUser!: (value: {
+      data: { user: { id: string; email: string; user_metadata: Record<string, string> } }
+      error: null
+    }) => void
+    supabaseAuthMock.getUser.mockReturnValue(new Promise((resolve) => {
+      resolveUser = resolve
+    }))
+
+    const first = desktopAuthService.getSession()
+    const second = desktopAuthService.getSession()
+
+    expect(first).toBe(second)
+    expect(supabaseAuthMock.getUser).toHaveBeenCalledOnce()
+
+    resolveUser({
+      data: {
+        user: {
+          id: "user-single-flight",
+          email: "writer@example.com",
+          user_metadata: { display_name: "Writer", username: "writer" },
+        },
+      },
+      error: null,
+    })
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    expect(firstResult.data?.user?.id).toBe("user-single-flight")
+    expect(secondResult.data?.user?.id).toBe("user-single-flight")
+  })
+
   it("getSession returns anonymous session when no user is logged in", async () => {
     supabaseAuthMock.getUser.mockResolvedValue({
       data: { user: null },

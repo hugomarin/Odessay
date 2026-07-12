@@ -44,7 +44,6 @@ import { getSyncService } from "@/lib/sync"
 import { invalidateHydrationFreshness } from "@/lib/sync/desktop-sync-service"
 import { invalidateWebWritingsHydrationFreshness } from "@/lib/sync/remote-bootstrap"
 import { invalidateWebCollectionsHydrationFreshness } from "@/lib/collections/remote-bootstrap"
-import { getAuthService } from "@/lib/services/auth-service-factory"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import {
@@ -214,8 +213,8 @@ export default function DeskPage() {
       // must bypass the freshness window on both runtimes.
       if (force) {
         if (isTauriRuntime()) {
-          const sessionResult = await getAuthService().getSession()
-          const userId = sessionResult.data?.user?.id
+          const scope = getLocalDBScope()
+          const userId = scope === "anonymous" ? null : scope
           if (userId) {
             invalidateHydrationFreshness(userId)
           }
