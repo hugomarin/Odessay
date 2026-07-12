@@ -189,15 +189,17 @@ type IncomingSharedWritingRow = {
   author_display_name: string | null
 }
 
-async function getUserId(supabase: DesktopSupabaseClient): Promise<string | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  return user?.id ?? null
+async function getSessionUserId(supabase: DesktopSupabaseClient): Promise<string | null> {
+  const { data, error } = await supabase.auth.getSession()
+  return error ? null : data.session?.user?.id ?? null
 }
 
 export function createDesktopSharingService(): DesktopSharingService {
   const supabase = createDesktopClient()
+  const inFlightRecipientPreviews = new Map<
+    string,
+    Promise<ServiceResponse<Record<string, RecipientPreview[]>>>
+  >()
 
   return {
     async listRecipients(writingId) {
@@ -311,43 +313,61 @@ export function createDesktopSharingService(): DesktopSharingService {
         )
       }
 
-      const userId = await getUserId(supabase)
-      if (!userId) {
-        return err(makeError("UNAUTHORIZED", "No active session.", false))
+      const normalizedWritingIds = [...new Set(writingIds)].sort()
+      const requestKey = normalizedWritingIds.join(",")
+      const existingRequest = inFlightRecipientPreviews.get(requestKey)
+      if (existingRequest) {
+        return existingRequest
       }
 
-      const result: Record<string, RecipientPreview[]> = Object.fromEntries(
-        writingIds.map((id) => [id, [] as RecipientPreview[]]),
-      )
-
-      const { data: shares, error: sharesError } = await supabase
-        .from("writing_shares")
-        .select("writing_id, profiles!shared_with_id(username, display_name)")
-        .in("writing_id", writingIds)
-        .order("created_at", { ascending: true })
-
-      if (sharesError) {
-        return err(makeError("DB_ERROR", sharesError.message, true))
-      }
-
-      for (const share of shares ?? []) {
-        const profile = normalizeProfile(
-          (share.profiles ?? null) as RawAuthorProfile | RawAuthorProfile[] | null,
-        )
-
-        if (!profile) {
-          continue
+      const request = (async (): Promise<ServiceResponse<Record<string, RecipientPreview[]>>> => {
+        const userId = await getSessionUserId(supabase)
+        if (!userId) {
+          return err(makeError("UNAUTHORIZED", "No active session.", false))
         }
 
-        const writingId = share.writing_id as string
-        result[writingId] ??= []
-        result[writingId].push({
-          username: profile.username,
-          displayName: profile.display_name,
-        })
-      }
+        const result: Record<string, RecipientPreview[]> = Object.fromEntries(
+          normalizedWritingIds.map((id) => [id, [] as RecipientPreview[]]),
+        )
 
-      return ok(result)
+        const { data: shares, error: sharesError } = await supabase
+          .from("writing_shares")
+          .select("writing_id, profiles!shared_with_id(username, display_name)")
+          .in("writing_id", normalizedWritingIds)
+          .order("created_at", { ascending: true })
+
+        if (sharesError) {
+          return err(makeError("DB_ERROR", sharesError.message, true))
+        }
+
+        for (const share of shares ?? []) {
+          const profile = normalizeProfile(
+            (share.profiles ?? null) as RawAuthorProfile | RawAuthorProfile[] | null,
+          )
+
+          if (!profile) {
+            continue
+          }
+
+          const writingId = share.writing_id as string
+          result[writingId] ??= []
+          result[writingId].push({
+            username: profile.username,
+            displayName: profile.display_name,
+          })
+        }
+
+        return ok(result)
+      })()
+
+      inFlightRecipientPreviews.set(requestKey, request)
+      try {
+        return await request
+      } finally {
+        if (inFlightRecipientPreviews.get(requestKey) === request) {
+          inFlightRecipientPreviews.delete(requestKey)
+        }
+      }
     },
 
     async searchUsers(query) {

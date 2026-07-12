@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createDesktopSharingService } from "@/lib/services/desktop/desktop-sharing-service"
 
 const getSessionMock = vi.hoisted(() => vi.fn())
+const sharingQueryMock = vi.hoisted(() => ({
+  select: vi.fn(),
+  in: vi.fn(),
+  order: vi.fn(),
+}))
+const fromMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/supabase/desktop-client", () => ({
   createDesktopClient: () => ({
@@ -9,12 +15,17 @@ vi.mock("@/lib/supabase/desktop-client", () => ({
       getSession: getSessionMock,
       getUser: vi.fn(),
     },
+    from: fromMock,
   }),
 }))
 
 describe("desktop sharing service preview-link bridge", () => {
   beforeEach(() => {
     getSessionMock.mockReset()
+    fromMock.mockReset().mockReturnValue(sharingQueryMock)
+    sharingQueryMock.select.mockReset().mockReturnValue(sharingQueryMock)
+    sharingQueryMock.in.mockReset().mockReturnValue(sharingQueryMock)
+    sharingQueryMock.order.mockReset()
     delete process.env.NEXT_PUBLIC_APP_URL
     vi.unstubAllGlobals()
   })
@@ -155,5 +166,30 @@ describe("desktop sharing service preview-link bridge", () => {
       writingId: "writing-1",
       revoked: true,
     })
+  })
+
+  it("deduplicates concurrent recipient preview reads for the same writing ids", async () => {
+    getSessionMock.mockResolvedValue({
+      data: { session: { user: { id: "desktop-user" } } },
+      error: null,
+    })
+    let resolveShares!: (value: { data: []; error: null }) => void
+    sharingQueryMock.order.mockReturnValue(new Promise((resolve) => {
+      resolveShares = resolve
+    }))
+
+    const service = createDesktopSharingService()
+    const first = service.listRecipientPreviews(["writing-2", "writing-1"])
+    const second = service.listRecipientPreviews(["writing-1", "writing-2"])
+    await vi.waitFor(() => {
+      expect(getSessionMock).toHaveBeenCalledOnce()
+      expect(fromMock).toHaveBeenCalledOnce()
+    })
+    expect(sharingQueryMock.in).toHaveBeenCalledWith("writing_id", ["writing-1", "writing-2"])
+
+    resolveShares({ data: [], error: null })
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    expect(firstResult.data).toEqual({ "writing-1": [], "writing-2": [] })
+    expect(secondResult.data).toEqual(firstResult.data)
   })
 })
