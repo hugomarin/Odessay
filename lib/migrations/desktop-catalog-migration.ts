@@ -3,6 +3,8 @@ import {
   readScopeSnapshot,
   setLocalDBReadOnly,
 } from "@/lib/local-db"
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
+import { isDesktopIndexedDbMigrationEnabled } from "@/lib/services/desktop/indexeddb-migration-flag"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import {
   tauriCatalogDualWrite,
@@ -105,4 +107,28 @@ export function runDesktopCatalogMigrationOnce(
     })
   }
   return runnerPromise
+}
+
+/**
+ * Startup entry point (ODE-376). Desktop Desk/Workspace read the SQLite catalog
+ * DIRECTLY (ODE-373), not through the DocumentService, so hooking the migration
+ * to `DocumentService.ensureMigrated` alone never fires it on launch — the
+ * catalog would render empty until a document is opened. This runs the migration
+ * from the global desktop bootstrap, resolving the config dir / db path itself,
+ * gated by runtime + the explicit cutover flag. A failure is logged, not thrown:
+ * the checkpoint persists so the next launch resumes, and bootstrap continues.
+ */
+export async function ensureDesktopCatalogMigrated(): Promise<void> {
+  if (!isDesktopRuntime() || !isDesktopIndexedDbMigrationEnabled()) return
+  try {
+    const { appConfigDir, join } = await import("@tauri-apps/api/path")
+    const configDir = await appConfigDir()
+    const dbPath = await join(configDir, "desktop-index.sqlite3")
+    await runDesktopCatalogMigrationOnce({ configDir, dbPath })
+  } catch (error) {
+    if (process.env.NODE_ENV !== "test") {
+      // eslint-disable-next-line no-console
+      console.error("[migration:indexeddb-sqlite] startup migration failed", error)
+    }
+  }
 }
