@@ -76,7 +76,7 @@ export type MigrationCheckpointStore = {
 }
 
 export type MigrationConflict = {
-  kind: "uuid" | "path" | "hash" | "mutation"
+  kind: "uuid" | "path" | "hash" | "mutation" | "commit"
   documentId: string
   detail: string
   losing: {
@@ -520,7 +520,29 @@ export async function migrateIndexedDbToSqlite(
           ? { ...mutation, entity_id: writing.id }
           : mutation
 
-      await sink.commit(toSinkInput(writing, rekeyedMutation, isLoser))
+      try {
+        await sink.commit(toSinkInput(writing, rekeyedMutation, isLoser))
+      } catch (error) {
+        // A single row that the sink rejects (an unexpected constraint clash in
+        // messy historical data) must NOT abort the whole bulk copy. Record it as
+        // a conflict — non-silent, recoverable, and it keeps the old store intact
+        // (requirement 3/8) — and continue with the rest of the batch.
+        recordConflict({
+          kind: "commit",
+          documentId: writing.id,
+          detail: `SQLite commit rejected document ${writing.id}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+          losing: {
+            scope: candidate.scope,
+            documentId: writing.id,
+            canonicalPath: canonicalPath,
+            contentHash: writing.content_hash ?? null,
+            version: writing.version,
+          },
+        })
+        continue
+      }
 
       committedDocumentIds.add(writing.id)
       emittedDocumentIds.push(writing.id)

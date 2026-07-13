@@ -111,6 +111,27 @@ function memoryCheckpoint(): MigrationCheckpointStore & { current: MigrationChec
   return store
 }
 
+/**
+ * Simulate a process crash mid-migration: the Nth checkpoint save throws (this
+ * happens OUTSIDE the per-row commit guard, so it propagates and aborts the run),
+ * modelling a real interruption rather than a single bad row.
+ */
+function crashingCheckpoint(crashOnSaveCall: number): MigrationCheckpointStore & { current: MigrationCheckpoint | null } {
+  let saves = 0
+  const store = {
+    current: null as MigrationCheckpoint | null,
+    async load() {
+      return store.current
+    },
+    async save(checkpoint: MigrationCheckpoint) {
+      saves += 1
+      if (saves === crashOnSaveCall) throw new Error("simulated interruption")
+      store.current = structuredClone(checkpoint)
+    },
+  }
+  return store
+}
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe("ODE-376 · IndexedDB → SQLite migration", () => {
@@ -330,6 +351,33 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
     expect(summary.retainedCollectionMutationCount).toBe(1)
   })
 
+  it("records a commit failure as a conflict and keeps migrating the rest", async () => {
+    const { documents } = makeSink()
+    const failingSink: CatalogMigrationSink = {
+      async commit(input) {
+        if (input.document.id === "bad") throw new Error("unexpected constraint clash")
+        documents.set(input.document.id, input.document)
+      },
+    }
+    const summary = await migrateIndexedDbToSqlite({
+      reader: reader({
+        anonymous: snapshot("anonymous", {
+          writings: [
+            writing({ id: "ok-1", canonical_path: "/root/ok1.md" }),
+            writing({ id: "bad", canonical_path: "/root/bad.md" }),
+            writing({ id: "ok-2", canonical_path: "/root/ok2.md" }),
+          ],
+        }),
+      }),
+      sink: failingSink,
+    })
+
+    // The bad row is recorded, the others still migrate — no aborted batch.
+    expect(summary.status).toBe("completed")
+    expect([...documents.keys()].sort()).toEqual(["ok-1", "ok-2"])
+    expect(summary.conflicts.some((c) => c.kind === "commit" && c.documentId === "bad")).toBe(true)
+  })
+
   it("emits a single fan-out signal for the whole batch", async () => {
     const { sink } = makeSink()
     const onBatchComplete = vi.fn()
@@ -349,7 +397,6 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
   })
 
   it("resumes idempotently after an interrupted checkpoint without duplicating mutations", async () => {
-    const checkpoint = memoryCheckpoint()
     const scopeData = reader({
       anonymous: snapshot("anonymous", {
         writings: [
@@ -365,20 +412,14 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
       }),
     })
 
-    // First run: sink fails after two commits, simulating a crash mid-migration.
+    // First run: the checkpoint save crashes after the first two rows commit,
+    // simulating a process interruption mid-migration.
     const first = makeSink()
-    let commits = 0
-    const flakySink: CatalogMigrationSink = {
-      async commit(input) {
-        commits += 1
-        if (commits === 3) throw new Error("simulated interruption")
-        return first.sink.commit(input)
-      },
-    }
+    const crashCheckpoint = crashingCheckpoint(2)
     await expect(
-      migrateIndexedDbToSqlite({ reader: scopeData, sink: flakySink, checkpoint }),
+      migrateIndexedDbToSqlite({ reader: scopeData, sink: first.sink, checkpoint: crashCheckpoint }),
     ).rejects.toThrow("simulated interruption")
-    expect(checkpoint.current?.status).toBe("failed")
+    expect(crashCheckpoint.current?.status).toBe("failed")
     expect(first.documents.size).toBe(2)
 
     // Second run resumes: already-committed ids are skipped, no mutation repeats.
@@ -389,18 +430,17 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
         return first.sink.commit(input)
       },
     }
-    const summary = await migrateIndexedDbToSqlite({ reader: scopeData, sink: resumeSink, checkpoint })
+    const summary = await migrateIndexedDbToSqlite({ reader: scopeData, sink: resumeSink, checkpoint: crashCheckpoint })
 
     expect(summary.status).toBe("completed")
     expect([...first.documents.keys()].sort()).toEqual(["one", "three", "two"])
     expect(first.mutations.size).toBe(3)
-    // The two already-committed documents are not re-committed on resume.
+    // The already-committed documents are not re-committed on resume.
     expect(commitCounts.get("one")).toBeUndefined()
     expect(commitCounts.get("three")).toBe(1)
   })
 
   it("does not duplicate conflicts when resuming after an interruption", async () => {
-    const checkpoint = memoryCheckpoint()
     const data = reader({
       anonymous: snapshot("anonymous", {
         writings: [
@@ -413,22 +453,17 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
       }),
     })
 
-    // First run fails after the winning "dup" row commits, leaving a checkpoint
-    // that already carries the UUID conflict.
+    // First run is interrupted right after the winning "dup" row commits, leaving a
+    // checkpoint that already carries the UUID conflict.
     const first = makeSink()
-    let commits = 0
-    const flakySink: CatalogMigrationSink = {
-      async commit(input) {
-        commits += 1
-        if (commits === 2) throw new Error("interrupted")
-        return first.sink.commit(input)
-      },
-    }
-    await expect(migrateIndexedDbToSqlite({ reader: data, sink: flakySink, checkpoint })).rejects.toThrow("interrupted")
-    expect(checkpoint.current?.conflicts.filter((c) => c.kind === "uuid")).toHaveLength(1)
+    const crashCheckpoint = crashingCheckpoint(1)
+    await expect(migrateIndexedDbToSqlite({ reader: data, sink: first.sink, checkpoint: crashCheckpoint })).rejects.toThrow(
+      "simulated interruption",
+    )
+    expect(crashCheckpoint.current?.conflicts.filter((c) => c.kind === "uuid")).toHaveLength(1)
 
     // Resume re-harvests and re-detects the same divergence but does not append it again.
-    const summary = await migrateIndexedDbToSqlite({ reader: data, sink: first.sink, checkpoint })
+    const summary = await migrateIndexedDbToSqlite({ reader: data, sink: first.sink, checkpoint: crashCheckpoint })
     expect(summary.conflicts.filter((c) => c.kind === "uuid")).toHaveLength(1)
   })
 
