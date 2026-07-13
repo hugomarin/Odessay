@@ -11,7 +11,7 @@ import type {
   WritingSummary,
 } from "@/lib/services/contracts/document-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
-import { localDB } from "@/lib/local-db"
+import { localDB, LocalDBReadOnlyError } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
@@ -345,7 +345,18 @@ class DesktopDocumentService implements DocumentService {
         local_updated_at: Date.now(),
       }
 
-      await localDB.writings.save(localWriting)
+      // Caching the read result into IndexedDB is opportunistic. During the
+      // ODE-376 read-only compatibility window desktop IndexedDB rejects writes;
+      // the content already came from the authoritative .md file, so a blocked
+      // cache refresh must NOT fail the open — the document still renders. Only
+      // the read-only latch is swallowed; any other write failure still surfaces.
+      try {
+        await localDB.writings.save(localWriting)
+      } catch (error) {
+        if (!(error instanceof LocalDBReadOnlyError)) {
+          throw error
+        }
+      }
       return ok(toCanonicalRecord(localWriting))
     } catch (error) {
       return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
