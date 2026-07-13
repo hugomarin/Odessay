@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-12T02:39:49.039Z",
+  "last_updated": "2026-07-13T04:00:18.373Z",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3091,6 +3091,16 @@
       "commit": "50f16c65548279d1ce1981124255c448f5804816",
       "date": "2026-07-12",
       "notes": "M4 of Fase 9 unified desktop document catalog. Desk and Workspace are two views of the same DocumentCatalog through application query ports (desk-catalog-source, workspace-catalog-source): shared identity/state derivation, no storage/runtime import in presentation, per-view FS watchers replaced by subscribeToCatalog (no parallel discovery). Recent + editor tab titles projected from catalog; startup request dedup (auth getSession, sharing recipient-preview cache, sync-bootstrap). Web boundary WorkspaceDesktopRequired instead of fake folder picker. Performance Contract required: waterfall via ops:network:gate required_failures:0 (0 duplicate startup requests, deduped bootstrap), reactive fan-out + local-first TTI via integration test. Visual/UX Contract: side-by-side Desk<->Workspace same document (Case4) + watcher-discovery Case4->Case4-renamed reflected in Desk without navigating to Workspace. Review score 9.5/10 (two informational P3) after one rejected round for missing perf/visual evidence. IndexedDB cutover/removal deferred to ODE-376; cloud adapters to ODE-371; DoD acceptance to ODE-372."
+    },
+    {
+      "what": "feat(desktop): migrate IndexedDB catalog and sync queue to SQLite [ODE-376]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-376",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-376/migrate-desktop-indexeddb-catalog-and-sync-queue-to-sqlite",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/339",
+      "commit": "cbef3ad",
+      "date": "2026-07-13",
+      "notes": "M5 of Fase 9: desktop IndexedDB->SQLite DocumentCatalog + durable sync queue migration behind explicit cutover flag NEXT_PUBLIC_DESKTOP_INDEXEDDB_MIGRATION (default OFF). Injectable-ports pipeline: enumerates all scopes (anonymous+user), dedupe UUID->path->hash with recorded conflicts, cloud-only preserved local_present=false (never materializes .md), checkpointed idempotent resume, tombstones never bind, per-row commit fault-tolerance, single fan-out per batch. Startup trigger via SyncBootstrap (Desk reads SQLite directly since ODE-373). Read-only compatibility latch on desktop IndexedDB (web unchanged); openWriting tolerates it so the read-only window is legible. Single Rust change: catalog_dual_write resolves binding root by root_path (UNIQUE fix). Validated end-to-end in production DMG (321 documents migrated from 424 IndexedDB writings). Review score 9.3 (2 non-blocking flag-gated findings routed to ODE-374/cutover). Collections/writing-collections mutations retained read-only in IndexedDB until M6."
     }
   ]
 }
