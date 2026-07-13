@@ -11,7 +11,7 @@ import type {
   WritingSummary,
 } from "@/lib/services/contracts/document-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
-import { localDB } from "@/lib/local-db"
+import { localDB, LocalDBReadOnlyError } from "@/lib/local-db"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
@@ -21,6 +21,8 @@ import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-doc
 import { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { migrateIndexedDbToFilesystem } from "@/lib/migrations/indexeddb-to-filesystem"
+import { runDesktopCatalogMigrationOnce } from "@/lib/migrations/desktop-catalog-migration"
+import { isDesktopIndexedDbMigrationEnabled } from "@/lib/services/desktop/indexeddb-migration-flag"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
@@ -32,6 +34,7 @@ import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
 type DesktopRuntimeServices = {
   configDir: string
   writingsDir: string
+  dbPath: string
   filesystem: FilesystemDocumentService
 }
 
@@ -157,7 +160,7 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
   const localIndex = new LocalIndexService(indexPath, writingsDir)
   const filesystem = new FilesystemDocumentService(writingsDir, { localIndex })
 
-  return { configDir, writingsDir, filesystem }
+  return { configDir, writingsDir, dbPath: indexPath, filesystem }
 }
 
 class DesktopDocumentService implements DocumentService {
@@ -168,6 +171,18 @@ class DesktopDocumentService implements DocumentService {
   private async ensureMigrated() {
     if (!this.migrationPromise) {
       this.migrationPromise = (async () => {
+        // ODE-376 M5: behind the explicit cutover flag, harvest every IndexedDB
+        // scope into the SQLite catalog/queue and begin the IndexedDB read-only
+        // window. The legacy filesystem migration materializes cloud-only rows
+        // into `.md` files, so it runs ONLY pre-cutover (bounded compatibility);
+        // once the SQLite migration is enabled it is superseded and skipped.
+        if (isDesktopIndexedDbMigrationEnabled()) {
+          await runDesktopCatalogMigrationOnce({
+            configDir: this.runtime.configDir,
+            dbPath: this.runtime.dbPath,
+          })
+          return
+        }
         await migrateIndexedDbToFilesystem({
           filesystem: this.runtime.filesystem,
         })
@@ -330,7 +345,18 @@ class DesktopDocumentService implements DocumentService {
         local_updated_at: Date.now(),
       }
 
-      await localDB.writings.save(localWriting)
+      // Caching the read result into IndexedDB is opportunistic. During the
+      // ODE-376 read-only compatibility window desktop IndexedDB rejects writes;
+      // the content already came from the authoritative .md file, so a blocked
+      // cache refresh must NOT fail the open — the document still renders. Only
+      // the read-only latch is swallowed; any other write failure still surfaces.
+      try {
+        await localDB.writings.save(localWriting)
+      } catch (error) {
+        if (!(error instanceof LocalDBReadOnlyError)) {
+          throw error
+        }
+      }
       return ok(toCanonicalRecord(localWriting))
     } catch (error) {
       return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }

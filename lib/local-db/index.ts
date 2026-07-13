@@ -82,6 +82,54 @@ const assertBrowser = () => {
   }
 };
 
+// ─── Desktop read-only compatibility latch (ODE-376 · M5) ───────────────────
+//
+// After the desktop IndexedDB→SQLite cutover, desktop keeps its IndexedDB stores
+// for one released version as read-only compatibility: no NEW writes are accepted
+// there (catalog spec §IndexedDB · Desktop, requirement 7). The latch is a module
+// global that ONLY the desktop migration ever engages — the web runtime never
+// calls `setLocalDBReadOnly`, so its IndexedDB adapter stays fully writable and
+// unchanged (requirement 9). Every blocked write emits telemetry instead of
+// failing silently.
+export type LocalDBReadOnlyBlock = { operation: string };
+type LocalDBReadOnlyListener = (block: LocalDBReadOnlyBlock) => void;
+
+export class LocalDBReadOnlyError extends Error {
+  readonly operation: string;
+  constructor(operation: string) {
+    super(
+      `localDB is read-only on desktop after the SQLite catalog cutover; blocked write "${operation}".`,
+    );
+    this.name = "LocalDBReadOnlyError";
+    this.operation = operation;
+  }
+}
+
+let localDBReadOnly = false;
+const readOnlyListeners = new Set<LocalDBReadOnlyListener>();
+
+export const setLocalDBReadOnly = (enabled: boolean) => {
+  localDBReadOnly = enabled;
+};
+
+export const isLocalDBReadOnly = () => localDBReadOnly;
+
+export const subscribeToLocalDBReadOnlyBlocks = (listener: LocalDBReadOnlyListener) => {
+  readOnlyListeners.add(listener);
+  return () => {
+    readOnlyListeners.delete(listener);
+  };
+};
+
+const assertWritable = (operation: string) => {
+  if (!localDBReadOnly) {
+    return;
+  }
+  const block: LocalDBReadOnlyBlock = { operation };
+  readOnlyListeners.forEach((listener) => listener(block));
+  throw new LocalDBReadOnlyError(operation);
+};
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 let databaseInstance: IDBDatabase | null = null;
 let currentScope = DEFAULT_SCOPE;
@@ -597,6 +645,7 @@ const withStore = async <T>(
 };
 
 const saveWriting = async (writing: LocalWriting) => {
+  assertWritable("writings.save");
   await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
     await runRequest(store.put({
       ...writing,
@@ -613,6 +662,7 @@ const saveWritingWithRebind = async ({
   remoteWriting: LocalWriting;
   candidate: LocalWriting;
 }) => {
+  assertWritable("writings.saveWithRebind");
   const nowIso = new Date().toISOString();
   const retiredCandidate: LocalWriting = {
     ...candidate,
@@ -715,6 +765,7 @@ const detachWritingLocalFile = async (id: string) => {
 };
 
 const saveCollection = async (collection: LocalCollection) => {
+  assertWritable("collections.save");
   await withStore(LOCAL_DB_STORES.collections, "readwrite", async (store) => {
     await runRequest(store.put(collection));
   });
@@ -890,6 +941,7 @@ const listAllWritingCollections = async () =>
   });
 
 const replaceWritingCollections = async (writingId: string, collectionIds: string[]) => {
+  assertWritable("writingCollections.replaceForWriting");
   const database = await openDatabase();
   const transaction = database.transaction(LOCAL_DB_STORES.writingCollections, "readwrite");
   const store = transaction.objectStore(LOCAL_DB_STORES.writingCollections);
@@ -947,6 +999,7 @@ const removeCollectionAssignments = async (collectionId: string) => {
 };
 
 const enqueueMutation = async (mutation: SyncMutation) => {
+  assertWritable("syncQueue.enqueue");
   await withStore(LOCAL_DB_STORES.syncMutations, "readwrite", async (store) => {
     const entityKey =
       mutation.entity_key ?? createEntityKey(mutation.entity_kind, mutation.entity_id);
@@ -1145,6 +1198,107 @@ const markMutationFailed = async (id: string, error: string, nextRetryAt: number
   emitLocalDBChange();
 
   await setEntitySyncState(mutation.entity_kind, mutation.entity_id, "failed");
+};
+
+// ─── Scope enumeration & raw harvest (ODE-376 · M5) ─────────────────────────
+//
+// The IndexedDB→SQLite migration must read EVERY known desktop scope — the
+// historical `anonymous` scope and every per-user scope — without treating the
+// active session as the source of local existence (requirement 1). These helpers
+// open each scoped database (`odessay-local-first-<scope>`) directly and read the
+// stores raw, preserving exact payload parity for the migration's before/after
+// count and checksum assertions (requirement 8). They never mutate.
+
+export type LocalDBScopeSnapshot = {
+  scope: string;
+  writings: LocalWriting[];
+  collections: LocalCollection[];
+  writingCollections: LocalWritingCollection[];
+  mutations: SyncMutation[];
+};
+
+const SCOPE_DB_PREFIX = `${LOCAL_DB_NAME}-`;
+
+const scopeFromDatabaseName = (name: string): string | null =>
+  name.startsWith(SCOPE_DB_PREFIX) ? name.slice(SCOPE_DB_PREFIX.length) : null;
+
+/**
+ * Enumerate every known localDB scope. Uses `indexedDB.databases()` where
+ * available (modern WebKit/WKWebView and Chromium both support it) and always
+ * unions the default `anonymous` scope plus any caller-provided seed (e.g. a
+ * user id resolved from the session) so a runtime that cannot enumerate still
+ * migrates the scopes it knows about.
+ */
+export const listLocalDBScopes = async (seed: string[] = []): Promise<string[]> => {
+  assertBrowser();
+  const scopes = new Set<string>([DEFAULT_SCOPE, ...seed.map((value) => normalizeScope(value))]);
+
+  if (typeof indexedDB.databases === "function") {
+    try {
+      const databases = await indexedDB.databases();
+      for (const database of databases) {
+        const name = database.name;
+        if (!name) {
+          continue;
+        }
+        const scope = scopeFromDatabaseName(name);
+        if (scope) {
+          scopes.add(scope);
+        }
+      }
+    } catch {
+      // Enumeration is best-effort; fall back to the seeded scopes.
+    }
+  }
+
+  return [...scopes];
+};
+
+const openScopeDatabaseByName = (name: string): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    // Open WITHOUT a version so an existing scope database is read at its current
+    // version and no `onupgradeneeded` fires — a snapshot read never migrates a
+    // schema. A non-existent name opens an empty database whose stores are absent,
+    // which the reader below tolerates.
+    const request = indexedDB.open(name);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () =>
+      reject(request.error ?? new Error(`Unable to open scope database ${name}.`));
+  });
+
+const readStoreAll = async <T>(database: IDBDatabase, storeName: string): Promise<T[]> => {
+  if (!database.objectStoreNames.contains(storeName)) {
+    return [];
+  }
+  const transaction = database.transaction(storeName, "readonly");
+  const store = transaction.objectStore(storeName);
+  const completion = waitForTransaction(transaction, `Scope read for ${storeName}`);
+  const rows = (await runRequest(store.getAll())) as T[];
+  await completion;
+  return rows;
+};
+
+/**
+ * Read one scope's durable stores raw, with no filtering or normalization, so the
+ * migration can harvest and dedupe deterministically and compare counts before
+ * and after. Correction blocks and editor sessions are ephemeral caches and are
+ * intentionally not harvested — they are not catalog identity.
+ */
+export const readScopeSnapshot = async (scope: string): Promise<LocalDBScopeSnapshot> => {
+  assertBrowser();
+  const normalized = normalizeScope(scope);
+  const database = await openScopeDatabaseByName(`${SCOPE_DB_PREFIX}${normalized}`);
+  try {
+    const [writings, collections, writingCollections, mutations] = await Promise.all([
+      readStoreAll<LocalWriting>(database, LOCAL_DB_STORES.writings),
+      readStoreAll<LocalCollection>(database, LOCAL_DB_STORES.collections),
+      readStoreAll<LocalWritingCollection>(database, LOCAL_DB_STORES.writingCollections),
+      readStoreAll<SyncMutation>(database, LOCAL_DB_STORES.syncMutations),
+    ]);
+    return { scope: normalized, writings, collections, writingCollections, mutations };
+  } finally {
+    database.close();
+  }
 };
 
 const localDBInstance: LocalDB = {

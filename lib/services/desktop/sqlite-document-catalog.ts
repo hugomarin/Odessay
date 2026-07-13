@@ -73,6 +73,17 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
   }
 
   /**
+   * Single fan-out signal for the ODE-376 M5 IndexedDB→SQLite migration: the
+   * migration commits each row idempotently without emitting, then calls this
+   * once for the whole batch so subscribers refresh a single time rather than
+   * once per row (Performance Contract: reactive fan-out).
+   */
+  notifyMigration(documentIds: string[]): void {
+    if (documentIds.length === 0) return
+    this.emit(documentIds, "migration")
+  }
+
+  /**
    * Apply one WorkspaceReconciler burst (ODE-370). Projects local bindings and
    * confirmed-absent detaches in a single SQLite transaction, then emits exactly
    * ONE CatalogChange for every document touched by the burst. Cloud metadata is

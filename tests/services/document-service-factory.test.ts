@@ -36,7 +36,17 @@ vi.mock("@/lib/services/desktop/runtime-detection", () => ({
   isDesktopRuntime: () => true,
 }))
 
+class MockLocalDBReadOnlyError extends Error {
+  readonly operation: string
+  constructor(operation: string) {
+    super(`read-only: ${operation}`)
+    this.name = "LocalDBReadOnlyError"
+    this.operation = operation
+  }
+}
+
 vi.mock("@/lib/local-db", () => ({
+  LocalDBReadOnlyError: MockLocalDBReadOnlyError,
   localDB: {
     writings: {
       get: mocks.getMock,
@@ -568,6 +578,52 @@ version: 2
     expect(mocks.saveMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: uuid, canonical_path: "/root/Notes/Idea.md" }),
     )
+  })
+
+  it("still returns the .md content when the read-only latch blocks the cache write (ODE-376)", async () => {
+    // After the M5 cutover the desktop IndexedDB is read-only; opening a document
+    // must still render its content from the authoritative .md instead of failing
+    // because the opportunistic cache refresh was rejected.
+    const uuid = "cccccccc-1234-4a2b-8c9d-0123456789ab"
+    mocks.getMock.mockResolvedValueOnce(null)
+    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
+    mocks.catalogFlag.value = true
+    mocks.catalogGetByIdMock.mockResolvedValueOnce({
+      id: uuid,
+      localPresent: true,
+      cloudPresent: false,
+      binding: { canonicalPath: "/root/Notes/ReadOnly.md" },
+    })
+    mocks.openWritingMock.mockResolvedValueOnce({
+      data: {
+        id: "/root/Notes/ReadOnly.md",
+        authorId: null,
+        title: "ReadOnly",
+        content: { markdown: "# ReadOnly\n\nCanonical body", richText: null, plainText: "Canonical body", canonicalSource: "markdown" },
+        slug: null,
+        status: "draft",
+        visibility: "private",
+        parentId: null,
+        correspondenceId: null,
+        version: 1,
+        deletedAt: null,
+        createdAt: "2026-06-04T00:00:00.000Z",
+        updatedAt: "2026-06-04T00:00:00.000Z",
+      },
+      error: null,
+    })
+    // The cache write is rejected by the read-only latch.
+    mocks.saveMock.mockRejectedValueOnce(new MockLocalDBReadOnlyError("writings.save"))
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const service = await getDocumentService()
+    const result = await service.openWriting(uuid)
+
+    // The open succeeds with real content despite the blocked cache write.
+    expect(result.error).toBeNull()
+    expect(result.data?.id).toBe(uuid)
+    expect(result.data?.content.plainText).toContain("Canonical body")
+    expect(mocks.saveMock).toHaveBeenCalled()
   })
 
   it("still returns NOT_FOUND for a UUID absent from both IndexedDB and the catalog", async () => {

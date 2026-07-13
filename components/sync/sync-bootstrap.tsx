@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isTauriRuntime } from "@/lib/runtime/detect";
 import { getAuthService } from "@/lib/services/auth-service-factory";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
+import { ensureDesktopCatalogMigrated } from "@/lib/migrations/desktop-catalog-migration";
 
 export function SyncBootstrap() {
   const lastHydratedUserIdRef = useRef<string | null>(null);
@@ -79,6 +80,14 @@ export function SyncBootstrap() {
     };
 
     const bootstrapDesktop = async () => {
+      // ODE-376 M5: harvest IndexedDB into the SQLite catalog at startup, before
+      // any surface reads it. Desk/Workspace read the catalog directly (ODE-373),
+      // so without this the migrated catalog would stay empty until a document is
+      // opened. Gated by the cutover flag; a no-op when it is off. The pipeline
+      // emits one 'migration' fan-out on completion, so surfaces that already
+      // rendered refresh once.
+      await ensureDesktopCatalogMigrated();
+
       const supabase = createDesktopClient();
 
       // The desktop shell already performs the authoritative network validation

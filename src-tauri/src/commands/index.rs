@@ -249,15 +249,36 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
       params![d.id,d.local_present as i64,d.cloud_present as i64,d.cloud_account_id,d.sync_status,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.created_at,d.modified_at])
       .map_err(|e| format!("catalog dual-write document: {e}"))?;
     if let Some(b) = &input.binding {
-        tx.execute("INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)
-          ON CONFLICT(id) DO UPDATE SET root_path=excluded.root_path,manifest_version=excluded.manifest_version,visible_as_workspace=excluded.visible_as_workspace",
-          params![b.binding_root_id,b.root_path,b.manifest_version,b.visible_as_workspace as i64])
-          .map_err(|e| format!("catalog dual-write root: {e}"))?;
+        // Resolve the binding root by its physical path. A directory has ONE
+        // identity, but the reconciler (manifest root ids) and legacy dual-write /
+        // M5 migration (`legacy-root:<path>` ids) can name the same dir; keying the
+        // upsert only on `id` would then hit UNIQUE(root_path). Reuse an existing
+        // root id for this path instead of inserting a second row for it, and bind
+        // the document to that resolved id.
+        let existing_root_id: Option<String> = tx
+            .query_row(
+                "SELECT id FROM binding_roots WHERE root_path=?1",
+                params![b.root_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("catalog dual-write root lookup: {e}"))?;
+        let root_id = match existing_root_id {
+            Some(id) => id,
+            None => {
+                tx.execute(
+                    "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)",
+                    params![b.binding_root_id, b.root_path, b.manifest_version, b.visible_as_workspace as i64],
+                )
+                .map_err(|e| format!("catalog dual-write root: {e}"))?;
+                b.binding_root_id.clone()
+            }
+        };
         tx.execute("INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
           VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
           ON CONFLICT(document_id) DO UPDATE SET binding_root_id=excluded.binding_root_id,relative_path=excluded.relative_path,
           canonical_path=excluded.canonical_path,inode=excluded.inode,content_hash=excluded.content_hash,size=excluded.size,last_seen_at=excluded.last_seen_at",
-          params![d.id,b.binding_root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at])
+          params![d.id,root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at])
           .map_err(|e| format!("catalog dual-write binding: {e}"))?;
     }
     if let Some(m) = &input.mutation {
@@ -577,6 +598,51 @@ mod catalog_tests {
             .unwrap()
             .unwrap();
         assert_eq!(first.canonical_path.as_deref(), Some("/tmp/root/doc.md"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn dual_write_reuses_existing_binding_root_for_the_same_path() {
+        let path = temp_db();
+
+        // First document registers the directory under a manifest root id (as the
+        // reconciler would).
+        let mut first = input("doc-a", "/tmp/shared/a.md", "mut-a");
+        {
+            let binding = first.binding.as_mut().unwrap();
+            binding.binding_root_id = "manifest-root".into();
+            binding.root_path = "/tmp/shared".into();
+        }
+        catalog_dual_write(path.clone(), first).unwrap();
+
+        // A second document (e.g. the M5 migration) names the SAME directory with a
+        // different `legacy-root:` id. This must NOT fail on UNIQUE(root_path).
+        let mut second = input("doc-b", "/tmp/shared/b.md", "mut-b");
+        {
+            let binding = second.binding.as_mut().unwrap();
+            binding.binding_root_id = "legacy-root:/tmp/shared".into();
+            binding.root_path = "/tmp/shared".into();
+        }
+        catalog_dual_write(path.clone(), second).unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let root_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM binding_roots WHERE root_path='/tmp/shared'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(root_count, 1, "one physical directory keeps one binding root");
+
+        // The second document is bound to the pre-existing root id, not a new one.
+        let row = catalog_get_by_id(path.clone(), "doc-b".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.binding_root_id.as_deref(), Some("manifest-root"));
+        assert_eq!(row.canonical_path.as_deref(), Some("/tmp/shared/b.md"));
+
+        drop(conn);
         let _ = fs::remove_file(path);
     }
 
