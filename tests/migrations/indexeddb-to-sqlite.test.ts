@@ -172,6 +172,56 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
     expect(documents.get("lose")?.syncStatus).toBe("conflict")
   })
 
+  it("never emits a binding for a deleted tombstone that shares a path with a live doc", async () => {
+    // A soft-deleted record keeps its old canonical_path; a live document can
+    // reclaim that path. The tombstone must project no binding, or catalog
+    // dual-write would fail on UNIQUE(canonical_path) and loop the migration.
+    const { sink, documents, bindings } = makeSink()
+    const summary = await migrateIndexedDbToSqlite({
+      reader: reader({
+        anonymous: snapshot("anonymous", {
+          writings: [
+            writing({ id: "tomb", canonical_path: "/root/reused.md", sync_status: "deleted", deleted_at: "2026-01-02T00:00:00.000Z" }),
+            writing({ id: "live", canonical_path: "/root/reused.md", version: 2 }),
+          ],
+          mutations: [mutation({ id: "m-tomb", entity_id: "tomb", operation: "delete" })],
+        }),
+      }),
+      sink,
+    })
+
+    // No UNIQUE violation: the migration completes and the live doc owns the path.
+    expect(summary.status).toBe("completed")
+    expect(bindings.get("/root/reused.md")).toBe("live")
+    expect(documents.get("tomb")?.localPresent).toBe(false)
+    // The tombstone (and its delete queue row) is still preserved.
+    expect(documents.has("tomb")).toBe(true)
+    // The tombstone is not counted as a path conflict — it simply never binds.
+    expect(summary.conflicts.some((c) => c.kind === "path")).toBe(false)
+  })
+
+  it("records a mutation conflict for a superseded cross-scope queue row", async () => {
+    const { sink, mutations } = makeSink()
+    const summary = await migrateIndexedDbToSqlite({
+      reader: reader({
+        anonymous: snapshot("anonymous", {
+          writings: [writing({ id: "shared", canonical_path: "/root/anon.md" })],
+          mutations: [mutation({ id: "m-old", entity_id: "shared", created_at: 1 })],
+        }),
+        "user-1": snapshot("user-1", {
+          writings: [writing({ id: "shared", version: 2, canonical_path: "/root/user.md" })],
+          mutations: [mutation({ id: "m-new", entity_id: "shared", created_at: 5 })],
+        }),
+      }),
+      sink,
+    })
+
+    // Newest queue row wins into SQLite; the superseded one is recorded, not dropped.
+    expect(mutations.has("m-new")).toBe(true)
+    expect(mutations.has("m-old")).toBe(false)
+    expect(summary.conflicts.some((c) => c.kind === "mutation" && c.losing.documentId === "m-old")).toBe(true)
+  })
+
   it("records an ambiguous hash for two unbound records sharing a content hash", async () => {
     const { sink } = makeSink()
     const summary = await migrateIndexedDbToSqlite({
@@ -347,6 +397,39 @@ describe("ODE-376 · IndexedDB → SQLite migration", () => {
     // The two already-committed documents are not re-committed on resume.
     expect(commitCounts.get("one")).toBeUndefined()
     expect(commitCounts.get("three")).toBe(1)
+  })
+
+  it("does not duplicate conflicts when resuming after an interruption", async () => {
+    const checkpoint = memoryCheckpoint()
+    const data = reader({
+      anonymous: snapshot("anonymous", {
+        writings: [
+          writing({ id: "dup", version: 1, body_text: "a", canonical_path: "/root/a.md" }),
+          writing({ id: "other", canonical_path: "/root/o.md" }),
+        ],
+      }),
+      "user-1": snapshot("user-1", {
+        writings: [writing({ id: "dup", version: 3, body_text: "b", canonical_path: "/root/b.md" })],
+      }),
+    })
+
+    // First run fails after the winning "dup" row commits, leaving a checkpoint
+    // that already carries the UUID conflict.
+    const first = makeSink()
+    let commits = 0
+    const flakySink: CatalogMigrationSink = {
+      async commit(input) {
+        commits += 1
+        if (commits === 2) throw new Error("interrupted")
+        return first.sink.commit(input)
+      },
+    }
+    await expect(migrateIndexedDbToSqlite({ reader: data, sink: flakySink, checkpoint })).rejects.toThrow("interrupted")
+    expect(checkpoint.current?.conflicts.filter((c) => c.kind === "uuid")).toHaveLength(1)
+
+    // Resume re-harvests and re-detects the same divergence but does not append it again.
+    const summary = await migrateIndexedDbToSqlite({ reader: data, sink: first.sink, checkpoint })
+    expect(summary.conflicts.filter((c) => c.kind === "uuid")).toHaveLength(1)
   })
 
   it("does nothing when a completed checkpoint already exists", async () => {

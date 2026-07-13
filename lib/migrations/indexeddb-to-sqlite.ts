@@ -76,7 +76,7 @@ export type MigrationCheckpointStore = {
 }
 
 export type MigrationConflict = {
-  kind: "uuid" | "path" | "hash"
+  kind: "uuid" | "path" | "hash" | "mutation"
   documentId: string
   detail: string
   losing: {
@@ -201,14 +201,28 @@ function mutationStatus(mutation: WritingSyncMutation): string {
   return mutation.attempts > 0 || mutation.last_error ? "failed" : "pending"
 }
 
+/**
+ * The binding path a record projects into SQLite, or null when it must be
+ * unbound. A `deleted` tombstone still carries its old `canonical_path` (soft
+ * delete spreads the record without nulling it), but it is NOT the live owner of
+ * that file — a live document can reclaim the same path (workspace-service delete
+ * on path reuse). Emitting a binding for a tombstone would collide with the live
+ * document on `UNIQUE(canonical_path)` and fail the whole migration, so a tombstone
+ * — like a path-conflict loser — projects no binding.
+ */
+function bindingPathFor(writing: LocalWriting, unbound: boolean): string | null {
+  if (unbound || writing.sync_status === "deleted") return null
+  return writing.canonical_path?.trim() || null
+}
+
 function toSinkInput(
   writing: LocalWriting,
   mutation: WritingSyncMutation | null,
   pathConflictLoser: boolean,
 ): DesktopCatalogDualWriteInput {
-  const canonicalPath = pathConflictLoser ? null : writing.canonical_path?.trim() || null
+  const canonicalPath = bindingPathFor(writing, pathConflictLoser)
   const pathParts = canonicalPath ? splitCanonicalPath(canonicalPath) : null
-  const localPresent = Boolean(canonicalPath) && writing.sync_status !== "deleted"
+  const localPresent = Boolean(canonicalPath)
   const cloudPresent =
     writing.lifecycle === "server-confirmed" || writing.sync_status === "synced"
 
@@ -316,7 +330,16 @@ export async function migrateIndexedDbToSqlite(
     error: null,
   }
 
+  // Fingerprint conflicts so a resume — which re-harvests every scope and
+  // re-detects the same divergences — does not append duplicate entries to a
+  // checkpoint that already carries them.
+  const conflictFingerprint = (conflict: MigrationConflict) =>
+    `${conflict.kind}:${conflict.documentId}:${conflict.losing.scope}:${conflict.losing.documentId}`
+  const seenConflicts = new Set(conflicts.map(conflictFingerprint))
   const recordConflict = (conflict: MigrationConflict) => {
+    const fingerprint = conflictFingerprint(conflict)
+    if (seenConflicts.has(fingerprint)) return
+    seenConflicts.add(fingerprint)
     conflicts.push(conflict)
     telemetry({ type: "conflict", conflict })
   }
@@ -327,7 +350,7 @@ export async function migrateIndexedDbToSqlite(
 
     // ── Harvest every scope (read-only) ──────────────────────────────────────
     const allCandidates: Candidate[] = []
-    const writingMutationsById = new Map<string, WritingSyncMutation>()
+    const writingMutationsById = new Map<string, { mutation: WritingSyncMutation; scope: string }>()
     let retainedCollectionMutationCount = 0
 
     for (const scope of scopes) {
@@ -337,11 +360,32 @@ export async function migrateIndexedDbToSqlite(
       }
       for (const mutation of snapshot.mutations) {
         if (isWritingMutation(mutation)) {
-          // A UUID's queue row is unique per scope; on a cross-scope UUID
-          // collision keep the newest-created row (never drop one).
+          // A UUID's queue row is unique per scope. On a cross-scope collision a
+          // single document row cannot replay two divergent upserts, so the
+          // newest-created row wins — but the superseded row is RECORDED as a
+          // migration conflict (never silently dropped) so it stays recoverable
+          // and its divergence is visible (requirement 3/6).
           const previous = writingMutationsById.get(mutation.entity_id)
-          if (!previous || mutation.created_at >= previous.created_at) {
-            writingMutationsById.set(mutation.entity_id, mutation)
+          if (!previous) {
+            writingMutationsById.set(mutation.entity_id, { mutation, scope })
+          } else if (mutation.id !== previous.mutation.id) {
+            const winner = mutation.created_at >= previous.mutation.created_at
+              ? { mutation, scope }
+              : previous
+            const loser = winner.mutation.id === mutation.id ? previous : { mutation, scope }
+            writingMutationsById.set(mutation.entity_id, winner)
+            recordConflict({
+              kind: "mutation",
+              documentId: mutation.entity_id,
+              detail: `Queue rows ${previous.mutation.id} and ${mutation.id} target document ${mutation.entity_id} across scopes; the superseded row is retained read-only in IndexedDB`,
+              losing: {
+                scope: loser.scope,
+                documentId: loser.mutation.id,
+                canonicalPath: null,
+                contentHash: null,
+                version: loser.mutation.payload.version,
+              },
+            })
           }
         } else {
           // Collection / writing-collection mutations have no SQLite catalog
@@ -454,7 +498,7 @@ export async function migrateIndexedDbToSqlite(
     for (const candidate of winners) {
       let writing = candidate.writing
       const isLoser = pathConflictLosers.has(writing.id)
-      const canonicalPath = isLoser ? null : writing.canonical_path?.trim() || null
+      const canonicalPath = bindingPathFor(writing, isLoser)
 
       if (canonicalPath) {
         const authoritativeId = await reconciler.resolveDocumentId({
@@ -470,7 +514,7 @@ export async function migrateIndexedDbToSqlite(
         continue
       }
 
-      const mutation = writingMutationsById.get(candidate.writing.id) ?? null
+      const mutation = writingMutationsById.get(candidate.writing.id)?.mutation ?? null
       const rekeyedMutation =
         mutation && mutation.entity_id !== writing.id
           ? { ...mutation, entity_id: writing.id }
