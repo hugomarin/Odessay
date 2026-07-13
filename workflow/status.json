@@ -3101,6 +3101,16 @@
       "commit": "cbef3ad",
       "date": "2026-07-13",
       "notes": "M5 of Fase 9: desktop IndexedDB->SQLite DocumentCatalog + durable sync queue migration behind explicit cutover flag NEXT_PUBLIC_DESKTOP_INDEXEDDB_MIGRATION (default OFF). Injectable-ports pipeline: enumerates all scopes (anonymous+user), dedupe UUID->path->hash with recorded conflicts, cloud-only preserved local_present=false (never materializes .md), checkpointed idempotent resume, tombstones never bind, per-row commit fault-tolerance, single fan-out per batch. Startup trigger via SyncBootstrap (Desk reads SQLite directly since ODE-373). Read-only compatibility latch on desktop IndexedDB (web unchanged); openWriting tolerates it so the read-only window is legible. Single Rust change: catalog_dual_write resolves binding root by root_path (UNIQUE fix). Validated end-to-end in production DMG (321 documents migrated from 424 IndexedDB writings). Review score 9.3 (2 non-blocking flag-gated findings routed to ODE-374/cutover). Collections/writing-collections mutations retained read-only in IndexedDB until M6."
+    },
+    {
+      "what": "feat(desktop): materialize cloud documents locally [ODE-371]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-371",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-371/complete-cloud-reconciliation-and-managed-root-materialization",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/340",
+      "commit": "f710a85724afb3b01c93618872dc9a67f6df93f0",
+      "date": "2026-07-13",
+      "notes": "M6 of Fase 9: cloud reconciliation + managed-root materialization. Metadata hydration projects one atomic cloud burst into SQLite via catalog_apply_cloud_snapshots (single transaction, single CatalogChange, never writes files, preserves local_present/binding, pending wins). Explicit materializeCloudOnly on edit-open: canonical .md (atomic) -> manifest via workspace_sync documentIds override -> SQLite registerBinding, order test-asserted; managed root default, external root only by explicit bindingRootId. body_json cache fallback removed from openWriting: missing .md is recoverable NOT_FOUND, never a draft. Cloud content_hash rebind unique-only, account-scoped (synced, cloud-only rows); duplicates ambiguous. SQLite catalog v3 additive (cloud_content_hash + partial index). Live-schema evidence vs the single Supabase project (odessay-staging = production): index exists, no new migration, backfill stays next-save (266 intentional nulls). Review score 7.5/10 first round: P2s on canonical-budget keydown_p95 outlier disclosure, DMG behavioral evidence deferred to ODE-372, and dropped TS syncStatus derivation (Rust owns it). Legacy path-as-id/IndexedDB retirement remains ODE-374; final cloud/offline/DMG acceptance remains ODE-372."
     }
   ]
 }
