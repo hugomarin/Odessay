@@ -1,12 +1,23 @@
 "use client"
 
 import { appConfigDir, join } from "@tauri-apps/api/path"
-import { filenameToTitle } from "@/lib/desktop/document-naming"
-import { localDB } from "@/lib/local-db"
+import {
+  filenameToTitle,
+  resolveUniqueFilename,
+  titleToFilename,
+} from "@/lib/desktop/document-naming"
+import { localDB, LocalDBReadOnlyError } from "@/lib/local-db"
+import { serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
-import { tauriWorkspaceSync } from "@/lib/services/desktop/tauri-commands"
+import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import {
+  tauriListRecentFiles,
+  tauriCatalogFindEligibleCloudHash,
+  tauriWorkspaceSync,
+  tauriWriteFile,
+} from "@/lib/services/desktop/tauri-commands"
 import type { KnownBinding } from "@/lib/services/desktop/workspace-reconciler"
 import {
   createOpenDocumentUseCase,
@@ -166,6 +177,105 @@ async function buildDesktopOpenDocumentUseCase() {
       }))
   }
 
+  async function materializeCloudOnly(input: {
+    documentId: string
+    bindingRootId?: string
+  }): Promise<DocumentCatalogRecord> {
+    let writing = await localDB.writings.get(input.documentId)
+    if (!writing) {
+      const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
+      const hydrated = await desktopSyncService.hydrateWriting({ writingId: input.documentId })
+      if (hydrated.error) throw new Error(hydrated.error.message)
+      writing = await localDB.writings.get(input.documentId)
+    }
+    if (!writing) throw new Error(`Cloud document ${input.documentId} has no hydrated body`)
+    const materializedWriting = writing
+
+    let markdown: string
+    try {
+      markdown = serializeDocumentToMarkdown(materializedWriting.body_json)
+    } catch (error) {
+      throw new Error(error instanceof Error ? error.message : "JSON→Markdown serialization failed")
+    }
+
+    const registeredRoots = await settings.getBindingRoots()
+    const selectedRoot = input.bindingRootId
+      ? registeredRoots.find((root) => root.id === input.bindingRootId)
+      : null
+    if (input.bindingRootId && !selectedRoot) {
+      throw new Error(`BindingRoot ${input.bindingRootId} is not registered`)
+    }
+    const root = selectedRoot ?? await settings.ensureManagedRoot(
+      await join(configDir, MANAGED_ROOT_DIRNAME),
+    )
+    async function registerMaterializedFile(
+      snapshot: Awaited<ReturnType<typeof tauriWorkspaceSync>>,
+      file: Awaited<ReturnType<typeof tauriWorkspaceSync>>["files"][number],
+    ): Promise<DocumentCatalogRecord> {
+      const existing = await catalog.getById(input.documentId)
+      if (!existing) throw new Error(`Cloud catalog record ${input.documentId} disappeared`)
+      const record = await catalog.registerBinding({
+        document: { ...existing, localPresent: true, syncStatus: "synced" },
+        binding: {
+          documentId: input.documentId,
+          bindingRootId: snapshot.bindingRootId,
+          relativePath: file.relativePath,
+          canonicalPath: file.path,
+          inode: file.inode || null,
+          contentHash: file.contentHash || null,
+          size: file.size,
+          lastSeenAt: file.modifiedAt,
+        },
+      })
+
+      try {
+        await localDB.writings.save({
+          ...materializedWriting,
+          title: filenameToTitle(file.relativePath),
+          canonical_path: file.path,
+          content_hash: file.contentHash,
+          sync_status: "synced",
+          lifecycle: "server-confirmed",
+          local_updated_at: Date.now(),
+        })
+      } catch (error) {
+        if (!(error instanceof LocalDBReadOnlyError)) throw error
+      }
+      return record
+    }
+
+    const existingFiles = await tauriListRecentFiles(root.rootPath, 5000)
+    const filename = resolveUniqueFilename(
+      titleToFilename(materializedWriting.title?.trim() || "Untitled"),
+      existingFiles.map((file) => file.name),
+    )
+    const canonicalPath = await join(root.rootPath, filename)
+
+    // Content commit first. The following workspace_sync persists the binding
+    // manifest atomically with the cloud UUID override; only then may SQLite be
+    // updated (spec §Guardado).
+    await tauriWriteFile(canonicalPath, markdown)
+    const snapshot = await tauriWorkspaceSync(
+      root.rootPath,
+      root.kind === "external"
+        ? Array.from(new Set([...root.selectedPaths, filename]))
+        : undefined,
+      { [filename]: input.documentId },
+    )
+    if (root.kind === "external") {
+      await settings.upsertBindingRoot({
+        ...root,
+        selectedPaths: snapshot.selectedPaths,
+      })
+    }
+    const file = snapshot.files.find((entry) => entry.relativePath === filename)
+    if (!file || file.id !== input.documentId) {
+      throw new Error(`Materialized file ${filename} was not bound to ${input.documentId}`)
+    }
+
+    return registerMaterializedFile(snapshot, file)
+  }
+
   const openDocument = createOpenDocumentUseCase({
     catalog: {
       getById: (id) => catalog.getById(id),
@@ -176,7 +286,17 @@ async function buildDesktopOpenDocumentUseCase() {
     locateBindingRoot,
     registerExternalRoot,
     listKnownBindings,
-    // cloudHashLookup + materializeCloudOnly are owned by ODE-371; not wired here.
+    materializeCloudOnly,
+    cloudHashLookup: async (contentHash) => {
+      const { data, error } = await createDesktopClient().auth.getSession()
+      if (error || !data.session?.user.id) return null
+      const candidates = await tauriCatalogFindEligibleCloudHash(
+        catalog.dbPath,
+        contentHash,
+        data.session.user.id,
+      )
+      return candidates.length === 1 ? candidates[0] : candidates.length > 1 ? "ambiguous" : null
+    },
   })
 
   return { openDocument, settings, configDir }

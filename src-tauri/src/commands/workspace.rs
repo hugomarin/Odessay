@@ -216,6 +216,7 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
 pub fn workspace_sync(
     root_path: String,
     selected_paths: Option<Vec<String>>,
+    document_ids: Option<HashMap<String, String>>,
 ) -> Result<WorkspaceSnapshot, String> {
     let root = Path::new(&root_path);
     if !root.exists() {
@@ -341,8 +342,10 @@ pub fn workspace_sync(
                 }
             });
 
-        let id = existing_entry
-            .map(|entry| entry.id)
+        let id = document_ids
+            .as_ref()
+            .and_then(|ids| ids.get(&file.relative_path).cloned())
+            .or_else(|| existing_entry.map(|entry| entry.id))
             .or_else(|| extract_writing_id_from_frontmatter(Path::new(&file.path)))
             .unwrap_or_else(|| {
                 // Transitional fallback: files that were not created through
@@ -636,7 +639,7 @@ mod tests {
         )
         .expect("write legacy index");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace with legacy index");
 
         assert!(root.join(WORKSPACE_DIR_NAME).exists());
@@ -655,7 +658,7 @@ mod tests {
             .expect("write internal markdown file");
         fs::write(root.join("visible.md"), "visible").expect("write visible markdown file");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace with internal markdown file");
 
         assert_eq!(snapshot.files.len(), 1);
@@ -669,7 +672,7 @@ mod tests {
         let root = temp_workspace_root("writes-content-hash");
         fs::write(root.join("letter.md"), "Hello\r\nworld\r\n").expect("write markdown file");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace with markdown file");
         let expected_hash = format!(
             "{CONTENT_HASH_PREFIX}:{}",
@@ -694,7 +697,7 @@ mod tests {
         let file_path = root.join("letter.md");
         fs::write(&file_path, "Before\n").expect("write markdown file");
 
-        let initial_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let initial_snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("initial sync workspace");
         let initial_file = initial_snapshot.files[0].clone();
 
@@ -702,7 +705,7 @@ mod tests {
         fs::write(&temp_path, "After\n").expect("write temp markdown file");
         fs::rename(&temp_path, &file_path).expect("replace markdown file");
 
-        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace after atomic save");
         let next_file = &next_snapshot.files[0];
 
@@ -723,13 +726,14 @@ mod tests {
         let initial_snapshot = workspace_sync(
             root.to_string_lossy().to_string(),
             Some(vec!["before.md".into()]),
+            None,
         )
         .expect("initial selected sync");
         let initial_id = initial_snapshot.files[0].id.clone();
 
         fs::rename(&original_path, &renamed_path).expect("rename selected file");
 
-        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync after selected-file rename");
 
         assert_eq!(next_snapshot.files.len(), 1);
@@ -750,7 +754,7 @@ mod tests {
         )
         .expect("write markdown file with frontmatter");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace with frontmatter file");
 
         assert_eq!(snapshot.files.len(), 1);
@@ -793,7 +797,7 @@ mod tests {
         )
         .expect("write markdown file");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace with existing entry");
 
         assert_eq!(snapshot.files.len(), 1);
@@ -837,7 +841,7 @@ mod tests {
         let root = temp_workspace_root("manifest-v2-shape");
         fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace");
 
         assert!(!snapshot.binding_root_id.is_empty());
@@ -877,7 +881,7 @@ mod tests {
         .expect("write v1 index");
         fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync migrates v1 manifest");
 
         assert_eq!(snapshot.files.len(), 1);
@@ -897,9 +901,9 @@ mod tests {
         let root = temp_workspace_root("stable-binding-root-id");
         fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
 
-        let first = workspace_sync(root.to_string_lossy().to_string(), None)
+        let first = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("first sync");
-        let second = workspace_sync(root.to_string_lossy().to_string(), None)
+        let second = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("second sync");
 
         assert_eq!(first.binding_root_id, second.binding_root_id);
@@ -914,7 +918,7 @@ mod tests {
         let new_path = root.join("nested").join("new.md");
         fs::write(&old_path, "Stable content\n").expect("write markdown file");
 
-        let initial_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let initial_snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("initial sync workspace");
         let initial_file = initial_snapshot.files[0].clone();
 
@@ -922,7 +926,7 @@ mod tests {
         fs::copy(&old_path, &new_path).expect("copy markdown to new path");
         fs::remove_file(&old_path).expect("remove old markdown path");
 
-        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None)
+        let next_snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
             .expect("sync workspace after remove-create rename");
         let next_file = &next_snapshot.files[0];
 
@@ -930,6 +934,23 @@ mod tests {
         assert_eq!(next_file.id, initial_file.id);
         assert_eq!(next_file.content_hash, initial_file.content_hash);
 
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_binds_materialized_file_to_explicit_cloud_uuid() {
+        let root = temp_workspace_root("cloud-materialization-id");
+        fs::write(root.join("Cloud letter.md"), "Cloud body\n").expect("write cloud markdown");
+        let ids = HashMap::from([("Cloud letter.md".into(), "cloud-uuid".into())]);
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, Some(ids))
+            .expect("bind cloud materialization");
+
+        assert_eq!(snapshot.files[0].id, "cloud-uuid");
+        let manifest = fs::read_to_string(
+            root.join(WORKSPACE_DIR_NAME).join(WORKSPACE_INDEX_FILE_NAME),
+        ).expect("read manifest");
+        assert!(manifest.contains("cloud-uuid"));
         cleanup(&root);
     }
 }

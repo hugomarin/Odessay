@@ -1,0 +1,137 @@
+{
+  "source_trace": "artifacts/perf/ode-371-editor-trace-rerun.json.gz",
+  "generated_at_utc": "2026-07-13T04:46:56.976Z",
+  "units": {
+    "durations": "milliseconds",
+    "long_task_threshold_ms": 50
+  },
+  "event_dispatch": {
+    "keydown": {
+      "count": 12,
+      "p50": 4.88,
+      "p75": 5.79,
+      "p95": 46.2,
+      "max": 46.2
+    },
+    "input": {
+      "count": 2,
+      "p50": 4.09,
+      "p75": 10.66,
+      "p95": 10.66,
+      "max": 10.66
+    },
+    "paste": {
+      "count": 1,
+      "p50": 45.56,
+      "p75": 45.56,
+      "p95": 45.56,
+      "max": 45.56
+    },
+    "click": {
+      "count": 6,
+      "p50": 0.01,
+      "p75": 0.01,
+      "p95": 21.25,
+      "max": 21.25
+    }
+  },
+  "event_timing": {
+    "keydown": {
+      "count": 12,
+      "p50": 23.54,
+      "p75": 30.14,
+      "p95": 53.46,
+      "max": 53.46
+    },
+    "input": {
+      "count": 2,
+      "p50": 18.45,
+      "p75": 22.45,
+      "p95": 22.45,
+      "max": 22.45
+    },
+    "paste": null,
+    "click": {
+      "count": 6,
+      "p50": 28.21,
+      "p75": 30.27,
+      "p95": 32.2,
+      "max": 32.2
+    }
+  },
+  "interaction_latency": {
+    "editor_inputs": {
+      "count": 20,
+      "p50": 27.12,
+      "p75": 30.14,
+      "p95": 44.02,
+      "max": 53.46
+    },
+    "with_interaction_id": {
+      "count": 18,
+      "p50": 28.21,
+      "p75": 30.27,
+      "p95": 53.46,
+      "max": 53.46
+    }
+  },
+  "long_tasks_ge_50ms": {
+    "total_run_tasks": 2483,
+    "stats": {
+      "count": 1,
+      "p50": 79.89,
+      "p75": 79.89,
+      "p95": 79.89,
+      "max": 79.89
+    },
+    "peaks_ms": [
+      79.89
+    ]
+  },
+  "peaks": {
+    "event_dispatch": {
+      "keydown": [
+        46.2,
+        33.9,
+        6.63,
+        5.79,
+        5.25
+      ],
+      "input": [
+        10.66,
+        4.09
+      ],
+      "paste": [
+        45.56
+      ],
+      "click": [
+        21.25,
+        0.01,
+        0.01,
+        0.01,
+        0.01
+      ]
+    },
+    "event_timing": {
+      "keydown": [
+        53.46,
+        44.02,
+        32.39,
+        30.14,
+        29.59
+      ],
+      "input": [
+        22.45,
+        18.45
+      ],
+      "paste": [],
+      "click": [
+        32.2,
+        30.27,
+        29.08,
+        28.21,
+        27.12
+      ]
+    }
+  }
+}

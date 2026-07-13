@@ -8,12 +8,17 @@ const mocks = vi.hoisted(() => ({
   getBindingRoots: vi.fn(),
   getDesktopSettings: vi.fn(),
   upsertBindingRoot: vi.fn(),
+  ensureManagedRoot: vi.fn(),
+  listRecentFiles: vi.fn(),
+  writeFile: vi.fn(),
+  findEligibleCloudHash: vi.fn(),
   catalogGetById: vi.fn(),
   catalogResolvePath: vi.fn(),
   catalogRegisterBinding: vi.fn(),
   catalogList: vi.fn(),
   localGet: vi.fn(),
   localSave: vi.fn(),
+  getSession: vi.fn(),
 }))
 
 vi.mock("@tauri-apps/api/path", () => ({
@@ -23,6 +28,9 @@ vi.mock("@tauri-apps/api/path", () => ({
 
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriWorkspaceSync: mocks.workspaceSync,
+  tauriListRecentFiles: mocks.listRecentFiles,
+  tauriWriteFile: mocks.writeFile,
+  tauriCatalogFindEligibleCloudHash: mocks.findEligibleCloudHash,
 }))
 
 vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
@@ -30,6 +38,7 @@ vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
     getBindingRoots = mocks.getBindingRoots
     getDesktopSettings = mocks.getDesktopSettings
     upsertBindingRoot = mocks.upsertBindingRoot
+    ensureManagedRoot = mocks.ensureManagedRoot
   },
 }))
 
@@ -45,6 +54,10 @@ vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
 
 vi.mock("@/lib/local-db", () => ({
   localDB: { writings: { get: mocks.localGet, save: mocks.localSave } },
+}))
+
+vi.mock("@/lib/supabase/desktop-client", () => ({
+  createDesktopClient: () => ({ auth: { getSession: mocks.getSession } }),
 }))
 
 function catalogRecord(overrides: Record<string, unknown>) {
@@ -74,6 +87,14 @@ describe("open-document-desktop", () => {
     mocks.getBindingRoots.mockResolvedValue([])
     mocks.getDesktopSettings.mockResolvedValue({ data: { workspaces: [] }, error: null })
     mocks.catalogList.mockResolvedValue([])
+    mocks.listRecentFiles.mockResolvedValue([])
+    mocks.writeFile.mockResolvedValue(undefined)
+    mocks.findEligibleCloudHash.mockResolvedValue([])
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: "acct-1" } } },
+      error: null,
+    })
+    mocks.ensureManagedRoot.mockResolvedValue({ id: "managed-root", rootPath: "/config/artifact-studio-managed" })
     mocks.localGet.mockResolvedValue(undefined)
     mocks.catalogRegisterBinding.mockImplementation(async (input: { document: { id: string }; binding: unknown }) =>
       catalogRecord({ id: input.document.id, binding: input.binding }),
@@ -163,5 +184,116 @@ describe("open-document-desktop", () => {
     const result = await openDesktopDocument({ kind: "id", id: "ghost" })
 
     expect(result).toEqual({ status: "orphaned", id: "ghost" })
+  })
+
+  it("materializes a cloud-only document before returning it to the editor", async () => {
+    const cloud = catalogRecord({
+      id: "cloud-1",
+      localPresent: false,
+      cloudPresent: true,
+      cloudAccountId: "user-1",
+      syncStatus: "synced",
+      title: "Cloud letter",
+      status: "draft",
+      visibility: "private",
+    })
+    mocks.catalogGetById.mockResolvedValue(cloud)
+    mocks.localGet.mockResolvedValue({
+      id: "cloud-1",
+      author_id: "user-1",
+      title: "Cloud letter",
+      body_json: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] },
+      body_text: "Hello",
+      slug: null,
+      status: "draft",
+      artifact_type: "general",
+      visibility: "private",
+      version: 1,
+      sync_status: "synced",
+      lifecycle: "server-confirmed",
+      deleted_at: null,
+      created_at: "2026-06-01T00:00:00.000Z",
+      updated_at: "2026-06-01T00:00:00.000Z",
+      local_updated_at: 1,
+      canonical_path: null,
+      content_hash: null,
+    })
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/config/artifact-studio-managed",
+      bindingRootId: "manifest-managed-root",
+      name: "artifact-studio-managed",
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: 2,
+      selectedPaths: [],
+      files: [{
+        id: "cloud-1",
+        path: "/config/artifact-studio-managed/Cloud letter.md",
+        relativePath: "Cloud letter.md",
+        name: "Cloud letter.md",
+        modifiedAt: 2,
+        size: 6,
+        inode: 10,
+        contentHash: "blake3:cloud",
+      }],
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "cloud-1" })
+
+    expect(result).toMatchObject({ status: "opened", documentId: "cloud-1" })
+    expect(mocks.writeFile).toHaveBeenCalledWith(
+      "/config/artifact-studio-managed/Cloud letter.md",
+      expect.stringContaining("Hello"),
+    )
+    expect(mocks.workspaceSync).toHaveBeenCalledWith(
+      "/config/artifact-studio-managed",
+      undefined,
+      { "Cloud letter.md": "cloud-1" },
+    )
+    expect(mocks.catalogRegisterBinding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        document: expect.objectContaining({ id: "cloud-1", localPresent: true }),
+        binding: expect.objectContaining({ documentId: "cloud-1", bindingRootId: "manifest-managed-root" }),
+      }),
+    )
+    const writeOrder = mocks.writeFile.mock.invocationCallOrder[0]
+    const manifestOrder = mocks.workspaceSync.mock.invocationCallOrder[0]
+    const catalogOrder = mocks.catalogRegisterBinding.mock.invocationCallOrder[0]
+    expect(writeOrder).toBeLessThan(manifestOrder)
+    expect(manifestOrder).toBeLessThan(catalogOrder)
+  })
+
+  it("materializes into an explicitly selected external BindingRoot", async () => {
+    const cloud = catalogRecord({ id: "cloud-2", localPresent: false, cloudPresent: true, syncStatus: "synced" })
+    mocks.catalogGetById.mockResolvedValue(cloud)
+    mocks.getBindingRoots.mockResolvedValue([{
+      id: "external-1", rootPath: "/Users/me/Letters", kind: "external",
+      visibleAsWorkspace: false, selectedPaths: ["existing.md"], consentedAt: "now", createdAt: "now",
+    }])
+    mocks.localGet.mockResolvedValue({
+      id: "cloud-2", title: "Chosen root", body_json: { type: "doc", content: [] }, body_text: "",
+      status: "draft", artifact_type: "general", visibility: "private", version: 1,
+      sync_status: "synced", lifecycle: "server-confirmed", created_at: "2026-01-01T00:00:00Z",
+      updated_at: "2026-01-01T00:00:00Z", local_updated_at: 1,
+    })
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/Letters", bindingRootId: "external-1", selectedPaths: ["existing.md", "Chosen root.md"],
+      files: [{ id: "cloud-2", path: "/Users/me/Letters/Chosen root.md", relativePath: "Chosen root.md", name: "Chosen root.md", modifiedAt: 2, size: 0, inode: 4, contentHash: "blake3:empty" }],
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "cloud-2", materializeInBindingRootId: "external-1" })
+
+    expect(result.status).toBe("opened")
+    expect(mocks.workspaceSync).toHaveBeenCalledWith(
+      "/Users/me/Letters",
+      ["existing.md", "Chosen root.md"],
+      { "Chosen root.md": "cloud-2" },
+    )
+    expect(mocks.upsertBindingRoot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "external-1", selectedPaths: ["existing.md", "Chosen root.md"] }),
+    )
+    expect(mocks.ensureManagedRoot).not.toHaveBeenCalled()
   })
 })

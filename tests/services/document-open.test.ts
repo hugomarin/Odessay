@@ -148,7 +148,10 @@ describe("openDocument — id input", () => {
     const { ports } = makePorts({ catalog, materializeCloudOnly })
     const open = createOpenDocumentUseCase(ports)
     const result = await open({ kind: "id", id: "cloud-1" })
-    expect(materializeCloudOnly).toHaveBeenCalledWith({ documentId: "cloud-1" })
+    expect(materializeCloudOnly).toHaveBeenCalledWith({
+      documentId: "cloud-1",
+      bindingRootId: undefined,
+    })
     expect(result).toMatchObject({ status: "opened", documentId: "cloud-1" })
   })
 })
@@ -245,6 +248,29 @@ describe("openDocument — path input", () => {
     const result = await open({ kind: "path", path: "/root/c.md" })
     expect(result.status).toBe("ambiguous")
     expect(result).toMatchObject({ candidates: expect.arrayContaining(["a", "b"]) })
+    expect(catalog.registerBinding).not.toHaveBeenCalled()
+  })
+
+  it("rebinds an unbound file to the single eligible cloud hash candidate", async () => {
+    const cloudHashLookup = vi.fn(async () => "cloud-doc")
+    const { ports } = makePorts({
+      readFileEvidence: vi.fn(async ({ path }) => evidence({ canonicalPath: path, contentHash: "cloud-hash" })),
+      cloudHashLookup,
+    })
+    const open = createOpenDocumentUseCase(ports)
+    const result = await open({ kind: "path", path: "/root/cloud-copy.md" })
+    expect(cloudHashLookup).toHaveBeenCalledWith("cloud-hash")
+    expect(result).toMatchObject({ status: "opened", documentId: "cloud-doc", strategy: "cloud_hash" })
+  })
+
+  it("returns ambiguous when the cloud hash has duplicate eligible candidates", async () => {
+    const { ports, catalog } = makePorts({
+      readFileEvidence: vi.fn(async ({ path }) => evidence({ canonicalPath: path, contentHash: "duplicate" })),
+      cloudHashLookup: vi.fn(async () => "ambiguous" as const),
+    })
+    const open = createOpenDocumentUseCase(ports)
+    const result = await open({ kind: "path", path: "/root/cloud-copy.md" })
+    expect(result.status).toBe("ambiguous")
     expect(catalog.registerBinding).not.toHaveBeenCalled()
   })
 })

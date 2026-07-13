@@ -278,10 +278,6 @@ class DesktopDocumentService implements DocumentService {
         existing?.canonical_path ??
         existingByCanonicalPath?.canonical_path
 
-      if (existing && !mappedCanonicalPath) {
-        return ok(toCanonicalRecord(existing))
-      }
-
       // A UUID-looking identifier is identity, not a filesystem path. If there
       // is no local binding (neither by id nor by canonical path), resolve the
       // canonical path from the DocumentCatalog (ODE-375 M3): the unified opener
@@ -290,7 +286,7 @@ class DesktopDocumentService implements DocumentService {
       // empty draft. Only when the catalog has no binding either do we refuse —
       // treating the bare UUID as a path would repeatedly hit the filesystem.
       let catalogCanonicalPath: string | null = null
-      if (isUuidLikeWritingIdentifier(writingId) && !existingRecord) {
+      if ((existingRecord || isUuidLikeWritingIdentifier(writingId)) && !mappedCanonicalPath) {
         catalogCanonicalPath = await resolveCatalogCanonicalPath(writingId)
         if (!catalogCanonicalPath) {
           return err("NOT_FOUND", `Writing ${writingId} not found`)
@@ -301,17 +297,10 @@ class DesktopDocumentService implements DocumentService {
       const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
 
       if (fileResult.error || !fileResult.data) {
-        // The canonical file is missing or unreadable (moved, deleted, or a
-        // stale path that never materialized — e.g. an imported writing whose
-        // canonical_path points at a .md that doesn't exist on disk). If we
-        // still hold the writing in the local cache, open it from there instead
-        // of reporting NOT_FOUND. Returning NOT_FOUND makes the editor discard
-        // the tab and spawn a blank draft, which looks like the document failed
-        // to open even though its synced content lives in IndexedDB. The file
-        // re-materializes on the next save.
-        if (existingRecord) {
-          return ok(toCanonicalRecord(existingRecord))
-        }
+        // The `.md` is authoritative once desktop opening reaches hydration.
+        // Never edit cached JSON as a fallback: cloud-only is materialized by
+        // openDocument first, while a missing/stale binding remains recoverable
+        // NOT_FOUND and must not create durable state.
         return err("NOT_FOUND", fileResult.error?.message ?? `Writing ${writingId} not found`)
       }
 

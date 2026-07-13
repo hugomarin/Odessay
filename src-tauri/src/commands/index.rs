@@ -71,6 +71,7 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
             local_present INTEGER NOT NULL DEFAULT 0 CHECK (local_present IN (0, 1)),
             cloud_present INTEGER NOT NULL DEFAULT 0 CHECK (cloud_present IN (0, 1)),
             cloud_account_id TEXT,
+            cloud_content_hash TEXT,
             sync_status TEXT NOT NULL CHECK (sync_status IN ('local-only','pending','synced','conflict','failed','deleted')),
             title_cache TEXT,
             slug_cache TEXT,
@@ -110,7 +111,26 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
           ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);",
     ).map_err(|e| format!("catalog migration v2: {e}"))?;
     tx.commit()
-        .map_err(|e| format!("catalog migration commit: {e}"))
+        .map_err(|e| format!("catalog migration commit: {e}"))?;
+
+    let has_cloud_hash = {
+        let mut stmt = conn.prepare("PRAGMA table_info(documents)")
+            .map_err(|e| format!("catalog migration inspect documents: {e}"))?;
+        let columns = stmt.query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("catalog migration list columns: {e}"))?;
+        let found = columns.filter_map(Result::ok).any(|name| name == "cloud_content_hash");
+        found
+    };
+    if !has_cloud_hash {
+        conn.execute("ALTER TABLE documents ADD COLUMN cloud_content_hash TEXT", [])
+            .map_err(|e| format!("catalog migration add cloud_content_hash: {e}"))?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_catalog_cloud_hash ON documents(cloud_content_hash) WHERE cloud_present=1 AND cloud_content_hash IS NOT NULL;
+         INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
+           ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);"
+    ).map_err(|e| format!("catalog migration v3: {e}"))?;
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -165,6 +185,23 @@ pub struct CatalogDualWriteInput {
     pub document: CatalogDocumentInput,
     pub binding: Option<CatalogBindingInput>,
     pub mutation: Option<CatalogMutationInput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogCloudSnapshotInput {
+    pub id: String,
+    pub cloud_present: bool,
+    pub cloud_account_id: Option<String>,
+    pub content_hash: Option<String>,
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub status: Option<String>,
+    pub artifact_type: Option<String>,
+    pub visibility: Option<String>,
+    pub version: Option<i64>,
+    pub created_at: Option<i64>,
+    pub modified_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -290,6 +327,67 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
     }
     tx.commit()
         .map_err(|e| format!("catalog dual-write commit: {e}"))
+}
+
+/// Project a complete cloud metadata burst without changing filesystem facts.
+/// Cloud hydration owns cloud presence/account/metadata only; an existing local
+/// binding and `local_present` always survive this transaction.
+#[tauri::command]
+pub fn catalog_apply_cloud_snapshots(
+    db_path: String,
+    snapshots: Vec<CatalogCloudSnapshotInput>,
+) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog cloud snapshot begin: {e}"))?;
+
+    for d in &snapshots {
+        tx.execute(
+            "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,cloud_content_hash,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,created_at,modified_at)
+             VALUES(?1,0,?2,?3,?4,CASE WHEN ?2=1 THEN 'synced' ELSE 'deleted' END,?5,?6,?7,?8,?9,?10,?11,?12)
+             ON CONFLICT(id) DO UPDATE SET
+               cloud_present=excluded.cloud_present,
+               cloud_account_id=excluded.cloud_account_id,
+               cloud_content_hash=excluded.cloud_content_hash,
+               title_cache=excluded.title_cache,
+               slug_cache=excluded.slug_cache,
+               status_cache=excluded.status_cache,
+               artifact_type_cache=excluded.artifact_type_cache,
+               visibility_cache=excluded.visibility_cache,
+               version_cache=excluded.version_cache,
+               created_at=COALESCE(documents.created_at,excluded.created_at),
+               modified_at=excluded.modified_at,
+               sync_status=CASE
+                 WHEN documents.sync_status IN ('pending','failed','conflict') THEN documents.sync_status
+                 WHEN excluded.cloud_present=1 THEN 'synced'
+                 WHEN documents.local_present=1 THEN 'local-only'
+                 ELSE 'deleted' END",
+            params![d.id,d.cloud_present as i64,d.cloud_account_id,d.content_hash,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.created_at,d.modified_at],
+        )
+        .map_err(|e| format!("catalog cloud snapshot document: {e}"))?;
+    }
+
+    tx.commit()
+        .map_err(|e| format!("catalog cloud snapshot commit: {e}"))
+}
+
+#[tauri::command]
+pub fn catalog_find_eligible_cloud_hash(
+    db_path: String,
+    content_hash: String,
+    cloud_account_id: String,
+) -> Result<Vec<String>, String> {
+    let conn = open_db(&db_path)?;
+    let mut stmt = conn.prepare(
+        "SELECT id FROM documents
+         WHERE cloud_present=1 AND local_present=0 AND cloud_content_hash=?1
+           AND cloud_account_id=?2 AND sync_status='synced' ORDER BY id LIMIT 2",
+    ).map_err(|e| format!("catalog cloud hash prepare: {e}"))?;
+    let rows = stmt.query_map(params![content_hash, cloud_account_id], |row| row.get(0))
+        .map_err(|e| format!("catalog cloud hash query: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog cloud hash row: {e}"))
 }
 
 #[tauri::command]
@@ -550,7 +648,7 @@ mod catalog_tests {
     }
 
     #[test]
-    fn v2_migration_is_additive_and_versioned() {
+    fn catalog_migration_is_additive_and_versioned() {
         let path = temp_db();
         let started_at = std::time::Instant::now();
         let conn = open_db(&path).unwrap();
@@ -565,7 +663,15 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 2);
+        let cloud_hash_column: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='cloud_content_hash'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 3);
+        assert_eq!(cloud_hash_column, 1);
         assert_eq!(legacy, "writings_index");
         eprintln!("catalog_startup_ms={startup_ms:.3}");
         assert!(startup_ms < 1000.0, "catalog startup exceeded 1s budget");
@@ -825,6 +931,97 @@ mod catalog_tests {
         assert!(row.cloud_present, "cloud metadata survives a local detach");
         assert_eq!(row.title.as_deref(), Some("Cloud Title"));
 
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn cloud_snapshot_batch_preserves_local_presence_and_pending_mutations() {
+        let path = temp_db();
+        let local = input("doc-local", "/tmp/root/local.md", "mut-local");
+        catalog_dual_write(path.clone(), local).unwrap();
+
+        catalog_apply_cloud_snapshots(
+            path.clone(),
+            vec![
+                CatalogCloudSnapshotInput {
+                    id: "doc-local".into(), cloud_present: true,
+                    cloud_account_id: Some("acct-1".into()), content_hash: Some("hash-local".into()),
+                    title: Some("Cloud metadata".into()), slug: Some("cloud".into()),
+                    status: Some("draft".into()), artifact_type: Some("general".into()),
+                    visibility: Some("private".into()), version: Some(2),
+                    created_at: Some(1), modified_at: Some(2),
+                },
+                CatalogCloudSnapshotInput {
+                    id: "doc-cloud".into(), cloud_present: true,
+                    cloud_account_id: Some("acct-1".into()), content_hash: Some("hash-cloud".into()),
+                    title: Some("Cloud only".into()), slug: None, status: Some("draft".into()),
+                    artifact_type: Some("general".into()), visibility: Some("private".into()),
+                    version: Some(1), created_at: Some(1), modified_at: Some(1),
+                },
+            ],
+        ).unwrap();
+
+        let local = catalog_get_by_id(path.clone(), "doc-local".into()).unwrap().unwrap();
+        assert!(local.local_present, "cloud hydration cannot clear local presence");
+        assert!(local.cloud_present);
+        assert_eq!(local.sync_status, "pending", "pending local work wins");
+        assert_eq!(local.title.as_deref(), Some("Cloud metadata"));
+
+        let cloud = catalog_get_by_id(path.clone(), "doc-cloud".into()).unwrap().unwrap();
+        assert!(!cloud.local_present);
+        assert!(cloud.cloud_present);
+        assert_eq!(cloud.cloud_account_id.as_deref(), Some("acct-1"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn catalog_account_filter_hides_only_cloud_only_rows_on_logout() {
+        let path = temp_db();
+        catalog_dual_write(path.clone(), input("local", "/tmp/root/local.md", "mut-local")).unwrap();
+        let snapshot = |id: &str, account: &str| CatalogCloudSnapshotInput {
+            id: id.into(), cloud_present: true,
+            cloud_account_id: Some(account.into()), content_hash: Some(format!("hash-{id}")),
+            title: Some(id.into()), slug: None, status: Some("draft".into()),
+            artifact_type: Some("general".into()), visibility: Some("private".into()),
+            version: Some(1), created_at: Some(1), modified_at: Some(1),
+        };
+        catalog_apply_cloud_snapshots(path.clone(), vec![
+            snapshot("cloud-a", "acct-a"), snapshot("cloud-b", "acct-b"),
+        ]).unwrap();
+
+        let signed_in = catalog_list(path.clone(), Some("acct-a".into()), false, false, 20).unwrap();
+        assert!(signed_in.iter().any(|row| row.id == "local"));
+        assert!(signed_in.iter().any(|row| row.id == "cloud-a"));
+        assert!(!signed_in.iter().any(|row| row.id == "cloud-b"));
+
+        let signed_out = catalog_list(path.clone(), None, false, false, 20).unwrap();
+        assert!(signed_out.iter().any(|row| row.id == "local"));
+        assert!(!signed_out.iter().any(|row| row.id == "cloud-a" || row.id == "cloud-b"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn cloud_hash_lookup_returns_only_eligible_candidates() {
+        let path = temp_db();
+        let snapshot = |id: &str| CatalogCloudSnapshotInput {
+            id: id.into(), cloud_present: true, cloud_account_id: Some("acct".into()),
+            content_hash: Some("same-hash".into()), title: Some(id.into()), slug: None,
+            status: Some("draft".into()), artifact_type: Some("general".into()),
+            visibility: Some("private".into()), version: Some(1), created_at: Some(1),
+            modified_at: Some(1),
+        };
+        catalog_apply_cloud_snapshots(path.clone(), vec![snapshot("cloud-a"), snapshot("cloud-b")]).unwrap();
+
+        let candidates = catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "acct".into()).unwrap();
+        assert_eq!(candidates, vec!["cloud-a", "cloud-b"], "two candidates are ambiguous");
+
+        let local = input("local", "/tmp/root/local.md", "mut-local");
+        catalog_dual_write(path.clone(), local).unwrap();
+        catalog_apply_cloud_snapshots(path.clone(), vec![snapshot("local")]).unwrap();
+        let candidates = catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "acct".into()).unwrap();
+        assert_eq!(candidates, vec!["cloud-a", "cloud-b"], "local and pending rows are ineligible");
+        let other_account = catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "other".into()).unwrap();
+        assert!(other_account.is_empty(), "hash candidates are account-scoped");
         let _ = fs::remove_file(path);
     }
 }

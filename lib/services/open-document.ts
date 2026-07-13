@@ -32,7 +32,7 @@ import {
  */
 
 export type OpenDocumentInput =
-  | { kind: "id"; id: string }
+  | { kind: "id"; id: string; materializeInBindingRootId?: string }
   | { kind: "path"; path: string; confirmRegisterRoot?: boolean }
 
 /** How a path open resolved its identity; `existing` = already bound in catalog. */
@@ -93,8 +93,11 @@ export type OpenDocumentPorts = {
    * (spec §Drafts nuevos y cloud-only). ODE-371 owns the final adapter; when it
    * is not wired, cloud-only surfaces as an explicit `failed`, never as missing.
    */
-  materializeCloudOnly?: (input: { documentId: string }) => Promise<DocumentCatalogRecord>
-  cloudHashLookup?: CloudHashLookup
+  materializeCloudOnly?: (input: {
+    documentId: string
+    bindingRootId?: string
+  }) => Promise<DocumentCatalogRecord>
+  cloudHashLookup?: (contentHash: string) => Promise<ReturnType<CloudHashLookup>>
   mintId?: () => string
 }
 
@@ -106,6 +109,7 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
   /** Turns an already-known catalog record into an explicit open outcome. */
   async function openExistingRecord(
     record: DocumentCatalogRecord,
+    materializeInBindingRootId?: string,
   ): Promise<OpenDocumentResult> {
     if (record.syncStatus === "conflict") {
       return { status: "conflict", documentId: record.id, record }
@@ -120,7 +124,10 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
           reason: `document ${record.id} is cloud-only; materialization is owned by ODE-371 and is not wired in this build`,
         }
       }
-      const materialized = await ports.materializeCloudOnly({ documentId: record.id })
+      const materialized = await ports.materializeCloudOnly({
+        documentId: record.id,
+        bindingRootId: materializeInBindingRootId,
+      })
       return { status: "opened", documentId: materialized.id, record: materialized, strategy: "existing" }
     }
 
@@ -178,12 +185,12 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
     return { status: "opened", documentId: record.id, record, strategy }
   }
 
-  async function openById(id: string): Promise<OpenDocumentResult> {
+  async function openById(id: string, materializeInBindingRootId?: string): Promise<OpenDocumentResult> {
     const record = await ports.catalog.getById(id)
     if (!record) {
       return { status: "orphaned", id }
     }
-    return openExistingRecord(record)
+    return openExistingRecord(record, materializeInBindingRootId)
   }
 
   async function openByPath(
@@ -209,6 +216,9 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
 
     const evidence = await ports.readFileEvidence({ ...match, path })
     const knownBindings = await ports.listKnownBindings(match.bindingRootId)
+    const cloudHashResult = evidence.contentHash && ports.cloudHashLookup
+      ? await ports.cloudHashLookup(evidence.contentHash)
+      : null
     const resolved = reconcileSingleFile({
       file: {
         relativePath: match.relativePath,
@@ -221,7 +231,7 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
       },
       bindingRootId: match.bindingRootId,
       knownBindings,
-      cloudHashLookup: ports.cloudHashLookup,
+      cloudHashLookup: evidence.contentHash ? () => cloudHashResult : undefined,
       mintId,
     })
 
@@ -237,7 +247,7 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
   ): Promise<OpenDocumentResult> {
     try {
       if (input.kind === "id") {
-        return await openById(input.id)
+        return await openById(input.id, input.materializeInBindingRootId)
       }
       return await openByPath(input.path, input.confirmRegisterRoot ?? false)
     } catch (error) {

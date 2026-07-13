@@ -1,0 +1,73 @@
+{
+  "generated_at_utc": "2026-07-13T04:46:56.980Z",
+  "trace_path": "artifacts/perf/ode-371-editor-trace-rerun.json.gz",
+  "budgets_path": "workflow/perf-budgets-ode-371.json",
+  "budget_version": "2026-07-12",
+  "summary": {
+    "total": 5,
+    "pass": 5,
+    "warn": 0,
+    "fail": 0,
+    "missing": 0,
+    "skip": 0,
+    "invalid_budget": 0,
+    "required_failures": 0
+  },
+  "evaluations": [
+    {
+      "section": "interaction_latency_ms",
+      "metric": "editor_inputs_p95",
+      "required": true,
+      "value": 44.02,
+      "warn_lte": 130,
+      "fail_lte": 168,
+      "grace_lte": null,
+      "status": "pass",
+      "note": null
+    },
+    {
+      "section": "interaction_latency_ms",
+      "metric": "editor_inputs_max",
+      "required": true,
+      "value": 53.46,
+      "warn_lte": 160,
+      "fail_lte": 204,
+      "grace_lte": null,
+      "status": "pass",
+      "note": null
+    },
+    {
+      "section": "interaction_latency_ms",
+      "metric": "with_interaction_id_p95",
+      "required": true,
+      "value": 53.46,
+      "warn_lte": 130,
+      "fail_lte": 168,
+      "grace_lte": null,
+      "status": "pass",
+      "note": null
+    },
+    {
+      "section": "long_tasks_ge_50ms",
+      "metric": "count",
+      "required": true,
+      "value": 1,
+      "warn_lte": 8,
+      "fail_lte": 12,
+      "grace_lte": null,
+      "status": "pass",
+      "note": null
+    },
+    {
+      "section": "long_tasks_ge_50ms",
+      "metric": "max_ms",
+      "required": true,
+      "value": 79.89,
+      "warn_lte": 360,
+      "fail_lte": 480,
+      "grace_lte": null,
+      "status": "pass",
+      "note": null
+    }
+  ]
+}
