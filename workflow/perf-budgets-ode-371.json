@@ -1,0 +1,16 @@
+{
+  "_description": "ODE-371 cloud materialization scope: editor interaction latency and long-task safety. Network waterfall, catalog TTI, and reactive fan-out are verified by deterministic desktop sync/catalog tests.",
+  "version": "2026-07-12",
+  "scope": "ode-371-cloud-materialization",
+  "budgets": {
+    "interaction_latency_ms": {
+      "editor_inputs_p95": { "required": true, "warn_lte": 130, "fail_lte": 168 },
+      "editor_inputs_max": { "required": true, "warn_lte": 160, "fail_lte": 204 },
+      "with_interaction_id_p95": { "required": true, "warn_lte": 130, "fail_lte": 168 }
+    },
+    "long_tasks_ge_50ms": {
+      "count": { "required": true, "warn_lte": 8, "fail_lte": 12 },
+      "max_ms": { "required": true, "warn_lte": 360, "fail_lte": 480 }
+    }
+  }
+}

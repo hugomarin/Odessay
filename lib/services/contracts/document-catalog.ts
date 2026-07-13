@@ -56,6 +56,7 @@ export type RegisterBindingInput = {
 
 export type CloudDocumentSnapshot = Omit<DocumentCatalogRecord, "binding" | "localPresent"> & {
   localPresent?: boolean
+  contentHash?: string | null
 }
 
 export interface DocumentCatalog {

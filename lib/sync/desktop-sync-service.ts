@@ -20,6 +20,9 @@ import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { computeMarkdownContentHash } from "@/lib/content-hash"
 import { tauriOpenFile } from "@/lib/services/desktop/tauri-commands"
 import { filenameToTitle } from "@/lib/desktop/document-naming"
+import { normalizeArtifactType } from "@/lib/writings/artifact-type"
+import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
+import type { CloudDocumentSnapshot } from "@/lib/services/contracts/document-catalog"
 import {
   beginHydrationProgress,
   completeHydrationProgress,
@@ -75,6 +78,19 @@ const HYDRATION_FRESHNESS_WINDOW_MS = 45_000
 let scheduledFlushId: number | null = null
 let desktopSyncStarted = false
 let lastSyncedAt: string | null = null
+let desktopCatalogPromise: Promise<SqliteDocumentCatalog> | null = null
+
+async function getDesktopCatalog() {
+  if (!desktopCatalogPromise) {
+    desktopCatalogPromise = (async () => {
+      const { appConfigDir, join } = await import("@tauri-apps/api/path")
+      return new SqliteDocumentCatalog(
+        await join(await appConfigDir(), "desktop-index.sqlite3"),
+      )
+    })()
+  }
+  return desktopCatalogPromise
+}
 
 type InFlightHydration<T> = {
   userId: string
@@ -748,6 +764,40 @@ async function doHydrateWritingsForUser(userId: string): Promise<ServiceResponse
       })
     }
 
+    // Metadata hydration projects one atomic cloud burst into SQLite. This
+    // never writes a file and the Rust command preserves local_present/binding
+    // for rows already materialized (ODE-371, reactive fan-out = one signal).
+    if (!isExpectedScopeStillActive(userId)) {
+      return ok({ appliedCount, hydratedIds })
+    }
+    const cloudSnapshots: CloudDocumentSnapshot[] = []
+    for (const remoteWriting of manifest) {
+      const localWriting = await localDB.writings.get(remoteWriting.id)
+      if (!localWriting) continue
+      cloudSnapshots.push({
+        id: remoteWriting.id,
+        cloudPresent: !remoteWriting.deleted_at,
+        cloudAccountId: userId,
+        contentHash: remoteWriting.content_hash ?? null,
+        syncStatus: localWriting.sync_status === "pending" || localWriting.sync_status === "failed"
+          ? localWriting.sync_status
+          : remoteWriting.deleted_at && localWriting.canonical_path
+            ? "local-only" as const
+            : remoteWriting.deleted_at
+              ? "deleted" as const
+              : "synced" as const,
+        title: localWriting.title ?? null,
+        slug: localWriting.slug ?? null,
+        status: localWriting.status,
+        artifactType: normalizeArtifactType(localWriting.artifact_type),
+        visibility: localWriting.visibility,
+        version: remoteWriting.version,
+        createdAt: parseTimestamp(localWriting.created_at) || null,
+        modifiedAt: parseTimestamp(remoteWriting.updated_at) || null,
+      })
+    }
+    await (await getDesktopCatalog()).applyCloudSnapshots(cloudSnapshots)
+
     if (shouldShowProgress) {
       markHydratedUserOnDevice(userId)
       completeHydrationProgress()
@@ -842,6 +892,29 @@ export const desktopSyncService: SyncService = {
 
       if (hydrated) {
         await localDB.writings.save(mapRemoteWritingToLocal(remoteWriting, localWriting))
+      }
+
+      const projected = await localDB.writings.get(remoteWriting.id)
+      if (projected) {
+        await (await getDesktopCatalog()).applyCloudSnapshot({
+          id: remoteWriting.id,
+          cloudPresent: !remoteWriting.deleted_at,
+          cloudAccountId: userId,
+          contentHash: remoteWriting.content_hash ?? null,
+          syncStatus: projected.sync_status === "pending" || projected.sync_status === "failed"
+            ? projected.sync_status
+            : remoteWriting.deleted_at && projected.canonical_path
+              ? "local-only"
+              : remoteWriting.deleted_at ? "deleted" : "synced",
+          title: projected.title ?? null,
+          slug: projected.slug ?? null,
+          status: projected.status,
+          artifactType: normalizeArtifactType(projected.artifact_type),
+          visibility: projected.visibility,
+          version: remoteWriting.version,
+          createdAt: parseTimestamp(projected.created_at) || null,
+          modifiedAt: parseTimestamp(remoteWriting.updated_at) || null,
+        })
       }
 
       return ok({ hydrated, writingId: input.writingId })

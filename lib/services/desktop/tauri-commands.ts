@@ -64,6 +64,12 @@ export type DesktopCatalogDualWriteInput = {
   }
 }
 
+export type DesktopCloudSnapshotInput = {
+  id: string; cloudPresent: boolean; cloudAccountId: string | null; contentHash: string | null
+  title: string | null; slug: string | null; status: string | null; artifactType: string | null
+  visibility: string | null; version: number | null; createdAt: number | null; modifiedAt: number | null
+}
+
 export async function tauriOpenFile(path: string): Promise<string> {
   return invoke<string>("open_file", { path })
 }
@@ -117,8 +123,9 @@ export async function tauriWorkspaceCreate(parentPath: string, name: string): Pr
 export async function tauriWorkspaceSync(
   rootPath: string,
   selectedPaths?: string[],
+  documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath, selectedPaths })
+  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath, selectedPaths, documentIds })
 }
 
 export async function tauriComputeContentHash(markdown: string): Promise<string> {
@@ -155,6 +162,21 @@ export async function tauriCatalogSchemaVersion(dbPath: string): Promise<number>
 
 export async function tauriCatalogDualWrite(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
   return invoke<void>("catalog_dual_write", { dbPath, input })
+}
+
+export async function tauriCatalogApplyCloudSnapshots(
+  dbPath: string,
+  snapshots: DesktopCloudSnapshotInput[],
+): Promise<void> {
+  return invoke<void>("catalog_apply_cloud_snapshots", { dbPath, snapshots })
+}
+
+export async function tauriCatalogFindEligibleCloudHash(
+  dbPath: string,
+  contentHash: string,
+  cloudAccountId: string,
+): Promise<string[]> {
+  return invoke<string[]>("catalog_find_eligible_cloud_hash", { dbPath, contentHash, cloudAccountId })
 }
 
 export async function tauriCatalogGetById(dbPath: string, id: string): Promise<DesktopCatalogRow | null> {

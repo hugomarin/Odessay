@@ -27,6 +27,8 @@ const localDBMock = {
 
 const getSessionMock = vi.fn()
 const tauriOpenFileMock = vi.fn()
+const applyCloudSnapshotsMock = vi.fn()
+const applyCloudSnapshotMock = vi.fn()
 
 const writingsOrderMock = vi.fn()
 const writingsInMock = vi.fn()
@@ -92,6 +94,18 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriOpenFile: tauriOpenFileMock,
 }))
 
+vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
+  SqliteDocumentCatalog: class {
+    applyCloudSnapshots = applyCloudSnapshotsMock
+    applyCloudSnapshot = applyCloudSnapshotMock
+  },
+}))
+
+vi.mock("@tauri-apps/api/path", () => ({
+  appConfigDir: vi.fn(async () => "/tmp/config"),
+  join: vi.fn(async (...parts: string[]) => parts.join("/")),
+}))
+
 describe("desktopSyncService", () => {
   beforeEach(() => {
     vi.resetModules()
@@ -122,6 +136,8 @@ describe("desktopSyncService", () => {
     collectionsSelectMock.mockReset()
     writingCollectionsSelectMock.mockReset()
     tauriOpenFileMock.mockReset()
+    applyCloudSnapshotsMock.mockReset().mockResolvedValue(undefined)
+    applyCloudSnapshotMock.mockReset().mockResolvedValue(undefined)
 
     writingsEqMock.mockImplementation(() => ({ order: writingsOrderMock, in: writingsInMock }))
     writingsSelectMock.mockImplementation(() => ({ eq: writingsEqMock }))
@@ -253,6 +269,11 @@ describe("desktopSyncService", () => {
     expect(writingsSelectMock).toHaveBeenCalledTimes(1)
     expect(writingsInMock).not.toHaveBeenCalled()
     expect(localDBMock.writings.save).not.toHaveBeenCalled()
+    expect(applyCloudSnapshotsMock).toHaveBeenCalledTimes(1)
+    expect(applyCloudSnapshotsMock).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "writing-1", contentHash: "hash-1", cloudAccountId: "user-1" }),
+      expect.objectContaining({ id: "writing-2", contentHash: "hash-2", cloudAccountId: "user-1" }),
+    ])
   })
 
   it("does not repeatedly fetch a body rejected by merge policy on desktop", async () => {

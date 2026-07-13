@@ -14,7 +14,7 @@ import {
   relocateDesktopWritingByCanonicalPath,
 } from "@/lib/services/document-service-factory";
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
-import { refreshWorkspaceReconcilerRoots } from "@/lib/services/desktop/desktop-workspace-reconciler";
+import { refreshWorkspaceReconcilerRoots } from "./desktop-workspace-reconciler";
 import {
   isOdessayInternalPath,
   isOdessaySelfWriteEvent,

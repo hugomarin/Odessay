@@ -705,7 +705,7 @@ version: 2
     )
   })
 
-  it("falls back to the cached record when a UUID's canonical file is missing instead of returning NOT_FOUND", async () => {
+  it("returns NOT_FOUND when a UUID's canonical file is missing instead of editing cached JSON", async () => {
     const uuid = "4dc2ea21-9bea-4090-80e6-8627f1ebd615"
     mocks.getMock.mockResolvedValueOnce({
       id: uuid,
@@ -740,17 +740,14 @@ version: 2
     const service = await getDocumentService()
     const result = await service.openWriting(uuid)
 
-    expect(result.error).toBeNull()
-    expect(result.data?.id).toBe(uuid)
-    expect(result.data?.title).toBe("Tokens en todas partes")
-    expect(result.data?.slug).toBe("tokens")
-    expect(result.data?.content.plainText).toBe("Synced body")
+    expect(result.data).toBeNull()
+    expect(result.error?.code).toBe("NOT_FOUND")
     expect(mocks.openWritingMock).toHaveBeenCalledWith(
       "/Users/hugo/Documents/Tutoria/Leccion 2/docx/tokens.md",
     )
   })
 
-  it("opens cloud-only desktop records from body_json without treating the writing id as a file path", async () => {
+  it("refuses to open cloud-only desktop records from cached body_json before materialization", async () => {
     mocks.getMock.mockResolvedValueOnce({
       id: "cloud-only-writing",
       author_id: "user-1",
@@ -779,16 +776,8 @@ version: 2
     const service = await getDocumentService()
     const result = await service.openWriting("cloud-only-writing")
 
-    expect(result.error).toBeNull()
-    expect(result.data).toMatchObject({
-      id: "cloud-only-writing",
-      title: "Cloud only",
-      content: {
-        plainText: "Persisted web body",
-        canonicalSource: "rich-text",
-      },
-    })
-    expect(mocks.getByCanonicalPathMock).toHaveBeenCalledWith("cloud-only-writing")
+    expect(result.data).toBeNull()
+    expect(result.error?.code).toBe("NOT_FOUND")
     expect(mocks.openWritingMock).not.toHaveBeenCalled()
     expect(mocks.saveMock).not.toHaveBeenCalled()
   })

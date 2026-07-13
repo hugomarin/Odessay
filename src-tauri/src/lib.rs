@@ -303,6 +303,8 @@ pub fn run() {
             commands::index::index_rebuild,
             commands::index::catalog_schema_version,
             commands::index::catalog_dual_write,
+            commands::index::catalog_apply_cloud_snapshots,
+            commands::index::catalog_find_eligible_cloud_hash,
             commands::index::catalog_get_by_id,
             commands::index::catalog_resolve_path,
             commands::index::catalog_list,

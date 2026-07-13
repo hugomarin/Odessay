@@ -9,6 +9,7 @@ import type {
 } from "@/lib/services/contracts/document-catalog"
 import {
   tauriCatalogApplyReconcile,
+  tauriCatalogApplyCloudSnapshots,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
   tauriCatalogGetById,
@@ -61,8 +62,29 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
   }
   async detachLocalFile(id: string) { await tauriCatalogDetachLocalFile(this.dbPath, id); this.emit([id], "detach") }
   async applyCloudSnapshot(snapshot: CloudDocumentSnapshot) {
-    await tauriCatalogDualWrite(this.dbPath, { document: { ...snapshot, localPresent: snapshot.localPresent ?? false }, binding: null, mutation: null })
-    this.emit([snapshot.id], "cloud-snapshot")
+    await this.applyCloudSnapshots([snapshot])
+  }
+
+  async applyCloudSnapshots(snapshots: CloudDocumentSnapshot[]) {
+    if (snapshots.length === 0) return
+    await tauriCatalogApplyCloudSnapshots(
+      this.dbPath,
+      snapshots.map((snapshot) => ({
+        id: snapshot.id,
+        cloudPresent: snapshot.cloudPresent,
+        cloudAccountId: snapshot.cloudAccountId,
+        contentHash: snapshot.contentHash ?? null,
+        title: snapshot.title,
+        slug: snapshot.slug,
+        status: snapshot.status,
+        artifactType: snapshot.artifactType,
+        visibility: snapshot.visibility,
+        version: snapshot.version,
+        createdAt: snapshot.createdAt,
+        modifiedAt: snapshot.modifiedAt,
+      })),
+    )
+    this.emit(snapshots.map((snapshot) => snapshot.id), "cloud-snapshot")
   }
 
   async commitDualWrite(input: DesktopCatalogDualWriteInput): Promise<void> {
