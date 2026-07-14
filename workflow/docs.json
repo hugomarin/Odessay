@@ -123,7 +123,7 @@
       "type": "feature",
       "scope": "desktop-migration-diagnostic",
       "state": "normative-sequence-step-2",
-      "description": "Diagnóstico arquitectónico del codebase para la migración a desktop: mapa de responsabilidades, runtimes, portabilidad, hotspots de acoplamiento, tensiones del modelo documental actual y secuencia recomendada de extracción de servicios."
+      "description": "Diagnóstico arquitectónico del codebase para la migración a desktop: mapa de responsabilidades, runtimes, portabilidad, hotspots de acoplamiento, tensiones del modelo documental actual, secuencia recomendada de extracción de servicios y herramientas read-only de cosecha/verificación de identidades históricas (ODE-374)."
     },
     {
       "path": "workflow/context/features/odessay-desktop-target-architecture.md",

@@ -399,6 +399,24 @@ Esto es especialmente importante para imágenes y sharing, donde web y desktop d
 
 ---
 
+## Herramientas de cosecha de identidades históricas (ODE-374)
+
+Antes de retirar los caminos de compatibilidad de runtime se dispone de herramientas
+read-only en `scripts/identity-harvest/`:
+
+- `harvest-legacy-identities.mjs`: produce un reporte auditable con `source`,
+  `proposed UUID/binding`, `evidence`, `conflict reason`, `decision` y `outcome`
+  para cada archivo, cruzando `.odyssey/index.json`, `.odessay/index.json` y
+  `frontmatter.id`.
+- `verify-odyssey-migration.mjs`: verifica que la migración `.odyssey` →
+  `.odessay/index.json` v2 preservó `selectedPaths`, ids de binding, inode/hash y
+  backup fuente.
+
+Ambos scripts son **tooling-only**: nunca escriben markdown, frontmatter ni índices.
+El borrado final de lectores de compatibilidad (frontmatter como identidad,
+`Uuid::new_v4` en Rust, `writings_index`, `LocalIndexService`, IndexedDB desktop)
+permanece detrás del gate de release de compatibilidad de M5 (ODE-376).
+
 ## Diferencias entre `tauri dev` y `tauri build` (bundle de producción)
 
 **`tauri dev` y el DMG producido por `tauri build` son entornos fundamentalmente distintos.** Probar solo en `tauri dev` es engañoso — varios problemas son invisibles hasta que se prueba el bundle real.
