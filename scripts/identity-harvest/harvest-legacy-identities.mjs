@@ -145,10 +145,10 @@ async function harvestRoot(rootInput, options) {
         odessayId: entry.odessay?.id ?? null,
         odessayBinding: entry.odessay
           ? {
-              inode: entry.odyssey?.inode ?? null,
+              inode: entry.odessay.inode,
               contentHash: entry.odessay.contentHash,
-              size: entry.odyssey?.size ?? null,
-              lastSeen: entry.odyssey?.lastSeen ?? null,
+              size: entry.odessay.size,
+              lastSeen: entry.odessay.lastSeen,
             }
           : null,
         currentContentHash: entry.evidence.contentHash,

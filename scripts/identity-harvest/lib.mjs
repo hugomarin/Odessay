@@ -1,8 +1,6 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import {
   collectMarkdownFiles,
-  computeMarkdownContentHash,
   LEGACY_WORKSPACE_DIR_NAME,
   normalizeRelative,
   pathExists,
@@ -230,7 +228,7 @@ export function buildProposedBinding(entry, decisionResult, workspaceRoot, bindi
   }
 
   return {
-    bindingRootId: bindingRootId ?? odessay?.bindingRootId ?? odyssey?.bindingRootId ?? null,
+    bindingRootId: bindingRootId ?? null,
     relativePath: evidence.relativePath,
     canonicalPath: evidence.absolutePath,
     inode: evidence.inode ?? manifestEntry?.inode ?? null,

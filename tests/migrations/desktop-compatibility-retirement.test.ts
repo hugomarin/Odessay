@@ -144,9 +144,6 @@ describe("desktop compatibility retirement reachability", () => {
       "tests/count-id-conflicts.test.ts",
       "tests/identity-harvest-report.test.ts",
       "tests/migrations/desktop-compatibility-retirement.test.ts",
-      "workflow/context/core/odessay-adr-identidad.md",
-      "workflow/context/features/odessay-desktop-catalog-retirement-audit.md",
-      "workflow/context/features/odessay-workspace-diagnostic.md",
     ]);
 
     const unexpected = [...files].filter((file) => !allowed.has(file));

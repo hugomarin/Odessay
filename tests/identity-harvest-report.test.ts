@@ -73,6 +73,12 @@ describe("harvest-legacy-identities", () => {
       },
     });
     expect(result.workspaces[0].files[0].conflictReason).toContain("frontmatter-id");
+    expect(result.workspaces[0].files[0].evidence.odessayBinding).toMatchObject({
+      inode: 100,
+      contentHash: "blake3:abc",
+      lastSeen: 1000,
+      size: 20,
+    });
   });
 
   it("adopts a legacy .odyssey index id when no v2 index exists", async () => {
