@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-13T04:00:18.373Z",
+  "last_updated": "2026-07-15T04:54:47.926Z",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3111,6 +3111,16 @@
       "commit": "f710a85724afb3b01c93618872dc9a67f6df93f0",
       "date": "2026-07-13",
       "notes": "M6 of Fase 9: cloud reconciliation + managed-root materialization. Metadata hydration projects one atomic cloud burst into SQLite via catalog_apply_cloud_snapshots (single transaction, single CatalogChange, never writes files, preserves local_present/binding, pending wins). Explicit materializeCloudOnly on edit-open: canonical .md (atomic) -> manifest via workspace_sync documentIds override -> SQLite registerBinding, order test-asserted; managed root default, external root only by explicit bindingRootId. body_json cache fallback removed from openWriting: missing .md is recoverable NOT_FOUND, never a draft. Cloud content_hash rebind unique-only, account-scoped (synced, cloud-only rows); duplicates ambiguous. SQLite catalog v3 additive (cloud_content_hash + partial index). Live-schema evidence vs the single Supabase project (odessay-staging = production): index exists, no new migration, backfill stays next-save (266 intentional nulls). Review score 7.5/10 first round: P2s on canonical-budget keydown_p95 outlier disclosure, DMG behavioral evidence deferred to ODE-372, and dropped TS syncStatus derivation (Rust owns it). Legacy path-as-id/IndexedDB retirement remains ODE-374; final cloud/offline/DMG acceptance remains ODE-372."
+    },
+    {
+      "what": "feat(tooling): harvest legacy identities and verify .odyssey migration [ODE-374]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-374",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-374/harvest-legacy-identities-and-retire-desktop-compatibility-paths",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/341",
+      "commit": "79a6a4ebc45aed0d62a233af6e6069f26f89db22",
+      "date": "2026-07-14",
+      "notes": "PARTIAL DELIVERY — PR 1 of 2 gated PRs per the issue brief (Delivery clause); the issue remains OPEN (In Progress in Linear) until the final cleanup gate passes. This entry exists because the status-drift gate requires every ODE ref on main to appear in built[]; it does NOT mean ODE-374 is done. Scope merged: non-destructive read-only harvest tooling (scripts/identity-harvest/: auditable identity report crossing .odyssey/.odessay/frontmatter with explicit conflicts and pending-human outcomes; .odyssey->v2 migration verifier), 17 tests incl. static reachability proof freezing allowed legacy consumers, migration-diagnostic doc + docs.json update. Review score 8.8/10 (PASS); review findings fixed in follow-up PR #342. Final cleanup (frontmatter/path-as-id removal, writings_index/LocalIndexService retirement, desktop IndexedDB fallback) stays gated by the M5 compatibility release evidence (ODE-376) and owner-accepted gate criteria; update this entry when PR 2 lands."
     }
   ]
 }
