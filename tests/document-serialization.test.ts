@@ -3,6 +3,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JSONContent } from "@tiptap/core";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   BODY_JSON_PERSISTENCE_ROLE,
   CANONICAL_DOCUMENT_CONTRACT,
@@ -19,6 +21,26 @@ import {
   serializeDocumentToSnapshot,
 } from "@/lib/editor/document-serialization";
 import { buildWritingMarkdown } from "@/lib/export/writing-export";
+import { ANNOTATION_TYPES } from "@/lib/editor/footnote-node";
+
+const collectHighlightTypes = (node: unknown, result: Array<string | null> = []) => {
+  if (!node || typeof node !== "object") return result;
+
+  const current = node as {
+    marks?: Array<{ type?: string; attrs?: { annotationType?: string | null } }>;
+    content?: unknown[];
+  };
+  for (const mark of current.marks ?? []) {
+    if (mark.type === "highlight") {
+      result.push(mark.attrs?.annotationType ?? null);
+    }
+  }
+  for (const child of current.content ?? []) {
+    collectHighlightTypes(child, result);
+  }
+
+  return result;
+};
 
 describe("document profile", () => {
   it("declares markdown as the canonical document contract", () => {
@@ -69,6 +91,44 @@ describe("document serialization", () => {
     expect(markdown).toContain("# Title");
     expect(markdown).toContain("Alpha ==Beta==");
     expect(markdown).toContain("[^1|ann-1: Footnote body]");
+  });
+
+  it("preserves every annotation highlight type across structural markdown round-trips", () => {
+    const source = `# ==Heading AI== [@1|ann-ai: Note with ] bracket]
+
+> ==Quoted personal==[@p1|ann-personal: Personal note]
+
+- ==Listed highlight== [@h1|ann-highlight: Saved passage]
+
+==Paragraph footnote== [^1|ann-footnote: Reference on
+the next line]`;
+
+    const parsed = parseMarkdownToSnapshot(source);
+    const markdown = serializeDocumentToMarkdown(parsed.bodyJson);
+    const reparsed = parseMarkdownToSnapshot(markdown);
+
+    expect(collectHighlightTypes(parsed.bodyJson)).toEqual([
+      "ai",
+      "personal",
+      "highlight",
+      "footnote",
+    ]);
+    expect(collectHighlightTypes(reparsed.bodyJson), markdown).toEqual([
+      "ai",
+      "personal",
+      "highlight",
+      "footnote",
+    ]);
+    expect(markdown).toContain("[@1|ann-ai: Note with ] bracket]");
+    expect(markdown).toContain("[^1|ann-footnote: Reference on\nthe next line]");
+  });
+
+  it("normalizes legacy collaborative markers to personal annotations", () => {
+    const parsed = parseMarkdownToSnapshot("==Legacy span==[@c1|ann-c: Legacy note]");
+    const markdown = serializeDocumentToMarkdown(parsed.bodyJson);
+
+    expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["personal"]);
+    expect(markdown).toBe("==Legacy span==[@p1|ann-c: Legacy note]");
   });
 
   it("separates consecutive block images when serializing canonical markdown", () => {
@@ -286,5 +346,32 @@ description: Keep this YAML untouched
     expect(parsed.snapshot.bodyText).toContain("name: skill-example");
     expect(parsed.snapshot.bodyText).toContain("Skill Body");
     expect(parsed.snapshot.markdown).toBe(source);
+  });
+});
+
+describe("annotation presentation contract", () => {
+  const globalsCss = readFileSync(resolve(process.cwd(), "app/globals.css"), "utf8");
+  const notesPanel = readFileSync(
+    resolve(process.cwd(), "components/editor/panels/notes-panel.tsx"),
+    "utf8",
+  );
+
+  it("styles every supported annotation type in editor and reading wrappers", () => {
+    for (const type of ANNOTATION_TYPES) {
+      expect(globalsCss).toContain(
+        `.odessay-editor-content mark[data-annotation-type="${type}"]`,
+      );
+      expect(globalsCss).toContain(`.prose-odessay mark[data-annotation-type="${type}"]`);
+    }
+  });
+
+  it("defines annotation hex colors once and makes Notes consume CSS tokens", () => {
+    for (const color of ["#5B5BD6", "#C07B2A", "#E8A020", "#999990"]) {
+      expect(globalsCss.match(new RegExp(color, "g"))).toHaveLength(1);
+      expect(notesPanel).not.toContain(color);
+    }
+
+    expect(notesPanel).toContain("ANNOTATION_TYPE_COLOR");
+    expect(globalsCss).toMatch(/\.annotation-ref-icon\s*\{[^}]*color:\s*inherit;/s);
   });
 });

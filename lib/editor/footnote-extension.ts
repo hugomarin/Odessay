@@ -4,6 +4,10 @@ import type { JSONContent } from "@tiptap/core"
 import type { MarkType } from "@tiptap/pm/model"
 import type { Transaction } from "@tiptap/pm/state"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
+import {
+  findInlineAnnotationMarkers,
+  replaceInlineAnnotationMarkers,
+} from "@/lib/editor/annotation-markdown"
 
 export type MarkdownAnnotation = {
   id?: string
@@ -19,8 +23,6 @@ type AnnotationRef = {
   index: number
 }
 
-const INLINE_ANNOTATION_RE =
-  /\[\^(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[@(p|c|h)?(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
 const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c|h)?(\d+)(?:\|[^\]:|]+)?:\s*([^\]]*?)\]/g
 const NON_AI_ANNOTATION_RE = /\[@(?:p|c|h)\d+(?:\|[^\]:|]+)?:\s*[^\]]*?\]/g
@@ -84,29 +86,9 @@ const collectLegacyFootnoteDefinitions = (markdown: string) => {
 
 const collectInlineReferences = (markdown: string, definitions: Map<number, string>) => {
   const refs: AnnotationRef[] = []
-  let match: RegExpExecArray | null
-
-  INLINE_ANNOTATION_RE.lastIndex = 0
-  while ((match = INLINE_ANNOTATION_RE.exec(markdown)) !== null) {
-    if (match[1]) {
-      refs.push({ type: "footnote", index: Number(match[1]) })
-      continue
-    }
-
-    if (match[5]) {
-      refs.push({
-        type:
-          match[4] === "p" ? "personal" : match[4] === "c" ? "personal" : match[4] === "h" ? "highlight" : "ai",
-        index: Number(match[5]),
-      })
-      continue
-    }
-
-    if (match[8]) {
-      const legacyIndex = Number(match[8])
-      if (definitions.has(legacyIndex)) {
-        refs.push({ type: "footnote", index: legacyIndex })
-      }
+  for (const marker of findInlineAnnotationMarkers(markdown)) {
+    if (!marker.legacyFootnote || definitions.has(marker.index)) {
+      refs.push({ type: marker.type, index: marker.index })
     }
   }
 
@@ -147,64 +129,25 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
     })
   }
 
-  const normalized = body.replace(
-    INLINE_ANNOTATION_RE,
-    (_full, inlineFootnoteIndex, inlineFootnoteId, inlineFootnoteText, sigilPrefix, sigilIndex, sigilId, sigilText, legacyIndex) => {
-      if (inlineFootnoteIndex) {
-        const nextIndex = mapping.get(`footnote:${Number(inlineFootnoteIndex)}`) ?? Number(inlineFootnoteIndex)
-        return annotationSigil("footnote", nextIndex, String(inlineFootnoteText ?? ""), inlineFootnoteId)
-      }
-
-      if (sigilIndex) {
-        const type =
-          sigilPrefix === "p" || sigilPrefix === "c"
-            ? "personal"
-            : sigilPrefix === "h"
-              ? "highlight"
-              : "ai"
-        const nextIndex = mapping.get(`${type}:${Number(sigilIndex)}`) ?? Number(sigilIndex)
-        return annotationSigil(type, nextIndex, String(sigilText ?? ""), sigilId)
-      }
-
-      const nextIndex = mapping.get(`footnote:${Number(legacyIndex)}`) ?? Number(legacyIndex)
-      return annotationSigil("footnote", nextIndex, definitions.get(Number(legacyIndex)) ?? "")
-    },
-  )
+  const normalized = replaceInlineAnnotationMarkers(body, (marker) => {
+    const nextIndex = mapping.get(`${marker.type}:${marker.index}`) ?? marker.index
+    const text = marker.legacyFootnote ? definitions.get(marker.index) ?? "" : marker.text
+    return annotationSigil(marker.type, nextIndex, text, marker.id)
+  })
 
   return normalized.trimEnd()
 }
 
 export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => {
   const normalized = normalizeMarkdownFootnotes(markdown)
-  const annotations: MarkdownAnnotation[] = []
-  let match: RegExpExecArray | null
-
-  INLINE_ANNOTATION_RE.lastIndex = 0
-  while ((match = INLINE_ANNOTATION_RE.exec(normalized)) !== null) {
-    if (match[1]) {
-      annotations.push({
-        ...(match[2] ? { id: match[2] } : {}),
-        type: "footnote",
-        index: Number(match[1]),
-        text: match[3].trim(),
-      })
-      continue
-    }
-
-    if (match[5]) {
-      const prefix = match[4]
-      const resolvedType =
-        prefix === "p" || prefix === "c" ? "personal" : prefix === "h" ? "highlight" : "ai"
-      annotations.push({
-        ...(match[6] ? { id: match[6] } : {}),
-        type: resolvedType,
-        index: Number(match[5]),
-        text: match[7].trim(),
-      })
-    }
-  }
-
-  return annotations
+  return findInlineAnnotationMarkers(normalized)
+    .filter((marker) => !marker.legacyFootnote)
+    .map((marker) => ({
+      ...(marker.id ? { id: marker.id } : {}),
+      type: marker.type,
+      index: marker.index,
+      text: marker.text,
+    }))
 }
 
 export const appendMarkdownFootnote = (markdown: string, note: string) => {

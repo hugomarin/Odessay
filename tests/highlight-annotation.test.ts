@@ -19,6 +19,8 @@ import {
   countTypedAnnotations,
 } from "@/lib/margins/margins"
 import { parseMarkdownToSnapshot, serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
+import { coerceHighlightAnnotationType } from "@/lib/editor/annotation-highlight"
+import { renderWritingBodyHtml } from "@/lib/reading/render-body-html"
 
 function createTestEditor(content = "") {
   return new Editor({
@@ -321,6 +323,24 @@ describe("highlight annotation", () => {
         index: 1,
         text: "note",
       })
+    })
+
+    it("maps legacy and unknown highlight attributes deterministically", () => {
+      expect(coerceHighlightAnnotationType("collaborative")).toBe("personal")
+      expect(coerceHighlightAnnotationType("future-type")).toBe("highlight")
+      expect(coerceHighlightAnnotationType(null)).toBeNull()
+    })
+
+    it("keeps annotation type attributes in reading HTML", () => {
+      const { bodyJson } = parseMarkdownToSnapshot(
+        "==AI==[@1|ann-ai: Note] ==Personal==[@p1|ann-p: Note] ==Saved==[@h1|ann-h: Note] ==Footnote==[^1|ann-f: Note]",
+      )
+      const { bodyHtml, mode } = renderWritingBodyHtml(bodyJson, "")
+
+      expect(mode).toBe("rich")
+      for (const type of ["ai", "personal", "highlight", "footnote"]) {
+        expect(bodyHtml).toContain(`data-annotation-type=\"${type}\"`)
+      }
     })
   })
 })

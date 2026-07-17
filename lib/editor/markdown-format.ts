@@ -1,4 +1,8 @@
 import { normalizeMarkdownFootnotes } from "@/lib/editor/footnote-extension"
+import {
+  findInlineAnnotationMarkers,
+  replaceInlineAnnotationMarkers,
+} from "@/lib/editor/annotation-markdown"
 
 export type MarkdownInlineToggleResult = {
   markdown: string
@@ -222,25 +226,59 @@ export const normalizeMarkdownForRoundTrip = (markdown: string): string =>
     ),
   )
 
-const annotationTypeFromInlineMarker = (marker: string) => {
-  if (marker.startsWith("[^")) return "footnote"
-  if (marker.startsWith("[@p") || marker.startsWith("[@c")) return "personal"
-  if (marker.startsWith("[@h")) return "highlight"
-  return "ai"
+const materializeAnnotationHighlightTypes = (markdown: string): string => {
+  const replacements: Array<{ end: number; replacement: string; start: number }> = []
+
+  for (const marker of findInlineAnnotationMarkers(markdown)) {
+    if (marker.legacyFootnote) continue
+
+    let highlightEnd = marker.start
+    while (highlightEnd > 0 && /[\t ]/.test(markdown[highlightEnd - 1])) highlightEnd -= 1
+    if (markdown.slice(highlightEnd - 2, highlightEnd) !== "==") continue
+
+    const highlightStart = markdown.lastIndexOf("==", highlightEnd - 3)
+    if (highlightStart === -1 || markdown.slice(highlightStart + 2, highlightEnd - 2).includes("\n")) {
+      continue
+    }
+
+    const highlightedText = markdown.slice(highlightStart + 2, highlightEnd - 2)
+    if (!highlightedText || highlightedText.includes("==")) continue
+
+    replacements.push({
+      end: highlightEnd,
+      replacement: `<mark data-annotation-type="${marker.type}">${highlightedText}</mark>`,
+      start: highlightStart,
+    })
+  }
+
+  return replacements.reduceRight(
+    (result, replacement) =>
+      `${result.slice(0, replacement.start)}${replacement.replacement}${result.slice(replacement.end)}`,
+    markdown,
+  )
 }
 
-const materializeAnnotationHighlightTypes = (markdown: string): string =>
-  markdown.replace(
-    /==([^=\n]+)==((?:\[\^(?:\d+)(?:\|[^\]:|]+)?:\s*[^\]]*?\])|(?:\[@(?:p|c|h)?(?:\d+)(?:\|[^\]:|]+)?:\s*[^\]]*?\]))/g,
-    (_match, highlightedText: string, marker: string) =>
-      `<mark data-annotation-type="${annotationTypeFromInlineMarker(marker)}">${highlightedText}</mark>${marker}`,
-  )
+const escapeAnnotationAttribute = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+
+const materializeInlineAnnotations = (markdown: string): string =>
+  replaceInlineAnnotationMarkers(markdown, (marker) => {
+    if (marker.legacyFootnote) return marker.raw
+
+    const idAttributes = marker.id
+      ? ` id="${escapeAnnotationAttribute(marker.id)}" annotation-id="${escapeAnnotationAttribute(marker.id)}"`
+      : ""
+    return `<annotation-ref${idAttributes} annotation-type="${marker.type}" index="${marker.index}" annotation-text="${escapeAnnotationAttribute(encodeURIComponent(marker.text))}"></annotation-ref>`
+  })
 
 export const materializeMarkdownForRichParser = (markdown: string): string =>
-  materializeAnnotationHighlightTypes(normalizeMarkdownForRoundTrip(markdown)).replace(
-    /==([^=\n]+)==/g,
-    "<mark>$1</mark>",
-  )
+  materializeInlineAnnotations(
+    materializeAnnotationHighlightTypes(normalizeMarkdownForRoundTrip(markdown)),
+  ).replace(/==([^=\n]+)==/g, "<mark>$1</mark>")
 
 const escapeHtml = (value: string) =>
   value

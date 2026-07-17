@@ -31,7 +31,8 @@ Cuando el usuario anota, no está corrigiendo ni editando. Está dejando constan
 
 El sistema actual usa un único nodo TipTap `annotationReference` con cuatro valores reales de `type`.
 `collaborative` ya no es un tipo de producto vigente; entradas legacy con prefijo `@c` se tratan como
-`personal` para compatibilidad.
+`personal` para compatibilidad. Ese mapping ocurre explícitamente en el parser Markdown compartido y
+se conserva al re-serializar como el sigil vigente `@p`.
 
 | Tipo        | Audiencia        | Significado                                                         |
 | ----------- | ---------------- | ------------------------------------------------------------------- |

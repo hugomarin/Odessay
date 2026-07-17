@@ -20,6 +20,10 @@
   --ink-3: 25 10% 38%;
   --ink-4: 25 8% 52%;
   --cursor: 22 55% 38%;
+  --od-annotation-ai: #5B5BD6;
+  --od-annotation-highlight: #C07B2A;
+  --od-annotation-highlight-badge: #E8A020;
+  --od-annotation-muted: #999990;
 
   /* ShadCN tokens mapped from Odessay */
   --background: var(--bg);
@@ -460,35 +464,35 @@
 
   .odessay-editor-content mark,
   .prose-odessay mark {
-    background: #C07B2A33;
+    background: color-mix(in srgb, var(--od-annotation-highlight) 20%, transparent);
     border-radius: 2px;
     padding: 0;
     color: inherit;
     box-shadow: none;
     border-bottom: none;
-    text-decoration: underline dotted #C07B2A;
+    text-decoration: underline dotted var(--od-annotation-highlight);
     text-underline-offset: 3px;
     text-decoration-thickness: 1px;
   }
 
   .odessay-editor-content mark[data-annotation-type="ai"],
   .prose-odessay mark[data-annotation-type="ai"] {
-    background: #5B5BD620;
-    text-decoration: underline dotted #5B5BD6;
+    background: color-mix(in srgb, var(--od-annotation-ai) 12.5%, transparent);
+    text-decoration: underline dotted var(--od-annotation-ai);
   }
 
   .odessay-editor-content mark[data-annotation-type="highlight"],
   .prose-odessay mark[data-annotation-type="highlight"] {
-    background: #C07B2A33;
-    text-decoration: underline dotted #C07B2A;
+    background: color-mix(in srgb, var(--od-annotation-highlight) 20%, transparent);
+    text-decoration: underline dotted var(--od-annotation-highlight);
   }
 
   .odessay-editor-content mark[data-annotation-type="personal"],
   .odessay-editor-content mark[data-annotation-type="footnote"],
   .prose-odessay mark[data-annotation-type="personal"],
   .prose-odessay mark[data-annotation-type="footnote"] {
-    background: #99999020;
-    text-decoration: underline dotted #999990;
+    background: color-mix(in srgb, var(--od-annotation-muted) 12.5%, transparent);
+    text-decoration: underline dotted var(--od-annotation-muted);
   }
 
   /* Cuando un mark contiene una corrección, quitar su propia decoración
@@ -502,25 +506,25 @@
   .annotation-ref-icon {
     font-size: 0.65em;
     line-height: 1;
-    color: #5B5BD6;
+    color: inherit;
   }
 
   /* Annotation superscripts: color by type */
   .odessay-editor-content sup.annotation-ref-ai,
   .prose-odessay sup.annotation-ref-ai {
-    color: #5B5BD6;
+    color: var(--od-annotation-ai);
   }
 
   .odessay-editor-content sup.annotation-ref-highlight,
   .prose-odessay sup.annotation-ref-highlight {
-    color: #C07B2A;
+    color: var(--od-annotation-highlight);
   }
 
   .odessay-editor-content sup.annotation-ref-personal,
   .prose-odessay sup.annotation-ref-personal,
   .odessay-editor-content sup.annotation-ref-footnote,
   .prose-odessay sup.annotation-ref-footnote {
-    color: #999990;
+    color: var(--od-annotation-muted);
   }
 
   .odessay-editor-content s,
@@ -767,7 +771,7 @@
   }
   .prose-odessay .hl-ai:hover { background: hsl(248 100% 90%); }
   .prose-odessay .hl-ai.active { background: hsl(248 100% 88%); }
-  .prose-odessay .hl-ai.annotated { border-bottom: 1.5px solid #5B5BD6; }
+  .prose-odessay .hl-ai.annotated { border-bottom: 1.5px solid var(--od-annotation-ai); }
 
   /* Personal margins */
   .prose-odessay .hl-personal {
@@ -775,7 +779,7 @@
   }
   .prose-odessay .hl-personal:hover { background: hsl(220 10% 84%); }
   .prose-odessay .hl-personal.active { background: hsl(220 10% 82%); }
-  .prose-odessay .hl-personal.annotated { border-bottom: 1.5px solid #999990; }
+  .prose-odessay .hl-personal.annotated { border-bottom: 1.5px solid var(--od-annotation-muted); }
 
   /* Highlight margins */
   .prose-odessay .hl-highlight {
@@ -783,7 +787,7 @@
   }
   .prose-odessay .hl-highlight:hover { background: hsl(39 85% 82%); }
   .prose-odessay .hl-highlight.active { background: hsl(39 85% 78%); }
-  .prose-odessay .hl-highlight.annotated { border-bottom: 1.5px solid #E8A020; }
+  .prose-odessay .hl-highlight.annotated { border-bottom: 1.5px solid var(--od-annotation-highlight-badge); }
 
   body.od-editor-focus-mode #sidebar,
   body.od-editor-focus-mode #sidebar-list-panel {
