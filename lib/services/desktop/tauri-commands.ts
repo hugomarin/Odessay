@@ -30,13 +30,6 @@ export type DesktopWorkspaceSnapshot = {
   files: DesktopWorkspaceFile[]
 }
 
-export type IndexEntry = {
-  path: string
-  title: string
-  createdAt: number
-  modifiedAt: number
-}
-
 export type DesktopCatalogRow = {
   id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
   syncStatus: string; title: string | null; slug: string | null; status: string | null
@@ -125,35 +118,20 @@ export async function tauriWorkspaceSync(
   selectedPaths?: string[],
   documentIds?: Record<string, string>,
 ): Promise<DesktopWorkspaceSnapshot> {
-  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", { rootPath, selectedPaths, documentIds })
+  const unboundPaths = await invoke<string[]>("workspace_unbound_paths", { rootPath, selectedPaths })
+  const clientIds = { ...documentIds }
+  for (const relativePath of unboundPaths) {
+    clientIds[relativePath] ??= crypto.randomUUID()
+  }
+  return invoke<DesktopWorkspaceSnapshot>("workspace_sync", {
+    rootPath,
+    selectedPaths,
+    documentIds: Object.keys(clientIds).length > 0 ? clientIds : undefined,
+  })
 }
 
 export async function tauriComputeContentHash(markdown: string): Promise<string> {
   return invoke<string>("workspace_compute_content_hash", { markdown })
-}
-
-// ─── Local Index ──────────────────────────────────────────────────────────────
-
-export async function tauriIndexUpsert(
-  dbPath: string,
-  path: string,
-  title: string,
-  createdAt: number,
-  modifiedAt: number,
-): Promise<void> {
-  return invoke<void>("index_upsert", { dbPath, path, title, createdAt, modifiedAt })
-}
-
-export async function tauriIndexList(dbPath: string, limit = 200): Promise<IndexEntry[]> {
-  return invoke<IndexEntry[]>("index_list", { dbPath, limit })
-}
-
-export async function tauriIndexDelete(dbPath: string, path: string): Promise<void> {
-  return invoke<void>("index_delete", { dbPath, path })
-}
-
-export async function tauriIndexRebuild(dbPath: string, dir: string): Promise<number> {
-  return invoke<number>("index_rebuild", { dbPath, dir })
 }
 
 export async function tauriCatalogSchemaVersion(dbPath: string): Promise<number> {
@@ -232,6 +210,112 @@ export async function tauriCatalogUpdateMutationStatus(
   lastError: string | null,
 ): Promise<void> {
   return invoke<void>("catalog_update_mutation_status", { dbPath, mutationId, status, attemptCount, nextRetryAt, lastError })
+}
+
+export type DesktopCatalogMutationRow = {
+  id: string
+  documentId: string
+  operation: "upsert" | "delete"
+  payloadJson: string
+  status: "pending" | "failed"
+  attemptCount: number
+  nextRetryAt: number | null
+  createdAt: number
+  lastError: string | null
+}
+
+export async function tauriCatalogEnqueueMutation(
+  dbPath: string,
+  documentId: string,
+  mutation: NonNullable<DesktopCatalogDualWriteInput["mutation"]>,
+): Promise<void> {
+  return invoke<void>("catalog_enqueue_mutation", { dbPath, documentId, mutation })
+}
+
+export async function tauriCatalogListPendingMutations(
+  dbPath: string,
+  now = Date.now(),
+  limit = 200,
+): Promise<DesktopCatalogMutationRow[]> {
+  return invoke<DesktopCatalogMutationRow[]>("catalog_list_pending_mutations", { dbPath, now, limit })
+}
+
+export type DesktopCatalogCollection = {
+  id: string; ownerId: string | null; name: string; description: string | null
+  visibility: "private" | "public"; syncStatus: string; lifecycle: string
+  deletedAt: string | null; createdAt: string; updatedAt: string; localUpdatedAt: number
+}
+
+export type DesktopCatalogWritingCollection = {
+  writingId: string; collectionId: string; addedAt: string; localUpdatedAt: number
+}
+
+export type DesktopCatalogCollectionSnapshot = {
+  collections: DesktopCatalogCollection[]
+  writingCollections: DesktopCatalogWritingCollection[]
+}
+
+export type DesktopCatalogMetadataMutation = {
+  id: string; entityKind: "collection" | "writing-collections"; entityId: string
+  operation: "upsert" | "delete" | "set"; payloadJson: string
+  status: "pending" | "failed" | "synced"; attemptCount: number
+  nextRetryAt: number | null; createdAt: number; lastError: string | null
+}
+
+export function tauriCatalogApplyCollectionSnapshot(dbPath: string, snapshot: DesktopCatalogCollectionSnapshot) {
+  return invoke<void>("catalog_apply_collection_snapshot", { dbPath, snapshot })
+}
+
+export function tauriCatalogListCollectionSnapshot(dbPath: string) {
+  return invoke<DesktopCatalogCollectionSnapshot>("catalog_list_collection_snapshot", { dbPath })
+}
+
+export function tauriCatalogSaveCollection(
+  dbPath: string,
+  collection: DesktopCatalogCollection,
+  mutation: DesktopCatalogMetadataMutation | null,
+) {
+  return invoke<void>("catalog_save_collection", { dbPath, collection, mutation })
+}
+
+export function tauriCatalogDeleteCollection(
+  dbPath: string,
+  collectionId: string,
+  deletedAt: string,
+  localUpdatedAt: number,
+  mutation: DesktopCatalogMetadataMutation,
+) {
+  return invoke<void>("catalog_delete_collection", { dbPath, collectionId, deletedAt, localUpdatedAt, mutation })
+}
+
+export function tauriCatalogReplaceWritingCollections(
+  dbPath: string,
+  writingId: string,
+  collectionIds: string[],
+  addedAt: string,
+  localUpdatedAt: number,
+  mutation: DesktopCatalogMetadataMutation | null,
+) {
+  return invoke<void>("catalog_replace_writing_collections", {
+    dbPath, writingId, collectionIds, addedAt, localUpdatedAt, mutation,
+  })
+}
+
+export function tauriCatalogListPendingMetadataMutations(dbPath: string, now = Date.now(), limit = 200) {
+  return invoke<DesktopCatalogMetadataMutation[]>("catalog_list_pending_metadata_mutations", { dbPath, now, limit })
+}
+
+export function tauriCatalogUpdateMetadataMutationStatus(
+  dbPath: string,
+  mutationId: string,
+  status: "pending" | "synced" | "failed",
+  attemptCount: number,
+  nextRetryAt: number | null,
+  lastError: string | null,
+) {
+  return invoke<void>("catalog_update_metadata_mutation_status", {
+    dbPath, mutationId, status, attemptCount, nextRetryAt, lastError,
+  })
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────

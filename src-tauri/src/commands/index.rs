@@ -2,38 +2,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use std::time::UNIX_EPOCH;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IndexEntry {
-    pub path: String,
-    pub title: String,
-    #[serde(rename = "createdAt")]
-    pub created_at: u64,
-    #[serde(rename = "modifiedAt")]
-    pub modified_at: u64,
-}
-
-fn ensure_table(conn: &Connection) -> Result<(), String> {
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS writings_index (
-            path TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            modified_at INTEGER NOT NULL
-        )",
-        [],
-    )
-    .map_err(|e| format!("init_index: {e}"))?;
-
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_writings_modified ON writings_index(modified_at DESC)",
-        [],
-    )
-    .map_err(|e| format!("init_index idx: {e}"))?;
-
-    Ok(())
-}
 
 fn open_db(db_path: &str) -> Result<Connection, String> {
     let path = Path::new(db_path);
@@ -45,7 +13,6 @@ fn open_db(db_path: &str) -> Result<Connection, String> {
     let conn = Connection::open(db_path).map_err(|e| format!("open_db: {e}"))?;
     conn.execute_batch("PRAGMA foreign_keys = ON;")
         .map_err(|e| format!("open_db foreign_keys: {e}"))?;
-    ensure_table(&conn)?;
     ensure_catalog_v2(&conn)?;
     Ok(conn)
 }
@@ -104,9 +71,42 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
             created_at INTEGER NOT NULL,
             last_error TEXT
         );
+        CREATE TABLE IF NOT EXISTS collections (
+            id TEXT PRIMARY KEY,
+            owner_id TEXT,
+            name TEXT NOT NULL,
+            description TEXT,
+            visibility TEXT NOT NULL CHECK (visibility IN ('private','public')),
+            sync_status TEXT NOT NULL,
+            lifecycle TEXT NOT NULL,
+            deleted_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            local_updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS writing_collections (
+            writing_id TEXT NOT NULL,
+            collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+            added_at TEXT NOT NULL,
+            local_updated_at INTEGER NOT NULL,
+            PRIMARY KEY(writing_id, collection_id)
+        );
+        CREATE TABLE IF NOT EXISTS metadata_sync_mutations (
+            id TEXT PRIMARY KEY,
+            entity_kind TEXT NOT NULL CHECK (entity_kind IN ('collection','writing-collections')),
+            entity_id TEXT NOT NULL,
+            operation TEXT NOT NULL CHECK (operation IN ('upsert','delete','set')),
+            payload_json TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('pending','processing','synced','failed')),
+            attempt_count INTEGER NOT NULL DEFAULT 0,
+            next_retry_at INTEGER,
+            created_at INTEGER NOT NULL,
+            last_error TEXT
+        );
         CREATE INDEX IF NOT EXISTS idx_catalog_modified ON documents(modified_at DESC);
         CREATE INDEX IF NOT EXISTS idx_catalog_cloud_account ON documents(cloud_account_id, cloud_present);
         CREATE INDEX IF NOT EXISTS idx_catalog_mutations_pending ON sync_mutations(status, next_retry_at);
+        CREATE INDEX IF NOT EXISTS idx_metadata_mutations_pending ON metadata_sync_mutations(status, next_retry_at);
         INSERT INTO catalog_schema(singleton, version) VALUES (1, 2)
           ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);",
     ).map_err(|e| format!("catalog migration v2: {e}"))?;
@@ -114,21 +114,39 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
         .map_err(|e| format!("catalog migration commit: {e}"))?;
 
     let has_cloud_hash = {
-        let mut stmt = conn.prepare("PRAGMA table_info(documents)")
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(documents)")
             .map_err(|e| format!("catalog migration inspect documents: {e}"))?;
-        let columns = stmt.query_map([], |row| row.get::<_, String>(1))
+        let columns = stmt
+            .query_map([], |row| row.get::<_, String>(1))
             .map_err(|e| format!("catalog migration list columns: {e}"))?;
-        let found = columns.filter_map(Result::ok).any(|name| name == "cloud_content_hash");
+        let found = columns
+            .filter_map(Result::ok)
+            .any(|name| name == "cloud_content_hash");
         found
     };
     if !has_cloud_hash {
-        conn.execute("ALTER TABLE documents ADD COLUMN cloud_content_hash TEXT", [])
-            .map_err(|e| format!("catalog migration add cloud_content_hash: {e}"))?;
+        conn.execute(
+            "ALTER TABLE documents ADD COLUMN cloud_content_hash TEXT",
+            [],
+        )
+        .map_err(|e| format!("catalog migration add cloud_content_hash: {e}"))?;
     }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_catalog_cloud_hash ON documents(cloud_content_hash) WHERE cloud_present=1 AND cloud_content_hash IS NOT NULL;
+         DROP TABLE IF EXISTS writings_index;
+         UPDATE sync_mutations AS older
+           SET status='synced', last_error='superseded by later snapshot mutation'
+         WHERE status IN ('pending','failed')
+           AND EXISTS (
+             SELECT 1 FROM sync_mutations AS newer
+             WHERE newer.document_id=older.document_id
+               AND newer.status IN ('pending','failed')
+               AND (newer.created_at>older.created_at OR (newer.created_at=older.created_at AND newer.id>older.id))
+           );
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
-           ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);"
+           ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
+         UPDATE catalog_schema SET version=5 WHERE singleton=1;"
     ).map_err(|e| format!("catalog migration v3: {e}"))?;
     Ok(())
 }
@@ -177,6 +195,82 @@ pub struct CatalogMutationInput {
     pub next_retry_at: Option<i64>,
     pub created_at: i64,
     pub last_error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogMutationRow {
+    pub id: String,
+    pub document_id: String,
+    pub operation: String,
+    pub payload_json: String,
+    pub status: String,
+    pub attempt_count: i64,
+    pub next_retry_at: Option<i64>,
+    pub created_at: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogCollectionInput {
+    pub id: String,
+    pub owner_id: Option<String>,
+    pub name: String,
+    pub description: Option<String>,
+    pub visibility: String,
+    pub sync_status: String,
+    pub lifecycle: String,
+    pub deleted_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub local_updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogWritingCollectionInput {
+    pub writing_id: String,
+    pub collection_id: String,
+    pub added_at: String,
+    pub local_updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogMetadataMutationInput {
+    pub id: String,
+    pub entity_kind: String,
+    pub entity_id: String,
+    pub operation: String,
+    pub payload_json: String,
+    pub status: String,
+    pub attempt_count: i64,
+    pub next_retry_at: Option<i64>,
+    pub created_at: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogMetadataMutationRow {
+    pub id: String,
+    pub entity_kind: String,
+    pub entity_id: String,
+    pub operation: String,
+    pub payload_json: String,
+    pub status: String,
+    pub attempt_count: i64,
+    pub next_retry_at: Option<i64>,
+    pub created_at: i64,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogCollectionSnapshot {
+    pub collections: Vec<CatalogCollectionInput>,
+    pub writing_collections: Vec<CatalogWritingCollectionInput>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -379,12 +473,15 @@ pub fn catalog_find_eligible_cloud_hash(
     cloud_account_id: String,
 ) -> Result<Vec<String>, String> {
     let conn = open_db(&db_path)?;
-    let mut stmt = conn.prepare(
-        "SELECT id FROM documents
+    let mut stmt = conn
+        .prepare(
+            "SELECT id FROM documents
          WHERE cloud_present=1 AND local_present=0 AND cloud_content_hash=?1
            AND cloud_account_id=?2 AND sync_status='synced' ORDER BY id LIMIT 2",
-    ).map_err(|e| format!("catalog cloud hash prepare: {e}"))?;
-    let rows = stmt.query_map(params![content_hash, cloud_account_id], |row| row.get(0))
+        )
+        .map_err(|e| format!("catalog cloud hash prepare: {e}"))?;
+    let rows = stmt
+        .query_map(params![content_hash, cloud_account_id], |row| row.get(0))
         .map_err(|e| format!("catalog cloud hash query: {e}"))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("catalog cloud hash row: {e}"))
@@ -588,11 +685,294 @@ pub fn catalog_update_mutation_status(
         .map_err(|e| format!("catalog mutation status commit: {e}"))
 }
 
+#[tauri::command]
+pub fn catalog_enqueue_mutation(
+    db_path: String,
+    document_id: String,
+    mutation: CatalogMutationInput,
+) -> Result<(), String> {
+    let conn = open_db(&db_path)?;
+    conn.execute(
+        "INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
+         ON CONFLICT(id) DO NOTHING",
+        params![mutation.id, document_id, mutation.operation, mutation.payload_json,
+            mutation.status, mutation.attempt_count, mutation.next_retry_at,
+            mutation.created_at, mutation.last_error],
+    )
+    .map_err(|e| format!("catalog enqueue mutation: {e}"))?;
+    conn.execute(
+        "UPDATE documents SET sync_status='pending' WHERE id=?1",
+        params![document_id],
+    )
+    .map_err(|e| format!("catalog enqueue document status: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn catalog_list_pending_mutations(
+    db_path: String,
+    now: i64,
+    limit: usize,
+) -> Result<Vec<CatalogMutationRow>, String> {
+    let conn = open_db(&db_path)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error
+             FROM sync_mutations
+             WHERE status IN ('pending','failed') AND (next_retry_at IS NULL OR next_retry_at<=?1)
+             ORDER BY created_at ASC LIMIT ?2",
+        )
+        .map_err(|e| format!("catalog list pending prepare: {e}"))?;
+    let rows = stmt
+        .query_map(params![now, limit as i64], |row| {
+            Ok(CatalogMutationRow {
+                id: row.get(0)?,
+                document_id: row.get(1)?,
+                operation: row.get(2)?,
+                payload_json: row.get(3)?,
+                status: row.get(4)?,
+                attempt_count: row.get(5)?,
+                next_retry_at: row.get(6)?,
+                created_at: row.get(7)?,
+                last_error: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("catalog list pending query: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog list pending row: {e}"))
+}
+
+fn upsert_collection(conn: &Connection, collection: &CatalogCollectionInput) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO collections(id,owner_id,name,description,visibility,sync_status,lifecycle,deleted_at,created_at,updated_at,local_updated_at)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)
+         ON CONFLICT(id) DO UPDATE SET owner_id=excluded.owner_id,name=excluded.name,
+           description=excluded.description,visibility=excluded.visibility,sync_status=excluded.sync_status,
+           lifecycle=excluded.lifecycle,deleted_at=excluded.deleted_at,created_at=excluded.created_at,
+           updated_at=excluded.updated_at,local_updated_at=excluded.local_updated_at",
+        params![collection.id, collection.owner_id, collection.name, collection.description,
+            collection.visibility, collection.sync_status, collection.lifecycle, collection.deleted_at,
+            collection.created_at, collection.updated_at, collection.local_updated_at],
+    )
+    .map_err(|e| format!("catalog upsert collection: {e}"))?;
+    Ok(())
+}
+
+fn enqueue_metadata_mutation(
+    conn: &Connection,
+    mutation: &CatalogMetadataMutationInput,
+) -> Result<(), String> {
+    conn.execute(
+        "INSERT INTO metadata_sync_mutations(id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+         VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) ON CONFLICT(id) DO NOTHING",
+        params![mutation.id, mutation.entity_kind, mutation.entity_id, mutation.operation,
+            mutation.payload_json, mutation.status, mutation.attempt_count, mutation.next_retry_at,
+            mutation.created_at, mutation.last_error],
+    )
+    .map_err(|e| format!("catalog enqueue metadata mutation: {e}"))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn catalog_apply_collection_snapshot(
+    db_path: String,
+    snapshot: CatalogCollectionSnapshot,
+) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("collection snapshot begin: {e}"))?;
+    for collection in &snapshot.collections {
+        upsert_collection(&tx, collection)?;
+    }
+    for relation in &snapshot.writing_collections {
+        tx.execute(
+            "INSERT INTO writing_collections(writing_id,collection_id,added_at,local_updated_at)
+             VALUES(?1,?2,?3,?4) ON CONFLICT(writing_id,collection_id) DO UPDATE SET
+             added_at=excluded.added_at,local_updated_at=excluded.local_updated_at",
+            params![
+                relation.writing_id,
+                relation.collection_id,
+                relation.added_at,
+                relation.local_updated_at
+            ],
+        )
+        .map_err(|e| format!("collection snapshot relation: {e}"))?;
+    }
+    tx.commit()
+        .map_err(|e| format!("collection snapshot commit: {e}"))
+}
+
+#[tauri::command]
+pub fn catalog_list_collection_snapshot(
+    db_path: String,
+) -> Result<CatalogCollectionSnapshot, String> {
+    let conn = open_db(&db_path)?;
+    let mut collection_stmt = conn.prepare(
+        "SELECT id,owner_id,name,description,visibility,sync_status,lifecycle,deleted_at,created_at,updated_at,local_updated_at
+         FROM collections WHERE deleted_at IS NULL ORDER BY local_updated_at DESC",
+    ).map_err(|e| format!("catalog list collections prepare: {e}"))?;
+    let collections = collection_stmt
+        .query_map([], |row| {
+            Ok(CatalogCollectionInput {
+                id: row.get(0)?,
+                owner_id: row.get(1)?,
+                name: row.get(2)?,
+                description: row.get(3)?,
+                visibility: row.get(4)?,
+                sync_status: row.get(5)?,
+                lifecycle: row.get(6)?,
+                deleted_at: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+                local_updated_at: row.get(10)?,
+            })
+        })
+        .map_err(|e| format!("catalog list collections query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog list collections row: {e}"))?;
+    let mut relation_stmt = conn.prepare(
+        "SELECT writing_id,collection_id,added_at,local_updated_at FROM writing_collections ORDER BY writing_id,collection_id",
+    ).map_err(|e| format!("catalog list relations prepare: {e}"))?;
+    let writing_collections = relation_stmt
+        .query_map([], |row| {
+            Ok(CatalogWritingCollectionInput {
+                writing_id: row.get(0)?,
+                collection_id: row.get(1)?,
+                added_at: row.get(2)?,
+                local_updated_at: row.get(3)?,
+            })
+        })
+        .map_err(|e| format!("catalog list relations query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog list relations row: {e}"))?;
+    Ok(CatalogCollectionSnapshot {
+        collections,
+        writing_collections,
+    })
+}
+
+#[tauri::command]
+pub fn catalog_save_collection(
+    db_path: String,
+    collection: CatalogCollectionInput,
+    mutation: Option<CatalogMetadataMutationInput>,
+) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog save collection begin: {e}"))?;
+    upsert_collection(&tx, &collection)?;
+    if let Some(value) = mutation.as_ref() {
+        enqueue_metadata_mutation(&tx, value)?;
+    }
+    tx.commit()
+        .map_err(|e| format!("catalog save collection commit: {e}"))
+}
+
+#[tauri::command]
+pub fn catalog_delete_collection(
+    db_path: String,
+    collection_id: String,
+    deleted_at: String,
+    local_updated_at: i64,
+    mutation: CatalogMetadataMutationInput,
+) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog delete collection begin: {e}"))?;
+    tx.execute("UPDATE collections SET deleted_at=?2,sync_status='deleted',local_updated_at=?3 WHERE id=?1",
+        params![collection_id, deleted_at, local_updated_at])
+      .map_err(|e| format!("catalog delete collection: {e}"))?;
+    enqueue_metadata_mutation(&tx, &mutation)?;
+    tx.commit()
+        .map_err(|e| format!("catalog delete collection commit: {e}"))
+}
+
+#[tauri::command]
+pub fn catalog_replace_writing_collections(
+    db_path: String,
+    writing_id: String,
+    collection_ids: Vec<String>,
+    added_at: String,
+    local_updated_at: i64,
+    mutation: Option<CatalogMetadataMutationInput>,
+) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog replace relations begin: {e}"))?;
+    tx.execute(
+        "DELETE FROM writing_collections WHERE writing_id=?1",
+        params![writing_id],
+    )
+    .map_err(|e| format!("catalog replace relations clear: {e}"))?;
+    for collection_id in collection_ids {
+        tx.execute("INSERT INTO writing_collections(writing_id,collection_id,added_at,local_updated_at) VALUES(?1,?2,?3,?4)",
+            params![writing_id, collection_id, added_at, local_updated_at])
+          .map_err(|e| format!("catalog replace relations insert: {e}"))?;
+    }
+    if let Some(value) = mutation.as_ref() {
+        enqueue_metadata_mutation(&tx, value)?;
+    }
+    tx.commit()
+        .map_err(|e| format!("catalog replace relations commit: {e}"))
+}
+
+#[tauri::command]
+pub fn catalog_list_pending_metadata_mutations(
+    db_path: String,
+    now: i64,
+    limit: usize,
+) -> Result<Vec<CatalogMetadataMutationRow>, String> {
+    let conn = open_db(&db_path)?;
+    let mut stmt = conn.prepare(
+        "SELECT id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error
+         FROM metadata_sync_mutations WHERE status IN ('pending','failed') AND (next_retry_at IS NULL OR next_retry_at<=?1)
+         ORDER BY created_at ASC LIMIT ?2",
+    ).map_err(|e| format!("catalog list metadata mutations prepare: {e}"))?;
+    let rows = stmt
+        .query_map(params![now, limit as i64], |row| {
+            Ok(CatalogMetadataMutationRow {
+                id: row.get(0)?,
+                entity_kind: row.get(1)?,
+                entity_id: row.get(2)?,
+                operation: row.get(3)?,
+                payload_json: row.get(4)?,
+                status: row.get(5)?,
+                attempt_count: row.get(6)?,
+                next_retry_at: row.get(7)?,
+                created_at: row.get(8)?,
+                last_error: row.get(9)?,
+            })
+        })
+        .map_err(|e| format!("catalog list metadata mutations query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog list metadata mutations row: {e}"))?;
+    Ok(rows)
+}
+
+#[tauri::command]
+pub fn catalog_update_metadata_mutation_status(
+    db_path: String,
+    mutation_id: String,
+    status: String,
+    attempt_count: i64,
+    next_retry_at: Option<i64>,
+    last_error: Option<String>,
+) -> Result<(), String> {
+    let conn = open_db(&db_path)?;
+    conn.execute("UPDATE metadata_sync_mutations SET status=?2,attempt_count=?3,next_retry_at=?4,last_error=?5 WHERE id=?1",
+        params![mutation_id, status, attempt_count, next_retry_at, last_error])
+      .map_err(|e| format!("catalog update metadata mutation: {e}"))?;
+    Ok(())
+}
+
 // Rollback for M1 (manual, only while the dual-write flag is disabled):
 // DROP TABLE sync_mutations; DROP TABLE document_bindings; DROP TABLE documents;
 // DROP TABLE binding_roots; DROP TABLE catalog_schema;
-// The legacy writings_index table is intentionally untouched through M6.
-
 #[cfg(test)]
 mod catalog_tests {
     use super::*;
@@ -656,13 +1036,6 @@ mod catalog_tests {
         let version: i64 = conn
             .query_row("SELECT version FROM catalog_schema", [], |row| row.get(0))
             .unwrap();
-        let legacy: String = conn
-            .query_row(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='writings_index'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
         let cloud_hash_column: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='cloud_content_hash'",
@@ -670,9 +1043,8 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 5);
         assert_eq!(cloud_hash_column, 1);
-        assert_eq!(legacy, "writings_index");
         eprintln!("catalog_startup_ms={startup_ms:.3}");
         assert!(startup_ms < 1000.0, "catalog startup exceeded 1s budget");
         drop(conn);
@@ -690,7 +1062,10 @@ mod catalog_tests {
         .unwrap();
         let dual_write_ms = started_at.elapsed().as_secs_f64() * 1000.0;
         eprintln!("catalog_dual_write_ms={dual_write_ms:.3}");
-        assert!(dual_write_ms < 1000.0, "catalog dual-write exceeded 1s safety budget");
+        assert!(
+            dual_write_ms < 1000.0,
+            "catalog dual-write exceeded 1s safety budget"
+        );
         let error = catalog_dual_write(
             path.clone(),
             input("doc-2", "/tmp/root/doc.md", "mutation-2"),
@@ -739,7 +1114,10 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(root_count, 1, "one physical directory keeps one binding root");
+        assert_eq!(
+            root_count, 1,
+            "one physical directory keeps one binding root"
+        );
 
         // The second document is bound to the pre-existing root id, not a new one.
         let row = catalog_get_by_id(path.clone(), "doc-b".into())
@@ -778,9 +1156,17 @@ mod catalog_tests {
         delete_input.mutation.as_mut().unwrap().operation = "delete".into();
         catalog_dual_write(path.clone(), delete_input).unwrap();
         catalog_update_mutation_status(
-            path.clone(), "mutation-delete".into(), "synced".into(), 0, None, None,
-        ).unwrap();
-        let record = catalog_get_by_id(path.clone(), "doc-local".into()).unwrap().unwrap();
+            path.clone(),
+            "mutation-delete".into(),
+            "synced".into(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        let record = catalog_get_by_id(path.clone(), "doc-local".into())
+            .unwrap()
+            .unwrap();
         assert!(record.local_present);
         assert!(!record.cloud_present);
         assert_eq!(record.sync_status, "local-only");
@@ -944,30 +1330,51 @@ mod catalog_tests {
             path.clone(),
             vec![
                 CatalogCloudSnapshotInput {
-                    id: "doc-local".into(), cloud_present: true,
-                    cloud_account_id: Some("acct-1".into()), content_hash: Some("hash-local".into()),
-                    title: Some("Cloud metadata".into()), slug: Some("cloud".into()),
-                    status: Some("draft".into()), artifact_type: Some("general".into()),
-                    visibility: Some("private".into()), version: Some(2),
-                    created_at: Some(1), modified_at: Some(2),
+                    id: "doc-local".into(),
+                    cloud_present: true,
+                    cloud_account_id: Some("acct-1".into()),
+                    content_hash: Some("hash-local".into()),
+                    title: Some("Cloud metadata".into()),
+                    slug: Some("cloud".into()),
+                    status: Some("draft".into()),
+                    artifact_type: Some("general".into()),
+                    visibility: Some("private".into()),
+                    version: Some(2),
+                    created_at: Some(1),
+                    modified_at: Some(2),
                 },
                 CatalogCloudSnapshotInput {
-                    id: "doc-cloud".into(), cloud_present: true,
-                    cloud_account_id: Some("acct-1".into()), content_hash: Some("hash-cloud".into()),
-                    title: Some("Cloud only".into()), slug: None, status: Some("draft".into()),
-                    artifact_type: Some("general".into()), visibility: Some("private".into()),
-                    version: Some(1), created_at: Some(1), modified_at: Some(1),
+                    id: "doc-cloud".into(),
+                    cloud_present: true,
+                    cloud_account_id: Some("acct-1".into()),
+                    content_hash: Some("hash-cloud".into()),
+                    title: Some("Cloud only".into()),
+                    slug: None,
+                    status: Some("draft".into()),
+                    artifact_type: Some("general".into()),
+                    visibility: Some("private".into()),
+                    version: Some(1),
+                    created_at: Some(1),
+                    modified_at: Some(1),
                 },
             ],
-        ).unwrap();
+        )
+        .unwrap();
 
-        let local = catalog_get_by_id(path.clone(), "doc-local".into()).unwrap().unwrap();
-        assert!(local.local_present, "cloud hydration cannot clear local presence");
+        let local = catalog_get_by_id(path.clone(), "doc-local".into())
+            .unwrap()
+            .unwrap();
+        assert!(
+            local.local_present,
+            "cloud hydration cannot clear local presence"
+        );
         assert!(local.cloud_present);
         assert_eq!(local.sync_status, "pending", "pending local work wins");
         assert_eq!(local.title.as_deref(), Some("Cloud metadata"));
 
-        let cloud = catalog_get_by_id(path.clone(), "doc-cloud".into()).unwrap().unwrap();
+        let cloud = catalog_get_by_id(path.clone(), "doc-cloud".into())
+            .unwrap()
+            .unwrap();
         assert!(!cloud.local_present);
         assert!(cloud.cloud_present);
         assert_eq!(cloud.cloud_account_id.as_deref(), Some("acct-1"));
@@ -977,26 +1384,42 @@ mod catalog_tests {
     #[test]
     fn catalog_account_filter_hides_only_cloud_only_rows_on_logout() {
         let path = temp_db();
-        catalog_dual_write(path.clone(), input("local", "/tmp/root/local.md", "mut-local")).unwrap();
+        catalog_dual_write(
+            path.clone(),
+            input("local", "/tmp/root/local.md", "mut-local"),
+        )
+        .unwrap();
         let snapshot = |id: &str, account: &str| CatalogCloudSnapshotInput {
-            id: id.into(), cloud_present: true,
-            cloud_account_id: Some(account.into()), content_hash: Some(format!("hash-{id}")),
-            title: Some(id.into()), slug: None, status: Some("draft".into()),
-            artifact_type: Some("general".into()), visibility: Some("private".into()),
-            version: Some(1), created_at: Some(1), modified_at: Some(1),
+            id: id.into(),
+            cloud_present: true,
+            cloud_account_id: Some(account.into()),
+            content_hash: Some(format!("hash-{id}")),
+            title: Some(id.into()),
+            slug: None,
+            status: Some("draft".into()),
+            artifact_type: Some("general".into()),
+            visibility: Some("private".into()),
+            version: Some(1),
+            created_at: Some(1),
+            modified_at: Some(1),
         };
-        catalog_apply_cloud_snapshots(path.clone(), vec![
-            snapshot("cloud-a", "acct-a"), snapshot("cloud-b", "acct-b"),
-        ]).unwrap();
+        catalog_apply_cloud_snapshots(
+            path.clone(),
+            vec![snapshot("cloud-a", "acct-a"), snapshot("cloud-b", "acct-b")],
+        )
+        .unwrap();
 
-        let signed_in = catalog_list(path.clone(), Some("acct-a".into()), false, false, 20).unwrap();
+        let signed_in =
+            catalog_list(path.clone(), Some("acct-a".into()), false, false, 20).unwrap();
         assert!(signed_in.iter().any(|row| row.id == "local"));
         assert!(signed_in.iter().any(|row| row.id == "cloud-a"));
         assert!(!signed_in.iter().any(|row| row.id == "cloud-b"));
 
         let signed_out = catalog_list(path.clone(), None, false, false, 20).unwrap();
         assert!(signed_out.iter().any(|row| row.id == "local"));
-        assert!(!signed_out.iter().any(|row| row.id == "cloud-a" || row.id == "cloud-b"));
+        assert!(!signed_out
+            .iter()
+            .any(|row| row.id == "cloud-a" || row.id == "cloud-b"));
         let _ = fs::remove_file(path);
     }
 
@@ -1004,147 +1427,87 @@ mod catalog_tests {
     fn cloud_hash_lookup_returns_only_eligible_candidates() {
         let path = temp_db();
         let snapshot = |id: &str| CatalogCloudSnapshotInput {
-            id: id.into(), cloud_present: true, cloud_account_id: Some("acct".into()),
-            content_hash: Some("same-hash".into()), title: Some(id.into()), slug: None,
-            status: Some("draft".into()), artifact_type: Some("general".into()),
-            visibility: Some("private".into()), version: Some(1), created_at: Some(1),
+            id: id.into(),
+            cloud_present: true,
+            cloud_account_id: Some("acct".into()),
+            content_hash: Some("same-hash".into()),
+            title: Some(id.into()),
+            slug: None,
+            status: Some("draft".into()),
+            artifact_type: Some("general".into()),
+            visibility: Some("private".into()),
+            version: Some(1),
+            created_at: Some(1),
             modified_at: Some(1),
         };
-        catalog_apply_cloud_snapshots(path.clone(), vec![snapshot("cloud-a"), snapshot("cloud-b")]).unwrap();
+        catalog_apply_cloud_snapshots(path.clone(), vec![snapshot("cloud-a"), snapshot("cloud-b")])
+            .unwrap();
 
-        let candidates = catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "acct".into()).unwrap();
-        assert_eq!(candidates, vec!["cloud-a", "cloud-b"], "two candidates are ambiguous");
+        let candidates =
+            catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "acct".into())
+                .unwrap();
+        assert_eq!(
+            candidates,
+            vec!["cloud-a", "cloud-b"],
+            "two candidates are ambiguous"
+        );
 
         let local = input("local", "/tmp/root/local.md", "mut-local");
         catalog_dual_write(path.clone(), local).unwrap();
         catalog_apply_cloud_snapshots(path.clone(), vec![snapshot("local")]).unwrap();
-        let candidates = catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "acct".into()).unwrap();
-        assert_eq!(candidates, vec!["cloud-a", "cloud-b"], "local and pending rows are ineligible");
-        let other_account = catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "other".into()).unwrap();
-        assert!(other_account.is_empty(), "hash candidates are account-scoped");
+        let candidates =
+            catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "acct".into())
+                .unwrap();
+        assert_eq!(
+            candidates,
+            vec!["cloud-a", "cloud-b"],
+            "local and pending rows are ineligible"
+        );
+        let other_account =
+            catalog_find_eligible_cloud_hash(path.clone(), "same-hash".into(), "other".into())
+                .unwrap();
+        assert!(
+            other_account.is_empty(),
+            "hash candidates are account-scoped"
+        );
         let _ = fs::remove_file(path);
     }
-}
 
-/// Upsert a writing entry into the local SQLite index.
-#[tauri::command]
-pub fn index_upsert(
-    db_path: String,
-    path: String,
-    title: String,
-    created_at: u64,
-    modified_at: u64,
-) -> Result<(), String> {
-    let conn = open_db(&db_path)?;
-    conn.execute(
-        "INSERT INTO writings_index (path, title, created_at, modified_at)
-         VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(path) DO UPDATE SET
-           title = excluded.title,
-           modified_at = excluded.modified_at",
-        params![path, title, created_at as i64, modified_at as i64],
-    )
-    .map_err(|e| format!("index_upsert: {e}"))?;
-    Ok(())
-}
-
-/// List recent writings from the index, ordered by modified_at descending.
-#[tauri::command]
-pub fn index_list(db_path: String, limit: usize) -> Result<Vec<IndexEntry>, String> {
-    let conn = open_db(&db_path)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT path, title, created_at, modified_at
-             FROM writings_index
-             ORDER BY modified_at DESC
-             LIMIT ?1",
+    #[test]
+    fn collection_snapshot_roundtrips_without_indexeddb() {
+        let path = temp_db();
+        catalog_apply_collection_snapshot(
+            path.clone(),
+            CatalogCollectionSnapshot {
+                collections: vec![CatalogCollectionInput {
+                    id: "collection-1".into(),
+                    owner_id: Some("acct".into()),
+                    name: "Research".into(),
+                    description: None,
+                    visibility: "private".into(),
+                    sync_status: "synced".into(),
+                    lifecycle: "server-confirmed".into(),
+                    deleted_at: None,
+                    created_at: "2026-01-01T00:00:00Z".into(),
+                    updated_at: "2026-01-02T00:00:00Z".into(),
+                    local_updated_at: 2,
+                }],
+                writing_collections: vec![CatalogWritingCollectionInput {
+                    writing_id: "doc-1".into(),
+                    collection_id: "collection-1".into(),
+                    added_at: "2026-01-02T00:00:00Z".into(),
+                    local_updated_at: 2,
+                }],
+            },
         )
-        .map_err(|e| format!("index_list prepare: {e}"))?;
+        .unwrap();
 
-    let rows = stmt
-        .query_map(params![limit as i64], |row| {
-            Ok(IndexEntry {
-                path: row.get(0)?,
-                title: row.get(1)?,
-                created_at: row.get::<_, i64>(2)? as u64,
-                modified_at: row.get::<_, i64>(3)? as u64,
-            })
-        })
-        .map_err(|e| format!("index_list query: {e}"))?;
-
-    let mut entries = Vec::new();
-    for row in rows {
-        entries.push(row.map_err(|e| format!("index_list row: {e}"))?);
+        let snapshot = catalog_list_collection_snapshot(path.clone()).unwrap();
+        assert_eq!(snapshot.collections.len(), 1);
+        assert_eq!(snapshot.collections[0].name, "Research");
+        assert_eq!(snapshot.writing_collections.len(), 1);
+        assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
+        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 5);
+        let _ = fs::remove_file(path);
     }
-    Ok(entries)
-}
-
-/// Delete a writing entry from the index.
-#[tauri::command]
-pub fn index_delete(db_path: String, path: String) -> Result<(), String> {
-    let conn = open_db(&db_path)?;
-    conn.execute("DELETE FROM writings_index WHERE path = ?1", params![path])
-        .map_err(|e| format!("index_delete: {e}"))?;
-    Ok(())
-}
-
-/// Rebuild the index by scanning all .md files in `dir`.
-/// Clears existing entries and re-inserts from filesystem metadata.
-/// Returns the number of entries indexed.
-#[tauri::command]
-pub fn index_rebuild(db_path: String, dir: String) -> Result<usize, String> {
-    let conn = open_db(&db_path)?;
-
-    // Clear existing entries
-    conn.execute("DELETE FROM writings_index", [])
-        .map_err(|e| format!("index_rebuild clear: {e}"))?;
-
-    let dir_path = Path::new(&dir);
-    if !dir_path.exists() {
-        return Ok(0);
-    }
-
-    let mut count = 0usize;
-    let entries: Vec<(String, String, u64, u64)> = fs::read_dir(dir_path)
-        .map_err(|e| format!("index_rebuild read_dir: {e}"))?
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                return None;
-            }
-            let metadata = entry.metadata().ok()?;
-            let modified_at = metadata
-                .modified()
-                .ok()?
-                .duration_since(UNIX_EPOCH)
-                .ok()?
-                .as_millis() as u64;
-            let created_at = metadata
-                .created()
-                .ok()?
-                .duration_since(UNIX_EPOCH)
-                .ok()?
-                .as_millis() as u64;
-            let name = path.file_stem()?.to_string_lossy().to_string();
-            let path_str = path.to_string_lossy().to_string();
-            Some((path_str, name, created_at, modified_at))
-        })
-        .collect();
-
-    for (path, title, created_at, modified_at) in entries {
-        conn.execute(
-            "INSERT INTO writings_index (path, title, created_at, modified_at)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(path) DO UPDATE SET
-               title = excluded.title,
-               created_at = excluded.created_at,
-               modified_at = excluded.modified_at",
-            params![path, title, created_at as i64, modified_at as i64],
-        )
-        .map_err(|e| format!("index_rebuild insert: {e}"))?;
-        count += 1;
-    }
-
-    Ok(count)
 }

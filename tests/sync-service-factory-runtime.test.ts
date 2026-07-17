@@ -4,8 +4,8 @@ vi.mock("@/lib/services/web-sync-service", () => ({
   webSyncService: { runtime: "web" },
 }))
 
-vi.mock("@/lib/sync/desktop-sync-service", () => ({
-  desktopSyncService: { runtime: "desktop" },
+vi.mock("@/lib/sync/desktop-catalog-sync-service", () => ({
+  desktopCatalogSyncService: { runtime: "desktop" },
 }))
 
 type TauriWindow = typeof globalThis & { __TAURI_INTERNALS__?: unknown }

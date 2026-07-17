@@ -107,7 +107,7 @@ describe("SyncBootstrap runtime split", () => {
     expect(desktopOnAuthStateChangeMock).toHaveBeenCalled()
     expect(hydrateWritingsMock).not.toHaveBeenCalled()
     expect(hydrateCollectionsMock).not.toHaveBeenCalled()
-    expect(setLocalDBScopeMock).toHaveBeenCalledWith(undefined)
+    expect(setLocalDBScopeMock).not.toHaveBeenCalled()
     expect(startMock).toHaveBeenCalled()
     expect(scheduleFlushMock).toHaveBeenCalled()
   })
@@ -122,7 +122,7 @@ describe("SyncBootstrap runtime split", () => {
 
     expect(supabaseGetUserMock).not.toHaveBeenCalled()
     expect(desktopGetSessionMock).toHaveBeenCalledOnce()
-    expect(setLocalDBScopeMock).toHaveBeenCalledWith("desktop-user")
+    expect(setLocalDBScopeMock).not.toHaveBeenCalled()
     expect(hydrateWritingsMock).toHaveBeenCalledOnce()
     expect(hydrateCollectionsMock).toHaveBeenCalledOnce()
   })
@@ -171,7 +171,7 @@ describe("SyncBootstrap runtime split", () => {
     const returnValue = callback?.("USER_UPDATED", { user: { id: "user-1" } })
 
     expect(returnValue).toBeUndefined()
-    expect(setLocalDBScopeMock).toHaveBeenCalledWith("user-1")
+    expect(setLocalDBScopeMock).not.toHaveBeenCalled()
     expect(hydrateWritingsMock).toHaveBeenCalled()
     expect(scheduleFlushMock).toHaveBeenCalled()
   })

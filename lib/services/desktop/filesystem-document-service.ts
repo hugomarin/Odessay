@@ -30,7 +30,6 @@ import {
   tauriWriteFile,
 } from "@/lib/services/desktop/tauri-commands"
 import type { DesktopFileMetadata } from "@/lib/services/desktop/tauri-commands"
-import type { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -44,10 +43,6 @@ function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T>
 
 function isoNow(): string {
   return new Date().toISOString()
-}
-
-function isoToMs(iso: string): number {
-  return new Date(iso).getTime()
 }
 
 function extractPlainText(markdown: string): string {
@@ -76,30 +71,6 @@ function fileMetadataToSummary(meta: DesktopFileMetadata): WritingSummary {
     deletedAt: null,
     createdAt: updatedAt,
     updatedAt,
-    excerpt: null,
-  }
-}
-
-function indexEntryToSummary(entry: {
-  path: string
-  title: string
-  createdAt: number
-  modifiedAt: number
-}): WritingSummary {
-  return {
-    id: entry.path,
-    authorId: null,
-    title: entry.title,
-    slug: null,
-    status: "draft",
-    artifactType: "general",
-    visibility: "private",
-    parentId: null,
-    correspondenceId: null,
-    version: 1,
-    deletedAt: null,
-    createdAt: new Date(entry.createdAt).toISOString(),
-    updatedAt: new Date(entry.modifiedAt).toISOString(),
     excerpt: null,
   }
 }
@@ -133,14 +104,12 @@ export type CreateDraftResult = {
  *  - Auth and sync failures must never block the local save.
  *  - Markdown serialization/deserialization lives here (TypeScript), not in Rust.
  *
- * ODE-210 additions:
- *  - Optional LocalIndexService for derived recent-list acceleration.
- *  - Index is updated on save, rename, create, and delete.
- *  - If index is absent or unreadable, falls back to directory listing.
+ * The former path-only `writings_index` projection was retired in ODE-374.
+ * UUID/binding/presence listing belongs to DocumentCatalog; this low-level
+ * adapter only lists the directory when its legacy contract is called directly.
  */
 export class FilesystemDocumentService implements DocumentService {
   readonly writingsDir: string
-  readonly localIndex?: LocalIndexService
 
   private savedListeners: SavedListener[] = []
   private pendingSaves = new Map<string, ReturnType<typeof setTimeout>>()
@@ -148,10 +117,9 @@ export class FilesystemDocumentService implements DocumentService {
 
   constructor(
     writingsDir: string,
-    options?: { localIndex?: LocalIndexService; autoSaveDebounceMs?: number },
+    options?: { autoSaveDebounceMs?: number },
   ) {
     this.writingsDir = writingsDir
-    this.localIndex = options?.localIndex
     this.autoSaveDebounceMs = options?.autoSaveDebounceMs ?? 500
   }
 
@@ -191,24 +159,6 @@ export class FilesystemDocumentService implements DocumentService {
       )
     }, this.autoSaveDebounceMs)
     this.pendingSaves.set(writing.id, timer)
-  }
-
-  // ─── Index helpers ─────────────────────────────────────────────────────────
-
-  private async upsertIndex(writing: WritingRecord): Promise<void> {
-    if (!this.localIndex) return
-    const title = writing.title ?? filenameToTitle(writing.id.split("/").pop() ?? "untitled")
-    await this.localIndex.upsert(
-      writing.id,
-      title,
-      isoToMs(writing.createdAt),
-      Date.now(),
-    )
-  }
-
-  private async deleteIndex(path: string): Promise<void> {
-    if (!this.localIndex) return
-    await this.localIndex.delete(path)
   }
 
   // ─── Desktop-specific helpers ──────────────────────────────────────────────
@@ -257,7 +207,6 @@ export class FilesystemDocumentService implements DocumentService {
         createdAt: now,
         updatedAt: now,
       }
-      await this.upsertIndex(writing)
       return ok({ path, writing })
     } catch (e) {
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to create draft")
@@ -277,18 +226,12 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * List writings.
-   * If a LocalIndexService is configured, reads from the SQLite index.
-   * Otherwise falls back to directory listing.
+   * UUID-aware product listing uses DocumentCatalog; this direct adapter method
+   * remains a filesystem-only fallback for tests and low-level callers.
    */
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     void input
     try {
-      if (this.localIndex) {
-        const entries = await this.localIndex.listRecent(200)
-        if (entries.length > 0) {
-          return ok(entries.map(indexEntryToSummary))
-        }
-      }
       const files = await tauriListRecentFiles(this.writingsDir, 200)
       return ok(files.map(fileMetadataToSummary))
     } catch (e) {
@@ -336,7 +279,6 @@ export class FilesystemDocumentService implements DocumentService {
 
   /**
    * Serialize writing.content.markdown and write it to disk.
-   * Updates the SQLite index if configured.
    * Emits a "saved" event after the file is fully persisted.
    */
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
@@ -349,7 +291,6 @@ export class FilesystemDocumentService implements DocumentService {
         updatedAt: isoNow(),
         version: writing.version + 1,
       }
-      await this.upsertIndex(savedRecord)
       this.emitSaved(writing.id)
       return ok(savedRecord)
     } catch (e) {
@@ -406,9 +347,6 @@ export class FilesystemDocumentService implements DocumentService {
         updatedAt: now,
       }
 
-      await this.deleteIndex(writingId)
-      await this.upsertIndex(renamedRecord)
-
       return ok(renamedRecord)
     } catch (e) {
       return err("STORAGE_ERROR", e instanceof Error ? e.message : "Failed to rename writing")
@@ -433,8 +371,6 @@ export class FilesystemDocumentService implements DocumentService {
       await tauriRenameFile(writingId, `${trashDir}/${filename}`).catch(() => {
         // If rename fails, fall back silently.
       })
-
-      await this.deleteIndex(writingId)
 
       const deletedRecord: WritingRecord = {
         ...record,

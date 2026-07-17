@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { isTauriRuntime } from "@/lib/runtime/detect";
 import { getAuthService } from "@/lib/services/auth-service-factory";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
-import { ensureDesktopCatalogMigrated } from "@/lib/migrations/desktop-catalog-migration";
 
 export function SyncBootstrap() {
   const lastHydratedUserIdRef = useRef<string | null>(null);
@@ -80,24 +79,14 @@ export function SyncBootstrap() {
     };
 
     const bootstrapDesktop = async () => {
-      // ODE-376 M5: harvest IndexedDB into the SQLite catalog at startup, before
-      // any surface reads it. Desk/Workspace read the catalog directly (ODE-373),
-      // so without this the migrated catalog would stay empty until a document is
-      // opened. Gated by the cutover flag; a no-op when it is off. The pipeline
-      // emits one 'migration' fan-out on completion, so surfaces that already
-      // rendered refresh once.
-      await ensureDesktopCatalogMigrated();
-
       const supabase = createDesktopClient();
 
       // The desktop shell already performs the authoritative network validation
       // through AuthService.getSession(). Bootstrap only needs the locally
-      // persisted session to select the IndexedDB compatibility scope; calling
+      // persisted session to start the SQLite-backed sync adapter; calling
       // getUser() here creates a second identical startup request.
       const { data: sessionData } = await supabase.auth.getSession();
       const userId = sessionData.session?.user?.id ?? undefined;
-      setLocalDBScope(userId);
-
       if (userId) {
         await hydrateFromRemote(userId);
       }
@@ -106,7 +95,6 @@ export function SyncBootstrap() {
       await syncService.scheduleFlush();
       const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
         if (event === "SIGNED_OUT") {
-          setLocalDBScope(undefined);
           lastHydratedUserIdRef.current = null;
           return;
         }
@@ -122,7 +110,6 @@ export function SyncBootstrap() {
           return;
         }
 
-        setLocalDBScope(nextUserId);
         lastHydratedUserIdRef.current = nextUserId;
         void hydrateFromRemote(nextUserId);
         void syncService.scheduleFlush();

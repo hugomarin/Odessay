@@ -212,6 +212,51 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
     Ok(target.to_string_lossy().to_string())
 }
 
+/// Read-only preflight for the application-layer UUID minter. Returns paths
+/// that do not yet have a durable manifest entry. Supplying ids for a correlated
+/// inode/hash move is harmless because `workspace_sync` prefers the existing
+/// ledger entry before the client proposal.
+#[tauri::command]
+pub fn workspace_unbound_paths(
+    root_path: String,
+    selected_paths: Option<Vec<String>>,
+) -> Result<Vec<String>, String> {
+    let root = Path::new(&root_path);
+    if !root.is_dir() {
+        return Err(format!(
+            "workspace_unbound_paths: folder not found: {}",
+            root.display()
+        ));
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("workspace_unbound_paths: canonicalize root: {e}"))?;
+    let index_path = canonical_root
+        .join(WORKSPACE_DIR_NAME)
+        .join(WORKSPACE_INDEX_FILE_NAME);
+    let existing_index = read_workspace_index(&index_path)?;
+    let effective_selected = match selected_paths {
+        Some(paths) => normalize_selected_paths(paths)?,
+        None => normalize_selected_paths(existing_index.selected_paths.clone())?,
+    };
+    let mut files = Vec::new();
+    let mut folder_count = 0usize;
+    visit_workspace(
+        &canonical_root,
+        &canonical_root,
+        &mut files,
+        &mut folder_count,
+    )?;
+    let mut paths = files
+        .into_iter()
+        .filter(|file| matches_selected_paths(&file.relative_path, &effective_selected))
+        .filter(|file| !existing_index.files.contains_key(&file.relative_path))
+        .map(|file| file.relative_path)
+        .collect::<Vec<_>>();
+    paths.sort();
+    Ok(paths)
+}
+
 #[tauri::command]
 pub fn workspace_sync(
     root_path: String,
@@ -259,7 +304,10 @@ pub fn workspace_sync(
         .files
         .iter()
         .filter(|(path, entry)| {
-            entry.inode > 0 && effective_selected_paths.iter().any(|selected| selected == *path)
+            entry.inode > 0
+                && effective_selected_paths
+                    .iter()
+                    .any(|selected| selected == *path)
         })
         .map(|(path, entry)| (entry.inode, path.clone()))
         .collect();
@@ -342,18 +390,22 @@ pub fn workspace_sync(
                 }
             });
 
-        let id = document_ids
-            .as_ref()
-            .and_then(|ids| ids.get(&file.relative_path).cloned())
-            .or_else(|| existing_entry.map(|entry| entry.id))
-            .or_else(|| extract_writing_id_from_frontmatter(Path::new(&file.path)))
-            .unwrap_or_else(|| {
-                // Transitional fallback: files that were not created through
-                // Odessay and carry no front-matter ID still need an identifier
-                // for the workspace UI. This path will be removed once external
-                // files are imported (minted in the client) before indexing.
-                Uuid::new_v4().to_string()
-            });
+        // The durable manifest always wins. Truly unbound documents must arrive
+        // with a UUID minted by the TypeScript application layer; Rust never
+        // reads historical frontmatter or invents document identity.
+        let id = existing_entry
+            .map(|entry| entry.id)
+            .or_else(|| {
+                document_ids
+                    .as_ref()
+                    .and_then(|ids| ids.get(&file.relative_path).cloned())
+            })
+            .ok_or_else(|| {
+                format!(
+                    "workspace_sync: missing client document id for unbound path {}",
+                    file.relative_path
+                )
+            })?;
 
         file.id = id.clone();
         file.content_hash = content_hash.clone();
@@ -399,37 +451,6 @@ fn canonical_markdown_hash_bytes(markdown: &str) -> Vec<u8> {
         .into_bytes()
 }
 
-/// Read the first portion of a markdown file and extract the `id` field from
-/// its YAML front-matter, if present and non-empty. This lets the workspace
-/// index adopt the writing UUID minted by the client instead of generating a
-/// second identifier in Rust.
-fn extract_writing_id_from_frontmatter(path: &Path) -> Option<String> {
-    let bytes = fs::read(path).ok()?;
-    // Only the start of the file is needed for front-matter; cap to avoid
-    // loading large files into memory just for an ID lookup.
-    let prefix = String::from_utf8(bytes.into_iter().take(4096).collect()).ok()?;
-    let normalized = prefix.replace("\r\n", "\n").replace('\r', "\n");
-
-    if !normalized.starts_with("---\n") {
-        return None;
-    }
-
-    let end = normalized.find("\n---\n")?;
-    let frontmatter = &normalized[4..end];
-
-    for line in frontmatter.lines() {
-        let trimmed = line.trim();
-        if let Some(value) = trimmed.strip_prefix("id:") {
-            let id = value.trim().trim_matches('"').trim_matches('\'').trim();
-            if !id.is_empty() {
-                return Some(id.to_string());
-            }
-        }
-    }
-
-    None
-}
-
 #[tauri::command]
 pub fn workspace_compute_content_hash(markdown: String) -> Result<String, String> {
     let canonical_bytes = canonical_markdown_hash_bytes(&markdown);
@@ -450,26 +471,9 @@ fn content_hash_for_markdown_file(path: &Path) -> Result<String, String> {
 
 fn prepare_workspace_index_dir(canonical_root: &Path) -> Result<PathBuf, String> {
     let workspace_dir = canonical_root.join(WORKSPACE_DIR_NAME);
-    let legacy_dir = canonical_root.join(LEGACY_WORKSPACE_DIR_NAME);
-
-    if legacy_dir.exists() && !workspace_dir.exists() {
-        fs::rename(&legacy_dir, &workspace_dir)
-            .map_err(|e| format!("workspace_sync migrate index dir: {e}"))?;
-        return Ok(workspace_dir);
-    }
 
     fs::create_dir_all(&workspace_dir)
         .map_err(|e| format!("workspace_sync create index dir: {e}"))?;
-
-    if legacy_dir.exists() {
-        let legacy_index_path = legacy_dir.join(WORKSPACE_INDEX_FILE_NAME);
-        let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
-
-        if legacy_index_path.exists() && !index_path.exists() {
-            fs::copy(&legacy_index_path, &index_path)
-                .map_err(|e| format!("workspace_sync preserve legacy index: {e}"))?;
-        }
-    }
 
     Ok(workspace_dir)
 }
@@ -603,6 +607,21 @@ fn inode_for_path(_path: &PathBuf) -> u64 {
 mod tests {
     use super::*;
 
+    fn workspace_sync(
+        root_path: String,
+        selected_paths: Option<Vec<String>>,
+        document_ids: Option<HashMap<String, String>>,
+    ) -> Result<WorkspaceSnapshot, String> {
+        let mut ids = document_ids.unwrap_or_default();
+        for relative_path in
+            super::workspace_unbound_paths(root_path.clone(), selected_paths.clone())?
+        {
+            ids.entry(relative_path)
+                .or_insert_with(|| Uuid::new_v4().to_string());
+        }
+        super::workspace_sync(root_path, selected_paths, (!ids.is_empty()).then_some(ids))
+    }
+
     fn temp_workspace_root(test_name: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "odessay-workspace-test-{test_name}-{}",
@@ -614,40 +633,6 @@ mod tests {
 
     fn cleanup(path: &Path) {
         let _ = fs::remove_dir_all(path);
-    }
-
-    #[test]
-    fn workspace_sync_migrates_legacy_index_dir() {
-        let root = temp_workspace_root("migrate-legacy-index-dir");
-        let legacy_dir = root.join(LEGACY_WORKSPACE_DIR_NAME);
-        fs::create_dir_all(&legacy_dir).expect("create legacy index dir");
-        fs::write(root.join("letter.md"), "Hello").expect("write markdown file");
-        fs::write(
-            legacy_dir.join(WORKSPACE_INDEX_FILE_NAME),
-            r#"{
-  "version": 1,
-  "selectedPaths": [],
-  "files": {
-    "letter.md": {
-      "id": "existing-id",
-      "inode": 0,
-      "lastSeen": 0,
-      "size": 5
-    }
-  }
-}"#,
-        )
-        .expect("write legacy index");
-
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
-            .expect("sync workspace with legacy index");
-
-        assert!(root.join(WORKSPACE_DIR_NAME).exists());
-        assert!(!root.join(LEGACY_WORKSPACE_DIR_NAME).exists());
-        assert_eq!(snapshot.files.len(), 1);
-        assert_eq!(snapshot.files[0].id, "existing-id");
-
-        cleanup(&root);
     }
 
     #[test]
@@ -745,8 +730,8 @@ mod tests {
     }
 
     #[test]
-    fn workspace_sync_adopts_writing_id_from_frontmatter_for_new_files() {
-        let root = temp_workspace_root("adopt-frontmatter-id");
+    fn workspace_sync_ignores_historical_frontmatter_identity() {
+        let root = temp_workspace_root("ignore-frontmatter-id");
         let file_path = root.join("letter.md");
         fs::write(
             &file_path,
@@ -758,14 +743,15 @@ mod tests {
             .expect("sync workspace with frontmatter file");
 
         assert_eq!(snapshot.files.len(), 1);
-        assert_eq!(snapshot.files[0].id, "writing-uuid-from-frontmatter");
+        assert_ne!(snapshot.files[0].id, "writing-uuid-from-frontmatter");
+        assert!(Uuid::parse_str(&snapshot.files[0].id).is_ok());
 
         let index_json = fs::read_to_string(
             root.join(WORKSPACE_DIR_NAME)
                 .join(WORKSPACE_INDEX_FILE_NAME),
         )
         .expect("read index");
-        assert!(index_json.contains("writing-uuid-from-frontmatter"));
+        assert!(!index_json.contains("writing-uuid-from-frontmatter"));
 
         cleanup(&root);
     }
@@ -841,15 +827,20 @@ mod tests {
         let root = temp_workspace_root("manifest-v2-shape");
         fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
 
-        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
-            .expect("sync workspace");
+        let snapshot =
+            workspace_sync(root.to_string_lossy().to_string(), None, None).expect("sync workspace");
 
         assert!(!snapshot.binding_root_id.is_empty());
 
-        let index_path = root.join(WORKSPACE_DIR_NAME).join(WORKSPACE_INDEX_FILE_NAME);
+        let index_path = root
+            .join(WORKSPACE_DIR_NAME)
+            .join(WORKSPACE_INDEX_FILE_NAME);
         let index_json = fs::read_to_string(&index_path).expect("read index");
         assert!(index_json.contains("\"version\": 2"));
-        assert!(index_json.contains(&format!("\"bindingRootId\": \"{}\"", snapshot.binding_root_id)));
+        assert!(index_json.contains(&format!(
+            "\"bindingRootId\": \"{}\"",
+            snapshot.binding_root_id
+        )));
 
         // No leftover temp files after a successful atomic write.
         let leftovers: Vec<_> = fs::read_dir(root.join(WORKSPACE_DIR_NAME))
@@ -901,10 +892,10 @@ mod tests {
         let root = temp_workspace_root("stable-binding-root-id");
         fs::write(root.join("letter.md"), "Hello\n").expect("write markdown file");
 
-        let first = workspace_sync(root.to_string_lossy().to_string(), None, None)
-            .expect("first sync");
-        let second = workspace_sync(root.to_string_lossy().to_string(), None, None)
-            .expect("second sync");
+        let first =
+            workspace_sync(root.to_string_lossy().to_string(), None, None).expect("first sync");
+        let second =
+            workspace_sync(root.to_string_lossy().to_string(), None, None).expect("second sync");
 
         assert_eq!(first.binding_root_id, second.binding_root_id);
 
@@ -948,8 +939,10 @@ mod tests {
 
         assert_eq!(snapshot.files[0].id, "cloud-uuid");
         let manifest = fs::read_to_string(
-            root.join(WORKSPACE_DIR_NAME).join(WORKSPACE_INDEX_FILE_NAME),
-        ).expect("read manifest");
+            root.join(WORKSPACE_DIR_NAME)
+                .join(WORKSPACE_INDEX_FILE_NAME),
+        )
+        .expect("read manifest");
         assert!(manifest.contains("cloud-uuid"));
         cleanup(&root);
     }

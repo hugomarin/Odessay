@@ -14,7 +14,6 @@
  */
 
 import { appConfigDir, join } from "@tauri-apps/api/path"
-import { isDesktopCatalogDualWriteEnabled } from "@/lib/services/desktop/catalog-feature-flag"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
@@ -97,7 +96,7 @@ function toReconcilerRoot(record: {
 }
 
 async function buildRuntime(): Promise<Runtime | null> {
-  if (!isDesktopRuntime() || !isDesktopCatalogDualWriteEnabled()) return null
+  if (!isDesktopRuntime()) return null
 
   const configDir = await appConfigDir()
   const settings = new DesktopSettingsService(configDir)

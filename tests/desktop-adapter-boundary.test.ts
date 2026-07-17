@@ -41,13 +41,12 @@ const allowedImports = new Set([
   "@/lib/services/contracts/service-types",
   "@/lib/services/desktop/tauri-commands",
   "@/lib/services/desktop/tauri-fs-watch",
-  "@/lib/services/desktop/local-index-service",
   "@/lib/services/desktop/desktop-settings-service",
   // ODE-370 — desktop catalog reconciliation (M2)
   "@/lib/services/desktop/workspace-reconciler",
-  "@/lib/services/desktop/catalog-feature-flag",
   "@/lib/services/desktop/runtime-detection",
   "@/lib/services/desktop/sqlite-document-catalog",
+  "@/lib/services/desktop/open-document-desktop",
   "@/lib/services/document-service-factory",
   // ODE-375 — unified opener application use case (pure shared-core module)
   "@/lib/services/open-document",

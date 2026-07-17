@@ -28,8 +28,8 @@ fn write_store(config_dir: &str, store: &HashMap<String, Value>) -> Result<(), S
             fs::create_dir_all(parent).map_err(|e| format!("write_settings mkdir: {e}"))?;
         }
     }
-    let content =
-        serde_json::to_string_pretty(store).map_err(|e| format!("write_settings serialize: {e}"))?;
+    let content = serde_json::to_string_pretty(store)
+        .map_err(|e| format!("write_settings serialize: {e}"))?;
     fs::write(&path, content).map_err(|e| format!("write_settings file: {e}"))?;
     Ok(())
 }
@@ -46,11 +46,7 @@ pub fn settings_read(config_dir: String, key: String) -> Result<String, String> 
 
 /// Write a setting value (JSON string) for the given key.
 #[tauri::command]
-pub fn settings_write(
-    config_dir: String,
-    key: String,
-    value_json: String,
-) -> Result<(), String> {
+pub fn settings_write(config_dir: String, key: String, value_json: String) -> Result<(), String> {
     let mut store = read_store(&config_dir)?;
     let value: Value =
         serde_json::from_str(&value_json).map_err(|e| format!("settings_write parse: {e}"))?;

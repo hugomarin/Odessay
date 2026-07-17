@@ -61,9 +61,6 @@ vi.mock("@/lib/services/document-catalog-factory", () => ({
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
   isDesktopRuntime: () => true,
 }))
-vi.mock("@/lib/services/desktop/catalog-feature-flag", () => ({
-  isDesktopCatalogDualWriteEnabled: () => true,
-}))
 
 vi.mock("@/lib/local-db", () => ({
   localDB: {
@@ -81,7 +78,17 @@ vi.mock("@/lib/local-db", () => ({
 
 vi.mock("@/lib/local-db/collections", () => ({
   createLocalCollection: vi.fn(),
+  deleteLocalCollection: vi.fn(),
   setLocalWritingCollections: vi.fn(),
+  updateLocalCollection: vi.fn(),
+}))
+
+vi.mock("@/lib/services/desktop/desktop-collection-service", () => ({
+  loadDesktopCollections: async () => ({ collections: [], writingCollections: [] }),
+  createDesktopCollection: vi.fn(),
+  deleteDesktopCollection: vi.fn(),
+  setDesktopWritingCollections: vi.fn(),
+  updateDesktopCollection: vi.fn(),
 }))
 
 const pushMock = vi.hoisted(() => vi.fn())
@@ -117,7 +124,6 @@ vi.mock("@/lib/sync/queue", () => ({
   enqueueWritingUpsert: vi.fn(),
   enqueueWritingDelete: vi.fn(),
 }))
-vi.mock("@/lib/sync/desktop-sync-service", () => ({ invalidateHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/sync/remote-bootstrap", () => ({ invalidateWebWritingsHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/collections/remote-bootstrap", () => ({ invalidateWebCollectionsHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/services/auth-service-factory", () => ({

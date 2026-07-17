@@ -4,8 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Tags } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { buildCollectionOptions } from "@/lib/collections/collections"
-import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
-import { getLocalDBScope, localDB, subscribeToLocalDBChanges } from "@/lib/local-db"
+import {
+  createLocalCollection,
+  getLocalDBScope,
+  loadCollectionState,
+  setLocalWritingCollections,
+  subscribeToCollectionChanges,
+} from "@/lib/queries/desk-catalog-source"
 import type { LocalCollection } from "@/lib/local-db/schema"
 import { getSyncService } from "@/lib/sync"
 
@@ -19,10 +24,8 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
   const selectedIdsRef = useRef<string[]>([])
 
   const loadLocalState = async (currentWritingId: string, cancelled?: () => boolean) => {
-    const [nextCollections, assignments] = await Promise.all([
-      localDB.collections.getAll(),
-      localDB.writingCollections.listForWriting(currentWritingId),
-    ])
+    const { collections: nextCollections, writingCollections: assignments } =
+      await loadCollectionState(currentWritingId)
 
     if (cancelled?.()) {
       return
@@ -47,7 +50,7 @@ export function WritingCollectionsSection({ writingId }: WritingCollectionsSecti
     }
 
     void hydrate()
-    const unsubscribe = subscribeToLocalDBChanges(() => void loadLocalState(writingId, () => cancelled))
+    const unsubscribe = subscribeToCollectionChanges(() => void loadLocalState(writingId, () => cancelled))
 
     return () => {
       cancelled = true

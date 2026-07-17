@@ -3,7 +3,6 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
-import { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 import { DesktopAssetService } from "@/lib/services/desktop/desktop-asset-service"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
@@ -13,7 +12,6 @@ import type { WritingRecord } from "@/lib/services/contracts/document-service"
 
 const mockFiles = new Map<string, string>()
 const mockMetadata: Array<{ path: string; name: string; modifiedAt: number; size: number }> = []
-const mockIndexEntries: Array<{ path: string; title: string; createdAt: number; modifiedAt: number }> = []
 
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriOpenFile: vi.fn(async (path: string) => {
@@ -53,33 +51,6 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
     const resolved = `${dir}/${relativePath}`
     if (!mockFiles.has(resolved)) throw new Error(`Asset not found: ${resolved}`)
     return resolved
-  }),
-  tauriIndexUpsert: vi.fn(async (_dbPath: string, path: string, title: string, createdAt: number, modifiedAt: number) => {
-    const idx = mockIndexEntries.findIndex((e) => e.path === path)
-    if (idx !== -1) {
-      mockIndexEntries[idx] = { path, title, createdAt, modifiedAt }
-    } else {
-      mockIndexEntries.push({ path, title, createdAt, modifiedAt })
-    }
-  }),
-  tauriIndexList: vi.fn(async (_dbPath: string, limit: number) => {
-    return [...mockIndexEntries].sort((a, b) => b.modifiedAt - a.modifiedAt).slice(0, limit)
-  }),
-  tauriIndexDelete: vi.fn(async (_dbPath: string, path: string) => {
-    const idx = mockIndexEntries.findIndex((e) => e.path === path)
-    if (idx !== -1) mockIndexEntries.splice(idx, 1)
-  }),
-  tauriIndexRebuild: vi.fn(async (_dbPath: string, _dir: string) => {
-    mockIndexEntries.length = 0
-    for (const meta of mockMetadata) {
-      mockIndexEntries.push({
-        path: meta.path,
-        title: meta.name,
-        createdAt: meta.modifiedAt,
-        modifiedAt: meta.modifiedAt,
-      })
-    }
-    return mockIndexEntries.length
   }),
   tauriSettingsRead: vi.fn(async (_configDir: string, _key: string) => {
     return null
@@ -185,7 +156,7 @@ const DOD_EVIDENCE: DoDEvidenceBlock[] = [
     title: "Infraestructura local derivada correctamente acotada",
     status: "PASS",
     justification:
-      "LocalIndexService is optional and rebuildable. deleteWriting removes from index but preserves .md. Index never overrides file truth.",
+      "The retired path-only index is absent from runtime. FilesystemDocumentService reads .md directly and DocumentCatalog owns UUID/binding/presence projection.",
   },
   {
     block: 6,
@@ -275,7 +246,6 @@ describe("fase 6 invariant harness", () => {
     vi.useFakeTimers()
     mockFiles.clear()
     mockMetadata.length = 0
-    mockIndexEntries.length = 0
     vi.clearAllMocks()
   })
 
@@ -422,12 +392,11 @@ Paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, [link](https://exa
     vi.useFakeTimers()
   })
 
-  // ── DoD §5: Index resilience ───────────────────────────────────────────────
+  // ── DoD §5: Derived catalog resilience ─────────────────────────────────────
 
-  it("DoD §5: deleting the SQLite index does not corrupt documents", async () => {
+  it("DoD §5: document content remains readable independently of derived catalog state", async () => {
     vi.useRealTimers()
-    const indexService = new LocalIndexService("/tmp/index.db", WRITINGS_DIR)
-    const service = new FilesystemDocumentService(WRITINGS_DIR, { localIndex: indexService })
+    const service = new FilesystemDocumentService(WRITINGS_DIR)
 
     const createResult = await service.createDraft("Indexed Doc")
     const path = createResult.data!.path
@@ -444,19 +413,12 @@ Paragraph with **bold**, *italic*, ~~strike~~, ==highlight==, [link](https://exa
     })
     await service.saveWriting({ writing })
 
-    // Verify index has entry
-    const entriesBefore = await indexService.listRecent()
-    expect(entriesBefore.some((e) => e.path === path)).toBe(true)
-
-    // Simulate index deletion by clearing entries
-    mockIndexEntries.length = 0
-
     // Document must still be readable from disk
     const openResult = await service.openWriting(path)
     expect(openResult.error).toBeNull()
     expect(openResult.data!.content.markdown).toBe("# Indexed Doc\n\nContent here.")
 
-    // listWritings must fall back to directory listing
+    // Low-level listing derives from disk; product listing is DocumentCatalog.
     const listResult = await service.listWritings()
     expect(listResult.error).toBeNull()
     // Fallback directory listing derives title from filename, not document content

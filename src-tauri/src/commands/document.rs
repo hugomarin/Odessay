@@ -131,7 +131,11 @@ pub fn resolve_asset_path(doc_path: String, relative_path: String) -> Result<Str
     let dir = doc.parent().unwrap_or(Path::new("."));
     let resolved = dir.join(&relative_path);
     let canonical = resolved.canonicalize().map_err(|e| {
-        format!("resolve_asset_path: {} (resolved: {})", e, resolved.display())
+        format!(
+            "resolve_asset_path: {} (resolved: {})",
+            e,
+            resolved.display()
+        )
     })?;
     if !canonical.is_file() {
         return Err(format!(

@@ -1,16 +1,21 @@
 import {
   getLocalDBScope,
   localDB,
+  subscribeToLocalDBChanges,
   subscribeToLocalDBScopeChanges,
 } from "@/lib/local-db"
-import { createLocalCollection, setLocalWritingCollections } from "@/lib/local-db/collections"
+import {
+  createLocalCollection as createWebCollection,
+  deleteLocalCollection as deleteWebCollection,
+  setLocalWritingCollections as setWebWritingCollections,
+  updateLocalCollection as updateWebCollection,
+} from "@/lib/local-db/collections"
 import type {
   LocalCollection,
   LocalWriting,
   LocalWritingCollection,
 } from "@/lib/local-db/schema"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
-import { isDesktopCatalogDualWriteEnabled } from "@/lib/services/desktop/catalog-feature-flag"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { loadCatalogRecords } from "@/lib/queries/document-catalog"
 import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
@@ -18,6 +23,13 @@ import {
   deriveDocumentStateFromCatalogRecord,
   type DocumentState,
 } from "@/lib/writings/document-state"
+import {
+  createDesktopCollection,
+  deleteDesktopCollection,
+  loadDesktopCollections,
+  setDesktopWritingCollections,
+  updateDesktopCollection,
+} from "@/lib/services/desktop/desktop-collection-service"
 
 /**
  * Application query port for Desk (ODE-373).
@@ -31,6 +43,8 @@ import {
  */
 
 const CATALOG_LIST_LIMIT = 10_000
+const desktopCollectionListeners = new Set<() => void>()
+const emitDesktopCollectionChange = () => desktopCollectionListeners.forEach((listener) => listener())
 
 /**
  * Whether Desk/Workspace read their base set from the DocumentCatalog.
@@ -42,8 +56,7 @@ const CATALOG_LIST_LIMIT = 10_000
  * cutover, not a data migration (Requirement 10).
  */
 export function isCatalogReadEnabled(): boolean {
-  if (!isDesktopRuntime()) return true
-  return isDesktopCatalogDualWriteEnabled()
+  return true
 }
 
 export type DeskCatalogData = {
@@ -129,6 +142,19 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
   const scope = getLocalDBScope()
   const userId = scope === "anonymous" ? null : scope
 
+  if (isDesktopRuntime()) {
+    const [records, metadata] = await Promise.all([
+      loadCatalogRecords({ limit: CATALOG_LIST_LIMIT }),
+      loadDesktopCollections(),
+    ])
+    const documentStateById: Record<string, DocumentState> = {}
+    const writings = records.map((record) => {
+      documentStateById[record.id] = deriveDocumentStateFromCatalogRecord(record)
+      return synthesizeWritingFromRecord(record)
+    })
+    return { writings, documentStateById, ...metadata, userId }
+  }
+
   const [localWritings, collections, writingCollections] = await Promise.all([
     localDB.writings.getAll(),
     localDB.collections.getAll(),
@@ -155,6 +181,10 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
 
 /** Single-writing read for edit flows (rename, status, export), routed through the port. */
 export async function getWritingForEdit(id: string): Promise<LocalWriting | undefined> {
+  if (isDesktopRuntime()) {
+    const record = await (await getDocumentCatalog()).getById(id)
+    return record ? synthesizeWritingFromRecord(record) : undefined
+  }
   const local = (await localDB.writings.get(id)) ?? undefined
   if (!isCatalogReadEnabled()) {
     return local
@@ -171,6 +201,10 @@ export async function getWritingForEdit(id: string): Promise<LocalWriting | unde
 
 /** Ids of shared, non-deleted writings — used to prefetch recipient previews. */
 export async function loadSharedWritingIds(): Promise<string[]> {
+  if (isDesktopRuntime()) {
+    const records = await loadCatalogRecords({ limit: CATALOG_LIST_LIMIT })
+    return records.filter((record) => record.visibility === "shared" && record.syncStatus !== "deleted").map((record) => record.id)
+  }
   const writings = await localDB.writings.getAll()
   return writings
     .filter((writing) => writing.visibility === "shared" && writing.sync_status !== "deleted")
@@ -179,4 +213,63 @@ export async function loadSharedWritingIds(): Promise<string[]> {
 
 // Re-export the scope/collection ports so the Desk presentation imports storage
 // access from one application module instead of reaching into @/lib/local-db.
-export { getLocalDBScope, subscribeToLocalDBScopeChanges, createLocalCollection, setLocalWritingCollections }
+export async function createLocalCollection(input: Parameters<typeof createWebCollection>[0]) {
+  if (isDesktopRuntime()) {
+    const result = await createDesktopCollection(input)
+    emitDesktopCollectionChange()
+    return result
+  }
+  return createWebCollection(input)
+}
+
+export async function setLocalWritingCollections(...input: Parameters<typeof setWebWritingCollections>) {
+  if (isDesktopRuntime()) {
+    const result = await setDesktopWritingCollections(...input)
+    emitDesktopCollectionChange()
+    return result
+  }
+  return setWebWritingCollections(...input)
+}
+
+export async function updateLocalCollection(...input: Parameters<typeof updateWebCollection>) {
+  if (isDesktopRuntime()) {
+    const result = await updateDesktopCollection(...input)
+    emitDesktopCollectionChange()
+    return result
+  }
+  return updateWebCollection(...input)
+}
+
+export async function deleteLocalCollection(...input: Parameters<typeof deleteWebCollection>) {
+  if (isDesktopRuntime()) {
+    const result = await deleteDesktopCollection(...input)
+    emitDesktopCollectionChange()
+    return result
+  }
+  return deleteWebCollection(...input)
+}
+
+export async function loadCollectionState(writingId?: string) {
+  if (isDesktopRuntime()) {
+    const state = await loadDesktopCollections()
+    return {
+      collections: state.collections,
+      writingCollections: writingId
+        ? state.writingCollections.filter((row) => row.writing_id === writingId)
+        : state.writingCollections,
+    }
+  }
+  const [collections, writingCollections] = await Promise.all([
+    localDB.collections.getAll(),
+    writingId ? localDB.writingCollections.listForWriting(writingId) : localDB.writingCollections.listAll(),
+  ])
+  return { collections, writingCollections }
+}
+
+export function subscribeToCollectionChanges(listener: () => void) {
+  if (!isDesktopRuntime()) return subscribeToLocalDBChanges(listener)
+  desktopCollectionListeners.add(listener)
+  return () => desktopCollectionListeners.delete(listener)
+}
+
+export { getLocalDBScope, subscribeToLocalDBScopeChanges }

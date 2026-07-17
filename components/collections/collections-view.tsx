@@ -25,15 +25,15 @@ import { buildCollectionHref } from "@/lib/collections/collection-route"
 import {
   createLocalCollection,
   deleteLocalCollection,
-  setLocalWritingCollections,
-  updateLocalCollection,
-} from "@/lib/local-db/collections"
-import {
   getLocalDBScope,
-  localDB,
-  subscribeToLocalDBChanges,
+  getWritingForEdit,
+  loadDeskCatalogData,
+  setLocalWritingCollections,
+  subscribeToCollectionChanges,
   subscribeToLocalDBScopeChanges,
-} from "@/lib/local-db"
+  updateLocalCollection,
+} from "@/lib/queries/desk-catalog-source"
+import { subscribeToCatalog } from "@/lib/queries/document-catalog"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import type { DeskActivityGroup, DeskActivityRow, DeskStatusTone } from "@/lib/queries/desk-activity"
@@ -49,7 +49,6 @@ import { downloadBlob } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import { getDocumentService } from "@/lib/services/document-service-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
-import { getWritingForEdit } from "@/lib/queries/desk-catalog-source"
 import {
   buildWorkspaceNameLookup,
   readAssignmentSlug,
@@ -157,15 +156,10 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   )
 
   const loadLocalState = useCallback(async () => {
-    const [nextWritings, nextCollections, nextAssignments] = await Promise.all([
-      localDB.writings.getAll(),
-      localDB.collections.getAll(),
-      localDB.writingCollections.listAll(),
-    ])
-
-    setWritings(nextWritings)
-    setCollections(nextCollections)
-    setAssignments(nextAssignments)
+    const state = await loadDeskCatalogData()
+    setWritings(state.writings)
+    setCollections(state.collections)
+    setAssignments(state.writingCollections)
   }, [])
 
   useEffect(() => {
@@ -190,12 +184,14 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
       leading: false,
       trailing: true,
     })
-    const unsubscribeChanges = subscribeToLocalDBChanges(debounced)
+    const unsubscribeChanges = subscribeToCollectionChanges(debounced)
+    const unsubscribeCatalog = subscribeToCatalog(debounced)
     const unsubscribeScope = subscribeToLocalDBScopeChanges(() => void bootstrap())
 
     return () => {
       cancelled = true
       unsubscribeChanges()
+      unsubscribeCatalog()
       unsubscribeScope()
       debounced.cancel()
     }
@@ -323,7 +319,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   )
 
   const changeWritingStatus = useCallback(async (writingId: string, status: WritingStatus) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted" || writing.status === status) {
       return
     }
@@ -341,7 +337,7 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   }, [])
 
   const changeWritingArtifactType = useCallback(async (writingId: string, artifactType: ArtifactType) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted" || writing.artifact_type === artifactType) {
       return
     }
@@ -450,20 +446,26 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   }, [])
 
   const copyWritingMarkdown = useCallback(async (writingId: string) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return
     }
-    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    const bodyJson = isDesktopRuntime()
+      ? (await (await getDocumentService()).openWriting(writingId)).data?.content.richText
+      : writing.body_json
+    const markdown = serializeWritingToMarkdown((bodyJson as Record<string, unknown>) ?? {}).trimEnd()
     await copyTextWithFallback(`${markdown}\n`)
   }, [])
 
   const downloadWritingMarkdown = useCallback(async (writingId: string) => {
-    const writing = await localDB.writings.get(writingId)
+    const writing = await getWritingForEdit(writingId)
     if (!writing || writing.sync_status === "deleted") {
       return
     }
-    const markdown = serializeWritingToMarkdown(writing.body_json).trimEnd()
+    const bodyJson = isDesktopRuntime()
+      ? (await (await getDocumentService()).openWriting(writingId)).data?.content.richText
+      : writing.body_json
+    const markdown = serializeWritingToMarkdown((bodyJson as Record<string, unknown>) ?? {}).trimEnd()
     const blob = new Blob([`${markdown}\n`], { type: "text/markdown;charset=utf-8" })
     downloadBlob(
       blob,

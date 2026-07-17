@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   localGet: vi.fn(),
   localSave: vi.fn(),
   getSession: vi.fn(),
+  fetchCloudWriting: vi.fn(),
 }))
 
 vi.mock("@tauri-apps/api/path", () => ({
@@ -57,7 +58,14 @@ vi.mock("@/lib/local-db", () => ({
 }))
 
 vi.mock("@/lib/supabase/desktop-client", () => ({
-  createDesktopClient: () => ({ auth: { getSession: mocks.getSession } }),
+  createDesktopClient: () => ({
+    auth: { getSession: mocks.getSession },
+    from: () => ({
+      select: () => ({
+        eq: () => ({ eq: () => ({ maybeSingle: mocks.fetchCloudWriting }) }),
+      }),
+    }),
+  }),
 }))
 
 function catalogRecord(overrides: Record<string, unknown>) {
@@ -92,6 +100,15 @@ describe("open-document-desktop", () => {
     mocks.findEligibleCloudHash.mockResolvedValue([])
     mocks.getSession.mockResolvedValue({
       data: { session: { user: { id: "acct-1" } } },
+      error: null,
+    })
+    mocks.fetchCloudWriting.mockResolvedValue({
+      data: {
+        id: "cloud-1", author_id: "acct-1", title: "Cloud letter",
+        body_json: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] },
+        slug: null, status: "draft", artifact_type: "general", visibility: "private",
+        version: 1, created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      },
       error: null,
     })
     mocks.ensureManagedRoot.mockResolvedValue({ id: "managed-root", rootPath: "/config/artifact-studio-managed" })
@@ -154,7 +171,7 @@ describe("open-document-desktop", () => {
     expect(mocks.catalogRegisterBinding).not.toHaveBeenCalled()
   })
 
-  it("projects a legacy IndexedDB writing for an id the catalog does not know yet", async () => {
+  it("does not revive an id from retired desktop IndexedDB compatibility", async () => {
     mocks.catalogGetById.mockResolvedValue(null)
     mocks.localGet.mockResolvedValue({
       id: "legacy-1",
@@ -171,8 +188,8 @@ describe("open-document-desktop", () => {
     const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
     const result = await openDesktopDocument({ kind: "id", id: "legacy-1" })
 
-    expect(result).toMatchObject({ status: "opened", documentId: "legacy-1", strategy: "existing" })
-    // Read-only projection: nothing is written back.
+    expect(result).toEqual({ status: "orphaned", id: "legacy-1" })
+    expect(mocks.localGet).not.toHaveBeenCalled()
     expect(mocks.localSave).not.toHaveBeenCalled()
   })
 
@@ -271,11 +288,14 @@ describe("open-document-desktop", () => {
       id: "external-1", rootPath: "/Users/me/Letters", kind: "external",
       visibleAsWorkspace: false, selectedPaths: ["existing.md"], consentedAt: "now", createdAt: "now",
     }])
-    mocks.localGet.mockResolvedValue({
-      id: "cloud-2", title: "Chosen root", body_json: { type: "doc", content: [] }, body_text: "",
-      status: "draft", artifact_type: "general", visibility: "private", version: 1,
-      sync_status: "synced", lifecycle: "server-confirmed", created_at: "2026-01-01T00:00:00Z",
-      updated_at: "2026-01-01T00:00:00Z", local_updated_at: 1,
+    mocks.fetchCloudWriting.mockResolvedValue({
+      data: {
+        id: "cloud-2", author_id: "acct-1", title: "Chosen root",
+        body_json: { type: "doc", content: [] }, slug: null, status: "draft",
+        artifact_type: "general", visibility: "private", version: 1,
+        created_at: "2026-01-01T00:00:00Z", updated_at: "2026-01-01T00:00:00Z",
+      },
+      error: null,
     })
     mocks.workspaceSync.mockResolvedValue({
       rootPath: "/Users/me/Letters", bindingRootId: "external-1", selectedPaths: ["existing.md", "Chosen root.md"],
