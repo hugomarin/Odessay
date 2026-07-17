@@ -6,7 +6,6 @@ import {
   resolveUniqueFilename,
   titleToFilename,
 } from "@/lib/desktop/document-naming"
-import { localDB, LocalDBReadOnlyError } from "@/lib/local-db"
 import { serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
@@ -181,15 +180,18 @@ async function buildDesktopOpenDocumentUseCase() {
     documentId: string
     bindingRootId?: string
   }): Promise<DocumentCatalogRecord> {
-    let writing = await localDB.writings.get(input.documentId)
-    if (!writing) {
-      const { desktopSyncService } = await import("@/lib/sync/desktop-sync-service")
-      const hydrated = await desktopSyncService.hydrateWriting({ writingId: input.documentId })
-      if (hydrated.error) throw new Error(hydrated.error.message)
-      writing = await localDB.writings.get(input.documentId)
-    }
-    if (!writing) throw new Error(`Cloud document ${input.documentId} has no hydrated body`)
-    const materializedWriting = writing
+    const supabase = createDesktopClient()
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    const userId = sessionData.session?.user.id
+    if (sessionError || !userId) throw new Error("Cloud materialization requires authentication")
+    const { data: materializedWriting, error: writingError } = await supabase
+      .from("writings")
+      .select("id,author_id,title,body_json,slug,status,artifact_type,visibility,version,created_at,updated_at")
+      .eq("id", input.documentId)
+      .eq("author_id", userId)
+      .maybeSingle()
+    if (writingError) throw new Error(writingError.message)
+    if (!materializedWriting) throw new Error(`Cloud document ${input.documentId} was not found`)
 
     let markdown: string
     try {
@@ -228,19 +230,6 @@ async function buildDesktopOpenDocumentUseCase() {
         },
       })
 
-      try {
-        await localDB.writings.save({
-          ...materializedWriting,
-          title: filenameToTitle(file.relativePath),
-          canonical_path: file.path,
-          content_hash: file.contentHash,
-          sync_status: "synced",
-          lifecycle: "server-confirmed",
-          local_updated_at: Date.now(),
-        })
-      } catch (error) {
-        if (!(error instanceof LocalDBReadOnlyError)) throw error
-      }
       return record
     }
 
@@ -302,49 +291,6 @@ async function buildDesktopOpenDocumentUseCase() {
   return { openDocument, settings, configDir }
 }
 
-/**
- * Non-authoritative projection of a legacy IndexedDB writing as a catalog record.
- *
- * The unified opener resolves identity through the SQLite catalog. During the
- * migration window (until IndexedDB is retired in ODE-376) a valid writing may
- * still live only in IndexedDB — e.g. one created before the catalog dual-write
- * landed. Reading that row lets `openDocument({id})` report `opened` instead of a
- * false `orphaned`, WITHOUT creating any new record or draft (spec Context Gap
- * action: keep IndexedDB as transitional, non-authoritative compatibility). It is
- * never written back and never becomes authoritative.
- */
-function projectLegacyWriting(local: {
-  id: string
-  canonical_path?: string | null
-  title?: string | null
-  slug?: string | null
-  status?: DocumentCatalogRecord["status"]
-  visibility?: DocumentCatalogRecord["visibility"]
-  version?: number | null
-  lifecycle?: string
-  author_id?: string | null
-  created_at?: string
-  updated_at?: string
-}): DocumentCatalogRecord {
-  const canonicalPath = local.canonical_path?.trim() || null
-  return {
-    id: local.id,
-    localPresent: Boolean(canonicalPath),
-    cloudPresent: local.lifecycle === "server-confirmed",
-    cloudAccountId: local.author_id ?? null,
-    syncStatus: canonicalPath ? "local-only" : "pending",
-    title: local.title ?? null,
-    slug: local.slug ?? null,
-    status: local.status ?? null,
-    artifactType: null,
-    visibility: local.visibility ?? null,
-    version: local.version ?? null,
-    createdAt: local.created_at ? Date.parse(local.created_at) : null,
-    modifiedAt: local.updated_at ? Date.parse(local.updated_at) : null,
-    binding: null,
-  }
-}
-
 let useCasePromise: ReturnType<typeof buildDesktopOpenDocumentUseCase> | null = null
 
 function getDesktopOpenDocumentUseCase() {
@@ -358,28 +304,14 @@ function getDesktopOpenDocumentUseCase() {
  * Desktop opener bound to the SQLite catalog (ODE-375 M3). Runs the pure use case;
  * it never seeds an empty draft — the editor hydrates the resolved UUID by reading
  * the authoritative `.md` through DocumentService.openWriting, which resolves the
- * canonical path from the catalog. The only exception is the transitional
- * IndexedDB read fallback for `id` opens described in `projectLegacyWriting`.
+ * canonical path from the catalog. There is no IndexedDB fallback: an id absent
+ * from SQLite is orphaned and never creates durable state.
  */
 export async function openDesktopDocument(
   input: OpenDocumentInput,
 ): Promise<OpenDocumentResult> {
   const { openDocument } = await getDesktopOpenDocumentUseCase()
-  const result = await openDocument(input)
-
-  if (input.kind === "id" && result.status === "orphaned") {
-    const legacy = await localDB.writings.get(input.id)
-    if (legacy) {
-      return {
-        status: "opened",
-        documentId: legacy.id,
-        record: projectLegacyWriting(legacy),
-        strategy: "existing",
-      }
-    }
-  }
-
-  return result
+  return openDocument(input)
 }
 
 export { MANAGED_ROOT_DIRNAME }

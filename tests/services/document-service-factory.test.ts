@@ -1,784 +1,170 @@
-/**
- * @vitest-environment happy-dom
- */
+/** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
-  getMock: vi.fn(),
-  getByCanonicalPathMock: vi.fn(),
-  getAllMock: vi.fn(),
-  saveMock: vi.fn(),
-  detachLocalFileMock: vi.fn(),
-  enqueueWritingUpsertMock: vi.fn(),
-  enqueueWritingDeleteMock: vi.fn(),
-  migrateMock: vi.fn(),
-  getDesktopSettingsMock: vi.fn(),
-  updateDesktopSettingsMock: vi.fn(),
-  createDraftMock: vi.fn(),
-  saveWritingMock: vi.fn(),
-  deleteWritingMock: vi.fn(),
-  openWritingMock: vi.fn(),
-  exportWritingMock: vi.fn(),
-  joinMock: vi.fn(),
-  catalogFlag: { value: false },
-  catalogGetByIdMock: vi.fn(),
-}))
-
-vi.mock("@/lib/services/desktop/catalog-feature-flag", () => ({
-  isDesktopCatalogDualWriteEnabled: () => mocks.catalogFlag.value,
-}))
-
-vi.mock("@/lib/services/document-catalog-factory", () => ({
-  getDocumentCatalog: async () => ({ getById: mocks.catalogGetByIdMock }),
+  desktop: true,
+  catalogGet: vi.fn(),
+  catalogList: vi.fn(async () => []),
+  catalogResolve: vi.fn(),
+  catalogDetach: vi.fn(),
+  openFile: vi.fn(),
+  createDraft: vi.fn(),
+  saveFile: vi.fn(),
+  renameFile: vi.fn(),
+  exportFile: vi.fn(),
+  workspaceSync: vi.fn(),
+  dualWrite: vi.fn(),
 }))
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
-  isDesktopRuntime: () => true,
+  isDesktopRuntime: () => mocks.desktop,
 }))
-
-class MockLocalDBReadOnlyError extends Error {
-  readonly operation: string
-  constructor(operation: string) {
-    super(`read-only: ${operation}`)
-    this.name = "LocalDBReadOnlyError"
-    this.operation = operation
-  }
-}
-
-vi.mock("@/lib/local-db", () => ({
-  LocalDBReadOnlyError: MockLocalDBReadOnlyError,
-  localDB: {
-    writings: {
-      get: mocks.getMock,
-      getByCanonicalPath: mocks.getByCanonicalPathMock,
-      getAll: mocks.getAllMock,
-      save: mocks.saveMock,
-      detachLocalFile: mocks.detachLocalFileMock,
-    },
+vi.mock("@tauri-apps/api/path", () => ({
+  appConfigDir: async () => "/config",
+  appDataDir: async () => "/data",
+  join: async (...parts: string[]) => parts.join("/"),
+}))
+vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
+  SqliteDocumentCatalog: class {
+    getById = mocks.catalogGet
+    list = mocks.catalogList
+    resolvePath = mocks.catalogResolve
+    detachLocalFile = mocks.catalogDetach
   },
 }))
-
-vi.mock("@/lib/sync/queue", () => ({
-  enqueueWritingUpsert: mocks.enqueueWritingUpsertMock,
-  enqueueWritingDelete: mocks.enqueueWritingDeleteMock,
-}))
-
-vi.mock("@/lib/migrations/indexeddb-to-filesystem", () => ({
-  migrateIndexedDbToFilesystem: mocks.migrateMock,
-}))
-
-vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
-  DesktopSettingsService: class {
-    async getDesktopSettings() {
-      return mocks.getDesktopSettingsMock()
-    }
-    async updateDesktopSettings(patch: unknown) {
-      return mocks.updateDesktopSettingsMock(patch)
-    }
-  },
-}))
-
-vi.mock("@/lib/services/desktop/local-index-service", () => ({
-  LocalIndexService: class {},
-}))
-
 vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
   FilesystemDocumentService: class {
-    createDraft = mocks.createDraftMock
-    saveWriting = mocks.saveWritingMock
-    deleteWriting = mocks.deleteWritingMock
-    openWriting = mocks.openWritingMock
-    exportWriting = mocks.exportWritingMock
+    openWriting = mocks.openFile
+    createDraft = mocks.createDraft
+    saveWriting = mocks.saveFile
+    renameWriting = mocks.renameFile
+    exportWriting = mocks.exportFile
   },
 }))
-
+vi.mock("@/lib/services/desktop/tauri-commands", () => ({
+  tauriWorkspaceSync: mocks.workspaceSync,
+  tauriCatalogDualWrite: mocks.dualWrite,
+}))
 vi.mock("@/lib/services/web-document-service", () => ({
-  webDocumentService: {
-    listWritingCollections: vi.fn(),
-    setWritingCollections: vi.fn(),
+  webDocumentService: { listWritings: vi.fn() },
+}))
+
+const id = "11111111-1111-4111-8111-111111111111"
+const path = "/docs/Letter.md"
+const catalogRecord = {
+  id,
+  localPresent: true,
+  cloudPresent: false,
+  cloudAccountId: null,
+  syncStatus: "local-only",
+  title: "Letter",
+  slug: null,
+  status: "draft",
+  artifactType: "general",
+  visibility: "private",
+  version: 1,
+  createdAt: 1,
+  modifiedAt: 2,
+  binding: {
+    documentId: id,
+    bindingRootId: "root-1",
+    relativePath: "Letter.md",
+    canonicalPath: path,
+    inode: 1,
+    contentHash: "blake3:a",
+    size: 5,
+    lastSeenAt: 2,
   },
-}))
+}
+const writing = {
+  id,
+  authorId: null,
+  title: "Letter",
+  content: {
+    richText: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello" }] }] },
+    markdown: null,
+    plainText: "Hello",
+    canonicalSource: "rich-text" as const,
+  },
+  slug: null,
+  status: "draft" as const,
+  artifactType: "general" as const,
+  visibility: "private" as const,
+  parentId: null,
+  correspondenceId: null,
+  version: 1,
+  deletedAt: null,
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+}
 
-vi.mock("@tauri-apps/api/path", () => ({
-  appConfigDir: vi.fn(async () => "/tmp/config"),
-  appDataDir: vi.fn(async () => "/tmp/app-data"),
-  join: mocks.joinMock,
-}))
-
-describe("document-service-factory", () => {
+describe("desktop document service after compatibility retirement", () => {
   beforeEach(() => {
     vi.resetModules()
-
-    mocks.getMock.mockReset()
-    mocks.getByCanonicalPathMock.mockReset()
-    mocks.getAllMock.mockReset()
-    mocks.saveMock.mockReset()
-    mocks.detachLocalFileMock.mockReset()
-    mocks.enqueueWritingUpsertMock.mockReset()
-    mocks.enqueueWritingDeleteMock.mockReset()
-    mocks.migrateMock.mockReset()
-    mocks.getDesktopSettingsMock.mockReset()
-    mocks.updateDesktopSettingsMock.mockReset()
-    mocks.createDraftMock.mockReset()
-    mocks.saveWritingMock.mockReset()
-    mocks.deleteWritingMock.mockReset()
-    mocks.openWritingMock.mockReset()
-    mocks.exportWritingMock.mockReset()
-    mocks.joinMock.mockReset()
-    mocks.catalogFlag.value = false
-    mocks.catalogGetByIdMock.mockReset().mockResolvedValue(null)
-
-    mocks.joinMock.mockImplementation(async (...parts: string[]) => parts.join("/"))
-    mocks.getDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Artifact Studio" }, error: null })
-    mocks.updateDesktopSettingsMock.mockResolvedValue({ data: { writingsDir: "/tmp/documents/Artifact Studio" }, error: null })
-    mocks.getMock.mockResolvedValue(null)
-    mocks.getByCanonicalPathMock.mockResolvedValue(null)
-    mocks.getAllMock.mockResolvedValue([])
-    mocks.saveMock.mockResolvedValue(undefined)
-    mocks.detachLocalFileMock.mockResolvedValue(undefined)
-    mocks.enqueueWritingUpsertMock.mockResolvedValue(undefined)
-    mocks.enqueueWritingDeleteMock.mockResolvedValue(undefined)
-    mocks.createDraftMock.mockResolvedValue({
-      data: {
-        path: "/tmp/documents/Artifact Studio/untitled.md",
-        writing: {
-          id: "/tmp/documents/Artifact Studio/untitled.md",
-          authorId: null,
-          title: "Untitled writing",
-          content: { markdown: "", richText: null, plainText: "", canonicalSource: "markdown" },
-          slug: null,
-          status: "draft",
-          visibility: "private",
-          parentId: null,
-          correspondenceId: null,
-          version: 1,
-          deletedAt: null,
-          createdAt: "2026-06-04T00:00:00.000Z",
-          updatedAt: "2026-06-04T00:00:00.000Z",
-        },
-      },
+    vi.clearAllMocks()
+    mocks.desktop = true
+    mocks.catalogGet.mockResolvedValue(catalogRecord)
+    mocks.openFile.mockResolvedValue({
+      data: { ...writing, id: path, content: { ...writing.content, markdown: "Hello", richText: null } },
       error: null,
     })
-    mocks.saveWritingMock.mockResolvedValue({
-      data: {
-        id: "/tmp/documents/Artifact Studio/untitled.md",
-        authorId: null,
-        title: "Untitled writing",
-        content: { markdown: "# Untitled writing", richText: null, plainText: "Untitled writing", canonicalSource: "markdown" },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-    mocks.deleteWritingMock.mockResolvedValue({
-      data: {
-        id: "/tmp/documents/Artifact Studio/untitled.md",
-        authorId: null,
-        title: "Untitled writing",
-        content: { markdown: "# Untitled writing", richText: null, plainText: "Untitled writing", canonicalSource: "markdown" },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: "2026-06-04T00:00:00.000Z",
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-    mocks.migrateMock.mockResolvedValue({ migratedCount: 0, skippedCount: 0 })
-  })
-
-  it("uses app data storage when no desktop writings directory is configured", async () => {
-    mocks.getDesktopSettingsMock.mockResolvedValue({ data: {}, error: null })
-
-    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-    await createDesktopDraft({ title: "Internal" })
-
-    expect(mocks.updateDesktopSettingsMock).toHaveBeenCalledWith({
-      writingsDir: "/tmp/app-data/Writings",
+    mocks.saveFile.mockResolvedValue({ data: writing, error: null })
+    mocks.createDraft.mockResolvedValue({ data: { path, writing: { ...writing, id: path } }, error: null })
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
+      files: [{ id, path, relativePath: "Letter.md", inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 2 }],
     })
   })
 
-  it("keeps configured macOS protected folders as the draft location", async () => {
-    mocks.getDesktopSettingsMock.mockResolvedValue({
-      data: { writingsDir: "/Users/hugo/Downloads/Artifact Studio" },
-      error: null,
-    })
-
-    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-    await createDesktopDraft({ title: "Internal" })
-
-    expect(mocks.updateDesktopSettingsMock).not.toHaveBeenCalled()
-  })
-
-  it("leaves protected canonical paths in place during desktop migration", async () => {
-    mocks.getAllMock.mockResolvedValue([
-      {
-        id: "writing-protected",
-        author_id: null,
-        title: "Protected",
-        canonical_path: "/Users/hugo/Downloads/Protected.md",
-        body_json: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Cached body" }] }] },
-        body_text: "Cached body",
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parent_id: null,
-        correspondence_id: null,
-        version: 1,
-        sync_status: "synced",
-        lifecycle: "local-only",
-        deleted_at: null,
-        created_at: "2026-06-04T00:00:00.000Z",
-        updated_at: "2026-06-04T00:00:00.000Z",
-        local_updated_at: 1,
-      },
-    ])
-
-    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-    await createDesktopDraft({ title: "After repair" })
-
-    expect(mocks.getAllMock).not.toHaveBeenCalled()
-    expect(mocks.openWritingMock).not.toHaveBeenCalledWith("/Users/hugo/Downloads/Protected.md")
-    expect(mocks.saveMock).not.toHaveBeenCalledWith(
-      expect.objectContaining({ id: "writing-protected" }),
-    )
-  })
-
-  it("opens protected macOS paths directly when there is no local mapping", async () => {
-    mocks.openWritingMock.mockResolvedValueOnce({
-      data: {
-        id: "/Users/hugo/Downloads/old.md",
-        authorId: null,
-        title: "Old",
-        content: {
-          markdown: "# Old\n\nIn place",
-          richText: null,
-          plainText: "In place",
-          canonicalSource: "markdown",
-        },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-
+  it("opens UUIDs only through the SQLite binding and hydrates canonical Markdown", async () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-
-    const result = await service.openWriting("/Users/hugo/Downloads/old.md")
+    const result = await (await getDocumentService()).openWriting(id)
 
     expect(result.error).toBeNull()
-    expect(result.data).toMatchObject({
-      content: { canonicalSource: "markdown" },
-    })
-    expect(result.data?.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    )
-    expect(mocks.openWritingMock).toHaveBeenCalledWith("/Users/hugo/Downloads/old.md")
-    expect(mocks.saveMock).toHaveBeenCalledWith(
+    expect(result.data?.id).toBe(id)
+    expect(mocks.catalogGet).toHaveBeenCalledWith(id)
+    expect(mocks.openFile).toHaveBeenCalledWith(path)
+  })
+
+  it("does not treat a path or unknown UUID as identity", async () => {
+    mocks.catalogGet.mockResolvedValue(null)
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).openWriting(path)
+
+    expect(result.error?.code).toBe("NOT_FOUND")
+    expect(mocks.openFile).not.toHaveBeenCalled()
+  })
+
+  it("persists markdown, then manifest, then SQLite mutation", async () => {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).saveWriting({ writing })
+
+    expect(result.error).toBeNull()
+    expect(mocks.saveFile.mock.invocationCallOrder[0]).toBeLessThan(mocks.workspaceSync.mock.invocationCallOrder[0])
+    expect(mocks.workspaceSync.mock.invocationCallOrder[0]).toBeLessThan(mocks.dualWrite.mock.invocationCallOrder[0])
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
       expect.objectContaining({
-        canonical_path: "/Users/hugo/Downloads/old.md",
+        document: expect.objectContaining({ id }),
+        mutation: expect.objectContaining({ operation: "upsert" }),
       }),
     )
   })
 
-  it("retries migration after an initial failure instead of caching a rejected promise forever", async () => {
-    mocks.migrateMock
-      .mockRejectedValueOnce(new Error("migration failed"))
-      .mockResolvedValueOnce({ migratedCount: 0, skippedCount: 0 })
-
-    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-
-    const first = await createDesktopDraft({ title: "Retry me" })
-    expect(first.error?.message).toContain("migration failed")
-
-    const second = await createDesktopDraft({ title: "Retry me" })
-    expect(second.error).toBeNull()
-    expect(mocks.migrateMock).toHaveBeenCalledTimes(2)
-  })
-
-  it("coalesces desktop save fan-out to a single enqueueWritingUpsert call per draft save", async () => {
-    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-
-    const result = await createDesktopDraft({
-      title: "One enqueue only",
-      initialBodyText: "One enqueue only",
-      initialBodyJson: {
-        type: "doc",
-        content: [{ type: "paragraph", content: [{ type: "text", text: "One enqueue only" }] }],
-      },
+  it("queues explicit cloud deletion without deleting the local markdown", async () => {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).deleteWriting({
+      writingId: id,
+      version: 1,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      deletedAt: "2026-01-02T00:00:00.000Z",
     })
 
     expect(result.error).toBeNull()
-    expect(mocks.enqueueWritingUpsertMock).toHaveBeenCalledTimes(1)
-    expect(mocks.saveWritingMock).toHaveBeenCalledTimes(1)
-    expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("---")
-    expect(mocks.saveWritingMock.mock.calls[0]?.[0].writing.content.markdown).not.toContain("id:")
-  })
-
-  it("uses the collision-resolved filename as the local and queued title", async () => {
-    mocks.createDraftMock.mockResolvedValueOnce({
-      data: {
-        path: "/tmp/documents/Artifact Studio/My Note 2.md",
-        writing: {
-          id: "/tmp/documents/Artifact Studio/My Note 2.md",
-          authorId: null,
-          title: "My Note 2",
-        },
-      },
-      error: null,
-    })
-
-    const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
-    const result = await createDesktopDraft({ title: "My Note" })
-
-    expect(result.error).toBeNull()
-    expect(result.data?.title).toBe("My Note 2")
-    expect(mocks.enqueueWritingUpsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        canonical_path: "/tmp/documents/Artifact Studio/My Note 2.md",
-        title: "My Note 2",
-      }),
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ mutation: expect.objectContaining({ operation: "delete" }) }),
     )
-  })
-
-  it("detaches a watcher-deleted desktop file without enqueueing a cloud delete", async () => {
-    mocks.getByCanonicalPathMock.mockResolvedValueOnce({
-      id: "writing-cloud",
-      author_id: "user-1",
-      title: "Cloud backed",
-      canonical_path: "/tmp/documents/Artifact Studio/cloud-backed.md",
-      body_json: { type: "doc", content: [] },
-      body_text: "Cloud backed",
-      slug: null,
-      status: "draft",
-      visibility: "private",
-      parent_id: null,
-      correspondence_id: null,
-      version: 3,
-      sync_status: "synced",
-      lifecycle: "server-confirmed",
-      deleted_at: null,
-      created_at: "2026-06-04T00:00:00.000Z",
-      updated_at: "2026-06-04T00:00:00.000Z",
-      local_updated_at: 1,
-    })
-
-    const { markDesktopWritingDeletedByCanonicalPath } = await import("@/lib/services/document-service-factory")
-    await markDesktopWritingDeletedByCanonicalPath("/tmp/documents/Artifact Studio/cloud-backed.md")
-
-    expect(mocks.detachLocalFileMock).toHaveBeenCalledWith("writing-cloud")
-    expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
-  })
-
-  it("desktop deleteWriting aligns with web semantics and enqueues cloud delete", async () => {
-    const beforeDelete = {
-      id: "writing-cloud",
-      author_id: "user-1",
-      title: "Cloud backed",
-      canonical_path: "/tmp/documents/Artifact Studio/cloud-backed.md",
-      body_json: { type: "doc", content: [] },
-      body_text: "Cloud backed",
-      slug: null,
-      status: "draft" as const,
-      visibility: "private" as const,
-      parent_id: null,
-      correspondence_id: null,
-      version: 3,
-      sync_status: "synced" as const,
-      lifecycle: "server-confirmed" as const,
-      deleted_at: null,
-      created_at: "2026-06-04T00:00:00.000Z",
-      updated_at: "2026-06-04T00:00:00.000Z",
-      local_updated_at: 1,
-    }
-    const afterDelete = {
-      ...beforeDelete,
-      sync_status: "deleted" as const,
-      deleted_at: "2026-06-05T00:00:00.000Z",
-      updated_at: "2026-06-05T00:00:00.000Z",
-    }
-
-    mocks.getMock
-      .mockResolvedValueOnce(beforeDelete)
-      .mockResolvedValueOnce(afterDelete)
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.deleteWriting({
-      writingId: "writing-cloud",
-      version: 4,
-      updatedAt: "2026-06-05T00:00:00.000Z",
-      deletedAt: "2026-06-05T00:00:00.000Z",
-    })
-
-    expect(result.error).toBeNull()
-    expect(result.data?.deletedAt).toBe("2026-06-05T00:00:00.000Z")
-    expect(mocks.enqueueWritingDeleteMock).toHaveBeenCalledWith("writing-cloud")
-    expect(mocks.deleteWritingMock).not.toHaveBeenCalled()
-    expect(mocks.detachLocalFileMock).not.toHaveBeenCalled()
-  })
-
-  it("uses IndexedDB metadata instead of legacy file frontmatter when opening desktop markdown", async () => {
-    mocks.getMock.mockResolvedValueOnce(null)
-    mocks.getByCanonicalPathMock.mockResolvedValueOnce({
-      id: "writing-from-index",
-      author_id: null,
-      title: "Indexed metadata",
-      canonical_path: "/tmp/documents/Artifact Studio/legacy.md",
-      body_json: { type: "doc", content: [] },
-      body_text: "",
-      slug: "indexed-slug",
-      status: "done",
-      visibility: "public",
-      parent_id: null,
-      correspondence_id: null,
-      version: 7,
-      sync_status: "synced",
-      lifecycle: "server-confirmed",
-      deleted_at: null,
-      created_at: "2026-06-01T00:00:00.000Z",
-      updated_at: "2026-06-02T00:00:00.000Z",
-      local_updated_at: 1,
-    })
-    mocks.openWritingMock.mockResolvedValueOnce({
-      data: {
-        id: "/tmp/documents/Artifact Studio/legacy.md",
-        authorId: null,
-        title: "File title",
-        content: {
-          markdown: `---
-id: legacy-frontmatter-id
-slug: legacy-slug
-status: draft
-visibility: private
-version: 2
----
-
-# File body`,
-          richText: null,
-          plainText: "File body",
-          canonicalSource: "markdown",
-        },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 2,
-        deletedAt: null,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting("/tmp/documents/Artifact Studio/legacy.md")
-
-    expect(result.error).toBeNull()
-    expect(result.data).toMatchObject({
-      id: "writing-from-index",
-      slug: "indexed-slug",
-      status: "done",
-      visibility: "public",
-      version: 7,
-    })
-    expect(mocks.saveMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "writing-from-index",
-        slug: "indexed-slug",
-        status: "done",
-        visibility: "public",
-        version: 7,
-        body_text: expect.stringContaining("id: legacy-frontmatter-id"),
-      }),
-    )
-  })
-
-  it("does not open a UUID-looking writingId as a filesystem path when there is no local binding", async () => {
-    const uuid = "f80b2dce-1262-403a-87e2-4ad17a881234"
-    mocks.getMock.mockResolvedValueOnce(null)
-    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting(uuid)
-
-    expect(result.error?.code).toBe("NOT_FOUND")
-    expect(result.error?.message).toContain(`Writing ${uuid} not found`)
-    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
-    expect(mocks.saveMock).not.toHaveBeenCalled()
-    expect(mocks.enqueueWritingDeleteMock).not.toHaveBeenCalled()
-  })
-
-  it("hydrates a catalog-resolved UUID from the .md without seeding a draft (ODE-375)", async () => {
-    const uuid = "a1b2c3d4-1234-4a2b-8c9d-0123456789ab"
-    // No IndexedDB record for this id...
-    mocks.getMock.mockResolvedValueOnce(null)
-    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
-    // ...but the unified opener registered its binding in the catalog.
-    mocks.catalogFlag.value = true
-    mocks.catalogGetByIdMock.mockResolvedValueOnce({
-      id: uuid,
-      localPresent: true,
-      cloudPresent: false,
-      binding: { canonicalPath: "/root/Notes/Idea.md" },
-    })
-    mocks.openWritingMock.mockResolvedValueOnce({
-      data: {
-        id: "/root/Notes/Idea.md",
-        authorId: null,
-        title: "Idea",
-        content: { markdown: "# Idea\n\nBody", richText: null, plainText: "Body", canonicalSource: "markdown" },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting(uuid)
-
-    expect(result.error).toBeNull()
-    // Content came from the authoritative .md, and the row keeps the catalog UUID.
-    expect(result.data?.id).toBe(uuid)
-    expect(result.data?.content.plainText).toContain("Body")
-    expect(mocks.catalogGetByIdMock).toHaveBeenCalledWith(uuid)
-    expect(mocks.openWritingMock).toHaveBeenCalledWith("/root/Notes/Idea.md")
-    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
-    // The saved row carries real body text — it is not an empty draft seed.
-    expect(mocks.saveMock).toHaveBeenCalledWith(
-      expect.objectContaining({ id: uuid, canonical_path: "/root/Notes/Idea.md" }),
-    )
-  })
-
-  it("still returns the .md content when the read-only latch blocks the cache write (ODE-376)", async () => {
-    // After the M5 cutover the desktop IndexedDB is read-only; opening a document
-    // must still render its content from the authoritative .md instead of failing
-    // because the opportunistic cache refresh was rejected.
-    const uuid = "cccccccc-1234-4a2b-8c9d-0123456789ab"
-    mocks.getMock.mockResolvedValueOnce(null)
-    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
-    mocks.catalogFlag.value = true
-    mocks.catalogGetByIdMock.mockResolvedValueOnce({
-      id: uuid,
-      localPresent: true,
-      cloudPresent: false,
-      binding: { canonicalPath: "/root/Notes/ReadOnly.md" },
-    })
-    mocks.openWritingMock.mockResolvedValueOnce({
-      data: {
-        id: "/root/Notes/ReadOnly.md",
-        authorId: null,
-        title: "ReadOnly",
-        content: { markdown: "# ReadOnly\n\nCanonical body", richText: null, plainText: "Canonical body", canonicalSource: "markdown" },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-    // The cache write is rejected by the read-only latch.
-    mocks.saveMock.mockRejectedValueOnce(new MockLocalDBReadOnlyError("writings.save"))
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting(uuid)
-
-    // The open succeeds with real content despite the blocked cache write.
-    expect(result.error).toBeNull()
-    expect(result.data?.id).toBe(uuid)
-    expect(result.data?.content.plainText).toContain("Canonical body")
-    expect(mocks.saveMock).toHaveBeenCalled()
-  })
-
-  it("still returns NOT_FOUND for a UUID absent from both IndexedDB and the catalog", async () => {
-    const uuid = "bbbbbbbb-1234-4a2b-8c9d-0123456789ab"
-    mocks.getMock.mockResolvedValueOnce(null)
-    mocks.getByCanonicalPathMock.mockResolvedValueOnce(null)
-    mocks.catalogFlag.value = true
-    mocks.catalogGetByIdMock.mockResolvedValueOnce(null)
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting(uuid)
-
-    expect(result.error?.code).toBe("NOT_FOUND")
-    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
-    expect(mocks.saveMock).not.toHaveBeenCalled()
-  })
-
-  it("opens a UUID with a canonical_path binding using the path and preserving the UUID", async () => {
-    const uuid = "53991a81-0766-4972-8610-b2946cd385ee"
-    mocks.getMock.mockResolvedValueOnce({
-      id: uuid,
-      author_id: null,
-      title: "Carta",
-      canonical_path: "/tmp/documents/Artifact Studio/Carta.md",
-      body_json: { type: "doc", content: [] },
-      body_text: "",
-      slug: "carta",
-      status: "draft",
-      visibility: "private",
-      parent_id: null,
-      correspondence_id: null,
-      version: 2,
-      sync_status: "synced",
-      lifecycle: "local-only",
-      deleted_at: null,
-      created_at: "2026-06-01T00:00:00.000Z",
-      updated_at: "2026-06-02T00:00:00.000Z",
-      local_updated_at: 1,
-    })
-    mocks.openWritingMock.mockResolvedValueOnce({
-      data: {
-        id: "/tmp/documents/Artifact Studio/Carta.md",
-        authorId: null,
-        title: "Carta",
-        content: {
-          markdown: "# Carta\n\nHola",
-          richText: null,
-          plainText: "Hola",
-          canonicalSource: "markdown",
-        },
-        slug: null,
-        status: "draft",
-        visibility: "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: "2026-06-04T00:00:00.000Z",
-        updatedAt: "2026-06-04T00:00:00.000Z",
-      },
-      error: null,
-    })
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting(uuid)
-
-    expect(result.error).toBeNull()
-    expect(result.data?.id).toBe(uuid)
-    expect(result.data?.slug).toBe("carta")
-    expect(mocks.openWritingMock).toHaveBeenCalledWith("/tmp/documents/Artifact Studio/Carta.md")
-    expect(mocks.openWritingMock).not.toHaveBeenCalledWith(uuid)
-    expect(mocks.saveMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: uuid,
-        canonical_path: "/tmp/documents/Artifact Studio/Carta.md",
-      }),
-    )
-  })
-
-  it("returns NOT_FOUND when a UUID's canonical file is missing instead of editing cached JSON", async () => {
-    const uuid = "4dc2ea21-9bea-4090-80e6-8627f1ebd615"
-    mocks.getMock.mockResolvedValueOnce({
-      id: uuid,
-      author_id: "user-1",
-      title: "Tokens en todas partes",
-      canonical_path: "/Users/hugo/Documents/Tutoria/Leccion 2/docx/tokens.md",
-      body_json: {
-        type: "doc",
-        content: [{ type: "paragraph", content: [{ type: "text", text: "Synced body" }] }],
-      },
-      body_text: "Synced body",
-      slug: "tokens",
-      status: "draft",
-      visibility: "private",
-      parent_id: null,
-      correspondence_id: null,
-      version: 3,
-      sync_status: "synced",
-      lifecycle: "server-confirmed",
-      deleted_at: null,
-      created_at: "2026-06-01T00:00:00.000Z",
-      updated_at: "2026-06-02T00:00:00.000Z",
-      local_updated_at: 1,
-    })
-    // The canonical .md no longer exists on disk (moved / stale import path).
-    mocks.openWritingMock.mockResolvedValueOnce({
-      data: null,
-      error: { code: "NOT_FOUND", message: "open_file: No such file or directory (os error 2)", retryable: false },
-    })
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting(uuid)
-
-    expect(result.data).toBeNull()
-    expect(result.error?.code).toBe("NOT_FOUND")
-    expect(mocks.openWritingMock).toHaveBeenCalledWith(
-      "/Users/hugo/Documents/Tutoria/Leccion 2/docx/tokens.md",
-    )
-  })
-
-  it("refuses to open cloud-only desktop records from cached body_json before materialization", async () => {
-    mocks.getMock.mockResolvedValueOnce({
-      id: "cloud-only-writing",
-      author_id: "user-1",
-      title: "Cloud only",
-      canonical_path: null,
-      body_json: {
-        type: "doc",
-        content: [{ type: "paragraph", content: [{ type: "text", text: "Persisted web body" }] }],
-      },
-      body_text: "Persisted web body",
-      slug: "cloud-only",
-      status: "draft",
-      visibility: "private",
-      parent_id: null,
-      correspondence_id: null,
-      version: 4,
-      sync_status: "synced",
-      lifecycle: "server-confirmed",
-      deleted_at: null,
-      created_at: "2026-06-01T00:00:00.000Z",
-      updated_at: "2026-06-02T00:00:00.000Z",
-      local_updated_at: 1,
-    })
-
-    const { getDocumentService } = await import("@/lib/services/document-service-factory")
-    const service = await getDocumentService()
-    const result = await service.openWriting("cloud-only-writing")
-
-    expect(result.data).toBeNull()
-    expect(result.error?.code).toBe("NOT_FOUND")
-    expect(mocks.openWritingMock).not.toHaveBeenCalled()
-    expect(mocks.saveMock).not.toHaveBeenCalled()
+    expect(mocks.renameFile).not.toHaveBeenCalled()
   })
 })

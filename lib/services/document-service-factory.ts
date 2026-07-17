@@ -10,32 +10,31 @@ import type {
   WritingRecord,
   WritingSummary,
 } from "@/lib/services/contracts/document-service"
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
-import { localDB, LocalDBReadOnlyError } from "@/lib/local-db"
-import type { LocalWriting } from "@/lib/local-db/schema"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
-import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { webDocumentService } from "@/lib/services/web-document-service"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
-import { LocalIndexService } from "@/lib/services/desktop/local-index-service"
-import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
-import { migrateIndexedDbToFilesystem } from "@/lib/migrations/indexeddb-to-filesystem"
-import { runDesktopCatalogMigrationOnce } from "@/lib/migrations/desktop-catalog-migration"
-import { isDesktopIndexedDbMigrationEnabled } from "@/lib/services/desktop/indexeddb-migration-flag"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions"
 import { filenameToTitle, UNTITLED_DOCUMENT_NAME } from "@/lib/desktop/document-naming"
-import { isUuidLikeWritingIdentifier } from "@/lib/writings/writing-route"
-import { scheduleDesktopCatalogDetach } from "@/lib/sync/catalog-dual-write"
-import { isDesktopCatalogDualWriteEnabled } from "@/lib/services/desktop/catalog-feature-flag"
-import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
+import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
+import {
+  loadDesktopCollections,
+  setDesktopWritingCollections,
+} from "@/lib/services/desktop/desktop-collection-service"
+import {
+  tauriCatalogDualWrite,
+  tauriWorkspaceSync,
+  type DesktopCatalogDualWriteInput,
+} from "@/lib/services/desktop/tauri-commands"
 
 type DesktopRuntimeServices = {
-  configDir: string
   writingsDir: string
   dbPath: string
   filesystem: FilesystemDocumentService
+  catalog: SqliteDocumentCatalog
 }
 
 type DesktopDraftOptions = {
@@ -50,569 +49,283 @@ type DesktopDraftOptions = {
   initialBodyText?: string
 }
 
-function ok<T>(data: T): ServiceResponse<T> {
-  return { data, error: null }
-}
-
+function ok<T>(data: T): ServiceResponse<T> { return { data, error: null } }
 function err<T>(code: ServiceError["code"], message: string): ServiceResponse<T> {
   return { data: null, error: { code, message, retryable: false } }
 }
-
-function makeUnexpectedError(error: unknown, fallback: ServiceError["code"] = "UNAVAILABLE"): ServiceError {
-  return {
-    code: fallback,
-    message: error instanceof Error ? error.message : "Unexpected error",
-    retryable: fallback === "DB_ERROR" || fallback === "UNAVAILABLE",
-  }
+function unexpected(error: unknown, fallback: ServiceError["code"] = "UNAVAILABLE"): ServiceError {
+  return { code: fallback, message: error instanceof Error ? error.message : "Unexpected error", retryable: false }
+}
+function createWritingId() { return crypto.randomUUID() }
+function dirname(value: string) {
+  const separator = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"))
+  return separator <= 0 ? value : value.slice(0, separator)
+}
+function basename(value: string) {
+  const separator = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"))
+  return separator < 0 ? value : value.slice(separator + 1)
 }
 
-function createWritingId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID()
-  }
-
-  return `desktop-${Date.now()}`
-}
-
-/**
- * Resolves a document's canonical `.md` path from the DocumentCatalog (ODE-375
- * M3). Enables `openWriting(uuid)` to hydrate a catalog-resolved identity by
- * reading the authoritative file — with no local record and no draft. Returns
- * null when the catalog is disabled or holds no binding for the id, so callers
- * fall back to the existing NOT_FOUND recovery.
- */
-async function resolveCatalogCanonicalPath(id: string): Promise<string | null> {
-  if (!isDesktopCatalogDualWriteEnabled()) return null
-  try {
-    const catalog = await getDocumentCatalog()
-    const record = await catalog.getById(id)
-    return record?.binding?.canonicalPath ?? null
-  } catch {
-    return null
-  }
-}
-
-function toCanonicalRecord(local: LocalWriting): WritingRecord {
-  const hasMaterializedMarkdown = Boolean(local.canonical_path?.trim())
-
-  return {
-    id: local.id,
-    authorId: local.author_id ?? null,
-    title: local.title ?? null,
-    content: {
-      richText: local.body_json,
-      markdown: null,
-      plainText: local.body_text,
-      canonicalSource: hasMaterializedMarkdown ? "markdown" : "rich-text",
-    },
-    slug: local.slug ?? null,
-    status: local.status,
-    artifactType: normalizeArtifactType(local.artifact_type),
-    visibility: local.visibility,
-    parentId: local.parent_id ?? null,
-    correspondenceId: local.correspondence_id ?? null,
-    version: local.version,
-    deletedAt: local.deleted_at ?? null,
-    createdAt: local.created_at,
-    updatedAt: local.updated_at,
-  }
-}
-
-function toLocalWriting(record: WritingRecord, canonicalPath: string): LocalWriting {
+function toWriting(record: DocumentCatalogRecord, bodyJson: Record<string, unknown>, bodyText: string): WritingRecord {
+  const createdAt = new Date(record.createdAt ?? record.modifiedAt ?? Date.now()).toISOString()
+  const updatedAt = new Date(record.modifiedAt ?? Date.now()).toISOString()
   return {
     id: record.id,
-    author_id: record.authorId,
-    title: record.title,
-    canonical_path: canonicalPath,
-    body_json: (record.content.richText as Record<string, unknown>) ?? EMPTY_EDITOR_JSON,
-    body_text: record.content.plainText,
+    authorId: record.cloudAccountId,
+    title: record.binding ? filenameToTitle(record.binding.relativePath) : record.title,
+    content: { richText: bodyJson, markdown: null, plainText: bodyText, canonicalSource: "markdown" },
     slug: record.slug,
-    status: record.status,
-    artifact_type: record.artifactType,
-    visibility: record.visibility,
-    parent_id: record.parentId,
-    correspondence_id: record.correspondenceId,
-    version: Math.max(1, record.version),
-    sync_status: "pending",
-    lifecycle: "local-only",
-    deleted_at: record.deletedAt,
-    created_at: record.createdAt,
-    updated_at: record.updatedAt,
-    local_updated_at: Date.now(),
+    status: record.status ?? "draft",
+    artifactType: normalizeArtifactType(record.artifactType),
+    visibility: record.visibility ?? "private",
+    parentId: null,
+    correspondenceId: null,
+    version: Math.max(1, record.version ?? 1),
+    deletedAt: null,
+    createdAt,
+    updatedAt,
+  }
+}
+
+function toSummary(record: DocumentCatalogRecord): WritingSummary {
+  const createdAt = new Date(record.createdAt ?? record.modifiedAt ?? Date.now()).toISOString()
+  const updatedAt = new Date(record.modifiedAt ?? Date.now()).toISOString()
+  return {
+    id: record.id, authorId: record.cloudAccountId, title: record.title, slug: record.slug,
+    status: record.status ?? "draft", artifactType: normalizeArtifactType(record.artifactType),
+    visibility: record.visibility ?? "private", parentId: null, correspondenceId: null,
+    version: Math.max(1, record.version ?? 1), deletedAt: null, createdAt, updatedAt, excerpt: null,
   }
 }
 
 async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> {
   const { appConfigDir, appDataDir, join } = await import("@tauri-apps/api/path")
-
   const configDir = await appConfigDir()
-  const defaultWritingsDir = await join(await appDataDir(), "Writings")
-  const settingsService = new DesktopSettingsService(configDir)
-  const settingsResult = await settingsService.getDesktopSettings()
-  const configuredWritingsDir = settingsResult.data?.writingsDir?.trim()
-  const writingsDir: string = configuredWritingsDir || defaultWritingsDir
-
-  if (writingsDir !== configuredWritingsDir) {
-    await settingsService.updateDesktopSettings({ writingsDir })
+  const writingsDir = await join(await appDataDir(), "Writings")
+  const dbPath = await join(configDir, "desktop-index.sqlite3")
+  return {
+    writingsDir,
+    dbPath,
+    filesystem: new FilesystemDocumentService(writingsDir),
+    catalog: new SqliteDocumentCatalog(dbPath),
   }
-
-  const indexPath = await join(configDir, "desktop-index.sqlite3")
-  const localIndex = new LocalIndexService(indexPath, writingsDir)
-  const filesystem = new FilesystemDocumentService(writingsDir, { localIndex })
-
-  return { configDir, writingsDir, dbPath: indexPath, filesystem }
 }
 
 class DesktopDocumentService implements DocumentService {
-  private migrationPromise: Promise<void> | null = null
-
   constructor(private readonly runtime: DesktopRuntimeServices) {}
 
-  private async ensureMigrated() {
-    if (!this.migrationPromise) {
-      this.migrationPromise = (async () => {
-        // ODE-376 M5: behind the explicit cutover flag, harvest every IndexedDB
-        // scope into the SQLite catalog/queue and begin the IndexedDB read-only
-        // window. The legacy filesystem migration materializes cloud-only rows
-        // into `.md` files, so it runs ONLY pre-cutover (bounded compatibility);
-        // once the SQLite migration is enabled it is superseded and skipped.
-        if (isDesktopIndexedDbMigrationEnabled()) {
-          await runDesktopCatalogMigrationOnce({
-            configDir: this.runtime.configDir,
-            dbPath: this.runtime.dbPath,
-          })
-          return
-        }
-        await migrateIndexedDbToFilesystem({
-          filesystem: this.runtime.filesystem,
-        })
-      })()
-        .catch((error) => {
-          this.migrationPromise = null
-          throw error
-        })
-    }
-
-    await this.migrationPromise
+  private serialize(record: WritingRecord) {
+    const result = desktopDocumentEngine.serializeBodyJson(
+      (record.content.richText as Record<string, unknown> | null | undefined) ?? EMPTY_EDITOR_JSON,
+    )
+    if (!result.success) throw new Error(result.error)
+    return result.markdown
   }
 
-  private async resolveCanonicalPath(record: WritingRecord) {
-    const existing = await localDB.writings.get(record.id)
-    if (existing?.canonical_path) {
-      return existing.canonical_path
-    }
-
-    const draftResult = await this.runtime.filesystem.createDraft(record.title ?? undefined)
-    if (draftResult.error || !draftResult.data) {
-      throw new Error(draftResult.error?.message ?? "Failed to allocate canonical file")
-    }
-
-    return draftResult.data.path
-  }
-
-  private buildCanonicalMarkdown(record: WritingRecord) {
-    const bodyJson = (record.content.richText as Record<string, unknown> | null | undefined) ?? EMPTY_EDITOR_JSON
-    const serialization = desktopDocumentEngine.serializeBodyJson(bodyJson)
-
-    if (!serialization.success) {
-      throw new Error(serialization.error)
-    }
-
-    return serialization.markdown
-  }
-
-  private async writeCanonicalFile(record: WritingRecord, canonicalPath: string) {
-    const canonicalMarkdown = this.buildCanonicalMarkdown(record)
-    const fileSaveResult = await this.runtime.filesystem.saveWriting({
-      writing: {
-        ...record,
-        id: canonicalPath,
-        content: {
-          markdown: canonicalMarkdown,
-          richText: null,
-          plainText: record.content.plainText,
-          canonicalSource: "markdown",
+  private async persist(
+    record: WritingRecord,
+    canonicalPath: string,
+    operation: "upsert" | "delete" = "upsert",
+  ): Promise<WritingRecord> {
+    const markdown = this.serialize(record)
+    if (operation === "upsert") {
+      const fileResult = await this.runtime.filesystem.saveWriting({
+        writing: {
+          ...record,
+          id: canonicalPath,
+          content: { markdown, richText: null, plainText: record.content.plainText, canonicalSource: "markdown" },
         },
-        version: Math.max(0, record.version - 1),
+      })
+      if (fileResult.error) throw new Error(fileResult.error.message)
+    }
+
+    const catalogBefore = await this.runtime.catalog.getById(record.id)
+    const priorBinding = catalogBefore?.binding
+    const rootPath = priorBinding
+      ? priorBinding.canonicalPath.slice(0, -(priorBinding.relativePath.length + 1))
+      : dirname(canonicalPath)
+    const relativePath = canonicalPath.startsWith(`${rootPath}/`)
+      ? canonicalPath.slice(rootPath.length + 1)
+      : basename(canonicalPath)
+    // Omit selectedPaths so the durable manifest keeps its existing whole-root
+    // or exact-file scope; a save must never narrow a BindingRoot implicitly.
+    const snapshot = await tauriWorkspaceSync(rootPath, undefined, { [relativePath]: record.id })
+    const file = snapshot.files.find((entry) => entry.path === canonicalPath || entry.relativePath === relativePath)
+    if (!file) throw new Error(`Manifest did not retain ${relativePath}`)
+    const now = Date.now()
+    const input: DesktopCatalogDualWriteInput = {
+      document: {
+        id: record.id,
+        localPresent: true,
+        cloudPresent: catalogBefore?.cloudPresent ?? false,
+        cloudAccountId: record.authorId,
+        syncStatus: "pending",
+        title: filenameToTitle(file.relativePath),
+        slug: record.slug,
+        status: record.status,
+        artifactType: record.artifactType,
+        visibility: record.visibility,
+        version: Math.max(1, record.version),
+        createdAt: Date.parse(record.createdAt),
+        modifiedAt: Date.parse(record.updatedAt),
       },
-    })
-
-    if (fileSaveResult.error) {
-      throw new Error(fileSaveResult.error.message)
+      binding: {
+        bindingRootId: snapshot.bindingRootId,
+        rootPath: snapshot.rootPath,
+        manifestVersion: 2,
+        visibleAsWorkspace: false,
+        relativePath: file.relativePath,
+        canonicalPath: file.path,
+        inode: file.inode || null,
+        contentHash: file.contentHash || null,
+        size: file.size,
+        lastSeenAt: file.modifiedAt,
+      },
+      mutation: {
+        id: crypto.randomUUID(),
+        operation,
+        payloadJson: JSON.stringify({
+          title: filenameToTitle(file.relativePath), bodyText: record.content.plainText,
+          bodyJson: record.content.richText, slug: record.slug, status: record.status,
+          artifactType: record.artifactType, visibility: record.visibility,
+          parentId: record.parentId, correspondenceId: record.correspondenceId,
+          version: Math.max(1, record.version), updatedAt: record.updatedAt,
+          deletedAt: operation === "delete" ? new Date().toISOString() : record.deletedAt,
+        }),
+        status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: now, lastError: null,
+      },
     }
-
-    const parsed = desktopDocumentEngine.parseSourceDocument(canonicalMarkdown)
-    if (!parsed.success) {
-      throw new Error(parsed.error)
-    }
-
-    return {
-      canonicalMarkdown,
-      bodyJson: parsed.document.snapshot.bodyJson as Record<string, unknown>,
-      bodyText: parsed.document.snapshot.bodyText,
-    }
+    await tauriCatalogDualWrite(this.runtime.dbPath, input)
+    return { ...record, title: filenameToTitle(file.relativePath) }
   }
 
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     try {
-      await this.ensureMigrated()
-      const writings = await localDB.writings.getAll({ includeDeleted: input?.includeDeleted })
-      const summaries: WritingSummary[] = writings.map((writing) => ({
-        ...toCanonicalRecord(writing),
-        excerpt: writing.body_text.slice(0, 200) || null,
-      }))
-
-      return ok(summaries)
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
+      const rows = await this.runtime.catalog.list({ includeDeleted: input?.includeDeleted, limit: 5000 })
+      return ok(rows.map(toSummary))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
-  async openWriting(writingId: string): Promise<ServiceResponse<WritingRecord>> {
+  async openWriting(id: string): Promise<ServiceResponse<WritingRecord>> {
     try {
-      await this.ensureMigrated()
-      const existing = await localDB.writings.get(writingId)
-      const existingByCanonicalPath = await localDB.writings.getByCanonicalPath(writingId)
-      const existingRecord = existing ?? existingByCanonicalPath
-      const mappedCanonicalPath =
-        existing?.canonical_path ??
-        existingByCanonicalPath?.canonical_path
-
-      // A UUID-looking identifier is identity, not a filesystem path. If there
-      // is no local binding (neither by id nor by canonical path), resolve the
-      // canonical path from the DocumentCatalog (ODE-375 M3): the unified opener
-      // registers the binding there before hydration, so the editor reads the
-      // authoritative `.md` for a catalog-resolved UUID instead of minting an
-      // empty draft. Only when the catalog has no binding either do we refuse —
-      // treating the bare UUID as a path would repeatedly hit the filesystem.
-      let catalogCanonicalPath: string | null = null
-      if ((existingRecord || isUuidLikeWritingIdentifier(writingId)) && !mappedCanonicalPath) {
-        catalogCanonicalPath = await resolveCatalogCanonicalPath(writingId)
-        if (!catalogCanonicalPath) {
-          return err("NOT_FOUND", `Writing ${writingId} not found`)
-        }
-      }
-
-      const canonicalPath = mappedCanonicalPath ?? catalogCanonicalPath ?? writingId
-      const fileResult = await this.runtime.filesystem.openWriting(canonicalPath)
-
-      if (fileResult.error || !fileResult.data) {
-        // The `.md` is authoritative once desktop opening reaches hydration.
-        // Never edit cached JSON as a fallback: cloud-only is materialized by
-        // openDocument first, while a missing/stale binding remains recoverable
-        // NOT_FOUND and must not create durable state.
-        return err("NOT_FOUND", fileResult.error?.message ?? `Writing ${writingId} not found`)
-      }
-
-      const parsed = desktopDocumentEngine.parseSourceDocument(fileResult.data.content.markdown ?? "")
-      if (!parsed.success) {
-        return err("INVALID_INPUT", parsed.error)
-      }
-
-      const canonicalId =
-        existingRecord?.id ?? (isUuidLikeWritingIdentifier(writingId) ? writingId : createWritingId())
-      const localWriting: LocalWriting = {
-        id: canonicalId,
-        author_id: existingRecord?.author_id ?? null,
-        // Desktop names are derived from the filename on every filesystem open;
-        // a cache must never preserve a stale title over the canonical path.
-        title: fileResult.data.title,
-        canonical_path: canonicalPath,
-        body_json: parsed.document.snapshot.bodyJson as Record<string, unknown>,
-        body_text: parsed.document.snapshot.bodyText,
-        slug: existingRecord?.slug ?? null,
-        status: existingRecord?.status ?? "draft",
-        visibility: existingRecord?.visibility ?? "private",
-        parent_id: existingRecord?.parent_id ?? null,
-        correspondence_id: existingRecord?.correspondence_id ?? null,
-        version: existingRecord?.version ?? 1,
-        sync_status: existingRecord?.sync_status ?? "synced",
-        lifecycle: existingRecord?.lifecycle ?? "local-only",
-        deleted_at: existingRecord?.deleted_at ?? null,
-        created_at: existingRecord?.created_at ?? fileResult.data.createdAt,
-        updated_at: existingRecord?.updated_at ?? fileResult.data.updatedAt,
-        local_updated_at: Date.now(),
-      }
-
-      // Caching the read result into IndexedDB is opportunistic. During the
-      // ODE-376 read-only compatibility window desktop IndexedDB rejects writes;
-      // the content already came from the authoritative .md file, so a blocked
-      // cache refresh must NOT fail the open — the document still renders. Only
-      // the read-only latch is swallowed; any other write failure still surfaces.
-      try {
-        await localDB.writings.save(localWriting)
-      } catch (error) {
-        if (!(error instanceof LocalDBReadOnlyError)) {
-          throw error
-        }
-      }
-      return ok(toCanonicalRecord(localWriting))
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
+      const record = await this.runtime.catalog.getById(id)
+      if (!record?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${id} has no local binding`)
+      const file = await this.runtime.filesystem.openWriting(record.binding.canonicalPath)
+      if (file.error || !file.data) return err("NOT_FOUND", file.error?.message ?? `Writing ${id} not found`)
+      const parsed = desktopDocumentEngine.parseSourceDocument(file.data.content.markdown ?? "")
+      if (!parsed.success) return err("INVALID_INPUT", parsed.error)
+      return ok(toWriting(
+        record,
+        parsed.document.snapshot.bodyJson as Record<string, unknown>,
+        parsed.document.snapshot.bodyText,
+      ))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
   async saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      await this.ensureMigrated()
-      const existing = await localDB.writings.get(input.writing.id)
-      const canonicalPath = await this.resolveCanonicalPath(input.writing)
-      const canonicalWriting = {
-        ...input.writing,
-        title: filenameToTitle(canonicalPath),
-      }
-      const derived = await this.writeCanonicalFile(canonicalWriting, canonicalPath)
-      const localWriting: LocalWriting = {
-        ...toLocalWriting(canonicalWriting, canonicalPath),
-        author_id: existing?.author_id ?? canonicalWriting.authorId ?? null,
-        body_json: derived.bodyJson,
-        body_text: derived.bodyText,
-        slug: canonicalWriting.slug ?? existing?.slug ?? null,
-        lifecycle: existing?.lifecycle ?? "local-only",
-      }
-
-      await enqueueWritingUpsert(localWriting)
-      return ok(toCanonicalRecord(localWriting))
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
+      const existing = await this.runtime.catalog.getById(input.writing.id)
+      if (!existing?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writing.id} has no local binding`)
+      return ok(await this.persist(input.writing, existing.binding.canonicalPath))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
   async createDraft(options: DesktopDraftOptions = {}): Promise<ServiceResponse<WritingRecord>> {
     try {
-      await this.ensureMigrated()
-      const nowIso = new Date().toISOString()
-      const writing: WritingRecord = {
-        id: options.writingId?.trim() || createWritingId(),
-        authorId: options.authorId ?? null,
-        title: options.title?.trim() || UNTITLED_DOCUMENT_NAME,
+      const now = new Date().toISOString()
+      const id = options.writingId?.trim() || createWritingId()
+      const title = options.title?.trim() || UNTITLED_DOCUMENT_NAME
+      const allocation = options.preferredPath
+        ? { path: options.preferredPath }
+        : (await this.runtime.filesystem.createDraft(title)).data
+      if (!allocation?.path) return err("UNAVAILABLE", "Failed to allocate canonical file")
+      const record: WritingRecord = {
+        id, authorId: options.authorId ?? null, title,
         content: {
-          richText: (options.initialBodyJson as Record<string, unknown> | null | undefined) ?? EMPTY_EDITOR_JSON,
-          markdown: null,
-          plainText: options.initialBodyText ?? "",
-          canonicalSource: "rich-text",
+          richText: options.initialBodyJson ?? EMPTY_EDITOR_JSON,
+          markdown: null, plainText: options.initialBodyText ?? "", canonicalSource: "rich-text",
         },
-        slug: options.slug ?? null,
-        status: options.status ?? "draft",
-        artifactType: "general",
-        visibility: options.visibility ?? "private",
-        parentId: null,
-        correspondenceId: null,
-        version: 1,
-        deletedAt: null,
-        createdAt: nowIso,
-        updatedAt: nowIso,
+        slug: options.slug ?? null, status: options.status ?? "draft", artifactType: "general",
+        visibility: options.visibility ?? "private", parentId: null, correspondenceId: null,
+        version: 1, deletedAt: null, createdAt: now, updatedAt: now,
       }
-
-      const canonicalPath =
-        options.preferredPath?.trim() ||
-        (await this.runtime.filesystem.createDraft(writing.title ?? undefined)).data?.path
-
-      if (!canonicalPath) {
-        return err("UNAVAILABLE", "Failed to allocate canonical file")
-      }
-
-      const canonicalWriting = {
-        ...writing,
-        title: filenameToTitle(canonicalPath),
-      }
-      const derived = await this.writeCanonicalFile(canonicalWriting, canonicalPath)
-      const localWriting: LocalWriting = {
-        ...toLocalWriting(canonicalWriting, canonicalPath),
-        body_json: derived.bodyJson,
-        body_text: derived.bodyText,
-      }
-
-      await enqueueWritingUpsert(localWriting)
-      return ok(toCanonicalRecord(localWriting))
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
+      return ok(await this.persist(record, allocation.path))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      await this.ensureMigrated()
-      const existing = await localDB.writings.get(input.writingId)
-      if (!existing?.canonical_path) {
-        return err("NOT_FOUND", `Writing ${input.writingId} not found`)
-      }
-
-      const renameResult = await this.runtime.filesystem.renameWriting({
-        writingId: existing.canonical_path,
-        title: input.title,
-        updatedAt: input.updatedAt,
+      const existing = await this.openWriting(input.writingId)
+      if (existing.error || !existing.data) return existing
+      const binding = await this.runtime.catalog.getById(input.writingId)
+      if (!binding?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writingId} not found`)
+      const renamed = await this.runtime.filesystem.renameWriting({
+        writingId: binding.binding.canonicalPath, title: input.title, updatedAt: input.updatedAt,
       })
-
-      if (renameResult.error || !renameResult.data) {
-        return err("UNAVAILABLE", renameResult.error?.message ?? "Failed to rename writing")
-      }
-
-      const updated: LocalWriting = {
-        ...existing,
-        title: renameResult.data.title,
-        canonical_path: renameResult.data.id,
-        updated_at: input.updatedAt,
-        local_updated_at: Date.now(),
-      }
-
-      await enqueueWritingUpsert(updated)
-      return ok(toCanonicalRecord(updated))
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
+      if (renamed.error || !renamed.data) return err("UNAVAILABLE", renamed.error?.message ?? "Rename failed")
+      const next = { ...existing.data, title: renamed.data.title, updatedAt: input.updatedAt }
+      return ok(await this.persist(next, renamed.data.id))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
   async deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      await this.ensureMigrated()
-      const existing = await localDB.writings.get(input.writingId)
-      if (!existing) {
-        return err("NOT_FOUND", `Writing ${input.writingId} not found`)
-      }
-
-      await enqueueWritingDelete(input.writingId)
-      const deleted = await localDB.writings.get(input.writingId)
-      if (!deleted) {
-        return err("NOT_FOUND", `Writing ${input.writingId} not found after delete`)
-      }
-
-      return ok(toCanonicalRecord(deleted))
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
+      const existing = await this.openWriting(input.writingId)
+      if (existing.error || !existing.data) return existing
+      const binding = await this.runtime.catalog.getById(input.writingId)
+      if (!binding?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writingId} not found`)
+      const deleted = { ...existing.data, deletedAt: input.deletedAt, updatedAt: input.updatedAt }
+      return ok(await this.persist(deleted, binding.binding.canonicalPath, "delete"))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
-  async listWritingCollections(
-    writingId: string,
-  ): Promise<ServiceResponse<WritingCollectionMembership[]>> {
-    return webDocumentService.listWritingCollections(writingId)
+  async listWritingCollections(id: string): Promise<ServiceResponse<WritingCollectionMembership[]>> {
+    const state = await loadDesktopCollections()
+    return ok(state.writingCollections.filter((row) => row.writing_id === id).map((row) => ({
+      collectionId: row.collection_id, addedAt: row.added_at,
+    })))
   }
-
-  async setWritingCollections(
-    input: SetWritingCollectionsInput,
-  ): Promise<ServiceResponse<WritingCollectionMembership[]>> {
-    return webDocumentService.setWritingCollections(input)
+  async setWritingCollections(input: SetWritingCollectionsInput): Promise<ServiceResponse<WritingCollectionMembership[]>> {
+    await setDesktopWritingCollections(input.writingId, input.collectionIds)
+    return this.listWritingCollections(input.writingId)
   }
-
-  async exportWriting(input: ExportWritingInput): Promise<ServiceResponse<{
-    writingId: string
-    format: "pdf" | "docx"
-    fileName: string
-    mimeType: string
-    bytes: Uint8Array
-  }>> {
-    try {
-      await this.ensureMigrated()
-
-      const localWriting = await localDB.writings.get(input.writingId)
-      if (!localWriting?.canonical_path) {
-        return err("NOT_FOUND", `Writing ${input.writingId} not found`)
-      }
-
-      return this.runtime.filesystem.exportWriting({
-        writingId: localWriting.canonical_path,
-        format: input.format,
-      })
-    } catch (error) {
-      return { data: null, error: makeUnexpectedError(error, "DB_ERROR") }
-    }
-  }
+  async exportWriting(input: ExportWritingInput) { return this.runtime.filesystem.exportWriting(input) }
 }
 
 let desktopServicePromise: Promise<DocumentService> | null = null
-
 export async function getDocumentService(): Promise<DocumentService> {
-  if (!isDesktopRuntime()) {
-    return webDocumentService
-  }
-
-  if (!desktopServicePromise) {
-    desktopServicePromise = resolveDesktopRuntimeServices().then(
-      (runtime) => new DesktopDocumentService(runtime),
-    )
-  }
-
+  if (!isDesktopRuntime()) return webDocumentService
+  desktopServicePromise ??= resolveDesktopRuntimeServices().then((runtime) => new DesktopDocumentService(runtime))
   return desktopServicePromise
 }
 
-export async function createDesktopDraft(
-  options: DesktopDraftOptions = {},
-): Promise<ServiceResponse<WritingRecord>> {
-  const documentService = await getDocumentService()
-
-  if (!(documentService instanceof DesktopDocumentService)) {
-    return err("UNAVAILABLE", "Desktop draft creation is only available in the desktop runtime")
-  }
-
-  return documentService.createDraft(options)
+export async function createDesktopDraft(options: DesktopDraftOptions = {}) {
+  const service = await getDocumentService()
+  if (!(service instanceof DesktopDocumentService)) return err<WritingRecord>("UNAVAILABLE", "Desktop runtime required")
+  return service.createDraft(options)
 }
 
-export async function relocateDesktopWriting(writingId: string, newPath: string): Promise<void> {
-  const existing = await localDB.writings.get(writingId)
-  if (!existing) return
-  await enqueueWritingUpsert({
-    ...existing,
-    title: filenameToTitle(newPath),
-    canonical_path: newPath,
-    local_updated_at: Date.now(),
-  })
+export async function relocateDesktopWriting(id: string, newPath: string): Promise<void> {
+  void id
+  void newPath
+}
+export async function relocateDesktopWritingByCanonicalPath(previous: string, next: string): Promise<void> {
+  void previous
+  void next
+}
+export async function markDesktopWritingDeletedByCanonicalPath(canonicalPath: string): Promise<void> {
+  if (!isDesktopRuntime()) return
+  const runtime = await resolveDesktopRuntimeServices()
+  const resolved = await runtime.catalog.resolvePath(canonicalPath)
+  if (resolved.kind === "resolved") await runtime.catalog.detachLocalFile(resolved.record.id)
 }
 
-export async function relocateDesktopWritingByCanonicalPath(
-  previousPath: string,
-  nextPath: string,
-): Promise<void> {
-  const existing = await localDB.writings.getByCanonicalPath(previousPath)
-  if (!existing || existing.canonical_path === nextPath) {
-    return
-  }
-
-  await enqueueWritingUpsert({
-    ...existing,
-    title: filenameToTitle(nextPath),
-    canonical_path: nextPath,
-    local_updated_at: Date.now(),
-  })
-}
-
-export async function markDesktopWritingDeletedByCanonicalPath(
-  canonicalPath: string,
-): Promise<void> {
-  const existing = await localDB.writings.getByCanonicalPath(canonicalPath)
-  if (!existing || existing.sync_status === "deleted") {
-    return
-  }
-
-  await localDB.writings.detachLocalFile(existing.id)
-  scheduleDesktopCatalogDetach(existing.id)
-}
-
-export async function importDesktopWritingFile(
-  path: string,
-  content: string,
-): Promise<ServiceResponse<WritingRecord>> {
+export async function importDesktopWritingFile(path: string, content: string) {
   const parsed = desktopDocumentEngine.parseSourceDocument(content)
-  if (!parsed.success) {
-    return err("INVALID_INPUT", parsed.error)
-  }
-
-  const title = filenameToTitle(path)
-
-  const result = await createDesktopDraft({
-    writingId: createWritingId(),
-    title,
-    slug: null,
-    status: "draft",
-    visibility: "private",
-    preferredPath: path,
+  if (!parsed.success) return err<WritingRecord>("INVALID_INPUT", parsed.error)
+  return createDesktopDraft({
+    writingId: createWritingId(), title: filenameToTitle(path), preferredPath: path,
     initialBodyJson: parsed.document.snapshot.bodyJson as Record<string, unknown>,
     initialBodyText: parsed.document.snapshot.bodyText,
   })
-
-  if (result.error || !result.data) {
-    return result
-  }
-
-  return ok(result.data)
 }

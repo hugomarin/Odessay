@@ -36,6 +36,32 @@ export async function writeJson(filePath, value) {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
+/**
+ * Crash-safe JSON replacement used for durable identity ledgers/checkpoints.
+ * The temp file lives beside the target so rename stays on the same volume.
+ */
+export async function writeJsonAtomic(filePath, value) {
+  const parent = path.dirname(filePath);
+  await fs.mkdir(parent, { recursive: true });
+  const tempPath = path.join(
+    parent,
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+  );
+  const handle = await fs.open(tempPath, "wx");
+  try {
+    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  try {
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true });
+    throw error;
+  }
+}
+
 export function normalizeRelative(filePath) {
   return filePath.split(path.sep).join("/");
 }

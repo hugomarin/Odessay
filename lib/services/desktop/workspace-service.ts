@@ -6,9 +6,7 @@ import {
   filenameToTitle,
   UNTITLED_DOCUMENT_NAME,
 } from "@/lib/desktop/document-naming";
-import { localDB } from "@/lib/local-db";
-import { EMPTY_EDITOR_JSON } from "@/lib/editor/extensions";
-import { getDocumentService } from "@/lib/services/document-service-factory";
+import { openDesktopDocument } from "@/lib/services/desktop/open-document-desktop";
 import {
   markDesktopWritingDeletedByCanonicalPath,
   relocateDesktopWritingByCanonicalPath,
@@ -360,55 +358,14 @@ export class DesktopWorkspaceService {
     filePath: string,
     workspaceFileId: string,
   ): Promise<string> {
-    // Old desktop builds could enqueue sync mutations keyed by canonical_path
-    // instead of the stable workspace UUID. Clear those stale path-keyed
-    // mutations before rebinding/opening so they do not keep the writing stuck
-    // in failed/pending forever.
-    await localDB.syncQueue.deleteForEntity("writing", filePath);
-    await localDB.syncQueue.deleteForEntity("writing-collections", filePath);
-
-    // Seed a local writing record with the workspace index ID before opening.
-    // This ensures the DocumentService treats the workspace UUID as the
-    // canonical writing ID; the markdown file itself remains content-only.
-    const existingByPath = await localDB.writings.getByCanonicalPath(filePath);
-    if (!existingByPath) {
-      const nowIso = new Date().toISOString();
-      await localDB.writings.save({
-        id: workspaceFileId,
-        canonical_path: filePath,
-        body_json: EMPTY_EDITOR_JSON,
-        body_text: "",
-        status: "draft",
-        visibility: "private",
-        version: 1,
-        sync_status: "synced",
-        lifecycle: "local-only",
-        created_at: nowIso,
-        updated_at: nowIso,
-        local_updated_at: Date.now(),
-      });
-    } else if (existingByPath.id !== workspaceFileId) {
-      await localDB.syncQueue.deleteForEntity("writing", existingByPath.id);
-      await localDB.syncQueue.deleteForEntity(
-        "writing-collections",
-        existingByPath.id,
-      );
-      await localDB.writings.delete(existingByPath.id);
-      await localDB.writings.save({
-        ...existingByPath,
-        id: workspaceFileId,
-        canonical_path: filePath,
-        local_updated_at: Date.now(),
-      });
+    const result = await openDesktopDocument({ kind: "path", path: filePath });
+    if (result.status !== "opened") {
+      throw new Error(`Unable to reconcile workspace document: ${result.status}`);
     }
-
-    const documentService = await getDocumentService();
-    const openResult = await documentService.openWriting(workspaceFileId);
-    if (openResult.error) {
-      throw new Error(openResult.error.message);
+    if (result.documentId !== workspaceFileId) {
+      throw new Error("Workspace manifest and catalog resolved different document identities");
     }
-
-    return workspaceFileId;
+    return result.documentId;
   }
 
   async readFilePreview(filePath: string) {

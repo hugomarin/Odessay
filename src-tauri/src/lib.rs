@@ -62,13 +62,8 @@ pub fn run() {
                 .build()?;
 
             let find = MenuItem::with_id(app, "find", "Find", true, Some("CmdOrCtrl+F"))?;
-            let replace = MenuItem::with_id(
-                app,
-                "replace",
-                "Replace",
-                true,
-                Some("CmdOrCtrl+Alt+F"),
-            )?;
+            let replace =
+                MenuItem::with_id(app, "replace", "Replace", true, Some("CmdOrCtrl+Alt+F"))?;
             let copy_md = MenuItem::with_id(
                 app,
                 "copyAsMarkdown",
@@ -94,29 +89,13 @@ pub fn run() {
                 .item(&copy_html)
                 .build()?;
 
-            let heading1 = MenuItem::with_id(
-                app,
-                "heading1",
-                "Heading 1",
-                true,
-                Some("CmdOrCtrl+1"),
-            )?;
-            let heading2 = MenuItem::with_id(
-                app,
-                "heading2",
-                "Heading 2",
-                true,
-                Some("CmdOrCtrl+2"),
-            )?;
-            let heading3 = MenuItem::with_id(
-                app,
-                "heading3",
-                "Heading 3",
-                true,
-                Some("CmdOrCtrl+3"),
-            )?;
-            let paragraph =
-                MenuItem::with_id(app, "paragraph", "Body", true, Some("CmdOrCtrl+0"))?;
+            let heading1 =
+                MenuItem::with_id(app, "heading1", "Heading 1", true, Some("CmdOrCtrl+1"))?;
+            let heading2 =
+                MenuItem::with_id(app, "heading2", "Heading 2", true, Some("CmdOrCtrl+2"))?;
+            let heading3 =
+                MenuItem::with_id(app, "heading3", "Heading 3", true, Some("CmdOrCtrl+3"))?;
+            let paragraph = MenuItem::with_id(app, "paragraph", "Body", true, Some("CmdOrCtrl+0"))?;
             let blockquote = MenuItem::with_id(
                 app,
                 "blockquote",
@@ -124,13 +103,8 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+Shift+B"),
             )?;
-            let bullet_list = MenuItem::with_id(
-                app,
-                "bulletList",
-                "Bullet List",
-                true,
-                Some("CmdOrCtrl+L"),
-            )?;
+            let bullet_list =
+                MenuItem::with_id(app, "bulletList", "Bullet List", true, Some("CmdOrCtrl+L"))?;
             let ordered_list = MenuItem::with_id(
                 app,
                 "orderedList",
@@ -171,8 +145,7 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+Shift+A"),
             )?;
-            let table =
-                MenuItem::with_id(app, "table", "Add Table", true, Some("CmdOrCtrl+T"))?;
+            let table = MenuItem::with_id(app, "table", "Add Table", true, Some("CmdOrCtrl+T"))?;
             let image =
                 MenuItem::with_id(app, "image", "Add Image", true, Some("CmdOrCtrl+Shift+I"))?;
             let clear_styles =
@@ -297,10 +270,6 @@ pub fn run() {
             commands::document::rename_file,
             commands::document::list_recent_files,
             commands::document::resolve_asset_path,
-            commands::index::index_upsert,
-            commands::index::index_list,
-            commands::index::index_delete,
-            commands::index::index_rebuild,
             commands::index::catalog_schema_version,
             commands::index::catalog_dual_write,
             commands::index::catalog_apply_cloud_snapshots,
@@ -311,6 +280,15 @@ pub fn run() {
             commands::index::catalog_detach_local_file,
             commands::index::catalog_apply_reconcile,
             commands::index::catalog_update_mutation_status,
+            commands::index::catalog_enqueue_mutation,
+            commands::index::catalog_list_pending_mutations,
+            commands::index::catalog_apply_collection_snapshot,
+            commands::index::catalog_list_collection_snapshot,
+            commands::index::catalog_save_collection,
+            commands::index::catalog_delete_collection,
+            commands::index::catalog_replace_writing_collections,
+            commands::index::catalog_list_pending_metadata_mutations,
+            commands::index::catalog_update_metadata_mutation_status,
             commands::keychain::keychain_write_token,
             commands::keychain::keychain_read_token,
             commands::keychain::keychain_delete_token,
@@ -319,6 +297,7 @@ pub fn run() {
             commands::settings::settings_delete,
             commands::settings::settings_list_keys,
             commands::workspace::workspace_create,
+            commands::workspace::workspace_unbound_paths,
             commands::workspace::workspace_sync,
             commands::workspace::workspace_compute_content_hash,
         ])

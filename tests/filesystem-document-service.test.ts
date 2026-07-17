@@ -4,15 +4,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import JSZip from "jszip"
 import { FilesystemDocumentService } from "@/lib/services/desktop/filesystem-document-service"
-import { LocalIndexService } from "@/lib/services/desktop/local-index-service"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 
 // ─── Mock Tauri commands (no real filesystem in test env) ─────────────────────
 
 const mockFiles = new Map<string, string>()
 const mockMetadata: Array<{ path: string; name: string; modifiedAt: number; size: number }> = []
-
-const mockIndexEntries: Array<{ path: string; title: string; createdAt: number; modifiedAt: number }> = []
 
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriOpenFile: vi.fn(async (path: string) => {
@@ -52,33 +49,6 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
     const resolved = `${dir}/${relativePath}`
     if (!mockFiles.has(resolved)) throw new Error(`Asset not found: ${resolved}`)
     return resolved
-  }),
-  tauriIndexUpsert: vi.fn(async (_dbPath: string, path: string, title: string, createdAt: number, modifiedAt: number) => {
-    const idx = mockIndexEntries.findIndex((e) => e.path === path)
-    if (idx !== -1) {
-      mockIndexEntries[idx] = { path, title, createdAt, modifiedAt }
-    } else {
-      mockIndexEntries.push({ path, title, createdAt, modifiedAt })
-    }
-  }),
-  tauriIndexList: vi.fn(async (_dbPath: string, limit: number) => {
-    return [...mockIndexEntries].sort((a, b) => b.modifiedAt - a.modifiedAt).slice(0, limit)
-  }),
-  tauriIndexDelete: vi.fn(async (_dbPath: string, path: string) => {
-    const idx = mockIndexEntries.findIndex((e) => e.path === path)
-    if (idx !== -1) mockIndexEntries.splice(idx, 1)
-  }),
-  tauriIndexRebuild: vi.fn(async (_dbPath: string, _dir: string) => {
-    mockIndexEntries.length = 0
-    for (const meta of mockMetadata) {
-      mockIndexEntries.push({
-        path: meta.path,
-        title: meta.name,
-        createdAt: meta.modifiedAt,
-        modifiedAt: meta.modifiedAt,
-      })
-    }
-    return mockIndexEntries.length
   }),
   tauriSettingsRead: vi.fn(async (_configDir: string, _key: string) => {
     return null
@@ -135,7 +105,6 @@ describe("FilesystemDocumentService", () => {
     vi.useFakeTimers()
     mockFiles.clear()
     mockMetadata.length = 0
-    mockIndexEntries.length = 0
     service = new FilesystemDocumentService(WRITINGS_DIR, { autoSaveDebounceMs: 300 })
     vi.clearAllMocks()
   })
@@ -472,98 +441,4 @@ describe("FilesystemDocumentService", () => {
     vi.useFakeTimers()
   })
 
-  // ── ODE-210: LocalIndexService integration ─────────────────────────────────
-
-  it("saveWriting with localIndex upserts exactly one index entry and emits one indexUpdated event [ODE-210 perf contract]", async () => {
-    vi.useRealTimers()
-    const indexService = new LocalIndexService("/tmp/index.db", WRITINGS_DIR)
-    const indexServiceWithIndex = new FilesystemDocumentService(WRITINGS_DIR, {
-      localIndex: indexService,
-      autoSaveDebounceMs: 300,
-    })
-
-    const updatedPaths: string[] = []
-    indexService.onIndexUpdated((path) => updatedPaths.push(path))
-
-    const path = `${WRITINGS_DIR}/indexed-save.md`
-    mockFiles.set(path, "")
-    const writing = makeWritingRecord({ id: path, title: "Indexed Save" })
-
-    const result = await indexServiceWithIndex.saveWriting({ writing })
-    expect(result.error).toBeNull()
-
-    // Exactly one index update event per save operation
-    expect(updatedPaths).toHaveLength(1)
-    expect(updatedPaths[0]).toBe(path)
-
-    // Index entry exists
-    const entries = await indexService.listRecent()
-    expect(entries).toHaveLength(1)
-    expect(entries[0].path).toBe(path)
-    expect(entries[0].title).toBe("Indexed Save")
-
-    vi.useFakeTimers()
-  })
-
-  it("listWritings uses LocalIndexService when configured and falls back to directory listing when index is empty", async () => {
-    vi.useRealTimers()
-    const indexService = new LocalIndexService("/tmp/index.db", WRITINGS_DIR)
-    const serviceWithIndex = new FilesystemDocumentService(WRITINGS_DIR, { localIndex: indexService })
-
-    // Pre-seed the mock filesystem
-    await serviceWithIndex.createDraft("Alpha")
-    await serviceWithIndex.createDraft("Beta")
-
-    // Index should have entries after createDraft
-    const fromIndex = await serviceWithIndex.listWritings()
-    expect(fromIndex.error).toBeNull()
-    expect(fromIndex.data!.length).toBeGreaterThanOrEqual(2)
-
-    vi.useFakeTimers()
-  })
-
-  it("deleteWriting removes the entry from the local index", async () => {
-    vi.useRealTimers()
-    const indexService = new LocalIndexService("/tmp/index.db", WRITINGS_DIR)
-    const serviceWithIndex = new FilesystemDocumentService(WRITINGS_DIR, { localIndex: indexService })
-
-    const path = `${WRITINGS_DIR}/delete-me.md`
-    mockFiles.set(path, "# Delete Me")
-    mockMetadata.push({ path, name: "delete-me", modifiedAt: Date.now(), size: 20 })
-    await indexService.upsert(path, "Delete Me", Date.now(), Date.now())
-
-    const result = await serviceWithIndex.deleteWriting({
-      writingId: path,
-      version: 1,
-      updatedAt: new Date().toISOString(),
-      deletedAt: new Date().toISOString(),
-    })
-    expect(result.error).toBeNull()
-
-    const entries = await indexService.listRecent()
-    expect(entries.find((e) => e.path === path)).toBeUndefined()
-    vi.useFakeTimers()
-  })
-
-  it("renameWriting updates the index (deletes old path, inserts new path)", async () => {
-    vi.useRealTimers()
-    const indexService = new LocalIndexService("/tmp/index.db", WRITINGS_DIR)
-    const serviceWithIndex = new FilesystemDocumentService(WRITINGS_DIR, { localIndex: indexService })
-
-    const oldPath = `${WRITINGS_DIR}/old-title.md`
-    mockFiles.set(oldPath, "# Old Title")
-    await indexService.upsert(oldPath, "Old Title", Date.now(), Date.now())
-
-    const result = await serviceWithIndex.renameWriting({
-      writingId: oldPath,
-      title: "New Title",
-      updatedAt: new Date().toISOString(),
-    })
-    expect(result.error).toBeNull()
-
-    const entries = await indexService.listRecent()
-    expect(entries.find((e) => e.path === oldPath)).toBeUndefined()
-    expect(entries.some((e) => e.title === "New Title")).toBe(true)
-    vi.useFakeTimers()
-  })
 })

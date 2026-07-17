@@ -401,8 +401,8 @@ Esto es especialmente importante para imágenes y sharing, donde web y desktop d
 
 ## Herramientas de cosecha de identidades históricas (ODE-374)
 
-Antes de retirar los caminos de compatibilidad de runtime se dispone de herramientas
-read-only en `scripts/identity-harvest/`:
+La cosecha y retiro de ODE-374 se ejecutó en dos pasos auditables desde
+`scripts/identity-harvest/`:
 
 - `harvest-legacy-identities.mjs`: produce un reporte auditable con `source`,
   `proposed UUID/binding`, `evidence`, `conflict reason`, `decision` y `outcome`
@@ -411,11 +411,16 @@ read-only en `scripts/identity-harvest/`:
 - `verify-odyssey-migration.mjs`: verifica que la migración `.odyssey` →
   `.odessay/index.json` v2 preservó `selectedPaths`, ids de binding, inode/hash y
   backup fuente.
+- `apply-identity-harvest.mjs`: fase de escritura explícita, con dry-run por
+  defecto, backup consistente de SQLite, checkpoint reiniciable, manifest
+  atómico antes de SQLite, registro del BindingRoot, verificación de paridad y
+  rollback. Rechaza ids históricos inválidos/duplicados; nunca modifica Markdown.
 
-Ambos scripts son **tooling-only**: nunca escriben markdown, frontmatter ni índices.
-El borrado final de lectores de compatibilidad (frontmatter como identidad,
-`Uuid::new_v4` en Rust, `writings_index`, `LocalIndexService`, IndexedDB desktop)
-permanece detrás del gate de release de compatibilidad de M5 (ODE-376).
+El harvest y el verificador siguen siendo **tooling-only**. La fase de escritura
+solo actúa con `--apply` y autorización del dueño. Tras validar manifest/catálogo,
+reinicio e integridad, runtime retiró frontmatter como identidad, el mint
+documental en Rust, `writings_index`, `LocalIndexService` y el adapter IndexedDB
+desktop. IndexedDB permanece sin cambios como adapter local-first de web.
 
 ## Diferencias entre `tauri dev` y `tauri build` (bundle de producción)
 

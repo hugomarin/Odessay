@@ -76,60 +76,41 @@ async function grepFiles(pattern: RegExp): Promise<Set<string>> {
  * legacy code can be deleted.
  */
 describe("desktop compatibility retirement reachability", () => {
-  it("frontmatter identity extraction is confined to workspace command, harvest tooling and tests", async () => {
+  it("frontmatter identity extraction has no runtime implementation", async () => {
     const files = await grepFiles(/extract_writing_id_from_frontmatter/);
-    const allowed = new Set([
-      "src-tauri/src/commands/workspace.rs",
-      "src-tauri/src/commands/index.rs",
-      "tests/migrations/desktop-compatibility-retirement.test.ts",
-    ]);
-
-    const unexpected = [...files].filter((file) => !allowed.has(file));
+    const unexpected = [...files].filter((file) => file !== "tests/migrations/desktop-compatibility-retirement.test.ts");
     expect(unexpected).toEqual([]);
   });
 
-  it("Rust UUID minting is confined to workspace command and tests", async () => {
-    const files = await grepFiles(/Uuid::new_v4/);
-    const allowed = new Set([
-      "src-tauri/src/commands/workspace.rs",
-      "src-tauri/src/commands/index.rs",
-      "tests/migrations/desktop-compatibility-retirement.test.ts",
-    ]);
-
-    const unexpected = [...files].filter((file) => !allowed.has(file));
+  it("Rust has no fallback that mints missing document ids", async () => {
+    const files = await grepFiles(/missing client document id|extract_writing_id_from_frontmatter/);
+    const unexpected = [...files].filter((file) =>
+      file !== "src-tauri/src/commands/workspace.rs" &&
+      file !== "tests/migrations/desktop-compatibility-retirement.test.ts"
+    );
     expect(unexpected).toEqual([]);
   });
 
-  it("legacy index commands are confined to LocalIndexService, tauri-commands and tests", async () => {
+  it("legacy index commands have zero runtime consumers or registrations", async () => {
     const files = await grepFiles(/index_upsert|index_list|index_delete|index_rebuild/);
-    const allowed = new Set([
-      "src-tauri/src/commands/index.rs",
-      "src-tauri/src/lib.rs",
-      "lib/services/desktop/local-index-service.ts",
-      "lib/services/desktop/tauri-commands.ts",
-      "tests/local-index-service.test.ts",
-      "tests/filesystem-document-service.test.ts",
-      "tests/fase6-invariants.test.ts",
-      "tests/services/document-service-factory.test.ts",
-      "tests/migrations/desktop-compatibility-retirement.test.ts",
-    ]);
-
-    const unexpected = [...files].filter((file) => !allowed.has(file));
+    const unexpected = [...files].filter((file) => file !== "tests/migrations/desktop-compatibility-retirement.test.ts");
     expect(unexpected).toEqual([]);
   });
 
-  it("pre-M5 filesystem migration is confined to factory, migration module and tests", async () => {
+  it("pre-M5 filesystem migration has zero runtime consumers", async () => {
     const files = await grepFiles(/migrateIndexedDbToFilesystem/);
-    const allowed = new Set([
-      "lib/migrations/indexeddb-to-filesystem.ts",
-      "lib/services/document-service-factory.ts",
-      "tests/services/desktop-save-path.test.ts",
-      "tests/services/document-service-factory.test.ts",
-      "tests/migrations/desktop-compatibility-retirement.test.ts",
-    ]);
-
-    const unexpected = [...files].filter((file) => !allowed.has(file));
+    const unexpected = [...files].filter((file) => file !== "tests/migrations/desktop-compatibility-retirement.test.ts");
     expect(unexpected).toEqual([]);
+  });
+
+  it("desktop document, workspace, opener and sync adapters do not import IndexedDB", async () => {
+    const files = await grepFiles(/from ["']@\/lib\/local-db["']/);
+    const forbidden = [...files].filter((file) =>
+      file === "lib/services/document-service-factory.ts" ||
+      file.startsWith("lib/services/desktop/") ||
+      file === "lib/sync/desktop-catalog-sync-service.ts"
+    );
+    expect(forbidden).toEqual([]);
   });
 
   it("legacy .odyssey spelling is confined to workspace command, identity tooling and tests", async () => {
@@ -140,6 +121,7 @@ describe("desktop compatibility retirement reachability", () => {
       "scripts/identity/count-id-conflicts.mjs",
       "scripts/identity-harvest/lib.mjs",
       "scripts/identity-harvest/harvest-legacy-identities.mjs",
+      "scripts/identity-harvest/apply-identity-harvest.mjs",
       "scripts/identity-harvest/verify-odyssey-migration.mjs",
       "tests/count-id-conflicts.test.ts",
       "tests/identity-harvest-report.test.ts",

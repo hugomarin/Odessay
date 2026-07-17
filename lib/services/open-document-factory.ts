@@ -1,16 +1,12 @@
-import { isDesktopCatalogDualWriteEnabled } from "@/lib/services/desktop/catalog-feature-flag"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import type { OpenDocumentResult } from "@/lib/services/open-document"
 
 /**
  * The unified opener (ODE-375 M3) is part of the Fase 9 catalog pipeline, so it is
- * gated by the same dual-write feature flag as the SQLite catalog and reconciler
- * (M1/M2). With the flag off, the catalog tables are empty and desktop keeps its
- * existing open pipelines — the migration stays additive and reversible until the
- * catalog becomes the single source (spec §Gates de BUILD #2).
+ * the single desktop opener after the ODE-374 compatibility retirement.
  */
 export function isUnifiedOpenEnabled(): boolean {
-  return isDesktopRuntime() && isDesktopCatalogDualWriteEnabled()
+  return isDesktopRuntime()
 }
 
 /** Opens a document through the catalog-backed unified opener. Desktop only. */

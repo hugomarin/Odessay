@@ -10,7 +10,7 @@ import type {
 import { computeWritingContentHash } from "@/lib/content-hash";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { getSyncService } from "@/lib/sync/sync-service-factory";
-import { scheduleDesktopCatalogDualWrite } from "@/lib/sync/catalog-dual-write";
+import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection";
 
 const createMutationId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -57,10 +57,6 @@ export const enqueueMutation = async (
     attempts: 0,
   };
   await localDB.syncQueue.enqueue(mutation);
-  // M1 is additive: IndexedDB remains the read path and commits first. SQLite
-  // dual-write is non-blocking and reports divergence instead of repairing it.
-  scheduleDesktopCatalogDualWrite(writing, mutation);
-
   emitSyncStatusChange({
     writingId: writing.id,
     status: "pending",
@@ -70,6 +66,24 @@ export const enqueueMutation = async (
 };
 
 export const enqueueWritingUpsert = async (writing: LocalWriting) => {
+  if (isDesktopRuntime()) {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory");
+    const service = await getDocumentService();
+    const result = await service.saveWriting({
+      writing: {
+        id: writing.id, authorId: writing.author_id ?? null, title: writing.title ?? null,
+        content: { richText: writing.body_json, markdown: null, plainText: writing.body_text, canonicalSource: "rich-text" },
+        slug: writing.slug ?? null, status: writing.status,
+        artifactType: normalizeArtifactType(writing.artifact_type), visibility: writing.visibility,
+        parentId: writing.parent_id ?? null, correspondenceId: writing.correspondence_id ?? null,
+        version: writing.version, deletedAt: writing.deleted_at ?? null,
+        createdAt: writing.created_at, updatedAt: writing.updated_at,
+      },
+    });
+    if (result.error) throw new Error(result.error.message);
+    void getSyncService().scheduleFlush();
+    return;
+  }
   await localDB.writings.save({
     ...writing,
     local_updated_at: Date.now(),
@@ -79,6 +93,19 @@ export const enqueueWritingUpsert = async (writing: LocalWriting) => {
 };
 
 export const enqueueWritingDelete = async (writingId: string) => {
+  if (isDesktopRuntime()) {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory");
+    const service = await getDocumentService();
+    const existing = await service.openWriting(writingId);
+    if (!existing.data) return;
+    const result = await service.deleteWriting({
+      writingId, version: existing.data.version + 1,
+      deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    });
+    if (result.error) throw new Error(result.error.message);
+    void getSyncService().scheduleFlush();
+    return;
+  }
   const writing = await localDB.writings.get(writingId);
 
   if (!writing) {

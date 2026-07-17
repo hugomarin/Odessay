@@ -41,7 +41,6 @@ import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
 import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
 import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { getSyncService } from "@/lib/sync"
-import { invalidateHydrationFreshness } from "@/lib/sync/desktop-sync-service"
 import { invalidateWebWritingsHydrationFreshness } from "@/lib/sync/remote-bootstrap"
 import { invalidateWebCollectionsHydrationFreshness } from "@/lib/collections/remote-bootstrap"
 import { getDocumentService } from "@/lib/services/document-service-factory"
@@ -212,13 +211,7 @@ export default function DeskPage() {
       // Explicit refresh flows (window focus / online / scope change with force)
       // must bypass the freshness window on both runtimes.
       if (force) {
-        if (isTauriRuntime()) {
-          const scope = getLocalDBScope()
-          const userId = scope === "anonymous" ? null : scope
-          if (userId) {
-            invalidateHydrationFreshness(userId)
-          }
-        } else {
+        if (!isTauriRuntime()) {
           invalidateWebWritingsHydrationFreshness()
           invalidateWebCollectionsHydrationFreshness()
         }

@@ -82,54 +82,6 @@ const assertBrowser = () => {
   }
 };
 
-// ─── Desktop read-only compatibility latch (ODE-376 · M5) ───────────────────
-//
-// After the desktop IndexedDB→SQLite cutover, desktop keeps its IndexedDB stores
-// for one released version as read-only compatibility: no NEW writes are accepted
-// there (catalog spec §IndexedDB · Desktop, requirement 7). The latch is a module
-// global that ONLY the desktop migration ever engages — the web runtime never
-// calls `setLocalDBReadOnly`, so its IndexedDB adapter stays fully writable and
-// unchanged (requirement 9). Every blocked write emits telemetry instead of
-// failing silently.
-export type LocalDBReadOnlyBlock = { operation: string };
-type LocalDBReadOnlyListener = (block: LocalDBReadOnlyBlock) => void;
-
-export class LocalDBReadOnlyError extends Error {
-  readonly operation: string;
-  constructor(operation: string) {
-    super(
-      `localDB is read-only on desktop after the SQLite catalog cutover; blocked write "${operation}".`,
-    );
-    this.name = "LocalDBReadOnlyError";
-    this.operation = operation;
-  }
-}
-
-let localDBReadOnly = false;
-const readOnlyListeners = new Set<LocalDBReadOnlyListener>();
-
-export const setLocalDBReadOnly = (enabled: boolean) => {
-  localDBReadOnly = enabled;
-};
-
-export const isLocalDBReadOnly = () => localDBReadOnly;
-
-export const subscribeToLocalDBReadOnlyBlocks = (listener: LocalDBReadOnlyListener) => {
-  readOnlyListeners.add(listener);
-  return () => {
-    readOnlyListeners.delete(listener);
-  };
-};
-
-const assertWritable = (operation: string) => {
-  if (!localDBReadOnly) {
-    return;
-  }
-  const block: LocalDBReadOnlyBlock = { operation };
-  readOnlyListeners.forEach((listener) => listener(block));
-  throw new LocalDBReadOnlyError(operation);
-};
-
 let dbPromise: Promise<IDBDatabase> | null = null;
 let databaseInstance: IDBDatabase | null = null;
 let currentScope = DEFAULT_SCOPE;
@@ -645,7 +597,6 @@ const withStore = async <T>(
 };
 
 const saveWriting = async (writing: LocalWriting) => {
-  assertWritable("writings.save");
   await withStore(LOCAL_DB_STORES.writings, "readwrite", async (store) => {
     await runRequest(store.put({
       ...writing,
@@ -662,7 +613,6 @@ const saveWritingWithRebind = async ({
   remoteWriting: LocalWriting;
   candidate: LocalWriting;
 }) => {
-  assertWritable("writings.saveWithRebind");
   const nowIso = new Date().toISOString();
   const retiredCandidate: LocalWriting = {
     ...candidate,
@@ -765,7 +715,6 @@ const detachWritingLocalFile = async (id: string) => {
 };
 
 const saveCollection = async (collection: LocalCollection) => {
-  assertWritable("collections.save");
   await withStore(LOCAL_DB_STORES.collections, "readwrite", async (store) => {
     await runRequest(store.put(collection));
   });
@@ -941,7 +890,6 @@ const listAllWritingCollections = async () =>
   });
 
 const replaceWritingCollections = async (writingId: string, collectionIds: string[]) => {
-  assertWritable("writingCollections.replaceForWriting");
   const database = await openDatabase();
   const transaction = database.transaction(LOCAL_DB_STORES.writingCollections, "readwrite");
   const store = transaction.objectStore(LOCAL_DB_STORES.writingCollections);
@@ -999,7 +947,6 @@ const removeCollectionAssignments = async (collectionId: string) => {
 };
 
 const enqueueMutation = async (mutation: SyncMutation) => {
-  assertWritable("syncQueue.enqueue");
   await withStore(LOCAL_DB_STORES.syncMutations, "readwrite", async (store) => {
     const entityKey =
       mutation.entity_key ?? createEntityKey(mutation.entity_kind, mutation.entity_id);
