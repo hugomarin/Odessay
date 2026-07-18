@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ArrowUpRight, Trash2 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
+import { ANNOTATION_TYPE_COLOR } from "@/lib/editor/annotation-palette"
 
 export type MarginData = {
   id: string
@@ -91,11 +92,7 @@ export function MarginEntry({
   const borderColor =
     focused
       ? "var(--cursor)"
-      : margin.type === "ai"
-        ? "#5B5BD6"
-        : margin.type === "highlight"
-          ? "#E8A020"
-          : "#999990"
+      : ANNOTATION_TYPE_COLOR[margin.type]
   const typeLabel = margin.type === "ai" ? "AI" : margin.type === "highlight" ? "Highlight" : "Personal"
   const visibleHeight = noteValue.trim().length === 0
     ? FALLBACK_LINE_HEIGHT
@@ -118,7 +115,7 @@ export function MarginEntry({
             className="inline-flex rounded-[4px] px-1.5 py-0.5 font-sans text-[10px] font-medium uppercase tracking-[0.07em]"
             style={{
               color: borderColor,
-              backgroundColor: `${borderColor}14`,
+              backgroundColor: `color-mix(in srgb, ${borderColor} 8%, transparent)`,
             }}
           >
             {typeLabel}

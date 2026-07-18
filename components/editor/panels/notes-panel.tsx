@@ -6,14 +6,12 @@ import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
 import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
+import { ANNOTATION_TYPE_COLOR } from "@/lib/editor/annotation-palette"
 
 type PanelEntryType = AnnotationType | "highlight"
 
 const TYPE_COLOR: Record<PanelEntryType, string> = {
-  footnote: "#999990",
-  personal: "#999990",
-  ai: "#5B5BD6",
-  highlight: "#E8A020",
+  ...ANNOTATION_TYPE_COLOR,
 }
 
 const TYPE_LABEL: Record<PanelEntryType, string> = {
@@ -24,10 +22,10 @@ const TYPE_LABEL: Record<PanelEntryType, string> = {
 }
 
 const ANNOTATION_TYPE_OPTIONS: { type: AnnotationType; label: string; color: string }[] = [
-  { type: "ai", label: "AI", color: "#5B5BD6" },
-  { type: "highlight", label: "Highlight", color: "#E8A020" },
-  { type: "personal", label: "Personal", color: "#999990" },
-  { type: "footnote", label: "Footnote", color: "#999990" },
+  { type: "ai", label: "AI", color: ANNOTATION_TYPE_COLOR.ai },
+  { type: "highlight", label: "Highlight", color: ANNOTATION_TYPE_COLOR.highlight },
+  { type: "personal", label: "Personal", color: ANNOTATION_TYPE_COLOR.personal },
+  { type: "footnote", label: "Footnote", color: ANNOTATION_TYPE_COLOR.footnote },
 ]
 
 type PanelEntry = {

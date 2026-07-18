@@ -54,7 +54,7 @@ Definidas en `lib/editor/extensions.ts` con `createEditorExtensions()`.
 - `Bold`
 - `Italic`
 - `Strike`
-- `Highlight`
+- `AnnotationHighlight` (extiende Highlight y conserva `data-annotation-type`)
 - `Link`
 - `Code` (inline)
 
@@ -104,11 +104,13 @@ Archivos:
 Diseño:
 - Node inline atómico (`annotationReference`, antes `footnoteReference` — el código acepta ambos nombres) con attrs `{ id, type, index, text }`; `type` cubre `footnote | personal | ai | highlight`.
 - NodeView renderiza `<sup>` clickable y emite evento `footnote:click`.
-- Serialización markdown de referencia: `[^n]`.
-- Definiciones se reconstruyen al persistir (`getMarkdownWithFootnoteDefinitions`).
+- Serialización markdown inline: `[^n|id: nota]`, `[@n|id: nota]`, `[@pn|id: nota]` o `[@hn|id: nota]` según tipo.
+- `]` y `\` dentro de la nota se serializan como `\]` y `\\`; el primer `]` no escapado cierra el marcador.
+- Una selección multibloque conserva varios fragments de mark y un único `annotationReference`; el panel Notes enumera el reference, no los fragments.
 
 Regla:
-- Las definiciones no viven como bloque visible de ProseMirror, se materializan en Markdown al guardar/exportar.
+- Las definiciones legacy no viven como bloque visible de ProseMirror; al guardar/exportar se normalizan al marcador inline canónico.
+- En tablas, el reference se mantiene en la misma celda que el último fragmento seleccionado y antes del delimitador `|`.
 
 ## 2) Find/Replace decorations
 

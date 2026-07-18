@@ -31,7 +31,8 @@ Cuando el usuario anota, no está corrigiendo ni editando. Está dejando constan
 
 El sistema actual usa un único nodo TipTap `annotationReference` con cuatro valores reales de `type`.
 `collaborative` ya no es un tipo de producto vigente; entradas legacy con prefijo `@c` se tratan como
-`personal` para compatibilidad.
+`personal` para compatibilidad. Ese mapping ocurre explícitamente en el parser Markdown compartido y
+se conserva al re-serializar como el sigil vigente `@p`.
 
 | Tipo        | Audiencia        | Significado                                                         |
 | ----------- | ---------------- | ------------------------------------------------------------------- |
@@ -146,7 +147,13 @@ El resultado inevitable[^1|ann-1: Ver Bread Science, p. 42] son texturas gomosas
 sin azúcar — pendiente confirmar]
 ```
 
-El mark `==highlight==` y el nodo de anotación son hermanos en el párrafo TipTap. El serializer los emite juntos; el parser reconstruye la estructura correcta.
+En una selección contenida en un bloque, el mark `==highlight==` y el nodo de anotación son hermanos en el párrafo TipTap. Si la selección cruza bloques, TipTap la representa como varios fragmentos de mark locales al bloque y un solo nodo de anotación al final. El serializer emite un `==...==` por fragmento y un único marcador con el mismo `id`; el parser debe reconstruir todos los fragmentos contiguos como una sola ancla semántica.
+
+El panel de notas enumera el nodo de anotación, no sus fragmentos de mark. Una anotación multibloque produce una sola entrada. Solo un mark sin `annotationType` y sin `annotationReference` asociado puede aparecer como highlight standalone.
+
+En tablas, el `annotationReference` pertenece a la misma celda que contiene el último fragmento seleccionado y se serializa antes del delimitador `|`. El parser repara la forma legacy desplazada `==texto== | [@…]celda siguiente` a `==texto==[@…] | celda siguiente` sin cambiar el contenido de las celdas.
+
+El texto de una anotación escapa `]` como `\]` y una barra invertida literal como `\\`. El primer `]` no escapado cierra el marcador; cualquier link, corchete o prosa posterior permanece en el cuerpo visible del documento. El parser desescapa esos dos caracteres al reconstruir el nodo y el serializer siempre emite la forma canónica escapada.
 
 ---
 
@@ -246,8 +253,7 @@ El color del subrayado/fondo se decide por marca, no por heurística de párrafo
 - `mark[data-annotation-type="personal"]` y `mark[data-annotation-type="footnote"]` usan neutro (`#999990`).
 - Marks sin `data-annotation-type` son highlights manuales y conservan el estilo default ámbar.
 
-La sintaxis markdown canónica incluye `|id`: `==texto==[@tipo...|id: ...]`. Al parsear markdown, el rich parser re-deriva
-`data-annotation-type` desde el `annotationReference` hermano que sigue al mark.
+La sintaxis markdown canónica incluye `|id`: `==texto==[@tipo...|id: ...]`. Al parsear markdown, el rich parser re-deriva `data-annotation-type` desde el `annotationReference` que cierra el ancla. En selecciones multibloque, el tipo se aplica a cada fragmento `==...==` contiguo que precede ese único reference.
 
 ### Panel de anotaciones filtrado
 

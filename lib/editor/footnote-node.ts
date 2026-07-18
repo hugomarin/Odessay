@@ -1,4 +1,8 @@
 import { Node, mergeAttributes } from "@tiptap/core"
+import {
+  escapeInlineAnnotationText,
+  findInlineAnnotationMarkers,
+} from "@/lib/editor/annotation-markdown"
 
 export const FOOTNOTE_REF_EVENT = "footnote:click"
 
@@ -22,8 +26,6 @@ type RawAnnotationMatch = {
   text: string
 }
 
-const INLINE_ANNOTATION_RE =
-  /\[\^(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[@(p|c|h)?(\d+)(?:\|([^\]:|]+))?:\s*([^\]]*?)\]|\[\^(\d+)\]/g
 const FOOTNOTE_DEFINITION_LINE_RE = /^\[\^(\d+)\]:\s*(.*)$/
 
 const escapeHtmlAttribute = (value: string) =>
@@ -48,46 +50,27 @@ const coerceAnnotationType = (value: string | null | undefined): AnnotationType 
 }
 
 const parseInlineAnnotation = (
-  match: RegExpExecArray,
+  marker: ReturnType<typeof findInlineAnnotationMarkers>[number],
   legacyDefinitions: Map<number, string>,
 ): RawAnnotationMatch | null => {
-  if (match[1]) {
+  if (marker.legacyFootnote) {
     return {
-      fullMatch: match[0],
-      legacyFootnote: false,
-      id: match[2],
-      type: "footnote",
-      index: Number(match[1]),
-      text: match[3].trim(),
-    }
-  }
-
-  if (match[5]) {
-    const prefix = match[4]
-    const resolvedType: AnnotationType =
-      prefix === "p" || prefix === "c" ? "personal" : prefix === "h" ? "highlight" : "ai"
-    return {
-      fullMatch: match[0],
-      legacyFootnote: false,
-      id: match[6],
-      type: resolvedType,
-      index: Number(match[5]),
-      text: match[7].trim(),
-    }
-  }
-
-  if (match[8]) {
-    const index = Number(match[8])
-    return {
-      fullMatch: match[0],
+      fullMatch: marker.raw,
       legacyFootnote: true,
       type: "footnote",
-      index,
-      text: legacyDefinitions.get(index) ?? "",
+      index: marker.index,
+      text: legacyDefinitions.get(marker.index) ?? "",
     }
   }
 
-  return null
+  return {
+    fullMatch: marker.raw,
+    legacyFootnote: false,
+    id: marker.id,
+    type: marker.type,
+    index: marker.index,
+    text: marker.text,
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -149,18 +132,14 @@ function setupMarkdownItRule(md: any) {
 
           const text = child.content
           let lastIndex = 0
-          let match: RegExpExecArray | null
-
-          INLINE_ANNOTATION_RE.lastIndex = 0
-
-          while ((match = INLINE_ANNOTATION_RE.exec(text)) !== null) {
-            const parsed = parseInlineAnnotation(match, legacyDefinitions)
+          for (const marker of findInlineAnnotationMarkers(text)) {
+            const parsed = parseInlineAnnotation(marker, legacyDefinitions)
             if (!parsed) {
               continue
             }
 
-            if (match.index > lastIndex) {
-              nextChildren.push({ type: "text", content: text.slice(lastIndex, match.index) })
+            if (marker.start > lastIndex) {
+              nextChildren.push({ type: "text", content: text.slice(lastIndex, marker.start) })
             }
 
             const annotationId = parsed.id ?? crypto.randomUUID()
@@ -177,7 +156,7 @@ function setupMarkdownItRule(md: any) {
               content: `<annotation-ref ${attrs.join(" ")}></annotation-ref>`,
             })
 
-            lastIndex = match.index + parsed.fullMatch.length
+            lastIndex = marker.end
           }
 
           if (lastIndex === 0) {
@@ -198,19 +177,19 @@ function setupMarkdownItRule(md: any) {
 }
 
 const annotationToMarkdown = (type: AnnotationType, index: number, text: string, id?: string) => {
-  const trimmedText = text.trim()
+  const escapedText = escapeInlineAnnotationText(text.trim())
   const idSuffix = id ? `|${id}` : ""
 
   switch (type) {
     case "ai":
-      return `[@${index}${idSuffix}: ${trimmedText}]`
+      return `[@${index}${idSuffix}: ${escapedText}]`
     case "personal":
-      return `[@p${index}${idSuffix}: ${trimmedText}]`
+      return `[@p${index}${idSuffix}: ${escapedText}]`
     case "highlight":
-      return `[@h${index}${idSuffix}: ${trimmedText}]`
+      return `[@h${index}${idSuffix}: ${escapedText}]`
     case "footnote":
     default:
-      return `[^${index}${idSuffix}: ${trimmedText}]`
+      return `[^${index}${idSuffix}: ${escapedText}]`
   }
 }
 

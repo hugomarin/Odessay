@@ -6,7 +6,6 @@ import Code from "@tiptap/extension-code"
 import CodeBlock from "@tiptap/extension-code-block"
 import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
-import Highlight from "@tiptap/extension-highlight"
 import Image from "@tiptap/extension-image"
 import Italic from "@tiptap/extension-italic"
 import Link from "@tiptap/extension-link"
@@ -23,6 +22,7 @@ import { sanitizeWritingBodyJson, sanitizeWritingBodyText } from "@/lib/editor/c
 import { FootnoteExtension } from "@/lib/editor/footnote-extension"
 import { AnnotationReferenceNode } from "@/lib/editor/footnote-node"
 import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
+import { AnnotationHighlight } from "@/lib/editor/annotation-highlight"
 
 export const WRITING_BODY_EXTENSIONS = [
   Document,
@@ -32,7 +32,7 @@ export const WRITING_BODY_EXTENSIONS = [
   Bold,
   Italic,
   Strike,
-  Highlight,
+  AnnotationHighlight,
   Image.configure({ allowBase64: false, inline: false }),
   Link.configure({ openOnClick: false, autolink: true, protocols: ["http", "https", "mailto"] }),
   Blockquote,

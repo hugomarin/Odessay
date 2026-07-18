@@ -1,4 +1,8 @@
 import { normalizeMarkdownFootnotes } from "@/lib/editor/footnote-extension"
+import {
+  findInlineAnnotationMarkers,
+  replaceInlineAnnotationMarkers,
+} from "@/lib/editor/annotation-markdown"
 
 export type MarkdownInlineToggleResult = {
   markdown: string
@@ -90,18 +94,62 @@ const mergeFragmentedHighlights = (markdown: string): string => {
       /==([^=\n]*)==\*\*==([^=\n]*)==\*\*==([^=\n]*)==/g,
       "==$1**$2**$3==",
     )
+    result = result.replace(/==([^=\n]*)==\*\*==([^=\n]*)==\*\*/g, "==$1**$2**==")
+    result = result.replace(/\*\*==([^=\n]*)==\*\*==([^=\n]*)==/g, "==**$1**$2==")
     // ==A==***==B==***==C== → ==A***B***C== (bold+italic)
     result = result.replace(
       /==([^=\n]*)==\*\*\*==([^=\n]*)==\*\*\*==([^=\n]*)==/g,
       "==$1***$2***$3==",
     )
+    result = result.replace(/==([^=\n]*)==\*\*\*==([^=\n]*)==\*\*\*/g, "==$1***$2***==")
+    result = result.replace(/\*\*\*==([^=\n]*)==\*\*\*==([^=\n]*)==/g, "==***$1***$2==")
     // ==A==*==B==*==C== → ==A*B*C== (italic only — must come after ** passes)
     result = result.replace(
       /==([^=\n]*)==\*==([^=\n]*)==\*==([^=\n]*)==/g,
       "==$1*$2*$3==",
     )
+    result = result.replace(/==([^=\n]*)==\*==([^=\n]*)==\*(?!\*)/g, "==$1*$2*==")
+    result = result.replace(/(?<!\*)\*==([^=\n]*)==\*==([^=\n]*)==/g, "==*$1*$2==")
+    result = result.replace(/\*\*\*==([^=\n]*)==\*\*\*/g, "==***$1***==")
+    result = result.replace(/(?<!\*)\*\*==([^=\n]*)==\*\*(?!\*)/g, "==**$1**==")
+    result = result.replace(/(?<!\*)\*==([^=\n]*)==\*(?!\*)/g, "==*$1*==")
   }
   return result
+}
+
+const normalizeTableAnnotationBoundaries = (markdown: string): string => {
+  const repairs: Array<{ anchorEnd: number; markerEnd: number; markerStart: number; raw: string }> = []
+
+  for (const marker of findInlineAnnotationMarkers(markdown)) {
+    if (marker.legacyFootnote) continue
+
+    let delimiterPos = marker.start
+    while (delimiterPos > 0 && /[\t ]/.test(markdown[delimiterPos - 1])) delimiterPos -= 1
+    if (markdown[delimiterPos - 1] !== "|") continue
+    delimiterPos -= 1
+
+    let anchorEnd = delimiterPos
+    while (anchorEnd > 0 && /[\t ]/.test(markdown[anchorEnd - 1])) anchorEnd -= 1
+    if (markdown.slice(anchorEnd - 2, anchorEnd) !== "==") continue
+
+    const lineStart = markdown.lastIndexOf("\n", delimiterPos - 1) + 1
+    if (!/^[\t ]*\|/.test(markdown.slice(lineStart, delimiterPos + 1))) continue
+
+    repairs.push({
+      anchorEnd,
+      markerEnd: marker.end,
+      markerStart: marker.start,
+      raw: marker.raw,
+    })
+  }
+
+  return repairs
+    .sort((a, b) => b.markerStart - a.markerStart)
+    .reduce(
+      (result, repair) =>
+        `${result.slice(0, repair.anchorEnd)}${repair.raw}${result.slice(repair.anchorEnd, repair.markerStart)}${result.slice(repair.markerEnd)}`,
+      markdown,
+    )
 }
 
 const TABLE_BLOCK_REGEX = /<table\b[\s\S]*?<\/table>/gi
@@ -215,32 +263,85 @@ export const convertHtmlTablesToMarkdown = (value: string): string => {
 
 export const normalizeMarkdownForRoundTrip = (markdown: string): string =>
   normalizeMarkdownFootnotes(
-    mergeFragmentedHighlights(
-      normalizeBlockImageBoundaries(
-        normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)),
+    normalizeTableAnnotationBoundaries(
+      mergeFragmentedHighlights(
+        normalizeBlockImageBoundaries(
+          normalizeMarkdownHighlights(convertHtmlTablesToMarkdown(markdown)),
+        ),
       ),
     ),
   )
 
-const annotationTypeFromInlineMarker = (marker: string) => {
-  if (marker.startsWith("[^")) return "footnote"
-  if (marker.startsWith("[@p") || marker.startsWith("[@c")) return "personal"
-  if (marker.startsWith("[@h")) return "highlight"
-  return "ai"
+const isAnnotationAnchorSeparator = (value: string) => {
+  if (!value.includes("\n")) return /^[\t ]*$/.test(value)
+
+  return value.split("\n").every((line, index) => {
+    if (index === 0) return /^[\t ]*$/.test(line)
+    return /^[\t ]*(?:#{1,6}[\t ]+|>[\t ]?|(?:[-+*]|\d+[.)])[\t ]+)?$/.test(line)
+  })
 }
 
-const materializeAnnotationHighlightTypes = (markdown: string): string =>
-  markdown.replace(
-    /==([^=\n]+)==((?:\[\^(?:\d+)(?:\|[^\]:|]+)?:\s*[^\]]*?\])|(?:\[@(?:p|c|h)?(?:\d+)(?:\|[^\]:|]+)?:\s*[^\]]*?\]))/g,
-    (_match, highlightedText: string, marker: string) =>
-      `<mark data-annotation-type="${annotationTypeFromInlineMarker(marker)}">${highlightedText}</mark>${marker}`,
+const materializeAnnotationHighlightTypes = (markdown: string): string => {
+  const replacements: Array<{ end: number; replacement: string; start: number }> = []
+
+  for (const marker of findInlineAnnotationMarkers(markdown)) {
+    if (marker.legacyFootnote) continue
+
+    let highlightEnd = marker.start
+    while (highlightEnd > 0 && /[\t ]/.test(markdown[highlightEnd - 1])) highlightEnd -= 1
+    if (markdown.slice(highlightEnd - 2, highlightEnd) !== "==") continue
+
+    let currentEnd = highlightEnd
+    let currentStart = markdown.lastIndexOf("==", currentEnd - 3)
+
+    while (currentStart !== -1) {
+      const highlightedText = markdown.slice(currentStart + 2, currentEnd - 2)
+      if (!highlightedText || highlightedText.includes("==") || highlightedText.includes("\n")) break
+
+      replacements.push({
+        end: currentEnd,
+        replacement: `<mark data-annotation-type="${marker.type}">${highlightedText}</mark>`,
+        start: currentStart,
+      })
+
+      const previousEnd = markdown.lastIndexOf("==", currentStart - 1)
+      if (previousEnd === -1) break
+      const separator = markdown.slice(previousEnd + 2, currentStart)
+      if (!isAnnotationAnchorSeparator(separator)) break
+
+      currentEnd = previousEnd + 2
+      currentStart = markdown.lastIndexOf("==", previousEnd - 1)
+    }
+  }
+
+  return replacements.sort((a, b) => a.start - b.start).reduceRight(
+    (result, replacement) =>
+      `${result.slice(0, replacement.start)}${replacement.replacement}${result.slice(replacement.end)}`,
+    markdown,
   )
+}
+
+const escapeAnnotationAttribute = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+
+const materializeInlineAnnotations = (markdown: string): string =>
+  replaceInlineAnnotationMarkers(markdown, (marker) => {
+    if (marker.legacyFootnote) return marker.raw
+
+    const idAttributes = marker.id
+      ? ` id="${escapeAnnotationAttribute(marker.id)}" annotation-id="${escapeAnnotationAttribute(marker.id)}"`
+      : ""
+    return `<annotation-ref${idAttributes} annotation-type="${marker.type}" index="${marker.index}" annotation-text="${escapeAnnotationAttribute(encodeURIComponent(marker.text))}"></annotation-ref>`
+  })
 
 export const materializeMarkdownForRichParser = (markdown: string): string =>
-  materializeAnnotationHighlightTypes(normalizeMarkdownForRoundTrip(markdown)).replace(
-    /==([^=\n]+)==/g,
-    "<mark>$1</mark>",
-  )
+  materializeInlineAnnotations(
+    materializeAnnotationHighlightTypes(normalizeMarkdownForRoundTrip(markdown)),
+  ).replace(/==([^=\n]+)==/g, "<mark>$1</mark>")
 
 const escapeHtml = (value: string) =>
   value

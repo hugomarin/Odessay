@@ -30,7 +30,7 @@ import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
   appendMarkdownFootnote,
-  extractWritingAnnotationNodes,
+  extractRichEditorAnnotations,
   getMarkdownFootnotes,
   removeMarkdownFootnote,
   updateMarkdownFootnote,
@@ -149,7 +149,6 @@ import { getLocalDBScope, localDB, subscribeToLocalDBChanges, subscribeToLocalDB
 import type {
   ArtifactType,
   LocalCorrectionBlock,
-  LocalWriting,
   PublicationSuggestion,
   WritingLifecycle,
   WritingStatus,
@@ -180,6 +179,11 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
+import {
+  createEditorHydrationRecord,
+  type EditorHydrationRecord,
+} from "@/lib/editor/document-hydration"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
@@ -1611,7 +1615,8 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     const targetWritingId = hydrationWritingId
 
     const hydrateEditor = async () => {
-      let localWriting: LocalWriting | null = null
+      let hydratedWriting: EditorHydrationRecord | null = null
+      let openedCatalogRecord: DocumentCatalogRecord | null = null
       let localCorrectionBlocks = await localDB.correctionBlocks.getByWriting(targetWritingId)
 
       // openWriting handles local read + optional remote hydration in one call.
@@ -1667,6 +1672,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             recoverUnavailableTab()
             return
           }
+          if (outcome.status === "opened" || outcome.status === "conflict") {
+            openedCatalogRecord = outcome.record
+          }
         }
 
         const openResult = await (await getDocumentService()).openWriting(targetWritingId)
@@ -1679,7 +1687,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           console.error(`[editor] openWriting failed for ${targetWritingId}`, openResult.error)
           return
         }
-        localWriting = await localDB.writings.get(targetWritingId)
+        const localMetadata = await localDB.writings.get(targetWritingId)
+        hydratedWriting = createEditorHydrationRecord(openResult.data, {
+          catalogRecord: openedCatalogRecord,
+          localMetadata,
+        })
       } catch (error) {
         console.error(`[editor] openWriting failed for ${targetWritingId}`, error)
         return
@@ -1709,11 +1721,13 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         return
       }
 
-      if (localWriting) {
+      if (hydratedWriting) {
+        const { writing, canonicalPath, lifecycle: hydratedLifecycle, syncStatus: hydratedSyncStatus } =
+          hydratedWriting
         isApplyingContentRef.current = true
         // Load JSON first to get the markdown serialization, then re-parse as markdown
         // so that footnote references are converted to footnoteReference nodes.
-        editor.commands.setContent(localWriting.body_json)
+        editor.commands.setContent(writing.content.richText ?? EMPTY_EDITOR_JSON)
         const serialized = isDesktopRuntime()
           ? desktopDocumentEngine.richToSource(editor)
           : null
@@ -1795,30 +1809,34 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
         }
 
-        const loadedTitle = localWriting.title?.trim() || UNTITLED_WRITING_TITLE
-        const loadedHasExplicitTitle = isExplicitWritingTitle(loadedTitle, localWriting.body_text, localWriting.created_at)
+        const loadedTitle = writing.title?.trim() || UNTITLED_WRITING_TITLE
+        const loadedHasExplicitTitle = isExplicitWritingTitle(
+          loadedTitle,
+          writing.content.plainText,
+          writing.createdAt,
+        )
         setTitle(loadedTitle)
         setHasExplicitTitle(loadedHasExplicitTitle)
-        setVersion(localWriting.version)
-        setCreatedAt(localWriting.created_at)
-        setWritingSlug(localWriting.slug ?? null)
-        setWritingStatus(localWriting.status ?? "draft")
-        setArtifactType(localWriting.artifact_type ?? "general")
-        setWritingVisibility(localWriting.visibility ?? "private")
-        setLifecycle(localWriting.lifecycle ?? "local-only")
+        setVersion(writing.version)
+        setCreatedAt(writing.createdAt)
+        setWritingSlug(writing.slug ?? null)
+        setWritingStatus(writing.status ?? "draft")
+        setArtifactType(writing.artifactType ?? "general")
+        setWritingVisibility(writing.visibility ?? "private")
+        setLifecycle(hydratedLifecycle)
         setExternalFileNotice(null)
         setSyncStatus(
           mapLocalSyncStatusToSaveState(
-            localWriting.sync_status,
-            localWriting.lifecycle ?? "local-only",
+            hydratedSyncStatus,
+            hydratedLifecycle,
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
-        currentCanonicalPathRef.current = localWriting.canonical_path ?? null
+        currentCanonicalPathRef.current = canonicalPath
         updateDerivedEditorState(editor)
 
         const activeTab =
-          editorSession.tabs.find((tab) => tab.writing_id === localWriting.id) ??
+          editorSession.tabs.find((tab) => tab.writing_id === writing.id) ??
           editorSession.tabs.find((tab) => tab.id === routeWritingId) ??
           editorSession.tabs.find((tab) => tab.id === EDITOR_DRAFT_TAB_ID)
         const viewState = activeTab?.view_state
@@ -3467,65 +3485,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       const contentRevision = version || richFootnoteRevision
       void contentRevision
       if (!editor) return []
-      const json = editor.getJSON()
-      const annotations = extractWritingAnnotationNodes(json)
-
-      // Extract standalone highlights with real document positions
-      const highlights: Array<{
-        type: "highlight"
-        index: number
-        text: string
-        id: string
-        anchor_text: string
-        anchor_start: number
-        anchor_end: number
-      }> = []
-      const highlightMark = editor.schema.marks.highlight
-      if (highlightMark) {
-        const annotationRanges: Array<{ from: number; to: number }> = []
-        editor.state.doc.descendants((node, pos) => {
-          if (node.type.name === "annotationReference" || node.type.name === "footnoteReference") {
-            annotationRanges.push({ from: pos, to: pos + node.nodeSize })
-          }
-        })
-
-        const visitedRanges = new Set<string>()
-        editor.state.doc.descendants((node, pos) => {
-          if (node.type.name !== "text") return
-          if (!node.marks.some((m) => m.type.name === "highlight")) return
-
-          const $pos = editor.state.doc.resolve(pos)
-          const range = getMarkRange($pos, highlightMark)
-          if (!range) return
-
-          const key = `${range.from}-${range.to}`
-          if (visitedRanges.has(key)) return
-          visitedRanges.add(key)
-
-          const hasAnnotation = annotationRanges.some(
-            (ar) =>
-              (ar.from >= range.from && ar.to <= range.to) || // annotation inside highlight
-              (ar.from >= range.from && ar.from <= range.to + 1), // annotation immediately after highlight (==text==[@1: ...]); tolerate ±1 position drift between JSON and HTML load paths
-          )
-
-          if (!hasAnnotation) {
-            const maxAnnotationHighlightIndex = annotations
-              .filter((a) => a.type === "highlight")
-              .reduce((max, a) => Math.max(max, a.index), 0)
-            highlights.push({
-              type: "highlight",
-              index: maxAnnotationHighlightIndex + highlights.length + 1,
-              text: "",
-              id: `highlight:${highlights.length}`,
-              anchor_text: editor.state.doc.textBetween(range.from, range.to),
-              anchor_start: range.from,
-              anchor_end: range.to,
-            })
-          }
-        })
-      }
-
-      return [...annotations, ...highlights]
+      return extractRichEditorAnnotations(editor)
     }
 
     return getMarkdownFootnotes(markdownValue)
