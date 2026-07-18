@@ -44,10 +44,16 @@ type NotesPanelProps = {
   onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
   onUpdateAnnotationType?: (type: AnnotationType, index: number, newType: AnnotationType) => void
   onDeleteAnnotation: (type: AnnotationType, index: number) => void
-  onDeleteHighlight: (anchorText: string, anchorStart?: number, anchorEnd?: number) => void
+  onDeleteHighlight: (anchorText: string, anchorStart?: number, anchorEnd?: number) => boolean
   onUpdateHighlight?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
   onConvertHighlightToAi?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
-  onNavigate: (type: AnnotationType, index: number, pos?: number) => void
+  onNavigate: (
+    type: AnnotationType,
+    index: number,
+    pos?: number,
+    anchorText?: string,
+    anchorEnd?: number,
+  ) => boolean
   onClose: () => void
 }
 
@@ -251,6 +257,7 @@ export function NotesPanel({
   const [recordingKey, setRecordingKey] = useState<string | null>(null)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
   const [typeDropdownKey, setTypeDropdownKey] = useState<string | null>(null)
+  const [actionErrorKey, setActionErrorKey] = useState<string | null>(null)
 
   useEffect(() => {
     if (!typeDropdownKey) return
@@ -494,13 +501,16 @@ export function NotesPanel({
                         {/* Navigate to annotation in document */}
                         <button
                           type="button"
-                          onClick={() =>
-                            onNavigate(
+                          onClick={() => {
+                            const didNavigate = onNavigate(
                               annotation.type as AnnotationType,
                               annotation.index,
                               isStandalone ? annotation.anchor_start : undefined,
+                              isStandalone ? annotation.anchor_text : undefined,
+                              isStandalone ? annotation.anchor_end : undefined,
                             )
-                          }
+                            setActionErrorKey(didNavigate ? null : key)
+                          }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
                           aria-label="Go to annotation in document"
                           title="Ir al texto"
@@ -520,11 +530,20 @@ export function NotesPanel({
                         )}
                         <button
                           type="button"
-                          onClick={() =>
-                            isHighlight
-                              ? onDeleteHighlight(annotation.anchor_text ?? "", annotation.anchor_start, annotation.anchor_end)
-                              : onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)
-                          }
+                          onClick={() => {
+                            if (isStandalone) {
+                              const didDelete = onDeleteHighlight(
+                                annotation.anchor_text ?? "",
+                                annotation.anchor_start,
+                                annotation.anchor_end,
+                              )
+                              setActionErrorKey(didDelete ? null : key)
+                              return
+                            }
+
+                            onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)
+                            setActionErrorKey(null)
+                          }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
                           aria-label={`Delete ${label}`}
                         >
@@ -532,6 +551,11 @@ export function NotesPanel({
                         </button>
                       </div>
                     </div>
+                    {actionErrorKey === key ? (
+                      <p role="status" className="mt-1.5 font-sans text-[11px] text-destructive">
+                        The annotated text could not be found.
+                      </p>
+                    ) : null}
                   </article>
                 )
               })}

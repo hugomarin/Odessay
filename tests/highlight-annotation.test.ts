@@ -20,7 +20,11 @@ import {
   countTypedAnnotations,
 } from "@/lib/margins/margins"
 import { parseMarkdownToSnapshot, serializeDocumentToMarkdown } from "@/lib/editor/document-serialization"
-import { coerceHighlightAnnotationType } from "@/lib/editor/annotation-highlight"
+import {
+  coerceHighlightAnnotationType,
+  deleteStandaloneHighlight,
+  resolveStandaloneHighlightRange,
+} from "@/lib/editor/annotation-highlight"
 import { renderWritingBodyHtml } from "@/lib/reading/render-body-html"
 
 function createTestEditor(content = "") {
@@ -272,6 +276,86 @@ describe("highlight annotation", () => {
   })
 
   describe("TipTap commands", () => {
+    it("deletes a standalone highlight after its captured positions become stale", () => {
+      const editor = createTestEditor("<p>Before</p><p>Hello world</p>")
+      let highlightStart = 0
+      editor.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === "Hello world") {
+          highlightStart = pos
+        }
+      })
+      editor
+        .chain()
+        .setTextSelection({ from: highlightStart, to: highlightStart + 5 })
+        .setHighlight()
+        .run()
+
+      const [panelEntry] = extractRichEditorAnnotations(editor)
+      expect(panelEntry).toMatchObject({
+        anchor_text: "Hello",
+        anchor_start: highlightStart,
+        anchor_end: highlightStart + 5,
+      })
+
+      editor.commands.insertContentAt(1, "Start ")
+      const result = deleteStandaloneHighlight(editor, {
+        anchorText: panelEntry.anchor_text,
+        anchorStart: panelEntry.anchor_start,
+        anchorEnd: panelEntry.anchor_end,
+      })
+
+      expect(result).toEqual({
+        status: "found",
+        range: { from: highlightStart + 6, to: highlightStart + 11 },
+      })
+      expect(extractRichEditorAnnotations(editor)).toEqual([])
+
+      const markdown = serializeDocumentToMarkdown(editor.getJSON())
+      const reloaded = new Editor({
+        extensions: createEditorExtensions(),
+        content: parseMarkdownToSnapshot(markdown).bodyJson,
+      })
+      expect(extractRichEditorAnnotations(reloaded)).toEqual([])
+      reloaded.destroy()
+      editor.destroy()
+    })
+
+    it("refuses to resolve a stale standalone highlight when the text is ambiguous", () => {
+      const editor = createTestEditor("Same gap Same")
+      editor.chain().setTextSelection({ from: 1, to: 5 }).setHighlight().run()
+      editor.chain().setTextSelection({ from: 10, to: 14 }).setHighlight().run()
+
+      const result = resolveStandaloneHighlightRange(editor, {
+        anchorText: "Same",
+        anchorStart: 2,
+        anchorEnd: 6,
+      })
+
+      expect(result).toEqual({ status: "ambiguous" })
+      expect(extractRichEditorAnnotations(editor)).toHaveLength(2)
+      editor.destroy()
+    })
+
+    it("does not treat a typed annotation highlight as a standalone delete target", () => {
+      const editor = createTestEditor("Hello world")
+      editor
+        .chain()
+        .setTextSelection({ from: 1, to: 6 })
+        .setHighlight()
+        .addAnnotation("ai", "Keep this")
+        .run()
+
+      expect(
+        resolveStandaloneHighlightRange(editor, {
+          anchorText: "Hello",
+          anchorStart: 1,
+          anchorEnd: 6,
+        }),
+      ).toEqual({ status: "missing" })
+      expect(extractRichEditorAnnotations(editor)).toHaveLength(1)
+      editor.destroy()
+    })
+
     it("applyAnnotationToBody stamps the highlight mark with the annotation type", () => {
       const result = applyAnnotationToBody({
         bodyJson: {
