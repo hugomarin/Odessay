@@ -3141,6 +3141,16 @@
       "commit": "53acb605651446e5340cc9db5f44c9940086c5f0",
       "date": "2026-07-18",
       "notes": "Single-round review, approved 10.0/10 (PASS). Standalone highlight delete from Notes now runs the same revision+derived-state+persistEditorSnapshot trio as typed handlers and persists across reload; stale captured positions re-resolve conservatively (exact range first, unique text match fallback; missing/ambiguous anchors return inline feedback, never mutate another mark). Navigation resolves standalone highlights and typed references, then scrolls the writing area explicitly (72px offset) so the anchor stays visible below the 56px sticky topbar and above the statusbar; globals.css untouched, TOC navigation unaffected. Typed annotation handlers preserved. Adds dev-only /perf/editor-harness/[id] for unauthenticated reload evidence. Evidence: 163 files/1071 tests, typecheck, lint, perf gate 13 pass/1 warn/1 skip (after trace ode-378-editor-after.json.gz, 0 required_failures), delivery gate, CI traceability + Vercel green, screenshots navigate-visible/delete-complete."
+    },
+    {
+      "what": "fix(editor): stabilize voice recorder states [ODE-379]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-379",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-379/stabilize-voice-note-recording-layout-and-failure-states-in-notes",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/346",
+      "commit": "c365e0ef91be348b5e1cfdae155ab345f2629904",
+      "date": "2026-07-18",
+      "notes": "Single-round review, approved 9.3/10 (PASS). Recorder row now fits the 312px Notes card (min-w-0/overflow-hidden waveform, shrink-0 controls, two-row layout); exclusive phases capturing/transcribing/error with no dead controls after Stop; Retry reuses the retained blob without re-recording and Discard aborts the in-flight request; 30s transcription timeout plus specific empty-audio message; upload filename/mime derived from the real recorder container (webm/mp4/ogg/wav/mp3) without relabeling; labels unified to English. Route /api/margins/transcribe contract unchanged (tests cover webm+mp4). Evidence: typecheck, lint, 164 files/1078 tests, targeted 16/16, delivery gate, CI traceability + Vercel green, new e2e with mocked 502/empty/success, screenshots recording/transcribing/error + flow webm + packaged-desktop smoke. Non-blocking findings: P2 e2e flake on cold dev server (pre-existing unguarded /write navigations in editor-shell outside isPerfHarness guard); P3 packaged-DMG screenshot lacks recorder states, real mic/provider validation deferred to owner acceptance."
     }
   ]
 }
