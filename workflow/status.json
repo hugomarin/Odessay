@@ -3131,6 +3131,16 @@
       "commit": "ceea06c9f08a82a4e1e5a97d3c47156e312a72ec",
       "date": "2026-07-18",
       "notes": "Two review rounds. Round 1 rejected (score 6.9): owner-authorized scope expansion not yet in PR + P1 marker parser swallowing prose after ] + P2 margin-entry palette duplication. Round 2 approved (score 10.0, PASS): escape-based inline marker format (\\] and \\\\, first-unescaped-bracket close) with directed regressions; multi-block annotations keep single identity/type/color + one Notes entry; bold/italic highlight normalization; annotationReference stays in the selected table cell with displaced-marker repair; desktop editor hydrates body from DocumentService.openWriting / canonical .md (IndexedDB metadata-only fallback, no draft fallback); single annotation palette consumed by marks, sups, Notes and margin entries (static contract test); shared typed AnnotationHighlight across editor and reading surfaces. Evidence: 162 files/1066 tests, perf gate 14 pass/0 warn/1 skip on fresh remediation trace, delivery gate, CI traceability + Vercel green, cross-surface screenshots."
+    },
+    {
+      "what": "fix(editor): repair Notes panel delete and go-to-annotation interactions [ODE-378]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-378",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-378/fix-notes-panel-delete-and-go-to-annotation-interactions",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/345",
+      "commit": "53acb605651446e5340cc9db5f44c9940086c5f0",
+      "date": "2026-07-18",
+      "notes": "Single-round review, approved 10.0/10 (PASS). Standalone highlight delete from Notes now runs the same revision+derived-state+persistEditorSnapshot trio as typed handlers and persists across reload; stale captured positions re-resolve conservatively (exact range first, unique text match fallback; missing/ambiguous anchors return inline feedback, never mutate another mark). Navigation resolves standalone highlights and typed references, then scrolls the writing area explicitly (72px offset) so the anchor stays visible below the 56px sticky topbar and above the statusbar; globals.css untouched, TOC navigation unaffected. Typed annotation handlers preserved. Adds dev-only /perf/editor-harness/[id] for unauthenticated reload evidence. Evidence: 163 files/1071 tests, typecheck, lint, perf gate 13 pass/1 warn/1 skip (after trace ode-378-editor-after.json.gz, 0 required_failures), delivery gate, CI traceability + Vercel green, screenshots navigate-visible/delete-complete."
     }
   ]
 }
