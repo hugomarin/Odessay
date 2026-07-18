@@ -110,6 +110,17 @@ No incluye metadata de Odessay (`status`, `visibility`, `slug`, versiones o tags
 
 ## Decisión de producto vigente
 
+### Estado actual y destino de las filas
+
+La tabla de Workspace vigente es de lectura para metadata: permite seleccionar y abrir documentos, pero sus filas no ofrecen todavía la misma edición inline de `status`/`artifact_type`, acciones de fila ni bulk actions que Desk.
+
+El destino aprobado es paridad de edición sin crear otro pipeline documental:
+
+- **ODE-381** lleva a Workspace los dropdowns de `status`/`artifact_type`, acciones de fila y multi-select sobre los mismos casos de uso y el mismo `DocumentCatalog` que Desk.
+- **ODE-382** aplica el rediseño aprobado de filas a Desk y Workspace (alineación, tipografía de títulos y columna Workspace).
+
+Esta distinción registra estado actual vs. destino; no reescribe la historia ni autoriza a Workspace a mutar SQLite, manifests o filesystem directamente.
+
 Workspace queda clasificado así:
 
 - Layer: `Adapter(desktop)` + `UI`

@@ -5,6 +5,7 @@
 - **Decide:** Hugo (esta es la decisión que ningún skill/doc estaba facultado para tomar)
 - **Reemplaza:** el marco "de transición" que aplazaba la polaridad A1/A2/A3
 - **Gobernanza:** este ADR es la **fuente de verdad de la arquitectura de documento**. Los cuatro `odessay-desktop-*` y los skills de arquitectura/backend/database deben referenciarlo.
+- **Enmienda D9 (2026-07-18):** distingue ausencia observada de una acción confirmada: el watcher nunca archiva cloud por inferencia; el caso de uso confirmado compone borrado local y soft-delete cloud según presencia, y el hard-delete queda en Settings > Archivados.
 - **Enmienda D10 (2026-07-09):** el catálogo operacional desktop y la reconciliación de identidad se especifican en `workflow/context/features/odessay-desktop-document-catalog.md`. SQLite sustituye a IndexedDB como catálogo/cola objetivo de desktop; `.odessay/index.json` se reconoce como ledger durable del binding local, no como caché equivalente a SQLite.
 - **Estado del corpus vs. código:** este ADR y los docs reconciliados son **normativos y van por delante del código**. D3 (id inline), D5 (UUID único), D6/D11 (`content_hash` en índice y nube), D7 (repliegue de `rehome`) describen el **destino**, no el runtime actual (hoy el código corre el modelo A+B). Leer los docs de feature como contrato objetivo, no como descripción del estado vigente; cada brecha doc↔código está marcada como trabajo bloqueante en §Consecuencias.
 
@@ -81,16 +82,18 @@ La parte "local" del estado es **por-máquina**; la parte "nube" es global. La U
 
 **Metadata de un documento "solo local":** un `.md` sin registro de nube ni espejo local usa **metadata por defecto (`draft`/`general`) hasta el primer sync**; NO se cachea metadata en disco (coherente con D4). Se eligió esta opción sobre la alternativa de cachear metadata en el índice de binding. (Decisión voltéable; los archivos ajenos no necesitan metadata de todos modos.)
 
-**Regla de borrado:** borrar el archivo físico **NO** borra el documento de la nube — solo quita la copia local (pasa a "solo nube"). Borrar de la nube es una **acción explícita y separada** dentro de la app. Nunca se destruyen datos de la nube por inferir un borrado a partir de un archivo ausente (puede ser disco desmontado, movido fuera de carpetas vigiladas, accidente). Los dos borrados son procesos independientes.
+**Regla de borrado:** la ausencia observada de un archivo físico **NO** borra ni archiva el documento de la nube — solo quita la copia local (pasa a "solo nube"). Nunca se destruyen datos de la nube por inferir intención a partir de un archivo ausente (puede ser disco desmontado, movido fuera de carpetas vigiladas o un accidente). Las autoridades local y cloud siguen siendo independientes, aunque una acción confirmada del usuario puede orquestar ambas explícitamente.
 
 **Semántica de borrado por runtime:**
 
-- **Web:** no hay archivo local. `DocumentService.deleteWriting` realiza un soft-delete del registro de nube, encolado para sync. Es la única operación de borrado expuesta en la UI.
-- **Desktop:** coexisten dos operaciones de borrado con autoridad distinta:
-  1. **Borrado del archivo local** (disparado por el watcher cuando un `.md` desaparece del filesystem, o por un comando explícito futuro de "eliminar copia local"): mueve/retira el archivo y llama a `detachLocalFile`, dejando el writing en estado "solo nube". **No** borra el registro cloud.
-  2. **Borrado del registro cloud** (acción por defecto en la UI): `DocumentService.deleteWriting` hace soft-delete del registro de nube, encolado para sync, igual que en web. No toca archivos locales.
-- **Paridad de interfaz:** `DocumentService.deleteWriting` tiene la misma semántica en web y desktop: borra el registro cloud. El borrado físico de archivo es una operación separada, reflejada en este contrato, y queda bajo responsabilidad del watcher/fs-event (o un comando desktop explícito futuro).
-- **UI:** el diálogo de borrado por defecto usa `scope="writing"` para no arrastrar la explicación desktop (archivo local vs nube) al runtime web. Los consumidores que necesiten la explicación cloud/desktop pueden optar por `scope="cloud"`.
+- **Web / cloud-only:** no hay archivo local. La acción confirmada hace `DocumentService.deleteWriting`: soft-delete del registro cloud, encolado para sync. El writing sale de las vistas activas y queda disponible en Settings > Archivados; el hard-delete cloud es otra acción explícita desde esa vista.
+- **Desktop, ausencia observada:** si el watcher detecta que un `.md` desapareció, llama a `detachLocalFile` y deja el writing activo como "solo nube" cuando existe cloud. **No** llama a `deleteWriting` ni presume intención.
+- **Desktop, acción confirmada del usuario:** el caso de uso de aplicación inspecciona presencia y compone operaciones con autoridad explícita:
+  1. **solo local:** confirma y elimina la copia física; al no existir registro cloud, no hay soft-delete remoto;
+  2. **solo nube:** confirma y ejecuta `deleteWriting`;
+  3. **local + nube:** confirma que se eliminará la copia local, ejecuta borrado físico + `detachLocalFile` y ejecuta `deleteWriting` para archivar la copia cloud.
+- **Paridad de contrato:** `DocumentService.deleteWriting` conserva la misma semántica en web y desktop: soft-delete del registro cloud. El borrado físico sigue siendo una operación desktop separada. La composición pertenece al caso de uso de aplicación, no al watcher ni a un adapter.
+- **UI:** Desk y Workspace excluyen todo writing soft-deleted. Conservar una copia cloud archivada nunca hace que el writing reaparezca como `cloud-only` en esas vistas. Settings > Archivados es la superficie para consultar esos registros y ejecutar el hard-delete cloud definitivo.
 
 ### D10 — Cada almacén tiene un solo rol y una sola autoridad
 
