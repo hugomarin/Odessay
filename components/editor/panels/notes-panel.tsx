@@ -16,7 +16,7 @@ const TYPE_COLOR: Record<PanelEntryType, string> = {
 
 const TYPE_LABEL: Record<PanelEntryType, string> = {
   footnote: "Footnote",
-  personal: "Highlight",
+  personal: "Personal",
   ai: "AI",
   highlight: "Highlight",
 }
@@ -28,32 +28,29 @@ const ANNOTATION_TYPE_OPTIONS: { type: AnnotationType; label: string; color: str
   { type: "footnote", label: "Footnote", color: ANNOTATION_TYPE_COLOR.footnote },
 ]
 
-type PanelEntry = {
+export type AnnotationPanelEntry = {
   id?: string
+  standalone?: boolean
   type: PanelEntryType
   index: number
   text: string
   anchor_text?: string
   anchor_start?: number
   anchor_end?: number
+  source_start?: number
+  source_end?: number
 }
 
 type NotesPanelProps = {
-  annotations: PanelEntry[]
+  annotations: AnnotationPanelEntry[]
   currentMarkdown: string
-  onUpdateAnnotation: (type: AnnotationType, index: number, text: string) => void
-  onUpdateAnnotationType?: (type: AnnotationType, index: number, newType: AnnotationType) => void
-  onDeleteAnnotation: (type: AnnotationType, index: number) => void
-  onDeleteHighlight: (anchorText: string, anchorStart?: number, anchorEnd?: number) => boolean
-  onUpdateHighlight?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
-  onConvertHighlightToAi?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => void
-  onNavigate: (
-    type: AnnotationType,
-    index: number,
-    pos?: number,
-    anchorText?: string,
-    anchorEnd?: number,
-  ) => boolean
+  onUpdateAnnotation: (annotation: AnnotationPanelEntry, text: string) => boolean
+  onUpdateAnnotationType?: (annotation: AnnotationPanelEntry, newType: AnnotationType) => boolean
+  onDeleteAnnotation: (annotation: AnnotationPanelEntry) => boolean
+  onDeleteHighlight: (anchorText: string, anchorStart?: number, anchorEnd?: number, id?: string) => boolean
+  onUpdateHighlight?: (anchorText: string, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => boolean
+  onConvertHighlight?: (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => boolean
+  onNavigate: (annotation: AnnotationPanelEntry) => boolean
   onClose: () => void
 }
 
@@ -96,9 +93,12 @@ function AutoTextarea({
   )
 }
 
-function isStandaloneHighlight(entry: PanelEntry): boolean {
-  return entry.type === "highlight" && (entry.id?.startsWith("highlight:") ?? false)
+function isStandaloneHighlight(entry: AnnotationPanelEntry): boolean {
+  return entry.type === "highlight" && entry.standalone === true
 }
+
+const panelEntryKey = (entry: AnnotationPanelEntry) =>
+  entry.id ? `annotation:${entry.id}` : `${entry.type}:${entry.index}`
 
 function VoiceRecorderInline({
   onTranscript,
@@ -126,6 +126,8 @@ function VoiceRecorderInline({
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const submittedBlobRef = useRef<Blob | null>(null)
   const requestRef = useRef<{ id: number; controller: AbortController } | null>(null)
+  const onTranscriptRef = useRef(onTranscript)
+  onTranscriptRef.current = onTranscript
 
   const discard = useCallback(() => {
     requestRef.current?.controller.abort()
@@ -149,7 +151,7 @@ function VoiceRecorderInline({
     void transcribeVoiceNote(recordedBlob, { signal: request.controller.signal })
       .then((transcript) => {
         if (requestRef.current?.id === request.id) {
-          onTranscript(transcript)
+          onTranscriptRef.current(transcript)
         }
       })
       .catch((error: unknown) => {
@@ -157,7 +159,7 @@ function VoiceRecorderInline({
         setVoiceError(error instanceof Error ? error.message : "Transcription failed. Try again.")
         setVoicePhase("error")
       })
-  }, [onTranscript])
+  }, [])
 
   useEffect(() => {
     void start()
@@ -337,7 +339,7 @@ export function NotesPanel({
   onDeleteAnnotation,
   onDeleteHighlight,
   onUpdateHighlight,
-  onConvertHighlightToAi,
+  onConvertHighlight,
   onNavigate,
   onClose,
 }: NotesPanelProps) {
@@ -358,7 +360,7 @@ export function NotesPanel({
   useEffect(() => {
     setDrafts(
       annotations.reduce<Record<string, string>>((acc, a) => {
-        acc[`${a.type}:${a.index}`] = a.text
+        acc[panelEntryKey(a)] = a.text
         return acc
       }, {}),
     )
@@ -446,36 +448,47 @@ export function NotesPanel({
           ) : (
             <div className="flex flex-col gap-2">
               {orderedWithDisplay.map((annotation) => {
-                const key = `${annotation.type}:${annotation.index}`
+                const key = panelEntryKey(annotation)
                 const color = TYPE_COLOR[annotation.type]
                 const label = TYPE_LABEL[annotation.type]
                 const { displayIndex } = annotation
                 const draft = drafts[key] ?? ""
                 const isStandalone = isStandaloneHighlight(annotation)
-                const isHighlight = annotation.type === "highlight"
                 const isRecording = recordingKey === key
 
                 const handleBlur = () => {
                   const next = drafts[key] ?? ""
                   if (next === annotation.text) return
+                  let didUpdate = false
                   if (isStandalone && onUpdateHighlight) {
-                    onUpdateHighlight(annotation.anchor_text ?? "", next, annotation.anchor_start, annotation.anchor_end)
-                  } else if (isHighlight) {
-                    onUpdateAnnotation("highlight", annotation.index, next)
+                    didUpdate = onUpdateHighlight(
+                      annotation.anchor_text ?? "",
+                      next,
+                      annotation.anchor_start,
+                      annotation.anchor_end,
+                      annotation.id,
+                    )
                   } else {
-                    onUpdateAnnotation(annotation.type as AnnotationType, annotation.index, next)
+                    didUpdate = onUpdateAnnotation(annotation, next)
                   }
+                  setActionErrorKey(didUpdate ? null : key)
                 }
 
                 const handleTranscript = (transcript: string) => {
                   setDrafts((prev) => ({ ...prev, [key]: transcript }))
                   setRecordingKey(null)
                   if (isStandalone && onUpdateHighlight) {
-                    onUpdateHighlight(annotation.anchor_text ?? "", transcript, annotation.anchor_start, annotation.anchor_end)
-                  } else if (isHighlight) {
-                    onUpdateAnnotation("highlight", annotation.index, transcript)
+                    const didUpdate = onUpdateHighlight(
+                      annotation.anchor_text ?? "",
+                      transcript,
+                      annotation.anchor_start,
+                      annotation.anchor_end,
+                      annotation.id,
+                    )
+                    setActionErrorKey(didUpdate ? null : key)
                   } else {
-                    onUpdateAnnotation(annotation.type as AnnotationType, annotation.index, transcript)
+                    const didUpdate = onUpdateAnnotation(annotation, transcript)
+                    setActionErrorKey(didUpdate ? null : key)
                   }
                 }
 
@@ -565,10 +578,19 @@ export function NotesPanel({
                                 key={opt.type}
                                 type="button"
                                 onClick={() => {
-                                  if (isStandalone && onConvertHighlightToAi && opt.type === "ai") {
-                                    onConvertHighlightToAi(annotation.anchor_text ?? "", draft, annotation.anchor_start, annotation.anchor_end)
+                                  if (isStandalone && onConvertHighlight) {
+                                    const didUpdate = onConvertHighlight(
+                                      annotation.anchor_text ?? "",
+                                      opt.type,
+                                      draft,
+                                      annotation.anchor_start,
+                                      annotation.anchor_end,
+                                      annotation.id,
+                                    )
+                                    setActionErrorKey(didUpdate ? null : key)
                                   } else if (onUpdateAnnotationType) {
-                                    onUpdateAnnotationType(annotation.type as AnnotationType, annotation.index, opt.type)
+                                    const didUpdate = onUpdateAnnotationType(annotation, opt.type)
+                                    setActionErrorKey(didUpdate ? null : key)
                                   }
                                   setTypeDropdownKey(null)
                                 }}
@@ -591,13 +613,7 @@ export function NotesPanel({
                         <button
                           type="button"
                           onClick={() => {
-                            const didNavigate = onNavigate(
-                              annotation.type as AnnotationType,
-                              annotation.index,
-                              isStandalone ? annotation.anchor_start : undefined,
-                              isStandalone ? annotation.anchor_text : undefined,
-                              isStandalone ? annotation.anchor_end : undefined,
-                            )
+                            const didNavigate = onNavigate(annotation)
                             setActionErrorKey(didNavigate ? null : key)
                           }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
@@ -625,13 +641,14 @@ export function NotesPanel({
                                 annotation.anchor_text ?? "",
                                 annotation.anchor_start,
                                 annotation.anchor_end,
+                                annotation.id,
                               )
                               setActionErrorKey(didDelete ? null : key)
                               return
                             }
 
-                            onDeleteAnnotation(annotation.type as AnnotationType, annotation.index)
-                            setActionErrorKey(null)
+                            const didDelete = onDeleteAnnotation(annotation)
+                            setActionErrorKey(didDelete ? null : key)
                           }}
                           className="flex h-5 w-5 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-opacity hover:bg-muted hover:text-ink group-hover:opacity-100"
                           aria-label={`Delete ${label}`}

@@ -22,6 +22,7 @@ function parseArgs(argv) {
     outputPath: DEFAULT_OUTPUT,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     headless: true,
+    scenario: "editor",
   };
 
   const args = argv.slice(2);
@@ -66,6 +67,15 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === "--scenario") {
+      if (value !== "editor" && value !== "notes-annotations") {
+        fail(`Invalid scenario "${value}".`);
+      }
+      options.scenario = value;
+      index += 1;
+      continue;
+    }
+
     fail(`Unknown argument "${arg}".`);
   }
 
@@ -103,9 +113,54 @@ async function readTraceFromStream(cdp, stream) {
   return Buffer.concat(chunks);
 }
 
-async function prepareHarness(page, targetUrl, timeoutMs) {
+async function prepareHarness(page, targetUrl, timeoutMs, scenario) {
+  if (scenario === "notes-annotations") {
+    await page.route("**/api/writings/**", async (route) => {
+      if (route.request().method() === "PATCH") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ data: null, error: null }),
+        });
+        return;
+      }
+      await route.continue();
+    });
+  }
+
   await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: timeoutMs });
   await page.waitForSelector(".odessay-editor-content", { timeout: timeoutMs });
+
+  if (scenario === "notes-annotations") {
+    await page.getByRole("button", { name: "Markdown" }).click();
+    const markdown = page.getByLabel("Markdown source");
+    const types = ["ai", "personal", "footnote", "highlight"];
+    const sigil = (type, index) => {
+      if (type === "personal") return `@p${index}`;
+      if (type === "footnote") return `^${index}`;
+      if (type === "highlight") return `@h${index}`;
+      return `@${index}`;
+    };
+    const typeCounts = new Map();
+    const fixture = Array.from({ length: 24 }, (_, index) => {
+      const type = types[index % types.length];
+      const typeIndex = (typeCounts.get(type) ?? 0) + 1;
+      typeCounts.set(type, typeIndex);
+      return `==Annotation anchor ${index + 1}==[${sigil(type, typeIndex)}|perf-${index + 1}: Annotation note ${index + 1}]`;
+    }).join("\n\n");
+    await markdown.fill(fixture);
+    await page.getByRole("button", { name: "Notes panel" }).click();
+    const panel = page.getByTestId("editor-panel-notes");
+    await panel.waitFor({ state: "visible", timeout: timeoutMs });
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="editor-panel-notes"] article').length >= 24,
+      undefined,
+      { timeout: timeoutMs },
+    );
+    await page.waitForTimeout(300);
+    return;
+  }
+
   const editor = page.locator(".odessay-editor-content").first();
   await editor.click();
 
@@ -124,7 +179,38 @@ async function prepareHarness(page, targetUrl, timeoutMs) {
   await page.waitForTimeout(300);
 }
 
-async function runMeasuredScenario(page, targetUrl) {
+async function runMeasuredScenario(page, targetUrl, scenario) {
+  if (scenario === "notes-annotations") {
+    const panel = page.getByTestId("editor-panel-notes");
+    const aiCard = panel.locator("article").filter({ hasText: "“Annotation anchor 1”" });
+    const textarea = aiCard.locator("textarea");
+    await textarea.fill("Updated annotation note from the performance scenario");
+    try {
+      const origin = new URL(targetUrl).origin;
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+      await page.evaluate(async () => {
+        await navigator.clipboard.writeText(" pasted");
+      });
+      await textarea.press("End");
+      await textarea.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+    } catch {
+      // Ignore clipboard restrictions in perf environments that do not expose it.
+    }
+    await aiCard.locator("button").filter({ hasText: "AI" }).click();
+    await aiCard.getByRole("button", { name: "Personal" }).click();
+
+    const footnoteCard = panel.locator("article").filter({ hasText: "“Annotation anchor 3”" });
+    await footnoteCard.getByRole("button", { name: "Go to annotation in document" }).click({ force: true });
+
+    const highlightCard = panel.locator("article").filter({ hasText: "“Annotation anchor 4”" });
+    await highlightCard.getByRole("button", { name: "Delete Highlight" }).click({ force: true });
+    await panel.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await page.waitForTimeout(900);
+    return;
+  }
+
   const commandKey = process.platform === "darwin" ? "Meta" : "Control";
   const editor = page.locator(".odessay-editor-content").first();
 
@@ -197,14 +283,14 @@ async function main() {
   });
 
   try {
-    await prepareHarness(page, targetUrl, options.timeoutMs);
+    await prepareHarness(page, targetUrl, options.timeoutMs, options.scenario);
     await cdp.send("Tracing.start", {
       transferMode: "ReturnAsStream",
       categories: categories.join(","),
       options: "record-as-much-as-possible",
     });
 
-    await runMeasuredScenario(page, targetUrl);
+    await runMeasuredScenario(page, targetUrl, options.scenario);
 
     await cdp.send("Tracing.end");
     const completion = await traceCompleted;

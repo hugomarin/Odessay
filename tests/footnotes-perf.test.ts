@@ -33,7 +33,7 @@ describe("footnotes useMemo performance", () => {
     const firstRun = extractRichEditorAnnotations(editor)
     const highlightCount = firstRun.filter((f) => f.type === "highlight").length
     const annotatedCount = firstRun.filter((f) => f.type === "highlight" && f.text !== "").length
-    const standaloneCount = firstRun.filter((f) => f.type === "highlight" && f.text === "" && f.id?.startsWith("highlight:")).length
+    const standaloneCount = firstRun.filter((f) => f.type === "highlight" && f.text === "" && f.standalone).length
 
     expect(highlightCount).toBe(5)
     expect(annotatedCount).toBe(2)
