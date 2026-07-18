@@ -1,9 +1,13 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import type { FloatingOverlayAnchor } from "@/lib/reading/floating-overlay-position"
+import { useFloatingOverlayPosition } from "./use-floating-overlay-position"
+
+export type SelectionPopupPosition = FloatingOverlayAnchor & { y: number }
 
 type SelectionPopupProps = {
-  position: { x: number; y: number } | null
+  position: SelectionPopupPosition | null
   onSelectType?: (type: "personal" | "ai" | "footnote") => void
   onMark?: () => void
   onAnnotate?: () => void
@@ -13,6 +17,11 @@ type SelectionPopupProps = {
 
 export function SelectionPopup({ position, onSelectType, onMark, onAnnotate, onFootnote, onDismiss }: SelectionPopupProps) {
   const ref = useRef<HTMLDivElement>(null)
+  const floatingPosition = useFloatingOverlayPosition({
+    anchor: position,
+    overlayRef: ref,
+    preferredPlacement: "above",
+  })
 
   // Dismiss on click outside
   useEffect(() => {
@@ -36,12 +45,13 @@ export function SelectionPopup({ position, onSelectType, onMark, onAnnotate, onF
       id="selection-popup"
       data-section="selection-popup"
       data-testid="selection-popup"
+      data-placement={floatingPosition?.placement ?? "above"}
       className="SelectionPopup"
       style={{
         position: "fixed",
-        left: position.x,
-        top: position.y,
-        transform: "translate(-50%, -100%)",
+        left: floatingPosition?.left ?? position.x,
+        top: floatingPosition?.top ?? position.y,
+        visibility: floatingPosition ? "visible" : "hidden",
         zIndex: 50,
         animation: "selectionPopupIn 150ms ease forwards",
       }}
@@ -91,8 +101,8 @@ export function SelectionPopup({ position, onSelectType, onMark, onAnnotate, onF
 
       <style>{`
         @keyframes selectionPopupIn {
-          from { opacity: 0; transform: translate(-50%, calc(-100% + 4px)); }
-          to   { opacity: 1; transform: translate(-50%, -100%); }
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

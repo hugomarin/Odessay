@@ -18,8 +18,8 @@ describe("buildSelectionGeometry", () => {
       { top: 40, left: 40, width: 80, height: 20, key: "15-40-0" },
       { top: 72, left: 42, width: 76, height: 20, key: "15-40-1" },
     ])
-    expect(geometry?.popupPosition).toEqual({ x: 140, y: 152 })
-    expect(geometry?.bubblePosition).toEqual({ x: 140, y: 220 })
+    expect(geometry?.popupPosition).toEqual({ x: 140, y: 152, top: 160, bottom: 212 })
+    expect(geometry?.bubblePosition).toEqual({ x: 140, y: 220, top: 160, bottom: 212 })
   })
 
   it("ignores zero-area rects and returns null when selection has no visible boxes", () => {

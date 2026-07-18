@@ -7,9 +7,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
 import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
 import { getEditorShortcutAction } from "@/lib/editor/shortcuts"
+import type { FloatingOverlayAnchor } from "@/lib/reading/floating-overlay-position"
+import { useFloatingOverlayPosition } from "./use-floating-overlay-position"
+
+export type AnnotationBubblePosition = FloatingOverlayAnchor & { y: number }
 
 type AnnotationBubbleProps = {
-  position: { x: number; y: number } | null
+  position: AnnotationBubblePosition | null
   type?: "personal" | "ai" | "footnote"
   onConfirm: (note: string) => void | Promise<void>
   onCancel: () => void
@@ -39,6 +43,11 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
   } = useVoiceRecorder()
   const supportsVoice = type === "personal" || type === "ai"
   const isVoiceMode = supportsVoice && state !== "idle"
+  const floatingPosition = useFloatingOverlayPosition({
+    anchor: position,
+    overlayRef: containerRef,
+    preferredPlacement: "below",
+  })
 
   // Focus textarea when shown
   useEffect(() => {
@@ -176,13 +185,17 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
       id="annotation-bubble"
       data-section="annotation-bubble"
       data-testid="annotation-bubble"
+      data-placement={floatingPosition?.placement ?? "below"}
       className="AnnotationBubble rounded-[12px] border-[0.5px] border-border bg-sb shadow-float-lg"
       style={{
         position: "fixed",
-        left: position.x,
-        top: position.y,
-        transform: "translateX(-50%)",
-        width: 260,
+        left: floatingPosition?.left ?? position.x,
+        top: floatingPosition?.top ?? position.y,
+        visibility: floatingPosition ? "visible" : "hidden",
+        width: "min(260px, calc(100vw - 16px))",
+        maxHeight: floatingPosition?.maxHeight,
+        overflowY: "auto",
+        overscrollBehavior: "contain",
         zIndex: 50,
         padding: "10px 12px",
         display: "flex",
