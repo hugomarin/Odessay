@@ -1,0 +1,129 @@
+{
+  "source_trace": "artifacts/perf/ode-378-editor-after.json.gz",
+  "generated_at_utc": "2026-07-18T14:10:55.422Z",
+  "units": {
+    "durations": "milliseconds",
+    "long_task_threshold_ms": 50
+  },
+  "event_dispatch": {
+    "keydown": {
+      "count": 12,
+      "p50": 6.42,
+      "p75": 7.79,
+      "p95": 23.45,
+      "max": 23.45
+    },
+    "input": {
+      "count": 2,
+      "p50": 6.44,
+      "p75": 12.11,
+      "p95": 12.11,
+      "max": 12.11
+    },
+    "paste": {
+      "count": 1,
+      "p50": 22.16,
+      "p75": 22.16,
+      "p95": 22.16,
+      "max": 22.16
+    },
+    "click": {
+      "count": 6,
+      "p50": 0.02,
+      "p75": 0.02,
+      "p95": 25.48,
+      "max": 25.48
+    }
+  },
+  "event_timing": {
+    "keydown": {
+      "count": 12,
+      "p50": 22.06,
+      "p75": 25.92,
+      "p95": 35.1,
+      "max": 35.1
+    },
+    "input": {
+      "count": 2,
+      "p50": 14.88,
+      "p75": 24.98,
+      "p95": 24.98,
+      "max": 24.98
+    },
+    "paste": null,
+    "click": {
+      "count": 6,
+      "p50": 25.7,
+      "p75": 36.85,
+      "p95": 44.61,
+      "max": 44.61
+    }
+  },
+  "interaction_latency": {
+    "editor_inputs": {
+      "count": 20,
+      "p50": 22.12,
+      "p75": 27.54,
+      "p95": 36.85,
+      "max": 44.61
+    },
+    "with_interaction_id": {
+      "count": 18,
+      "p50": 22.12,
+      "p75": 29.83,
+      "p95": 44.61,
+      "max": 44.61
+    }
+  },
+  "long_tasks_ge_50ms": {
+    "total_run_tasks": 3348,
+    "stats": null,
+    "peaks_ms": []
+  },
+  "peaks": {
+    "event_dispatch": {
+      "keydown": [
+        23.45,
+        11.5,
+        9.38,
+        7.79,
+        7.21
+      ],
+      "input": [
+        12.11,
+        6.44
+      ],
+      "paste": [
+        22.16
+      ],
+      "click": [
+        25.48,
+        0.02,
+        0.02,
+        0.02,
+        0.02
+      ]
+    },
+    "event_timing": {
+      "keydown": [
+        35.1,
+        32.6,
+        29.83,
+        25.92,
+        23.05
+      ],
+      "input": [
+        24.98,
+        14.88
+      ],
+      "paste": [],
+      "click": [
+        44.61,
+        36.85,
+        27.54,
+        25.7,
+        21.4
+      ]
+    }
+  }
+}

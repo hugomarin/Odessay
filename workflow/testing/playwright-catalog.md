@@ -62,6 +62,7 @@ Implicación:
 Este helper ya resuelve:
 
 - abrir `editor-harness`
+- rehidratar un writing concreto con `/perf/editor-harness/[id]` sin cruzar auth
 - cambiar Rich / Markdown
 - obtener textarea markdown
 - enfocar editor rico

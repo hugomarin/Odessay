@@ -42,6 +42,10 @@ import {
   toggleMarkdownInlineMarker,
 } from "@/lib/editor/markdown-format"
 import { FOOTNOTE_REF_EVENT, getEditorFootnotes, getMarkdownWithFootnoteDefinitions, type AnnotationType } from "@/lib/editor/footnote-node"
+import {
+  deleteStandaloneHighlight,
+  resolveStandaloneHighlightRange,
+} from "@/lib/editor/annotation-highlight"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -314,6 +318,35 @@ const MARKDOWN_SAVE_DEBOUNCE_MS = 800
 const AUTO_TITLE_MAX_CHARS = 48
 const UNTITLED_WRITING_TITLE = "Untitled writing"
 const DESKTOP_UNTITLED_WRITING_TITLE = UNTITLED_DOCUMENT_NAME
+
+const navigateToEditorPosition = (editor: Editor, position: number) => {
+  const didSelect = editor
+    .chain()
+    .focus()
+    .setTextSelection(position)
+    .run()
+
+  if (!didSelect) {
+    return false
+  }
+
+  requestAnimationFrame(() => {
+    const scrollContainer = editor.view.dom.closest<HTMLElement>("[data-testid='editor-writing-area']")
+    if (!scrollContainer) {
+      return
+    }
+
+    const target = editor.view.coordsAtPos(position)
+    const container = scrollContainer.getBoundingClientRect()
+    const targetOffset = 72
+    scrollContainer.scrollTo({
+      top: scrollContainer.scrollTop + target.top - container.top - targetOffset,
+      behavior: "smooth",
+    })
+  })
+
+  return true
+}
 
 function deriveAutoTitle(bodyText: string, createdAt: string | null): string {
   const text = bodyText.trim()
@@ -5519,23 +5552,36 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
                 onClose={closeActivePanel}
-                onNavigate={(type, index, pos) => {
-                  if (!editor) return
-                  if (pos != null) {
-                    editor.chain().focus().setTextSelection(pos).scrollIntoView().run()
-                    return
+                onNavigate={(type, index, pos, anchorText, anchorEnd) => {
+                  if (!editor) return false
+                  if (pos != null && anchorText) {
+                    const resolution = resolveStandaloneHighlightRange(editor, {
+                      anchorText,
+                      anchorStart: pos,
+                      anchorEnd,
+                    })
+                    return resolution.status === "found"
+                      ? navigateToEditorPosition(editor, resolution.range.from)
+                      : false
                   }
+
+                  let targetPosition: number | null = null
                   editor.state.doc.descendants((node, nodePos) => {
+                    if (targetPosition !== null) return false
                     if (
                       (node.type.name === "annotationReference" ||
                         node.type.name === "footnoteReference") &&
                       (node.attrs.type as string) === type &&
                       (node.attrs.index as number) === index
                     ) {
-                      editor.chain().focus().setTextSelection(nodePos).scrollIntoView().run()
+                      targetPosition = nodePos
                       return false
                     }
                   })
+
+                  return targetPosition !== null
+                    ? navigateToEditorPosition(editor, targetPosition)
+                    : false
                 }}
                 onUpdateAnnotation={(type, index, text) => {
                   if (mode === "rich" && editor) {
@@ -5583,23 +5629,20 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                   void persistEditorSnapshot(editor)
                 }}
                 onDeleteHighlight={(anchorText: string, anchorStart?: number, anchorEnd?: number) => {
-                  if (!editor || !anchorText) return
-                  const highlightMark = editor.schema.marks.highlight
-                  if (!highlightMark) return
-                  editor.state.doc.descendants((node, pos) => {
-                    if (node.type.name !== "text") return
-                    if (!node.marks.some((m) => m.type.name === "highlight")) return
-                    const $pos = editor.state.doc.resolve(pos)
-                    const range = getMarkRange($pos, highlightMark)
-                    if (!range) return
-                    const text = editor.state.doc.textBetween(range.from, range.to)
-                    if (text === anchorText) {
-                      if (anchorStart !== undefined && anchorEnd !== undefined) {
-                        if (range.from !== anchorStart || range.to !== anchorEnd) return
-                      }
-                      editor.chain().setTextSelection(range).unsetHighlight().run()
-                    }
+                  if (!editor || !anchorText) return false
+                  const resolution = deleteStandaloneHighlight(editor, {
+                    anchorText,
+                    anchorStart,
+                    anchorEnd,
                   })
+                  if (resolution.status !== "found") {
+                    return false
+                  }
+
+                  setRichFootnoteRevision((r) => r + 1)
+                  updateDerivedEditorState(editor)
+                  void persistEditorSnapshot(editor)
+                  return true
                 }}
               />
             ) : activePanel === "properties" ? (
