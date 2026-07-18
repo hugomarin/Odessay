@@ -1,5 +1,8 @@
 import { Node, mergeAttributes } from "@tiptap/core"
-import { findInlineAnnotationMarkers } from "@/lib/editor/annotation-markdown"
+import {
+  escapeInlineAnnotationText,
+  findInlineAnnotationMarkers,
+} from "@/lib/editor/annotation-markdown"
 
 export const FOOTNOTE_REF_EVENT = "footnote:click"
 
@@ -174,19 +177,19 @@ function setupMarkdownItRule(md: any) {
 }
 
 const annotationToMarkdown = (type: AnnotationType, index: number, text: string, id?: string) => {
-  const trimmedText = text.trim()
+  const escapedText = escapeInlineAnnotationText(text.trim())
   const idSuffix = id ? `|${id}` : ""
 
   switch (type) {
     case "ai":
-      return `[@${index}${idSuffix}: ${trimmedText}]`
+      return `[@${index}${idSuffix}: ${escapedText}]`
     case "personal":
-      return `[@p${index}${idSuffix}: ${trimmedText}]`
+      return `[@p${index}${idSuffix}: ${escapedText}]`
     case "highlight":
-      return `[@h${index}${idSuffix}: ${trimmedText}]`
+      return `[@h${index}${idSuffix}: ${escapedText}]`
     case "footnote":
     default:
-      return `[^${index}${idSuffix}: ${trimmedText}]`
+      return `[^${index}${idSuffix}: ${escapedText}]`
   }
 }
 

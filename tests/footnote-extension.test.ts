@@ -50,6 +50,30 @@ describe("footnote extension helpers", () => {
     expect(removeMarkdownFootnote(updated, 1)).toBe("Body[^1|ann-b: Updated second]")
   })
 
+  it("escapes closing brackets in annotation text without consuming following prose", () => {
+    const markdown = "Body[^1|ann-a: Note with \\] bracket] then [link](https://example.com) and ] literal"
+    const updated = updateMarkdownFootnote(markdown, 1, "Updated \\ path and ] bracket")
+
+    expect(getMarkdownFootnotes(markdown)).toEqual([
+      { type: "footnote", index: 1, text: "Note with ] bracket", id: "ann-a" },
+    ])
+    expect(updated).toBe(
+      "Body[^1|ann-a: Updated \\\\ path and \\] bracket] then [link](https://example.com) and ] literal",
+    )
+    expect(getMarkdownFootnotes(updated)).toEqual([
+      { type: "footnote", index: 1, text: "Updated \\ path and ] bracket", id: "ann-a" },
+    ])
+  })
+
+  it("closes a marker at the first unescaped bracket before same-block links", () => {
+    const markdown = "==AI==[@1|ann-ai: note] text with [link](https://example.com) and ] literal"
+
+    expect(buildAiAnnotationCopy(markdown)).toEqual({
+      annotationsOnly: `${annotationsOnlyPrefix}\n\n"AI" [@1|ann-ai: note]`,
+      fullText: `${fullTextPrefix}\n\n${markdown}`,
+    })
+  })
+
   it("preserves inline annotation ids while renumbering by type", () => {
     const markdown = "Body[@3|ai-a: third][@1|ai-b: first][@p2|p-a: personal][^7|fn-a: note]"
 

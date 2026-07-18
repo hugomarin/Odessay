@@ -94,7 +94,7 @@ describe("document serialization", () => {
   });
 
   it("preserves every annotation highlight type across structural markdown round-trips", () => {
-    const source = `# ==Heading AI== [@1|ann-ai: Note with ] bracket]
+    const source = `# ==Heading AI== [@1|ann-ai: Note with \\] bracket]
 
 > ==Quoted personal==[@p1|ann-personal: Personal note]
 
@@ -119,7 +119,7 @@ the next line]`;
       "highlight",
       "footnote",
     ]);
-    expect(markdown).toContain("[@1|ann-ai: Note with ] bracket]");
+    expect(markdown).toContain("[@1|ann-ai: Note with \\] bracket]");
     expect(markdown).toContain("[^1|ann-footnote: Reference on\nthe next line]");
   });
 
@@ -355,6 +355,10 @@ describe("annotation presentation contract", () => {
     resolve(process.cwd(), "components/editor/panels/notes-panel.tsx"),
     "utf8",
   );
+  const marginEntry = readFileSync(
+    resolve(process.cwd(), "components/reading/margins/margin-entry.tsx"),
+    "utf8",
+  );
 
   it("styles every supported annotation type in editor and reading wrappers", () => {
     for (const type of ANNOTATION_TYPES) {
@@ -369,9 +373,11 @@ describe("annotation presentation contract", () => {
     for (const color of ["#5B5BD6", "#C07B2A", "#E8A020", "#999990"]) {
       expect(globalsCss.match(new RegExp(color, "g"))).toHaveLength(1);
       expect(notesPanel).not.toContain(color);
+      expect(marginEntry).not.toContain(color);
     }
 
     expect(notesPanel).toContain("ANNOTATION_TYPE_COLOR");
+    expect(marginEntry).toContain("ANNOTATION_TYPE_COLOR");
     expect(globalsCss).toMatch(/\.annotation-ref-icon\s*\{[^}]*color:\s*inherit;/s);
   });
 });

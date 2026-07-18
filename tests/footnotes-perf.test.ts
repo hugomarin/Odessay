@@ -4,75 +4,13 @@
 import { describe, expect, it } from "vitest"
 import { Editor } from "@tiptap/core"
 import { createEditorExtensions } from "@/lib/editor/extensions"
-import { extractWritingAnnotationNodes, getMarkdownFootnotes } from "@/lib/editor/footnote-extension"
-import { getMarkRange } from "@tiptap/core"
+import { extractRichEditorAnnotations, getMarkdownFootnotes } from "@/lib/editor/footnote-extension"
 
 function createTestEditor(content = "") {
   return new Editor({
     extensions: createEditorExtensions(),
     content,
   })
-}
-
-function computeFootnotesForEditor(editor: Editor) {
-  const json = editor.getJSON()
-  const annotations = extractWritingAnnotationNodes(json)
-
-  const highlights: Array<{
-    type: "highlight"
-    index: number
-    text: string
-    id: string
-    anchor_text: string
-    anchor_start: number
-    anchor_end: number
-  }> = []
-  const highlightMark = editor.schema.marks.highlight
-  if (highlightMark) {
-    const annotationRanges: Array<{ from: number; to: number }> = []
-    editor.state.doc.descendants((node, pos) => {
-      if (node.type.name === "annotationReference" || node.type.name === "footnoteReference") {
-        annotationRanges.push({ from: pos, to: pos + node.nodeSize })
-      }
-    })
-
-    const visitedRanges = new Set<string>()
-    editor.state.doc.descendants((node, pos) => {
-      if (node.type.name !== "text") return
-      if (!node.marks.some((m) => m.type.name === "highlight")) return
-
-      const $pos = editor.state.doc.resolve(pos)
-      const range = getMarkRange($pos, highlightMark)
-      if (!range) return
-
-      const key = `${range.from}-${range.to}`
-      if (visitedRanges.has(key)) return
-      visitedRanges.add(key)
-
-      const hasAnnotation = annotationRanges.some(
-        (ar) =>
-          (ar.from >= range.from && ar.to <= range.to) ||
-          (ar.from >= range.from && ar.from <= range.to + 1),
-      )
-
-      if (!hasAnnotation) {
-        const maxAnnotationHighlightIndex = annotations
-          .filter((a) => a.type === "highlight")
-          .reduce((max, a) => Math.max(max, a.index), 0)
-        highlights.push({
-          type: "highlight",
-          index: maxAnnotationHighlightIndex + highlights.length + 1,
-          text: "",
-          id: `highlight:${highlights.length}`,
-          anchor_text: editor.state.doc.textBetween(range.from, range.to),
-          anchor_start: range.from,
-          anchor_end: range.to,
-        })
-      }
-    })
-  }
-
-  return [...annotations, ...highlights]
 }
 
 describe("footnotes useMemo performance", () => {
@@ -92,7 +30,7 @@ describe("footnotes useMemo performance", () => {
     editor.chain().setTextSelection({ from: 100, to: 115 }).setHighlight().run()
 
     // Verify content shape
-    const firstRun = computeFootnotesForEditor(editor)
+    const firstRun = extractRichEditorAnnotations(editor)
     const highlightCount = firstRun.filter((f) => f.type === "highlight").length
     const annotatedCount = firstRun.filter((f) => f.type === "highlight" && f.text !== "").length
     const standaloneCount = firstRun.filter((f) => f.type === "highlight" && f.text === "" && f.id?.startsWith("highlight:")).length
@@ -106,7 +44,7 @@ describe("footnotes useMemo performance", () => {
     const times: number[] = []
     for (let i = 0; i < iterations; i++) {
       const t0 = performance.now()
-      computeFootnotesForEditor(editor)
+      extractRichEditorAnnotations(editor)
       const t1 = performance.now()
       times.push(t1 - t0)
     }

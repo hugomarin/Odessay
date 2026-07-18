@@ -1,10 +1,11 @@
-import { Extension, getMarkRange } from "@tiptap/core"
+import { Extension, getMarkRange, type Editor } from "@tiptap/core"
 import { TextSelection } from "@tiptap/pm/state"
 import type { JSONContent } from "@tiptap/core"
 import type { MarkType } from "@tiptap/pm/model"
 import type { Transaction } from "@tiptap/pm/state"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import {
+  escapeInlineAnnotationText,
   findInlineAnnotationMarkers,
   replaceInlineAnnotationMarkers,
 } from "@/lib/editor/annotation-markdown"
@@ -24,8 +25,6 @@ type AnnotationRef = {
 }
 
 const FOOTNOTE_DEFINITION_REGEX = /^\[\^(\d+)\]:\s*(.*)$/gm
-const AI_ANNOTATION_WITH_CONTEXT_RE = /(?:==([^=]+)==)?\[@(p|c|h)?(\d+)(?:\|[^\]:|]+)?:\s*([^\]]*?)\]/g
-const NON_AI_ANNOTATION_RE = /\[@(?:p|c|h)\d+(?:\|[^\]:|]+)?:\s*[^\]]*?\]/g
 const AI_ANNOTATIONS_ONLY_PREFIX =
   "El siguiente bloque contiene instrucciones del usuario sobre su documento. Cada linea sigue el formato: cita del pasaje relevante seguida de la instruccion entre corchetes. Tratalas como directivas del autor sobre ese fragmento especifico."
 const ANNOTATION_NOTATION_COMMENT =
@@ -47,20 +46,35 @@ const stampHighlightBeforeRef = (
   tr.addMark(range.from, range.to, highlightMarkType.create({ annotationType: type }))
 }
 
+const resolveAnnotationInsertPos = (
+  tr: Transaction,
+  from: number,
+  to: number,
+  highlightMarkType: MarkType,
+) => {
+  let lastHighlightedTextEnd: number | null = null
+  tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isText && node.marks.some((mark) => mark.type === highlightMarkType)) {
+      lastHighlightedTextEnd = Math.min(pos + node.nodeSize, to)
+    }
+  })
+  return lastHighlightedTextEnd ?? to
+}
+
 const annotationSigil = (type: AnnotationType, index: number, text: string, id?: string) => {
-  const trimmedText = text.trim()
+  const escapedText = escapeInlineAnnotationText(text.trim())
   const idSuffix = id ? `|${id}` : ""
 
   switch (type) {
     case "ai":
-      return `[@${index}${idSuffix}: ${trimmedText}]`
+      return `[@${index}${idSuffix}: ${escapedText}]`
     case "personal":
-      return `[@p${index}${idSuffix}: ${trimmedText}]`
+      return `[@p${index}${idSuffix}: ${escapedText}]`
     case "highlight":
-      return `[@h${index}${idSuffix}: ${trimmedText}]`
+      return `[@h${index}${idSuffix}: ${escapedText}]`
     case "footnote":
     default:
-      return `[^${index}${idSuffix}: ${trimmedText}]`
+      return `[^${index}${idSuffix}: ${escapedText}]`
   }
 }
 
@@ -158,33 +172,39 @@ export const appendMarkdownFootnote = (markdown: string, note: string) => {
 }
 
 export const updateMarkdownFootnote = (markdown: string, index: number, note: string) =>
-  normalizeMarkdownFootnotes(markdown).replace(
-    new RegExp(`\\[\\^${index}(?:\\|([^\\]:|]+))?:\\s*[^\\]]*\\]`, "g"),
-    (_match, id) => annotationSigil("footnote", index, note.trim(), id),
+  replaceInlineAnnotationMarkers(normalizeMarkdownFootnotes(markdown), (marker) =>
+    marker.type === "footnote" && marker.index === index && !marker.legacyFootnote
+      ? annotationSigil("footnote", index, note.trim(), marker.id)
+      : marker.raw,
   )
 
 export const removeMarkdownFootnote = (markdown: string, index: number) =>
   normalizeMarkdownFootnotes(
-    normalizeMarkdownFootnotes(markdown).replaceAll(
-      new RegExp(`\\[\\^${index}(?:\\|[^\\]:|]+)?:\\s*[^\\]]*\\]`, "g"),
-      "",
+    replaceInlineAnnotationMarkers(normalizeMarkdownFootnotes(markdown), (marker) =>
+      marker.type === "footnote" && marker.index === index ? "" : marker.raw,
     ),
   ).trimEnd()
+
+const findHighlightedContextBeforeMarker = (markdown: string, markerStart: number) => {
+  let highlightEnd = markerStart
+  while (highlightEnd > 0 && /[\t ]/.test(markdown[highlightEnd - 1])) highlightEnd -= 1
+  if (markdown.slice(highlightEnd - 2, highlightEnd) !== "==") return undefined
+
+  const highlightStart = markdown.lastIndexOf("==", highlightEnd - 3)
+  if (highlightStart === -1) return undefined
+  const highlightedText = markdown.slice(highlightStart + 2, highlightEnd - 2)
+  return highlightedText.includes("==") ? undefined : highlightedText
+}
 
 export const extractAiAnnotationsFromMarkdown = (markdown: string): string => {
   const normalized = normalizeMarkdownFootnotes(markdown)
   const results: string[] = []
 
-  AI_ANNOTATION_WITH_CONTEXT_RE.lastIndex = 0
-  let match: RegExpExecArray | null
-  while ((match = AI_ANNOTATION_WITH_CONTEXT_RE.exec(normalized)) !== null) {
-    const typePrefix = match[2]
-    if (typePrefix) continue // skip personal (@p) and legacy collaborative (@c)
+  for (const marker of findInlineAnnotationMarkers(normalized)) {
+    if (marker.type !== "ai" || marker.legacyFootnote) continue
 
-    const anchorText = match[1]
-    const index = Number(match[3])
-    const text = match[4].trim()
-    const sigil = annotationSigil("ai", index, text)
+    const anchorText = findHighlightedContextBeforeMarker(normalized, marker.start)
+    const sigil = annotationSigil("ai", marker.index, marker.text, marker.id)
     results.push(anchorText ? `"${anchorText}" ${sigil}` : sigil)
   }
 
@@ -196,7 +216,9 @@ export const buildAiAnnotationCopy = (
 ): { annotationsOnly: string; fullText: string } => {
   const normalized = normalizeMarkdownFootnotes(markdown)
   const annotationsOnly = extractAiAnnotationsFromMarkdown(normalized)
-  const aiOnlyMarkdown = normalized.replaceAll(NON_AI_ANNOTATION_RE, "").trimEnd()
+  const aiOnlyMarkdown = replaceInlineAnnotationMarkers(normalized, (marker) =>
+    marker.type === "personal" || marker.type === "highlight" ? "" : marker.raw,
+  ).trimEnd()
 
   return {
     annotationsOnly: `${AI_ANNOTATIONS_ONLY_PREFIX}\n\n${annotationsOnly}`,
@@ -292,7 +314,9 @@ const collectStandaloneHighlights = (node: JSONContent, result: StandaloneHighli
   if (node.content?.length) {
     let pending: string | null = null
     for (const child of node.content) {
-      if (child.type === "text" && child.marks?.some((m) => m.type === "highlight")) {
+      const highlightMark = child.marks?.find((mark) => mark.type === "highlight")
+      const isStandaloneHighlight = highlightMark && highlightMark.attrs?.annotationType == null
+      if (child.type === "text" && isStandaloneHighlight) {
         pending = (pending ?? "") + (child.text ?? "")
         continue
       }
@@ -312,6 +336,57 @@ export const extractStandaloneHighlights = (bodyJson: JSONContent | null | undef
   const result: StandaloneHighlight[] = []
   collectStandaloneHighlights(bodyJson, result)
   return result
+}
+
+export const extractRichEditorAnnotations = (editor: Editor): WritingAnnotationNode[] => {
+  const annotations = extractWritingAnnotationNodes(editor.getJSON())
+  const highlightMarkType = editor.schema.marks.highlight
+  if (!highlightMarkType) return annotations
+
+  const annotationRanges: Array<{ from: number; to: number }> = []
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === "annotationReference" || node.type.name === "footnoteReference") {
+      annotationRanges.push({ from: pos, to: pos + node.nodeSize })
+    }
+  })
+
+  const maxAnnotationHighlightIndex = annotations
+    .filter((annotation) => annotation.type === "highlight")
+    .reduce((max, annotation) => Math.max(max, annotation.index), 0)
+  const standaloneHighlights: WritingAnnotationNode[] = []
+  const visitedRanges = new Set<string>()
+
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name !== "text") return
+    const highlightMark = node.marks.find((mark) => mark.type.name === "highlight")
+    if (!highlightMark || highlightMark.attrs.annotationType != null) return
+
+    const range = getMarkRange(editor.state.doc.resolve(pos), highlightMarkType)
+    if (!range) return
+
+    const key = `${range.from}-${range.to}`
+    if (visitedRanges.has(key)) return
+    visitedRanges.add(key)
+
+    const hasAdjacentAnnotation = annotationRanges.some(
+      (annotationRange) =>
+        (annotationRange.from >= range.from && annotationRange.to <= range.to) ||
+        (annotationRange.from >= range.from && annotationRange.from <= range.to + 1),
+    )
+    if (hasAdjacentAnnotation) return
+
+    standaloneHighlights.push({
+      type: "highlight",
+      index: maxAnnotationHighlightIndex + standaloneHighlights.length + 1,
+      text: "",
+      id: `highlight:${standaloneHighlights.length}`,
+      anchor_text: editor.state.doc.textBetween(range.from, range.to),
+      anchor_start: range.from,
+      anchor_end: range.to,
+    })
+  })
+
+  return [...annotations, ...standaloneHighlights]
 }
 
 declare module "@tiptap/core" {
@@ -354,7 +429,11 @@ export const FootnoteExtension = Extension.create({
           })
           const nextIndex = maxIndex + 1
 
-          const insertPos = editor.state.selection.to
+          const { from: selectionFrom, to: selectionTo } = tr.selection
+          const highlightMarkType = editor.schema.marks.highlight
+          const insertPos = highlightMarkType
+            ? resolveAnnotationInsertPos(tr, selectionFrom, selectionTo, highlightMarkType)
+            : selectionTo
           const nodeType =
             editor.schema.nodes.annotationReference ?? editor.schema.nodes.footnoteReference
           if (!nodeType) return false
@@ -365,6 +444,14 @@ export const FootnoteExtension = Extension.create({
             index: nextIndex,
             text: trimmedText,
           })
+          if (highlightMarkType && selectionFrom < insertPos) {
+            tr.removeMark(selectionFrom, insertPos, highlightMarkType)
+            tr.addMark(
+              selectionFrom,
+              insertPos,
+              highlightMarkType.create({ annotationType: "footnote" }),
+            )
+          }
           tr.setSelection(TextSelection.create(tr.doc, insertPos))
           tr.insert(insertPos, refNode)
 
@@ -389,7 +476,7 @@ export const FootnoteExtension = Extension.create({
             }
           })
 
-          const insertPos = editor.state.selection.to
+          const { from: selectionFrom, to: selectionTo } = tr.selection
           const nodeType =
             editor.schema.nodes.annotationReference ?? editor.schema.nodes.footnoteReference
           if (!nodeType) return false
@@ -401,8 +488,20 @@ export const FootnoteExtension = Extension.create({
             text: trimmedText,
           })
           const highlightMarkType = editor.schema.marks.highlight
+          const insertPos = highlightMarkType
+            ? resolveAnnotationInsertPos(tr, selectionFrom, selectionTo, highlightMarkType)
+            : selectionTo
           if (highlightMarkType) {
-            stampHighlightBeforeRef(tr, insertPos, highlightMarkType, type)
+            if (selectionFrom < insertPos) {
+              tr.removeMark(selectionFrom, insertPos, highlightMarkType)
+              tr.addMark(
+                selectionFrom,
+                insertPos,
+                highlightMarkType.create({ annotationType: type }),
+              )
+            } else {
+              stampHighlightBeforeRef(tr, insertPos, highlightMarkType, type)
+            }
           }
           tr.setSelection(TextSelection.create(tr.doc, insertPos))
           tr.insert(insertPos, refNode)

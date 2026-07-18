@@ -7,6 +7,7 @@ import { createEditorExtensions } from "@/lib/editor/extensions"
 import {
   getMarkdownFootnotes,
   buildAiAnnotationCopy,
+  extractRichEditorAnnotations,
   extractStandaloneHighlights,
   extractWritingAnnotationNodes,
   normalizeMarkdownFootnotes,
@@ -58,6 +59,132 @@ describe("highlight annotation", () => {
       expect(markdown).toBe("==AI span==[@1|ann-ai: AI note] and ==highlight span==[@h1|ann-h: saved]")
       expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["ai", "highlight"])
       expect(collectHighlightTypes(reparsed.bodyJson)).toEqual(["ai", "highlight"])
+    })
+
+    it("keeps one annotation type across block-local highlight fragments", () => {
+      const markdown =
+        "# ==Mis conclusiones:==\n\n==Luna es la familia más costo-eficiente.==[@1|ann-ai: Tests de Nota]"
+      const parsed = parseMarkdownToSnapshot(markdown)
+      const serialized = serializeDocumentToMarkdown(parsed.bodyJson)
+      const reparsed = parseMarkdownToSnapshot(serialized)
+
+      const collectHighlightTypes = (node: unknown, result: Array<string | null> = []) => {
+        if (!node || typeof node !== "object") return result
+        const current = node as {
+          marks?: Array<{ type?: string; attrs?: { annotationType?: string | null } }>
+          content?: unknown[]
+        }
+        for (const mark of current.marks ?? []) {
+          if (mark.type === "highlight") result.push(mark.attrs?.annotationType ?? null)
+        }
+        for (const child of current.content ?? []) collectHighlightTypes(child, result)
+        return result
+      }
+
+      expect(collectHighlightTypes(parsed.bodyJson)).toEqual(["ai", "ai"])
+      expect(collectHighlightTypes(reparsed.bodyJson)).toEqual(["ai", "ai"])
+      expect(extractWritingAnnotationNodes(parsed.bodyJson)).toHaveLength(1)
+      expect(serialized).toBe(markdown)
+    })
+
+    it("keeps one annotation type when the final fragment is a blockquote", () => {
+      const markdown = [
+        "## ==Titulo 2==",
+        "",
+        "==Terra queda en un efecto sándwich. **Podría recuperar sentido.**==",
+        "",
+        "> ==Terra queda en un efecto sándwich. Podría recuperar sentido.==[@3|ann-ai: TEST 3]",
+      ].join("\n")
+      const parsed = parseMarkdownToSnapshot(markdown)
+      const serialized = serializeDocumentToMarkdown(parsed.bodyJson)
+      const highlightTypes: Array<string | null> = []
+
+      const collectHighlightTypes = (node: unknown) => {
+        if (!node || typeof node !== "object") return
+        const current = node as {
+          marks?: Array<{ type?: string; attrs?: { annotationType?: string | null } }>
+          content?: unknown[]
+        }
+        for (const mark of current.marks ?? []) {
+          if (mark.type === "highlight") highlightTypes.push(mark.attrs?.annotationType ?? null)
+        }
+        for (const child of current.content ?? []) collectHighlightTypes(child)
+      }
+      collectHighlightTypes(parsed.bodyJson)
+
+      expect(new Set(highlightTypes)).toEqual(new Set(["ai"]))
+      expect(highlightTypes.length).toBeGreaterThanOrEqual(3)
+      expect(extractWritingAnnotationNodes(parsed.bodyJson)).toHaveLength(1)
+      expect(serialized).toBe(markdown.replace("[@3|", "[@1|"))
+
+      const reparsed = parseMarkdownToSnapshot(serialized)
+      const reparsedTypes: Array<string | null> = []
+      const collectReparsedTypes = (node: unknown) => {
+        if (!node || typeof node !== "object") return
+        const current = node as {
+          marks?: Array<{ type?: string; attrs?: { annotationType?: string | null } }>
+          content?: unknown[]
+        }
+        for (const mark of current.marks ?? []) {
+          if (mark.type === "highlight") reparsedTypes.push(mark.attrs?.annotationType ?? null)
+        }
+        for (const child of current.content ?? []) collectReparsedTypes(child)
+      }
+      collectReparsedTypes(reparsed.bodyJson)
+      expect(new Set(reparsedTypes)).toEqual(new Set(["ai"]))
+      expect(extractWritingAnnotationNodes(reparsed.bodyJson)).toHaveLength(1)
+    })
+
+    it("lists multi-block annotations once instead of inventing standalone highlights", () => {
+      const markdown = [
+        "==AI one==[@1|ann-1: TEST 1]",
+        "",
+        "==AI two==[@2|ann-2: TEST 2]",
+        "",
+        "## ==Titulo 2==",
+        "",
+        "==AI three with **bold text**.==",
+        "",
+        "> ==AI three quote.==[@3|ann-3: TEST 3]",
+        "",
+        "### ==Titulo 3==",
+        "",
+        "==Highlighted paragraph.==",
+        "",
+        "> ==Highlighted quote.==[@h1|highlight-1: ]",
+      ].join("\n")
+      const snapshot = parseMarkdownToSnapshot(markdown)
+      const editor = new Editor({
+        extensions: createEditorExtensions(),
+        content: snapshot.bodyJson,
+      })
+
+      const panelAnnotations = extractRichEditorAnnotations(editor)
+
+      expect(panelAnnotations).toHaveLength(4)
+      expect(panelAnnotations.map(({ type, text }) => ({ type, text }))).toEqual([
+        { type: "ai", text: "TEST 1" },
+        { type: "ai", text: "TEST 2" },
+        { type: "ai", text: "TEST 3" },
+        { type: "highlight", text: "" },
+      ])
+      expect(extractStandaloneHighlights(editor.getJSON())).toEqual([])
+      editor.destroy()
+    })
+
+    it("repairs table annotations displaced into the following cell", () => {
+      const markdown = [
+        "| Etapa | Período | Foco | Salto |",
+        "| --- | --- | --- | --- |",
+        "| **==1. Foundation==** | [@4|ann-4: TEST 4]Meses 1–3 | Baseline | Salto 1 |",
+        "| **2. Adoption** | Meses 4–6 | ==Workflows personales.== | [@5|ann-5: TEST 5]Consolidado |",
+      ].join("\n")
+      const snapshot = parseMarkdownToSnapshot(markdown)
+      const serialized = serializeDocumentToMarkdown(snapshot.bodyJson)
+
+      expect(serialized).toContain("==**1. Foundation**==[@1|ann-4: TEST 4] | Meses 1–3")
+      expect(serialized).toContain("==Workflows personales.==[@2|ann-5: TEST 5] | Consolidado")
+      expect(extractWritingAnnotationNodes(snapshot.bodyJson)).toHaveLength(2)
     })
 
     it("serializes highlight annotation with a stable inline id", () => {
@@ -190,6 +317,59 @@ describe("highlight annotation", () => {
       expect(annotations).toHaveLength(1)
       expect(annotations[0].type).toBe("highlight")
       expect(annotations[0].text).toBe("")
+      editor.destroy()
+    })
+
+    it("addAnnotation stamps every block fragment in a multi-block selection", () => {
+      const editor = createTestEditor("<h1>Heading</h1><p>Paragraph</p>")
+      editor
+        .chain()
+        .setTextSelection({ from: 1, to: 19 })
+        .setHighlight()
+        .addAnnotation("ai", "AI note")
+        .run()
+
+      const highlightTypes: Array<string | null> = []
+      editor.state.doc.descendants((node) => {
+        if (!node.isText) return
+        const highlight = node.marks.find((mark) => mark.type.name === "highlight")
+        if (highlight) highlightTypes.push(highlight.attrs.annotationType ?? null)
+      })
+
+      expect(highlightTypes).toEqual(["ai", "ai"])
+      expect(extractWritingAnnotationNodes(editor.getJSON())).toHaveLength(1)
+      editor.destroy()
+    })
+
+    it("keeps a table-cell annotation reference in the selected cell", () => {
+      const editor = createTestEditor(
+        "<table><tbody><tr><td><p>Foundation</p></td><td><p>Meses 1–3</p></td></tr></tbody></table>",
+      )
+      let textFrom = 0
+      let nextCellTextFrom = 0
+      editor.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === "Foundation") {
+          textFrom = pos
+        }
+        if (node.isText && node.text === "Meses 1–3") {
+          nextCellTextFrom = pos
+        }
+      })
+
+      editor
+        .chain()
+        .setTextSelection({ from: textFrom, to: nextCellTextFrom })
+        .setHighlight()
+        .addAnnotation("ai", "Table note")
+        .run()
+
+      let annotationPos: number | null = null
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === "annotationReference") annotationPos = pos
+      })
+
+      expect(annotationPos).not.toBeNull()
+      expect(editor.state.doc.resolve(annotationPos ?? 0).parent.textContent).toBe("Foundation")
       editor.destroy()
     })
 

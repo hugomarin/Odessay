@@ -23,6 +23,26 @@ const typeFromPrefix = (prefix: string): InlineAnnotationMarkerType => {
   return "ai"
 }
 
+export const escapeInlineAnnotationText = (value: string) =>
+  value.replaceAll("\\", "\\\\").replaceAll("]", "\\]")
+
+export const unescapeInlineAnnotationText = (value: string) => {
+  let result = ""
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index]
+    const nextCharacter = value[index + 1]
+    if (character === "\\" && (nextCharacter === "\\" || nextCharacter === "]")) {
+      result += nextCharacter
+      index += 1
+      continue
+    }
+    result += character
+  }
+
+  return result
+}
+
 const nextMarkerOrBlockBoundary = (markdown: string, contentStart: number) => {
   MARKER_START_RE.lastIndex = contentStart
   const nextMarker = MARKER_START_RE.exec(markdown)?.index ?? markdown.length
@@ -32,8 +52,18 @@ const nextMarkerOrBlockBoundary = (markdown: string, contentStart: number) => {
 
 const findMarkerEnd = (markdown: string, contentStart: number) => {
   const boundary = nextMarkerOrBlockBoundary(markdown, contentStart)
-  const closingBracket = markdown.lastIndexOf("]", boundary - 1)
-  return closingBracket >= contentStart ? closingBracket + 1 : -1
+
+  for (let index = contentStart; index < boundary; index += 1) {
+    if (markdown[index] !== "]") continue
+
+    let precedingBackslashes = 0
+    for (let cursor = index - 1; cursor >= contentStart && markdown[cursor] === "\\"; cursor -= 1) {
+      precedingBackslashes += 1
+    }
+    if (precedingBackslashes % 2 === 0) return index + 1
+  }
+
+  return -1
 }
 
 export const findInlineAnnotationMarkers = (markdown: string): InlineAnnotationMarker[] => {
@@ -86,7 +116,7 @@ export const findInlineAnnotationMarkers = (markdown: string): InlineAnnotationM
       legacyFootnote: false,
       raw,
       start,
-      text: markdown.slice(contentStart, end - 1).trim(),
+      text: unescapeInlineAnnotationText(markdown.slice(contentStart, end - 1).trim()),
       type: isFootnote ? "footnote" : typeFromPrefix(header[1]),
     })
     MARKER_START_RE.lastIndex = end
