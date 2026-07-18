@@ -223,25 +223,30 @@ El ciclo de escritura colaborativa con AI no termina cuando la AI produce el tex
 
 ## Interfaz
 
-### Popup de selección
+### Superficie primaria: panel Notes del editor
 
-Al seleccionar texto en la vista de lectura, el popup muestra cuatro opciones:
+La superficie primaria vigente es el panel lateral **Notes** del editor, disponible tanto en modo Rich como Markdown. El panel consume un único view-model de anotaciones y muestra:
 
-- **Personal** — nota para mí
-- **AI** — instrucción para la AI
-- **Highlight** — marcar pasaje
-- **Footnote** — referencia o aclaración
+- tabs dinámicas `All`, `AI`, `Personal`, `Footnote` y `Highlight` según los tipos presentes;
+- una card por anotación con cita del texto ancla cuando existe;
+- edición inline del texto de la nota;
+- dropdown para cambiar el tipo en cualquier momento, preservando el `id` estable;
+- acciones para ir al texto anclado y borrar;
+- highlights standalone (`==texto==` sin marker) como cards que pueden recibir nota, cambiar de tipo o eliminarse.
 
-### Indicador de tipo en el margen
+Las mutaciones del panel deben actuar sobre la representación canónica del modo activo. Un target ausente produce error visible y deja el Markdown intacto; nunca se convierte en un no-op silencioso ni acuña otra identidad.
 
-Cada anotación en el sidebar muestra un indicador visual:
+Las superficies de lectura pueden conservar bubbles o márgenes para crear/consultar anotaciones, pero no reemplazan este panel como superficie de edición primaria.
 
-- `personal` — tono neutro (`#999990`)
-- `ai` — indigo (`#5B5BD6`)
-- `highlight` — amber (`#C07B2A`)
-- `footnote` — tono neutro (`#999990`)
+### Notas de voz y transcripción
 
-El usuario puede cambiar el tipo desde la anotación antes de guardar.
+Cada card puede iniciar una grabación de voz. Al detenerla:
+
+1. el cliente envía el audio al servicio de transcripción;
+2. el transcript sustituye el texto editable de la anotación;
+3. la misma mutación del panel lo persiste sobre el `id` y el modo vigentes, incluso si el transcript llega después de un cambio Rich ↔ Markdown.
+
+La credencial del proveedor de transcripción permanece server-side. Web usa la route autenticada `/api/margins/transcribe`; desktop no ejecuta routes Next locales y usa el proxy del runtime web con bearer de la sesión. El audio vacío, timeout, permiso denegado o error upstream deja la card recuperable con retry/discard y nunca descarta una nota previa silenciosamente.
 
 ### Color del anclaje inline
 
@@ -254,10 +259,6 @@ El color del subrayado/fondo se decide por marca, no por heurística de párrafo
 - Marks sin `data-annotation-type` son highlights manuales y conservan el estilo default ámbar.
 
 La sintaxis markdown canónica incluye `|id`: `==texto==[@tipo...|id: ...]`. Al parsear markdown, el rich parser re-deriva `data-annotation-type` desde el `annotationReference` que cierra el ancla. En selecciones multibloque, el tipo se aplica a cada fragmento `==...==` contiguo que precede ese único reference.
-
-### Panel de anotaciones filtrado
-
-Tabs de filtro: Todas / Personal / AI / Highlight / Footnote.
 
 ### "Copiar para AI"
 

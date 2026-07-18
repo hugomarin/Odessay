@@ -2,6 +2,7 @@
 
 - **Estado:** Aceptado — contrato objetivo por implementar
 - **Fecha:** 2026-07-09
+- **Enmienda ODE-384:** 2026-07-18 — delete confirmado, bus único, BindingRoot por path y gates M4/M5
 - **Decide:** Hugo
 - **Scope:** desktop + shared core + cloud
 - **Subordinado a:** `workflow/context/core/odessay-adr-identidad.md`
@@ -26,6 +27,7 @@ Esta diferencia no representa estados legítimos del documento. Es complejidad a
 - solo nube
 - pendiente de sync/materialización
 - conflicto
+- archivado (fuera de vistas activas)
 
 Desk, Workspace, Search, Recent y Open Document deben converger en el mismo catálogo y en el mismo caso de uso de apertura.
 
@@ -40,6 +42,7 @@ Desk, Workspace, Search, Recent y Open Document deben converger en el mismo cat�
 7. IndexedDB deja de ser el catálogo de writings en desktop. Permanece como adapter del runtime web durante y después de la migración.
 8. La existencia local y la existencia cloud son señales independientes, derivadas después de resolver la identidad.
 9. Ninguna falla de apertura crea un draft como fallback.
+10. Una acción confirmada de borrado siempre retira el writing de Desk/Workspace; la ausencia inferida por el watcher nunca archiva cloud.
 
 ## Clasificación arquitectónica
 
@@ -127,6 +130,7 @@ No existe una única base que sea autoridad de todos los campos. Cada hecho tien
 | Metadata cloud (`slug/status/visibility/version`) | Supabase | SQLite cachea; web IndexedDB refleja |
 | Existencia local | Filesystem observado por reconciliador | SQLite guarda `local_present` |
 | Existencia cloud | Supabase para el UUID | SQLite guarda `cloud_present` por cuenta |
+| Soft-delete/archivo cloud | `deleted_at` de Supabase | SQLite cachea la marca para excluirlo de vistas activas y mostrarlo en Archivados |
 | Mutaciones desktop no sincronizadas | Cola SQLite durable | No se descartan al reconstruir vistas |
 | Estado de pestañas | Store de sesión | Nunca prueba existencia documental |
 
@@ -146,7 +150,10 @@ La identidad se resuelve antes del estado.
 identityResolved = UUID conocido
 localPresent     = archivo local confirmado
 cloudPresent     = registro cloud confirmado para ese UUID/cuenta
+archivedAt       = soft-delete confirmado del registro cloud
 ```
+
+`archivedAt != null` deriva `archived` antes de evaluar presencia y excluye el writing de Desk, Workspace, Search y Recent. Settings > Archivados es la única consulta de producto que lo incluye. Si no está archivado:
 
 | `localPresent` | `cloudPresent` | Estado derivado |
 |---:|---:|---|
@@ -242,6 +249,7 @@ documents
   artifact_type_cache TEXT NULL
   visibility_cache TEXT NULL
   version_cache INTEGER NULL
+  deleted_at_cache TEXT NULL
   created_at INTEGER
   modified_at INTEGER
 
@@ -268,6 +276,10 @@ sync_mutations
 
 El schema físico puede variar, pero debe preservar UUID único, ruta única, cola durable y separación binding/metadata.
 
+### Identidad de BindingRoot
+
+Un directorio físico corresponde a una sola identidad de `BindingRoot`, resuelta siempre por `root_path`. Esta regla aplica a **todos** los escritores de `binding_roots`: reconciliador, migración, dual-write, registro de carpetas externas y adopción como Workspace. Un escritor que reciba otro `id` para un `root_path` conocido reutiliza la identidad existente o ejecuta una migración explícita; nunca intenta crear una segunda fila y nunca resuelve solo por `id`.
+
 ### Scope de autenticación
 
 - el catálogo SQLite no se particiona por usuario;
@@ -292,6 +304,14 @@ IndexedDB es transicional. La migración debe:
 4. conservar IndexedDB en read-only compatibility durante una versión;
 5. retirar lecturas/escrituras desktop después del gate de migración.
 
+La cosecha solo puede ver el IndexedDB del origen y contenedor de storage de su propio WKWebView. Un build local o ad-hoc puede abrir un store distinto del instalado aunque ejecute el mismo código. Por eso el gate M5 exige:
+
+- distribuir el cutover por el mismo canal firmado, bundle id y origen que el release oficial anterior;
+- validar el upgrade instalando el build nuevo sobre ese release, no contra `tauri dev` ni un DMG ad-hoc aislado;
+- comparar, después de deduplicar identidades, el conteo de writings fuente en todos los IndexedDB visibles con el conteo correspondiente de `documents` en SQLite y resolver cualquier diferencia antes del retiro.
+
+M4 y M5 quedan acoplados: Desk/Workspace no pueden usar SQLite como única fuente mientras la cosecha esté incompleta. El rollout debe ejecutar M5 antes o en el mismo release que activa lectura exclusiva de SQLite, o mantener un latch/fallback explícito que impida el cutover hasta confirmar paridad.
+
 No se crea un nuevo scope desktop `anonymous` para documentos.
 
 ## `DocumentCatalog` compartido
@@ -309,6 +329,12 @@ type DocumentCatalog = {
   subscribe(listener: (change: CatalogChange) => void): () => void
 }
 ```
+
+### Fuente única de `CatalogChange`
+
+Existe una sola fuente lógica de `CatalogChange` por runtime desktop. Todo escritor —dual-write, `WorkspaceReconciler`, migración, `registerBinding`, `detachLocalFile` y operaciones cloud proyectadas— publica en el mismo bus que escuchan Desk, Workspace, Search, Recent y Open Document. No se permiten instancias aisladas con escritores y lectores en buses distintos. Una operación bulk emite una sola notificación lógica después de confirmar su transacción, no una por fila.
+
+El enforcement ejecutable de esta invariante pertenece a ODE-380; este documento fija el contrato.
 
 Implementaciones:
 
@@ -452,6 +478,22 @@ Si el `.md` se confirmó, fallas posteriores no pueden reportar pérdida de cont
 
 No se permite que una superficie descubra documentos mediante una fuente que las demás no proyectan al catálogo.
 
+Todas las queries activas excluyen `deleted_at_cache != null`. Settings > Archivados consulta explícitamente esos registros; conservarlos para recuperación o hard-delete posterior no autoriza que reaparezcan como `cloud-only` en Desk/Workspace.
+
+## Borrado iniciado por el usuario
+
+La intención confirmada del usuario y la ausencia inferida por el filesystem son eventos distintos.
+
+| Presencia antes de confirmar | Acción de aplicación | Resultado visible |
+|---|---|---|
+| solo local | borrar el `.md` y hacer `detachLocalFile` | desaparece de vistas activas; no existe registro cloud que archivar |
+| solo nube | `DocumentService.deleteWriting` (soft-delete cloud) | desaparece de vistas activas; queda en Settings > Archivados |
+| local + nube | borrar `.md` → `detachLocalFile` + `DocumentService.deleteWriting` | desaparece de vistas activas; la copia cloud queda en Archivados |
+
+La UI muestra confirmación antes de ejecutar y explica si eliminará una copia local, archivará una copia cloud o ambas. El hard-delete de Supabase nunca forma parte de esta acción: se inicia por separado desde Settings > Archivados.
+
+Si el watcher observa un archivo ausente sin esa intención confirmada, solo proyecta `local_present=false`/detach. Nunca escribe `deleted_at`, nunca borra metadata cloud y, si el registro cloud sigue activo, el writing puede quedar como `cloud-only`.
+
 ## Fallas y recuperación
 
 | Falla | Estado permitido | Recuperación |
@@ -463,6 +505,7 @@ No se permite que una superficie descubra documentos mediante una fuente que las
 | Supabase offline | local funciona | mantener `local-only`/`pending`; retry |
 | hash ambiguo | no elegir automáticamente | presentar candidatos o registrar decisión explícita |
 | archivo borrado | `local_present=false` | no borrar cloud; conservar UUID |
+| delete confirmado por el usuario | `archived` cuando existe cloud; eliminado local cuando corresponde | excluir de vistas activas; conservar cloud soft-deleted hasta hard-delete explícito en Archivados |
 | archivo movido fuera de roots | detach local | rebind futuro por hash/Open Document |
 | logout durante apertura | local no cambia | cancelar solo operaciones cloud; no cambiar scope de catálogo |
 
@@ -474,6 +517,7 @@ Eventos mínimos estructurados:
 - `binding.resolved` con estrategia `path|inode|local_hash|cloud_hash|minted`
 - `binding.ambiguous`
 - `binding.detached`
+- `document.archive.requested/completed/failed`
 - `manifest.write.failed`
 - `catalog.transaction.failed`
 - `open.local|open.cloud_materialized|open.failed`
@@ -547,6 +591,7 @@ Nunca registrar contenido del documento, tokens ni rutas completas en telemetrí
 ### Catálogo
 
 - Desk y Workspace reflejan el mismo conjunto base y los mismos estados;
+- un delete confirmado desaparece de ambas vistas y no reaparece como cloud-only por conservar el registro soft-deleted;
 - SQLite se reconstruye desde BindingRoots sin red;
 - un archivo detectado por watcher aparece en ambas vistas sin visitar Workspace;
 - logout no mueve documentos locales a otro scope ni los oculta.
@@ -578,6 +623,8 @@ Nunca registrar contenido del documento, tokens ni rutas completas en telemetrí
 - integration: cloud-only usa el BindingRoot managed por defecto;
 - integration: archivo externo registra `selectedPaths` solo para el archivo elegido;
 - integration: cambio de auth no cambia catálogo local;
+- integration: una mutación bulk produce un solo `CatalogChange` en el bus compartido;
+- integration: delete local+cloud hace detach + soft-delete y queda fuera de Desk/Workspace;
 - E2E DMG: rename/move en Finder mientras app está en Desk;
 - E2E DMG: Open Document fuera de root → confirmación → mismo documento en Desk/Workspace;
 - E2E DMG: offline open/save/restart/sync posterior.
@@ -603,3 +650,4 @@ Nunca registrar contenido del documento, tokens ni rutas completas en telemetrí
 8. Open Document es otra entrada al mismo `OpenDocument`, no un importador paralelo.
 9. Auth nunca decide si un archivo local existe.
 10. Una falla de apertura nunca crea estado durable nuevo.
+11. La ausencia local inferida nunca archiva cloud; un borrado confirmado siempre desaparece de las vistas activas.

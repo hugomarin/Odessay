@@ -31,7 +31,7 @@
       "type": "core",
       "scope": "arquitectura-de-documento",
       "state": "adr-aceptado-fuente-de-verdad",
-      "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube y binding por ruta+inode+content_hash. Incluye enmienda D10: `.odessay/index.json` como ledger durable de binding, SQLite como catálogo/cola objetivo de desktop e IndexedDB como adapter web/transición desktop."
+      "description": "ADR raíz de identidad y fuente de verdad del documento. Cierra la polaridad A1/A2/A3: .md canónico, body_json copia de trabajo, metadata en la nube (no en frontmatter), un solo UUID cliente=nube y binding por ruta+inode+content_hash. Incluye enmienda D10 y la semántica D9 de borrado: ausencia observada nunca archiva cloud; una acción confirmada compone borrado local y soft-delete cloud según presencia."
     },
     {
       "path": "workflow/context/core/odessay-paginas.md",
@@ -87,7 +87,7 @@
       "path": "workflow/context/features/odessay-anotaciones-ai.md",
       "type": "feature",
       "scope": "annotations-ai-expanded",
-      "description": "Contrato de anotaciones expandidas para lectura, AI y síntesis: tipos reales footnote/personal/ai/highlight, sintaxis markdown inline, attrs de highlight por tipo, relación con margins y flujo de copia para AI."
+      "description": "Contrato de anotaciones expandidas: tipos footnote/personal/ai/highlight, sintaxis markdown inline e identidad estable, panel Notes cross-mode con cards editables/highlights standalone, notas de voz con transcripción runtime-aware y flujo de copia para AI."
     },
     {
       "path": "workflow/context/features/odessay-margenes.md",
@@ -137,7 +137,7 @@
       "type": "feature",
       "scope": "desktop-document-catalog-and-identity",
       "state": "accepted-normative-target",
-      "description": "Spec normativo para una sola personalidad documental desktop: `.odessay/index.json` como ledger durable de binding por BindingRoot, SQLite como catálogo operacional y sync queue, watcher/reconciliador global, IndexedDB limitado al adapter web, estados local/cloud derivados y apertura unificada para Desk, Workspace y Open Document."
+      "description": "Spec normativo para una sola personalidad documental desktop: ledger `.odessay`, SQLite operacional, bus único de CatalogChange, BindingRoots resueltos por root_path, reconciliador/apertura unificados, gate M5 same-channel y semántica confirmada de borrado local/cloud con Archivados fuera de Desk/Workspace."
     },
     {
       "path": "workflow/context/features/odessay-desktop-migration-plan.md",
@@ -151,7 +151,7 @@
       "type": "feature",
       "scope": "workspace-runtime-contract",
       "state": "desktop-first-runtime-map",
-      "description": "Contrato normativo de Workspace por runtime: capacidad desktop-first de carpeta/ubicación sobre el mismo DocumentCatalog que Desk, límites explícitos del runtime web y persistencia de `selectedPaths`/bindings en `.odessay/index.json`. No define un pipeline documental separado."
+      "description": "Contrato normativo de Workspace por runtime: vista desktop-first sobre el DocumentCatalog de Desk, límites web, persistencia de selectedPaths/bindings y separación explícita entre filas read-only actuales y el destino de paridad editable de ODE-381/ODE-382."
     },
     {
       "path": "workflow/context/features/odessay-workspace-diagnostic.md",
