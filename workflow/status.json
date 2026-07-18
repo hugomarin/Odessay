@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-18T04:10:00.182Z",
+  "last_updated": "2026-07-18T13:37:12.508Z",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3121,6 +3121,16 @@
       "commit": "c31d3a1eff5bfc6175fa5a0190b476f2d38a0c2a",
       "date": "2026-07-17",
       "notes": "FINAL DELIVERY — two gated PRs per the brief Delivery clause. PR 1 (#341, commit 79a6a4e, findings fixed in #342): non-destructive read-only harvest tooling. PR 2 (#343, this entry): owner-authorized write-phase harvest (769 markdown files, 769 UUID v2 manifest bindings, zero active non-UUID bindings, identical markdown fingerprint, 3 historical path identities rekeyed) plus runtime retirement of frontmatter identity, Rust UUID mint fallback, path-as-id, writings_index (SQLite v5 DROP), LocalIndexService, migration feature flags and desktop IndexedDB fallback. Desktop documents/collections/relations/sync-queue operate on SQLite v5 (923 docs, 829 bindings, 12 collections, 56 relations, 4,391 queue rows preserved with superseded marked, zero deletions); web IndexedDB untouched. catalog_apply_reconcile resolves binding roots by root_path (closes ODE-376 carry-over). Compatibility evidence gate accepted by owner after signed same-channel releases 0.3.6 (M5 parity) -> 0.3.7 (collections migration) -> 0.3.8 (final cleanup, stable across restart). Sanitized evidence: artifacts/ode-374/compatibility-release-evidence-2026-07-17.md. Review score 9.5/10 (PASS); 2 non-blocking P3 follow-ups (stale docstring in desk-catalog-source, dead indexeddb-to-sqlite module)."
+    },
+    {
+      "what": "fix(editor): preserve annotation highlight fidelity + consolidate owner-authorized expanded scope [ODE-377]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-377",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-377",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/344",
+      "commit": "ceea06c9f08a82a4e1e5a97d3c47156e312a72ec",
+      "date": "2026-07-18",
+      "notes": "Two review rounds. Round 1 rejected (score 6.9): owner-authorized scope expansion not yet in PR + P1 marker parser swallowing prose after ] + P2 margin-entry palette duplication. Round 2 approved (score 10.0, PASS): escape-based inline marker format (\\] and \\\\, first-unescaped-bracket close) with directed regressions; multi-block annotations keep single identity/type/color + one Notes entry; bold/italic highlight normalization; annotationReference stays in the selected table cell with displaced-marker repair; desktop editor hydrates body from DocumentService.openWriting / canonical .md (IndexedDB metadata-only fallback, no draft fallback); single annotation palette consumed by marks, sups, Notes and margin entries (static contract test); shared typed AnnotationHighlight across editor and reading surfaces. Evidence: 162 files/1066 tests, perf gate 14 pass/0 warn/1 skip on fresh remediation trace, delivery gate, CI traceability + Vercel green, cross-surface screenshots."
     }
   ]
 }
