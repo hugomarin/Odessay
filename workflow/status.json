@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-18T13:37:12.508Z",
+  "last_updated": "2026-07-18T20:26:04.654Z",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3161,6 +3161,16 @@
       "commit": "dfb495c8dd41003ab93321cc22053ac04eb8f35f",
       "date": "2026-07-18",
       "notes": "Single-round review, approved 9.5/10 (PASS). Notes panel now runs one view-model in both modes: Markdown extractor derives anchor_text/anchor/source ranges (existing findHighlightedContextBeforeMarker helper) plus standalone ==highlights==, so cards show the anchor quote in Markdown too; update/delete/change-type work for ai/personal/footnote/highlight in both modes via stable-id-first matching (Rich commands accept optional id; new generalized Markdown mutators return {found, markdown} and leave input byte-for-byte intact on miss); zero silent no-ops — every panel handler returns boolean and failures show inline feedback; voice transcripts route through onTranscriptRef + modeRef.current so late transcripts write into the marker of the current mode/document for any type; go-to-text in Markdown selects the marker range in the source textarea; standalone highlight conversion preserves identity end-to-end. Round-trip serialization and Copiar-para-AI output unchanged. Evidence: typecheck, lint (6 pre-existing warnings), 164 files/1090 tests, reviewer re-ran targeted 70/70, perf scenario notes-annotations (24 annotations) 14 pass/0 warn/1 skip with 0 required_failures, delivery gate with OPS_PERF_TRACE_PATH, CI traceability + Vercel green, e2e notes-annotation-pipeline + screenshots markdown/rich. Non-blocking findings: P3 standalone-highlight regex may false-positive on == inside escaped sigil text; P3 brief asked for per-mode recordings, PR delivered screenshots + e2e."
+    },
+    {
+      "what": "fix(editor): keep selection overlays in viewport [ODE-385]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-385",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-385/keep-annotation-bubble-and-selection-popup-within-the-viewport",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/348",
+      "commit": "bee78fcbcb9fe6bbc85f9c0adb9d3e979d6f6a59",
+      "date": "2026-07-18",
+      "notes": "Single-round review, approved 9.5/10 (PASS). AnnotationBubble and SelectionPopup now stay fully inside the viewport in Editor and Reading: one shared measured collision helper (lib/reading/floating-overlay-position.ts) flips the overlay when the preferred side lacks space, clamps to 8px horizontal/bottom margins and below the 54px top boundary, and caps oversized bubbles with internal scroll; useFloatingOverlayPosition remeasures via ResizeObserver so live voice/transcription growth stays reachable; editor re-anchors open overlays on resize/scroll without touching the keystroke path. Props and contracts unchanged; no save/sync/catalog/identity impact. Evidence: typecheck, lint (6 pre-existing warnings), 165 files/1095 tests, Playwright floating-overlays-viewport 2 passed, perf keydown p95 18.00 -> 17.35ms with 0 long tasks, perf gate 14 pass/0 warn/1 skip (0 required_failures), delivery gate with OPS_PERF_TRACE_PATH, CI traceability + Vercel green, 5 cross-mode screenshots. Non-blocking findings: P3 dead position fallback in annotation-bubble; P3 coordsAtPos may throw on stale positions in the editor scroll listener (medium confidence)."
     }
   ]
 }
