@@ -10,6 +10,65 @@ async function screenshot(page: Page, filename: string) {
   await page.screenshot({ path: `${EVIDENCE_DIR}/${filename}`, fullPage: false })
 }
 
+async function installVoiceRecorderMock(page: Page) {
+  await page.addInitScript(() => {
+    class FakeAnalyser {
+      fftSize = 2048
+      smoothingTimeConstant = 0
+      disconnect() {}
+      getByteTimeDomainData(samples: Uint8Array) {
+        samples.fill(148)
+      }
+    }
+
+    class FakeAudioContext {
+      createAnalyser() {
+        return new FakeAnalyser()
+      }
+      createMediaStreamSource() {
+        return { connect() {} }
+      }
+      close() {
+        return Promise.resolve()
+      }
+    }
+
+    class FakeMediaRecorder {
+      static isTypeSupported(type: string) {
+        return type.startsWith("audio/webm")
+      }
+
+      state: RecordingState = "inactive"
+      readonly mimeType = "audio/webm"
+      ondataavailable: ((event: BlobEvent) => void) | null = null
+      onstop: ((event: Event) => void) | null = null
+
+      start() {
+        this.state = "recording"
+      }
+      pause() {
+        this.state = "paused"
+      }
+      resume() {
+        this.state = "recording"
+      }
+      stop() {
+        this.state = "inactive"
+        this.onstop?.(new Event("stop"))
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({ getTracks: () => [{ stop() {} }] }),
+      },
+    })
+    window.AudioContext = FakeAudioContext as unknown as typeof AudioContext
+    window.MediaRecorder = FakeMediaRecorder as unknown as typeof MediaRecorder
+  })
+}
+
 async function expectInsideViewport(locator: Locator, page: Page) {
   const box = await locator.boundingBox()
   const viewport = page.viewportSize()
@@ -60,9 +119,11 @@ async function selectEdgeWord(paragraph: Locator, edge: "left" | "right") {
 }
 
 test.describe("floating selection overlays stay inside the viewport", () => {
+  test.describe.configure({ timeout: 90_000 })
   test.use({ viewport: { width: 760, height: 360 } })
 
   test("editor flips the annotation bubble above a selection near the bottom", async ({ page }) => {
+    await installVoiceRecorderMock(page)
     await page.setViewportSize({ width: 1100, height: 360 })
     await openEditorHarness(page)
     await switchToMarkdown(page)
@@ -86,9 +147,14 @@ test.describe("floating selection overlays stay inside the viewport", () => {
     await expect(bubble).toHaveAttribute("data-placement", "above")
     await expectInsideViewport(bubble, page)
     await screenshot(page, "editor-bottom-flip.png")
+    await bubble.getByRole("button", { name: "Record a voice note" }).click()
+    await expect(bubble.getByRole("button", { name: "Pause recording" })).toBeVisible()
+    await expectInsideViewport(bubble, page)
+    await screenshot(page, "editor-bottom-voice-mode.png")
   })
 
   test("reading bubble flips at the bottom and clamps at both horizontal edges", async ({ page }) => {
+    await installVoiceRecorderMock(page)
     await page.goto("/perf/reading-harness")
     const paragraphs = page.locator("#reading-text .prose-odessay p")
     const lastParagraph = paragraphs.last()
@@ -103,6 +169,12 @@ test.describe("floating selection overlays stay inside the viewport", () => {
     await expect(bubble).toHaveAttribute("data-placement", "above")
     await expectInsideViewport(bubble, page)
     await screenshot(page, "reading-bottom-right-clamp.png")
+
+    await bubble.getByRole("button", { name: "Record a voice note" }).click()
+    await expect(bubble.getByRole("button", { name: "Pause recording" })).toBeVisible()
+    await expectInsideViewport(bubble, page)
+    await screenshot(page, "reading-bottom-voice-mode.png")
+    await bubble.getByRole("button", { name: "Discard recording" }).click()
 
     await page.getByRole("button", { name: "Cancel" }).click()
     const firstParagraph = paragraphs.first()
