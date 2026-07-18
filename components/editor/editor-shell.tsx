@@ -29,12 +29,16 @@ import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal"
 import {
+  annotateMarkdownStandaloneHighlight,
   appendMarkdownFootnote,
+  changeMarkdownAnnotationType,
   extractRichEditorAnnotations,
   getMarkdownFootnotes,
-  removeMarkdownFootnote,
-  updateMarkdownFootnote,
+  removeMarkdownAnnotation,
+  removeMarkdownStandaloneHighlight,
+  updateMarkdownAnnotation,
 } from "@/lib/editor/footnote-extension"
+import type { AnnotationPanelEntry } from "@/components/editor/panels/notes-panel"
 import {
   convertHtmlTablesToMarkdown,
   materializeMarkdownForRichParser,
@@ -2074,11 +2078,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     (nextMarkdown: string) => {
       const normalizedMarkdown = normalizeMarkdownForRoundTrip(nextMarkdown)
 
-      if (editor) {
-        isApplyingContentRef.current = true
-      }
+      if (!editor) return false
 
-      void applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
+      setMarkdownValue(normalizedMarkdown)
+      isApplyingContentRef.current = true
+
+      const applied = applyPanelMarkdownChange(editor, materializeMarkdownForRichParser(normalizedMarkdown), {
         clearPendingSave: () => {
           if (markdownSaveTimeoutRef.current) {
             window.clearTimeout(markdownSaveTimeoutRef.current)
@@ -2101,6 +2106,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       })
 
       isApplyingContentRef.current = false
+      return applied
     },
     [editor, persistEditorSnapshot, updateDerivedEditorState],
   )
@@ -3047,9 +3053,11 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
   const convertStandaloneHighlight = useCallback(
     (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number) => {
-      if (!editor || !anchorText) return
+      if (!editor || !anchorText) return false
       const highlightMark = editor.schema.marks.highlight
-      if (!highlightMark) return
+      if (!highlightMark) return false
+
+      let converted = false
 
       editor.state.doc.descendants((node, pos) => {
         if (node.type.name !== "text") return
@@ -3062,7 +3070,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           if (anchorStart !== undefined && anchorEnd !== undefined) {
             if (range.from !== anchorStart || range.to !== anchorEnd) return
           }
-          editor
+          converted = editor
             .chain()
             .focus()
             .setTextSelection({ from: range.from, to: range.to })
@@ -3074,6 +3082,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           return false
         }
       })
+      return converted
     },
     [editor],
   )
@@ -5552,13 +5561,34 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
                 onClose={closeActivePanel}
-                onNavigate={(type, index, pos, anchorText, anchorEnd) => {
+                onNavigate={(annotation: AnnotationPanelEntry) => {
+                  if (modeRef.current === "markdown") {
+                    const textarea = markdownTextareaRef.current
+                    if (
+                      !textarea ||
+                      annotation.source_start == null ||
+                      annotation.source_end == null
+                    ) {
+                      return false
+                    }
+
+                    textarea.focus()
+                    textarea.setSelectionRange(annotation.source_start, annotation.source_end)
+                    markdownSelectionRef.current = {
+                      start: annotation.source_start,
+                      end: annotation.source_end,
+                      text: markdownValue.slice(annotation.source_start, annotation.source_end),
+                    }
+                    queueMarkdownSelectionRestore(annotation.source_start, annotation.source_end)
+                    return true
+                  }
+
                   if (!editor) return false
-                  if (pos != null && anchorText) {
+                  if (annotation.anchor_start != null && annotation.anchor_text) {
                     const resolution = resolveStandaloneHighlightRange(editor, {
-                      anchorText,
-                      anchorStart: pos,
-                      anchorEnd,
+                      anchorText: annotation.anchor_text,
+                      anchorStart: annotation.anchor_start,
+                      anchorEnd: annotation.anchor_end,
                     })
                     return resolution.status === "found"
                       ? navigateToEditorPosition(editor, resolution.range.from)
@@ -5571,8 +5601,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     if (
                       (node.type.name === "annotationReference" ||
                         node.type.name === "footnoteReference") &&
-                      (node.attrs.type as string) === type &&
-                      (node.attrs.index as number) === index
+                      (annotation.id
+                        ? String(node.attrs.id ?? "") === annotation.id
+                        : (node.attrs.type as string) === annotation.type &&
+                          (node.attrs.index as number) === annotation.index)
                     ) {
                       targetPosition = nodePos
                       return false
@@ -5583,52 +5615,113 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                     ? navigateToEditorPosition(editor, targetPosition)
                     : false
                 }}
-                onUpdateAnnotation={(type, index, text) => {
-                  if (mode === "rich" && editor) {
-                    editor.commands.updateAnnotation(type, index, text)
+                onUpdateAnnotation={(annotation: AnnotationPanelEntry, text: string) => {
+                  if (modeRef.current === "rich" && editor) {
+                    const updated = editor.commands.updateAnnotation(
+                      annotation.type as AnnotationType,
+                      annotation.index,
+                      text,
+                      annotation.id,
+                    )
+                    if (!updated) return false
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
-                  } else if (type === "footnote") {
-                    const nextMarkdown = updateMarkdownFootnote(markdownValue, index, text)
-                    applyMarkdownFromPanel(nextMarkdown)
+                    return true
                   }
+
+                  const result = updateMarkdownAnnotation(markdownValue, annotation, text)
+                  return result.found && applyMarkdownFromPanel(result.markdown)
                 }}
-                onUpdateAnnotationType={(type, index, newType) => {
-                  if (mode === "rich" && editor) {
-                    editor.commands.updateAnnotationType(type, index, newType)
+                onUpdateAnnotationType={(annotation: AnnotationPanelEntry, newType: AnnotationType) => {
+                  if (modeRef.current === "rich" && editor) {
+                    const updated = editor.commands.updateAnnotationType(
+                      annotation.type as AnnotationType,
+                      annotation.index,
+                      newType,
+                      undefined,
+                      annotation.id,
+                    )
+                    if (!updated) return false
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
+                    return true
                   }
+
+                  const result = changeMarkdownAnnotationType(markdownValue, annotation, newType)
+                  return result.found && applyMarkdownFromPanel(result.markdown)
                 }}
-                onDeleteAnnotation={(type, index) => {
-                  if (mode === "rich" && editor) {
-                    editor.commands.deleteAnnotation(type, index)
+                onDeleteAnnotation={(annotation: AnnotationPanelEntry) => {
+                  if (modeRef.current === "rich" && editor) {
+                    const deleted = editor.commands.deleteAnnotation(
+                      annotation.type as AnnotationType,
+                      annotation.index,
+                      annotation.id,
+                    )
+                    if (!deleted) return false
                     setRichFootnoteRevision((r) => r + 1)
                     updateDerivedEditorState(editor)
                     void persistEditorSnapshot(editor)
-                  } else if (type === "footnote") {
-                    const nextMarkdown = removeMarkdownFootnote(markdownValue, index)
-                    applyMarkdownFromPanel(nextMarkdown)
+                    return true
                   }
+
+                  const result = removeMarkdownAnnotation(markdownValue, annotation)
+                  return result.found && applyMarkdownFromPanel(result.markdown)
                 }}
-                onUpdateHighlight={(anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => {
-                  if (!editor || !anchorText) return
-                  convertStandaloneHighlight(anchorText, "highlight", text, anchorStart, anchorEnd)
+                onUpdateHighlight={(anchorText: string, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
+                  if (modeRef.current === "markdown") {
+                    const result = annotateMarkdownStandaloneHighlight(
+                      markdownValue,
+                      { id, anchor_text: anchorText, anchor_start: anchorStart, anchor_end: anchorEnd },
+                      "highlight",
+                      text,
+                      id?.startsWith("highlight:")
+                        ? `annotation-${id.slice("highlight:".length)}`
+                        : id ?? `annotation-${anchorStart ?? 0}-${anchorEnd ?? 0}`,
+                    )
+                    return result.found && applyMarkdownFromPanel(result.markdown)
+                  }
+                  if (!editor || !anchorText) return false
+                  const converted = convertStandaloneHighlight(anchorText, "highlight", text, anchorStart, anchorEnd)
+                  if (!converted) return false
                   setRichFootnoteRevision((r) => r + 1)
                   updateDerivedEditorState(editor)
                   void persistEditorSnapshot(editor)
+                  return true
                 }}
-                onConvertHighlightToAi={(anchorText: string, text: string, anchorStart?: number, anchorEnd?: number) => {
-                  if (!editor || !anchorText) return
-                  const aiText = text.trim() || anchorText
-                  convertStandaloneHighlight(anchorText, "ai", aiText, anchorStart, anchorEnd)
+                onConvertHighlight={(anchorText: string, newType: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
+                  const nextText = newType === "ai" ? text.trim() || anchorText : text
+                  if (modeRef.current === "markdown") {
+                    const result = annotateMarkdownStandaloneHighlight(
+                      markdownValue,
+                      { id, anchor_text: anchorText, anchor_start: anchorStart, anchor_end: anchorEnd },
+                      newType,
+                      nextText,
+                      id?.startsWith("highlight:")
+                        ? `annotation-${id.slice("highlight:".length)}`
+                        : id ?? `annotation-${anchorStart ?? 0}-${anchorEnd ?? 0}`,
+                    )
+                    return result.found && applyMarkdownFromPanel(result.markdown)
+                  }
+                  if (!editor || !anchorText) return false
+                  const converted = convertStandaloneHighlight(anchorText, newType, nextText, anchorStart, anchorEnd)
+                  if (!converted) return false
                   setRichFootnoteRevision((r) => r + 1)
                   updateDerivedEditorState(editor)
                   void persistEditorSnapshot(editor)
+                  return true
                 }}
-                onDeleteHighlight={(anchorText: string, anchorStart?: number, anchorEnd?: number) => {
+                onDeleteHighlight={(anchorText: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
+                  if (modeRef.current === "markdown") {
+                    const result = removeMarkdownStandaloneHighlight(markdownValue, {
+                      id,
+                      anchor_text: anchorText,
+                      anchor_start: anchorStart,
+                      anchor_end: anchorEnd,
+                    })
+                    return result.found && applyMarkdownFromPanel(result.markdown)
+                  }
                   if (!editor || !anchorText) return false
                   const resolution = deleteStandaloneHighlight(editor, {
                     anchorText,

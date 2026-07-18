@@ -245,7 +245,9 @@ describe("highlight annotation", () => {
   describe("footnote extension helpers", () => {
     it("getMarkdownFootnotes includes highlight annotations", () => {
       const markdown = "Body[@h1: Highlight note][@1: AI note][^1: Footnote]"
-      expect(getMarkdownFootnotes(markdown)).toEqual([
+      expect(
+        getMarkdownFootnotes(markdown).map(({ type, index, text }) => ({ type, index, text })),
+      ).toEqual([
         { type: "highlight", index: 1, text: "Highlight note" },
         { type: "ai", index: 1, text: "AI note" },
         { type: "footnote", index: 1, text: "Footnote" },
@@ -511,6 +513,40 @@ describe("highlight annotation", () => {
       expect(indices).toContain(2)
       expect(after.every((a) => a.type === "ai")).toBe(true)
       editor.destroy()
+    })
+
+    it.each([
+      ["ai", "[@1|stable-id: Old]"],
+      ["personal", "[@p1|stable-id: Old]"],
+      ["footnote", "[^1|stable-id: Old]"],
+      ["highlight", "[@h1|stable-id: Old]"],
+    ] as const)("targets rich %s annotation actions by stable id", (type, marker) => {
+      const createEditor = () => createTestEditor(`==Anchor==${marker}`)
+
+      const updateEditor = createEditor()
+      expect(updateEditor.commands.updateAnnotation(type, 99, "Transcript", "stable-id")).toBe(true)
+      expect(extractWritingAnnotationNodes(updateEditor.getJSON())[0]).toMatchObject({
+        id: "stable-id",
+        type,
+        text: "Transcript",
+      })
+      updateEditor.destroy()
+
+      const typeEditor = createEditor()
+      const nextType = type === "ai" ? "personal" : "ai"
+      expect(
+        typeEditor.commands.updateAnnotationType(type, 99, nextType, undefined, "stable-id"),
+      ).toBe(true)
+      expect(extractWritingAnnotationNodes(typeEditor.getJSON())[0]).toMatchObject({
+        id: "stable-id",
+        type: nextType,
+      })
+      typeEditor.destroy()
+
+      const deleteEditor = createEditor()
+      expect(deleteEditor.commands.deleteAnnotation(type, 99, "stable-id")).toBe(true)
+      expect(extractWritingAnnotationNodes(deleteEditor.getJSON())).toEqual([])
+      deleteEditor.destroy()
     })
 
     it("extractWritingAnnotationNodes finds highlight annotations", () => {

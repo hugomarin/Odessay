@@ -36,8 +36,8 @@ const renderPanel = ({
           },
         ]}
         currentMarkdown="==Target anchor=="
-        onUpdateAnnotation={vi.fn()}
-        onDeleteAnnotation={vi.fn()}
+        onUpdateAnnotation={vi.fn(() => true)}
+        onDeleteAnnotation={vi.fn(() => true)}
         onDeleteHighlight={onDeleteHighlight}
         onNavigate={onNavigate}
         onClose={vi.fn()}
@@ -67,7 +67,9 @@ describe("NotesPanel interactions", () => {
     )
     act(() => button?.click())
 
-    expect(onNavigate).toHaveBeenCalledWith("ai", 1, undefined, undefined, undefined)
+    expect(onNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "annotation-1", type: "ai", index: 1 }),
+    )
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "The annotated text could not be found.",
     )
@@ -80,7 +82,7 @@ describe("NotesPanel interactions", () => {
     const button = container.querySelector<HTMLButtonElement>('button[aria-label="Delete Highlight"]')
     act(() => button?.click())
 
-    expect(onDeleteHighlight).toHaveBeenCalledWith("Target anchor", 10, 23)
+    expect(onDeleteHighlight).toHaveBeenCalledWith("Target anchor", 10, 23, "highlight:0")
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "The annotated text could not be found.",
     )

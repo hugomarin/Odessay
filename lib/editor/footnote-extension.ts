@@ -15,9 +15,28 @@ export type MarkdownAnnotation = {
   type: AnnotationType
   index: number
   text: string
+  anchor_text: string
+  anchor_start: number
+  anchor_end: number
+  source_start: number
+  source_end: number
 }
 
 export type MarkdownFootnote = MarkdownAnnotation
+
+export type AnnotationIdentity = Pick<MarkdownAnnotation, "id" | "type" | "index">
+
+export type MarkdownAnnotationMutationResult = {
+  found: boolean
+  markdown: string
+}
+
+type MarkdownHighlightIdentity = {
+  id?: string
+  anchor_text: string
+  anchor_start?: number
+  anchor_end?: number
+}
 
 type AnnotationRef = {
   type: AnnotationType
@@ -154,14 +173,54 @@ export const normalizeMarkdownFootnotes = (markdown: string) => {
 
 export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => {
   const normalized = normalizeMarkdownFootnotes(markdown)
-  return findInlineAnnotationMarkers(normalized)
+  const annotations = findInlineAnnotationMarkers(normalized)
     .filter((marker) => !marker.legacyFootnote)
-    .map((marker) => ({
-      ...(marker.id ? { id: marker.id } : {}),
-      type: marker.type,
-      index: marker.index,
-      text: marker.text,
-    }))
+    .map((marker) => {
+      const anchor = findHighlightedContextBeforeMarker(normalized, marker.start)
+      return {
+        ...(marker.id ? { id: marker.id } : {}),
+        type: marker.type,
+        index: marker.index,
+        text: marker.text,
+        anchor_text: anchor?.text ?? "",
+        anchor_start: anchor?.start ?? marker.start,
+        anchor_end: anchor?.end ?? marker.start,
+        source_start: marker.start,
+        source_end: marker.end,
+      }
+    })
+
+  const claimedAnchors = new Set(
+    annotations
+      .filter((annotation) => annotation.anchor_text)
+      .map((annotation) => `${annotation.anchor_start}:${annotation.anchor_end}`),
+  )
+  const maxHighlightIndex = annotations
+    .filter((annotation) => annotation.type === "highlight")
+    .reduce((max, annotation) => Math.max(max, annotation.index), 0)
+  const standaloneHighlights: MarkdownAnnotation[] = []
+  const highlightPattern = /==([^=\n]+)==/g
+
+  for (const match of normalized.matchAll(highlightPattern)) {
+    const rawStart = match.index
+    const anchorStart = rawStart + 2
+    const anchorEnd = anchorStart + match[1].length
+    if (claimedAnchors.has(`${anchorStart}:${anchorEnd}`)) continue
+
+    standaloneHighlights.push({
+      id: `highlight:${rawStart}`,
+      type: "highlight",
+      index: maxHighlightIndex + standaloneHighlights.length + 1,
+      text: "",
+      anchor_text: match[1],
+      anchor_start: anchorStart,
+      anchor_end: anchorEnd,
+      source_start: anchorStart,
+      source_end: anchorEnd,
+    })
+  }
+
+  return [...annotations, ...standaloneHighlights]
 }
 
 export const appendMarkdownFootnote = (markdown: string, note: string) => {
@@ -171,20 +230,6 @@ export const appendMarkdownFootnote = (markdown: string, note: string) => {
   return `${normalized}${annotationSigil("footnote", nextIndex, note.trim(), crypto.randomUUID())}`.trimEnd()
 }
 
-export const updateMarkdownFootnote = (markdown: string, index: number, note: string) =>
-  replaceInlineAnnotationMarkers(normalizeMarkdownFootnotes(markdown), (marker) =>
-    marker.type === "footnote" && marker.index === index && !marker.legacyFootnote
-      ? annotationSigil("footnote", index, note.trim(), marker.id)
-      : marker.raw,
-  )
-
-export const removeMarkdownFootnote = (markdown: string, index: number) =>
-  normalizeMarkdownFootnotes(
-    replaceInlineAnnotationMarkers(normalizeMarkdownFootnotes(markdown), (marker) =>
-      marker.type === "footnote" && marker.index === index ? "" : marker.raw,
-    ),
-  ).trimEnd()
-
 const findHighlightedContextBeforeMarker = (markdown: string, markerStart: number) => {
   let highlightEnd = markerStart
   while (highlightEnd > 0 && /[\t ]/.test(markdown[highlightEnd - 1])) highlightEnd -= 1
@@ -193,8 +238,146 @@ const findHighlightedContextBeforeMarker = (markdown: string, markerStart: numbe
   const highlightStart = markdown.lastIndexOf("==", highlightEnd - 3)
   if (highlightStart === -1) return undefined
   const highlightedText = markdown.slice(highlightStart + 2, highlightEnd - 2)
-  return highlightedText.includes("==") ? undefined : highlightedText
+  return highlightedText.includes("==")
+    ? undefined
+    : {
+        text: highlightedText,
+        start: highlightStart + 2,
+        end: highlightEnd - 2,
+      }
 }
+
+const markerMatchesIdentity = (
+  marker: ReturnType<typeof findInlineAnnotationMarkers>[number],
+  target: AnnotationIdentity,
+) =>
+  target.id
+    ? marker.id === target.id
+    : marker.type === target.type && marker.index === target.index
+
+export const updateMarkdownAnnotation = (
+  markdown: string,
+  target: AnnotationIdentity,
+  text: string,
+): MarkdownAnnotationMutationResult => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  let found = false
+  const nextMarkdown = replaceInlineAnnotationMarkers(normalized, (marker) => {
+    if (marker.legacyFootnote || !markerMatchesIdentity(marker, target)) return marker.raw
+    found = true
+    return annotationSigil(marker.type, marker.index, text, marker.id)
+  })
+
+  return { found, markdown: found ? nextMarkdown : markdown }
+}
+
+export const changeMarkdownAnnotationType = (
+  markdown: string,
+  target: AnnotationIdentity,
+  newType: AnnotationType,
+): MarkdownAnnotationMutationResult => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  let found = false
+  const changed = replaceInlineAnnotationMarkers(normalized, (marker) => {
+    if (marker.legacyFootnote || !markerMatchesIdentity(marker, target)) return marker.raw
+    found = true
+    return annotationSigil(newType, marker.index, marker.text, marker.id)
+  })
+
+  return {
+    found,
+    markdown: found ? normalizeMarkdownFootnotes(changed) : markdown,
+  }
+}
+
+export const removeMarkdownAnnotation = (
+  markdown: string,
+  target: AnnotationIdentity,
+): MarkdownAnnotationMutationResult => {
+  const normalized = normalizeMarkdownFootnotes(markdown)
+  let found = false
+  const changed = replaceInlineAnnotationMarkers(normalized, (marker) => {
+    if (marker.legacyFootnote || !markerMatchesIdentity(marker, target)) return marker.raw
+    found = true
+    return ""
+  })
+
+  return {
+    found,
+    markdown: found ? normalizeMarkdownFootnotes(changed).trimEnd() : markdown,
+  }
+}
+
+const resolveMarkdownStandaloneHighlight = (
+  markdown: string,
+  target: MarkdownHighlightIdentity,
+) => {
+  const expectedRawStart = target.id?.startsWith("highlight:")
+    ? Number(target.id.slice("highlight:".length))
+    : null
+  const highlightPattern = /==([^=\n]+)==/g
+
+  for (const match of markdown.matchAll(highlightPattern)) {
+    const rawStart = match.index
+    const anchorStart = rawStart + 2
+    const anchorEnd = anchorStart + match[1].length
+    if (expectedRawStart != null && Number.isFinite(expectedRawStart)) {
+      if (rawStart === expectedRawStart && match[1] === target.anchor_text) {
+        return { rawStart, rawEnd: anchorEnd + 2, anchorStart, anchorEnd }
+      }
+      continue
+    }
+    if (
+      match[1] === target.anchor_text &&
+      (target.anchor_start == null || target.anchor_start === anchorStart) &&
+      (target.anchor_end == null || target.anchor_end === anchorEnd)
+    ) {
+      return { rawStart, rawEnd: anchorEnd + 2, anchorStart, anchorEnd }
+    }
+  }
+
+  return null
+}
+
+export const annotateMarkdownStandaloneHighlight = (
+  markdown: string,
+  target: MarkdownHighlightIdentity,
+  type: AnnotationType,
+  text: string,
+  id: string,
+): MarkdownAnnotationMutationResult => {
+  const resolved = resolveMarkdownStandaloneHighlight(markdown, target)
+  if (!resolved) return { found: false, markdown }
+
+  const nextIndex =
+    getMarkdownFootnotes(markdown)
+      .filter((annotation) => annotation.type === type && !annotation.id?.startsWith("highlight:"))
+      .reduce((max, annotation) => Math.max(max, annotation.index), 0) + 1
+  const marker = annotationSigil(type, nextIndex, text, id)
+  return {
+    found: true,
+    markdown: `${markdown.slice(0, resolved.rawEnd)}${marker}${markdown.slice(resolved.rawEnd)}`,
+  }
+}
+
+export const removeMarkdownStandaloneHighlight = (
+  markdown: string,
+  target: MarkdownHighlightIdentity,
+): MarkdownAnnotationMutationResult => {
+  const resolved = resolveMarkdownStandaloneHighlight(markdown, target)
+  if (!resolved) return { found: false, markdown }
+
+  return {
+    found: true,
+    markdown: `${markdown.slice(0, resolved.rawStart)}${target.anchor_text}${markdown.slice(resolved.rawEnd)}`,
+  }
+}
+
+export const updateMarkdownFootnote = (markdown: string, index: number, note: string) =>
+  updateMarkdownAnnotation(markdown, { type: "footnote", index }, note).markdown
+
+export const removeMarkdownFootnote = (markdown: string, index: number) =>
+  removeMarkdownAnnotation(markdown, { type: "footnote", index }).markdown
 
 export const extractAiAnnotationsFromMarkdown = (markdown: string): string => {
   const normalized = normalizeMarkdownFootnotes(markdown)
@@ -203,7 +386,7 @@ export const extractAiAnnotationsFromMarkdown = (markdown: string): string => {
   for (const marker of findInlineAnnotationMarkers(normalized)) {
     if (marker.type !== "ai" || marker.legacyFootnote) continue
 
-    const anchorText = findHighlightedContextBeforeMarker(normalized, marker.start)
+    const anchorText = findHighlightedContextBeforeMarker(normalized, marker.start)?.text
     const sigil = annotationSigil("ai", marker.index, marker.text, marker.id)
     results.push(anchorText ? `"${anchorText}" ${sigil}` : sigil)
   }
@@ -395,10 +578,10 @@ declare module "@tiptap/core" {
       addFootnote: (text: string) => ReturnType
       addAnnotation: (type: AnnotationType, text: string) => ReturnType
       updateFootnote: (index: number, text: string) => ReturnType
-      updateAnnotation: (type: AnnotationType, index: number, text: string) => ReturnType
-      updateAnnotationType: (type: AnnotationType, index: number, newType: AnnotationType, newText?: string) => ReturnType
+      updateAnnotation: (type: AnnotationType, index: number, text: string, id?: string) => ReturnType
+      updateAnnotationType: (type: AnnotationType, index: number, newType: AnnotationType, newText?: string, id?: string) => ReturnType
       deleteFootnote: (index: number) => ReturnType
-      deleteAnnotation: (type: AnnotationType, index: number) => ReturnType
+      deleteAnnotation: (type: AnnotationType, index: number, id?: string) => ReturnType
     }
   }
 }
@@ -600,14 +783,16 @@ export const FootnoteExtension = Extension.create({
         },
 
       updateAnnotation:
-        (type: AnnotationType, index: number, text: string) =>
+        (type: AnnotationType, index: number, text: string, id?: string) =>
         ({ editor, tr, dispatch }) => {
           const positions: number[] = []
           editor.state.doc.descendants((node, pos) => {
             if (
               (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
-              (node.attrs.type as AnnotationType | undefined) === type &&
-              (node.attrs.index as number) === index
+              (id
+                ? String(node.attrs.id ?? "") === id
+                : (node.attrs.type as AnnotationType | undefined) === type &&
+                  (node.attrs.index as number) === index)
             ) {
               positions.push(pos)
             }
@@ -622,14 +807,16 @@ export const FootnoteExtension = Extension.create({
         },
 
       updateAnnotationType:
-        (type: AnnotationType, index: number, newType: AnnotationType, newText?: string) =>
+        (type: AnnotationType, index: number, newType: AnnotationType, newText?: string, id?: string) =>
         ({ editor, tr, dispatch }) => {
           const positions: number[] = []
           editor.state.doc.descendants((node, pos) => {
             if (
               (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
-              (node.attrs.type as AnnotationType | undefined) === type &&
-              (node.attrs.index as number) === index
+              (id
+                ? String(node.attrs.id ?? "") === id
+                : (node.attrs.type as AnnotationType | undefined) === type &&
+                  (node.attrs.index as number) === index)
             ) {
               positions.push(pos)
             }
@@ -672,14 +859,16 @@ export const FootnoteExtension = Extension.create({
         },
 
       deleteAnnotation:
-        (type: AnnotationType, index: number) =>
+        (type: AnnotationType, index: number, id?: string) =>
         ({ editor, tr, dispatch }) => {
           const positions: { pos: number; size: number }[] = []
           editor.state.doc.descendants((node, pos) => {
             if (
               (node.type.name === "annotationReference" || node.type.name === "footnoteReference") &&
-              (node.attrs.type as AnnotationType | undefined) === type &&
-              (node.attrs.index as number) === index
+              (id
+                ? String(node.attrs.id ?? "") === id
+                : (node.attrs.type as AnnotationType | undefined) === type &&
+                  (node.attrs.index as number) === index)
             ) {
               positions.push({ pos, size: node.nodeSize })
             }
