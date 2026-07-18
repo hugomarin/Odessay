@@ -61,53 +61,56 @@ describe("POST /api/margins/transcribe", () => {
     })
   })
 
-  it("proxies the audio blob to Deepgram and returns the transcript", async () => {
-    supabaseAuthMock.getUser.mockResolvedValue({
-      data: { user: { id: "user-1" } },
-    })
+  it.each(["audio/webm", "audio/mp4"])(
+    "proxies a %s audio blob to Deepgram and returns the transcript",
+    async (audioType) => {
+      supabaseAuthMock.getUser.mockResolvedValue({
+        data: { user: { id: "user-1" } },
+      })
 
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          results: {
-            channels: [
-              {
-                alternatives: [{ transcript: "hola mundo" }],
-              },
-            ],
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            results: {
+              channels: [
+                {
+                  alternatives: [{ transcript: "hola mundo" }],
+                },
+              ],
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
+      )
+
+      const audio = new Blob(["voice-bytes"], { type: audioType })
+      const response = await POST(createRequest(audio))
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(body).toEqual({
+        data: { transcript: "hola mundo" },
+        error: null,
+      })
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.deepgram.com/v1/listen?model=nova-2&language=es",
+        expect.objectContaining({
+          method: "POST",
+          headers: {
+            Authorization: "Token deepgram-test-key",
+            "Content-Type": audioType,
           },
         }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
-    )
+      )
 
-    const audio = new Blob(["voice-bytes"], { type: "audio/webm" })
-    const response = await POST(createRequest(audio))
-    const body = await response.json()
-
-    expect(response.status).toBe(200)
-    expect(body).toEqual({
-      data: { transcript: "hola mundo" },
-      error: null,
-    })
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.deepgram.com/v1/listen?model=nova-2&language=es",
-      expect.objectContaining({
-        method: "POST",
-        headers: {
-          Authorization: "Token deepgram-test-key",
-          "Content-Type": "audio/webm",
-        },
-      }),
-    )
-
-    const [, init] = fetchMock.mock.calls[0] ?? []
-    expect(init?.body).toBeInstanceOf(File)
-    expect((init?.body as File).type).toBe("audio/webm")
-  })
+      const [, init] = fetchMock.mock.calls[0] ?? []
+      expect(init?.body).toBeInstanceOf(File)
+      expect((init?.body as File).type).toBe(audioType)
+    },
+  )
 
   it("returns 502 when Deepgram responds with an error", async () => {
     supabaseAuthMock.getUser.mockResolvedValue({

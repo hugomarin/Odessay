@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { ChevronDown, Mic, Pause, Play, Trash2, X } from "lucide-react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { ChevronDown, LoaderCircle, Mic, Pause, Play, Square, Trash2, X } from "lucide-react"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import type { AnnotationType } from "@/lib/editor/footnote-node"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
@@ -122,45 +122,99 @@ function VoiceRecorderInline({
     errorMessage,
   } =
     useVoiceRecorder()
-  const [isSubmittingVoice, setIsSubmittingVoice] = useState(false)
+  const [voicePhase, setVoicePhase] = useState<"capturing" | "transcribing" | "error">("capturing")
   const [voiceError, setVoiceError] = useState<string | null>(null)
-  const prevBlobRef = useRef<Blob | null>(null)
+  const submittedBlobRef = useRef<Blob | null>(null)
+  const requestRef = useRef<{ id: number; controller: AbortController } | null>(null)
+
+  const discard = useCallback(() => {
+    requestRef.current?.controller.abort()
+    requestRef.current = null
+    reset()
+    onCancel()
+  }, [onCancel, reset])
+
+  const submitRecording = useCallback((recordedBlob: Blob) => {
+    requestRef.current?.controller.abort()
+
+    const request = {
+      id: (requestRef.current?.id ?? 0) + 1,
+      controller: new AbortController(),
+    }
+    requestRef.current = request
+    submittedBlobRef.current = recordedBlob
+    setVoicePhase("transcribing")
+    setVoiceError(null)
+
+    void transcribeVoiceNote(recordedBlob, { signal: request.controller.signal })
+      .then((transcript) => {
+        if (requestRef.current?.id === request.id) {
+          onTranscript(transcript)
+        }
+      })
+      .catch((error: unknown) => {
+        if (request.controller.signal.aborted || requestRef.current?.id !== request.id) return
+        setVoiceError(error instanceof Error ? error.message : "Transcription failed. Try again.")
+        setVoicePhase("error")
+      })
+  }, [onTranscript])
 
   useEffect(() => {
-    start()
+    void start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
     if (errorMessage) {
       setVoiceError(errorMessage)
+      setVoicePhase("error")
     }
   }, [errorMessage])
 
   useEffect(() => {
-    if (blob && blob !== prevBlobRef.current && !isSubmittingVoice) {
-      prevBlobRef.current = blob
-      setIsSubmittingVoice(true)
-      setVoiceError(null)
+    if (state !== "stopped") return
 
-      transcribeVoiceNote(blob)
-        .then((transcript) => {
-          onTranscript(transcript)
-        })
-        .catch((err: unknown) => {
-          setVoiceError(err instanceof Error ? err.message : "Transcription failed.")
-        })
-        .finally(() => {
-          setIsSubmittingVoice(false)
-        })
+    if (blob && blob !== submittedBlobRef.current) {
+      submitRecording(blob)
+    } else if (!blob) {
+      setVoiceError("The recording could not be finalized. Try again.")
+      setVoicePhase("error")
     }
-  }, [blob, isSubmittingVoice, onTranscript])
+  }, [blob, state, submitRecording])
+
+  useEffect(() => {
+    if (voicePhase !== "transcribing" || state === "stopped") return
+
+    const timeoutId = window.setTimeout(() => {
+      if (!blob) {
+        setVoiceError("The recording could not be finalized. Try again.")
+        setVoicePhase("error")
+      }
+    }, 2_000)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [blob, state, voicePhase])
+
+  useEffect(() => () => requestRef.current?.controller.abort(), [])
+
+  const retry = () => {
+    if (blob) {
+      submitRecording(blob)
+      return
+    }
+
+    reset()
+    submittedBlobRef.current = null
+    setVoiceError(null)
+    setVoicePhase("capturing")
+    void start()
+  }
 
   if (!isSupported) {
     return (
       <div className="flex items-center gap-2 text-[11px] text-ink-3">
         <span>Microphone not supported</span>
-        <button onClick={onCancel} className="text-ink-4 hover:text-ink">Cancel</button>
+        <button type="button" onClick={discard} className="ml-auto text-ink-4 hover:text-ink">Discard</button>
       </div>
     )
   }
@@ -169,7 +223,48 @@ function VoiceRecorderInline({
     return (
       <div className="flex items-center gap-2 text-[11px] text-ink-3">
         <span>Microphone permission denied</span>
-        <button onClick={onCancel} className="text-ink-4 hover:text-ink">Cancel</button>
+        <button type="button" onClick={discard} className="ml-auto text-ink-4 hover:text-ink">Discard</button>
+      </div>
+    )
+  }
+
+  if (voicePhase === "error") {
+    return (
+      <div className="flex min-w-0 flex-col gap-2" data-testid="voice-recorder-error">
+        <p className="break-words font-sans text-[11px] leading-relaxed text-destructive">
+          {voiceError ?? "Recording failed. Try again."}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={retry}
+            className="rounded-[6px] bg-ink px-2 py-1 font-sans text-[11px] text-bg transition-opacity hover:opacity-90"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            onClick={discard}
+            className="rounded-[6px] bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (voicePhase === "transcribing") {
+    return (
+      <div
+        className="flex min-w-0 items-center gap-2 font-sans text-[11px] text-ink-3"
+        data-testid="voice-recorder-transcribing"
+      >
+        <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={1.5} />
+        <span className="min-w-0 flex-1">Transcribing recording…</span>
+        <button type="button" onClick={discard} className="shrink-0 text-ink-4 hover:text-ink">
+          Discard
+        </button>
       </div>
     )
   }
@@ -178,64 +273,58 @@ function VoiceRecorderInline({
     return (
       <div className="flex items-center gap-2 text-[11px] text-ink-4">
         <Mic className="h-3 w-3 animate-pulse" strokeWidth={1.5} />
-        <span>{state === "requesting" ? "Solicitando micrófono…" : "Iniciando…"}</span>
-        <button onClick={onCancel} className="ml-auto text-ink-4 hover:text-ink">Cancelar</button>
+        <span>{state === "requesting" ? "Requesting microphone…" : "Starting…"}</span>
+        <button type="button" onClick={discard} className="ml-auto text-ink-4 hover:text-ink">Discard</button>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <div className="flex h-6 flex-1 items-end gap-px">
+    <div className="flex min-w-0 flex-col gap-2" data-testid="voice-recorder-recording">
+      <div className="flex min-w-0 items-end gap-2 overflow-hidden">
+        <div className="flex h-6 min-w-0 flex-1 items-end gap-px overflow-hidden">
           {waveformData.map((v, i) => (
             <div
               key={i}
-              className="w-1 rounded-full bg-destructive"
+              className="w-[2px] shrink-0 rounded-full bg-destructive"
               style={{ height: `${Math.max(2, v * 24)}px`, opacity: 0.6 + v * 0.4 }}
             />
           ))}
         </div>
-        <span className="font-mono text-[11px] text-ink-3 tabular-nums">
+        <span className="shrink-0 font-mono text-[11px] tabular-nums text-ink-3">
           {Math.floor(duration / 60)}:{String(duration % 60).padStart(2, "0")}
         </span>
+      </div>
+      <div className="flex min-w-0 items-center gap-1.5">
         <button
           type="button"
           onClick={state === "paused" ? resume : pause}
-          className="rounded-[6px] bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
+          className="inline-flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-[6px] bg-muted px-2 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
         >
           {state === "paused" ? (
-            <span className="inline-flex items-center gap-1">
-              <Play className="h-3 w-3" strokeWidth={1.5} />
-              Resume
-            </span>
+            <><Play className="h-3 w-3 shrink-0" strokeWidth={1.5} /> Resume</>
           ) : (
-            <span className="inline-flex items-center gap-1">
-              <Pause className="h-3 w-3" strokeWidth={1.5} />
-              Pause
-            </span>
+            <><Pause className="h-3 w-3 shrink-0" strokeWidth={1.5} /> Pause</>
           )}
         </button>
         <button
           type="button"
-          onClick={stop}
-          className="rounded-[6px] bg-destructive px-2 py-1 font-sans text-[11px] text-white transition-colors hover:bg-destructive/90"
+          onClick={() => {
+            setVoicePhase("transcribing")
+            stop()
+          }}
+          className="inline-flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-[6px] bg-destructive px-2 font-sans text-[11px] text-white transition-colors hover:bg-destructive/90"
         >
-          Stop
+          <Square className="h-2.5 w-2.5 shrink-0 fill-current" strokeWidth={1.5} /> Stop
         </button>
         <button
           type="button"
-          onClick={() => {
-            reset()
-            onCancel()
-          }}
-          className="rounded-[6px] bg-muted px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
+          onClick={discard}
+          className="inline-flex h-7 min-w-0 flex-1 items-center justify-center rounded-[6px] bg-muted px-2 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted-hover hover:text-ink"
         >
-          Cancel
+          Discard
         </button>
       </div>
-      {voiceError && <p className="text-[11px] text-destructive">{voiceError}</p>}
-      {isSubmittingVoice && <p className="text-[11px] text-ink-4">Transcribing…</p>}
     </div>
   )
 }
