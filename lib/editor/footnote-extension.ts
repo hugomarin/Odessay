@@ -12,6 +12,7 @@ import {
 
 export type MarkdownAnnotation = {
   id?: string
+  standalone?: boolean
   type: AnnotationType
   index: number
   text: string
@@ -208,7 +209,8 @@ export const getMarkdownFootnotes = (markdown: string): MarkdownAnnotation[] => 
     if (claimedAnchors.has(`${anchorStart}:${anchorEnd}`)) continue
 
     standaloneHighlights.push({
-      id: `highlight:${rawStart}`,
+      id: `highlight-${rawStart}`,
+      standalone: true,
       type: "highlight",
       index: maxHighlightIndex + standaloneHighlights.length + 1,
       text: "",
@@ -312,8 +314,8 @@ const resolveMarkdownStandaloneHighlight = (
   markdown: string,
   target: MarkdownHighlightIdentity,
 ) => {
-  const expectedRawStart = target.id?.startsWith("highlight:")
-    ? Number(target.id.slice("highlight:".length))
+  const expectedRawStart = target.id?.startsWith("highlight-")
+    ? Number(target.id.slice("highlight-".length))
     : null
   const highlightPattern = /==([^=\n]+)==/g
 
@@ -351,7 +353,7 @@ export const annotateMarkdownStandaloneHighlight = (
 
   const nextIndex =
     getMarkdownFootnotes(markdown)
-      .filter((annotation) => annotation.type === type && !annotation.id?.startsWith("highlight:"))
+      .filter((annotation) => annotation.type === type && !annotation.standalone)
       .reduce((max, annotation) => Math.max(max, annotation.index), 0) + 1
   const marker = annotationSigil(type, nextIndex, text, id)
   return {
@@ -411,6 +413,7 @@ export const buildAiAnnotationCopy = (
 
 export type WritingAnnotationNode = {
   id: string
+  standalone?: boolean
   type: AnnotationType
   index: number
   text: string
@@ -562,7 +565,8 @@ export const extractRichEditorAnnotations = (editor: Editor): WritingAnnotationN
       type: "highlight",
       index: maxAnnotationHighlightIndex + standaloneHighlights.length + 1,
       text: "",
-      id: `highlight:${standaloneHighlights.length}`,
+      id: `highlight-${standaloneHighlights.length}`,
+      standalone: true,
       anchor_text: editor.state.doc.textBetween(range.from, range.to),
       anchor_start: range.from,
       anchor_end: range.to,
@@ -576,7 +580,7 @@ declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     footnote: {
       addFootnote: (text: string) => ReturnType
-      addAnnotation: (type: AnnotationType, text: string) => ReturnType
+      addAnnotation: (type: AnnotationType, text: string, id?: string) => ReturnType
       updateFootnote: (index: number, text: string) => ReturnType
       updateAnnotation: (type: AnnotationType, index: number, text: string, id?: string) => ReturnType
       updateAnnotationType: (type: AnnotationType, index: number, newType: AnnotationType, newText?: string, id?: string) => ReturnType
@@ -643,7 +647,7 @@ export const FootnoteExtension = Extension.create({
         },
 
       addAnnotation:
-        (type: AnnotationType, text: string) =>
+        (type: AnnotationType, text: string, id?: string) =>
         ({ editor, tr, dispatch }) => {
           const trimmedText = text.trim()
           if (!trimmedText && type !== "highlight") return false
@@ -665,7 +669,7 @@ export const FootnoteExtension = Extension.create({
           if (!nodeType) return false
 
           const refNode = nodeType.create({
-            id: crypto.randomUUID(),
+            id: id ?? crypto.randomUUID(),
             type,
             index: maxIndex + 1,
             text: trimmedText,

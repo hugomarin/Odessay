@@ -30,6 +30,7 @@ const ANNOTATION_TYPE_OPTIONS: { type: AnnotationType; label: string; color: str
 
 export type AnnotationPanelEntry = {
   id?: string
+  standalone?: boolean
   type: PanelEntryType
   index: number
   text: string
@@ -93,7 +94,7 @@ function AutoTextarea({
 }
 
 function isStandaloneHighlight(entry: AnnotationPanelEntry): boolean {
-  return entry.type === "highlight" && (entry.id?.startsWith("highlight:") ?? false)
+  return entry.type === "highlight" && entry.standalone === true
 }
 
 const panelEntryKey = (entry: AnnotationPanelEntry) =>

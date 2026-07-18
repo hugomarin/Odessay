@@ -182,7 +182,7 @@ describe("footnote extension helpers", () => {
   it("includes standalone markdown highlights and supports navigation, annotation, and deletion", () => {
     const markdown = "Before ==Standalone== after ==Anchored==[@1|ann-ai: Keep]"
     const standalone = getMarkdownFootnotes(markdown).find((entry) =>
-      entry.id?.startsWith("highlight:"),
+      entry.standalone,
     )
 
     expect(standalone).toMatchObject({

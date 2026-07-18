@@ -3052,7 +3052,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   }, [editor, pendingRichSelection, persistEditorSnapshot, updateDerivedEditorState])
 
   const convertStandaloneHighlight = useCallback(
-    (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number) => {
+    (anchorText: string, type: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
       if (!editor || !anchorText) return false
       const highlightMark = editor.schema.marks.highlight
       if (!highlightMark) return false
@@ -3076,7 +3076,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             .setTextSelection({ from: range.from, to: range.to })
             .unsetHighlight()
             .setHighlight()
-            .addAnnotation(type, text)
+            .addAnnotation(type, text, id)
             .setTextSelection(range.to)
             .run()
           return false
@@ -5670,20 +5670,19 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                   return result.found && applyMarkdownFromPanel(result.markdown)
                 }}
                 onUpdateHighlight={(anchorText: string, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
+                  if (!id) return false
                   if (modeRef.current === "markdown") {
                     const result = annotateMarkdownStandaloneHighlight(
                       markdownValue,
                       { id, anchor_text: anchorText, anchor_start: anchorStart, anchor_end: anchorEnd },
                       "highlight",
                       text,
-                      id?.startsWith("highlight:")
-                        ? `annotation-${id.slice("highlight:".length)}`
-                        : id ?? `annotation-${anchorStart ?? 0}-${anchorEnd ?? 0}`,
+                      id,
                     )
                     return result.found && applyMarkdownFromPanel(result.markdown)
                   }
                   if (!editor || !anchorText) return false
-                  const converted = convertStandaloneHighlight(anchorText, "highlight", text, anchorStart, anchorEnd)
+                  const converted = convertStandaloneHighlight(anchorText, "highlight", text, anchorStart, anchorEnd, id)
                   if (!converted) return false
                   setRichFootnoteRevision((r) => r + 1)
                   updateDerivedEditorState(editor)
@@ -5691,6 +5690,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                   return true
                 }}
                 onConvertHighlight={(anchorText: string, newType: AnnotationType, text: string, anchorStart?: number, anchorEnd?: number, id?: string) => {
+                  if (!id) return false
                   const nextText = newType === "ai" ? text.trim() || anchorText : text
                   if (modeRef.current === "markdown") {
                     const result = annotateMarkdownStandaloneHighlight(
@@ -5698,14 +5698,12 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                       { id, anchor_text: anchorText, anchor_start: anchorStart, anchor_end: anchorEnd },
                       newType,
                       nextText,
-                      id?.startsWith("highlight:")
-                        ? `annotation-${id.slice("highlight:".length)}`
-                        : id ?? `annotation-${anchorStart ?? 0}-${anchorEnd ?? 0}`,
+                      id,
                     )
                     return result.found && applyMarkdownFromPanel(result.markdown)
                   }
                   if (!editor || !anchorText) return false
-                  const converted = convertStandaloneHighlight(anchorText, newType, nextText, anchorStart, anchorEnd)
+                  const converted = convertStandaloneHighlight(anchorText, newType, nextText, anchorStart, anchorEnd, id)
                   if (!converted) return false
                   setRichFootnoteRevision((r) => r + 1)
                   updateDerivedEditorState(editor)

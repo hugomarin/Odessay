@@ -26,7 +26,8 @@ const renderPanel = ({
       <NotesPanel
         annotations={[
           {
-            id: annotationId,
+          id: annotationId,
+          standalone: annotationId.startsWith("highlight-"),
             type,
             index: 1,
             text: "",
@@ -77,12 +78,12 @@ describe("NotesPanel interactions", () => {
 
   it("shows feedback when a standalone highlight cannot be deleted safely", () => {
     const onDeleteHighlight = vi.fn(() => false)
-    renderPanel({ annotationId: "highlight:0", type: "highlight", onDeleteHighlight })
+    renderPanel({ annotationId: "highlight-0", type: "highlight", onDeleteHighlight })
 
     const button = container.querySelector<HTMLButtonElement>('button[aria-label="Delete Highlight"]')
     act(() => button?.click())
 
-    expect(onDeleteHighlight).toHaveBeenCalledWith("Target anchor", 10, 23, "highlight:0")
+    expect(onDeleteHighlight).toHaveBeenCalledWith("Target anchor", 10, 23, "highlight-0")
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
       "The annotated text could not be found.",
     )
