@@ -21,8 +21,8 @@ import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dial
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
-import { AnnotationBubble } from "@/components/reading/margins/annotation-bubble"
-import { SelectionPopup } from "@/components/reading/margins/selection-popup"
+import { AnnotationBubble, type AnnotationBubblePosition } from "@/components/reading/margins/annotation-bubble"
+import { SelectionPopup, type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
@@ -225,7 +225,7 @@ type PendingAnnotationSnapshot = {
   from: number
   to: number
   text: string
-  position: { x: number; y: number }
+  position: AnnotationBubblePosition
   annotationType?: "personal" | "ai" | "footnote"
 }
 
@@ -233,8 +233,8 @@ type PendingRichSelectionSnapshot = {
   from: number
   to: number
   text: string
-  popupPosition: { x: number; y: number }
-  bubblePosition: { x: number; y: number }
+  popupPosition: SelectionPopupPosition
+  bubblePosition: AnnotationBubblePosition
 }
 
 type EditorCursorSnapshot =
@@ -2491,6 +2491,30 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     )
   }, [applyCorrectionSuggestionUpdate, updatePersistedBlocksFromSuggestions])
 
+  const getRichSelectionOverlayPositions = useCallback((from: number, to: number) => {
+    if (!editor) return null
+    const fromCoords = editor.view.coordsAtPos(from)
+    const toCoords = editor.view.coordsAtPos(to)
+    const anchorTop = Math.min(fromCoords.top, toCoords.top)
+    const anchorBottom = Math.max(fromCoords.bottom, toCoords.bottom)
+    const anchorX = (fromCoords.left + toCoords.right) / 2
+
+    return {
+      popupPosition: {
+        x: anchorX,
+        y: anchorTop - 8,
+        top: anchorTop,
+        bottom: anchorBottom,
+      },
+      bubblePosition: {
+        x: anchorX,
+        y: anchorBottom + 10,
+        top: anchorTop,
+        bottom: anchorBottom,
+      },
+    }
+  }, [editor])
+
   const captureRichSelectionSnapshot = useCallback((): PendingRichSelectionSnapshot | null => {
     if (!editor || modeRef.current !== "rich") {
       return null
@@ -2506,23 +2530,16 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       return null
     }
 
-    const fromCoords = editor.view.coordsAtPos(from)
-    const toCoords = editor.view.coordsAtPos(to)
+    const positions = getRichSelectionOverlayPositions(from, to)
+    if (!positions) return null
 
     return {
       from,
       to,
       text: selectedText,
-      popupPosition: {
-        x: (fromCoords.left + toCoords.right) / 2,
-        y: Math.min(fromCoords.top, toCoords.top) - 8,
-      },
-      bubblePosition: {
-        x: (fromCoords.left + toCoords.right) / 2,
-        y: Math.max(fromCoords.bottom, toCoords.bottom) + 10,
-      },
+      ...positions,
     }
-  }, [editor])
+  }, [editor, getRichSelectionOverlayPositions])
 
   const handleRunAction = useCallback(
     (action: EditorShortcutAction, options?: { richSelection?: RichSelectionRange }) => {
@@ -3210,6 +3227,36 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       editor.off("selectionUpdate", handleSelectionUpdate)
     }
   }, [captureRichSelectionSnapshot, editor, pendingAnnotation])
+
+  useEffect(() => {
+    if (!editor || (!pendingRichSelection && !pendingAnnotation)) return
+
+    const syncOpenOverlayPosition = () => {
+      if (pendingRichSelection) {
+        const positions = getRichSelectionOverlayPositions(pendingRichSelection.from, pendingRichSelection.to)
+        if (positions) {
+          setPendingRichSelection((current) => (current ? { ...current, ...positions } : current))
+        }
+      }
+
+      if (pendingAnnotation) {
+        const positions = getRichSelectionOverlayPositions(pendingAnnotation.from, pendingAnnotation.to)
+        if (positions) {
+          setPendingAnnotation((current) =>
+            current ? { ...current, position: positions.bubblePosition } : current,
+          )
+        }
+      }
+    }
+
+    window.addEventListener("resize", syncOpenOverlayPosition)
+    window.addEventListener("scroll", syncOpenOverlayPosition, { capture: true, passive: true })
+
+    return () => {
+      window.removeEventListener("resize", syncOpenOverlayPosition)
+      window.removeEventListener("scroll", syncOpenOverlayPosition, { capture: true })
+    }
+  }, [editor, getRichSelectionOverlayPositions, pendingAnnotation, pendingRichSelection])
 
   const handleToggleMode = useCallback(
     (nextMode: "rich" | "markdown") => {

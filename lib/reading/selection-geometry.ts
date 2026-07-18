@@ -14,8 +14,8 @@ export type SelectionPreviewRect = {
 }
 
 export type SelectionGeometry = {
-  popupPosition: { x: number; y: number }
-  bubblePosition: { x: number; y: number }
+  popupPosition: { x: number; y: number; top: number; bottom: number }
+  bubblePosition: { x: number; y: number; top: number; bottom: number }
   previewRects: SelectionPreviewRect[]
 }
 
@@ -51,14 +51,21 @@ export function buildSelectionGeometry({
     key: `${anchorStart}-${anchorEnd}-${index}`,
   }))
 
-  const popupPosition = {
+  const minTop = Math.min(...visibleRects.map((rect) => rect.top))
+  const maxBottom = Math.max(...visibleRects.map((rect) => rect.top + rect.height))
+  const anchor = {
     x: firstRect.left + firstRect.width / 2,
-    y: firstRect.top - 8,
+    top: minTop,
+    bottom: maxBottom,
   }
 
-  const maxBottom = Math.max(...visibleRects.map((rect) => rect.top + rect.height))
+  const popupPosition = {
+    ...anchor,
+    y: minTop - 8,
+  }
+
   const bubblePosition = {
-    x: popupPosition.x,
+    ...anchor,
     y: maxBottom + 8,
   }
 

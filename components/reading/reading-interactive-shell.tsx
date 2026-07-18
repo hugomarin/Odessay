@@ -5,8 +5,8 @@ import type { JSONContent } from "@tiptap/core"
 import type { ReactNode } from "react"
 import { ReadingTopbar } from "./reading-topbar"
 import { ReadingContent } from "./reading-content"
-import { SelectionPopup } from "./margins/selection-popup"
-import { AnnotationBubble } from "./margins/annotation-bubble"
+import { SelectionPopup, type SelectionPopupPosition } from "./margins/selection-popup"
+import { AnnotationBubble, type AnnotationBubblePosition } from "./margins/annotation-bubble"
 import { HighlightLayer, findTextPosition, type MarginHighlight } from "./margins/highlight-layer"
 import { MarginsPanel } from "./margins/margins-panel"
 import type { SelectionPreviewRect } from "./margins/selection-preview-layer"
@@ -21,8 +21,8 @@ type SelectionInfo = {
   anchorStart: number
   anchorEnd: number
   anchorText: string
-  popupPosition: { x: number; y: number }
-  bubblePosition: { x: number; y: number }
+  popupPosition: SelectionPopupPosition
+  bubblePosition: AnnotationBubblePosition
   selectionRects: SelectionPreviewRect[]
 }
 
