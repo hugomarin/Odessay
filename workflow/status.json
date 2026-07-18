@@ -3151,6 +3151,16 @@
       "commit": "c365e0ef91be348b5e1cfdae155ab345f2629904",
       "date": "2026-07-18",
       "notes": "Single-round review, approved 9.3/10 (PASS). Recorder row now fits the 312px Notes card (min-w-0/overflow-hidden waveform, shrink-0 controls, two-row layout); exclusive phases capturing/transcribing/error with no dead controls after Stop; Retry reuses the retained blob without re-recording and Discard aborts the in-flight request; 30s transcription timeout plus specific empty-audio message; upload filename/mime derived from the real recorder container (webm/mp4/ogg/wav/mp3) without relabeling; labels unified to English. Route /api/margins/transcribe contract unchanged (tests cover webm+mp4). Evidence: typecheck, lint, 164 files/1078 tests, targeted 16/16, delivery gate, CI traceability + Vercel green, new e2e with mocked 502/empty/success, screenshots recording/transcribing/error + flow webm + packaged-desktop smoke. Non-blocking findings: P2 e2e flake on cold dev server (pre-existing unguarded /write navigations in editor-shell outside isPerfHarness guard); P3 packaged-DMG screenshot lacks recorder states, real mic/provider validation deferred to owner acceptance."
+    },
+    {
+      "what": "fix(editor): unify Notes annotation pipeline [ODE-383]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-383",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-383/unify-notes-panel-annotation-pipeline-across-rich-and-markdown-modes",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/347",
+      "commit": "dfb495c8dd41003ab93321cc22053ac04eb8f35f",
+      "date": "2026-07-18",
+      "notes": "Single-round review, approved 9.5/10 (PASS). Notes panel now runs one view-model in both modes: Markdown extractor derives anchor_text/anchor/source ranges (existing findHighlightedContextBeforeMarker helper) plus standalone ==highlights==, so cards show the anchor quote in Markdown too; update/delete/change-type work for ai/personal/footnote/highlight in both modes via stable-id-first matching (Rich commands accept optional id; new generalized Markdown mutators return {found, markdown} and leave input byte-for-byte intact on miss); zero silent no-ops — every panel handler returns boolean and failures show inline feedback; voice transcripts route through onTranscriptRef + modeRef.current so late transcripts write into the marker of the current mode/document for any type; go-to-text in Markdown selects the marker range in the source textarea; standalone highlight conversion preserves identity end-to-end. Round-trip serialization and Copiar-para-AI output unchanged. Evidence: typecheck, lint (6 pre-existing warnings), 164 files/1090 tests, reviewer re-ran targeted 70/70, perf scenario notes-annotations (24 annotations) 14 pass/0 warn/1 skip with 0 required_failures, delivery gate with OPS_PERF_TRACE_PATH, CI traceability + Vercel green, e2e notes-annotation-pipeline + screenshots markdown/rich. Non-blocking findings: P3 standalone-highlight regex may false-positive on == inside escaped sigil text; P3 brief asked for per-mode recordings, PR delivered screenshots + e2e."
     }
   ]
 }
