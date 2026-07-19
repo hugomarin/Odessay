@@ -16,6 +16,7 @@ El mapa completo de archivos de referencia y sus screenshots está en `CLAUDE.md
 ## Sidebar (todas las vistas)
 
 ### Logo
+
 ```
 font-family: Lora
 font-size: 17px
@@ -24,6 +25,7 @@ En mini: opacity 0, width 0, overflow hidden
 ```
 
 ### Botón New writing
+
 ```
 Estado normal: fondo transparente, texto ink, icono Plus
 Estado mini:   32×32px, fondo var(--ink), color var(--bg), centrado
@@ -33,6 +35,7 @@ font-size: 15px, font-weight: 500
 ```
 
 ### Nav items
+
 ```
 padding:       10px
 border-radius: 8px
@@ -45,6 +48,7 @@ En mini:       justify-content center, gap 0, label oculto
 ```
 
 ### Sub-items (colecciones y correspondencias)
+
 ```
 padding:       7px 10px 7px 34px
 border-radius: 8px
@@ -54,6 +58,7 @@ icono:         12×12px
 ```
 
 ### Chevron de expansión
+
 ```
 color:      var(--ink-4)
 rotación:   90deg cuando open
@@ -62,6 +67,7 @@ En mini:    display none
 ```
 
 ### User bar (bottom)
+
 ```
 avatar:  28×28px, border-radius 50%, background var(--ink), color var(--bg), font 11px 600
 nombre:  13px, font-weight 500
@@ -81,6 +87,7 @@ Table — writings con actividad epistolar
 ```
 
 ### Hero — Draft cards
+
 ```
 width:         220px fijo, scroll horizontal con snap
 border-radius: 10px
@@ -93,6 +100,7 @@ new writing:   border dashed, fondo transparente
 ```
 
 ### State badges (tabla de actividad)
+
 ```
 New reply:  bg hsl(22,55%,92%)   color var(--cursor)
 Waiting:    bg hsl(45,60%,91%)   color hsl(35,55%,32%)
@@ -102,6 +110,7 @@ Read:       bg var(--muted)      color var(--ink-4)
 ```
 
 ### Tabla de actividad
+
 ```
 columnas:  checkbox | Writing | Status | Type | Workspace | actions
 grupos:    Today / This week / Earlier — label uppercase 10px ink-4
@@ -114,12 +123,16 @@ chips:     collection con icono Tag, borde 0.5px y fondo papel cálido
 meta:      fecha y collections forman un stack con gap 6px; el chip no agrega padding superior propio
 controles: Status / Type / Workspace, height 40px, anchos mínimos consistentes
 paridad:   Desk y Workspace reutilizan el mismo HTML base de Writing (ArtifactWritingCell)
+handoff:   Workspace reutiliza también el checkbox y las acciones rename/preview/collections;
+           mientras ODE-381 no conecte sus mutaciones, se muestran disabled y con copy accesible
+           de "coming soon". El excerpt conserva su slot visual sin fingir datos del filesystem.
 responsive: Writing es la columna elástica; controles conservan min-width. Bajo el ancho útil,
             overflow-x queda dentro del wrapper de tabla, nunca en la página; no ocultar columnas
             ni convertir filas a cards.
 ```
 
 ### Filter buttons
+
 ```
 off:           borde none, bg transparente, color ink-4
 on:            bg var(--ink), color var(--bg)
@@ -141,6 +154,7 @@ Collections list — colecciones expandibles
 ```
 
 ### Banner uncategorized
+
 ```
 background:    hsl(22,55%,97%)
 border:        0.5px solid hsl(22,40%,84%)
@@ -149,6 +163,7 @@ AI strip:      fondo hsl(22,55%,95%), borde top 0.5px
 ```
 
 ### Organize panel — writing cards
+
 ```
 grid:    checkbox (32px) | preview (1fr) | AI pill | col dropdown
 excerpt: Lora 13px, 2 líneas clamp
@@ -158,6 +173,7 @@ AI pill: bg hsl(22,55%,93%), color var(--cursor), border hsl(22,40%,82%)
 ```
 
 ### Colecciones expandibles
+
 ```
 border:         0.5px solid var(--border)
 border-radius:  10px
@@ -170,6 +186,7 @@ transición:     max-height 0→2000px, 350ms ease-layout
 ```
 
 ### Status badges en writing items
+
 ```
 Draft:  bg var(--muted)         color ink-4
 Done:   bg hsl(140,30%,91%)     color hsl(140,40%,30%)
@@ -188,6 +205,7 @@ Reply prompt — acción fundacional
 ```
 
 ### Participants bar
+
 ```
 avatares: 26px, border 2px solid var(--sb), margin-left -7px (apilados)
 stats:    writings count | words total | desde cuándo
@@ -195,6 +213,7 @@ font:     Geist Sans 12-13px, ink-3/ink-4
 ```
 
 ### Mini-document cards
+
 ```
 max-width:     560px, centrado en columna de 680px
 border:        0.5px solid var(--border)
@@ -215,12 +234,14 @@ card bottom (padding 12px 24px):
 ```
 
 ### Connector entre cards
+
 ```
 línea:  0.5px vertical, color var(--border)
 altura: 24px entre cards
 ```
 
 ### Reply prompt
+
 ```
 border:        0.5px dashed var(--border)
 border-radius: 10px
@@ -230,6 +251,7 @@ botón:         "Write a response" — bg var(--cursor), color white
 ```
 
 ### Your turn pill
+
 ```
 background:    hsl(22,55%,92%)
 color:         var(--cursor)
@@ -244,6 +266,7 @@ border-radius: 13px
 Sin sidebar. Pantalla completa, fondo `var(--bg)`.
 
 ### Chrome (46px)
+
 ```
 back link: Geist Sans 13px ink-4
 nav:       Previous | N of N | Next
@@ -251,11 +274,13 @@ tools:     Margins toggle | Write a response (btn terracota)
 ```
 
 ### Layout
+
 ```
 Reading scroll (flex: 1) | Margin panel (0px → 296px, animado 300ms ease-layout)
 ```
 
 ### Contenido (max-width 660px, centrado)
+
 ```
 author block: avatar 38px + nombre 14px + fecha 12px
               border-bottom 0.5px antes del texto
@@ -266,6 +291,7 @@ blockquote: border-left 2px ink-3, Lora italic 18px, padding-left 1.4em
 ```
 
 ### Contrato textual compartido (`write`/`preview`/`shared`/`public`)
+
 ```
 regla:          misma semántica de presentación textual entre superficies
 tables:         ancho mínimo del contenedor + expansión de columnas + scroll horizontal interno
@@ -277,6 +303,7 @@ wrappers:       permitidos por superficie (ej. tableWrapper), pero mapeados al m
 Referencia obligatoria: `.agents/skills/skill-design/tipografia.md` (fuente de verdad del contrato tipográfico canónico).
 
 ### Highlights
+
 ```
 default:       bg hsl(45,90%,84%)
 hover:         bg hsl(45,90%,76%)
@@ -285,6 +312,7 @@ active:        bg hsl(45,90%,74%)
 ```
 
 ### Selection popup
+
 ```
 background:    var(--ink)
 border-radius: 10px
@@ -294,6 +322,7 @@ animación:     opacity + translateY(4px→0), 150ms
 ```
 
 ### Annotation bubble
+
 ```
 background:    var(--sb)
 border:        0.5px solid var(--border)
@@ -304,6 +333,7 @@ posición:      debajo de la selección, dentro del viewport
 ```
 
 ### Margin panel (296px)
+
 ```
 header:  46px — "Margins" label + count badge + "Share" link
 entries: flex 1, scroll
@@ -324,6 +354,7 @@ footer: "Share margins with..." — dashed border btn
 Ver `odessay-editor.md` para la spec completa de TipTap (extensiones, shortcuts, auto-save, modales).
 
 ### Layout
+
 ```
 Sidebar (292px/52px) | Editor area (flex-1) | Right panels (248-280px)
 Topbar (46px) — sobre editor area
@@ -499,6 +530,7 @@ Al escribir en el editor con el panel abierto: re-busca con debounce 150ms.
 ```
 
 ### Right panels
+
 ```
 Notes:      248px, writings de footnotes
 AI Editor:  280px, observaciones del AI — ver odessay-ai-editor.md
@@ -511,12 +543,14 @@ Properties: 248px — Status, Visibility, Collections, correspondence card, Info
 Panel de preparación para publicación. Se abre desde el icono Sparkles en la topbar.
 
 **Header (46px)**
+
 ```
 label:    "Polish" — Geist Sans 13px, font-weight 600, ink
 close:    X — icon 14×14px, ink-4, hover ink
 ```
 
 **Sección de opciones**
+
 ```
 label de sección:  "REVISAR" — Geist Sans 10px, font-weight 500, ink-4, uppercase, letter-spacing 0.08em
                    Mismo estilo que "STATUS", "VISIBILITY" en Properties panel
@@ -533,6 +567,7 @@ Todas las opciones activas por default al abrir el panel
 ```
 
 **Botón Analizar**
+
 ```
 margin:        16px (horizontal)
 width:         calc(100% - 32px)
@@ -546,6 +581,7 @@ label loading: "Analyzing…" + spinner 12px inline-left
 ```
 
 **Estado de carga (mientras AI procesa)**
+
 ```
 El botón cambia a "Analizando…" + spinner, deshabilitado.
 Debajo del botón: skeleton de 3 sugerencias con animate-pulse:
@@ -554,6 +590,7 @@ No mostrar ningún mensaje adicional — el skeleton es suficiente.
 ```
 
 **Estado de error**
+
 ```
 Debajo del botón: toast inline (no global):
   background:    hsl(0,72%,97%)
@@ -600,6 +637,7 @@ Sección Checklist:
 ```
 
 **Footer — acciones globales**
+
 ```
 border-top:  0.5px solid var(--border)
 padding:     12px 16px
@@ -610,6 +648,7 @@ flex row, gap 8px
 ```
 
 **Estado vacío (sin resultados)**
+
 ```
 padding:     32px 16px
 text-align:  center
@@ -619,6 +658,7 @@ subtexto:    Lora italic 12px, ink-4 — "No issues found with the selected chec
 ```
 
 ### Correspondence card (panel Properties)
+
 ```
 background:    hsl(22,55%,97%)
 border:        0.5px solid hsl(22,40%,85%)
@@ -773,6 +813,7 @@ Nav lateral:
 Usar antes de mover un issue a In Review. Complementa el checklist de `skill-code-review.md`.
 
 ### Sidebar (todas las vistas)
+
 - [ ] Expandido 292px exactos, colapsado 52px solo iconos centrados
 - [ ] Transición width 300ms ease-layout
 - [ ] Logo "Odessay" en Lora 17px
@@ -782,6 +823,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Todos los bordes 0.5px, ningún borde 1px
 
 ### Desk
+
 - [ ] Hero: cards 220px, scroll horizontal con snap
 - [ ] Card activo: border-top 2px var(--cursor)
 - [ ] Tabla: grupos Today / This week / Earlier
@@ -791,12 +833,14 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Responsive wide/medium/narrow sin overflow de página ni controles ocultos
 
 ### Collections
+
 - [ ] Banner uncategorized visible cuando hay writings sin clasificar
 - [ ] AI pill en terracota, aceptable con click
 - [ ] Colecciones expandibles con chevron y animación suave
 - [ ] Botón "New collection" en tinta oscura (no terracota)
 
 ### Correspondences
+
 - [ ] Mini-docs centrados, max-width 560px
 - [ ] Sin borde izquierdo de color en ningún card
 - [ ] Título en Lora 22px
@@ -806,6 +850,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Reply prompt con botón terracota "Write a response"
 
 ### Reading
+
 - [ ] Sin sidebar en ningún viewport
 - [ ] Selection popup aparece al seleccionar texto
 - [ ] Highlight en ámbar hsl(45,90%,84%)
@@ -815,6 +860,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Navegación keyboard: flechas entre writings, ESC cierra popup
 
 ### Editor
+
 - [ ] Un keystroke no re-renderiza el sidebar ni paneles
 - [ ] Título editable en Lora sin borde visible
 - [ ] Panels (Notes / AI / Properties) con lazy load
@@ -829,6 +875,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Escape cierra y devuelve foco al editor sin mover el cursor
 
 ### Panel Pulir
+
 - [ ] Panel 280px, mismo patrón de apertura que AI Editor (cierra otros panels)
 - [ ] Sección "REVISAR" con 4 toggles — todos activos por default
 - [ ] Botón Analyze bg var(--ink), full width menos 32px, border-radius 8px

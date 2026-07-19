@@ -15,6 +15,7 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Eye,
   ExternalLink,
   FileText,
   Folder,
@@ -24,6 +25,7 @@ import {
   Pencil,
   Plus,
   Search,
+  Tag,
   TriangleAlert,
   Trash2,
 } from "lucide-react";
@@ -35,6 +37,7 @@ import {
   DocumentStateTooltipProvider,
 } from "@/components/ui/document-state-badge";
 import { ArtifactTable } from "@/components/shared/artifact-table";
+import { ArtifactRowSelection } from "@/components/shared/artifact-row-selection";
 import {
   ArtifactWritingAction,
   ArtifactWritingCell,
@@ -932,7 +935,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [documentJoin, setDocumentJoin] = useState<
     Map<string, WorkspaceDocumentInfo>
   >(new Map());
-  const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([]);
+  const [collectionOptions, setCollectionOptions] = useState<
+    CollectionOption[]
+  >([]);
   const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
     Record<string, string[]>
   >({});
@@ -1069,32 +1074,46 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "title",
         label: "Writing",
-        className: "min-w-0 pl-5 pr-5",
+        className: "min-w-0 pl-2 pr-5",
         render: (file) => {
           const document = documentJoin.get(file.path);
-          const secondaryLabel = fileSecondaryLabel(file);
           return (
             <ArtifactWritingCell
               title={file.name}
-              documentState={deriveWorkspaceFileDocumentState(file, documentJoin)}
-              description={secondaryLabel === "Root folder" ? null : secondaryLabel}
+              documentState={deriveWorkspaceFileDocumentState(
+                file,
+                documentJoin,
+              )}
+              description="Writing description will appear here."
               dateLabel={formatFileTimestamp(file.modifiedAt)}
               actions={
-                <ArtifactWritingAction
-                  label={`Open ${file.name} in editor`}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void openInEditor(file);
-                  }}
-                >
-                  <ExternalLink className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                </ArtifactWritingAction>
+                <>
+                  <ArtifactWritingAction
+                    disabled
+                    label={`Rename ${file.name} (coming soon)`}
+                  >
+                    <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                  <ArtifactWritingAction
+                    disabled
+                    label={`Preview ${file.name} (coming soon)`}
+                  >
+                    <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                  <ArtifactWritingAction
+                    disabled
+                    label={`Assign collections for ${file.name} (coming soon)`}
+                  >
+                    <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                </>
               }
               collections={
                 <CollectionChips
                   collectionIds={
-                    document ? collectionIdsByWritingId[document.id] ?? [] : []
+                    document
+                      ? (collectionIdsByWritingId[document.id] ?? [])
+                      : []
                   }
                   collectionOptions={collectionOptions}
                 />
@@ -1531,9 +1550,17 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     getRowId={(file) => file.id}
                     getRowAriaLabel={(file) => `Open ${file.name} in editor`}
                     onRowClick={(file) => void openInEditor(file)}
+                    renderLeading={(file) => (
+                      <ArtifactRowSelection
+                        disabled
+                        label={`Select ${file.name} (coming soon)`}
+                      />
+                    )}
                     showHeader={false}
-                    tableClassName="min-w-[900px] table-fixed"
+                    tableClassName="min-w-[920px] table-fixed"
                     rowCellClassName="py-6"
+                    leadingColumnClassName="w-9"
+                    leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
                   />
                 </div>
               )}

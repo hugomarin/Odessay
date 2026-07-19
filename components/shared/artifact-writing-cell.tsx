@@ -1,20 +1,20 @@
-"use client"
+"use client";
 
-import type { ReactNode } from "react"
+import type { ReactNode } from "react";
 
-import { DocumentStateIcon } from "@/components/ui/document-state-icon"
-import type { DocumentState } from "@/lib/writings/document-state"
-import { cn } from "@/lib/utils"
+import { DocumentStateIcon } from "@/components/ui/document-state-icon";
+import type { DocumentState } from "@/lib/writings/document-state";
+import { cn } from "@/lib/utils";
 
 type ArtifactWritingCellProps = {
-  title: string
-  documentState: DocumentState
-  description?: string | null
-  dateLabel?: string | null
-  actions?: ReactNode
-  collections?: ReactNode
-  className?: string
-}
+  title: string;
+  documentState: DocumentState;
+  description?: string | null;
+  dateLabel?: string | null;
+  actions?: ReactNode;
+  collections?: ReactNode;
+  className?: string;
+};
 
 /**
  * Shared writing-cell markup for Desk and Workspace rows.
@@ -66,29 +66,33 @@ export function ArtifactWritingCell({
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 type ArtifactWritingActionProps = {
-  label: string
-  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void
-  children: ReactNode
-}
+  label: string;
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  children: ReactNode;
+};
 
 export function ArtifactWritingAction({
   label,
   onClick,
+  disabled = false,
   children,
 }: ArtifactWritingActionProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="ArtifactWritingAction inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-[background-color,color] duration-150 hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+      disabled={disabled}
+      className="ArtifactWritingAction inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-[background-color,color] duration-150 hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-ink-4"
       data-section="artifact-writing-action"
       aria-label={label}
+      title={disabled ? label : undefined}
     >
       {children}
     </button>
-  )
+  );
 }
