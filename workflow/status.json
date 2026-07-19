@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-18",
+  "last_updated": "2026-07-19",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3191,6 +3191,16 @@
       "commit": "630153e62ac446e88dec41a35f986fb54a81418e",
       "date": "2026-07-19",
       "notes": "Single-round review, approved 9.5/10 (PASS). CatalogChange bus unified per dbPath at module level (spec line 335) with contract test preventing private buses; composed desktop delete per spec user-initiated delete section: .md to .trash with unique-name resolution, binding removed, durable deletedAt independent from sync_status, cloud delete mutation only when cloudPresent; stale cloud hydration cannot resurrect pending/failed/conflict deletes (Rust test); Desk filters deletedAt in all reads and reloads on SQLite collection changes; .trash excluded from watcher/reconciler; schema v6 migration. Web unchanged. Evidence: typecheck, lint (6 pre-existing warnings), 165 files/1101 tests, cargo 26 passed/1 ignored, ops:delivery:gate, tauri build + packaged QA (Desk TTI 1457 ms < 1.5 s), CI traceability + Vercel green. context_risk=true: brief cited legacy paths (catalog-dual-write.ts, IndexedDB collections) — stale-doc, correctly reported by BUILD."
+    },
+    {
+      "what": "feat(desk): redesign responsive Desk and Workspace rows [ODE-382]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-382",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-382/redesign-desk-and-workspace-rows-to-match-approved-mock-alignment",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/351",
+      "commit": "2e87da05a23b047e9171c9baef33237e8790021f",
+      "date": "2026-07-19",
+      "notes": "Review approved 9.8/10 (PASS) after one prior rejection resolved. Desk (web+desktop) and Workspace FILES table now share the same row language via extracted ArtifactWritingCell + ArtifactRowSelection: Geist medium title, filled state badge, permanent aligned checkbox, redesigned inline actions, Tag-icon collection chip, aligned Status/Type/Workspace controls, generous vertical rhythm. Responsive table shrinks title/excerpt first, keeps control min-widths, contains horizontal overflow in the table wrapper (never the page), no column hiding or card conversion. Workspace column gated to desktop (showWorkspaceColumn=workspaceAvailable) so web never fakes a local-assign selector. Near-viewport excerpt hydration via DocumentService.openWriting is the owner-approved exception; ODE-396 owns durable/batched cache. vistas.md reconciled to Geist. Performance Contract TTI reclassified not-required by explicit owner resolution 2026-07-19 (visual/responsive only). Evidence: typecheck, lint (6 pre-existing warnings), 168 files/1106 tests, production Tauri build + final DMG validator zero warnings, packaged DMG artifacts/ode-382/01-08 + design-qa passed + dmg-validation. context_risk=true: original brief required unmeasurable TTI and visual acceptance iterated during BUILD. Prior CI traceability red was pre-existing main drift (last_updated 2026-07-18 < ODE-380), cured by this entry bumping last_updated to 2026-07-19. Non-blocking P3: output/playwright captures duplicate canonical evidence."
     }
   ]
 }
