@@ -45,6 +45,7 @@ import {
 const CATALOG_LIST_LIMIT = 10_000
 const desktopCollectionListeners = new Set<() => void>()
 const emitDesktopCollectionChange = () => desktopCollectionListeners.forEach((listener) => listener())
+const isActiveCatalogRecord = (record: DocumentCatalogRecord) => record.deletedAt === null
 
 /**
  * Whether Desk/Workspace read their base set from the DocumentCatalog.
@@ -148,7 +149,7 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
       loadDesktopCollections(),
     ])
     const documentStateById: Record<string, DocumentState> = {}
-    const writings = records.map((record) => {
+    const writings = records.filter(isActiveCatalogRecord).map((record) => {
       documentStateById[record.id] = deriveDocumentStateFromCatalogRecord(record)
       return synthesizeWritingFromRecord(record)
     })
@@ -171,7 +172,7 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
   const records = await loadCatalogRecords({ limit: CATALOG_LIST_LIMIT })
   const localById = new Map(localWritings.map((writing) => [writing.id, writing]))
   const documentStateById: Record<string, DocumentState> = {}
-  const writings = records.map((record) => {
+  const writings = records.filter(isActiveCatalogRecord).map((record) => {
     documentStateById[record.id] = deriveDocumentStateFromCatalogRecord(record)
     return mergeRecordWithLocal(record, localById.get(record.id))
   })
@@ -183,7 +184,7 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
 export async function getWritingForEdit(id: string): Promise<LocalWriting | undefined> {
   if (isDesktopRuntime()) {
     const record = await (await getDocumentCatalog()).getById(id)
-    return record ? synthesizeWritingFromRecord(record) : undefined
+    return record && isActiveCatalogRecord(record) ? synthesizeWritingFromRecord(record) : undefined
   }
   const local = (await localDB.writings.get(id)) ?? undefined
   if (!isCatalogReadEnabled()) {
@@ -195,6 +196,7 @@ export async function getWritingForEdit(id: string): Promise<LocalWriting | unde
   if (!record) {
     return local
   }
+  if (!isActiveCatalogRecord(record)) return undefined
 
   return mergeRecordWithLocal(record, local)
 }
@@ -203,7 +205,7 @@ export async function getWritingForEdit(id: string): Promise<LocalWriting | unde
 export async function loadSharedWritingIds(): Promise<string[]> {
   if (isDesktopRuntime()) {
     const records = await loadCatalogRecords({ limit: CATALOG_LIST_LIMIT })
-    return records.filter((record) => record.visibility === "shared" && record.syncStatus !== "deleted").map((record) => record.id)
+    return records.filter((record) => isActiveCatalogRecord(record) && record.visibility === "shared").map((record) => record.id)
   }
   const writings = await localDB.writings.getAll()
   return writings

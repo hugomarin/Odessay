@@ -59,6 +59,7 @@ export async function watchFsPaths(
 
 export function isOdessayInternalPath(path: string) {
   return path.includes("/.odessay/") || path.endsWith("/.odessay")
+    || path.includes("/.trash/") || path.endsWith("/.trash")
 }
 
 export function markOdessaySelfWritePath(

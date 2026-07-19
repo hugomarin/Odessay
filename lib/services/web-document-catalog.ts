@@ -26,6 +26,7 @@ function toCatalogRecord(writing: LocalWriting): DocumentCatalogRecord {
     artifactType: normalizeArtifactType(writing.artifact_type),
     visibility: writing.visibility,
     version: writing.version,
+    deletedAt: writing.deleted_at ?? null,
     createdAt: Date.parse(writing.created_at),
     modifiedAt: Date.parse(writing.updated_at),
     binding: writing.canonical_path ? {
@@ -74,6 +75,7 @@ export class WebDocumentCatalog implements DocumentCatalog {
       artifact_type: snapshot.artifactType,
       visibility: snapshot.visibility ?? writing.visibility,
       version: snapshot.version ?? writing.version,
+      deleted_at: snapshot.deletedAt,
       lifecycle: snapshot.cloudPresent ? "server-confirmed" : writing.lifecycle,
       sync_status: snapshot.syncStatus === "local-only" || snapshot.syncStatus === "conflict"
         ? "synced"

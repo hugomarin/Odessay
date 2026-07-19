@@ -109,6 +109,7 @@ fn should_ignore_entry(name: &str, is_dir: bool) -> bool {
     // Internal/system directories are always skipped, regardless of dot-prefix.
     if name == WORKSPACE_DIR_NAME
         || name == LEGACY_WORKSPACE_DIR_NAME
+        || name == ".trash"
         || name == ".git"
         || name == "node_modules"
     {
@@ -649,6 +650,22 @@ mod tests {
         assert_eq!(snapshot.files.len(), 1);
         assert_eq!(snapshot.files[0].relative_path, "visible.md");
 
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_ignores_confirmed_delete_trash() {
+        let root = temp_workspace_root("ignore-delete-trash");
+        fs::create_dir_all(root.join(".trash")).expect("create trash dir");
+        fs::write(root.join(".trash").join("deleted.md"), "deleted")
+            .expect("write trashed markdown file");
+        fs::write(root.join("visible.md"), "visible").expect("write visible markdown file");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("sync workspace with trashed markdown file");
+
+        assert_eq!(snapshot.files.len(), 1);
+        assert_eq!(snapshot.files[0].relative_path, "visible.md");
         cleanup(&root);
     }
 

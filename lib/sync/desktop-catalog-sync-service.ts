@@ -65,6 +65,7 @@ async function hydrateOne(id: string): Promise<boolean> {
   await (await catalog()).applyCloudSnapshot({
     id: data.id, localPresent: false, cloudPresent: !data.deleted_at,
     cloudAccountId: data.author_id, syncStatus: data.deleted_at ? "deleted" : "synced",
+    deletedAt: data.deleted_at,
     contentHash: data.content_hash, title: data.title, slug: data.slug,
     status: data.status, artifactType: data.artifact_type, visibility: data.visibility,
     version: data.version, createdAt: Date.parse(data.created_at), modifiedAt: Date.parse(data.updated_at),
@@ -189,6 +190,7 @@ export const desktopCatalogSyncService: SyncService = {
       const snapshots = (data ?? []).map((row) => ({
         id: row.id, localPresent: false, cloudPresent: !row.deleted_at,
         cloudAccountId: row.author_id, syncStatus: row.deleted_at ? "deleted" as const : "synced" as const,
+        deletedAt: row.deleted_at,
         contentHash: row.content_hash, title: row.title, slug: row.slug, status: row.status,
         artifactType: row.artifact_type, visibility: row.visibility, version: row.version,
         createdAt: Date.parse(row.created_at), modifiedAt: Date.parse(row.updated_at),

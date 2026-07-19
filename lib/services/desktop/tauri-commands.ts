@@ -34,7 +34,7 @@ export type DesktopCatalogRow = {
   id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
   syncStatus: string; title: string | null; slug: string | null; status: string | null
   artifactType: string | null; visibility: string | null; version: number | null
-  createdAt: number | null; modifiedAt: number | null; bindingRootId: string | null
+  deletedAt: string | null; createdAt: number | null; modifiedAt: number | null; bindingRootId: string | null
   relativePath: string | null; canonicalPath: string | null; inode: number | null
   contentHash: string | null; size: number | null; lastSeenAt: number | null
 }
@@ -44,7 +44,7 @@ export type DesktopCatalogDualWriteInput = {
     id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
     syncStatus: string; title: string | null; slug: string | null; status: string | null
     artifactType: string | null; visibility: string | null; version: number | null
-    createdAt: number | null; modifiedAt: number | null
+    deletedAt: string | null; createdAt: number | null; modifiedAt: number | null
   }
   binding: null | {
     bindingRootId: string; rootPath: string; manifestVersion: number; visibleAsWorkspace: boolean
@@ -60,7 +60,8 @@ export type DesktopCatalogDualWriteInput = {
 export type DesktopCloudSnapshotInput = {
   id: string; cloudPresent: boolean; cloudAccountId: string | null; contentHash: string | null
   title: string | null; slug: string | null; status: string | null; artifactType: string | null
-  visibility: string | null; version: number | null; createdAt: number | null; modifiedAt: number | null
+  visibility: string | null; version: number | null; deletedAt: string | null
+  createdAt: number | null; modifiedAt: number | null
 }
 
 export async function tauriOpenFile(path: string): Promise<string> {

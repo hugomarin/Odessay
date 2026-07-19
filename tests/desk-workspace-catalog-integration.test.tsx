@@ -50,6 +50,11 @@ const catalog = vi.hoisted(() => {
 })
 
 const storage = vi.hoisted(() => ({ writings: [] as LocalWriting[] }))
+const collectionStore = vi.hoisted(() => ({
+  state: { collections: [] as unknown[], writingCollections: [] as unknown[] },
+  load: vi.fn(),
+  set: vi.fn(),
+}))
 
 vi.mock("@/lib/services/document-catalog-factory", () => ({
   getDocumentCatalog: async () => catalog.instance,
@@ -84,10 +89,10 @@ vi.mock("@/lib/local-db/collections", () => ({
 }))
 
 vi.mock("@/lib/services/desktop/desktop-collection-service", () => ({
-  loadDesktopCollections: async () => ({ collections: [], writingCollections: [] }),
+  loadDesktopCollections: collectionStore.load,
   createDesktopCollection: vi.fn(),
   deleteDesktopCollection: vi.fn(),
-  setDesktopWritingCollections: vi.fn(),
+  setDesktopWritingCollections: collectionStore.set,
   updateDesktopCollection: vi.fn(),
 }))
 
@@ -170,6 +175,7 @@ const makeRecord = (partial: Partial<DocumentCatalogRecord>): DocumentCatalogRec
   artifactType: partial.artifactType ?? "general",
   visibility: partial.visibility ?? "private",
   version: partial.version ?? 1,
+  deletedAt: partial.deletedAt ?? null,
   createdAt: partial.createdAt ?? 1000,
   modifiedAt: partial.modifiedAt ?? 2000,
   binding: partial.binding ?? null,
@@ -217,6 +223,16 @@ beforeEach(() => {
   catalog.state.records = []
   catalog.listeners.clear()
   storage.writings = []
+  collectionStore.state = { collections: [], writingCollections: [] }
+  collectionStore.load.mockImplementation(async () => collectionStore.state)
+  collectionStore.set.mockImplementation(async (writingId: string, collectionIds: string[]) => {
+    collectionStore.state.writingCollections = collectionIds.map((collectionId) => ({
+      writing_id: writingId,
+      collection_id: collectionId,
+      added_at: "2026-07-18T00:00:00.000Z",
+      local_updated_at: 1,
+    }))
+  })
   sync.blockHydration = false
   pushMock.mockReset()
 })
@@ -297,6 +313,30 @@ describe("Desk consumes the DocumentCatalog", () => {
     expect(container.textContent).toContain("Watcher Discovered Doc")
   })
 
+  it("does not synthesize a Desk row for a confirmed soft-delete", async () => {
+    catalog.state.records = [
+      makeRecord({ id: "active", title: "Active Doc" }),
+      makeRecord({
+        id: "deleted",
+        title: "Deleted Doc",
+        localPresent: false,
+        cloudPresent: true,
+        syncStatus: "failed",
+        deletedAt: "2026-07-18T00:00:00.000Z",
+      }),
+    ]
+
+    const { default: DeskPage } = await import("@/app/(app)/desk/page")
+    await act(async () => {
+      root = createRoot(container)
+      root.render(<DeskPage />)
+    })
+    await flush()
+
+    expect(container.textContent).toContain("Active Doc")
+    expect(container.textContent).not.toContain("Deleted Doc")
+  })
+
   it("coalesces a burst of catalog changes into a single reload (reactive fan-out)", async () => {
     catalog.state.records = [makeRecord({ id: "cat-1", title: "Doc One" })]
     storage.writings = [makeWriting({ id: "cat-1", title: "Doc One" })]
@@ -322,6 +362,43 @@ describe("Desk consumes the DocumentCatalog", () => {
     // The Performance Contract requires one bulk change → one view refresh. The
     // coalescing debounce collapses the burst into a single catalog reload.
     expect(catalog.instance.list).toHaveBeenCalledTimes(1)
+  })
+
+  it("reloads Desk when desktop collection membership changes", async () => {
+    catalog.state.records = [makeRecord({ id: "cat-1", title: "Collection Doc" })]
+    collectionStore.state.collections = [{
+      id: "collection-1",
+      owner_id: null,
+      name: "Letters",
+      description: null,
+      visibility: "private",
+      sync_status: "synced",
+      lifecycle: "local-only",
+      created_at: "2026-07-18T00:00:00.000Z",
+      updated_at: "2026-07-18T00:00:00.000Z",
+      local_updated_at: 1,
+    }]
+
+    const { default: DeskPage } = await import("@/app/(app)/desk/page")
+    const { setLocalWritingCollections } = await import("@/lib/queries/desk-catalog-source")
+    await act(async () => {
+      root = createRoot(container)
+      root.render(<DeskPage />)
+    })
+    await flush()
+    catalog.instance.list.mockClear()
+    collectionStore.load.mockClear()
+
+    await act(async () => {
+      await setLocalWritingCollections("cat-1", ["collection-1"])
+    })
+    await waitPastDebounce()
+
+    expect(catalog.instance.list).toHaveBeenCalledTimes(1)
+    expect(collectionStore.load).toHaveBeenCalledTimes(1)
+    expect(collectionStore.state.writingCollections).toEqual([
+      expect.objectContaining({ writing_id: "cat-1", collection_id: "collection-1" }),
+    ])
   })
 
   it("renders the local catalog without waiting on cloud hydration (local-first / TTI)", async () => {

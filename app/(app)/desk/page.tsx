@@ -33,6 +33,7 @@ import {
   loadDeskCatalogData,
   loadSharedWritingIds,
   setLocalWritingCollections,
+  subscribeToCollectionChanges,
   subscribeToLocalDBScopeChanges,
 } from "@/lib/queries/desk-catalog-source"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
@@ -436,9 +437,11 @@ export default function DeskPage() {
       { leading: false, trailing: true },
     )
 
-    const unsubscribe = subscribeToCatalog(debounced)
+    const unsubscribeCatalog = subscribeToCatalog(debounced)
+    const unsubscribeCollections = subscribeToCollectionChanges(debounced)
     return () => {
-      unsubscribe()
+      unsubscribeCatalog()
+      unsubscribeCollections()
       debounced.cancel()
     }
   }, [activeView, loadDeskActivity])
