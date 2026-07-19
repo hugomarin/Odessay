@@ -178,6 +178,7 @@ const makeRecord = (partial: Partial<DocumentCatalogRecord>): DocumentCatalogRec
   deletedAt: partial.deletedAt ?? null,
   createdAt: partial.createdAt ?? 1000,
   modifiedAt: partial.modifiedAt ?? 2000,
+  excerpt: partial.excerpt ?? null,
   binding: partial.binding ?? null,
 })
 
@@ -426,6 +427,7 @@ describe("Workspace consumes the DocumentCatalog", () => {
       localPresent: true,
       cloudPresent: true,
       syncStatus: "synced",
+      excerpt: "The same cached excerpt in both catalog views.",
       binding: {
         documentId: "shared-doc",
         bindingRootId: "root",
@@ -478,7 +480,8 @@ describe("Workspace consumes the DocumentCatalog", () => {
 
     const text = container.textContent ?? ""
     expect(text).toContain("Shared")
-    expect(text).not.toContain("Shared.md")
+    expect(text).toContain("The same cached excerpt in both catalog views.")
+    expect(text).toContain("file:///root/Shared.md")
     // Same UUID, same catalog-derived state Desk renders (Synced), sourced from the
     // catalog join — not a direct IndexedDB read.
     expect(container.querySelector('[aria-label="Document state: Synced"]')).not.toBeNull()

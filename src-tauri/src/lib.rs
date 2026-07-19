@@ -277,6 +277,7 @@ pub fn run() {
             commands::index::catalog_get_by_id,
             commands::index::catalog_resolve_path,
             commands::index::catalog_list,
+            commands::index::catalog_hydrate_excerpts,
             commands::index::catalog_detach_local_file,
             commands::index::catalog_apply_reconcile,
             commands::index::catalog_update_mutation_status,

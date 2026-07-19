@@ -42,7 +42,6 @@ import {
   ArtifactWritingAction,
   ArtifactWritingCell,
 } from "@/components/shared/artifact-writing-cell";
-import { getDocumentService } from "@/lib/services/document-service-factory";
 import { CollectionChips } from "@/components/desk/collection-chips";
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
@@ -1086,20 +1085,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 file,
                 documentJoin,
               )}
-              loadDescription={async () => {
-                if (document) {
-                  const result = await (
-                    await getDocumentService()
-                  ).openWriting(document.id);
-                  if (result.data?.content.plainText) {
-                    return result.data.content.plainText;
-                  }
-                }
-                const preview = await (
-                  await getDesktopWorkspaceService()
-                ).readFilePreview(file.path);
-                return preview.preview;
-              }}
+              description={document?.excerpt ?? null}
+              localPath={file.path}
               dateLabel={formatFileTimestamp(file.modifiedAt)}
               actions={
                 <>

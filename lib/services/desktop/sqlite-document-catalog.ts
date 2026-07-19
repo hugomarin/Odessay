@@ -13,6 +13,7 @@ import {
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
   tauriCatalogGetById,
+  tauriCatalogHydrateExcerpts,
   tauriCatalogList,
   tauriCatalogResolvePath,
   type DesktopCatalogDualWriteInput,
@@ -30,6 +31,9 @@ function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
     visibility: row.visibility as DocumentCatalogRecord["visibility"], version: row.version,
     deletedAt: row.deletedAt,
     createdAt: row.createdAt, modifiedAt: row.modifiedAt,
+    excerpt: row.excerptContentHash && row.excerptContentHash === row.contentHash
+      ? row.excerpt
+      : null,
     binding: row.canonicalPath && row.bindingRootId && row.relativePath ? {
       documentId: row.id, bindingRootId: row.bindingRootId, relativePath: row.relativePath,
       canonicalPath: row.canonicalPath, inode: row.inode, contentHash: row.contentHash,
@@ -39,6 +43,7 @@ function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
 }
 
 const listenersByDatabase = new Map<string, Set<(change: CatalogChange) => void>>()
+const excerptHydrationsByDatabase = new Map<string, Promise<void>>()
 
 function listenersFor(dbPath: string) {
   let listeners = listenersByDatabase.get(dbPath)
@@ -67,9 +72,24 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
   async getById(id: string) { const row = await tauriCatalogGetById(this.dbPath, id); return row ? toRecord(row) : null }
   async resolvePath(path: string): Promise<PathResolution> { const row = await tauriCatalogResolvePath(this.dbPath, path); return row ? { kind: "resolved", record: toRecord(row) } : { kind: "unbound", path } }
   async list(query?: DocumentCatalogQuery) {
-    return (await tauriCatalogList(this.dbPath, query))
+    const records = (await tauriCatalogList(this.dbPath, query))
       .map(toRecord)
       .filter((record) => record.localPresent || record.cloudPresent || (query?.includeDeleted && record.deletedAt))
+    this.scheduleExcerptHydration()
+    return records
+  }
+  private scheduleExcerptHydration() {
+    if (excerptHydrationsByDatabase.has(this.dbPath)) return
+    const hydration = tauriCatalogHydrateExcerpts(this.dbPath)
+      .then((documentIds) => {
+        if (documentIds.length > 0) this.emit(documentIds, "bulk")
+      })
+      .catch(() => {
+        // A missing/unreadable file must not hide the catalog row or erase a
+        // previously valid cache. The next catalog load may retry.
+      })
+      .finally(() => excerptHydrationsByDatabase.delete(this.dbPath))
+    excerptHydrationsByDatabase.set(this.dbPath, hydration)
   }
   async registerBinding(input: RegisterBindingInput) {
     const { document: catalogDocument } = input

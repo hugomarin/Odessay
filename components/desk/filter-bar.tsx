@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
-import type { DeskCreatedDateFilter, DeskGroupBy, DeskSortBy } from "@/lib/queries/desk-activity"
+import { NO_WORKSPACE_FILTER_VALUE, type DeskCreatedDateFilter, type DeskGroupBy, type DeskSortBy } from "@/lib/queries/desk-activity"
+import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { getWritingStatusLabel, WRITING_STATUS_VALUES, type WritingStatus } from "@/lib/writings/status"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
@@ -19,12 +20,13 @@ type DeskFilterBarProps = {
   selectedCollectionIds: string[]; onToggleCollection: (id: string) => void
   selectedStatuses: WritingStatus[]; onToggleStatus: (status: WritingStatus) => void
   selectedArtifactTypes: ArtifactType[]; onToggleArtifactType: (artifactType: ArtifactType) => void
+  selectedWorkspaceSlugs: string[]; onToggleWorkspace: (slug: string) => void
   createdDateFilter: DeskCreatedDateFilter | null; onCreatedDateFilterChange: (filter: DeskCreatedDateFilter | null) => void
   createdDateFrom: string; onCreatedDateFromChange: (value: string) => void
   createdDateTo: string; onCreatedDateToChange: (value: string) => void
   groupBy: DeskGroupBy; onGroupByChange: (value: DeskGroupBy) => void
   sortBy: DeskSortBy; onSortByChange: (value: DeskSortBy) => void
-  collectionOptions: CollectionOption[]; activeFilterCount: number; hasActiveFilters: boolean; filteredCount: number; totalCount: number
+  collectionOptions: CollectionOption[]; workspaceOptions: WorkspaceAssignmentOption[]; activeFilterCount: number; hasActiveFilters: boolean; filteredCount: number; totalCount: number
 }
 
 const DATE_OPTIONS: { value: DeskCreatedDateFilter; label: string }[] = [
@@ -37,6 +39,7 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
   const [collectionOpen, setCollectionOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
   const [artifactOpen, setArtifactOpen] = useState(false)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [dateOpen, setDateOpen] = useState(false)
   const { settings } = useUserSettingsContext()
   const collections = useMemo(() => [...props.collectionOptions, { id: UNCATEGORIZED_COLLECTION_ID, name: "Uncategorized" }], [props.collectionOptions])
@@ -46,6 +49,7 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
     props.searchQuery ? "name" : null,
     props.selectedStatuses.length ? "status" : null,
     props.selectedArtifactTypes.length ? "artifact" : null,
+    props.selectedWorkspaceSlugs.length ? "workspace" : null,
     props.selectedCollectionIds.length ? "collection" : null,
     props.createdDateFilter ? "date" : null,
   ].filter(Boolean).join(", ")
@@ -58,7 +62,7 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
       filterActive={props.activeFilterCount > 0}
       groupActive={props.groupBy !== "none"}
       sortLabel={sortLabel}
-      filterContent={<div className="space-y-1"><SecondLevelControl label="Status" open={statusOpen} onOpenChange={setStatusOpen}>{enabledStatuses.map((status) => <Choice key={status} selected={props.selectedStatuses.includes(status)} onClick={() => props.onToggleStatus(status)}>{getWritingStatusLabel(status)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Artifact" open={artifactOpen} onOpenChange={setArtifactOpen}>{ARTIFACT_TYPE_VALUES.map((type) => <Choice key={type} selected={props.selectedArtifactTypes.includes(type)} onClick={() => props.onToggleArtifactType(type)}>{getArtifactTypeLabel(type)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Collection" open={collectionOpen} onOpenChange={setCollectionOpen}>{collections.map((collection) => <Choice key={collection.id} selected={props.selectedCollectionIds.includes(collection.id)} onClick={() => props.onToggleCollection(collection.id)}>{collection.name}</Choice>)}</SecondLevelControl><SecondLevelControl label="Date" open={dateOpen} onOpenChange={setDateOpen}>{DATE_OPTIONS.map((option) => <Choice key={option.value} selected={props.createdDateFilter === option.value} onClick={() => props.onCreatedDateFilterChange(props.createdDateFilter === option.value ? null : option.value)}>{option.label}</Choice>)}{props.createdDateFilter === "custom" ? <div className="space-y-2 px-2 pb-2"><Input type="date" value={props.createdDateFrom} onChange={(event) => props.onCreatedDateFromChange(event.target.value)} className="h-8 text-xs"/><Input type="date" value={props.createdDateTo} onChange={(event) => props.onCreatedDateToChange(event.target.value)} className="h-8 text-xs"/></div> : null}</SecondLevelControl></div>}
+      filterContent={<div className="space-y-1"><SecondLevelControl label="Status" open={statusOpen} onOpenChange={setStatusOpen}>{enabledStatuses.map((status) => <Choice key={status} selected={props.selectedStatuses.includes(status)} onClick={() => props.onToggleStatus(status)}>{getWritingStatusLabel(status)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Artifact" open={artifactOpen} onOpenChange={setArtifactOpen}>{ARTIFACT_TYPE_VALUES.map((type) => <Choice key={type} selected={props.selectedArtifactTypes.includes(type)} onClick={() => props.onToggleArtifactType(type)}>{getArtifactTypeLabel(type)}</Choice>)}</SecondLevelControl><SecondLevelControl label="Collection" open={collectionOpen} onOpenChange={setCollectionOpen}>{collections.map((collection) => <Choice key={collection.id} selected={props.selectedCollectionIds.includes(collection.id)} onClick={() => props.onToggleCollection(collection.id)}>{collection.name}</Choice>)}</SecondLevelControl><SecondLevelControl label="Workspace" open={workspaceOpen} onOpenChange={setWorkspaceOpen}>{props.workspaceOptions.map((workspace) => <Choice key={workspace.slug} selected={props.selectedWorkspaceSlugs.includes(workspace.slug)} onClick={() => props.onToggleWorkspace(workspace.slug)}>{workspace.name}</Choice>)}<Choice selected={props.selectedWorkspaceSlugs.includes(NO_WORKSPACE_FILTER_VALUE)} onClick={() => props.onToggleWorkspace(NO_WORKSPACE_FILTER_VALUE)}>No workspace</Choice></SecondLevelControl><SecondLevelControl label="Date" open={dateOpen} onOpenChange={setDateOpen}>{DATE_OPTIONS.map((option) => <Choice key={option.value} selected={props.createdDateFilter === option.value} onClick={() => props.onCreatedDateFilterChange(props.createdDateFilter === option.value ? null : option.value)}>{option.label}</Choice>)}{props.createdDateFilter === "custom" ? <div className="space-y-2 px-2 pb-2"><Input type="date" value={props.createdDateFrom} onChange={(event) => props.onCreatedDateFromChange(event.target.value)} className="h-8 text-xs"/><Input type="date" value={props.createdDateTo} onChange={(event) => props.onCreatedDateToChange(event.target.value)} className="h-8 text-xs"/></div> : null}</SecondLevelControl></div>}
       groupContent={<div className="flex flex-wrap gap-2">{GROUP_OPTIONS.map((option) => <Choice key={option.value} selected={props.groupBy === option.value} onClick={() => props.onGroupByChange(option.value)}>{option.label}</Choice>)}</div>}
       sortContent={<div className="space-y-1">{SORT_OPTIONS.map((option) => <Choice key={option.value} selected={props.sortBy === option.value} onClick={() => props.onSortByChange(option.value)}>{option.label}</Choice>)}</div>}
     />

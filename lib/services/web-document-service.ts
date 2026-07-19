@@ -43,6 +43,7 @@ function localWritingToRecord(local: LocalWriting): WritingRecord {
     updatedAt: local.updated_at,
     contentUpdatedAt: local.content_updated_at ?? null,
     metadataUpdatedAt: local.metadata_updated_at ?? null,
+    lifecycle: local.lifecycle,
   }
 }
 

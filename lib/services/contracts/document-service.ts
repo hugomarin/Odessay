@@ -7,6 +7,7 @@ import {
 } from "./service-types"
 
 export type WritingVisibility = "private" | "shared" | "public"
+export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed"
 export type CollectionVisibility = "private" | "public"
 export type ArtifactType = "general" | "agent" | "skill" | "prompt" | "template" | "status"
 export type DocumentCanonicalSource = "pending-document-contract" | "markdown" | "rich-text"
@@ -36,6 +37,8 @@ export type WritingRecord = {
   updatedAt: string
   contentUpdatedAt?: string | null
   metadataUpdatedAt?: string | null
+  /** Runtime-neutral sync capability used by consumers such as Preview. */
+  lifecycle?: WritingLifecycle
 }
 
 export type WritingSummary = Omit<WritingRecord, "content"> & {

@@ -9,6 +9,10 @@ import {
 } from "@/lib/writings/status"
 import { deriveDocumentStateForLocalWriting, type DocumentState } from "@/lib/writings/document-state"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import {
+  inferWorkspaceSlugFromPath,
+  type WorkspaceAssignmentOption,
+} from "@/lib/workspace/assignment"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
@@ -19,6 +23,8 @@ export type DeskGroupBy = "none" | "status" | "artifact" | "collection" | "creat
 export type DeskSortBy = "created-at-desc" | "created-at-asc" | "content-updated-at-desc"
 
 export type DeskCreatedDateFilter = "today" | "last-7" | "last-30" | "this-year" | "custom"
+
+export const NO_WORKSPACE_FILTER_VALUE = "__no-workspace__"
 
 export type DeskRecipientPreview = {
   username: string
@@ -74,6 +80,7 @@ export type DeskClientFilter = {
   selectedCollectionIds?: string[]
   selectedStatuses?: string[]
   selectedArtifactTypes?: ArtifactType[]
+  selectedWorkspaceSlugs?: string[]
   createdDateFilter?: DeskCreatedDateFilter | null
   createdDateFrom?: string
   createdDateTo?: string
@@ -96,6 +103,8 @@ type BuildDeskActivityOptions = {
   workspaceAssignments?: Record<string, string>
   /** workspace slug → display name, used to resolve the assigned workspace label. */
   workspaceNamesBySlug?: Record<string, string>
+  /** Registered Workspace roots used to infer physical membership when no manual override exists. */
+  workspaceOptions?: WorkspaceAssignmentOption[]
   /**
    * Authoritative document state per UUID, derived from the DocumentCatalog
    * (ODE-373). When provided it overrides the local presence/sync derivation so
@@ -297,6 +306,7 @@ const buildMetas = (
   sortBy?: DeskSortBy,
   workspaceAssignments?: Record<string, string>,
   workspaceNamesBySlug?: Record<string, string>,
+  workspaceOptions?: WorkspaceAssignmentOption[],
   documentStateById?: Record<string, DocumentState>,
 ): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
@@ -309,7 +319,9 @@ const buildMetas = (
   }
 
   const metas = activeWritings.map((writing) => {
-    const workspaceSlug = workspaceAssignments?.[writing.id] ?? null
+    const workspaceSlug =
+      workspaceAssignments?.[writing.id] ??
+      inferWorkspaceSlugFromPath(writing.canonical_path, workspaceOptions ?? [])
     const workspaceName = workspaceSlug
       ? (workspaceNamesBySlug?.[workspaceSlug] ?? workspaceSlug)
       : null
@@ -386,6 +398,7 @@ const applyClientFilters = (
     selectedCollectionIds,
     selectedStatuses,
     selectedArtifactTypes,
+    selectedWorkspaceSlugs,
     createdDateFilter,
     createdDateFrom,
     createdDateTo,
@@ -397,6 +410,7 @@ const applyClientFilters = (
     selectedCollectionIds?.length ||
     selectedStatuses?.length ||
     selectedArtifactTypes?.length ||
+    selectedWorkspaceSlugs?.length ||
     createdDateFilter
 
   if (!hasAnyFilter) {
@@ -415,6 +429,8 @@ const applyClientFilters = (
   }
 
   const selectedCollectionSet = new Set(selectedCollectionIds ?? [])
+  const selectedWorkspaceSet = new Set(selectedWorkspaceSlugs ?? [])
+  const includesNoWorkspace = selectedWorkspaceSet.has(NO_WORKSPACE_FILTER_VALUE)
   const hasUncategorized = selectedCollectionSet.has(UNCATEGORIZED_COLLECTION_ID)
   const selectedRealCollections = new Set(
     (selectedCollectionIds ?? []).filter((id) => id !== UNCATEGORIZED_COLLECTION_ID),
@@ -452,6 +468,16 @@ const applyClientFilters = (
 
     if (selectedArtifactTypes && selectedArtifactTypes.length > 0) {
       if (!selectedArtifactTypes.includes(writing.artifactType)) {
+        return false
+      }
+    }
+
+    if (selectedWorkspaceSet.size > 0) {
+      const matchesWorkspace = writing.workspaceSlug
+        ? selectedWorkspaceSet.has(writing.workspaceSlug)
+        : includesNoWorkspace
+
+      if (!matchesWorkspace) {
         return false
       }
     }
@@ -625,6 +651,7 @@ export const buildDeskActivitySummary = (
     options.sortBy,
     options.workspaceAssignments,
     options.workspaceNamesBySlug,
+    options.workspaceOptions,
     options.documentStateById,
   )
   let filtered = applyFilter(allWritings, options.filter)

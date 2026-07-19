@@ -48,7 +48,9 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
             version_cache INTEGER,
             deleted_at_cache TEXT,
             created_at INTEGER,
-            modified_at INTEGER
+            modified_at INTEGER,
+            excerpt_cache TEXT,
+            excerpt_content_hash TEXT
         );
         CREATE TABLE IF NOT EXISTS document_bindings (
             document_id TEXT PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
@@ -149,6 +151,31 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
         conn.execute("ALTER TABLE documents ADD COLUMN deleted_at_cache TEXT", [])
             .map_err(|e| format!("catalog migration add deleted_at_cache: {e}"))?;
     }
+    let (has_excerpt_cache, has_excerpt_content_hash) = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(documents)")
+            .map_err(|e| format!("catalog migration inspect excerpt cache: {e}"))?;
+        let columns: Vec<String> = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("catalog migration list excerpt cache: {e}"))?
+            .filter_map(Result::ok)
+            .collect();
+        (
+            columns.iter().any(|name| name == "excerpt_cache"),
+            columns.iter().any(|name| name == "excerpt_content_hash"),
+        )
+    };
+    if !has_excerpt_cache {
+        conn.execute("ALTER TABLE documents ADD COLUMN excerpt_cache TEXT", [])
+            .map_err(|e| format!("catalog migration add excerpt_cache: {e}"))?;
+    }
+    if !has_excerpt_content_hash {
+        conn.execute(
+            "ALTER TABLE documents ADD COLUMN excerpt_content_hash TEXT",
+            [],
+        )
+        .map_err(|e| format!("catalog migration add excerpt_content_hash: {e}"))?;
+    }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_catalog_cloud_hash ON documents(cloud_content_hash) WHERE cloud_present=1 AND cloud_content_hash IS NOT NULL;
          DROP TABLE IF EXISTS writings_index;
@@ -165,7 +192,7 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
            WHERE sync_status='deleted' AND deleted_at_cache IS NULL;
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
            ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
-         UPDATE catalog_schema SET version=6 WHERE singleton=1;"
+         UPDATE catalog_schema SET version=7 WHERE singleton=1;"
     ).map_err(|e| format!("catalog migration v3: {e}"))?;
     Ok(())
 }
@@ -336,6 +363,8 @@ pub struct CatalogRow {
     pub deleted_at: Option<String>,
     pub created_at: Option<i64>,
     pub modified_at: Option<i64>,
+    pub excerpt: Option<String>,
+    pub excerpt_content_hash: Option<String>,
     pub binding_root_id: Option<String>,
     pub relative_path: Option<String>,
     pub canonical_path: Option<String>,
@@ -361,20 +390,148 @@ fn map_catalog_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CatalogRow> {
         deleted_at: row.get(11)?,
         created_at: row.get(12)?,
         modified_at: row.get(13)?,
-        binding_root_id: row.get(14)?,
-        relative_path: row.get(15)?,
-        canonical_path: row.get(16)?,
-        inode: row.get(17)?,
-        content_hash: row.get(18)?,
-        size: row.get(19)?,
-        last_seen_at: row.get(20)?,
+        excerpt: row.get(14)?,
+        excerpt_content_hash: row.get(15)?,
+        binding_root_id: row.get(16)?,
+        relative_path: row.get(17)?,
+        canonical_path: row.get(18)?,
+        inode: row.get(19)?,
+        content_hash: row.get(20)?,
+        size: row.get(21)?,
+        last_seen_at: row.get(22)?,
     })
 }
 
-const CATALOG_SELECT: &str = "SELECT d.id,d.local_present,d.cloud_present,d.cloud_account_id,d.sync_status,
+const CATALOG_SELECT: &str =
+    "SELECT d.id,d.local_present,d.cloud_present,d.cloud_account_id,d.sync_status,
  d.title_cache,d.slug_cache,d.status_cache,d.artifact_type_cache,d.visibility_cache,d.version_cache,
- d.deleted_at_cache,d.created_at,d.modified_at,b.binding_root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at
+ d.deleted_at_cache,d.created_at,d.modified_at,d.excerpt_cache,d.excerpt_content_hash,
+ b.binding_root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at
  FROM documents d LEFT JOIN document_bindings b ON b.document_id=d.id";
+
+const MAX_EXCERPT_CHARS: usize = 120;
+
+fn markdown_excerpt(markdown: &str) -> Option<String> {
+    let normalized = markdown.replace("\r\n", "\n").replace('\r', "\n");
+    let mut lines = normalized.lines().peekable();
+    if lines.peek().is_some_and(|line| line.trim() == "---") {
+        lines.next();
+        for line in lines.by_ref() {
+            if matches!(line.trim(), "---" | "...") {
+                break;
+            }
+        }
+    }
+
+    let mut text = String::new();
+    for line in lines {
+        let mut value = line.trim();
+        if value.starts_with("```") || value.starts_with("~~~") {
+            continue;
+        }
+        value = value.trim_start_matches(|character: char| {
+            matches!(character, '#' | '>' | '-' | '+' | '*' | ' ' | '\t')
+        });
+        let mut chars = value.chars().peekable();
+        let mut in_html_tag = false;
+        while let Some(character) = chars.next() {
+            if in_html_tag {
+                if character == '>' {
+                    in_html_tag = false;
+                }
+                continue;
+            }
+            if character == '<' {
+                in_html_tag = true;
+                continue;
+            }
+            if character == ']' && chars.peek() == Some(&'(') {
+                chars.next();
+                for target_character in chars.by_ref() {
+                    if target_character == ')' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if matches!(character, '[' | ']' | '`' | '_' | '~') {
+                continue;
+            }
+            if character == '!' && chars.peek() == Some(&'[') {
+                continue;
+            }
+            text.push(character);
+        }
+        text.push(' ');
+    }
+
+    let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if compact.is_empty() {
+        None
+    } else {
+        Some(compact.chars().take(MAX_EXCERPT_CHARS).collect())
+    }
+}
+
+/// Rebuild stale/missing excerpts away from React. Reads execute sequentially
+/// in this background command (bounded concurrency = 1), then every valid result
+/// commits in one SQLite transaction. The content-hash predicate prevents a
+/// watcher result from overwriting a newer save.
+#[tauri::command]
+pub fn catalog_hydrate_excerpts(db_path: String) -> Result<Vec<String>, String> {
+    let mut conn = open_db(&db_path)?;
+    let candidates: Vec<(String, String, String)> = {
+        let mut stmt = conn
+            .prepare(
+                "SELECT d.id,b.canonical_path,b.content_hash
+                 FROM documents d JOIN document_bindings b ON b.document_id=d.id
+                 WHERE d.local_present=1 AND b.content_hash IS NOT NULL
+                   AND (d.excerpt_content_hash IS NULL OR d.excerpt_content_hash != b.content_hash)
+                 ORDER BY d.modified_at DESC",
+            )
+            .map_err(|e| format!("catalog excerpt candidates prepare: {e}"))?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map_err(|e| format!("catalog excerpt candidates query: {e}"))?
+            .filter_map(Result::ok)
+            .collect();
+        rows
+    };
+
+    let prepared: Vec<(String, Option<String>, String)> = candidates
+        .into_iter()
+        .filter_map(|(id, path, content_hash)| {
+            let markdown = fs::read_to_string(path).ok()?;
+            Some((id, markdown_excerpt(&markdown), content_hash))
+        })
+        .collect();
+    if prepared.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog excerpt batch begin: {e}"))?;
+    let mut updated = Vec::new();
+    for (id, excerpt, content_hash) in prepared {
+        let changed = tx
+            .execute(
+                "UPDATE documents SET excerpt_cache=?1,excerpt_content_hash=?2
+                 WHERE id=?3 AND EXISTS (
+                   SELECT 1 FROM document_bindings b
+                   WHERE b.document_id=?3 AND b.content_hash=?2
+                 )",
+                params![excerpt, content_hash, id],
+            )
+            .map_err(|e| format!("catalog excerpt batch update: {e}"))?;
+        if changed > 0 {
+            updated.push(id);
+        }
+    }
+    tx.commit()
+        .map_err(|e| format!("catalog excerpt batch commit: {e}"))?;
+    Ok(updated)
+}
 
 #[tauri::command]
 pub fn catalog_schema_version(db_path: String) -> Result<i64, String> {
@@ -655,7 +812,7 @@ pub fn catalog_apply_reconcile(
         .map_err(|e| format!("catalog reconcile detach binding: {e}"))?;
         // Confirmed physical absence never deletes cloud metadata (spec §Fallas).
         tx.execute(
-            "UPDATE documents SET local_present=0 WHERE id=?1",
+            "UPDATE documents SET local_present=0,excerpt_cache=NULL,excerpt_content_hash=NULL WHERE id=?1",
             params![id],
         )
         .map_err(|e| format!("catalog reconcile detach document: {e}"))?;
@@ -677,7 +834,7 @@ pub fn catalog_detach_local_file(db_path: String, id: String) -> Result<(), Stri
     )
     .map_err(|e| format!("catalog detach binding: {e}"))?;
     tx.execute(
-        "UPDATE documents SET local_present=0 WHERE id=?1",
+        "UPDATE documents SET local_present=0,excerpt_cache=NULL,excerpt_content_hash=NULL WHERE id=?1",
         params![id],
     )
     .map_err(|e| format!("catalog detach document: {e}"))?;
@@ -1087,13 +1244,65 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 6);
+        let excerpt_columns: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name IN ('excerpt_cache','excerpt_content_hash')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 7);
         assert_eq!(cloud_hash_column, 1);
         assert_eq!(deleted_at_column, 1);
+        assert_eq!(excerpt_columns, 2);
         eprintln!("catalog_startup_ms={startup_ms:.3}");
         assert!(startup_ms < 1000.0, "catalog startup exceeded 1s budget");
         drop(conn);
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn markdown_excerpt_ignores_frontmatter_and_bounds_unicode_text() {
+        let markdown = format!(
+            "---\ntitle: Metadata only\ntags: [test]\n---\n# Guide CMP\n\n{}",
+            "contenido ".repeat(30)
+        );
+        let excerpt = markdown_excerpt(&markdown).unwrap();
+        assert!(excerpt.starts_with("Guide CMP contenido"));
+        assert!(!excerpt.contains("Metadata only"));
+        assert!(excerpt.chars().count() <= MAX_EXCERPT_CHARS);
+        assert_eq!(markdown_excerpt("---\ntitle: Empty\n---\n"), None);
+    }
+
+    #[test]
+    fn catalog_hydrates_excerpt_as_one_rebuildable_batch() {
+        let path = temp_db();
+        let root = std::env::temp_dir().join(format!("odessay-excerpt-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let document_path = root.join("guide.md");
+        fs::write(
+            &document_path,
+            "---\ntitle: Guide\n---\n# Guide CMP\n\nSame content",
+        )
+        .unwrap();
+
+        let mut catalog_input = input("doc-1", &document_path.to_string_lossy(), "mutation-1");
+        let binding = catalog_input.binding.as_mut().unwrap();
+        binding.root_path = root.to_string_lossy().to_string();
+        binding.content_hash = Some("blake3:current".into());
+        catalog_dual_write(path.clone(), catalog_input).unwrap();
+
+        let updated = catalog_hydrate_excerpts(path.clone()).unwrap();
+        assert_eq!(updated, vec!["doc-1"]);
+        let row = catalog_get_by_id(path.clone(), "doc-1".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.excerpt.as_deref(), Some("Guide CMP Same content"));
+        assert_eq!(row.excerpt_content_hash.as_deref(), Some("blake3:current"));
+        assert!(catalog_hydrate_excerpts(path.clone()).unwrap().is_empty());
+
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
@@ -1636,7 +1845,7 @@ mod catalog_tests {
         assert_eq!(snapshot.collections[0].name, "Research");
         assert_eq!(snapshot.writing_collections.len(), 1);
         assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
-        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 6);
+        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 7);
         let _ = fs::remove_file(path);
     }
 }

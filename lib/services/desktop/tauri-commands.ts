@@ -37,6 +37,7 @@ export type DesktopCatalogRow = {
   deletedAt: string | null; createdAt: number | null; modifiedAt: number | null; bindingRootId: string | null
   relativePath: string | null; canonicalPath: string | null; inode: number | null
   contentHash: string | null; size: number | null; lastSeenAt: number | null
+  excerpt: string | null; excerptContentHash: string | null
 }
 
 export type DesktopCatalogDualWriteInput = {
@@ -181,6 +182,10 @@ export async function tauriCatalogList(
 
 export async function tauriCatalogDetachLocalFile(dbPath: string, id: string): Promise<void> {
   return invoke<void>("catalog_detach_local_file", { dbPath, id })
+}
+
+export async function tauriCatalogHydrateExcerpts(dbPath: string): Promise<string[]> {
+  return invoke<string[]>("catalog_hydrate_excerpts", { dbPath })
 }
 
 export type DesktopCatalogLocalBinding = {

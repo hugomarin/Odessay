@@ -83,6 +83,11 @@ function toWriting(record: DocumentCatalogRecord, bodyJson: Record<string, unkno
     deletedAt: record.deletedAt,
     createdAt,
     updatedAt,
+    lifecycle: record.cloudPresent
+      ? "server-confirmed"
+      : record.syncStatus === "pending"
+        ? "syncing"
+        : "local-only",
   }
 }
 
@@ -93,7 +98,8 @@ function toSummary(record: DocumentCatalogRecord): WritingSummary {
     id: record.id, authorId: record.cloudAccountId, title: record.title, slug: record.slug,
     status: record.status ?? "draft", artifactType: normalizeArtifactType(record.artifactType),
     visibility: record.visibility ?? "private", parentId: null, correspondenceId: null,
-    version: Math.max(1, record.version ?? 1), deletedAt: record.deletedAt, createdAt, updatedAt, excerpt: null,
+    version: Math.max(1, record.version ?? 1), deletedAt: record.deletedAt, createdAt, updatedAt,
+    excerpt: record.excerpt ?? null,
   }
 }
 

@@ -26,6 +26,31 @@ export type WorkspaceAssignmentMap = Record<string, string>
 export type WorkspaceAssignmentOption = {
   slug: string
   name: string
+  /** Physical root used to infer membership for catalog-bound local files. */
+  rootPath?: string
+}
+
+const normalizePath = (value: string) =>
+  value.trim().replace(/\\/g, "/").replace(/\/+$/, "")
+
+/**
+ * Finds the visible Workspace that physically contains a catalog binding.
+ * Nested roots are resolved to the most specific Workspace.
+ */
+export function inferWorkspaceSlugFromPath(
+  canonicalPath: string | null | undefined,
+  options: readonly WorkspaceAssignmentOption[],
+): string | null {
+  if (!canonicalPath?.trim()) return null
+
+  const path = normalizePath(canonicalPath)
+  const match = options
+    .filter((option) => option.rootPath?.trim())
+    .map((option) => ({ option, rootPath: normalizePath(option.rootPath!) }))
+    .filter(({ rootPath }) => path === rootPath || path.startsWith(`${rootPath}/`))
+    .sort((left, right) => right.rootPath.length - left.rootPath.length)[0]
+
+  return match?.option.slug ?? null
 }
 
 /** Reads the current workspace slug for a writing, or null when unassigned. */

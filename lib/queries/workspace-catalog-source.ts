@@ -26,6 +26,7 @@ export type WorkspaceDocumentInfo = {
   state: DocumentState
   status: WritingStatus
   artifactType: ArtifactType
+  excerpt: string | null
 }
 
 function normalizeRoot(rootPath: string): string {
@@ -60,6 +61,7 @@ export async function loadWorkspaceDocumentJoin(
         state: row.state,
         status: row.status ?? "draft",
         artifactType: row.artifactType ?? "general",
+        excerpt: row.excerpt,
       })
     }
     return map
@@ -75,6 +77,7 @@ export async function loadWorkspaceDocumentJoin(
       state: deriveDocumentStateForLocalWriting(writing),
       status: normalizeWritingStatus(writing.status),
       artifactType: normalizeArtifactType(writing.artifact_type),
+      excerpt: writing.body_text.replace(/\s+/g, " ").trim().slice(0, 120) || null,
     })
   }
   return map

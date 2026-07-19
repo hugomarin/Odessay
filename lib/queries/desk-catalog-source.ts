@@ -94,7 +94,7 @@ function synthesizeWritingFromRecord(record: DocumentCatalogRecord): LocalWritin
     title: record.title,
     canonical_path: record.binding?.canonicalPath ?? null,
     body_json: {},
-    body_text: "",
+    body_text: record.excerpt ?? "",
     content_hash: record.binding?.contentHash ?? null,
     slug: record.slug,
     status: record.status ?? "draft",

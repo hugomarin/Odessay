@@ -19,6 +19,8 @@ export type DocumentCatalogRecord = {
   deletedAt: string | null
   createdAt: number | null
   modifiedAt: number | null
+  /** Rebuildable content-derived preview; never a source of document truth. */
+  excerpt?: string | null
   binding: DocumentBindingRecord | null
 }
 
@@ -56,7 +58,7 @@ export type RegisterBindingInput = {
   binding: DocumentBindingRecord
 }
 
-export type CloudDocumentSnapshot = Omit<DocumentCatalogRecord, "binding" | "localPresent"> & {
+export type CloudDocumentSnapshot = Omit<DocumentCatalogRecord, "binding" | "localPresent" | "excerpt"> & {
   localPresent?: boolean
   contentHash?: string | null
 }

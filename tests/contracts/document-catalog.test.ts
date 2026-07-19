@@ -5,6 +5,7 @@ import { WebDocumentCatalog } from "@/lib/services/web-document-catalog"
 
 const mocks = vi.hoisted(() => ({
   catalogGet: vi.fn(), catalogResolve: vi.fn(), catalogList: vi.fn(), catalogWrite: vi.fn(), catalogDetach: vi.fn(),
+  catalogHydrateExcerpts: vi.fn(),
   writingGet: vi.fn(), writingGetByPath: vi.fn(), writingGetAll: vi.fn(), writingSave: vi.fn(), writingDetach: vi.fn(),
   localListener: null as null | (() => void),
 }))
@@ -15,6 +16,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogList: mocks.catalogList,
   tauriCatalogDualWrite: mocks.catalogWrite,
   tauriCatalogDetachLocalFile: mocks.catalogDetach,
+  tauriCatalogHydrateExcerpts: mocks.catalogHydrateExcerpts,
 }))
 
 vi.mock("@/lib/local-db", () => ({
@@ -30,6 +32,7 @@ const nativeRow = {
   title: "Doc", slug: null, status: "draft", artifactType: "general", visibility: "private", version: 1,
   deletedAt: null, createdAt: 1, modifiedAt: 2, bindingRootId: "root-1", relativePath: "Doc.md",
   canonicalPath: "/tmp/Doc.md", inode: null, contentHash: "blake3:abc", size: 10, lastSeenAt: 2,
+  excerpt: "Catalog excerpt", excerptContentHash: "blake3:abc",
 }
 
 const localWriting = {
@@ -65,6 +68,7 @@ describe("DocumentCatalog contract", () => {
     mocks.catalogList.mockResolvedValue([nativeRow])
     mocks.catalogWrite.mockResolvedValue(undefined)
     mocks.catalogDetach.mockResolvedValue(undefined)
+    mocks.catalogHydrateExcerpts.mockResolvedValue([])
     mocks.writingGet.mockResolvedValue(localWriting)
     mocks.writingGetByPath.mockResolvedValue(localWriting)
     mocks.writingGetAll.mockResolvedValue([localWriting])
@@ -114,5 +118,35 @@ describe("DocumentCatalog contract", () => {
     const records = await new SqliteDocumentCatalog("/tmp/catalog.db").list()
 
     expect(records.map((record) => record.id)).toEqual(["doc-1"])
+  })
+
+  it("hydrates stale excerpts once per database and emits one bulk signal", async () => {
+    mocks.catalogHydrateExcerpts.mockResolvedValueOnce(["doc-1", "doc-2"])
+    const catalog = new SqliteDocumentCatalog("/tmp/excerpt-batch.sqlite3")
+    const changes: Array<{ documentIds: string[]; reason: string }> = []
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
+
+    await Promise.all([catalog.list(), catalog.list()])
+    await vi.waitFor(() => expect(changes).toHaveLength(1))
+
+    expect(mocks.catalogHydrateExcerpts).toHaveBeenCalledTimes(1)
+    expect(changes[0]).toMatchObject({
+      documentIds: ["doc-1", "doc-2"],
+      reason: "bulk",
+    })
+    unsubscribe()
+  })
+
+  it("does not expose an excerpt cached for an older content hash", async () => {
+    mocks.catalogList.mockResolvedValueOnce([{
+      ...nativeRow,
+      contentHash: "blake3:new",
+      excerpt: "Stale excerpt",
+      excerptContentHash: "blake3:old",
+    }])
+
+    const records = await new SqliteDocumentCatalog("/tmp/stale-excerpt.sqlite3").list()
+
+    expect(records[0].excerpt).toBeNull()
   })
 })

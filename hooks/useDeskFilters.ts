@@ -14,6 +14,7 @@ export type DeskFilterState = {
   selectedCollectionIds: string[]
   selectedStatuses: WritingStatus[]
   selectedArtifactTypes: ArtifactType[]
+  selectedWorkspaceSlugs: string[]
   createdDateFilter: DeskCreatedDateFilter | null
   createdDateFrom: string
   createdDateTo: string
@@ -26,6 +27,7 @@ export function useDeskFilters() {
   const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([])
   const [selectedStatuses, setSelectedStatuses] = useState<WritingStatus[]>([])
   const [selectedArtifactTypes, setSelectedArtifactTypes] = useState<ArtifactType[]>([])
+  const [selectedWorkspaceSlugs, setSelectedWorkspaceSlugs] = useState<string[]>([])
   const [createdDateFilter, setCreatedDateFilter] = useState<DeskCreatedDateFilter | null>(null)
   const [createdDateFrom, setCreatedDateFrom] = useState("")
   const [createdDateTo, setCreatedDateTo] = useState("")
@@ -52,11 +54,18 @@ export function useDeskFilters() {
     )
   }, [])
 
+  const toggleWorkspace = useCallback((slug: string) => {
+    setSelectedWorkspaceSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((workspaceSlug) => workspaceSlug !== slug) : [...prev, slug],
+    )
+  }, [])
+
   const clearFilters = useCallback(() => {
     setSearchQuery("")
     setSelectedCollectionIds([])
     setSelectedStatuses([])
     setSelectedArtifactTypes([])
+    setSelectedWorkspaceSlugs([])
     setCreatedDateFilter(null)
     setCreatedDateFrom("")
     setCreatedDateTo("")
@@ -91,6 +100,7 @@ export function useDeskFilters() {
     selectedCollectionIds.length > 0 ||
     selectedStatuses.length > 0 ||
     selectedArtifactTypes.length > 0 ||
+    selectedWorkspaceSlugs.length > 0 ||
     createdDateFilter !== null
 
   const activeFilterCount =
@@ -98,6 +108,7 @@ export function useDeskFilters() {
     selectedCollectionIds.length +
     selectedStatuses.length +
     selectedArtifactTypes.length +
+    selectedWorkspaceSlugs.length +
     (createdDateFilter !== null ? 1 : 0)
 
   return {
@@ -105,6 +116,7 @@ export function useDeskFilters() {
     selectedCollectionIds,
     selectedStatuses,
     selectedArtifactTypes,
+    selectedWorkspaceSlugs,
     createdDateFilter,
     createdDateFrom,
     createdDateTo,
@@ -114,6 +126,7 @@ export function useDeskFilters() {
     toggleCollection,
     toggleStatus,
     toggleArtifactType,
+    toggleWorkspace,
     setCreatedDateFilter,
     setCreatedDateFrom,
     setCreatedDateTo,
