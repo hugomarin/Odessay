@@ -533,4 +533,49 @@ describe("buildDeskActivitySummary workspace assignment", () => {
     expect(row?.workspaceSlug).toBeNull()
     expect(row?.workspaceName).toBeNull()
   })
+
+  it("infers physical Workspace membership from the writing path", () => {
+    const physicallyBound = workspaceWritings.map((writing) =>
+      writing.id === "unassigned"
+        ? { ...writing, canonical_path: "/Users/me/projects/course/lesson.md" }
+        : writing,
+    )
+    const summary = buildDeskActivitySummary(physicallyBound, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      workspaceOptions: [
+        { slug: "projects", name: "Projects", rootPath: "/Users/me/projects" },
+        { slug: "course", name: "Course", rootPath: "/Users/me/projects/course" },
+      ],
+      workspaceNamesBySlug: { projects: "Projects", course: "Course" },
+    })
+
+    const row = summary.groups[0]?.rows.find((candidate) => candidate.id === "unassigned")
+    expect(row?.workspaceSlug).toBe("course")
+    expect(row?.workspaceName).toBe("Course")
+  })
+
+  it("keeps an explicit Workspace assignment as the contextual override", () => {
+    const physicallyBound = workspaceWritings.map((writing) => ({
+      ...writing,
+      canonical_path: "/Users/me/projects/lesson.md",
+    }))
+    const summary = buildDeskActivitySummary(physicallyBound, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      workspaceAssignments: { assigned: "drafts" },
+      workspaceOptions: [
+        { slug: "projects", name: "Projects", rootPath: "/Users/me/projects" },
+      ],
+      workspaceNamesBySlug: { drafts: "Drafts", projects: "Projects" },
+    })
+
+    const row = summary.groups[0]?.rows.find((candidate) => candidate.id === "assigned")
+    expect(row?.workspaceSlug).toBe("drafts")
+    expect(row?.workspaceName).toBe("Drafts")
+  })
 })

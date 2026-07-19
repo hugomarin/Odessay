@@ -472,7 +472,11 @@ export class DesktopWorkspaceService {
   /** Lists registered workspaces as lightweight assignment targets (no FS sync). */
   async listAssignableWorkspaces(): Promise<WorkspaceAssignmentOption[]> {
     const records = await this.readRecords();
-    return records.map((record) => ({ slug: record.slug, name: record.name }));
+    return records.map((record) => ({
+      slug: record.slug,
+      name: record.name,
+      rootPath: record.rootPath,
+    }));
   }
 
   /** Returns the full writing id → workspace slug map for the current account. */

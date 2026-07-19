@@ -481,7 +481,7 @@ describe("Workspace consumes the DocumentCatalog", () => {
     const text = container.textContent ?? ""
     expect(text).toContain("Shared")
     expect(text).toContain("The same cached excerpt in both catalog views.")
-    expect(text).not.toContain("Shared.md")
+    expect(text).toContain("file:///root/Shared.md")
     // Same UUID, same catalog-derived state Desk renders (Synced), sourced from the
     // catalog join — not a direct IndexedDB read.
     expect(container.querySelector('[aria-label="Document state: Synced"]')).not.toBeNull()

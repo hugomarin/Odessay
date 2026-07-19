@@ -1086,6 +1086,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 documentJoin,
               )}
               description={document?.excerpt ?? null}
+              localPath={file.path}
               dateLabel={formatFileTimestamp(file.modifiedAt)}
               actions={
                 <>

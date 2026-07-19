@@ -9,6 +9,10 @@ import {
 } from "@/lib/writings/status"
 import { deriveDocumentStateForLocalWriting, type DocumentState } from "@/lib/writings/document-state"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
+import {
+  inferWorkspaceSlugFromPath,
+  type WorkspaceAssignmentOption,
+} from "@/lib/workspace/assignment"
 
 export type DeskActivityFilter = "all" | "correspondence" | "with-responses" | "received"
 
@@ -96,6 +100,8 @@ type BuildDeskActivityOptions = {
   workspaceAssignments?: Record<string, string>
   /** workspace slug → display name, used to resolve the assigned workspace label. */
   workspaceNamesBySlug?: Record<string, string>
+  /** Registered Workspace roots used to infer physical membership when no manual override exists. */
+  workspaceOptions?: WorkspaceAssignmentOption[]
   /**
    * Authoritative document state per UUID, derived from the DocumentCatalog
    * (ODE-373). When provided it overrides the local presence/sync derivation so
@@ -297,6 +303,7 @@ const buildMetas = (
   sortBy?: DeskSortBy,
   workspaceAssignments?: Record<string, string>,
   workspaceNamesBySlug?: Record<string, string>,
+  workspaceOptions?: WorkspaceAssignmentOption[],
   documentStateById?: Record<string, DocumentState>,
 ): WritingMeta[] => {
   const activeWritings = writings.filter((writing) => writing.sync_status !== "deleted")
@@ -309,7 +316,9 @@ const buildMetas = (
   }
 
   const metas = activeWritings.map((writing) => {
-    const workspaceSlug = workspaceAssignments?.[writing.id] ?? null
+    const workspaceSlug =
+      workspaceAssignments?.[writing.id] ??
+      inferWorkspaceSlugFromPath(writing.canonical_path, workspaceOptions ?? [])
     const workspaceName = workspaceSlug
       ? (workspaceNamesBySlug?.[workspaceSlug] ?? workspaceSlug)
       : null
@@ -625,6 +634,7 @@ export const buildDeskActivitySummary = (
     options.sortBy,
     options.workspaceAssignments,
     options.workspaceNamesBySlug,
+    options.workspaceOptions,
     options.documentStateById,
   )
   let filtered = applyFilter(allWritings, options.filter)

@@ -183,6 +183,7 @@ export function DeskActivityTable({
             title={row.title}
             documentState={row.documentState}
             description={row.excerpt}
+            localPath={row.localPath}
             dateLabel={row.dateLabel}
             actions={
               <>

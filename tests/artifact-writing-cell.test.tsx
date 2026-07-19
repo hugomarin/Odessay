@@ -44,6 +44,7 @@ describe("ArtifactWritingCell", () => {
             title="Post costos GPT 5.6"
             documentState="synced"
             description="Escoger bien el modelo puede optimizar mucho más tu presupuesto."
+            localPath="/Users/hugo/Documents/Odessay/Post costos GPT 5.6.md"
             dateLabel="Yesterday"
             actions={
               <ArtifactWritingAction label="Rename writing" onClick={onAction}>
@@ -73,6 +74,13 @@ describe("ArtifactWritingCell", () => {
       "Escoger bien el modelo puede optimizar mucho más tu presupuesto.",
     );
     expect(container.textContent).toContain("Yesterday");
+    expect(container.textContent).toContain(
+      "file:///Users/hugo/Documents/Odessay/Post costos GPT 5.6.md",
+    );
+    expect(
+      container.querySelector('[data-section="artifact-writing-location"]')
+        ?.getAttribute("title"),
+    ).toBe("file:///Users/hugo/Documents/Odessay/Post costos GPT 5.6.md");
     expect(
       container.querySelector('[data-testid="collections"]')?.textContent,
     ).toBe("Posts");

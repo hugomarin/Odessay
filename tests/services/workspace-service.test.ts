@@ -201,8 +201,8 @@ describe("DesktopWorkspaceService assignments", () => {
   it("lists registered workspaces as assignment targets without syncing the FS", async () => {
     const options = await service.listAssignableWorkspaces();
     expect(options).toEqual([
-      { slug: "drafts", name: "Drafts" },
-      { slug: "letters", name: "Letters" },
+      { slug: "drafts", name: "Drafts", rootPath: "/Users/me/drafts" },
+      { slug: "letters", name: "Letters", rootPath: "/Users/me/letters" },
     ]);
   });
 

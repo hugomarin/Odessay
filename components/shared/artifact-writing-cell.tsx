@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { FolderOpen } from "lucide-react";
 
 import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import type { DocumentState } from "@/lib/writings/document-state";
@@ -10,6 +11,7 @@ type ArtifactWritingCellProps = {
   title: string;
   documentState: DocumentState;
   description?: string | null;
+  localPath?: string | null;
   dateLabel?: string | null;
   actions?: ReactNode;
   collections?: ReactNode;
@@ -26,12 +28,14 @@ export function ArtifactWritingCell({
   title,
   documentState,
   description,
+  localPath,
   dateLabel,
   actions,
   collections,
   className,
 }: ArtifactWritingCellProps) {
   const resolvedDescription = description?.trim() || null;
+  const resolvedLocalPath = localPath?.trim() || null;
 
   return (
     <div
@@ -57,6 +61,17 @@ export function ArtifactWritingCell({
       >
         {resolvedDescription}
       </p>
+
+      {resolvedLocalPath ? (
+        <p
+          className="mt-1.5 flex min-w-0 items-center gap-1.5 font-sans text-[11px] leading-[1.35] text-ink-4"
+          title={`file://${resolvedLocalPath}`}
+          data-section="artifact-writing-location"
+        >
+          <FolderOpen className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+          <span className="truncate">file://{resolvedLocalPath}</span>
+        </p>
+      ) : null}
 
       {dateLabel || collections ? (
         <div className="mt-2 flex min-w-0 flex-col items-start gap-1.5">

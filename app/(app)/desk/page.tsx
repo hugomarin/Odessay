@@ -102,6 +102,7 @@ export default function DeskPage() {
   const [workspaceAvailable, setWorkspaceAvailable] = useState(false)
   const recipientPreviewsRef = useRef(recipientPreviewsByWritingId)
   const workspaceAssignmentsRef = useRef(workspaceAssignments)
+  const workspaceOptionsRef = useRef(workspaceOptions)
   const workspaceNamesRef = useRef<Record<string, string>>({})
   const hasHydratedRemoteRef = useRef(false)
   const hasLoadedSharedRef = useRef(false)
@@ -115,6 +116,7 @@ export default function DeskPage() {
     [workspaceOptions],
   )
   workspaceAssignmentsRef.current = workspaceAssignments
+  workspaceOptionsRef.current = workspaceOptions
   workspaceNamesRef.current = workspaceNamesBySlug
 
   const {
@@ -246,6 +248,7 @@ export default function DeskPage() {
         sortBy,
         workspaceAssignments: workspaceAssignmentsRef.current,
         workspaceNamesBySlug: workspaceNamesRef.current,
+        workspaceOptions: workspaceOptionsRef.current,
         documentStateById,
       }),
     )
@@ -266,6 +269,8 @@ export default function DeskPage() {
 
     if (!service.isAvailable) {
       workspaceAssignmentsRef.current = {}
+      workspaceOptionsRef.current = []
+      workspaceNamesRef.current = {}
       setWorkspaceOptions([])
       setWorkspaceAssignments({})
       return
@@ -276,6 +281,8 @@ export default function DeskPage() {
       service.listAssignments(),
     ])
     workspaceAssignmentsRef.current = assignments
+    workspaceOptionsRef.current = options
+    workspaceNamesRef.current = buildWorkspaceNameLookup(options)
     setWorkspaceOptions(options)
     setWorkspaceAssignments(assignments)
   }, [])
@@ -507,6 +514,7 @@ export default function DeskPage() {
       sortBy,
       workspaceAssignments,
       workspaceNamesBySlug,
+      workspaceOptions,
       documentStateById: documentStateByIdRef.current,
       clientFilter: {
         searchQuery,
@@ -537,6 +545,7 @@ export default function DeskPage() {
     collectionOptions,
     workspaceAssignments,
     workspaceNamesBySlug,
+    workspaceOptions,
   ])
 
   const visibleWritingIds = useMemo(() => {
