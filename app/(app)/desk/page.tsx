@@ -124,6 +124,7 @@ export default function DeskPage() {
     selectedCollectionIds,
     selectedStatuses,
     selectedArtifactTypes,
+    selectedWorkspaceSlugs,
     createdDateFilter,
     createdDateFrom,
     createdDateTo,
@@ -133,6 +134,7 @@ export default function DeskPage() {
     toggleCollection,
     toggleStatus,
     toggleArtifactType,
+    toggleWorkspace,
     setCreatedDateFilter,
     setCreatedDateFrom,
     setCreatedDateTo,
@@ -521,6 +523,7 @@ export default function DeskPage() {
         selectedCollectionIds,
         selectedStatuses,
         selectedArtifactTypes,
+        selectedWorkspaceSlugs,
         createdDateFilter,
         createdDateFrom,
         createdDateTo,
@@ -536,6 +539,7 @@ export default function DeskPage() {
     selectedCollectionIds,
     selectedStatuses,
     selectedArtifactTypes,
+    selectedWorkspaceSlugs,
     createdDateFilter,
     createdDateFrom,
     createdDateTo,
@@ -866,6 +870,8 @@ export default function DeskPage() {
                 onToggleStatus={toggleStatus}
                 selectedArtifactTypes={selectedArtifactTypes}
                 onToggleArtifactType={toggleArtifactType}
+                selectedWorkspaceSlugs={selectedWorkspaceSlugs}
+                onToggleWorkspace={toggleWorkspace}
                 createdDateFilter={createdDateFilter}
                 onCreatedDateFilterChange={setCreatedDateFilter}
                 createdDateFrom={createdDateFrom}
@@ -877,6 +883,7 @@ export default function DeskPage() {
                 sortBy={sortBy}
                 onSortByChange={setSortBy}
                 collectionOptions={collectionOptions}
+                workspaceOptions={workspaceOptions}
                 activeFilterCount={activeFilterCount}
                 hasActiveFilters={hasActiveFilters}
                 filteredCount={filteredSummary.total}

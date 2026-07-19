@@ -21,6 +21,8 @@
     "ops:network:gate": "node scripts/check-network-budget.mjs",
     "ops:workflow:validate": "node scripts/validate-workflow-json.mjs",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
+    "ops:documents:audit": "node scripts/document-cleanup/audit-desktop-documents.mjs",
+    "ops:documents:cleanup": "node scripts/document-cleanup/apply-desktop-cleanup.mjs",
     "test:parity": "node scripts/run-parity-tests.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",

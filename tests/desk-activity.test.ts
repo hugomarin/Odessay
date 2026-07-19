@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildDeskActivitySummary } from "../lib/queries/desk-activity"
+import { buildDeskActivitySummary, NO_WORKSPACE_FILTER_VALUE } from "../lib/queries/desk-activity"
 import type { LocalWriting } from "../lib/local-db/schema"
 
 const now = new Date("2026-03-19T15:30:00.000Z")
@@ -577,5 +577,51 @@ describe("buildDeskActivitySummary workspace assignment", () => {
     const row = summary.groups[0]?.rows.find((candidate) => candidate.id === "assigned")
     expect(row?.workspaceSlug).toBe("drafts")
     expect(row?.workspaceName).toBe("Drafts")
+  })
+
+  it("filters by explicit and inferred Workspace membership", () => {
+    const candidates = [
+      createWriting({ id: "assigned", title: "Assigned writing" }),
+      createWriting({ id: "inferred", title: "Inferred writing", canonical_path: "/Users/me/projects/course/lesson.md" }),
+      createWriting({ id: "unassigned", title: "Unassigned writing" }),
+    ]
+    const baseOptions = {
+      filter: "all" as const,
+      userId: "user-1",
+      now,
+      groupBy: "none" as const,
+      workspaceAssignments: { assigned: "drafts" },
+      workspaceOptions: [
+        { slug: "drafts", name: "Drafts", rootPath: "/Users/me/drafts" },
+        { slug: "course", name: "Course", rootPath: "/Users/me/projects/course" },
+      ],
+      workspaceNamesBySlug: { drafts: "Drafts", course: "Course" },
+    }
+
+    const explicit = buildDeskActivitySummary(candidates, {
+      ...baseOptions,
+      clientFilter: { selectedWorkspaceSlugs: ["drafts"] },
+    })
+    const inferred = buildDeskActivitySummary(candidates, {
+      ...baseOptions,
+      clientFilter: { selectedWorkspaceSlugs: ["course"] },
+    })
+
+    expect(explicit.groups[0]?.rows.map((row) => row.id)).toEqual(["assigned"])
+    expect(inferred.groups[0]?.rows.map((row) => row.id)).toEqual(["inferred"])
+  })
+
+  it("filters writings without a Workspace", () => {
+    const summary = buildDeskActivitySummary(workspaceWritings, {
+      filter: "all",
+      userId: "user-1",
+      now,
+      groupBy: "none",
+      workspaceAssignments: { assigned: "drafts" },
+      workspaceNamesBySlug: { drafts: "Drafts" },
+      clientFilter: { selectedWorkspaceSlugs: [NO_WORKSPACE_FILTER_VALUE] },
+    })
+
+    expect(summary.groups[0]?.rows.map((row) => row.id)).toEqual(["unassigned"])
   })
 })

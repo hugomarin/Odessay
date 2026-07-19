@@ -24,6 +24,8 @@ export type DeskSortBy = "created-at-desc" | "created-at-asc" | "content-updated
 
 export type DeskCreatedDateFilter = "today" | "last-7" | "last-30" | "this-year" | "custom"
 
+export const NO_WORKSPACE_FILTER_VALUE = "__no-workspace__"
+
 export type DeskRecipientPreview = {
   username: string
   displayName: string | null
@@ -78,6 +80,7 @@ export type DeskClientFilter = {
   selectedCollectionIds?: string[]
   selectedStatuses?: string[]
   selectedArtifactTypes?: ArtifactType[]
+  selectedWorkspaceSlugs?: string[]
   createdDateFilter?: DeskCreatedDateFilter | null
   createdDateFrom?: string
   createdDateTo?: string
@@ -395,6 +398,7 @@ const applyClientFilters = (
     selectedCollectionIds,
     selectedStatuses,
     selectedArtifactTypes,
+    selectedWorkspaceSlugs,
     createdDateFilter,
     createdDateFrom,
     createdDateTo,
@@ -406,6 +410,7 @@ const applyClientFilters = (
     selectedCollectionIds?.length ||
     selectedStatuses?.length ||
     selectedArtifactTypes?.length ||
+    selectedWorkspaceSlugs?.length ||
     createdDateFilter
 
   if (!hasAnyFilter) {
@@ -424,6 +429,8 @@ const applyClientFilters = (
   }
 
   const selectedCollectionSet = new Set(selectedCollectionIds ?? [])
+  const selectedWorkspaceSet = new Set(selectedWorkspaceSlugs ?? [])
+  const includesNoWorkspace = selectedWorkspaceSet.has(NO_WORKSPACE_FILTER_VALUE)
   const hasUncategorized = selectedCollectionSet.has(UNCATEGORIZED_COLLECTION_ID)
   const selectedRealCollections = new Set(
     (selectedCollectionIds ?? []).filter((id) => id !== UNCATEGORIZED_COLLECTION_ID),
@@ -461,6 +468,16 @@ const applyClientFilters = (
 
     if (selectedArtifactTypes && selectedArtifactTypes.length > 0) {
       if (!selectedArtifactTypes.includes(writing.artifactType)) {
+        return false
+      }
+    }
+
+    if (selectedWorkspaceSet.size > 0) {
+      const matchesWorkspace = writing.workspaceSlug
+        ? selectedWorkspaceSet.has(writing.workspaceSlug)
+        : includesNoWorkspace
+
+      if (!matchesWorkspace) {
         return false
       }
     }
