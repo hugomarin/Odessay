@@ -83,6 +83,11 @@ function toWriting(record: DocumentCatalogRecord, bodyJson: Record<string, unkno
     deletedAt: record.deletedAt,
     createdAt,
     updatedAt,
+    lifecycle: record.cloudPresent
+      ? "server-confirmed"
+      : record.syncStatus === "pending"
+        ? "syncing"
+        : "local-only",
   }
 }
 
