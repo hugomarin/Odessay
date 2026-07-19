@@ -18,6 +18,8 @@ type WritingStatusIconProps = {
 
 export function WritingStatusIcon({ status, className = "h-[13px] w-[13px]" }: WritingStatusIconProps) {
   switch (status) {
+    case "draft":
+      return <CircleDashed className={className} strokeWidth={1.5} />
     case "new":
       return <CircleDot className={className} strokeWidth={1.5} />
     case "exploring":

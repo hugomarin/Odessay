@@ -18,7 +18,6 @@ import {
   ExternalLink,
   FileText,
   Folder,
-  Layers,
   LayoutGrid,
   List,
   MoreHorizontal,
@@ -1047,21 +1046,16 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "title",
         label: "Writing",
-        width: "w-[55%]",
-        className: "min-w-0 px-10",
+        className: "min-w-0 pl-6 pr-6",
         render: (file) => (
-          <div
-            style={{
-              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
-            }}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+          <div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="min-w-0 flex-1 truncate font-sans text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink">
                 {file.name}
               </p>
               <DocumentStateIcon
                 state={deriveWorkspaceFileDocumentState(file, documentJoin)}
+                className="h-5 w-5 rounded-[6px]"
               />
             </div>
             {fileSecondaryLabel(file) !== "Root folder" ? (
@@ -1075,7 +1069,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "status",
         label: "Status",
-        width: "w-[12%]",
+        width: "w-[152px]",
         className: "px-2",
         render: (file) => {
           // The .md file IS the canonical document (ADR identidad D1/D9). Show the
@@ -1087,6 +1081,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <TablePropertySelector
               readOnly
+              className="min-w-[136px]"
               ariaLabel={`Status ${getWritingStatusLabel(status)}`}
               icon={<WritingStatusIcon status={status} />}
               label={getWritingStatusLabel(status)}
@@ -1097,7 +1092,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[14%]",
+        width: "w-[164px]",
         className: "px-2",
         render: (file) => {
           const artifactType =
@@ -1105,6 +1100,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <TablePropertySelector
               readOnly
+              className="min-w-[148px]"
               ariaLabel={`Artifact ${getArtifactTypeLabel(artifactType)}`}
               icon={<ArtifactTypeIcon artifactType={artifactType} />}
               label={getArtifactTypeLabel(artifactType)}
@@ -1115,14 +1111,14 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[17%]",
+        width: "w-[188px]",
         className: "px-2",
         render: () => (
           <TablePropertySelector
             readOnly
             ariaLabel={`Workspace ${workspace?.name ?? ""}`}
             icon={
-              <Layers
+              <Folder
                 className="h-[13px] w-[13px] shrink-0 text-ink-4"
                 strokeWidth={1.5}
               />
@@ -1135,8 +1131,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         id: "actions",
         label: "",
         align: "end",
-        width: "w-14",
-        className: "px-4",
+        width: "w-[72px]",
+        className: "pl-3 pr-6",
         render: (file) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1144,7 +1140,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 type="button"
                 aria-label={`Actions for ${file.name}`}
                 onClick={(event) => event.stopPropagation()}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
               >
                 <MoreHorizontal
                   className="h-[14px] w-[14px]"
@@ -1493,6 +1489,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     getRowAriaLabel={(file) => `Open ${file.name} in editor`}
                     onRowClick={(file) => void openInEditor(file)}
                     showHeader={false}
+                    tableClassName="min-w-[980px] table-fixed"
+                    rowCellClassName="py-6"
                   />
                 </div>
               )}

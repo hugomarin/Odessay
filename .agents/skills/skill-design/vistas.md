@@ -103,12 +103,17 @@ Read:       bg var(--muted)      color var(--ink-4)
 
 ### Tabla de actividad
 ```
-columnas:  · | Writing | State | With | Date
+columnas:  checkbox | Writing | Status | Type | Workspace | actions
 grupos:    Today / This week / Earlier — label uppercase 10px ink-4
-filas:     padding 18px vertical
-título:    Lora 15px
-excerpt:   Geist Sans 12px, ink-3
-dot:       6px, hsl(220,50%,55%) para items nuevos
+filas:     padding 24px vertical; checkbox alineado con la primera línea del título
+título:    Geist Sans 15px, font-weight 600 (decisión ODE-382; sustituye Lora en estas filas funcionales)
+excerpt:   Geist Sans 13px, ink-3, clamp 2 líneas
+estado:    badge icon-only relleno, rounded-square; color semántico del DocumentState
+chips:     collection con icono Tag, borde 0.5px y fondo papel cálido
+controles: Status / Type / Workspace, height 40px, anchos mínimos consistentes
+responsive: Writing es la columna elástica; controles conservan min-width. Bajo el ancho útil,
+            overflow-x queda dentro del wrapper de tabla, nunca en la página; no ocultar columnas
+            ni convertir filas a cards.
 ```
 
 ### Filter buttons
@@ -779,6 +784,8 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Tabla: grupos Today / This week / Earlier
 - [ ] "All activity" activo por defecto (btn tinta oscura)
 - [ ] Dot indicador 6px visible en items nuevos
+- [ ] Filas Desk/Workspace: título Geist, badge rounded-square, chips con icono y controles alineados
+- [ ] Responsive wide/medium/narrow sin overflow de página ni controles ocultos
 
 ### Collections
 - [ ] Banner uncategorized visible cuando hay writings sin clasificar

@@ -191,20 +191,14 @@ export function DeskActivityTable({
       {
         id: "title",
         label: "Writing",
-        width: "w-[55%]",
-        className: "min-w-0 px-10",
+        className: "min-w-0 pl-3 pr-6",
         render: (row) => (
-          <div
-            style={{
-              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
-            }}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
+          <div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <p className="min-w-0 flex-1 truncate font-sans text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink">
                 {row.title}
               </p>
-              <DocumentStateIcon state={row.documentState} />
+              <DocumentStateIcon state={row.documentState} className="h-5 w-5 rounded-[6px]" />
               {onRenameWriting ? (
                 <button
                   type="button"
@@ -213,10 +207,10 @@ export function DeskActivityTable({
                     event.stopPropagation();
                     onRenameWriting(row.id);
                   }}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                   aria-label={`Rename ${row.title}`}
                 >
-                  <Pencil className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                  <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
                 </button>
               ) : null}
               {onPreviewWriting ? (
@@ -227,10 +221,10 @@ export function DeskActivityTable({
                     event.stopPropagation();
                     onPreviewWriting(row.id);
                   }}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                   aria-label={`Preview ${row.title}`}
                 >
-                  <Eye className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                  <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
                 </button>
               ) : null}
               {collectionOptions.length > 0 ? (
@@ -250,10 +244,10 @@ export function DeskActivityTable({
                     trigger={
                       <button
                         type="button"
-                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                         aria-label={`Assign collections for ${row.title}`}
                       >
-                        <Tag className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                        <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
                       </button>
                     }
                   />
@@ -261,17 +255,17 @@ export function DeskActivityTable({
               ) : null}
             </div>
             {row.excerpt ? (
-              <p className="truncate pt-1 text-[12px] text-ink-3">
+              <p className="line-clamp-2 max-w-[680px] pt-1.5 text-[13px] leading-[1.45] text-ink-3">
                 {row.excerpt}
               </p>
             ) : null}
-            <p className="pt-1 text-[11px] leading-[1.35] text-ink-4">
+            <p className="pt-1.5 text-[11px] leading-[1.35] text-ink-4">
               {row.dateLabel}
             </p>
             <CollectionChips
               collectionIds={collectionIdsByWritingId[row.id] ?? []}
               collectionOptions={collectionOptions}
-              className="pt-1"
+              className="pt-2"
             />
           </div>
         ),
@@ -279,7 +273,7 @@ export function DeskActivityTable({
       {
         id: "status",
         label: "Status",
-        width: "w-[12%]",
+        width: "w-[152px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -287,6 +281,7 @@ export function DeskActivityTable({
               ariaLabel={`Change status for ${row.title}`}
               icon={<WritingStatusIcon status={row.stateTone} />}
               label={row.stateLabel}
+              className="min-w-[136px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
@@ -318,7 +313,7 @@ export function DeskActivityTable({
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[14%]",
+        width: "w-[164px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -330,6 +325,7 @@ export function DeskActivityTable({
                 />
               }
               label={getArtifactTypeLabel(row.artifactType ?? "general")}
+              className="min-w-[148px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
@@ -361,7 +357,7 @@ export function DeskActivityTable({
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[17%]",
+        width: "w-[188px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -386,8 +382,8 @@ export function DeskActivityTable({
         id: "actions",
         label: "",
         align: "end",
-        width: "w-14",
-        className: "pl-4 pr-10",
+        width: "w-[72px]",
+        className: "pl-3 pr-6",
         render: (row) => {
           const extraMenuItems = renderExtraMenuItems?.(row);
           const hasMenu = Boolean(
@@ -410,7 +406,7 @@ export function DeskActivityTable({
                     <button
                       type="button"
                       aria-label={`Actions for ${row.title}`}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                     >
                       <MoreHorizontal
                         className="h-[14px] w-[14px]"
@@ -550,6 +546,9 @@ export function DeskActivityTable({
             }
             renderLeading={selectionEnabled ? renderSelection : undefined}
             showHeader={false}
+            tableClassName="min-w-[1040px]"
+            rowCellClassName="py-6"
+            leadingCellClassName="pt-[25px]"
           />
         </div>
 
