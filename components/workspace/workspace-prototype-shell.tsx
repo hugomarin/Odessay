@@ -15,16 +15,17 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  Eye,
   ExternalLink,
   FileText,
   Folder,
-  Layers,
   LayoutGrid,
   List,
   MoreHorizontal,
   Pencil,
   Plus,
   Search,
+  Tag,
   TriangleAlert,
   Trash2,
 } from "lucide-react";
@@ -35,8 +36,14 @@ import {
   DocumentStateBadge,
   DocumentStateTooltipProvider,
 } from "@/components/ui/document-state-badge";
-import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import { ArtifactTable } from "@/components/shared/artifact-table";
+import { ArtifactRowSelection } from "@/components/shared/artifact-row-selection";
+import {
+  ArtifactWritingAction,
+  ArtifactWritingCell,
+} from "@/components/shared/artifact-writing-cell";
+import { getDocumentService } from "@/lib/services/document-service-factory";
+import { CollectionChips } from "@/components/desk/collection-chips";
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table";
@@ -88,6 +95,9 @@ import {
   loadWorkspaceDocumentJoin,
   type WorkspaceDocumentInfo,
 } from "@/lib/queries/workspace-catalog-source";
+import type { CollectionOption } from "@/lib/collections/collections";
+import { buildCollectionOptions } from "@/lib/collections/collections";
+import { loadCollectionState } from "@/lib/queries/desk-catalog-source";
 import {
   deriveDocumentStateFromSignals,
   type DocumentState,
@@ -926,6 +936,12 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [documentJoin, setDocumentJoin] = useState<
     Map<string, WorkspaceDocumentInfo>
   >(new Map());
+  const [collectionOptions, setCollectionOptions] = useState<
+    CollectionOption[]
+  >([]);
+  const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
+    Record<string, string[]>
+  >({});
   const {
     dateFilter: fileDateFilter,
     setDateFilter: setFileDateFilter,
@@ -952,9 +968,21 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         return;
       }
 
-      const join = await loadWorkspaceDocumentJoin(nextWorkspace.rootPath);
+      const [join, collectionState] = await Promise.all([
+        loadWorkspaceDocumentJoin(nextWorkspace.rootPath),
+        loadCollectionState(),
+      ]);
+      const idsByWritingId: Record<string, string[]> = {};
+      for (const assignment of collectionState.writingCollections) {
+        idsByWritingId[assignment.writing_id] = [
+          ...(idsByWritingId[assignment.writing_id] ?? []),
+          assignment.collection_id,
+        ];
+      }
       setWorkspace(nextWorkspace);
       setDocumentJoin(join);
+      setCollectionOptions(buildCollectionOptions(collectionState.collections));
+      setCollectionIdsByWritingId(idsByWritingId);
       await service.markWorkspaceOpened(workspaceSlug);
     } catch (error) {
       setErrorMessage(
@@ -1047,35 +1075,72 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "title",
         label: "Writing",
-        width: "w-[55%]",
-        className: "min-w-0 px-10",
-        render: (file) => (
-          <div
-            style={{
-              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
-            }}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
-                {file.name}
-              </p>
-              <DocumentStateIcon
-                state={deriveWorkspaceFileDocumentState(file, documentJoin)}
-              />
-            </div>
-            {fileSecondaryLabel(file) !== "Root folder" ? (
-              <p className="truncate pt-1 text-[12px] text-ink-3">
-                {fileSecondaryLabel(file)}
-              </p>
-            ) : null}
-          </div>
-        ),
+        className: "min-w-0 pl-2 pr-5",
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          const writingTitle = file.name.replace(/\.(md|mdx)$/i, "");
+          return (
+            <ArtifactWritingCell
+              title={writingTitle}
+              documentState={deriveWorkspaceFileDocumentState(
+                file,
+                documentJoin,
+              )}
+              loadDescription={async () => {
+                if (document) {
+                  const result = await (
+                    await getDocumentService()
+                  ).openWriting(document.id);
+                  if (result.data?.content.plainText) {
+                    return result.data.content.plainText;
+                  }
+                }
+                const preview = await (
+                  await getDesktopWorkspaceService()
+                ).readFilePreview(file.path);
+                return preview.preview;
+              }}
+              dateLabel={formatFileTimestamp(file.modifiedAt)}
+              actions={
+                <>
+                  <ArtifactWritingAction
+                    disabled
+                    label={`Rename ${writingTitle} (coming soon)`}
+                  >
+                    <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                  <ArtifactWritingAction
+                    disabled
+                    label={`Preview ${writingTitle} (coming soon)`}
+                  >
+                    <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                  <ArtifactWritingAction
+                    disabled
+                    label={`Assign collections for ${writingTitle} (coming soon)`}
+                  >
+                    <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                </>
+              }
+              collections={
+                <CollectionChips
+                  collectionIds={
+                    document
+                      ? (collectionIdsByWritingId[document.id] ?? [])
+                      : []
+                  }
+                  collectionOptions={collectionOptions}
+                />
+              }
+            />
+          );
+        },
       },
       {
         id: "status",
         label: "Status",
-        width: "w-[12%]",
+        width: "w-[144px]",
         className: "px-2",
         render: (file) => {
           // The .md file IS the canonical document (ADR identidad D1/D9). Show the
@@ -1087,6 +1152,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <TablePropertySelector
               readOnly
+              className="min-w-[128px]"
               ariaLabel={`Status ${getWritingStatusLabel(status)}`}
               icon={<WritingStatusIcon status={status} />}
               label={getWritingStatusLabel(status)}
@@ -1097,7 +1163,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[14%]",
+        width: "w-[156px]",
         className: "px-2",
         render: (file) => {
           const artifactType =
@@ -1105,6 +1171,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <TablePropertySelector
               readOnly
+              className="min-w-[140px]"
               ariaLabel={`Artifact ${getArtifactTypeLabel(artifactType)}`}
               icon={<ArtifactTypeIcon artifactType={artifactType} />}
               label={getArtifactTypeLabel(artifactType)}
@@ -1115,14 +1182,14 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[17%]",
+        width: "w-[180px]",
         className: "px-2",
         render: () => (
           <TablePropertySelector
             readOnly
             ariaLabel={`Workspace ${workspace?.name ?? ""}`}
             icon={
-              <Layers
+              <Folder
                 className="h-[13px] w-[13px] shrink-0 text-ink-4"
                 strokeWidth={1.5}
               />
@@ -1135,8 +1202,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         id: "actions",
         label: "",
         align: "end",
-        width: "w-14",
-        className: "px-4",
+        width: "w-[56px]",
+        className: "pl-2 pr-4",
         render: (file) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1144,7 +1211,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 type="button"
                 aria-label={`Actions for ${file.name}`}
                 onClick={(event) => event.stopPropagation()}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
               >
                 <MoreHorizontal
                   className="h-[14px] w-[14px]"
@@ -1168,7 +1235,13 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         ),
       },
     ],
-    [openInEditor, workspace?.name, documentJoin],
+    [
+      collectionIdsByWritingId,
+      collectionOptions,
+      documentJoin,
+      openInEditor,
+      workspace?.name,
+    ],
   );
 
   const handleCreateFile = async () => {
@@ -1492,7 +1565,17 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     getRowId={(file) => file.id}
                     getRowAriaLabel={(file) => `Open ${file.name} in editor`}
                     onRowClick={(file) => void openInEditor(file)}
+                    renderLeading={(file) => (
+                      <ArtifactRowSelection
+                        disabled
+                        label={`Select ${file.name} (coming soon)`}
+                      />
+                    )}
                     showHeader={false}
+                    tableClassName="min-w-[920px] table-fixed"
+                    rowCellClassName="py-6"
+                    leadingColumnClassName="w-9"
+                    leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
                   />
                 </div>
               )}

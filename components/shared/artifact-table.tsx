@@ -29,6 +29,14 @@ export type ArtifactTableProps<T> = {
   loadingState?: ReactNode
   emptyState?: ReactNode
   className?: string
+  /** Classes applied to the semantic table (for example a responsive min-width). */
+  tableClassName?: string
+  /** Shared cell rhythm for every data row in list mode. */
+  rowCellClassName?: string
+  /** Optional override for the leading selection cell. */
+  leadingCellClassName?: string
+  /** Width of the leading selection column. */
+  leadingColumnClassName?: string
   /** Hide column labels for dense library rows that communicate their controls directly. */
   showHeader?: boolean
   /** Tailwind grid template applied to each group in grid mode. */
@@ -69,6 +77,10 @@ export function ArtifactTable<T>({
   loadingState,
   emptyState,
   className,
+  tableClassName,
+  rowCellClassName,
+  leadingCellClassName,
+  leadingColumnClassName = "w-12",
   showHeader = true,
   gridClassName = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3",
 }: ArtifactTableProps<T>) {
@@ -84,9 +96,9 @@ export function ArtifactTable<T>({
   if (mode === "list") {
     return (
       <div className={cn("ArtifactTable", className)}>
-        <Table className="table-fixed">
+        <Table className={cn("table-fixed", tableClassName)}>
           <colgroup>
-            {renderLeading ? <col className="w-12" /> : null}
+            {renderLeading ? <col className={leadingColumnClassName} /> : null}
             {columns.map((column) => <col key={column.id} className={column.width} />)}
           </colgroup>
           {showHeader ? (
@@ -116,7 +128,7 @@ export function ArtifactTable<T>({
               }
               groupRows.push(...group.items.map((item) => {
                 const href = getRowHref?.(item)
-                return <ArtifactTableRow key={getRowId(item)} item={item} columns={columns} href={href} ariaLabel={getRowAriaLabel?.(item)} isSelected={isRowSelected?.(item)} leading={renderLeading?.(item)} onActivate={resolveActivate(item, href, getRowHref, onRowClick)} />
+                return <ArtifactTableRow key={getRowId(item)} item={item} columns={columns} href={href} ariaLabel={getRowAriaLabel?.(item)} isSelected={isRowSelected?.(item)} leading={renderLeading?.(item)} cellClassName={rowCellClassName} leadingCellClassName={leadingCellClassName} onActivate={resolveActivate(item, href, getRowHref, onRowClick)} />
               }))
               return groupRows
             })}
@@ -162,7 +174,7 @@ export function ArtifactTable<T>({
                 })}
               </div>
             ) : (
-              <Table>
+              <Table className={tableClassName}>
                 {groupIndex === 0 ? (
                   <TableHeader>
                     <TableRow>
@@ -187,6 +199,8 @@ export function ArtifactTable<T>({
                       ariaLabel={getRowAriaLabel?.(item)}
                       isSelected={isRowSelected?.(item)}
                       leading={renderLeading?.(item)}
+                      cellClassName={rowCellClassName}
+                      leadingCellClassName={leadingCellClassName}
                       onActivate={resolveActivate(item, href, getRowHref, onRowClick)}
                     />
                   )

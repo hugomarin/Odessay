@@ -30,7 +30,7 @@ type TablePropertySelectorProps = {
 
 /** Chrome shared by the interactive trigger and the read-only label so they match exactly. */
 const TRIGGER_CHROME =
-  "items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[13px] font-medium text-ink-2"
+  "items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-3 text-[13px] font-medium text-ink-2"
 
 /**
  * Shared table property control for status, artifact type, and workspace.
@@ -47,7 +47,7 @@ export function TablePropertySelector({
   variant = "table",
   readOnly = false,
 }: TablePropertySelectorProps) {
-  const sizing = variant === "rail" ? "flex h-10 w-full" : "inline-flex h-9 w-fit min-w-[116px]"
+  const sizing = variant === "rail" ? "flex h-10 w-full" : "inline-flex h-10 w-full min-w-[136px]"
 
   if (readOnly) {
     return (

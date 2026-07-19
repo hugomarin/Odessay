@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronDown, FolderPlus, Layers, Monitor, X } from "lucide-react"
+import { ChevronDown, Folder, FolderPlus, Monitor, X } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,7 +77,7 @@ export function WorkspaceAssignmentDropdown({
       ? WORKSPACE_COPY.assignAffordance
       : WORKSPACE_COPY.emptyClosed
 
-  const TriggerIcon = isAssigned ? Layers : Monitor
+  const TriggerIcon = isAssigned ? Folder : Monitor
 
   const trigger =
     variant === "card" ? (
@@ -113,7 +113,7 @@ export function WorkspaceAssignmentDropdown({
         type="button"
         aria-label={`Manage workspace for ${title}`}
         className={cn(
-          "inline-flex h-9 w-fit min-w-[156px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[13px] font-medium transition-colors hover:bg-muted data-[state=open]:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
+          "inline-flex h-10 w-full min-w-[164px] items-center justify-between gap-2 rounded-[8px] border-[0.5px] border-border bg-bg px-3 text-[13px] font-medium transition-colors hover:bg-muted data-[state=open]:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3",
           isAssigned ? "text-ink-2" : "text-ink-3",
         )}
       >
@@ -150,7 +150,7 @@ export function WorkspaceAssignmentDropdown({
                   className="items-center justify-between gap-2 rounded-[10px] px-2 text-[13px] opacity-100"
                 >
                   <span className="flex min-w-0 items-center gap-2 text-ink">
-                    <Layers className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
+                    <Folder className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
                     <span className="truncate font-medium">{currentName ?? currentSlug}</span>
                   </span>
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-ink" aria-hidden="true" />
@@ -183,7 +183,7 @@ export function WorkspaceAssignmentDropdown({
                     void onAssign(writingId, option.slug)
                   }}
                 >
-                  <Layers className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />
+                  <Folder className="h-[13px] w-[13px] shrink-0 text-ink-4" strokeWidth={1.5} />
                   <span className="truncate">{option.name}</span>
                 </DropdownMenuItem>
               ))

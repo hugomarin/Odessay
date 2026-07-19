@@ -13,10 +13,12 @@ type ArtifactTableRowProps<T> = {
   ariaLabel?: string
   isSelected?: boolean
   leading?: ReactNode
+  cellClassName?: string
+  leadingCellClassName?: string
   onActivate?: () => void
 }
 
-function ArtifactTableRowInner<T>({ item, columns, href, ariaLabel, isSelected, leading, onActivate }: ArtifactTableRowProps<T>) {
+function ArtifactTableRowInner<T>({ item, columns, href, ariaLabel, isSelected, leading, cellClassName, leadingCellClassName, onActivate }: ArtifactTableRowProps<T>) {
   const isNavigable = Boolean(onActivate)
   const handleKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
     if (isNavigable && (event.key === "Enter" || event.key === " ")) {
@@ -41,9 +43,9 @@ function ArtifactTableRowInner<T>({ item, columns, href, ariaLabel, isSelected, 
           : "cursor-default",
       )}
     >
-      {leading != null ? <TableCell className="w-12 pl-5 pr-1 align-top pt-[1.15rem] sm:pl-9">{leading}</TableCell> : null}
+      {leading != null ? <TableCell className={cn("w-12 pl-5 pr-1 align-top pt-[1.15rem] sm:pl-9", leadingCellClassName)}>{leading}</TableCell> : null}
       {columns.map((column) => (
-        <TableCell key={column.id} className={cn("min-w-0", column.align === "end" ? "text-right" : "", column.className)}>
+        <TableCell key={column.id} className={cn("min-w-0", cellClassName, column.align === "end" ? "text-right" : "", column.className)}>
           {column.render(item)}
         </TableCell>
       ))}

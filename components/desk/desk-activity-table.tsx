@@ -4,7 +4,6 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bot,
-  Check,
   Clipboard,
   Download,
   Eye,
@@ -40,10 +39,14 @@ import { CollectionAssignmentMenu } from "@/components/collections/collection-as
 import { CollectionChips } from "@/components/desk/collection-chips";
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment";
 import { ArtifactTable } from "@/components/shared/artifact-table";
+import { ArtifactRowSelection } from "@/components/shared/artifact-row-selection";
+import {
+  ArtifactWritingAction,
+  ArtifactWritingCell,
+} from "@/components/shared/artifact-writing-cell";
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
-import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import {
@@ -51,7 +54,7 @@ import {
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
-import { cn } from "@/lib/utils";
+import { getDocumentService } from "@/lib/services/document-service-factory";
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[];
@@ -146,31 +149,15 @@ export function DeskActivityTable({
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { settings } = useUserSettingsContext();
   const selectionEnabled = Boolean(onToggleSelection);
-  const hasSelection = (selectedIds?.size ?? 0) > 0;
 
   const renderSelection = (row: DeskActivityRow) => {
     const isRowSelected = selectedIds?.has(row.id) ?? false;
     return (
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleSelection?.(row.id);
-        }}
-        className={cn(
-          "inline-flex h-4 w-4 items-center justify-center rounded-[4px] border transition-all duration-150",
-          isRowSelected
-            ? "border-ink bg-ink text-bg"
-            : "border-border bg-sb text-transparent hover:border-ink-3",
-          hasSelection ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-        )}
-        aria-label={
-          isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`
-        }
-        aria-pressed={isRowSelected}
-      >
-        <Check className="h-3 w-3" strokeWidth={2.2} />
-      </button>
+      <ArtifactRowSelection
+        label={isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
+        selected={isRowSelected}
+        onToggle={() => onToggleSelection?.(row.id)}
+      />
     );
   };
 
@@ -191,95 +178,88 @@ export function DeskActivityTable({
       {
         id: "title",
         label: "Writing",
-        width: "w-[55%]",
-        className: "min-w-0 px-10",
+        className: "min-w-0 pl-2 pr-5",
         render: (row) => (
-          <div
-            style={{
-              WebkitMaskImage: "linear-gradient(90deg, #000 86%, transparent)",
-              maskImage: "linear-gradient(90deg, #000 86%, transparent)",
+          <ArtifactWritingCell
+            title={row.title}
+            documentState={row.documentState}
+            description={row.excerpt}
+            loadDescription={async () => {
+              const result = await (
+                await getDocumentService()
+              ).openWriting(row.id);
+              return result.data?.content.plainText ?? null;
             }}
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate font-lora text-[15px] font-medium leading-[1.3] text-ink">
-                {row.title}
-              </p>
-              <DocumentStateIcon state={row.documentState} />
-              {onRenameWriting ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onRenameWriting(row.id);
-                  }}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                  aria-label={`Rename ${row.title}`}
-                >
-                  <Pencil className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                </button>
-              ) : null}
-              {onPreviewWriting ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onPreviewWriting(row.id);
-                  }}
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                  aria-label={`Preview ${row.title}`}
-                >
-                  <Eye className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                </button>
-              ) : null}
-              {collectionOptions.length > 0 ? (
-                <div onClick={stopRowNavigation}>
-                  <CollectionAssignmentMenu
-                    collections={collectionOptions}
-                    selectedIds={collectionIdsByWritingId[row.id] ?? []}
-                    align="start"
-                    title="Collections"
-                    description="Choose labels for this writing."
-                    onToggleCollection={(collectionId) =>
-                      void onToggleCollection(row.id, collectionId)
-                    }
-                    onCreateCollection={(name) =>
-                      void onCreateCollection(row.id, name)
-                    }
-                    trigger={
-                      <button
-                        type="button"
-                        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                        aria-label={`Assign collections for ${row.title}`}
-                      >
-                        <Tag className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                      </button>
-                    }
-                  />
-                </div>
-              ) : null}
-            </div>
-            {row.excerpt ? (
-              <p className="truncate pt-1 text-[12px] text-ink-3">
-                {row.excerpt}
-              </p>
-            ) : null}
-            <p className="pt-1 text-[11px] leading-[1.35] text-ink-4">
-              {row.dateLabel}
-            </p>
-            <CollectionChips
-              collectionIds={collectionIdsByWritingId[row.id] ?? []}
-              collectionOptions={collectionOptions}
-              className="pt-1"
-            />
-          </div>
+            dateLabel={row.dateLabel}
+            actions={
+              <>
+                {onRenameWriting ? (
+                  <ArtifactWritingAction
+                    label={`Rename ${row.title}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onRenameWriting(row.id);
+                    }}
+                  >
+                    <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                ) : null}
+                {onPreviewWriting ? (
+                  <ArtifactWritingAction
+                    label={`Preview ${row.title}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onPreviewWriting(row.id);
+                    }}
+                  >
+                    <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                ) : null}
+                {collectionOptions.length > 0 ? (
+                  <div onClick={stopRowNavigation}>
+                    <CollectionAssignmentMenu
+                      collections={collectionOptions}
+                      selectedIds={collectionIdsByWritingId[row.id] ?? []}
+                      align="start"
+                      title="Collections"
+                      description="Choose labels for this writing."
+                      onToggleCollection={(collectionId) =>
+                        void onToggleCollection(row.id, collectionId)
+                      }
+                      onCreateCollection={(name) =>
+                        void onCreateCollection(row.id, name)
+                      }
+                      trigger={
+                        <ArtifactWritingAction
+                          label={`Assign collections for ${row.title}`}
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Tag
+                            className="h-[14px] w-[14px]"
+                            strokeWidth={1.5}
+                          />
+                        </ArtifactWritingAction>
+                      }
+                    />
+                  </div>
+                ) : null}
+              </>
+            }
+            collections={
+              <CollectionChips
+                collectionIds={collectionIdsByWritingId[row.id] ?? []}
+                collectionOptions={collectionOptions}
+              />
+            }
+          />
         ),
       },
       {
         id: "status",
         label: "Status",
-        width: "w-[12%]",
+        width: "w-[144px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -287,6 +267,7 @@ export function DeskActivityTable({
               ariaLabel={`Change status for ${row.title}`}
               icon={<WritingStatusIcon status={row.stateTone} />}
               label={row.stateLabel}
+              className="min-w-[128px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
@@ -318,7 +299,7 @@ export function DeskActivityTable({
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[14%]",
+        width: "w-[156px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -330,6 +311,7 @@ export function DeskActivityTable({
                 />
               }
               label={getArtifactTypeLabel(row.artifactType ?? "general")}
+              className="min-w-[140px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
@@ -361,7 +343,7 @@ export function DeskActivityTable({
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[17%]",
+        width: "w-[180px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -386,8 +368,8 @@ export function DeskActivityTable({
         id: "actions",
         label: "",
         align: "end",
-        width: "w-14",
-        className: "pl-4 pr-10",
+        width: "w-[56px]",
+        className: "pl-2 pr-4",
         render: (row) => {
           const extraMenuItems = renderExtraMenuItems?.(row);
           const hasMenu = Boolean(
@@ -410,7 +392,7 @@ export function DeskActivityTable({
                     <button
                       type="button"
                       aria-label={`Actions for ${row.title}`}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                     >
                       <MoreHorizontal
                         className="h-[14px] w-[14px]"
@@ -550,6 +532,10 @@ export function DeskActivityTable({
             }
             renderLeading={selectionEnabled ? renderSelection : undefined}
             showHeader={false}
+            tableClassName="min-w-[920px]"
+            rowCellClassName="py-6"
+            leadingColumnClassName="w-9"
+            leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
           />
         </div>
 
