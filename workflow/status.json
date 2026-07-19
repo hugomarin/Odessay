@@ -3181,6 +3181,16 @@
       "commit": "9085114a4901f68e0c7ff7211ef2d836bf6498e3",
       "date": "2026-07-18",
       "notes": "Single-round review, approved 10.0/10 (PASS). Docs-only context reconciliation: catalog spec now defines owner-decided delete semantics (observed absence never archives cloud; confirmed delete composes local delete + cloud soft-delete by presence; Desk/Workspace exclude archived; hard-delete in Settings > Archivados), single CatalogChange bus invariant (enforcement deferred to ODE-380), BindingRoot-by-root_path identity for all writers, M5 gate additions (WKWebView storage isolation, same-channel cutover, IndexedDB/SQLite parity, M4/M5 coupling); annotations doc describes the real Notes panel + voice notes without touching normative sections; workspace doc records read-only present vs ODE-381/382 target; docs.json synced. ADR D9 amended as stale-doc within documentary scope (disclosed). Evidence: workflow JSON validation, typecheck, lint (6 pre-existing warnings), 165 files/1095 tests, ops:delivery:gate, CI traceability + Vercel green. ODE-380 unblocked with complete contract."
+    },
+    {
+      "what": "fix(desktop): unify catalog change bus and delete projection [ODE-380]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-380",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-380/unify-desktop-documentcatalog-change-bus-and-project-local-deletes-so",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/350",
+      "commit": "630153e62ac446e88dec41a35f986fb54a81418e",
+      "date": "2026-07-19",
+      "notes": "Single-round review, approved 9.5/10 (PASS). CatalogChange bus unified per dbPath at module level (spec line 335) with contract test preventing private buses; composed desktop delete per spec user-initiated delete section: .md to .trash with unique-name resolution, binding removed, durable deletedAt independent from sync_status, cloud delete mutation only when cloudPresent; stale cloud hydration cannot resurrect pending/failed/conflict deletes (Rust test); Desk filters deletedAt in all reads and reloads on SQLite collection changes; .trash excluded from watcher/reconciler; schema v6 migration. Web unchanged. Evidence: typecheck, lint (6 pre-existing warnings), 165 files/1101 tests, cargo 26 passed/1 ignored, ops:delivery:gate, tauri build + packaged QA (Desk TTI 1457 ms < 1.5 s), CI traceability + Vercel green. context_risk=true: brief cited legacy paths (catalog-dual-write.ts, IndexedDB collections) — stale-doc, correctly reported by BUILD."
     }
   ]
 }
