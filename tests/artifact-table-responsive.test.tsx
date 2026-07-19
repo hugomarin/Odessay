@@ -51,18 +51,23 @@ describe("ArtifactTable responsive row contract", () => {
           renderLeading={() => <button type="button">Select</button>}
           showHeader={false}
           tableClassName="min-w-[1040px]"
+          leadingColumnClassName="w-9"
           rowCellClassName="py-6"
-          leadingCellClassName="pt-[25px]"
+          leadingCellClassName="pl-3 pr-0 pt-[25px]"
         />,
       )
     })
 
     const table = container.querySelector("table")
     const scroller = table?.parentElement
+    const leadingColumn = container.querySelector("col")
     const cells = Array.from(container.querySelectorAll("td"))
 
     expect(table?.className).toContain("min-w-[1040px]")
     expect(scroller?.className).toContain("overflow-x-auto")
+    expect(leadingColumn?.className).toContain("w-9")
+    expect(cells[0]?.className).toContain("pl-3")
+    expect(cells[0]?.className).toContain("pr-0")
     expect(cells[0]?.className).toContain("pt-[25px]")
     expect(cells.slice(1).every((cell) => cell.className.includes("py-6"))).toBe(true)
   })

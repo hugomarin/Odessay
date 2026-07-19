@@ -34,8 +34,12 @@ import {
   DocumentStateBadge,
   DocumentStateTooltipProvider,
 } from "@/components/ui/document-state-badge";
-import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import { ArtifactTable } from "@/components/shared/artifact-table";
+import {
+  ArtifactWritingAction,
+  ArtifactWritingCell,
+} from "@/components/shared/artifact-writing-cell";
+import { CollectionChips } from "@/components/desk/collection-chips";
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table";
@@ -87,6 +91,9 @@ import {
   loadWorkspaceDocumentJoin,
   type WorkspaceDocumentInfo,
 } from "@/lib/queries/workspace-catalog-source";
+import type { CollectionOption } from "@/lib/collections/collections";
+import { buildCollectionOptions } from "@/lib/collections/collections";
+import { loadCollectionState } from "@/lib/queries/desk-catalog-source";
 import {
   deriveDocumentStateFromSignals,
   type DocumentState,
@@ -925,6 +932,10 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [documentJoin, setDocumentJoin] = useState<
     Map<string, WorkspaceDocumentInfo>
   >(new Map());
+  const [collectionOptions, setCollectionOptions] = useState<CollectionOption[]>([]);
+  const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
+    Record<string, string[]>
+  >({});
   const {
     dateFilter: fileDateFilter,
     setDateFilter: setFileDateFilter,
@@ -951,9 +962,21 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         return;
       }
 
-      const join = await loadWorkspaceDocumentJoin(nextWorkspace.rootPath);
+      const [join, collectionState] = await Promise.all([
+        loadWorkspaceDocumentJoin(nextWorkspace.rootPath),
+        loadCollectionState(),
+      ]);
+      const idsByWritingId: Record<string, string[]> = {};
+      for (const assignment of collectionState.writingCollections) {
+        idsByWritingId[assignment.writing_id] = [
+          ...(idsByWritingId[assignment.writing_id] ?? []),
+          assignment.collection_id,
+        ];
+      }
       setWorkspace(nextWorkspace);
       setDocumentJoin(join);
+      setCollectionOptions(buildCollectionOptions(collectionState.collections));
+      setCollectionIdsByWritingId(idsByWritingId);
       await service.markWorkspaceOpened(workspaceSlug);
     } catch (error) {
       setErrorMessage(
@@ -1046,30 +1069,44 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "title",
         label: "Writing",
-        className: "min-w-0 pl-6 pr-6",
-        render: (file) => (
-          <div>
-            <div className="flex min-w-0 items-center gap-1.5">
-              <p className="min-w-0 flex-1 truncate font-sans text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink">
-                {file.name}
-              </p>
-              <DocumentStateIcon
-                state={deriveWorkspaceFileDocumentState(file, documentJoin)}
-                className="h-5 w-5 rounded-[6px]"
-              />
-            </div>
-            {fileSecondaryLabel(file) !== "Root folder" ? (
-              <p className="truncate pt-1 text-[12px] text-ink-3">
-                {fileSecondaryLabel(file)}
-              </p>
-            ) : null}
-          </div>
-        ),
+        className: "min-w-0 pl-5 pr-5",
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          const secondaryLabel = fileSecondaryLabel(file);
+          return (
+            <ArtifactWritingCell
+              title={file.name}
+              documentState={deriveWorkspaceFileDocumentState(file, documentJoin)}
+              description={secondaryLabel === "Root folder" ? null : secondaryLabel}
+              dateLabel={formatFileTimestamp(file.modifiedAt)}
+              actions={
+                <ArtifactWritingAction
+                  label={`Open ${file.name} in editor`}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void openInEditor(file);
+                  }}
+                >
+                  <ExternalLink className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                </ArtifactWritingAction>
+              }
+              collections={
+                <CollectionChips
+                  collectionIds={
+                    document ? collectionIdsByWritingId[document.id] ?? [] : []
+                  }
+                  collectionOptions={collectionOptions}
+                />
+              }
+            />
+          );
+        },
       },
       {
         id: "status",
         label: "Status",
-        width: "w-[152px]",
+        width: "w-[144px]",
         className: "px-2",
         render: (file) => {
           // The .md file IS the canonical document (ADR identidad D1/D9). Show the
@@ -1081,7 +1118,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <TablePropertySelector
               readOnly
-              className="min-w-[136px]"
+              className="min-w-[128px]"
               ariaLabel={`Status ${getWritingStatusLabel(status)}`}
               icon={<WritingStatusIcon status={status} />}
               label={getWritingStatusLabel(status)}
@@ -1092,7 +1129,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[164px]",
+        width: "w-[156px]",
         className: "px-2",
         render: (file) => {
           const artifactType =
@@ -1100,7 +1137,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <TablePropertySelector
               readOnly
-              className="min-w-[148px]"
+              className="min-w-[140px]"
               ariaLabel={`Artifact ${getArtifactTypeLabel(artifactType)}`}
               icon={<ArtifactTypeIcon artifactType={artifactType} />}
               label={getArtifactTypeLabel(artifactType)}
@@ -1111,7 +1148,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[188px]",
+        width: "w-[180px]",
         className: "px-2",
         render: () => (
           <TablePropertySelector
@@ -1131,8 +1168,8 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         id: "actions",
         label: "",
         align: "end",
-        width: "w-[72px]",
-        className: "pl-3 pr-6",
+        width: "w-[56px]",
+        className: "pl-2 pr-4",
         render: (file) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1164,7 +1201,13 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         ),
       },
     ],
-    [openInEditor, workspace?.name, documentJoin],
+    [
+      collectionIdsByWritingId,
+      collectionOptions,
+      documentJoin,
+      openInEditor,
+      workspace?.name,
+    ],
   );
 
   const handleCreateFile = async () => {
@@ -1489,7 +1532,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     getRowAriaLabel={(file) => `Open ${file.name} in editor`}
                     onRowClick={(file) => void openInEditor(file)}
                     showHeader={false}
-                    tableClassName="min-w-[980px] table-fixed"
+                    tableClassName="min-w-[900px] table-fixed"
                     rowCellClassName="py-6"
                   />
                 </div>

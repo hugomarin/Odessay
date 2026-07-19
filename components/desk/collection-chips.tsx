@@ -56,9 +56,13 @@ export function CollectionChips({
             tabIndex={0}
             onClick={handleClick}
             onKeyDown={handleKeyDown}
-            className="inline-flex max-w-[104px] cursor-pointer items-center gap-1 rounded-[6px] border-[0.5px] border-border bg-muted/60 px-[7px] py-[3px] text-[10px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+            className="inline-flex max-w-[112px] cursor-pointer items-center gap-1.5 rounded-[6px] border-[0.5px] border-border bg-muted/60 px-[7px] py-[3px] text-[10px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
           >
-            <Tag className="h-[10px] w-[10px] shrink-0 text-ink-4" strokeWidth={1.5} />
+            <Tag
+              className="h-[11px] w-[11px] shrink-0 text-ink-4"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
             <span className="truncate">{collection?.name ?? id}</span>
           </span>
         )

@@ -40,10 +40,13 @@ import { CollectionAssignmentMenu } from "@/components/collections/collection-as
 import { CollectionChips } from "@/components/desk/collection-chips";
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment";
 import { ArtifactTable } from "@/components/shared/artifact-table";
+import {
+  ArtifactWritingAction,
+  ArtifactWritingCell,
+} from "@/components/shared/artifact-writing-cell";
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
 import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
-import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import {
@@ -191,41 +194,38 @@ export function DeskActivityTable({
       {
         id: "title",
         label: "Writing",
-        className: "min-w-0 pl-3 pr-6",
+        className: "min-w-0 pl-2 pr-5",
         render: (row) => (
-          <div>
-            <div className="flex min-w-0 items-center gap-1.5">
-              <p className="min-w-0 flex-1 truncate font-sans text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink">
-                {row.title}
-              </p>
-              <DocumentStateIcon state={row.documentState} className="h-5 w-5 rounded-[6px]" />
+          <ArtifactWritingCell
+            title={row.title}
+            documentState={row.documentState}
+            description={row.excerpt}
+            dateLabel={row.dateLabel}
+            actions={
+              <>
               {onRenameWriting ? (
-                <button
-                  type="button"
+                <ArtifactWritingAction
+                  label={`Rename ${row.title}`}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     onRenameWriting(row.id);
                   }}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                  aria-label={`Rename ${row.title}`}
                 >
                   <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                </button>
+                </ArtifactWritingAction>
               ) : null}
               {onPreviewWriting ? (
-                <button
-                  type="button"
+                <ArtifactWritingAction
+                  label={`Preview ${row.title}`}
                   onClick={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     onPreviewWriting(row.id);
                   }}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                  aria-label={`Preview ${row.title}`}
                 >
                   <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                </button>
+                </ArtifactWritingAction>
               ) : null}
               {collectionOptions.length > 0 ? (
                 <div onClick={stopRowNavigation}>
@@ -242,38 +242,31 @@ export function DeskActivityTable({
                       void onCreateCollection(row.id, name)
                     }
                     trigger={
-                      <button
-                        type="button"
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-ink group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                        aria-label={`Assign collections for ${row.title}`}
+                      <ArtifactWritingAction
+                        label={`Assign collections for ${row.title}`}
+                        onClick={(event) => event.stopPropagation()}
                       >
                         <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                      </button>
+                      </ArtifactWritingAction>
                     }
                   />
                 </div>
               ) : null}
-            </div>
-            {row.excerpt ? (
-              <p className="line-clamp-2 max-w-[680px] pt-1.5 text-[13px] leading-[1.45] text-ink-3">
-                {row.excerpt}
-              </p>
-            ) : null}
-            <p className="pt-1.5 text-[11px] leading-[1.35] text-ink-4">
-              {row.dateLabel}
-            </p>
-            <CollectionChips
-              collectionIds={collectionIdsByWritingId[row.id] ?? []}
-              collectionOptions={collectionOptions}
-              className="pt-2"
-            />
-          </div>
+              </>
+            }
+            collections={
+              <CollectionChips
+                collectionIds={collectionIdsByWritingId[row.id] ?? []}
+                collectionOptions={collectionOptions}
+              />
+            }
+          />
         ),
       },
       {
         id: "status",
         label: "Status",
-        width: "w-[152px]",
+        width: "w-[144px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -281,7 +274,7 @@ export function DeskActivityTable({
               ariaLabel={`Change status for ${row.title}`}
               icon={<WritingStatusIcon status={row.stateTone} />}
               label={row.stateLabel}
-              className="min-w-[136px]"
+              className="min-w-[128px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
@@ -313,7 +306,7 @@ export function DeskActivityTable({
       {
         id: "artifact",
         label: "Artifact",
-        width: "w-[164px]",
+        width: "w-[156px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -325,7 +318,7 @@ export function DeskActivityTable({
                 />
               }
               label={getArtifactTypeLabel(row.artifactType ?? "general")}
-              className="min-w-[148px]"
+              className="min-w-[140px]"
               contentClassName="w-[248px]"
               onClick={stopRowNavigation}
             >
@@ -357,7 +350,7 @@ export function DeskActivityTable({
       {
         id: "workspace",
         label: "Workspace",
-        width: "w-[188px]",
+        width: "w-[180px]",
         className: "px-2",
         render: (row) => (
           <div onClick={stopRowNavigation}>
@@ -382,8 +375,8 @@ export function DeskActivityTable({
         id: "actions",
         label: "",
         align: "end",
-        width: "w-[72px]",
-        className: "pl-3 pr-6",
+        width: "w-[56px]",
+        className: "pl-2 pr-4",
         render: (row) => {
           const extraMenuItems = renderExtraMenuItems?.(row);
           const hasMenu = Boolean(
@@ -546,9 +539,10 @@ export function DeskActivityTable({
             }
             renderLeading={selectionEnabled ? renderSelection : undefined}
             showHeader={false}
-            tableClassName="min-w-[1040px]"
+            tableClassName="min-w-[920px]"
             rowCellClassName="py-6"
-            leadingCellClassName="pt-[25px]"
+            leadingColumnClassName="w-9"
+            leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
           />
         </div>
 

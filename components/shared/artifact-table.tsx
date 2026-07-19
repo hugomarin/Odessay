@@ -35,6 +35,8 @@ export type ArtifactTableProps<T> = {
   rowCellClassName?: string
   /** Optional override for the leading selection cell. */
   leadingCellClassName?: string
+  /** Width of the leading selection column. */
+  leadingColumnClassName?: string
   /** Hide column labels for dense library rows that communicate their controls directly. */
   showHeader?: boolean
   /** Tailwind grid template applied to each group in grid mode. */
@@ -78,6 +80,7 @@ export function ArtifactTable<T>({
   tableClassName,
   rowCellClassName,
   leadingCellClassName,
+  leadingColumnClassName = "w-12",
   showHeader = true,
   gridClassName = "grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3",
 }: ArtifactTableProps<T>) {
@@ -95,7 +98,7 @@ export function ArtifactTable<T>({
       <div className={cn("ArtifactTable", className)}>
         <Table className={cn("table-fixed", tableClassName)}>
           <colgroup>
-            {renderLeading ? <col className="w-12" /> : null}
+            {renderLeading ? <col className={leadingColumnClassName} /> : null}
             {columns.map((column) => <col key={column.id} className={column.width} />)}
           </colgroup>
           {showHeader ? (

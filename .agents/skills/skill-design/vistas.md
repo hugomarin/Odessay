@@ -107,10 +107,13 @@ columnas:  checkbox | Writing | Status | Type | Workspace | actions
 grupos:    Today / This week / Earlier — label uppercase 10px ink-4
 filas:     padding 24px vertical; checkbox alineado con la primera línea del título
 título:    Geist Sans 15px, font-weight 600 (decisión ODE-382; sustituye Lora en estas filas funcionales)
+jerarquía: título + estado + acciones forman un grupo adyacente; el título no ocupa el espacio restante
 excerpt:   Geist Sans 13px, ink-3, clamp 2 líneas
 estado:    badge icon-only relleno, rounded-square; color semántico del DocumentState
 chips:     collection con icono Tag, borde 0.5px y fondo papel cálido
+meta:      fecha y collections forman un stack con gap 6px; el chip no agrega padding superior propio
 controles: Status / Type / Workspace, height 40px, anchos mínimos consistentes
+paridad:   Desk y Workspace reutilizan el mismo HTML base de Writing (ArtifactWritingCell)
 responsive: Writing es la columna elástica; controles conservan min-width. Bajo el ancho útil,
             overflow-x queda dentro del wrapper de tabla, nunca en la página; no ocultar columnas
             ni convertir filas a cards.
