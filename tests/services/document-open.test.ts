@@ -28,6 +28,7 @@ function makeRecord(
     artifactType: null,
     visibility: null,
     version: null,
+    deletedAt: null,
     createdAt: 1,
     modifiedAt: 1,
     binding: null,

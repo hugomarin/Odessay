@@ -368,9 +368,11 @@ export class FilesystemDocumentService implements DocumentService {
       const filename = parts.pop()!
       const dir = parts.join("/")
       const trashDir = `${dir}/.trash`
-      await tauriRenameFile(writingId, `${trashDir}/${filename}`).catch(() => {
-        // If rename fails, fall back silently.
-      })
+      const trashFilename = resolveUniqueFilename(
+        filename,
+        await this.listDirectoryFilenames(trashDir),
+      )
+      await tauriRenameFile(writingId, `${trashDir}/${trashFilename}`)
 
       const deletedRecord: WritingRecord = {
         ...record,

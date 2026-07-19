@@ -77,6 +77,12 @@ describe("resolveActionableRootIds", () => {
     ).toEqual([])
   })
 
+  it("returns an empty list for confirmed-delete trash moves", () => {
+    expect(
+      resolveActionableRootIds(["/Users/h/A/.trash/letter.md"], roots),
+    ).toEqual([])
+  })
+
   it("returns every affected root when a burst spans two roots", () => {
     expect(
       resolveActionableRootIds(["/Users/h/A/x.md", "/Users/h/B/y.md"], roots).sort(),

@@ -28,6 +28,7 @@ function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
     title: row.title, slug: row.slug, status: row.status as DocumentCatalogRecord["status"],
     artifactType: row.artifactType as DocumentCatalogRecord["artifactType"],
     visibility: row.visibility as DocumentCatalogRecord["visibility"], version: row.version,
+    deletedAt: row.deletedAt,
     createdAt: row.createdAt, modifiedAt: row.modifiedAt,
     binding: row.canonicalPath && row.bindingRootId && row.relativePath ? {
       documentId: row.id, bindingRootId: row.bindingRootId, relativePath: row.relativePath,
@@ -37,21 +38,38 @@ function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
   }
 }
 
+const listenersByDatabase = new Map<string, Set<(change: CatalogChange) => void>>()
+
+function listenersFor(dbPath: string) {
+  let listeners = listenersByDatabase.get(dbPath)
+  if (!listeners) {
+    listeners = new Set()
+    listenersByDatabase.set(dbPath, listeners)
+  }
+  return listeners
+}
+
 export class SqliteDocumentCatalog implements DocumentCatalog {
-  private listeners = new Set<(change: CatalogChange) => void>()
   constructor(readonly dbPath: string) {}
 
-  subscribe(listener: (change: CatalogChange) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener) }
+  subscribe(listener: (change: CatalogChange) => void) {
+    const listeners = listenersFor(this.dbPath)
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+      if (listeners.size === 0) listenersByDatabase.delete(this.dbPath)
+    }
+  }
   private emit(documentIds: string[], reason: CatalogChange["reason"]) {
     const change = { transactionId: crypto.randomUUID(), documentIds, reason, occurredAt: Date.now() } satisfies CatalogChange
-    this.listeners.forEach((listener) => listener(change))
+    listenersByDatabase.get(this.dbPath)?.forEach((listener) => listener(change))
   }
   async getById(id: string) { const row = await tauriCatalogGetById(this.dbPath, id); return row ? toRecord(row) : null }
   async resolvePath(path: string): Promise<PathResolution> { const row = await tauriCatalogResolvePath(this.dbPath, path); return row ? { kind: "resolved", record: toRecord(row) } : { kind: "unbound", path } }
   async list(query?: DocumentCatalogQuery) {
     return (await tauriCatalogList(this.dbPath, query))
       .map(toRecord)
-      .filter((record) => record.localPresent || record.cloudPresent)
+      .filter((record) => record.localPresent || record.cloudPresent || (query?.includeDeleted && record.deletedAt))
   }
   async registerBinding(input: RegisterBindingInput) {
     const { document: catalogDocument } = input
@@ -80,6 +98,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
         artifactType: snapshot.artifactType,
         visibility: snapshot.visibility,
         version: snapshot.version,
+        deletedAt: snapshot.deletedAt,
         createdAt: snapshot.createdAt,
         modifiedAt: snapshot.modifiedAt,
       })),
@@ -141,7 +160,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
       reason: "bulk",
       occurredAt: Date.now(),
     } satisfies CatalogChange
-    this.listeners.forEach((listener) => listener(change))
+    listenersByDatabase.get(this.dbPath)?.forEach((listener) => listener(change))
     return change
   }
 }

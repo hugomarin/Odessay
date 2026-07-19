@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   openFile: vi.fn(),
   createDraft: vi.fn(),
   saveFile: vi.fn(),
+  deleteFile: vi.fn(),
   renameFile: vi.fn(),
   exportFile: vi.fn(),
   workspaceSync: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
     list = mocks.catalogList
     resolvePath = mocks.catalogResolve
     detachLocalFile = mocks.catalogDetach
+    commitDualWrite = (input: unknown) => mocks.dualWrite("/config/desktop-index.sqlite3", input)
   },
 }))
 vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
@@ -37,6 +39,7 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
     openWriting = mocks.openFile
     createDraft = mocks.createDraft
     saveWriting = mocks.saveFile
+    deleteWriting = mocks.deleteFile
     renameWriting = mocks.renameFile
     exportWriting = mocks.exportFile
   },
@@ -63,6 +66,7 @@ const catalogRecord = {
   artifactType: "general",
   visibility: "private",
   version: 1,
+  deletedAt: null,
   createdAt: 1,
   modifiedAt: 2,
   binding: {
@@ -109,6 +113,10 @@ describe("desktop document service after compatibility retirement", () => {
       error: null,
     })
     mocks.saveFile.mockResolvedValue({ data: writing, error: null })
+    mocks.deleteFile.mockResolvedValue({
+      data: { ...writing, deletedAt: "2026-01-02T00:00:00.000Z" },
+      error: null,
+    })
     mocks.createDraft.mockResolvedValue({ data: { path, writing: { ...writing, id: path } }, error: null })
     mocks.workspaceSync.mockResolvedValue({
       rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
@@ -151,7 +159,8 @@ describe("desktop document service after compatibility retirement", () => {
     )
   })
 
-  it("queues explicit cloud deletion without deleting the local markdown", async () => {
+  it("removes the local markdown and queues the confirmed cloud archive", async () => {
+    mocks.catalogGet.mockResolvedValue({ ...catalogRecord, cloudPresent: true, cloudAccountId: "acct-1" })
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).deleteWriting({
       writingId: id,
@@ -163,8 +172,53 @@ describe("desktop document service after compatibility retirement", () => {
     expect(result.error).toBeNull()
     expect(mocks.dualWrite).toHaveBeenCalledWith(
       expect.any(String),
+      expect.objectContaining({
+        document: expect.objectContaining({ localPresent: false, deletedAt: "2026-01-02T00:00:00.000Z" }),
+        binding: null,
+        mutation: expect.objectContaining({ operation: "delete" }),
+      }),
+    )
+    expect(mocks.deleteFile).toHaveBeenCalledWith(expect.objectContaining({ writingId: path }))
+  })
+
+  it("deletes local-only documents without enqueueing a cloud mutation", async () => {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).deleteWriting({
+      writingId: id,
+      version: 2,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      deletedAt: "2026-01-02T00:00:00.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(mocks.deleteFile).toHaveBeenCalledTimes(1)
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ mutation: null }),
+    )
+  })
+
+  it("archives cloud-only documents without touching the filesystem", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: true,
+      cloudAccountId: "acct-1",
+      binding: null,
+    })
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).deleteWriting({
+      writingId: id,
+      version: 2,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+      deletedAt: "2026-01-02T00:00:00.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(mocks.deleteFile).not.toHaveBeenCalled()
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      expect.any(String),
       expect.objectContaining({ mutation: expect.objectContaining({ operation: "delete" }) }),
     )
-    expect(mocks.renameFile).not.toHaveBeenCalled()
   })
 })

@@ -25,7 +25,6 @@ import {
   setDesktopWritingCollections,
 } from "@/lib/services/desktop/desktop-collection-service"
 import {
-  tauriCatalogDualWrite,
   tauriWorkspaceSync,
   type DesktopCatalogDualWriteInput,
 } from "@/lib/services/desktop/tauri-commands"
@@ -81,7 +80,7 @@ function toWriting(record: DocumentCatalogRecord, bodyJson: Record<string, unkno
     parentId: null,
     correspondenceId: null,
     version: Math.max(1, record.version ?? 1),
-    deletedAt: null,
+    deletedAt: record.deletedAt,
     createdAt,
     updatedAt,
   }
@@ -94,7 +93,7 @@ function toSummary(record: DocumentCatalogRecord): WritingSummary {
     id: record.id, authorId: record.cloudAccountId, title: record.title, slug: record.slug,
     status: record.status ?? "draft", artifactType: normalizeArtifactType(record.artifactType),
     visibility: record.visibility ?? "private", parentId: null, correspondenceId: null,
-    version: Math.max(1, record.version ?? 1), deletedAt: null, createdAt, updatedAt, excerpt: null,
+    version: Math.max(1, record.version ?? 1), deletedAt: record.deletedAt, createdAt, updatedAt, excerpt: null,
   }
 }
 
@@ -166,6 +165,7 @@ class DesktopDocumentService implements DocumentService {
         artifactType: record.artifactType,
         visibility: record.visibility,
         version: Math.max(1, record.version),
+        deletedAt: record.deletedAt,
         createdAt: Date.parse(record.createdAt),
         modifiedAt: Date.parse(record.updatedAt),
       },
@@ -195,7 +195,7 @@ class DesktopDocumentService implements DocumentService {
         status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: now, lastError: null,
       },
     }
-    await tauriCatalogDualWrite(this.runtime.dbPath, input)
+    await this.runtime.catalog.commitDualWrite(input)
     return { ...record, title: filenameToTitle(file.relativePath) }
   }
 
@@ -270,12 +270,69 @@ class DesktopDocumentService implements DocumentService {
 
   async deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
-      const existing = await this.openWriting(input.writingId)
-      if (existing.error || !existing.data) return existing
-      const binding = await this.runtime.catalog.getById(input.writingId)
-      if (!binding?.binding?.canonicalPath) return err("NOT_FOUND", `Writing ${input.writingId} not found`)
-      const deleted = { ...existing.data, deletedAt: input.deletedAt, updatedAt: input.updatedAt }
-      return ok(await this.persist(deleted, binding.binding.canonicalPath, "delete"))
+      const catalogRecord = await this.runtime.catalog.getById(input.writingId)
+      if (!catalogRecord) return err("NOT_FOUND", `Writing ${input.writingId} not found`)
+
+      let existing = toWriting(catalogRecord, {}, "")
+      const localBinding = catalogRecord.binding
+      if (localBinding?.canonicalPath) {
+        const opened = await this.openWriting(input.writingId)
+        if (opened.error || !opened.data) return opened
+        existing = opened.data
+        const removed = await this.runtime.filesystem.deleteWriting({
+          ...input,
+          writingId: localBinding.canonicalPath,
+        })
+        if (removed.error) return err("STORAGE_ERROR", removed.error.message)
+
+        const rootPath = localBinding.canonicalPath.slice(
+          0,
+          -(localBinding.relativePath.length + 1),
+        )
+        await tauriWorkspaceSync(rootPath)
+      }
+
+      const deleted = {
+        ...existing,
+        version: input.version,
+        deletedAt: input.deletedAt,
+        updatedAt: input.updatedAt,
+      }
+      const now = Date.now()
+      await this.runtime.catalog.commitDualWrite({
+        document: {
+          id: catalogRecord.id,
+          localPresent: false,
+          cloudPresent: catalogRecord.cloudPresent,
+          cloudAccountId: catalogRecord.cloudAccountId,
+          syncStatus: "deleted",
+          title: catalogRecord.title,
+          slug: catalogRecord.slug,
+          status: catalogRecord.status,
+          artifactType: catalogRecord.artifactType,
+          visibility: catalogRecord.visibility,
+          version: input.version,
+          deletedAt: input.deletedAt,
+          createdAt: catalogRecord.createdAt,
+          modifiedAt: Date.parse(input.updatedAt),
+        },
+        binding: null,
+        mutation: catalogRecord.cloudPresent ? {
+          id: crypto.randomUUID(),
+          operation: "delete",
+          payloadJson: JSON.stringify({
+            version: input.version,
+            deletedAt: input.deletedAt,
+            updatedAt: input.updatedAt,
+          }),
+          status: "pending",
+          attemptCount: 0,
+          nextRetryAt: null,
+          createdAt: now,
+          lastError: null,
+        } : null,
+      })
+      return ok(deleted)
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 

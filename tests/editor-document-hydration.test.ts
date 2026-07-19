@@ -66,6 +66,7 @@ const catalogRecord: DocumentCatalogRecord = {
   artifactType: "general",
   visibility: "private",
   version: 1,
+  deletedAt: null,
   createdAt: 1,
   modifiedAt: 2,
   binding: {

@@ -28,7 +28,7 @@ vi.mock("@/lib/local-db", () => ({
 const nativeRow = {
   id: "doc-1", localPresent: true, cloudPresent: false, cloudAccountId: null, syncStatus: "pending",
   title: "Doc", slug: null, status: "draft", artifactType: "general", visibility: "private", version: 1,
-  createdAt: 1, modifiedAt: 2, bindingRootId: "root-1", relativePath: "Doc.md",
+  deletedAt: null, createdAt: 1, modifiedAt: 2, bindingRootId: "root-1", relativePath: "Doc.md",
   canonicalPath: "/tmp/Doc.md", inode: null, contentHash: "blake3:abc", size: 10, lastSeenAt: 2,
 }
 
@@ -78,12 +78,31 @@ describe("DocumentCatalog contract", () => {
   it("emits one CatalogChange for one native logical transaction", async () => {
     const catalog = new SqliteDocumentCatalog("/tmp/catalog.db")
     const changes: unknown[] = []
-    catalog.subscribe((change) => changes.push(change))
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
     await catalog.commitDualWrite({
       document: { ...nativeRow, artifactType: "general" }, binding: null, mutation: null,
     })
     expect(changes).toHaveLength(1)
     expect(mocks.catalogWrite).toHaveBeenCalledTimes(1)
+    unsubscribe()
+  })
+
+  it("shares one CatalogChange bus across desktop writers for the same database", async () => {
+    const reader = new SqliteDocumentCatalog("/tmp/shared-catalog.db")
+    const writer = new SqliteDocumentCatalog("/tmp/shared-catalog.db")
+    const unrelated = new SqliteDocumentCatalog("/tmp/other-catalog.db")
+    const changes: unknown[] = []
+    const unsubscribe = reader.subscribe((change) => changes.push(change))
+
+    await writer.commitDualWrite({
+      document: { ...nativeRow, artifactType: "general" }, binding: null, mutation: null,
+    })
+    await unrelated.commitDualWrite({
+      document: { ...nativeRow, artifactType: "general" }, binding: null, mutation: null,
+    })
+
+    expect(changes).toHaveLength(1)
+    unsubscribe()
   })
 
   it("does not list records that exist in neither local nor cloud storage", async () => {

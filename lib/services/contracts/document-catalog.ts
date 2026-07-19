@@ -15,6 +15,8 @@ export type DocumentCatalogRecord = {
   artifactType: ArtifactType | null
   visibility: WritingVisibility | null
   version: number | null
+  /** Confirmed user archive marker. Independent from retryable sync status. */
+  deletedAt: string | null
   createdAt: number | null
   modifiedAt: number | null
   binding: DocumentBindingRecord | null

@@ -46,6 +46,7 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
             artifact_type_cache TEXT,
             visibility_cache TEXT,
             version_cache INTEGER,
+            deleted_at_cache TEXT,
             created_at INTEGER,
             modified_at INTEGER
         );
@@ -132,6 +133,22 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
         )
         .map_err(|e| format!("catalog migration add cloud_content_hash: {e}"))?;
     }
+    let has_deleted_at_cache = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(documents)")
+            .map_err(|e| format!("catalog migration inspect deleted marker: {e}"))?;
+        let columns = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("catalog migration list deleted marker: {e}"))?;
+        let found = columns
+            .filter_map(Result::ok)
+            .any(|name| name == "deleted_at_cache");
+        found
+    };
+    if !has_deleted_at_cache {
+        conn.execute("ALTER TABLE documents ADD COLUMN deleted_at_cache TEXT", [])
+            .map_err(|e| format!("catalog migration add deleted_at_cache: {e}"))?;
+    }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_catalog_cloud_hash ON documents(cloud_content_hash) WHERE cloud_present=1 AND cloud_content_hash IS NOT NULL;
          DROP TABLE IF EXISTS writings_index;
@@ -144,9 +161,11 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
                AND newer.status IN ('pending','failed')
                AND (newer.created_at>older.created_at OR (newer.created_at=older.created_at AND newer.id>older.id))
            );
+         UPDATE documents SET deleted_at_cache='legacy'
+           WHERE sync_status='deleted' AND deleted_at_cache IS NULL;
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
            ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
-         UPDATE catalog_schema SET version=5 WHERE singleton=1;"
+         UPDATE catalog_schema SET version=6 WHERE singleton=1;"
     ).map_err(|e| format!("catalog migration v3: {e}"))?;
     Ok(())
 }
@@ -165,6 +184,7 @@ pub struct CatalogDocumentInput {
     pub artifact_type: Option<String>,
     pub visibility: Option<String>,
     pub version: Option<i64>,
+    pub deleted_at: Option<String>,
     pub created_at: Option<i64>,
     pub modified_at: Option<i64>,
 }
@@ -294,6 +314,7 @@ pub struct CatalogCloudSnapshotInput {
     pub artifact_type: Option<String>,
     pub visibility: Option<String>,
     pub version: Option<i64>,
+    pub deleted_at: Option<String>,
     pub created_at: Option<i64>,
     pub modified_at: Option<i64>,
 }
@@ -312,6 +333,7 @@ pub struct CatalogRow {
     pub artifact_type: Option<String>,
     pub visibility: Option<String>,
     pub version: Option<i64>,
+    pub deleted_at: Option<String>,
     pub created_at: Option<i64>,
     pub modified_at: Option<i64>,
     pub binding_root_id: Option<String>,
@@ -336,21 +358,22 @@ fn map_catalog_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CatalogRow> {
         artifact_type: row.get(8)?,
         visibility: row.get(9)?,
         version: row.get(10)?,
-        created_at: row.get(11)?,
-        modified_at: row.get(12)?,
-        binding_root_id: row.get(13)?,
-        relative_path: row.get(14)?,
-        canonical_path: row.get(15)?,
-        inode: row.get(16)?,
-        content_hash: row.get(17)?,
-        size: row.get(18)?,
-        last_seen_at: row.get(19)?,
+        deleted_at: row.get(11)?,
+        created_at: row.get(12)?,
+        modified_at: row.get(13)?,
+        binding_root_id: row.get(14)?,
+        relative_path: row.get(15)?,
+        canonical_path: row.get(16)?,
+        inode: row.get(17)?,
+        content_hash: row.get(18)?,
+        size: row.get(19)?,
+        last_seen_at: row.get(20)?,
     })
 }
 
 const CATALOG_SELECT: &str = "SELECT d.id,d.local_present,d.cloud_present,d.cloud_account_id,d.sync_status,
  d.title_cache,d.slug_cache,d.status_cache,d.artifact_type_cache,d.visibility_cache,d.version_cache,
- d.created_at,d.modified_at,b.binding_root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at
+ d.deleted_at_cache,d.created_at,d.modified_at,b.binding_root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at
  FROM documents d LEFT JOIN document_bindings b ON b.document_id=d.id";
 
 #[tauri::command]
@@ -371,13 +394,14 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
         .transaction()
         .map_err(|e| format!("catalog dual-write begin: {e}"))?;
     let d = &input.document;
-    tx.execute("INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,created_at,modified_at)
-      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)
+    tx.execute("INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,deleted_at_cache,created_at,modified_at)
+      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
       ON CONFLICT(id) DO UPDATE SET local_present=excluded.local_present,cloud_present=excluded.cloud_present,
       cloud_account_id=excluded.cloud_account_id,sync_status=excluded.sync_status,title_cache=excluded.title_cache,
       slug_cache=excluded.slug_cache,status_cache=excluded.status_cache,artifact_type_cache=excluded.artifact_type_cache,
-      visibility_cache=excluded.visibility_cache,version_cache=excluded.version_cache,modified_at=excluded.modified_at",
-      params![d.id,d.local_present as i64,d.cloud_present as i64,d.cloud_account_id,d.sync_status,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.created_at,d.modified_at])
+      visibility_cache=excluded.visibility_cache,version_cache=excluded.version_cache,deleted_at_cache=excluded.deleted_at_cache,
+      modified_at=excluded.modified_at",
+      params![d.id,d.local_present as i64,d.cloud_present as i64,d.cloud_account_id,d.sync_status,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.deleted_at,d.created_at,d.modified_at])
       .map_err(|e| format!("catalog dual-write document: {e}"))?;
     if let Some(b) = &input.binding {
         // Resolve the binding root by its physical path. A directory has ONE
@@ -412,6 +436,13 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
           params![d.id,root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at])
           .map_err(|e| format!("catalog dual-write binding: {e}"))?;
     }
+    if d.deleted_at.is_some() {
+        tx.execute(
+            "DELETE FROM document_bindings WHERE document_id=?1",
+            params![d.id],
+        )
+        .map_err(|e| format!("catalog dual-write delete binding: {e}"))?;
+    }
     if let Some(m) = &input.mutation {
         tx.execute("INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
           VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
@@ -438,8 +469,8 @@ pub fn catalog_apply_cloud_snapshots(
 
     for d in &snapshots {
         tx.execute(
-            "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,cloud_content_hash,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,created_at,modified_at)
-             VALUES(?1,0,?2,?3,?4,CASE WHEN ?2=1 THEN 'synced' ELSE 'deleted' END,?5,?6,?7,?8,?9,?10,?11,?12)
+            "INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,cloud_content_hash,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,deleted_at_cache,created_at,modified_at)
+             VALUES(?1,0,?2,?3,?4,CASE WHEN ?2=1 THEN 'synced' ELSE 'deleted' END,?5,?6,?7,?8,?9,?10,?11,?12,?13)
              ON CONFLICT(id) DO UPDATE SET
                cloud_present=excluded.cloud_present,
                cloud_account_id=excluded.cloud_account_id,
@@ -450,6 +481,11 @@ pub fn catalog_apply_cloud_snapshots(
                artifact_type_cache=excluded.artifact_type_cache,
                visibility_cache=excluded.visibility_cache,
                version_cache=excluded.version_cache,
+               deleted_at_cache=CASE
+                 WHEN documents.deleted_at_cache IS NOT NULL
+                   AND documents.sync_status IN ('pending','failed','conflict')
+                 THEN documents.deleted_at_cache
+                 ELSE excluded.deleted_at_cache END,
                created_at=COALESCE(documents.created_at,excluded.created_at),
                modified_at=excluded.modified_at,
                sync_status=CASE
@@ -457,7 +493,7 @@ pub fn catalog_apply_cloud_snapshots(
                  WHEN excluded.cloud_present=1 THEN 'synced'
                  WHEN documents.local_present=1 THEN 'local-only'
                  ELSE 'deleted' END",
-            params![d.id,d.cloud_present as i64,d.cloud_account_id,d.content_hash,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.created_at,d.modified_at],
+            params![d.id,d.cloud_present as i64,d.cloud_account_id,d.content_hash,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.deleted_at,d.created_at,d.modified_at],
         )
         .map_err(|e| format!("catalog cloud snapshot document: {e}"))?;
     }
@@ -520,7 +556,7 @@ pub fn catalog_list(
     limit: i64,
 ) -> Result<Vec<CatalogRow>, String> {
     let conn = open_db(&db_path)?;
-    let sql = format!("{CATALOG_SELECT} WHERE (?1 OR d.sync_status != 'deleted') AND (?2=0 OR d.local_present=1)
+    let sql = format!("{CATALOG_SELECT} WHERE (?1 OR (d.deleted_at_cache IS NULL AND d.sync_status != 'deleted')) AND (?2=0 OR d.local_present=1)
       AND (d.local_present=1 OR d.cloud_account_id IS NULL OR d.cloud_account_id=?3) ORDER BY d.modified_at DESC LIMIT ?4");
     let mut stmt = conn
         .prepare(&sql)
@@ -999,6 +1035,7 @@ mod catalog_tests {
                 artifact_type: Some("general".into()),
                 visibility: Some("private".into()),
                 version: Some(1),
+                deleted_at: None,
                 created_at: Some(1),
                 modified_at: Some(2),
             },
@@ -1043,8 +1080,16 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 5);
+        let deleted_at_column: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('documents') WHERE name='deleted_at_cache'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 6);
         assert_eq!(cloud_hash_column, 1);
+        assert_eq!(deleted_at_column, 1);
         eprintln!("catalog_startup_ms={startup_ms:.3}");
         assert!(startup_ms < 1000.0, "catalog startup exceeded 1s budget");
         drop(conn);
@@ -1170,6 +1215,86 @@ mod catalog_tests {
         assert!(record.local_present);
         assert!(!record.cloud_present);
         assert_eq!(record.sync_status, "local-only");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn confirmed_delete_stays_out_of_active_views_when_sync_fails() {
+        let path = temp_db();
+        let mut delete_input = input("doc-deleted", "/tmp/root/deleted.md", "mutation-delete");
+        delete_input.document.local_present = false;
+        delete_input.document.cloud_present = true;
+        delete_input.document.cloud_account_id = Some("acct-1".into());
+        delete_input.document.sync_status = "deleted".into();
+        delete_input.document.deleted_at = Some("2026-07-18T00:00:00.000Z".into());
+        delete_input.binding = None;
+        delete_input.mutation.as_mut().unwrap().operation = "delete".into();
+        catalog_dual_write(path.clone(), delete_input).unwrap();
+
+        assert!(
+            catalog_list(path.clone(), Some("acct-1".into()), false, false, 20)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            catalog_list(path.clone(), Some("acct-1".into()), true, false, 20)
+                .unwrap()
+                .len(),
+            1
+        );
+
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-delete".into(),
+            "failed".into(),
+            1,
+            None,
+            Some("offline".into()),
+        )
+        .unwrap();
+
+        let record = catalog_get_by_id(path.clone(), "doc-deleted".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.sync_status, "failed");
+        assert!(record.deleted_at.is_some());
+        assert!(
+            catalog_list(path.clone(), Some("acct-1".into()), false, false, 20)
+                .unwrap()
+                .is_empty()
+        );
+
+        // A stale cloud hydration can still report the row as active while the
+        // delete mutation is offline. It must not clear the durable local marker.
+        catalog_apply_cloud_snapshots(
+            path.clone(),
+            vec![CatalogCloudSnapshotInput {
+                id: "doc-deleted".into(),
+                cloud_present: true,
+                cloud_account_id: Some("acct-1".into()),
+                content_hash: Some("hash-before-delete".into()),
+                title: Some("Deleted doc".into()),
+                slug: None,
+                status: Some("draft".into()),
+                artifact_type: Some("general".into()),
+                visibility: Some("private".into()),
+                version: Some(1),
+                deleted_at: None,
+                created_at: Some(1),
+                modified_at: Some(2),
+            }],
+        )
+        .unwrap();
+
+        let after_hydration = catalog_get_by_id(path.clone(), "doc-deleted".into())
+            .unwrap()
+            .unwrap();
+        assert!(after_hydration.deleted_at.is_some());
+        assert!(
+            catalog_list(path.clone(), Some("acct-1".into()), false, false, 20)
+                .unwrap()
+                .is_empty()
+        );
         let _ = fs::remove_file(path);
     }
 
@@ -1340,6 +1465,7 @@ mod catalog_tests {
                     artifact_type: Some("general".into()),
                     visibility: Some("private".into()),
                     version: Some(2),
+                    deleted_at: None,
                     created_at: Some(1),
                     modified_at: Some(2),
                 },
@@ -1354,6 +1480,7 @@ mod catalog_tests {
                     artifact_type: Some("general".into()),
                     visibility: Some("private".into()),
                     version: Some(1),
+                    deleted_at: None,
                     created_at: Some(1),
                     modified_at: Some(1),
                 },
@@ -1400,6 +1527,7 @@ mod catalog_tests {
             artifact_type: Some("general".into()),
             visibility: Some("private".into()),
             version: Some(1),
+            deleted_at: None,
             created_at: Some(1),
             modified_at: Some(1),
         };
@@ -1437,6 +1565,7 @@ mod catalog_tests {
             artifact_type: Some("general".into()),
             visibility: Some("private".into()),
             version: Some(1),
+            deleted_at: None,
             created_at: Some(1),
             modified_at: Some(1),
         };
@@ -1507,7 +1636,7 @@ mod catalog_tests {
         assert_eq!(snapshot.collections[0].name, "Research");
         assert_eq!(snapshot.writing_collections.len(), 1);
         assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
-        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 5);
+        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 6);
         let _ = fs::remove_file(path);
     }
 }

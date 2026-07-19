@@ -52,6 +52,7 @@ describe("getWritingForEdit", () => {
       artifactType: "general",
       visibility: "private",
       version: 1,
+      deletedAt: null,
       createdAt: Date.now(),
       modifiedAt: Date.now(),
       binding: {

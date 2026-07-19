@@ -239,6 +239,7 @@ function toSinkInput(
       artifactType: writing.artifact_type ?? "general",
       visibility: writing.visibility,
       version: writing.version,
+      deletedAt: writing.deleted_at ?? null,
       createdAt: timestamp(writing.created_at) || null,
       modifiedAt: timestamp(writing.updated_at) || null,
     },

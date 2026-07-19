@@ -164,6 +164,7 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
           artifactType: null,
           visibility: null,
           version: null,
+          deletedAt: null,
           createdAt: now,
           modifiedAt: evidence.modifiedAt ?? now,
         }
