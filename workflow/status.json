@@ -3201,6 +3201,26 @@
       "commit": "2e87da05a23b047e9171c9baef33237e8790021f",
       "date": "2026-07-19",
       "notes": "Review approved 9.8/10 (PASS) after one prior rejection resolved. Desk (web+desktop) and Workspace FILES table now share the same row language via extracted ArtifactWritingCell + ArtifactRowSelection: Geist medium title, filled state badge, permanent aligned checkbox, redesigned inline actions, Tag-icon collection chip, aligned Status/Type/Workspace controls, generous vertical rhythm. Responsive table shrinks title/excerpt first, keeps control min-widths, contains horizontal overflow in the table wrapper (never the page), no column hiding or card conversion. Workspace column gated to desktop (showWorkspaceColumn=workspaceAvailable) so web never fakes a local-assign selector. Near-viewport excerpt hydration via DocumentService.openWriting is the owner-approved exception; ODE-396 owns durable/batched cache. vistas.md reconciled to Geist. Performance Contract TTI reclassified not-required by explicit owner resolution 2026-07-19 (visual/responsive only). Evidence: typecheck, lint (6 pre-existing warnings), 168 files/1106 tests, production Tauri build + final DMG validator zero warnings, packaged DMG artifacts/ode-382/01-08 + design-qa passed + dmg-validation. context_risk=true: original brief required unmeasurable TTI and visual acceptance iterated during BUILD. Prior CI traceability red was pre-existing main drift (last_updated 2026-07-18 < ODE-380), cured by this entry bumping last_updated to 2026-07-19. Non-blocking P3: output/playwright captures duplicate canonical evidence."
+    },
+    {
+      "what": "feat(catalog): project cached excerpts and Workspace context [ODE-396]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-396",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-396/project-cached-writing-excerpts-into-desktop-documentcatalog-for-desk",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/352",
+      "commit": "74fa35dfd2c8c2d614386aa8d849988fd65f1ffa",
+      "date": "2026-07-19",
+      "notes": "Single-round review, approved 8.8/10 (PASS). DocumentCatalog now projects a 120-character excerpt cache keyed by content_hash; desktop SQLite schema v7 is additive and rebuildable, hydration runs in one background batch with bounded concurrency and one CatalogChange, and stale results cannot overwrite a newer hash. Desk and Workspace consume the same excerpt by UUID, expose physical file location, infer the most specific Workspace from the binding path while preserving explicit assignment overrides, and Desk can filter by multiple Workspaces or No workspace. Adds recoverable document audit/cleanup tooling with dry-run, source-drift checks, SQLite integrity validation, manifest-safe removal, backup, quarantine and rollback. Evidence: typecheck, lint (6 pre-existing warnings), 170 files/1119 tests, Rust 28 passed/1 ignored, traceability and Vercel green, owner acceptance. Merged as 887dd5f."
+    },
+    {
+      "what": "fix(preview): open writings through DocumentService [ODE-397]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-397",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-397/load-writing-preview-through-documentservice-instead-of-indexeddb",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/352",
+      "commit": "74fa35dfd2c8c2d614386aa8d849988fd65f1ffa",
+      "date": "2026-07-19",
+      "notes": "Single-round review, approved 8.8/10 (PASS). Preview resolves writing UUIDs through the runtime-neutral DocumentService instead of importing IndexedDB, deduplicates concurrent opens, keeps navigation cache behavior and degrades per document to unavailable without creating drafts or durable fallback state. Web and desktop retain adapter parity. Evidence: typecheck, lint, 170 files/1119 tests, Rust 28 passed/1 ignored, traceability and Vercel green, owner acceptance. Merged as 887dd5f."
     }
   ]
 }
