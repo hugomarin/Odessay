@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import type { DocumentState } from "@/lib/writings/document-state";
@@ -10,7 +10,6 @@ type ArtifactWritingCellProps = {
   title: string;
   documentState: DocumentState;
   description?: string | null;
-  loadDescription?: () => Promise<string | null>;
   dateLabel?: string | null;
   actions?: ReactNode;
   collections?: ReactNode;
@@ -27,76 +26,15 @@ export function ArtifactWritingCell({
   title,
   documentState,
   description,
-  loadDescription,
   dateLabel,
   actions,
   collections,
   className,
 }: ArtifactWritingCellProps) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const loadDescriptionRef = useRef(loadDescription);
-  const [resolvedDescription, setResolvedDescription] = useState(
-    description?.trim() || null,
-  );
-
-  loadDescriptionRef.current = loadDescription;
-
-  useEffect(() => {
-    const suppliedDescription = description?.trim() || null;
-    setResolvedDescription(suppliedDescription);
-    if (suppliedDescription || !loadDescriptionRef.current) {
-      return;
-    }
-
-    let active = true;
-    let requested = false;
-    const load = () => {
-      if (requested) return;
-      requested = true;
-      void loadDescriptionRef
-        .current?.()
-        .then((value) => {
-          if (!active) return;
-          const normalized = value?.replace(/\s+/g, " ").trim() || null;
-          setResolvedDescription(
-            normalized && normalized.length > 160
-              ? `${normalized.slice(0, 157)}...`
-              : normalized,
-          );
-        })
-        .catch(() => {
-          // The row remains usable without an excerpt when the local file is
-          // temporarily unavailable; opening the document owns error recovery.
-        });
-    };
-
-    if (typeof IntersectionObserver === "undefined" || !rootRef.current) {
-      load();
-      return () => {
-        active = false;
-      };
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          observer.disconnect();
-          load();
-        }
-      },
-      { rootMargin: "240px 0px" },
-    );
-    observer.observe(rootRef.current);
-
-    return () => {
-      active = false;
-      observer.disconnect();
-    };
-  }, [description]);
+  const resolvedDescription = description?.trim() || null;
 
   return (
     <div
-      ref={rootRef}
       className={cn("ArtifactWritingCell min-w-0", className)}
       data-section="artifact-writing-cell"
     >
@@ -113,11 +51,12 @@ export function ArtifactWritingCell({
         ) : null}
       </div>
 
-      {resolvedDescription ? (
-        <p className="line-clamp-2 pt-1.5 font-sans text-[13px] leading-[1.45] text-ink-3">
-          {resolvedDescription}
-        </p>
-      ) : null}
+      <p
+        className="line-clamp-2 min-h-[38px] pt-1.5 font-sans text-[13px] leading-[1.45] text-ink-3"
+        aria-hidden={resolvedDescription ? undefined : true}
+      >
+        {resolvedDescription}
+      </p>
 
       {dateLabel || collections ? (
         <div className="mt-2 flex min-w-0 flex-col items-start gap-1.5">

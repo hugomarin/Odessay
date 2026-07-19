@@ -108,30 +108,18 @@ describe("ArtifactWritingCell", () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
-  it("loads a description on demand when catalog metadata has no excerpt", async () => {
-    vi.stubGlobal("IntersectionObserver", undefined);
-    const loadDescription = vi
-      .fn()
-      .mockResolvedValue(
-        "Escoger bien el modelo puede optimizar mucho más tu presupuesto.",
-      );
-
-    await act(async () => {
+  it("does not trigger row-level hydration when catalog metadata has no excerpt", () => {
+    act(() => {
       root?.render(
         <DocumentStateTooltipProvider>
           <ArtifactWritingCell
             title="Post costos GPT 5.6"
             documentState="synced"
-            loadDescription={loadDescription}
           />
         </DocumentStateTooltipProvider>,
       );
-      await Promise.resolve();
     });
 
-    expect(loadDescription).toHaveBeenCalledOnce();
-    expect(container.textContent).toContain(
-      "Escoger bien el modelo puede optimizar mucho más tu presupuesto.",
-    );
+    expect(container.textContent).toBe("Post costos GPT 5.6");
   });
 });

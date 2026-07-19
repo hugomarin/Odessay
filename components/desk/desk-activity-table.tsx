@@ -54,7 +54,6 @@ import {
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
-import { getDocumentService } from "@/lib/services/document-service-factory";
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[];
@@ -184,12 +183,6 @@ export function DeskActivityTable({
             title={row.title}
             documentState={row.documentState}
             description={row.excerpt}
-            loadDescription={async () => {
-              const result = await (
-                await getDocumentService()
-              ).openWriting(row.id);
-              return result.data?.content.plainText ?? null;
-            }}
             dateLabel={row.dateLabel}
             actions={
               <>

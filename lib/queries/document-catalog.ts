@@ -43,6 +43,7 @@ export type CatalogRowViewModel = {
   cloudPresent: boolean
   createdAt: number | null
   modifiedAt: number | null
+  excerpt: string | null
 }
 
 /**
@@ -69,6 +70,7 @@ export function toCatalogRowViewModel(
     cloudPresent: record.cloudPresent,
     createdAt: record.createdAt,
     modifiedAt: record.modifiedAt,
+    excerpt: record.excerpt?.trim() || null,
   }
 }
 

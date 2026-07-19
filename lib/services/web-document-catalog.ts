@@ -11,6 +11,11 @@ import type {
 } from "@/lib/services/contracts/document-catalog"
 import { normalizeArtifactType } from "@/lib/writings/artifact-type"
 
+const toExcerpt = (value: string): string | null => {
+  const normalized = value.replace(/\s+/g, " ").trim()
+  return normalized ? normalized.slice(0, 120) : null
+}
+
 function toCatalogRecord(writing: LocalWriting): DocumentCatalogRecord {
   const localPresent = Boolean(writing.canonical_path)
   const cloudPresent = writing.lifecycle === "server-confirmed"
@@ -29,6 +34,7 @@ function toCatalogRecord(writing: LocalWriting): DocumentCatalogRecord {
     deletedAt: writing.deleted_at ?? null,
     createdAt: Date.parse(writing.created_at),
     modifiedAt: Date.parse(writing.updated_at),
+    excerpt: toExcerpt(writing.body_text),
     binding: writing.canonical_path ? {
       documentId: writing.id,
       bindingRootId: "web-indexeddb-compat",
