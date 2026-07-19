@@ -42,6 +42,7 @@ import {
   ArtifactWritingAction,
   ArtifactWritingCell,
 } from "@/components/shared/artifact-writing-cell";
+import { getDocumentService } from "@/lib/services/document-service-factory";
 import { CollectionChips } from "@/components/desk/collection-chips";
 import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
 import { TablePropertySelector } from "@/components/ui/table-property-selector";
@@ -1077,32 +1078,46 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         className: "min-w-0 pl-2 pr-5",
         render: (file) => {
           const document = documentJoin.get(file.path);
+          const writingTitle = file.name.replace(/\.(md|mdx)$/i, "");
           return (
             <ArtifactWritingCell
-              title={file.name}
+              title={writingTitle}
               documentState={deriveWorkspaceFileDocumentState(
                 file,
                 documentJoin,
               )}
-              description="Writing description will appear here."
+              loadDescription={async () => {
+                if (document) {
+                  const result = await (
+                    await getDocumentService()
+                  ).openWriting(document.id);
+                  if (result.data?.content.plainText) {
+                    return result.data.content.plainText;
+                  }
+                }
+                const preview = await (
+                  await getDesktopWorkspaceService()
+                ).readFilePreview(file.path);
+                return preview.preview;
+              }}
               dateLabel={formatFileTimestamp(file.modifiedAt)}
               actions={
                 <>
                   <ArtifactWritingAction
                     disabled
-                    label={`Rename ${file.name} (coming soon)`}
+                    label={`Rename ${writingTitle} (coming soon)`}
                   >
                     <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
                   </ArtifactWritingAction>
                   <ArtifactWritingAction
                     disabled
-                    label={`Preview ${file.name} (coming soon)`}
+                    label={`Preview ${writingTitle} (coming soon)`}
                   >
                     <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
                   </ArtifactWritingAction>
                   <ArtifactWritingAction
                     disabled
-                    label={`Assign collections for ${file.name} (coming soon)`}
+                    label={`Assign collections for ${writingTitle} (coming soon)`}
                   >
                     <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
                   </ArtifactWritingAction>

@@ -54,6 +54,7 @@ import {
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
+import { getDocumentService } from "@/lib/services/document-service-factory";
 
 type DeskActivityTableProps = {
   groups: DeskActivityGroup[];
@@ -148,7 +149,6 @@ export function DeskActivityTable({
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const { settings } = useUserSettingsContext();
   const selectionEnabled = Boolean(onToggleSelection);
-  const hasSelection = (selectedIds?.size ?? 0) > 0;
 
   const renderSelection = (row: DeskActivityRow) => {
     const isRowSelected = selectedIds?.has(row.id) ?? false;
@@ -156,7 +156,6 @@ export function DeskActivityTable({
       <ArtifactRowSelection
         label={isRowSelected ? `Deselect ${row.title}` : `Select ${row.title}`}
         selected={isRowSelected}
-        visible={hasSelection}
         onToggle={() => onToggleSelection?.(row.id)}
       />
     );
@@ -185,6 +184,12 @@ export function DeskActivityTable({
             title={row.title}
             documentState={row.documentState}
             description={row.excerpt}
+            loadDescription={async () => {
+              const result = await (
+                await getDocumentService()
+              ).openWriting(row.id);
+              return result.data?.content.plainText ?? null;
+            }}
             dateLabel={row.dateLabel}
             actions={
               <>

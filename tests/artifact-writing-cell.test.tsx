@@ -28,6 +28,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root?.unmount());
+  vi.unstubAllGlobals();
   root = null;
   container.remove();
 });
@@ -105,5 +106,32 @@ describe("ArtifactWritingCell", () => {
     expect(action?.title).toBe("Preview writing (coming soon)");
     act(() => action?.click());
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("loads a description on demand when catalog metadata has no excerpt", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const loadDescription = vi
+      .fn()
+      .mockResolvedValue(
+        "Escoger bien el modelo puede optimizar mucho más tu presupuesto.",
+      );
+
+    await act(async () => {
+      root?.render(
+        <DocumentStateTooltipProvider>
+          <ArtifactWritingCell
+            title="Post costos GPT 5.6"
+            documentState="synced"
+            loadDescription={loadDescription}
+          />
+        </DocumentStateTooltipProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    expect(loadDescription).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain(
+      "Escoger bien el modelo puede optimizar mucho más tu presupuesto.",
+    );
   });
 });
