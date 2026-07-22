@@ -368,9 +368,17 @@ export async function createDesktopDraft(options: DesktopDraftOptions = {}) {
   return service.createDraft(options)
 }
 
-export async function relocateDesktopWriting(id: string, newPath: string): Promise<void> {
+export type RelocateDesktopWritingResult =
+  | { status: "relocated" }
+  | { status: "unsupported" }
+
+// ODE-400 slice A will implement the real relocate against the SQLite catalog.
+// Until then the relocate is a no-op and MUST report "unsupported" so callers
+// never reflect a move that did not materialize (ODE-401).
+export async function relocateDesktopWriting(id: string, newPath: string): Promise<RelocateDesktopWritingResult> {
   void id
   void newPath
+  return { status: "unsupported" }
 }
 export async function relocateDesktopWritingByCanonicalPath(previous: string, next: string): Promise<void> {
   void previous

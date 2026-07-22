@@ -11,7 +11,7 @@ type Handlers = {
   onNewFile: (path: string) => void
   onEditorAction?: (action: EditorShortcutAction) => void
   onGetSaveContent?: () => { content: string; defaultName: string } | null
-  onSaveComplete?: (path: string) => Promise<void> | void
+  onSaveComplete?: (path: string) => Promise<boolean | void> | boolean | void
   documentKey?: string | null
 }
 
@@ -139,8 +139,14 @@ export function useTauriMenuEvents({
       try {
         const { invoke } = await import("@tauri-apps/api/core")
         await invoke("write_file", { path: finalPath, content: payload.content })
-        lastSavePathRef.current = finalPath
-        onSaveCompleteRef.current?.(finalPath)
+        // Only adopt the chosen path as the save target when the consumer
+        // confirms the document actually moved there. An explicit `false`
+        // (e.g. relocate still unsupported) keeps the previous target so a
+        // later save-to-disk does not keep writing to an untracked copy.
+        const adopted = await onSaveCompleteRef.current?.(finalPath)
+        if (adopted !== false) {
+          lastSavePathRef.current = finalPath
+        }
       } catch (err) {
         console.error("write_file failed:", err)
       } finally {
