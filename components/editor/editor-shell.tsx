@@ -281,6 +281,7 @@ type CorrectionToastState = {
 type ExternalFileNotice =
   | { kind: "moved"; path: string | null }
   | { kind: "deleted"; path: string | null }
+  | { kind: "relocate-unsupported"; path: string | null }
 
 function replaceEditorHistory(nextHref: string) {
   if (typeof window === "undefined") {
@@ -5257,16 +5258,24 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [handleCreateWorkspaceTab])
 
-  const handleSaveComplete = useCallback(async (path: string) => {
+  const handleSaveComplete = useCallback(async (path: string): Promise<boolean> => {
     const writingId = currentWritingIdRef.current
-    if (!writingId || !isDesktopRuntime()) return
+    if (!writingId || !isDesktopRuntime()) return false
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
-    await relocateDesktopWriting(writingId, path)
+    const result = await relocateDesktopWriting(writingId, path)
+    if (result.status !== "relocated") {
+      // The relocate is still a no-op (ODE-400 slice A pending): never reflect
+      // a move that did not materialize. Title, canonical path and any active
+      // external-file notice stay untouched; surface a clear notice instead.
+      setExternalFileNotice({ kind: "relocate-unsupported", path: currentCanonicalPathRef.current })
+      return false
+    }
     const filenameTitle = filenameToTitle(path)
     setTitle(filenameTitle)
     setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
     currentCanonicalPathRef.current = path
     setExternalFileNotice(null)
+    return true
   }, [])
 
   useTauriEditorMenuEvents(handleRunAction)
@@ -5470,6 +5479,17 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
               <span>
                 This file moved outside Artifact Studio. The editor is now following the new path:
                 <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
+              </span>
+            ) : externalFileNotice.kind === "relocate-unsupported" ? (
+              <span>
+                Moving this document to another folder isn&apos;t supported yet. A copy was written to the
+                chosen path, but Artifact Studio keeps working on the original
+                {externalFileNotice.path ? (
+                  <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
+                ) : (
+                  " file"
+                )}
+                .
               </span>
             ) : (
               <span>

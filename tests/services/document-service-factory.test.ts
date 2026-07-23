@@ -124,6 +124,15 @@ describe("desktop document service after compatibility retirement", () => {
     })
   })
 
+  it("reports the desktop relocate as unsupported until ODE-400 lands", async () => {
+    const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+    const result = await relocateDesktopWriting(id, "/elsewhere/Letter.md")
+
+    // ODE-401: the relocate is still a no-op; callers must never reflect a
+    // move that did not materialize. ODE-400 slice A replaces this stub.
+    expect(result).toEqual({ status: "unsupported" })
+  })
+
   it("opens UUIDs only through the SQLite binding and hydrates canonical Markdown", async () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).openWriting(id)
