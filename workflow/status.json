@@ -3255,6 +3255,16 @@
       "commit": "b392917bf09f2fa18a5f3999ab1a98b3f215222b",
       "date": "2026-07-23",
       "notes": "Approved 9.0/10 (PASS). Verified-write semantics: synced implies a cloud row was affected; UPDATE 0 rows falls back to INSERT or fails. cloud_present=1 projected immediately after INSERT via applyCloudSnapshots batch. Stalled queue recovered by 60s periodic tick. Image upload pre-flight checks parent writing existence and returns actionable UNAVAILABLE retryable error. Evidence: 32/32 targeted tests PASS, typecheck PASS, lint PASS with pre-existing warnings, local delivery gate PASS, Vercel SUCCESS. CI traceability FAIL on event_dispatch_ms.keydown_p95=38.43, but issue brief declares Interaction latency not required; per workflow perf exception this is informative and non-blocking."
+    },
+    {
+      "what": "feat(desktop): relocate primitive — atomic physical move managed→folder [ODE-402]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-402",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-402/escenario-a-primitivo-relocate-managedcarpeta-move-fisico-atomico-sin",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/357",
+      "commit": "eed65471abbaaefe66f609bb481578ba14161840",
+      "date": "2026-07-23",
+      "notes": "Approved 9.5/10 (PASS). Reimplements the conscious relocate primitive as a physical MOVE (rename, no copy) preserving UUID: Rust relocate_file with 'Name 2.md' collision suffix (ADR D10), cross-device copy+verify+rollback, same-volume inode-preserving rename; TypeScript relocateDesktopWriting commits current .md content, moves, binds destination manifest to same UUID, replaces SQLite binding + enqueues sync in one transaction, drops origin ledger, and registers the external BindingRoot scoped to the file. Save-to-disk/Save-As no longer writes an untracked copy; failed moves keep the previous target and surface a clear notice. Global reconciler suppresses self-write events so UI moves and Finder moves converge without duplicate reconciliation. Evidence: typecheck PASS, lint PASS with 6 pre-existing editor-shell warnings, 173 files/1148 tests PASS, Rust 34 passed/1 ignored, delivery gate PASS, traceability and Vercel SUCCESS. One non-blocking P2: BindingRoot containment check uses a hardcoded forward slash and will fail on Windows; future slices should normalize path separators."
     }
   ]
 }
