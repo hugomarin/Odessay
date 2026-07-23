@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   catalogList: vi.fn(async () => []),
   catalogResolve: vi.fn(),
   catalogDetach: vi.fn(),
+  applyReconcile: vi.fn(),
   openFile: vi.fn(),
   createDraft: vi.fn(),
   saveFile: vi.fn(),
@@ -15,6 +16,13 @@ const mocks = vi.hoisted(() => ({
   exportFile: vi.fn(),
   workspaceSync: vi.fn(),
   dualWrite: vi.fn(),
+  tauriOpen: vi.fn(),
+  tauriWrite: vi.fn(),
+  tauriRelocate: vi.fn(),
+  getBindingRoots: vi.fn(async () => [] as unknown[]),
+  getDesktopSettings: vi.fn(async () => ({ data: { workspaces: [] }, error: null })),
+  upsertBindingRoot: vi.fn(),
+  refreshReconcilerRoots: vi.fn(),
 }))
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
@@ -31,8 +39,19 @@ vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
     list = mocks.catalogList
     resolvePath = mocks.catalogResolve
     detachLocalFile = mocks.catalogDetach
+    applyReconcileTransaction = mocks.applyReconcile
     commitDualWrite = (input: unknown) => mocks.dualWrite("/config/desktop-index.sqlite3", input)
   },
+}))
+vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
+  DesktopSettingsService: class {
+    getBindingRoots = mocks.getBindingRoots
+    getDesktopSettings = mocks.getDesktopSettings
+    upsertBindingRoot = mocks.upsertBindingRoot
+  },
+}))
+vi.mock("@/lib/services/desktop/desktop-workspace-reconciler", () => ({
+  refreshWorkspaceReconcilerRoots: mocks.refreshReconcilerRoots,
 }))
 vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
   FilesystemDocumentService: class {
@@ -47,6 +66,9 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriWorkspaceSync: mocks.workspaceSync,
   tauriCatalogDualWrite: mocks.dualWrite,
+  tauriOpenFile: mocks.tauriOpen,
+  tauriWriteFile: mocks.tauriWrite,
+  tauriRelocateFile: mocks.tauriRelocate,
 }))
 vi.mock("@/lib/services/web-document-service", () => ({
   webDocumentService: { listWritings: vi.fn() },
@@ -124,13 +146,245 @@ describe("desktop document service after compatibility retirement", () => {
     })
   })
 
-  it("reports the desktop relocate as unsupported until ODE-400 lands", async () => {
-    const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
-    const result = await relocateDesktopWriting(id, "/elsewhere/Letter.md")
+  describe("relocateDesktopWriting (ODE-402)", () => {
+    const managedRecord = {
+      ...catalogRecord,
+      binding: {
+        ...catalogRecord.binding,
+        bindingRootId: "managed-root",
+        relativePath: "Letter.md",
+        canonicalPath: "/managed/Letter.md",
+      },
+    }
 
-    // ODE-401: the relocate is still a no-op; callers must never reflect a
-    // move that did not materialize. ODE-400 slice A replaces this stub.
-    expect(result).toEqual({ status: "unsupported" })
+    beforeEach(() => {
+      mocks.catalogGet.mockResolvedValue(managedRecord)
+      mocks.tauriRelocate.mockResolvedValue("/chosen/Renamed.md")
+      mocks.getBindingRoots.mockResolvedValue([
+        {
+          id: "managed-root", rootPath: "/managed", kind: "managed",
+          visibleAsWorkspace: false, selectedPaths: [], consentedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ])
+      mocks.workspaceSync.mockImplementation(async (rootPath: string) => ({
+        rootPath,
+        bindingRootId: rootPath === "/managed" ? "managed-root" : "dest-root",
+        selectedPaths: rootPath === "/managed" ? [] : ["Renamed.md"],
+        files: rootPath === "/managed"
+          ? []
+          : [{
+              id, path: "/chosen/Renamed.md", relativePath: "Renamed.md",
+              inode: 7, contentHash: "blake3:b", size: 8, modifiedAt: 9,
+            }],
+      }))
+    })
+
+    it("moves the file, binds the SAME UUID at the destination and enqueues sync in one transaction", async () => {
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "# Letter\n\nHello\n")
+
+      expect(result).toEqual({ status: "relocated", path: "/chosen/Renamed.md" })
+
+      // Content commit to the CURRENT canonical file, then the physical rename.
+      expect(mocks.tauriWrite).toHaveBeenCalledWith("/managed/Letter.md", "# Letter\n\nHello\n")
+      expect(mocks.tauriRelocate).toHaveBeenCalledWith("/managed/Letter.md", "/chosen/Renamed.md")
+      expect(mocks.tauriWrite.mock.invocationCallOrder[0])
+        .toBeLessThan(mocks.tauriRelocate.mock.invocationCallOrder[0])
+
+      // Destination ledger binds the moved file to the SAME UUID with a scope
+      // limited to exactly that file (a new root never indexes the folder).
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/chosen", ["Renamed.md"], { "Renamed.md": id })
+
+      // SQLite binding replacement + sync enqueue in one dual-write transaction.
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        "/config/desktop-index.sqlite3",
+        expect.objectContaining({
+          document: expect.objectContaining({ id, localPresent: true, title: "Renamed" }),
+          binding: expect.objectContaining({
+            canonicalPath: "/chosen/Renamed.md",
+            bindingRootId: "dest-root",
+            visibleAsWorkspace: false,
+          }),
+          mutation: expect.objectContaining({ operation: "upsert" }),
+        }),
+      )
+
+      // Origin ledger drop after SQLite moved on (manifest rewritten without the file).
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/managed")
+      const destSyncOrder = mocks.workspaceSync.mock.invocationCallOrder[0]
+      expect(mocks.tauriRelocate.mock.invocationCallOrder[0]).toBeLessThan(destSyncOrder)
+      expect(destSyncOrder).toBeLessThan(mocks.dualWrite.mock.invocationCallOrder[0])
+
+      // The chosen folder becomes an external BindingRoot: consented, scoped to
+      // the file, never a visible Workspace by default; the reconciler watches it.
+      expect(mocks.upsertBindingRoot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "dest-root", rootPath: "/chosen", kind: "external",
+          visibleAsWorkspace: false, selectedPaths: ["Renamed.md"],
+        }),
+      )
+      expect(mocks.upsertBindingRoot.mock.calls[0][0].consentedAt).toBeTruthy()
+      expect(mocks.refreshReconcilerRoots).toHaveBeenCalled()
+    })
+
+    it("adopts the collision-suffixed path resolved by the physical move", async () => {
+      mocks.tauriRelocate.mockResolvedValue("/chosen/Renamed 2.md")
+      mocks.workspaceSync.mockImplementation(async (rootPath: string) => ({
+        rootPath,
+        bindingRootId: rootPath === "/managed" ? "managed-root" : "dest-root",
+        selectedPaths: rootPath === "/managed" ? [] : ["Renamed 2.md"],
+        files: rootPath === "/managed"
+          ? []
+          : [{
+              id, path: "/chosen/Renamed 2.md", relativePath: "Renamed 2.md",
+              inode: 7, contentHash: "blake3:b", size: 8, modifiedAt: 9,
+            }],
+      }))
+
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "Hello\n")
+
+      expect(result).toEqual({ status: "relocated", path: "/chosen/Renamed 2.md" })
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/chosen", ["Renamed 2.md"], { "Renamed 2.md": id })
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          document: expect.objectContaining({ title: "Renamed 2" }),
+        }),
+      )
+    })
+
+    it("extends a narrowed selection of an existing destination root with the chosen file", async () => {
+      mocks.getBindingRoots.mockResolvedValue([
+        {
+          id: "managed-root", rootPath: "/managed", kind: "managed",
+          visibleAsWorkspace: false, selectedPaths: [], consentedAt: null,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "dest-root", rootPath: "/chosen", kind: "external",
+          visibleAsWorkspace: false, selectedPaths: ["Other.md"],
+          consentedAt: "2026-01-01T00:00:00.000Z", createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ])
+      mocks.workspaceSync.mockImplementation(async (rootPath: string) => ({
+        rootPath,
+        bindingRootId: rootPath === "/managed" ? "managed-root" : "dest-root",
+        selectedPaths: rootPath === "/managed" ? [] : ["Other.md", "Renamed.md"],
+        files: rootPath === "/managed"
+          ? []
+          : [{
+              id, path: "/chosen/Renamed.md", relativePath: "Renamed.md",
+              inode: 7, contentHash: "blake3:b", size: 8, modifiedAt: 9,
+            }],
+      }))
+
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "Hello\n")
+
+      expect(result.status).toBe("relocated")
+      expect(mocks.workspaceSync).toHaveBeenCalledWith(
+        "/chosen",
+        ["Other.md", "Renamed.md"],
+        { "Renamed.md": id },
+      )
+      // Existing root: no new registration, only the extended durable scope.
+      expect(mocks.refreshReconcilerRoots).not.toHaveBeenCalled()
+      expect(mocks.upsertBindingRoot).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "dest-root", selectedPaths: ["Other.md", "Renamed.md"] }),
+      )
+    })
+
+    it("reports a recoverable failure and touches nothing else when the physical move fails", async () => {
+      mocks.tauriRelocate.mockRejectedValue(new Error("relocate_file verify: copied content mismatch; original preserved"))
+
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "Hello\n")
+
+      expect(result).toEqual({
+        status: "failed",
+        message: "relocate_file verify: copied content mismatch; original preserved",
+      })
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+      expect(mocks.upsertBindingRoot).not.toHaveBeenCalled()
+      expect(mocks.workspaceSync).not.toHaveBeenCalled()
+    })
+
+    it("reports a recoverable failure for a UUID without local binding (never a draft)", async () => {
+      mocks.catalogGet.mockResolvedValue(null)
+
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "Hello\n")
+
+      expect(result.status).toBe("failed")
+      expect(mocks.tauriRelocate).not.toHaveBeenCalled()
+      expect(mocks.tauriWrite).not.toHaveBeenCalled()
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+    })
+
+    it("fails without adopting a second identity when the destination manifest binds another UUID", async () => {
+      mocks.workspaceSync.mockImplementation(async (rootPath: string) => ({
+        rootPath,
+        bindingRootId: "dest-root",
+        selectedPaths: ["Renamed.md"],
+        files: [{
+          id: "22222222-2222-4222-8222-222222222222", path: "/chosen/Renamed.md",
+          relativePath: "Renamed.md", inode: 7, contentHash: "blake3:b", size: 8, modifiedAt: 9,
+        }],
+      }))
+
+      const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
+      const result = await relocateDesktopWriting(id, "/chosen/Renamed.md", "Hello\n")
+
+      expect(result.status).toBe("failed")
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+    })
+  })
+
+  describe("relocateDesktopWritingByCanonicalPath (watcher-observed move)", () => {
+    it("projects the manifest's verdict into SQLite via the reconcile transaction", async () => {
+      mocks.catalogResolve.mockResolvedValue({ kind: "resolved", record: catalogRecord })
+      mocks.workspaceSync.mockResolvedValue({
+        rootPath: "/docs", bindingRootId: "root-1", selectedPaths: [],
+        files: [{
+          id, path: "/docs/Sub/Letter.md", relativePath: "Sub/Letter.md",
+          inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 10,
+        }],
+      })
+
+      const { relocateDesktopWritingByCanonicalPath } = await import("@/lib/services/document-service-factory")
+      await relocateDesktopWritingByCanonicalPath("/docs/Letter.md", "/docs/Sub/Letter.md")
+
+      expect(mocks.applyReconcile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bindingRootId: "root-1",
+          rootPath: "/docs",
+          upserts: [expect.objectContaining({
+            documentId: id,
+            canonicalPath: "/docs/Sub/Letter.md",
+            relativePath: "Sub/Letter.md",
+          })],
+          detached: [],
+        }),
+      )
+    })
+
+    it("never auto-chooses identity when the manifest resolves a different UUID", async () => {
+      mocks.catalogResolve.mockResolvedValue({ kind: "resolved", record: catalogRecord })
+      mocks.workspaceSync.mockResolvedValue({
+        rootPath: "/docs", bindingRootId: "root-1", selectedPaths: [],
+        files: [{
+          id: "33333333-3333-4333-8333-333333333333", path: "/docs/Sub/Letter.md",
+          relativePath: "Sub/Letter.md", inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 10,
+        }],
+      })
+
+      const { relocateDesktopWritingByCanonicalPath } = await import("@/lib/services/document-service-factory")
+      await relocateDesktopWritingByCanonicalPath("/docs/Letter.md", "/docs/Sub/Letter.md")
+
+      expect(mocks.applyReconcile).not.toHaveBeenCalled()
+    })
   })
 
   it("opens UUIDs only through the SQLite binding and hydrates canonical Markdown", async () => {

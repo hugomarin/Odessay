@@ -1,9 +1,10 @@
 /**
  * @vitest-environment happy-dom
  *
- * @contract ODE-401 P3 — EditorShell "Save to disk / Save As" must not adopt
- * the chosen path when the desktop relocate is unsupported, and must adopt it
- * when the relocate is confirmed.
+ * @contract ODE-401/ODE-402 — EditorShell "Save to disk / Save As" must not
+ * adopt the chosen path when the desktop relocate fails (and must not leave a
+ * copy at the destination), and must adopt the relocated — possibly
+ * collision-suffixed — path when the move is confirmed.
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -351,8 +352,11 @@ afterEach(async () => {
 })
 
 describe("EditorShell save-to-disk relocate behavior", () => {
-  it("keeps the original title and canonical path when relocate is unsupported", async () => {
-    mocks.relocateDesktopWriting.mockResolvedValue({ status: "unsupported" })
+  it("keeps the original title and writes nothing at the destination when relocate fails", async () => {
+    mocks.relocateDesktopWriting.mockResolvedValue({
+      status: "failed",
+      message: "relocate_file: source not found",
+    })
 
     await act(async () => root?.render(<EditorShell writingId="writing-1" />))
 
@@ -363,24 +367,31 @@ describe("EditorShell save-to-disk relocate behavior", () => {
     await emit("save-as")
 
     await vi.waitFor(() =>
-      expect(mocks.invoke).toHaveBeenCalledWith("write_file", {
-        path: "/chosen/Renamed.md",
-        content: "# Letter\n",
-      }),
+      expect(mocks.relocateDesktopWriting).toHaveBeenCalledWith(
+        "writing-1",
+        "/chosen/Renamed.md",
+        "# Letter\n",
+      ),
     )
 
-    // 1. Title must remain the original document title, not the chosen filename.
+    // 1. No copy may be written at the chosen destination (ODE-402: move, not copy).
+    expect(mocks.invoke).not.toHaveBeenCalledWith("write_file", expect.anything())
+
+    // 2. Title must remain the original document title, not the chosen filename.
     expect(getActiveTabTitle()).toBe("Letter")
 
-    // 2. The notice must surface the original canonical path, not the chosen one.
+    // 3. The notice must surface the original canonical path, not the chosen one.
     const text = container.textContent ?? ""
-    expect(text).toContain("Moving this document to another folder isn't supported yet")
+    expect(text).toContain("couldn't be moved to the chosen folder")
     expect(text).toContain("/managed/Letter.md")
     expect(text).not.toContain("/chosen/Renamed.md")
   })
 
-  it("adopts the chosen filename and clears the notice when relocate is confirmed", async () => {
-    mocks.relocateDesktopWriting.mockResolvedValue({ status: "relocated" })
+  it("adopts the relocated (collision-suffixed) filename and clears the notice", async () => {
+    mocks.relocateDesktopWriting.mockResolvedValue({
+      status: "relocated",
+      path: "/chosen/Renamed 2.md",
+    })
 
     await act(async () => root?.render(<EditorShell writingId="writing-1" />))
 
@@ -391,19 +402,20 @@ describe("EditorShell save-to-disk relocate behavior", () => {
     await emit("save-as")
 
     await vi.waitFor(() =>
-      expect(mocks.invoke).toHaveBeenCalledWith("write_file", {
-        path: "/chosen/Renamed.md",
-        content: "# Letter\n",
-      }),
+      expect(mocks.relocateDesktopWriting).toHaveBeenCalledWith(
+        "writing-1",
+        "/chosen/Renamed.md",
+        "# Letter\n",
+      ),
     )
 
-    // Title should follow the new filename.
+    // Title should follow the FINAL filename resolved by the move (suffix included).
     await vi.waitFor(() => {
-      expect(getActiveTabTitle()).toBe("Renamed")
+      expect(getActiveTabTitle()).toBe("Renamed 2")
     })
 
-    // No "unsupported" notice should be rendered.
+    // No failure notice should be rendered.
     const text = container.textContent ?? ""
-    expect(text).not.toContain("Moving this document to another folder isn't supported yet")
+    expect(text).not.toContain("couldn't be moved to the chosen folder")
   })
 })

@@ -95,6 +95,20 @@ export async function tauriRenameFile(oldPath: string, newPath: string): Promise
   return resolvedPath
 }
 
+/**
+ * Conscious physical move (ODE-402): collision-suffixing, cross-device-safe
+ * rename that never overwrites. Marks every involved path as a self-write so
+ * the watcher does not duplicate the reconciliation the caller projects itself.
+ * Returns the final destination path (may carry a collision suffix).
+ */
+export async function tauriRelocateFile(oldPath: string, newPath: string): Promise<string> {
+  markOdessaySelfWritePath(oldPath)
+  markOdessaySelfWritePath(newPath)
+  const resolvedPath = await invoke<string>("relocate_file", { oldPath, newPath })
+  markOdessaySelfWritePath(resolvedPath)
+  return resolvedPath
+}
+
 export async function tauriListRecentFiles(
   dir: string,
   limit = 50,
