@@ -1,12 +1,14 @@
 /**
  * Document ↔ workspace assignment model.
  *
- * Architecture Contract §ODE-318:
- *  - The assignment is *contextual ownership* metadata, not physical containment.
- *    Assigning or moving a writing to a workspace never relocates the file on
- *    disk and never makes the workspace the physical owner of the substrate.
- *    "Files in place" (ADR D7) is preserved: only this logical association
- *    changes.
+ * Architecture Contract §ODE-318, scoped by the ADR D7 amendment (ODE-400/403):
+ *  - The metadata-only rule ("assigning never relocates the file on disk")
+ *    applies to *presentation-only* workspaces (no backing folder) and to
+ *    writings without a local file. For folder-backed workspaces, "Move to"
+ *    IS a conscious physical relocate handled by the desktop adapter; after
+ *    the move, membership is inferred from the path
+ *    (`inferWorkspaceSlugFromPath`) and the stale map entry is cleared so path
+ *    and metadata never sustain two truths.
  *  - The map is single-valued per writing — a document has at most one primary
  *    workspace, so re-assigning replaces the previous slug instead of stacking.
  *  - These helpers are pure (no Tauri, no IO) so the invariant is unit-testable

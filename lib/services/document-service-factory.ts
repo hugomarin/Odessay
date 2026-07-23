@@ -377,6 +377,19 @@ export type RelocateDesktopWritingResult =
   | { status: "failed"; message: string }
   | { status: "unsupported" }
 
+/**
+ * Reads the canonical `.md` path bound to a writing UUID, or null when the
+ * document has no local binding on this machine (cloud-only) or the runtime is
+ * not desktop. Read-only: lets workspace flows decide between a physical move
+ * and metadata-only membership without inferring identity from the filesystem.
+ */
+export async function getDesktopWritingCanonicalPath(id: string): Promise<string | null> {
+  if (!isDesktopRuntime()) return null
+  const runtime = await resolveDesktopRuntimeServices()
+  const record = await runtime.catalog.getById(id)
+  return record?.binding?.canonicalPath ?? null
+}
+
 function matchesSelectedPaths(relativePath: string, selectedPaths: string[]) {
   if (selectedPaths.length === 0) return true
   return selectedPaths.some(

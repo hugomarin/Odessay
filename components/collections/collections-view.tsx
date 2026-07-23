@@ -127,7 +127,12 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
   const assignWorkspace = useCallback(
     async (writingId: string, slug: string) => {
-      await getWorkspaceAssignmentService().assign(writingId, slug)
+      try {
+        // Folder-backed target: physically moves the `.md` (ADR D7 amended).
+        await getWorkspaceAssignmentService().assign(writingId, slug)
+      } catch (error) {
+        console.error("[collections:workspace-move]", error)
+      }
       await loadWorkspaceData()
     },
     [loadWorkspaceData],
@@ -135,7 +140,11 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
   const unassignWorkspace = useCallback(
     async (writingId: string) => {
-      await getWorkspaceAssignmentService().clearAssignment(writingId)
+      try {
+        await getWorkspaceAssignmentService().clearAssignment(writingId)
+      } catch (error) {
+        console.error("[collections:workspace-remove]", error)
+      }
       await loadWorkspaceData()
     },
     [loadWorkspaceData],

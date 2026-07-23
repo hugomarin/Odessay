@@ -19,6 +19,10 @@ const tauriMocks = vi.hoisted(() => ({
   tauriWorkspaceSync: vi.fn(),
 }));
 const reconcilerMocks = vi.hoisted(() => ({ refreshRoots: vi.fn() }));
+const factoryMocks = vi.hoisted(() => ({
+  relocateDesktopWriting: vi.fn(),
+  getDesktopWritingCanonicalPath: vi.fn(),
+}));
 
 // The desktop workspace service imports Tauri + local-db modules at the top
 // level. Stub them so the assignment methods (which only touch the injected
@@ -35,6 +39,12 @@ vi.mock("@/lib/services/document-service-factory", () => ({
   getDocumentService: vi.fn(),
   markDesktopWritingDeletedByCanonicalPath: vi.fn(),
   relocateDesktopWritingByCanonicalPath: vi.fn(),
+  relocateDesktopWriting: factoryMocks.relocateDesktopWriting,
+  getDesktopWritingCanonicalPath: factoryMocks.getDesktopWritingCanonicalPath,
+}));
+vi.mock("@/lib/services/desktop/open-document-desktop", () => ({
+  MANAGED_ROOT_DIRNAME: "artifact-studio-managed",
+  openDesktopDocument: vi.fn(),
 }));
 vi.mock("@/lib/services/desktop/tauri-fs-watch", () => ({
   isOdessayInternalPath: vi.fn(() => false),
@@ -124,6 +134,22 @@ function createFakeSettingsService(initial: FakeStore = {}) {
         ? roots.map((root) => (matches(root) ? record : root))
         : [...roots, record];
     }),
+    ensureManagedRoot: vi.fn(async (rootPath: string) => {
+      const roots = store.bindingRoots ?? [];
+      const existing = roots.find((root) => root.kind === "managed");
+      if (existing) return existing;
+      const managed = {
+        id: "managed-root",
+        rootPath,
+        kind: "managed" as const,
+        visibleAsWorkspace: false,
+        selectedPaths: [],
+        consentedAt: null,
+        createdAt: "2026-06-01T00:00:00.000Z",
+      };
+      store.bindingRoots = [...roots, managed];
+      return managed;
+    }),
     get store() {
       return store;
     },
@@ -150,6 +176,9 @@ describe("DesktopWorkspaceService assignments", () => {
     tauriMocks.tauriWorkspaceCreate.mockReset();
     tauriMocks.tauriWorkspaceSync.mockReset();
     reconcilerMocks.refreshRoots.mockReset();
+    factoryMocks.relocateDesktopWriting.mockReset();
+    // Default: the writing has no local file, so membership stays metadata-only.
+    factoryMocks.getDesktopWritingCanonicalPath.mockReset().mockResolvedValue(null);
     settings = createFakeSettingsService({
       workspaces: [record("drafts", "Drafts"), record("letters", "Letters")],
     });
@@ -238,6 +267,152 @@ describe("DesktopWorkspaceService assignments", () => {
     expect(await service.getAssignment("writing-1")).toBeNull();
     expect(await service.getAssignment("writing-2")).toBe("letters");
     expect(await service.listAssignments()).toEqual({ "writing-2": "letters" });
+  });
+
+  describe("folder-backed physical move (ODE-403, ADR D7 amended)", () => {
+    beforeEach(() => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(
+        "/managed/Letter.md",
+      );
+      factoryMocks.relocateDesktopWriting.mockResolvedValue({
+        status: "relocated",
+        path: "/Users/me/drafts/Letter.md",
+      });
+    });
+
+    it("moves the .md into the workspace folder and clears the stale explicit assignment", async () => {
+      // A stale metadata assignment must not survive the physical move.
+      await settings.updateDesktopSettings({
+        workspaceAssignments: { "writing-1": "letters" },
+      });
+
+      await service.assignToWorkspace("writing-1", "drafts");
+
+      expect(factoryMocks.relocateDesktopWriting).toHaveBeenCalledWith(
+        "writing-1",
+        "/Users/me/drafts/Letter.md",
+      );
+      // Membership is now inferred from the path — the map holds no second truth.
+      expect(settings.store.workspaceAssignments).toEqual({});
+    });
+
+    it("reassigning to another folder-backed workspace moves the file to the new root", async () => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(
+        "/Users/me/drafts/Letter.md",
+      );
+      factoryMocks.relocateDesktopWriting.mockResolvedValue({
+        status: "relocated",
+        path: "/Users/me/letters/Letter.md",
+      });
+
+      await service.assignToWorkspace("writing-1", "letters");
+
+      expect(factoryMocks.relocateDesktopWriting).toHaveBeenCalledWith(
+        "writing-1",
+        "/Users/me/letters/Letter.md",
+      );
+    });
+
+    it("skips the physical move when the file already lives inside the target root", async () => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(
+        "/Users/me/drafts/Sub/Letter.md",
+      );
+      await settings.updateDesktopSettings({
+        workspaceAssignments: { "writing-1": "letters" },
+      });
+
+      await service.assignToWorkspace("writing-1", "drafts");
+
+      expect(factoryMocks.relocateDesktopWriting).not.toHaveBeenCalled();
+      // The stale metadata entry still gets cleared: path is the single truth.
+      expect(settings.store.workspaceAssignments).toEqual({});
+    });
+
+    it("keeps metadata-only membership for writings without a local file", async () => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(null);
+
+      await service.assignToWorkspace("writing-1", "drafts");
+
+      expect(factoryMocks.relocateDesktopWriting).not.toHaveBeenCalled();
+      expect(await service.getAssignment("writing-1")).toBe("drafts");
+    });
+
+    it("surfaces a failed relocate instead of writing metadata that lies about the location", async () => {
+      factoryMocks.relocateDesktopWriting.mockResolvedValue({
+        status: "failed",
+        message: "relocate_file verify: copied content mismatch; original preserved",
+      });
+
+      await expect(
+        service.assignToWorkspace("writing-1", "drafts"),
+      ).rejects.toThrow(/copied content mismatch/);
+      expect(settings.store.workspaceAssignments ?? {}).toEqual({});
+    });
+
+    it("returns the .md to the managed root when removing from a folder-backed workspace", async () => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(
+        "/Users/me/drafts/Letter.md",
+      );
+      await settings.updateDesktopSettings({
+        bindingRoots: [
+          {
+            id: "managed-root",
+            rootPath: "/managed",
+            kind: "managed",
+            visibleAsWorkspace: false,
+            selectedPaths: [],
+            consentedAt: null,
+            createdAt: "2026-06-01T00:00:00.000Z",
+          },
+        ],
+      });
+      factoryMocks.relocateDesktopWriting.mockResolvedValue({
+        status: "relocated",
+        path: "/managed/Letter.md",
+      });
+
+      await service.clearAssignment("writing-1");
+
+      expect(factoryMocks.relocateDesktopWriting).toHaveBeenCalledWith(
+        "writing-1",
+        "/managed/Letter.md",
+      );
+      expect(await service.getAssignment("writing-1")).toBeNull();
+    });
+
+    it("remove is metadata-only when the file does not live inside any workspace root", async () => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(
+        "/Users/me/elsewhere/Letter.md",
+      );
+      await settings.updateDesktopSettings({
+        workspaceAssignments: { "writing-1": "drafts" },
+      });
+
+      await service.clearAssignment("writing-1");
+
+      expect(factoryMocks.relocateDesktopWriting).not.toHaveBeenCalled();
+      expect(await service.getAssignment("writing-1")).toBeNull();
+    });
+
+    it("registers the managed root on demand when none exists yet", async () => {
+      factoryMocks.getDesktopWritingCanonicalPath.mockResolvedValue(
+        "/Users/me/drafts/Letter.md",
+      );
+      factoryMocks.relocateDesktopWriting.mockResolvedValue({
+        status: "relocated",
+        path: "/tmp/cfg/artifact-studio-managed/Letter.md",
+      });
+
+      await service.clearAssignment("writing-1");
+
+      expect(settings.ensureManagedRoot).toHaveBeenCalledWith(
+        "/tmp/cfg/artifact-studio-managed",
+      );
+      expect(factoryMocks.relocateDesktopWriting).toHaveBeenCalledWith(
+        "writing-1",
+        "/tmp/cfg/artifact-studio-managed/Letter.md",
+      );
+    });
   });
 
   it("keeps hyphens and underscores in a workspace filename-derived title", async () => {

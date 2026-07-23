@@ -27,9 +27,19 @@ export interface WorkspaceAssignmentService {
   getAssignment(writingId: string): Promise<string | null>
   /** Full workspace detail for destination-picking or inspection flows. */
   getWorkspaceDetail(slug: string): Promise<WorkspaceDetail | null>
-  /** Assigns or moves a writing to an existing workspace. Never moves the file. */
+  /**
+   * Moves a writing to an existing workspace. For a folder-backed workspace
+   * this physically relocates the canonical `.md` into the workspace folder
+   * (ADR D7 amended — conscious move, same UUID); presentation-only workspaces
+   * and writings without a local file stay metadata-only.
+   */
   assign(writingId: string, slug: string): Promise<void>
-  /** Removes the workspace assignment for a writing. Never moves the file. */
+  /**
+   * Removes a writing from its workspace. When the file physically lives in a
+   * folder-backed workspace, it returns to the managed root via the same
+   * relocate primitive (symmetric, reversible); otherwise only the metadata
+   * assignment is dropped.
+   */
   clearAssignment(writingId: string): Promise<void>
   /**
    * Registers a new workspace (native folder picker on desktop) and returns it

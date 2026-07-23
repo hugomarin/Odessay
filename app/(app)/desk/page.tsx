@@ -292,7 +292,15 @@ export default function DeskPage() {
   const assignWorkspace = useCallback(
     async (writingId: string, slug: string) => {
       const service = getWorkspaceAssignmentService()
-      await service.assign(writingId, slug)
+      try {
+        // Folder-backed target: this physically moves the `.md` (ADR D7
+        // amended). A failed move throws with nothing durable written.
+        await service.assign(writingId, slug)
+      } catch (error) {
+        console.error("[desk:workspace-move]", error)
+      }
+      // Always reload from the catalog so the UI reflects reality — success
+      // shows the new location, failure never fakes one.
       await refreshWorkspaceAssignments()
       await loadDeskActivity()
     },
@@ -302,7 +310,12 @@ export default function DeskPage() {
   const unassignWorkspace = useCallback(
     async (writingId: string) => {
       const service = getWorkspaceAssignmentService()
-      await service.clearAssignment(writingId)
+      try {
+        // Folder-backed membership: this returns the `.md` to Writings.
+        await service.clearAssignment(writingId)
+      } catch (error) {
+        console.error("[desk:workspace-remove]", error)
+      }
       await refreshWorkspaceAssignments()
       await loadDeskActivity()
     },
