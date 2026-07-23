@@ -6,9 +6,14 @@ import {
   filenameToTitle,
   UNTITLED_DOCUMENT_NAME,
 } from "@/lib/desktop/document-naming";
-import { openDesktopDocument } from "@/lib/services/desktop/open-document-desktop";
 import {
+  MANAGED_ROOT_DIRNAME,
+  openDesktopDocument,
+} from "@/lib/services/desktop/open-document-desktop";
+import {
+  getDesktopWritingCanonicalPath,
   markDesktopWritingDeletedByCanonicalPath,
+  relocateDesktopWriting,
   relocateDesktopWritingByCanonicalPath,
 } from "@/lib/services/document-service-factory";
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
@@ -65,6 +70,16 @@ function joinDesktopPath(basePath: string, relativePath: string) {
   return normalizedRelative
     ? `${normalizedBase}/${normalizedRelative}`
     : normalizedBase;
+}
+
+function pathBasename(value: string) {
+  const separator = Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
+  return separator < 0 ? value : value.slice(separator + 1);
+}
+
+function isPathInsideRoot(path: string, rootPath: string) {
+  const normalizedRoot = rootPath.replace(/[\\/]+$/, "");
+  return path.startsWith(`${normalizedRoot}/`);
 }
 
 function formatWorkspaceFromSnapshot(
@@ -452,10 +467,16 @@ export class DesktopWorkspaceService {
     await this.writeAssignments(pruned);
   }
 
-  // ─── Document ↔ workspace assignment (contextual ownership) ─────────────────
+  // ─── Document ↔ workspace membership ─────────────────────────────────────────
   //
-  // The assignment is logical metadata: it records which workspace a writing
-  // belongs to without moving the underlying file or exposing local paths.
+  // ADR D7 (amended, ODE-400/ODE-403): for a folder-backed workspace (its
+  // BindingRoot is `visibleAsWorkspace`), "Move to workspace" is a *conscious
+  // physical move* of the canonical `.md` into the workspace folder via the
+  // relocate primitive (ODE-402) — same UUID, binding intact. Membership is then
+  // inferred from the path (`inferWorkspaceSlugFromPath`), so the explicit
+  // assignment map is cleared after the move: path and metadata never sustain
+  // two truths. The metadata-only model remains for presentation-only
+  // workspaces (no folder) and for writings without a local file.
 
   private async readAssignments(): Promise<WorkspaceAssignmentMap> {
     const result = await this.settingsService.getDesktopSettings();
@@ -500,23 +521,114 @@ export class DesktopWorkspaceService {
   }
 
   /**
-   * Assigns (or moves) a writing to an existing workspace. Single-valued, so a
-   * move simply replaces the previous slug. Does not touch the file on disk.
+   * Moves a writing to an existing workspace. For a folder-backed target the
+   * canonical `.md` is physically relocated into the workspace folder (same
+   * UUID, source and destination `.odessay` ledgers updated by the relocate
+   * primitive) and the explicit assignment is dropped — membership becomes
+   * path-inferred. Presentation-only targets and writings without a local file
+   * keep the single-valued metadata assignment.
    */
   async assignToWorkspace(writingId: string, slug: string): Promise<void> {
     const records = await this.readRecords();
-    if (!records.some((record) => record.slug === slug)) {
+    const target = records.find((record) => record.slug === slug);
+    if (!target) {
       throw new Error(`Unknown workspace: ${slug}`);
     }
 
+    const rootPath = target.rootPath?.trim();
+    const canonicalPath = rootPath
+      ? await getDesktopWritingCanonicalPath(writingId)
+      : null;
+
+    if (!rootPath || !canonicalPath) {
+      // Presentation-only workspace, or a writing with no local file: contextual
+      // metadata is the only membership model and no physical path can
+      // contradict it.
+      const assignments = await this.readAssignments();
+      await this.writeAssignments(withAssignment(assignments, writingId, slug));
+      return;
+    }
+
+    if (!isPathInsideRoot(canonicalPath, rootPath)) {
+      const destinationPath = joinDesktopPath(
+        rootPath,
+        pathBasename(canonicalPath),
+      );
+      const result = await relocateDesktopWriting(writingId, destinationPath);
+      if (result.status !== "relocated") {
+        // Recoverable by design (ODE-402): nothing durable was created, so
+        // surface the failure instead of writing metadata that lies about
+        // where the file lives.
+        throw new Error(
+          result.status === "failed"
+            ? result.message
+            : "Moving files requires the desktop app",
+        );
+      }
+    }
+
+    // Membership is now inferred from the physical path; drop any explicit
+    // assignment so the map never contradicts the file's location.
     const assignments = await this.readAssignments();
-    await this.writeAssignments(withAssignment(assignments, writingId, slug));
+    if (readAssignmentSlug(assignments, writingId) !== null) {
+      await this.writeAssignments(withoutAssignment(assignments, writingId));
+    }
   }
 
-  /** Removes any workspace assignment for a writing. The file stays in place. */
+  /**
+   * Removes a writing from its workspace. When the `.md` physically lives
+   * inside a folder-backed workspace root, removal is the symmetric conscious
+   * move: the file returns to the managed root (the "no workspace" home) via
+   * the same relocate primitive — same UUID, binding intact, reversible. The
+   * explicit assignment entry is always dropped.
+   */
   async clearAssignment(writingId: string): Promise<void> {
+    const canonicalPath = await getDesktopWritingCanonicalPath(writingId);
+    if (canonicalPath) {
+      const records = await this.readRecords();
+      const containingWorkspace = records
+        .filter((record) => record.rootPath?.trim())
+        .filter((record) => isPathInsideRoot(canonicalPath, record.rootPath))
+        .sort((left, right) => right.rootPath.length - left.rootPath.length)[0];
+
+      if (containingWorkspace) {
+        const managedRootPath = await this.resolveManagedRootPath();
+        const destinationPath = joinDesktopPath(
+          managedRootPath,
+          pathBasename(canonicalPath),
+        );
+        const result = await relocateDesktopWriting(writingId, destinationPath);
+        if (result.status !== "relocated") {
+          throw new Error(
+            result.status === "failed"
+              ? result.message
+              : "Moving files requires the desktop app",
+          );
+        }
+      }
+    }
+
     const assignments = await this.readAssignments();
     await this.writeAssignments(withoutAssignment(assignments, writingId));
+  }
+
+  /**
+   * Resolves the managed BindingRoot — the durable "no workspace" home where
+   * removed documents return. Guaranteed to exist by `ensureManagedRoot` (spec
+   * §BindingRoot: always present, never visible as a Workspace).
+   */
+  private async resolveManagedRootPath(): Promise<string> {
+    const roots = await this.settingsService.getBindingRoots();
+    const managed = roots.find((root) => root.kind === "managed");
+    if (managed) {
+      return managed.rootPath;
+    }
+
+    const configDir = await appConfigDir();
+    const record = await this.settingsService.ensureManagedRoot(
+      joinDesktopPath(configDir, MANAGED_ROOT_DIRNAME),
+    );
+    return record.rootPath;
   }
 
   async watchWorkspace(

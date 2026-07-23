@@ -26,6 +26,11 @@ import { cn } from "@/lib/utils"
  *  - open, assigned     → `Current` section + `Move to` list + `New workspace…`.
  *  - open, unassigned   → `Add to workspace` list + `New workspace…`.
  *  - web (unavailable)  → informative state; workspaces require the desktop app.
+ *
+ * Semantics (ADR D7 amended, ODE-403): for folder-backed workspaces "Move to"
+ * physically moves the `.md` into the workspace folder, and leaving one returns
+ * the file to Writings — the copy says so ("Return to Writings"). Presentation-
+ * only workspaces keep the metadata-only "Remove from workspace" copy.
  */
 
 // Centralized copy so both surfaces are guaranteed to match.
@@ -36,6 +41,7 @@ export const WORKSPACE_COPY = {
   moveTo: "Move to",
   addTo: "Add to workspace",
   removeFromWorkspace: "Remove from workspace",
+  returnToWritings: "Return to Writings",
   newWorkspace: "New workspace…",
   noWorkspaces: "No workspaces yet",
   desktopOnly: "Workspaces live in the desktop app.",
@@ -70,6 +76,11 @@ export function WorkspaceAssignmentDropdown({
 }: WorkspaceAssignmentDropdownProps) {
   const isAssigned = Boolean(currentSlug)
   const moveTargets = options.filter((option) => option.slug !== currentSlug)
+  // Folder-backed current workspace → leaving it physically returns the file
+  // to Writings, and the copy must say so (conscious move, ADR D7 amended).
+  const currentIsFolderBacked = Boolean(
+    options.find((option) => option.slug === currentSlug)?.rootPath?.trim(),
+  )
 
   const triggerLabel = isAssigned
     ? (currentName ?? currentSlug ?? WORKSPACE_COPY.emptyClosed)
@@ -163,7 +174,9 @@ export function WorkspaceAssignmentDropdown({
                   }}
                 >
                   <X className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                  {WORKSPACE_COPY.removeFromWorkspace}
+                  {currentIsFolderBacked
+                    ? WORKSPACE_COPY.returnToWritings
+                    : WORKSPACE_COPY.removeFromWorkspace}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
               </>
