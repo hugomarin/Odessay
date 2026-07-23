@@ -3275,6 +3275,16 @@
       "commit": "8fb1005b69d0e3ba8b7bb2fca8df441788ddcada",
       "date": "2026-07-23",
       "notes": "Approved 9.8/10 (PASS). Folder-backed \"Move to workspace\" physically relocates the .md via the ODE-402 relocate primitive, infers membership from path, and clears stale workspaceAssignments so path and metadata never sustain two truths. Remove returns the file to the managed root; presentation-only workspaces and cloud-only writings keep metadata-only assignment. UI copy reflects \"Return to Writings\" for folder-backed targets; Desk/Collections handlers surface failed moves. Evidence: typecheck PASS, lint PASS (6 pre-existing editor-shell warnings), 173 files/1156 tests PASS, ops:delivery:gate PASS, Traceability and Vercel SUCCESS. Non-blocking P3: isPathInsideRoot hardcodes forward slash (Windows portability carry-over from ODE-402)."
+    },
+    {
+      "what": "docs(adr): amend D7 — explicit user moves are conscious, preserve binding [ODE-400]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-400",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-400/relocatemover-documento-a-carpeta-o-workspace-no-op-conflicto-adr-d7",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/354",
+      "commit": "3ebca2e02a512393083c5e71e057b1a2c48105a8",
+      "date": "2026-07-23",
+      "notes": "Epic closed at review (10/10 PASS). Direct scope was the docs-only ADR D7 amendment (merged 2026-07-22): 'files in place' forbids system-initiated rehoming, not explicit user moves — conscious moves preserve binding (UUID/inode/content_hash match); metadata-only assignment scoped to presentation-only workspaces. All plan slices delivered via sub-issues, each independently reviewed and merged: ODE-401 (UI stops faking relocate success, 10.0), ODE-402 (atomic physical relocate primitive managed→folder, 9.5), ODE-403 (folder-backed Move to workspace + stale assignment cleanup, 9.8), ODE-404 (sync queue silent-miss/stall hardening, 9.0). relocateDesktopWriting no longer a stub — ODE-374 regression closed."
     }
   ]
 }
