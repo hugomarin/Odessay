@@ -11,7 +11,15 @@ type Handlers = {
   onNewFile: (path: string) => void
   onEditorAction?: (action: EditorShortcutAction) => void
   onGetSaveContent?: () => { content: string; defaultName: string } | null
-  onSaveComplete?: (path: string) => Promise<boolean | void> | boolean | void
+  /**
+   * Performs the actual save-to-disk for the chosen path (ODE-402): the consumer
+   * owns the physical move/write so the hook never leaves an untracked copy at
+   * the destination. Returns the adopted canonical path (which may differ from
+   * the requested one, e.g. a collision suffix) or `false` when the document did
+   * not move — in that case the previous save target is kept so a later save
+   * opens the picker again instead of writing to an untracked copy.
+   */
+  onSaveToDisk?: (path: string, content: string) => Promise<string | false> | string | false
   documentKey?: string | null
 }
 
@@ -53,14 +61,14 @@ export function useTauriMenuEvents({
   onNewFile,
   onEditorAction,
   onGetSaveContent,
-  onSaveComplete,
+  onSaveToDisk,
   documentKey,
 }: Handlers) {
   const onOpenFileRef = useRef(onOpenFile)
   const onNewFileRef = useRef(onNewFile)
   const onEditorActionRef = useRef(onEditorAction)
   const onGetSaveContentRef = useRef(onGetSaveContent)
-  const onSaveCompleteRef = useRef(onSaveComplete)
+  const onSaveToDiskRef = useRef(onSaveToDisk)
   const lastSavePathRef = useRef<string | null>(null)
   const isWritingRef = useRef(false)
 
@@ -68,7 +76,7 @@ export function useTauriMenuEvents({
   useEffect(() => { onNewFileRef.current = onNewFile }, [onNewFile])
   useEffect(() => { onEditorActionRef.current = onEditorAction }, [onEditorAction])
   useEffect(() => { onGetSaveContentRef.current = onGetSaveContent }, [onGetSaveContent])
-  useEffect(() => { onSaveCompleteRef.current = onSaveComplete }, [onSaveComplete])
+  useEffect(() => { onSaveToDiskRef.current = onSaveToDisk }, [onSaveToDisk])
   useEffect(() => { lastSavePathRef.current = null }, [documentKey])
 
   useEffect(() => {
@@ -137,18 +145,23 @@ export function useTauriMenuEvents({
       const finalPath = path
       isWritingRef.current = true
       try {
-        const { invoke } = await import("@tauri-apps/api/core")
-        await invoke("write_file", { path: finalPath, content: payload.content })
-        // Only adopt the chosen path as the save target when the consumer
-        // confirms the document actually moved there. An explicit `false`
-        // (e.g. relocate still unsupported) keeps the previous target so a
-        // later save-to-disk does not keep writing to an untracked copy.
-        const adopted = await onSaveCompleteRef.current?.(finalPath)
-        if (adopted !== false) {
+        if (onSaveToDiskRef.current) {
+          // The consumer owns the physical move (ODE-402): a rename of the
+          // canonical file, never a second copy written by this hook. Only a
+          // confirmed move adopts the (possibly collision-suffixed) path as the
+          // save target; `false` keeps the previous target so a later save
+          // opens the picker again instead of writing to an untracked copy.
+          const adopted = await onSaveToDiskRef.current(finalPath, payload.content)
+          if (typeof adopted === "string" && adopted.length > 0) {
+            lastSavePathRef.current = adopted
+          }
+        } else {
+          const { invoke } = await import("@tauri-apps/api/core")
+          await invoke("write_file", { path: finalPath, content: payload.content })
           lastSavePathRef.current = finalPath
         }
       } catch (err) {
-        console.error("write_file failed:", err)
+        console.error("save-to-disk failed:", err)
       } finally {
         isWritingRef.current = false
       }

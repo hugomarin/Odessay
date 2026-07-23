@@ -281,7 +281,7 @@ type CorrectionToastState = {
 type ExternalFileNotice =
   | { kind: "moved"; path: string | null }
   | { kind: "deleted"; path: string | null }
-  | { kind: "relocate-unsupported"; path: string | null }
+  | { kind: "relocate-failed"; path: string | null }
 
 function replaceEditorHistory(nextHref: string) {
   if (typeof window === "undefined") {
@@ -5258,24 +5258,27 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     void handleCreateWorkspaceTab({ skipConfirm: true })
   }, [handleCreateWorkspaceTab])
 
-  const handleSaveComplete = useCallback(async (path: string): Promise<boolean> => {
+  const handleSaveToDisk = useCallback(async (path: string, content: string): Promise<string | false> => {
     const writingId = currentWritingIdRef.current
     if (!writingId || !isDesktopRuntime()) return false
     const { relocateDesktopWriting } = await import("@/lib/services/document-service-factory")
-    const result = await relocateDesktopWriting(writingId, path)
+    // Conscious physical MOVE (ODE-402): content commits to the current
+    // canonical file and the rename transports it — no copy is ever written at
+    // the destination. The adopted path may carry a collision suffix.
+    const result = await relocateDesktopWriting(writingId, path, content)
     if (result.status !== "relocated") {
-      // The relocate is still a no-op (ODE-400 slice A pending): never reflect
-      // a move that did not materialize. Title, canonical path and any active
-      // external-file notice stay untouched; surface a clear notice instead.
-      setExternalFileNotice({ kind: "relocate-unsupported", path: currentCanonicalPathRef.current })
+      // Never reflect a move that did not materialize. Title, canonical path
+      // and any active external-file notice stay untouched; surface a clear
+      // notice instead.
+      setExternalFileNotice({ kind: "relocate-failed", path: currentCanonicalPathRef.current })
       return false
     }
-    const filenameTitle = filenameToTitle(path)
+    const filenameTitle = filenameToTitle(result.path)
     setTitle(filenameTitle)
     setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
-    currentCanonicalPathRef.current = path
+    currentCanonicalPathRef.current = result.path
     setExternalFileNotice(null)
-    return true
+    return result.path
   }, [])
 
   useTauriEditorMenuEvents(handleRunAction)
@@ -5325,7 +5328,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     onNewFile: handleMenuNewFile,
     onEditorAction: (action) => handleRunAction(action),
     onGetSaveContent: handleGetSaveContent,
-    onSaveComplete: handleSaveComplete,
+    onSaveToDisk: handleSaveToDisk,
     documentKey: currentWritingId,
   })
 
@@ -5480,10 +5483,10 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
                 This file moved outside Artifact Studio. The editor is now following the new path:
                 <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
               </span>
-            ) : externalFileNotice.kind === "relocate-unsupported" ? (
+            ) : externalFileNotice.kind === "relocate-failed" ? (
               <span>
-                Moving this document to another folder isn&apos;t supported yet. A copy was written to the
-                chosen path, but Artifact Studio keeps working on the original
+                This document couldn&apos;t be moved to the chosen folder. Nothing was written there;
+                Artifact Studio keeps working on the original
                 {externalFileNotice.path ? (
                   <span className="ml-1 font-medium text-ink">{externalFileNotice.path}</span>
                 ) : (

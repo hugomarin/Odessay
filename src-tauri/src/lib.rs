@@ -268,6 +268,7 @@ pub fn run() {
             commands::document::write_file,
             commands::document::write_binary_file,
             commands::document::rename_file,
+            commands::document::relocate_file,
             commands::document::list_recent_files,
             commands::document::resolve_asset_path,
             commands::index::catalog_schema_version,

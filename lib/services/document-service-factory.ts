@@ -25,9 +25,13 @@ import {
   setDesktopWritingCollections,
 } from "@/lib/services/desktop/desktop-collection-service"
 import {
+  tauriOpenFile,
+  tauriRelocateFile,
   tauriWorkspaceSync,
+  tauriWriteFile,
   type DesktopCatalogDualWriteInput,
 } from "@/lib/services/desktop/tauri-commands"
+import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 
 type DesktopRuntimeServices = {
   writingsDir: string
@@ -369,20 +373,285 @@ export async function createDesktopDraft(options: DesktopDraftOptions = {}) {
 }
 
 export type RelocateDesktopWritingResult =
-  | { status: "relocated" }
+  | { status: "relocated"; path: string }
+  | { status: "failed"; message: string }
   | { status: "unsupported" }
 
-// ODE-400 slice A will implement the real relocate against the SQLite catalog.
-// Until then the relocate is a no-op and MUST report "unsupported" so callers
-// never reflect a move that did not materialize (ODE-401).
-export async function relocateDesktopWriting(id: string, newPath: string): Promise<RelocateDesktopWritingResult> {
-  void id
-  void newPath
-  return { status: "unsupported" }
+function matchesSelectedPaths(relativePath: string, selectedPaths: string[]) {
+  if (selectedPaths.length === 0) return true
+  return selectedPaths.some(
+    (selected) => relativePath === selected || relativePath.startsWith(`${selected}/`),
+  )
 }
+
+function sameSelectedPaths(left: string[], right: string[]) {
+  return left.length === right.length && left.every((path, index) => path === right[index])
+}
+
+/**
+ * Conscious relocate primitive (ODE-402, ADR D7 amendment): physically MOVE the
+ * canonical `.md` to the user-chosen path while preserving the document's UUID
+ * and keeping exactly ONE canonical_path at every step.
+ *
+ * Durable order (spec §Guardado): content commit to the current `.md` → physical
+ * rename (no copy; collision-suffixed; cross-device safe) → destination manifest
+ * atomic bind to the SAME UUID → SQLite binding replacement + sync enqueue in one
+ * transaction → origin ledger drop. Cloud sync flushes in background.
+ *
+ * Every failure leaves a recoverable state (NOT_FOUND / unbound file / stale
+ * origin manifest); it never mints a draft or any other durable fallback.
+ */
+export async function relocateDesktopWriting(
+  id: string,
+  requestedPath: string,
+  content?: string,
+): Promise<RelocateDesktopWritingResult> {
+  if (!isDesktopRuntime()) return { status: "unsupported" }
+  try {
+    const runtime = await resolveDesktopRuntimeServices()
+    const record = await runtime.catalog.getById(id)
+    const binding = record?.binding
+    if (!record || !binding?.canonicalPath) {
+      // Recoverable: a UUID without a local binding never becomes a draft here.
+      return { status: "failed", message: `Writing ${id} has no local binding` }
+    }
+    const sourcePath = binding.canonicalPath
+    const sourceRootPath = sourcePath.slice(0, -(binding.relativePath.length + 1))
+
+    // 1. Commit the latest editor content to the CURRENT canonical file first:
+    //    the move then transports exactly those bytes and there is a single
+    //    canonical copy at all times (never write-copy-then-move).
+    if (typeof content === "string") {
+      await tauriWriteFile(sourcePath, content)
+    }
+
+    // 2. Physical move: rename, no copy. Collisions auto-suffix ("Name 2.md");
+    //    cross-device degrades to copy+verify+delete-original in Rust.
+    const finalPath = await tauriRelocateFile(sourcePath, requestedPath)
+
+    // 3. Resolve the destination BindingRoot: deepest registered root (Settings
+    //    BindingRoots, or a Workspace root not yet adopted into bindingRoots —
+    //    ODE-373 bridge). Otherwise the chosen folder becomes a new external root.
+    const { appConfigDir } = await import("@tauri-apps/api/path")
+    const settings = new DesktopSettingsService(await appConfigDir())
+    const [bindingRoots, desktopSettings] = await Promise.all([
+      settings.getBindingRoots(),
+      settings.getDesktopSettings(),
+    ])
+    const contains = (rootPath: string) =>
+      finalPath.startsWith(`${rootPath.replace(/[\\/]+$/, "")}/`)
+    const settingsRecord =
+      bindingRoots
+        .filter((root) => contains(root.rootPath))
+        .sort((a, b) => b.rootPath.length - a.rootPath.length)[0] ?? null
+    const workspaceRecord =
+      (desktopSettings.data?.workspaces ?? [])
+        .filter((workspace) => contains(workspace.rootPath))
+        .sort((a, b) => b.rootPath.length - a.rootPath.length)[0] ?? null
+    const destRootPath =
+      settingsRecord &&
+      (!workspaceRecord || settingsRecord.rootPath.length >= workspaceRecord.rootPath.length)
+        ? settingsRecord.rootPath
+        : (workspaceRecord?.rootPath ?? dirname(finalPath))
+    const isNewRoot = !settingsRecord && !workspaceRecord
+    const relativePath = finalPath.slice(destRootPath.length + 1)
+
+    // 4. Destination ledger: the atomic manifest write binds the moved file to
+    //    the SAME UUID. Scope: a new root starts limited to exactly this file
+    //    (never indexes the rest of the folder); a narrowed existing selection
+    //    is extended with the file the user explicitly chose.
+    let selectedPaths: string[] | undefined
+    if (isNewRoot) {
+      selectedPaths = [relativePath]
+    } else if (
+      settingsRecord &&
+      settingsRecord.selectedPaths.length > 0 &&
+      !matchesSelectedPaths(relativePath, settingsRecord.selectedPaths)
+    ) {
+      selectedPaths = Array.from(new Set([...settingsRecord.selectedPaths, relativePath]))
+    }
+    let snapshot = await tauriWorkspaceSync(destRootPath, selectedPaths, { [relativePath]: id })
+    let file = snapshot.files.find((entry) => entry.relativePath === relativePath)
+    if (!file && snapshot.selectedPaths.length > 0) {
+      // The durable manifest scope did not cover the destination; extend it with
+      // the user's explicit choice instead of failing the conscious move.
+      snapshot = await tauriWorkspaceSync(
+        destRootPath,
+        Array.from(new Set([...snapshot.selectedPaths, relativePath])),
+        { [relativePath]: id },
+      )
+      file = snapshot.files.find((entry) => entry.relativePath === relativePath)
+    }
+    if (!file) throw new Error(`Destination manifest did not retain ${relativePath}`)
+    if (file.id !== id) {
+      // Ambiguity is never auto-chosen: leave the recoverable state to the
+      // reconciler/Open Document instead of forcing a second identity.
+      throw new Error(`Destination manifest bound ${relativePath} to a different identity`)
+    }
+
+    // 5. SQLite + sync enqueue in ONE transaction. The binding upsert is keyed by
+    //    document_id, so the origin binding row is replaced — a single
+    //    canonical_path, zero residue. Cloud sync then flushes in background.
+    const markdown = typeof content === "string" ? content : await tauriOpenFile(file.path)
+    const parsed = desktopDocumentEngine.parseSourceDocument(markdown)
+    if (!parsed.success) throw new Error(parsed.error)
+    const nowIso = new Date().toISOString()
+    const now = Date.now()
+    const title = filenameToTitle(file.relativePath)
+    const version = Math.max(1, record.version ?? 1)
+    await runtime.catalog.commitDualWrite({
+      document: {
+        id,
+        localPresent: true,
+        cloudPresent: record.cloudPresent,
+        cloudAccountId: record.cloudAccountId,
+        syncStatus: "pending",
+        title,
+        slug: record.slug,
+        status: record.status ?? "draft",
+        artifactType: record.artifactType,
+        visibility: record.visibility ?? "private",
+        version,
+        deletedAt: record.deletedAt,
+        createdAt: record.createdAt ?? now,
+        modifiedAt: now,
+      },
+      binding: {
+        bindingRootId: snapshot.bindingRootId,
+        rootPath: snapshot.rootPath,
+        manifestVersion: 2,
+        visibleAsWorkspace: settingsRecord?.visibleAsWorkspace ?? false,
+        relativePath: file.relativePath,
+        canonicalPath: file.path,
+        inode: file.inode || null,
+        contentHash: file.contentHash || null,
+        size: file.size,
+        lastSeenAt: file.modifiedAt,
+      },
+      mutation: {
+        id: crypto.randomUUID(),
+        operation: "upsert",
+        payloadJson: JSON.stringify({
+          title,
+          bodyText: parsed.document.snapshot.bodyText,
+          bodyJson: parsed.document.snapshot.bodyJson,
+          slug: record.slug,
+          status: record.status ?? "draft",
+          artifactType: record.artifactType,
+          visibility: record.visibility ?? "private",
+          parentId: null,
+          correspondenceId: null,
+          version,
+          updatedAt: nowIso,
+          deletedAt: record.deletedAt,
+        }),
+        status: "pending",
+        attemptCount: 0,
+        nextRetryAt: null,
+        createdAt: now,
+        lastError: null,
+      },
+    })
+
+    // 6. Origin ledger drop: re-scanning the source root rewrites its manifest
+    //    atomically without the moved file. SQLite already replaced the binding,
+    //    so nothing references the origin path anymore.
+    if (destRootPath !== sourceRootPath) {
+      try {
+        await tauriWorkspaceSync(sourceRootPath)
+      } catch {
+        // Recoverable: the next reconciler scan of the source root converges the
+        // manifest; the file is gone and the catalog already moved on.
+      }
+    }
+
+    // 7. Register/extend the destination root so the global reconciler observes
+    //    it. Consent = the user's explicit folder choice in the Save dialog; a
+    //    new root is never a visible Workspace by default.
+    if (isNewRoot) {
+      await settings.upsertBindingRoot({
+        id: snapshot.bindingRootId,
+        rootPath: destRootPath,
+        kind: "external",
+        visibleAsWorkspace: false,
+        selectedPaths: snapshot.selectedPaths,
+        consentedAt: nowIso,
+        createdAt: nowIso,
+      })
+      const { refreshWorkspaceReconcilerRoots } = await import(
+        "@/lib/services/desktop/desktop-workspace-reconciler"
+      )
+      await refreshWorkspaceReconcilerRoots()
+    } else if (
+      settingsRecord &&
+      !sameSelectedPaths(settingsRecord.selectedPaths, snapshot.selectedPaths)
+    ) {
+      await settings.upsertBindingRoot({
+        ...settingsRecord,
+        selectedPaths: snapshot.selectedPaths,
+      })
+    }
+
+    return { status: "relocated", path: file.path }
+  } catch (error) {
+    return {
+      status: "failed",
+      message: error instanceof Error ? error.message : "Relocate failed",
+    }
+  }
+}
+
+/**
+ * Watcher-observed move projection: the file already moved on disk (e.g. Finder)
+ * and `workspace_sync` re-bound the manifest to the SAME UUID via inode/content
+ * hash. Project that verdict into SQLite through the same reconcile transaction
+ * the WorkspaceReconciler uses, so a Finder move and a UI move converge on one
+ * identity and one canonical_path. Ambiguity is never auto-chosen.
+ */
 export async function relocateDesktopWritingByCanonicalPath(previous: string, next: string): Promise<void> {
-  void previous
-  void next
+  if (!isDesktopRuntime()) return
+  const runtime = await resolveDesktopRuntimeServices()
+  const resolved = await runtime.catalog.resolvePath(previous)
+  if (resolved.kind !== "resolved" || !resolved.record.binding) return
+  const record = resolved.record
+  const rootPath = resolved.record.binding.canonicalPath.slice(
+    0,
+    -(resolved.record.binding.relativePath.length + 1),
+  )
+  let snapshot: Awaited<ReturnType<typeof tauriWorkspaceSync>>
+  try {
+    snapshot = await tauriWorkspaceSync(rootPath)
+  } catch {
+    // Root temporarily unobservable — never a detach, never a new identity.
+    return
+  }
+  const file = snapshot.files.find((entry) => entry.path === next)
+  if (!file || file.id !== record.id) return
+  const { appConfigDir } = await import("@tauri-apps/api/path")
+  const settings = new DesktopSettingsService(await appConfigDir())
+  const roots = await settings.getBindingRoots()
+  const rootRecord =
+    roots.find((root) => root.id === snapshot.bindingRootId || root.rootPath === rootPath) ?? null
+  await runtime.catalog.applyReconcileTransaction({
+    transactionId: crypto.randomUUID(),
+    bindingRootId: snapshot.bindingRootId,
+    rootPath: snapshot.rootPath,
+    visibleAsWorkspace: rootRecord?.visibleAsWorkspace ?? false,
+    upserts: [
+      {
+        documentId: record.id,
+        bindingRootId: snapshot.bindingRootId,
+        relativePath: file.relativePath,
+        canonicalPath: file.path,
+        inode: file.inode || null,
+        contentHash: file.contentHash || null,
+        size: file.size,
+        modifiedAt: file.modifiedAt,
+        strategy: "path",
+      },
+    ],
+    detached: [],
+  })
 }
 export async function markDesktopWritingDeletedByCanonicalPath(canonicalPath: string): Promise<void> {
   if (!isDesktopRuntime()) return

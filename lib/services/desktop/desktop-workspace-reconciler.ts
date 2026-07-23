@@ -18,6 +18,7 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import {
+  isOdessaySelfWriteEvent,
   resolveActionableRootIds,
   watchFsPaths,
   type UnwatchFn,
@@ -65,6 +66,10 @@ async function configureRootWatcher(
       const stopWatching = await watchFsPaths(
         [root.rootPath],
         (event) => {
+          // Self-write suppression (ADR D6 / ODE-402): saves and conscious moves
+          // already project manifest + SQLite themselves, so their own events
+          // must not trigger a duplicate reconciliation of the same paths.
+          if (isOdessaySelfWriteEvent(event)) return
           for (const rootId of resolveActionableRootIds(event.paths, rootRefs)) {
             runtime.reconciler.notifyRootChanged(rootId)
           }

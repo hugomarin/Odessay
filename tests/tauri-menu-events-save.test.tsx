@@ -1,8 +1,10 @@
 /**
  * @vitest-environment happy-dom
  *
- * @contract ODE-401 — a "Save to disk / Save As" whose relocate did not
- * materialize must not adopt the chosen path as the save target.
+ * @contract ODE-401/ODE-402 — "Save to disk / Save As" delegates the physical
+ * move to the consumer (no untracked copy is ever written by the hook), adopts
+ * the confirmed — possibly collision-suffixed — path as the save target, and
+ * keeps the previous target when the move did not materialize.
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
@@ -41,14 +43,16 @@ const registeredHandlers = new Map<string, () => unknown>()
 
 let container: HTMLDivElement
 let root: Root | null = null
-let onSaveComplete: (path: string) => Promise<boolean | void>
+let onSaveToDisk: ((path: string, content: string) => Promise<string | false>) | undefined
 
 function Harness() {
   useTauriMenuEvents({
     onOpenFile: () => {},
     onNewFile: () => {},
     onGetSaveContent: () => ({ content: "# Letter\n", defaultName: "Letter" }),
-    onSaveComplete: (path) => onSaveComplete(path),
+    onSaveToDisk: onSaveToDisk
+      ? (path, content) => onSaveToDisk!(path, content)
+      : undefined,
     documentKey: "writing-1",
   })
   return null
@@ -60,18 +64,7 @@ async function emit(action: string) {
   })
 }
 
-beforeEach(async () => {
-  mocks.saveDialog.mockReset()
-  mocks.openDialog.mockReset()
-  mocks.invoke.mockReset()
-  onSaveComplete = async () => true
-  mocks.listen.mockImplementation(async (channel: string, handler: () => unknown) => {
-    registeredHandlers.set(channel.replace("menu:", ""), handler)
-    return () => {}
-  })
-  mocks.invoke.mockResolvedValue(undefined)
-  mocks.saveDialog.mockResolvedValue("/chosen/Letter.md")
-
+async function mountHarness() {
   container = document.createElement("div")
   document.body.appendChild(container)
   root = createRoot(container)
@@ -80,6 +73,19 @@ beforeEach(async () => {
     expect(registeredHandlers.has("save-as")).toBe(true)
     expect(registeredHandlers.has("save-to-disk")).toBe(true)
   })
+}
+
+beforeEach(async () => {
+  mocks.saveDialog.mockReset()
+  mocks.openDialog.mockReset()
+  mocks.invoke.mockReset()
+  onSaveToDisk = undefined
+  mocks.listen.mockImplementation(async (channel: string, handler: () => unknown) => {
+    registeredHandlers.set(channel.replace("menu:", ""), handler)
+    return () => {}
+  })
+  mocks.invoke.mockResolvedValue(undefined)
+  mocks.saveDialog.mockResolvedValue("/chosen/Letter.md")
 })
 
 afterEach(async () => {
@@ -89,8 +95,46 @@ afterEach(async () => {
 })
 
 describe("useTauriMenuEvents save flow", () => {
-  it("does not adopt the chosen path when the relocate is unsupported", async () => {
-    onSaveComplete = async () => false
+  it("never writes an untracked copy and reopens the picker when the move fails", async () => {
+    const saveToDisk = vi.fn(async () => false as const)
+    onSaveToDisk = saveToDisk
+    await mountHarness()
+
+    await emit("save-as")
+    await vi.waitFor(() =>
+      expect(saveToDisk).toHaveBeenCalledWith("/chosen/Letter.md", "# Letter\n"),
+    )
+
+    // The hook must not write anything itself: no double copy at the chosen path.
+    expect(mocks.invoke).not.toHaveBeenCalledWith("write_file", expect.anything())
+
+    // A later plain save must open the picker again instead of silently
+    // adopting a path the document never moved to.
+    mocks.saveDialog.mockResolvedValue("/chosen-2/Letter.md")
+    await emit("save-to-disk")
+    await vi.waitFor(() =>
+      expect(saveToDisk).toHaveBeenCalledWith("/chosen-2/Letter.md", "# Letter\n"),
+    )
+    expect(mocks.saveDialog).toHaveBeenCalledTimes(2)
+  })
+
+  it("adopts the confirmed (collision-suffixed) path as the next save target", async () => {
+    const saveToDisk = vi.fn(async () => "/chosen/Letter 2.md")
+    onSaveToDisk = saveToDisk
+    await mountHarness()
+
+    await emit("save-as")
+    await vi.waitFor(() => expect(saveToDisk).toHaveBeenCalledTimes(1))
+
+    await emit("save-to-disk")
+    await vi.waitFor(() => expect(saveToDisk).toHaveBeenCalledTimes(2))
+    expect(mocks.saveDialog).toHaveBeenCalledTimes(1)
+    expect(saveToDisk).toHaveBeenLastCalledWith("/chosen/Letter 2.md", "# Letter\n")
+    expect(mocks.invoke).not.toHaveBeenCalledWith("write_file", expect.anything())
+  })
+
+  it("falls back to a plain write when no move handler is provided", async () => {
+    await mountHarness()
 
     await emit("save-as")
     await vi.waitFor(() =>
@@ -100,46 +144,8 @@ describe("useTauriMenuEvents save flow", () => {
       }),
     )
 
-    // A later plain save must open the picker again instead of silently
-    // writing to the untracked copy.
-    mocks.saveDialog.mockResolvedValue("/chosen-2/Letter.md")
-    await emit("save-to-disk")
-    await vi.waitFor(() =>
-      expect(mocks.invoke).toHaveBeenCalledWith("write_file", {
-        path: "/chosen-2/Letter.md",
-        content: "# Letter\n",
-      }),
-    )
-    expect(mocks.saveDialog).toHaveBeenCalledTimes(2)
-  })
-
-  it("adopts the chosen path when the consumer confirms the move", async () => {
-    onSaveComplete = async () => true
-
-    await emit("save-as")
-    await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(1))
-
     await emit("save-to-disk")
     await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2))
     expect(mocks.saveDialog).toHaveBeenCalledTimes(1)
-    expect(mocks.invoke).toHaveBeenLastCalledWith("write_file", {
-      path: "/chosen/Letter.md",
-      content: "# Letter\n",
-    })
-  })
-
-  it("keeps the legacy adoption when the consumer returns nothing", async () => {
-    onSaveComplete = async () => undefined
-
-    await emit("save-as")
-    await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(1))
-
-    await emit("save-to-disk")
-    await vi.waitFor(() => expect(mocks.invoke).toHaveBeenCalledTimes(2))
-    expect(mocks.saveDialog).toHaveBeenCalledTimes(1)
-    expect(mocks.invoke).toHaveBeenLastCalledWith("write_file", {
-      path: "/chosen/Letter.md",
-      content: "# Letter\n",
-    })
   })
 })
