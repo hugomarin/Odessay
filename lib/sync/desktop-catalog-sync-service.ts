@@ -8,6 +8,7 @@ import type {
   SyncRuntimeState,
   SyncService,
 } from "@/lib/services/contracts/sync-service"
+import type { CloudDocumentSnapshot } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
@@ -37,8 +38,16 @@ async function catalog() {
   return catalogPromise
 }
 
+// ODE-404: a single post-enqueue/bootstrap flush that dies early (e.g. a token
+// refresh failure inside sessionUserId) used to strand pending mutations until
+// the next app restart. A low-frequency periodic tick retries pending/failed
+// mutations while the app runs; when the queue is idle the tick costs one
+// SQLite existence probe per queue and performs no cloud queries or events.
+const RETRY_TICK_MS = 60_000
+
 let started = false
 let scheduled: ReturnType<typeof setTimeout> | null = null
+let retryTicker: ReturnType<typeof setInterval> | null = null
 let lastSyncedAt: string | null = null
 
 async function sessionUserId() {
@@ -73,9 +82,102 @@ async function hydrateOne(id: string): Promise<boolean> {
   return true
 }
 
+/**
+ * Per-flush shared state (ODE-404). `cloudConfirmed` lets a later mutation for
+ * the same document take the UPDATE branch after an earlier one inserted the
+ * cloud row in this flush, before the catalog projection lands. Snapshots are
+ * batched so the whole flush emits ONE CatalogChange (reactive fan-out budget).
+ */
+type FlushContext = {
+  cloudConfirmed: Set<string>
+  confirmedSnapshots: CloudDocumentSnapshot[]
+}
+
+/**
+ * PostgREST reports success for an UPDATE that matched 0 rows, and a malformed
+ * response can omit the count entirely. Both used to be marked `synced` without
+ * any row landing in the cloud (silent-miss incident 2026-07-22). `synced` must
+ * mean "the cloud write affected at least one verified row" — an unknown count
+ * is a failure (retry), never a success.
+ */
+function requireAffectedRows(count: number | null): number {
+  if (count === null) throw new Error("Cloud write did not report affected rows")
+  return count
+}
+
+function cloudSnapshotFromRow(
+  row: WritingRow,
+  record: Awaited<ReturnType<SqliteDocumentCatalog["getById"]>>,
+): CloudDocumentSnapshot {
+  return {
+    id: row.id, localPresent: false, cloudPresent: !row.deleted_at,
+    cloudAccountId: row.author_id, syncStatus: row.deleted_at ? "deleted" : "synced",
+    deletedAt: (row.deleted_at ?? null) as string | null,
+    contentHash: null,
+    title: (row.title ?? null) as string | null,
+    slug: (row.slug ?? null) as string | null,
+    status: (row.status ?? null) as CloudDocumentSnapshot["status"],
+    artifactType: (row.artifact_type ?? null) as CloudDocumentSnapshot["artifactType"],
+    visibility: (row.visibility ?? null) as CloudDocumentSnapshot["visibility"],
+    version: row.version,
+    createdAt: record?.createdAt ?? Date.parse(row.updated_at),
+    modifiedAt: Date.parse(row.updated_at),
+  }
+}
+
+type WritingRow = {
+  id: string
+  author_id: string
+  title: unknown
+  body_json: unknown
+  body_text: string
+  slug: unknown
+  status: unknown
+  artifact_type: unknown
+  visibility: unknown
+  parent_id: unknown
+  correspondence_id: unknown
+  version: number
+  updated_at: string
+  deleted_at: unknown
+}
+
+/**
+ * INSERT the cloud row and verify it landed. RLS precedent (42501): writings
+ * uses plain INSERT/UPDATE with `{ count: "exact" }` — never upsert, never
+ * `.select()` chained to the write. On a unique violation the row already
+ * exists (e.g. a parallel pre-flight flush won the race), so converge through
+ * a verified UPDATE instead of failing. Either way the confirmed cloud
+ * presence is queued for the catalog so `cloud_present=1` lands in this same
+ * flush without waiting for hydration.
+ */
+async function insertVerified(
+  supabase: ReturnType<typeof createDesktopClient>,
+  row: WritingRow,
+  record: Awaited<ReturnType<SqliteDocumentCatalog["getById"]>>,
+  ctx: FlushContext,
+) {
+  const { error, count } = await supabase.from("writings").insert(row, { count: "exact" })
+  if (error) {
+    if (error.code !== "23505") throw new Error(error.message)
+    const { error: updateError, count: updateCount } = await supabase
+      .from("writings")
+      .update(row, { count: "exact" })
+      .eq("id", row.id)
+      .eq("author_id", row.author_id)
+    if (updateError) throw new Error(updateError.message)
+    if (requireAffectedRows(updateCount) === 0) throw new Error("Cloud row vanished during insert fallback")
+  } else if (requireAffectedRows(count) === 0) {
+    throw new Error("Cloud insert did not affect any row")
+  }
+  ctx.cloudConfirmed.add(row.id)
+  ctx.confirmedSnapshots.push(cloudSnapshotFromRow(row, record))
+}
+
 async function processMutation(
   userId: string,
   mutation: Awaited<ReturnType<typeof tauriCatalogListPendingMutations>>[number],
+  ctx: FlushContext,
 ) {
   const store = await catalog()
   const record = await store.getById(mutation.documentId)
@@ -85,12 +187,33 @@ async function processMutation(
   const supabase = createDesktopClient()
 
   if (mutation.operation === "delete") {
-    const { error } = await supabase.from("writings").update({
-      deleted_at: payloadValue(payload, "deletedAt", "deleted_at") ?? updatedAt,
+    const deletedAt = payloadValue(payload, "deletedAt", "deleted_at") ?? updatedAt
+    const { error, count } = await supabase.from("writings").update({
+      deleted_at: deletedAt,
       updated_at: updatedAt,
       version,
-    }).eq("id", mutation.documentId).eq("author_id", userId)
+    }, { count: "exact" }).eq("id", mutation.documentId).eq("author_id", userId)
     if (error) throw new Error(error.message)
+    if (requireAffectedRows(count) > 0) return
+    // 0 rows: the catalog believed cloudPresent but the row never landed
+    // (silent-miss legacy state). Materialize the tombstone so `synced` keeps
+    // meaning "the corresponding cloud row exists".
+    await insertVerified(supabase, {
+      id: mutation.documentId,
+      author_id: userId,
+      title: record?.title ?? null,
+      body_json: null,
+      body_text: "",
+      slug: record?.slug ?? null,
+      status: record?.status ?? "draft",
+      artifact_type: record?.artifactType ?? "general",
+      visibility: record?.visibility ?? "private",
+      parent_id: null,
+      correspondence_id: null,
+      version,
+      updated_at: updatedAt,
+      deleted_at: deletedAt,
+    }, record, ctx)
     return
   }
 
@@ -105,7 +228,7 @@ async function processMutation(
     bodyText = parsed.document.snapshot.bodyText
     title = filenameToTitle(record.binding.relativePath)
   }
-  const row = {
+  const row: WritingRow = {
     id: mutation.documentId,
     author_id: userId,
     title,
@@ -121,11 +244,21 @@ async function processMutation(
     updated_at: updatedAt,
     deleted_at: payloadValue(payload, "deletedAt", "deleted_at"),
   }
-  const write = record?.cloudPresent
-    ? supabase.from("writings").update(row).eq("id", mutation.documentId).eq("author_id", userId)
-    : supabase.from("writings").insert(row)
-  const { error } = await write
-  if (error) throw new Error(error.message)
+  if (record?.cloudPresent || ctx.cloudConfirmed.has(mutation.documentId)) {
+    const { error, count } = await supabase
+      .from("writings")
+      .update(row, { count: "exact" })
+      .eq("id", mutation.documentId)
+      .eq("author_id", userId)
+    if (error) throw new Error(error.message)
+    if (requireAffectedRows(count) > 0) {
+      ctx.cloudConfirmed.add(mutation.documentId)
+      return
+    }
+    // 0 rows affected: the doc is absent in the cloud despite cloudPresent —
+    // fall through to a verified INSERT instead of faking success.
+  }
+  await insertVerified(supabase, row, record, ctx)
 }
 
 async function processMetadataMutation(
@@ -157,6 +290,28 @@ async function processMetadataMutation(
       collectionIds.map((collectionId) => ({ writing_id: mutation.entityId, collection_id: collectionId })),
     )
     if (error) throw new Error(error.message)
+  }
+}
+
+/**
+ * Periodic queue recovery (ODE-404). Per-mutation exponential backoff already
+ * lives in `next_retry_at` (capped at 5 minutes); this tick only guarantees
+ * someone keeps looking at the queue after a flush dies early. On an idle
+ * queue the tick performs two limit-1 SQLite probes and exits — no cloud
+ * queries, no catalog events.
+ */
+async function retryPendingTick() {
+  if (!started || scheduled) return
+  try {
+    const store = await catalog()
+    const now = Date.now()
+    const hasPending =
+      (await tauriCatalogListPendingMutations(store.dbPath, now, 1)).length > 0 ||
+      (await tauriCatalogListPendingMetadataMutations(store.dbPath, now, 1)).length > 0
+    if (!hasPending) return
+    await desktopCatalogSyncService.flushPending()
+  } catch {
+    // The queue is durable in SQLite; the next tick retries.
   }
 }
 
@@ -243,9 +398,10 @@ export const desktopCatalogSyncService: SyncService = {
       const pending = await tauriCatalogListPendingMutations(store.dbPath, Date.now(), 200)
       const metadataPending = await tauriCatalogListPendingMetadataMutations(store.dbPath, Date.now(), 200)
       const failed: string[] = []
+      const ctx: FlushContext = { cloudConfirmed: new Set(), confirmedSnapshots: [] }
       for (const mutation of pending) {
         try {
-          await processMutation(userId, mutation)
+          await processMutation(userId, mutation, ctx)
           await tauriCatalogUpdateMutationStatus(store.dbPath, mutation.id, "synced", mutation.attemptCount, null, null)
         } catch (error) {
           failed.push(mutation.id)
@@ -271,6 +427,10 @@ export const desktopCatalogSyncService: SyncService = {
           )
         }
       }
+      // ODE-404: project every cloud row confirmed by INSERT in this flush as a
+      // single catalog batch — cloud_present=1 lands immediately (no hydration
+      // dependency) and subscribers receive exactly ONE CatalogChange.
+      if (ctx.confirmedSnapshots.length > 0) await store.applyCloudSnapshots(ctx.confirmedSnapshots)
       const processed = pending.length + metadataPending.length
       if (processed > 0 && failed.length === 0) lastSyncedAt = new Date().toISOString()
       return ok({ processedMutations: processed, failedMutations: failed, nextRetryAt: null })
@@ -282,8 +442,19 @@ export const desktopCatalogSyncService: SyncService = {
     scheduled = setTimeout(() => { scheduled = null; void desktopCatalogSyncService.flushPending() }, 1500)
     return ok(undefined)
   },
-  async start() { started = true; return ok(undefined) },
-  async stop() { started = false; if (scheduled) clearTimeout(scheduled); scheduled = null; return ok(undefined) },
+  async start() {
+    started = true
+    retryTicker ??= setInterval(() => { void retryPendingTick() }, RETRY_TICK_MS)
+    return ok(undefined)
+  },
+  async stop() {
+    started = false
+    if (scheduled) clearTimeout(scheduled)
+    scheduled = null
+    if (retryTicker) clearInterval(retryTicker)
+    retryTicker = null
+    return ok(undefined)
+  },
   async getRuntimeState(): Promise<ServiceResponse<SyncRuntimeState>> {
     try {
       const store = await catalog()
