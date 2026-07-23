@@ -79,6 +79,10 @@
       {
         "issue": "ODE-400",
         "reason": "Referenced by docs commit 938f34f on main (ADR D7 amendment for explicit user moves) before product-code delivery. Issue In Progress; its relocate implementation ships in later slices (ODE-401+). Ignored for status drift until delivery."
+      },
+      {
+        "issue": "ODE-401",
+        "reason": "Referenced by main-only REVIEW maintenance commits while PR #355 remains open. Temporary traceability exception; remove immediately after merge when ODE-401 is registered in built[]."
       }
     ]
   },
