@@ -6,8 +6,14 @@ import type {
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { tauriResolveAssetPath } from "@/lib/services/desktop/tauri-commands"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
+import { desktopCatalogSyncService } from "@/lib/sync/desktop-catalog-sync-service"
 
 const TEN_YEARS_SECONDS = 315_360_000
+
+// ODE-404: writing_assets.writing_id has an FK to writings. A desktop-first
+// document may not have its cloud row yet (mutation still queued), so the
+// insert would surface a raw Postgres FK violation in the editor modal.
+const NOT_SYNCED_MESSAGE = "Document not yet synced — retry in a moment"
 
 function ok<T>(data: T): ServiceResponse<T> {
   return { data, error: null }
@@ -27,12 +33,45 @@ export class DesktopAssetService implements AssetService {
     }
   }
 
+  /**
+   * Pre-flight (ODE-404): verify the parent writing row exists in the cloud
+   * before uploading. If it is absent, flush the sync queue once (the queued
+   * mutation for this writing rides along) and re-check. The result is an
+   * actionable, retryable error instead of a raw FK violation.
+   */
+  private async writingExistsInCloud(
+    supabase: ReturnType<typeof createDesktopClient>,
+    writingId: string,
+    userId: string,
+  ): Promise<boolean> {
+    const { count, error } = await supabase
+      .from("writings")
+      .select("id", { count: "exact", head: true })
+      .eq("id", writingId)
+      .eq("author_id", userId)
+    if (error) throw new Error(error.message)
+    return (count ?? 0) > 0
+  }
+
   async uploadImageAsset(input: UploadImageAssetInput): Promise<ServiceResponse<WritingAsset>> {
     const supabase = createDesktopClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
       return err("UNAUTHORIZED", "Not authenticated")
+    }
+
+    try {
+      let exists = await this.writingExistsInCloud(supabase, input.writingId, user.id)
+      if (!exists) {
+        await desktopCatalogSyncService.flushPending()
+        exists = await this.writingExistsInCloud(supabase, input.writingId, user.id)
+      }
+      if (!exists) {
+        return err("UNAVAILABLE", NOT_SYNCED_MESSAGE, true)
+      }
+    } catch {
+      return err("UNAVAILABLE", NOT_SYNCED_MESSAGE, true)
     }
 
     const ext = input.fileName.split(".").pop()?.toLowerCase() ?? "bin"
@@ -58,6 +97,11 @@ export class DesktopAssetService implements AssetService {
 
     if (dbError) {
       void supabase.storage.from("writing-assets").remove([storagePath])
+      // FK race after a passing pre-flight (e.g. the writing was deleted in the
+      // cloud mid-upload): keep the message actionable, never raw Postgres.
+      if ((dbError as { code?: string }).code === "23503") {
+        return err("UNAVAILABLE", NOT_SYNCED_MESSAGE, true)
+      }
       return err("DB_ERROR", dbError.message)
     }
 
