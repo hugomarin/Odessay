@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-19",
+  "last_updated": "2026-07-22",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -75,6 +75,10 @@
       {
         "issue": "ODE-376",
         "reason": "Referenced by the accepted Fase 9 roadmap/spec commits before implementation. Planned M5 desktop IndexedDB harvest/retirement issue, not yet built; ignored for status drift until delivery."
+      },
+      {
+        "issue": "ODE-400",
+        "reason": "Referenced by docs commit 938f34f on main (ADR D7 amendment for explicit user moves) before product-code delivery. Issue In Progress; its relocate implementation ships in later slices (ODE-401+). Ignored for status drift until delivery."
       }
     ]
   },
@@ -3221,6 +3225,16 @@
       "commit": "74fa35dfd2c8c2d614386aa8d849988fd65f1ffa",
       "date": "2026-07-19",
       "notes": "Single-round review, approved 8.8/10 (PASS). Preview resolves writing UUIDs through the runtime-neutral DocumentService instead of importing IndexedDB, deduplicates concurrent opens, keeps navigation cache behavior and degrades per document to unavailable without creating drafts or durable fallback state. Web and desktop retain adapter parity. Evidence: typecheck, lint, 170 files/1119 tests, Rust 28 passed/1 ignored, traceability and Vercel green, owner acceptance. Merged as 887dd5f."
+    },
+    {
+      "what": "fix(desktop): allow external HTTPS images in Tauri CSP img-src [ODE-399]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-399",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-399/desktop-csp-bloquea-imagenes-externas-de-documentos-img-src",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/353",
+      "commit": "933d2c6",
+      "date": "2026-07-22",
+      "notes": "Entregado y mergeado vía PR #353 el 2026-07-22 pero nunca registrado en status.json tras el merge; ops:status:drift:strict lo reportó como faltante durante el review de ODE-401 y se registra retroactivamente aquí (autorizado por el review de ODE-401)."
     }
   ]
 }
