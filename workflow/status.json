@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-22",
+  "last_updated": "2026-07-23",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3245,6 +3245,16 @@
       "commit": "3f43bbd",
       "date": "2026-07-22",
       "notes": "Approved 10.0/10 after two corrective review rounds and merged as 9054f4b. EditorShell preserves the original title and canonical path when desktop relocate is unsupported, useTauriMenuEvents does not adopt a phantom save target, and the service reports an explicit relocated|unsupported result. Direct EditorShell and hook regression tests cover both outcomes. Evidence: typecheck, lint, 172 files/1125 tests, targeted 12/12, delivery gate, Traceability and Vercel green. The real binding-preserving MOVE remains scoped to ODE-400."
+    },
+    {
+      "what": "fix(sync): desktop queue silent-miss + stalled flush retry [ODE-404]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-404",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-404/fix-desktop-sync-queue-silent-miss-and-stalled-flush-retry",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/356",
+      "commit": "b392917bf09f2fa18a5f3999ab1a98b3f215222b",
+      "date": "2026-07-23",
+      "notes": "Approved 9.0/10 (PASS). Verified-write semantics: synced implies a cloud row was affected; UPDATE 0 rows falls back to INSERT or fails. cloud_present=1 projected immediately after INSERT via applyCloudSnapshots batch. Stalled queue recovered by 60s periodic tick. Image upload pre-flight checks parent writing existence and returns actionable UNAVAILABLE retryable error. Evidence: 32/32 targeted tests PASS, typecheck PASS, lint PASS with pre-existing warnings, local delivery gate PASS, Vercel SUCCESS. CI traceability FAIL on event_dispatch_ms.keydown_p95=38.43, but issue brief declares Interaction latency not required; per workflow perf exception this is informative and non-blocking."
     }
   ]
 }
