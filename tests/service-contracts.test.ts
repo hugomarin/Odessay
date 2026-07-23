@@ -138,6 +138,15 @@ describe("service contracts", () => {
     }
   })
 
+  it("locks the verified-write semantics of SyncService flushes (ODE-404)", () => {
+    // `synced` must mean the cloud write affected >= 1 verified row. A PostgREST
+    // UPDATE matching 0 rows reports success, so without this invariant a
+    // mutation can be marked synced while the cloud row never existed.
+    expect(SYNC_SERVICE_CONTRACT.invariants).toContain(
+      "A queued mutation reaches 'synced' only after the cloud write verifiably affected at least one row; a zero-row update falls back to insert or fails — it is never reported as synced.",
+    )
+  })
+
   it("keeps contract modules free of runtime-specific imports", () => {
     for (const file of contractFiles) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8")

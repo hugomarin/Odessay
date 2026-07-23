@@ -52,6 +52,9 @@ const allowedImports = new Set([
   "@/lib/services/open-document",
   // Desktop-only: this module uses @supabase/supabase-js (JWT auth, no cookies/SSR)
   "@/lib/supabase/desktop-client",
+  // ODE-404 — asset upload pre-flight flushes the desktop sync queue so the
+  // parent writing row exists in the cloud before writing_assets insert (FK)
+  "@/lib/sync/desktop-catalog-sync-service",
   "@/lib/workspace/types",
   "@/lib/workspace/assignment",
   "@/lib/local-db",

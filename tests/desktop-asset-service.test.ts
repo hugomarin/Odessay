@@ -7,6 +7,9 @@ const mockStorageRemove = vi.fn()
 const mockStorageUpload = vi.fn()
 const mockStorageCreateSignedUrl = vi.fn()
 const mockFromInsert = vi.fn()
+// ODE-404 pre-flight: head-count of the parent writing row in the cloud.
+const mockWritingsCount = vi.fn()
+const mockFlushPending = vi.fn()
 
 const mockSupabase = {
   auth: {
@@ -19,10 +22,18 @@ const mockSupabase = {
       createSignedUrl: mockStorageCreateSignedUrl,
     })),
   },
-  from: vi.fn(() => ({
-    insert: mockFromInsert,
-  })),
+  from: vi.fn((table: string) =>
+    table === "writings"
+      ? { select: () => ({ eq: () => ({ eq: mockWritingsCount }) }) }
+      : { insert: mockFromInsert },
+  ),
 }
+
+vi.mock("@/lib/sync/desktop-catalog-sync-service", () => ({
+  desktopCatalogSyncService: {
+    flushPending: (...args: unknown[]) => mockFlushPending(...args),
+  },
+}))
 
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriResolveAssetPath: vi.fn(async (docPath: string, relativePath: string) => {
@@ -44,6 +55,9 @@ describe("DesktopAssetService", () => {
     mockFiles.clear()
     service = new DesktopAssetService()
     vi.clearAllMocks()
+    // Default: parent writing row already present in the cloud.
+    mockWritingsCount.mockResolvedValue({ count: 1, error: null })
+    mockFlushPending.mockResolvedValue({ data: { processedMutations: 0, failedMutations: [], nextRetryAt: null }, error: null })
   })
 
   it("resolveAssetPath returns the absolute path for an existing asset", async () => {
@@ -144,6 +158,80 @@ describe("DesktopAssetService", () => {
 
     expect(result.data).toBeNull()
     expect(result.error?.code).toBe("DB_ERROR")
+    expect(mockStorageRemove).toHaveBeenCalledOnce()
+  })
+
+  // ── ODE-404: pre-flight flush before writing_assets insert (FK) ─────────────
+
+  it("flushes the sync queue when the writing is missing in the cloud and proceeds once present", async () => {
+    const user = { id: "user-123" }
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user }, error: null })
+    mockWritingsCount
+      .mockResolvedValueOnce({ count: 0, error: null })
+      .mockResolvedValueOnce({ count: 1, error: null })
+    mockStorageUpload.mockResolvedValue({ error: null })
+    mockFromInsert.mockResolvedValue({ error: null })
+    mockStorageCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: "https://cdn.example.com/signed-url" },
+      error: null,
+    })
+
+    const result = await service.uploadImageAsset({
+      writingId: "doc-1",
+      fileName: "test.png",
+      contentType: "image/png",
+      sizeBytes: 1024,
+      bytes: new Uint8Array([1, 2, 3]),
+    })
+
+    expect(result.error).toBeNull()
+    expect(mockFlushPending).toHaveBeenCalledOnce()
+    expect(mockStorageUpload).toHaveBeenCalledOnce()
+    expect(mockFromInsert).toHaveBeenCalledOnce()
+  })
+
+  it("returns an actionable retryable error when the writing is still absent after the pre-flight flush", async () => {
+    const user = { id: "user-123" }
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user }, error: null })
+    mockWritingsCount.mockResolvedValue({ count: 0, error: null })
+
+    const result = await service.uploadImageAsset({
+      writingId: "doc-1",
+      fileName: "test.png",
+      contentType: "image/png",
+      sizeBytes: 1024,
+      bytes: new Uint8Array([1, 2, 3]),
+    })
+
+    expect(result.data).toBeNull()
+    expect(result.error?.code).toBe("UNAVAILABLE")
+    expect(result.error?.retryable).toBe(true)
+    expect(result.error?.message).toBe("Document not yet synced — retry in a moment")
+    // Nothing was uploaded or inserted: no orphaned storage object, no raw FK error.
+    expect(mockFlushPending).toHaveBeenCalledOnce()
+    expect(mockStorageUpload).not.toHaveBeenCalled()
+    expect(mockFromInsert).not.toHaveBeenCalled()
+  })
+
+  it("maps a residual FK violation after a passing pre-flight to the actionable message", async () => {
+    const user = { id: "user-123" }
+    mockSupabase.auth.getUser.mockResolvedValue({ data: { user }, error: null })
+    mockStorageUpload.mockResolvedValue({ error: null })
+    mockFromInsert.mockResolvedValue({
+      error: { message: 'insert or update on table "writing_assets" violates foreign key constraint "writing_assets_writing_id_fkey"', code: "23503" },
+    })
+
+    const result = await service.uploadImageAsset({
+      writingId: "doc-1",
+      fileName: "test.png",
+      contentType: "image/png",
+      sizeBytes: 1024,
+      bytes: new Uint8Array([1, 2, 3]),
+    })
+
+    expect(result.data).toBeNull()
+    expect(result.error?.code).toBe("UNAVAILABLE")
+    expect(result.error?.message).toBe("Document not yet synced — retry in a moment")
     expect(mockStorageRemove).toHaveBeenCalledOnce()
   })
 })
