@@ -79,10 +79,6 @@
       {
         "issue": "ODE-400",
         "reason": "Referenced by docs commit 938f34f on main (ADR D7 amendment for explicit user moves) before product-code delivery. Issue In Progress; its relocate implementation ships in later slices (ODE-401+). Ignored for status drift until delivery."
-      },
-      {
-        "issue": "ODE-401",
-        "reason": "Referenced by main-only REVIEW maintenance commits while PR #355 remains open. Temporary traceability exception; remove immediately after merge when ODE-401 is registered in built[]."
       }
     ]
   },
@@ -3239,6 +3235,16 @@
       "commit": "933d2c6",
       "date": "2026-07-22",
       "notes": "Entregado y mergeado vía PR #353 el 2026-07-22 pero nunca registrado en status.json tras el merge; ops:status:drift:strict lo reportó como faltante durante el review de ODE-401 y se registra retroactivamente aquí (autorizado por el review de ODE-401)."
+    },
+    {
+      "what": "fix(editor): stop faking save-to-disk relocate success [ODE-401]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-401",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-401/save-to-disk-handlesavecomplete-deja-de-fingir-exito-cuando-el",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/355",
+      "commit": "3f43bbd",
+      "date": "2026-07-22",
+      "notes": "Approved 10.0/10 after two corrective review rounds and merged as 9054f4b. EditorShell preserves the original title and canonical path when desktop relocate is unsupported, useTauriMenuEvents does not adopt a phantom save target, and the service reports an explicit relocated|unsupported result. Direct EditorShell and hook regression tests cover both outcomes. Evidence: typecheck, lint, 172 files/1125 tests, targeted 12/12, delivery gate, Traceability and Vercel green. The real binding-preserving MOVE remains scoped to ODE-400."
     }
   ]
 }
