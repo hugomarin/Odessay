@@ -617,11 +617,14 @@ describe("Workspace consumes the DocumentCatalog", () => {
       const { WorkspaceDetailPrototype } = await import(
         "@/components/workspace/workspace-prototype-shell"
       )
+      const workspaceMountStartedAt = performance.now()
       await act(async () => {
         root = createRoot(workspaceContainer)
         root.render(<WorkspaceDetailPrototype workspaceSlug="letters" />)
       })
       await flush()
+      const workspaceTimeToUsefulPaintMs = performance.now() - workspaceMountStartedAt
+      expect(workspaceTimeToUsefulPaintMs).toBeLessThan(1_500)
 
       expect(deskContainer.textContent).toContain("Draft")
       expect(workspaceContainer.textContent).toContain("Draft")
