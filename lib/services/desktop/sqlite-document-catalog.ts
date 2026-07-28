@@ -133,6 +133,15 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     this.emit([documentId], "upsert")
   }
 
+  async commitBulkDualWrite(inputs: DesktopCatalogDualWriteInput[]): Promise<void> {
+    if (inputs.length === 0) return
+    for (const input of inputs) {
+      await tauriCatalogDualWrite(this.dbPath, input)
+    }
+    const documentIds = inputs.map(({ document }) => document.id)
+    this.emit(documentIds, "bulk")
+  }
+
   /**
    * Single fan-out signal for the ODE-376 M5 IndexedDB→SQLite migration: the
    * migration commits each row idempotently without emitting, then calls this

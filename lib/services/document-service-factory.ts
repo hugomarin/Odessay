@@ -6,6 +6,7 @@ import type {
   RenameWritingInput,
   SaveWritingInput,
   UpdateWritingMetadataInput,
+  UpdateWritingsMetadataInput,
   SetWritingCollectionsInput,
   WritingCollectionMembership,
   WritingRecord,
@@ -242,22 +243,31 @@ class DesktopDocumentService implements DocumentService {
   }
 
   async updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>> {
+    const result = await this.updateWritingsMetadata({ updates: [input] })
+    if (result.error) return { data: null, error: result.error }
+    if (!result.data?.[0]) return err("NOT_FOUND", `Writing ${input.writingId} not found`)
+    return ok(result.data[0])
+  }
+
+  async updateWritingsMetadata(input: UpdateWritingsMetadataInput): Promise<ServiceResponse<WritingRecord[]>> {
     try {
-      const existing = await this.runtime.catalog.getById(input.writingId)
-      if (!existing || existing.deletedAt) return err("NOT_FOUND", `Writing ${input.writingId} not found`)
-      const updated: DocumentCatalogRecord = {
-        ...existing,
-        status: input.status ?? existing.status,
-        artifactType: input.artifactType ?? existing.artifactType,
-        version: input.version,
-        modifiedAt: Date.parse(input.updatedAt),
-        syncStatus: "pending",
-      }
-      const binding = existing.binding
-      const rootPath = binding
-        ? binding.canonicalPath.slice(0, -(binding.relativePath.length + 1))
-        : null
-      await this.runtime.catalog.commitDualWrite({
+      const prepared = []
+      for (const change of input.updates) {
+        const existing = await this.runtime.catalog.getById(change.writingId)
+        if (!existing || existing.deletedAt) return err("NOT_FOUND", `Writing ${change.writingId} not found`)
+        const updated: DocumentCatalogRecord = {
+          ...existing,
+          status: change.status ?? existing.status,
+          artifactType: change.artifactType ?? existing.artifactType,
+          version: change.version,
+          modifiedAt: Date.parse(change.updatedAt),
+          syncStatus: "pending",
+        }
+        const binding = existing.binding
+        const rootPath = binding
+          ? binding.canonicalPath.slice(0, -(binding.relativePath.length + 1))
+          : null
+        prepared.push({ updated, dualWrite: {
         document: {
           id: updated.id,
           localPresent: updated.localPresent,
@@ -290,14 +300,11 @@ class DesktopDocumentService implements DocumentService {
           id: crypto.randomUUID(),
           operation: "upsert",
           payloadJson: JSON.stringify({
-            title: updated.title,
-            slug: updated.slug,
+            mutationKind: "metadata",
             status: updated.status,
             artifactType: updated.artifactType,
-            visibility: updated.visibility,
             version: updated.version,
-            updatedAt: input.updatedAt,
-            deletedAt: updated.deletedAt,
+            updatedAt: change.updatedAt,
           }),
           status: "pending",
           attemptCount: 0,
@@ -305,8 +312,10 @@ class DesktopDocumentService implements DocumentService {
           createdAt: Date.now(),
           lastError: null,
         },
-      })
-      return ok(toWriting(updated, {}, ""))
+        } satisfies DesktopCatalogDualWriteInput })
+      }
+      await this.runtime.catalog.commitBulkDualWrite(prepared.map(({ dualWrite }) => dualWrite))
+      return ok(prepared.map(({ updated }) => toWriting(updated, {}, "")))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 

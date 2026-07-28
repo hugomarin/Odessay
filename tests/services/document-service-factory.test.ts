@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   exportFile: vi.fn(),
   workspaceSync: vi.fn(),
   dualWrite: vi.fn(),
+  bulkDualWrite: vi.fn(),
   tauriOpen: vi.fn(),
   tauriWrite: vi.fn(),
   tauriRelocate: vi.fn(),
@@ -41,6 +42,7 @@ vi.mock("@/lib/services/desktop/sqlite-document-catalog", () => ({
     detachLocalFile = mocks.catalogDetach
     applyReconcileTransaction = mocks.applyReconcile
     commitDualWrite = (input: unknown) => mocks.dualWrite("/config/desktop-index.sqlite3", input)
+    commitBulkDualWrite = (inputs: unknown[]) => mocks.bulkDualWrite(inputs)
   },
 }))
 vi.mock("@/lib/services/desktop/desktop-settings-service", () => ({
@@ -436,8 +438,7 @@ describe("desktop document service after compatibility retirement", () => {
     expect(mocks.saveFile).not.toHaveBeenCalled()
     expect(mocks.tauriWrite).not.toHaveBeenCalled()
     expect(mocks.workspaceSync).not.toHaveBeenCalled()
-    expect(mocks.dualWrite).toHaveBeenCalledWith(
-      "/config/desktop-index.sqlite3",
+    expect(mocks.bulkDualWrite).toHaveBeenCalledWith([
       expect.objectContaining({
         document: expect.objectContaining({
           id,
@@ -446,9 +447,12 @@ describe("desktop document service after compatibility retirement", () => {
           version: 2,
         }),
         binding: expect.objectContaining({ canonicalPath: path, contentHash: "blake3:a" }),
-        mutation: expect.objectContaining({ operation: "upsert" }),
+        mutation: expect.objectContaining({
+          operation: "upsert",
+          payloadJson: expect.stringContaining('"mutationKind":"metadata"'),
+        }),
       }),
-    )
+    ])
   })
 
   it("removes the local markdown and queues the confirmed cloud archive", async () => {

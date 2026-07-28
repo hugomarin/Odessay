@@ -179,6 +179,25 @@ vi.mock("@/lib/services/document-service-factory", () => ({
       catalog.emit()
       return { data: record, error: null }
     },
+    updateWritingsMetadata: async (input: { updates: Array<{
+      writingId: string
+      status?: DocumentCatalogRecord["status"]
+      artifactType?: DocumentCatalogRecord["artifactType"]
+      version: number
+    }> }) => {
+      const updated: DocumentCatalogRecord[] = []
+      for (const change of input.updates) {
+        const record = (catalog.state.records as DocumentCatalogRecord[]).find((row) => row.id === change.writingId)
+        if (!record) return { data: null, error: { code: "NOT_FOUND", message: "Missing", retryable: false } }
+        if (change.status) record.status = change.status
+        if (change.artifactType) record.artifactType = change.artifactType
+        record.version = change.version
+        record.modifiedAt = Date.now()
+        updated.push(record)
+      }
+      catalog.emit()
+      return { data: updated, error: null }
+    },
   }),
 }))
 vi.mock("@/lib/services/workspace-service", () => ({

@@ -61,6 +61,10 @@ export type UpdateWritingMetadataInput = {
   updatedAt: string
 }
 
+export type UpdateWritingsMetadataInput = {
+  updates: UpdateWritingMetadataInput[]
+}
+
 export type RenameWritingInput = {
   writingId: string
   title: string | null
@@ -105,6 +109,7 @@ export interface DocumentService {
   openWriting(writingId: string): Promise<ServiceResponse<WritingRecord>>
   saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>>
   updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>>
+  updateWritingsMetadata(input: UpdateWritingsMetadataInput): Promise<ServiceResponse<WritingRecord[]>>
   renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>>
   deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>>
   listWritingCollections(writingId: string): Promise<ServiceResponse<WritingCollectionMembership[]>>
@@ -173,6 +178,14 @@ export const DOCUMENT_SERVICE_CONTRACT = {
       summary: "Update document metadata without entering the canonical content write-path.",
       input: ["writingId", "status and/or artifactType", "version", "updatedAt"],
       output: ["updated WritingRecord"],
+      errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "DB_ERROR"],
+    },
+    {
+      name: "updateWritingsMetadata",
+      kind: "command",
+      summary: "Commit a metadata-only batch and publish one logical catalog change for all affected UUIDs.",
+      input: ["updates[]"],
+      output: ["updated WritingRecord[]"],
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "DB_ERROR"],
     },
     {

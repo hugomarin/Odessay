@@ -114,6 +114,61 @@ describe("desktopCatalogSyncService", () => {
     )
   })
 
+  it("updates cloud-only metadata without replacing the existing cloud body", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({
+      localPresent: false,
+      cloudPresent: true,
+      binding: null,
+    }))
+    mocks.listPending.mockResolvedValue([mutationRow({
+      operation: "upsert",
+      payloadJson: JSON.stringify({
+        mutationKind: "metadata",
+        status: "done",
+        artifactType: "skill",
+        version: 3,
+        updatedAt: "2026-07-28T23:30:00Z",
+      }),
+    })])
+    mocks.update.mockResolvedValue({ error: null, count: 1 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.update).toHaveBeenCalledWith({
+      status: "done",
+      artifact_type: "skill",
+      version: 3,
+      updated_at: "2026-07-28T23:30:00Z",
+    }, { count: "exact" })
+    const writtenPatch = mocks.update.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(writtenPatch).not.toHaveProperty("body_json")
+    expect(writtenPatch).not.toHaveProperty("body_text")
+    expect(mocks.insert).not.toHaveBeenCalled()
+  })
+
+  it("fails a metadata-only mutation that matches no cloud row instead of inserting an empty body", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({ localPresent: false, cloudPresent: true, binding: null }))
+    mocks.listPending.mockResolvedValue([mutationRow({
+      payloadJson: JSON.stringify({
+        mutationKind: "metadata", status: "done", artifactType: "skill",
+        version: 3, updatedAt: "2026-07-28T23:30:00Z",
+      }),
+    })])
+    mocks.update.mockResolvedValue({ error: null, count: 0 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual(["m1"])
+    expect(mocks.insert).not.toHaveBeenCalled()
+    expect(mocks.updateStatus).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3", "m1", "failed", 1, expect.any(Number),
+      expect.stringContaining("content was not replaced"),
+    )
+  })
+
   it("hydrates cloud metadata into SQLite without opening IndexedDB", async () => {
     mocks.selectEq.mockResolvedValue({
       data: [{

@@ -217,6 +217,26 @@ async function processMutation(
     return
   }
 
+  if (payload.mutationKind === "metadata") {
+    const patch = {
+      status: payload.status,
+      artifact_type: payloadValue(payload, "artifactType", "artifact_type"),
+      version,
+      updated_at: updatedAt,
+    }
+    const { error, count } = await supabase
+      .from("writings")
+      .update(patch, { count: "exact" })
+      .eq("id", mutation.documentId)
+      .eq("author_id", userId)
+    if (error) throw new Error(error.message)
+    if (requireAffectedRows(count) === 0) {
+      throw new Error("Metadata-only update matched no cloud writing; content was not replaced")
+    }
+    ctx.cloudConfirmed.add(mutation.documentId)
+    return
+  }
+
   let bodyJson = payloadValue(payload, "bodyJson", "body_json")
   let bodyText = String(payloadValue(payload, "bodyText", "body_text") ?? "")
   let title = payload.title ?? record?.title ?? null

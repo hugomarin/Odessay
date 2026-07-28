@@ -184,6 +184,16 @@ export const webDocumentService: DocumentService = {
     }
   },
 
+  async updateWritingsMetadata(input) {
+    const updated: WritingRecord[] = []
+    for (const change of input.updates) {
+      const result = await this.updateWritingMetadata(change)
+      if (result.error || !result.data) return { data: null, error: result.error }
+      updated.push(result.data)
+    }
+    return ok(updated)
+  },
+
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {
     try {
       const local = await localDB.writings.get(input.writingId)

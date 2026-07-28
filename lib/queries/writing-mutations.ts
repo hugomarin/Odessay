@@ -146,18 +146,28 @@ export async function bulkChangeStatus(
   writingIds: Iterable<string>,
   status: WritingStatus,
 ) {
-  for (const writingId of writingIds) {
-    await changeWritingStatus(writingId, status);
-  }
+  const writings = (await Promise.all([...writingIds].map(getWritingForEdit)))
+    .filter((writing): writing is LocalWriting => Boolean(writing && writing.sync_status !== "deleted" && writing.status !== status));
+  if (writings.length === 0) return;
+  const updatedAt = nowIso();
+  const result = await (await getDocumentService()).updateWritingsMetadata({
+    updates: writings.map((writing) => ({ writingId: writing.id, status, version: writing.version + 1, updatedAt })),
+  });
+  if (result.error) throw new Error(result.error.message);
 }
 
 export async function bulkChangeArtifactType(
   writingIds: Iterable<string>,
   artifactType: ArtifactType,
 ) {
-  for (const writingId of writingIds) {
-    await changeWritingArtifactType(writingId, artifactType);
-  }
+  const writings = (await Promise.all([...writingIds].map(getWritingForEdit)))
+    .filter((writing): writing is LocalWriting => Boolean(writing && writing.sync_status !== "deleted" && writing.artifact_type !== artifactType));
+  if (writings.length === 0) return;
+  const updatedAt = nowIso();
+  const result = await (await getDocumentService()).updateWritingsMetadata({
+    updates: writings.map((writing) => ({ writingId: writing.id, artifactType, version: writing.version + 1, updatedAt })),
+  });
+  if (result.error) throw new Error(result.error.message);
 }
 
 export async function bulkAddToCollection(

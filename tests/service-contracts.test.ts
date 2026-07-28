@@ -176,6 +176,7 @@ describe("service contracts", () => {
     expectTypeOf<DocumentService["updateWritingMetadata"]>().toEqualTypeOf<
       (input: UpdateWritingMetadataInput) => Promise<ServiceResponse<WritingRecord>>
     >()
+    expectTypeOf<DocumentService["updateWritingsMetadata"]>().toBeFunction()
     expectTypeOf<DocumentService["renameWriting"]>().toEqualTypeOf<
       (input: RenameWritingInput) => Promise<ServiceResponse<WritingRecord>>
     >()

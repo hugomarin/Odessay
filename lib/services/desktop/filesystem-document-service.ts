@@ -145,6 +145,11 @@ export class FilesystemDocumentService implements DocumentService {
     return err("UNAVAILABLE", "FilesystemDocumentService does not own document metadata")
   }
 
+  async updateWritingsMetadata(input: { updates: UpdateWritingMetadataInput[] }): Promise<ServiceResponse<WritingRecord[]>> {
+    void input
+    return err("UNAVAILABLE", "FilesystemDocumentService does not own document metadata")
+  }
+
   // ─── Auto-save (debounced) ─────────────────────────────────────────────────
 
   /**
