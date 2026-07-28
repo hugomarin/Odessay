@@ -15,11 +15,7 @@ import { RenameWritingModal } from "@/components/editor/modals/rename-writing-mo
 import { useDeskFilters } from "@/hooks/useDeskFilters"
 import { useWritingSelection } from "@/hooks/useWritingSelection"
 import { BulkActionBar } from "@/components/desk/bulk-action-bar"
-import {
-  buildCollectionOptions,
-  dedupeCollectionIds,
-  getWritingCollectionIds,
-} from "@/lib/collections/collections"
+import { buildCollectionOptions } from "@/lib/collections/collections"
 import { debounce } from "@/lib/utils/debounce"
 import type { LocalCollection, LocalWriting, LocalWritingCollection } from "@/lib/local-db/schema"
 import {
@@ -27,20 +23,29 @@ import {
   type DeskActivitySummary,
 } from "@/lib/queries/desk-activity"
 import {
-  createLocalCollection,
   getLocalDBScope,
   getWritingForEdit,
   loadDeskCatalogData,
   loadSharedWritingIds,
-  setLocalWritingCollections,
   subscribeToCollectionChanges,
   subscribeToLocalDBScopeChanges,
 } from "@/lib/queries/desk-catalog-source"
+import {
+  bulkAddToCollection,
+  bulkChangeArtifactType,
+  bulkChangeStatus,
+  bulkCreateCollection,
+  bulkDelete,
+  changeWritingArtifactType,
+  changeWritingStatus,
+  createAndAssignCollection,
+  deleteWriting,
+  renameWriting,
+  toggleWritingCollection as toggleWritingCollectionMutation,
+} from "@/lib/queries/writing-mutations"
 import { createSharingService } from "@/lib/services/sharing-service-factory"
 import { type RecipientPreview } from "@/lib/services/web-sharing-service"
 import type { SharedWritingListItem } from "@/lib/sharing/writing-shares"
-import { enqueueWritingDelete, enqueueWritingUpsert } from "@/lib/sync/queue"
-import type { ArtifactType } from "@/lib/writings/artifact-type"
 import { getSyncService } from "@/lib/sync"
 import { invalidateWebWritingsHydrationFreshness } from "@/lib/sync/remote-bootstrap"
 import { invalidateWebCollectionsHydrationFreshness } from "@/lib/collections/remote-bootstrap"
@@ -623,13 +628,11 @@ export default function DeskPage() {
 
   const toggleWritingCollection = useCallback(
     async (writingId: string, collectionId: string) => {
-      const currentIds = getWritingCollectionIds(writingId, writingCollections)
-      const nextIds = currentIds.includes(collectionId)
-        ? currentIds.filter((id) => id !== collectionId)
-        : [...currentIds, collectionId]
-
-      await setLocalWritingCollections(writingId, dedupeCollectionIds(nextIds))
-      void getSyncService().scheduleFlush()
+      await toggleWritingCollectionMutation(
+        writingId,
+        collectionId,
+        writingCollections,
+      )
     },
     [writingCollections],
   )
@@ -637,94 +640,14 @@ export default function DeskPage() {
   const createWritingCollection = useCallback(
     async (writingId: string, name: string) => {
       const ownerId = getLocalDBScope()
-      const collection = await createLocalCollection({
-        ownerId: ownerId === "anonymous" ? null : ownerId,
+      await createAndAssignCollection(
+        writingId,
         name,
-      })
-      const currentIds = getWritingCollectionIds(writingId, writingCollections)
-      await setLocalWritingCollections(writingId, dedupeCollectionIds([...currentIds, collection.id]))
-      void getSyncService().scheduleFlush()
+        ownerId === "anonymous" ? null : ownerId,
+        writingCollections,
+      )
     },
     [writingCollections],
-  )
-
-  const changeWritingStatus = useCallback(async (writingId: string, status: LocalWriting["status"]) => {
-    const writing = await getWritingForEdit(writingId)
-    if (!writing || writing.sync_status === "deleted") {
-      return
-    }
-    if (writing.status === status) {
-      return
-    }
-
-    const nowIso = new Date().toISOString()
-    const updatedWriting: LocalWriting = {
-      ...writing,
-      status,
-      version: writing.version + 1,
-      updated_at: nowIso,
-      metadata_updated_at: nowIso,
-      local_updated_at: Date.now(),
-    }
-
-    await enqueueWritingUpsert(updatedWriting)
-  }, [])
-
-  const changeWritingArtifactType = useCallback(async (writingId: string, artifactType: ArtifactType) => {
-    const writing = await getWritingForEdit(writingId)
-    if (!writing || writing.sync_status === "deleted" || writing.artifact_type === artifactType) {
-      return
-    }
-
-    const nowIso = new Date().toISOString()
-    await enqueueWritingUpsert({
-      ...writing,
-      artifact_type: artifactType,
-      version: writing.version + 1,
-      updated_at: nowIso,
-      metadata_updated_at: nowIso,
-      local_updated_at: Date.now(),
-    })
-  }, [])
-
-  const saveWritingTitleById = useCallback(
-    async (writingId: string, nextTitle: string) => {
-      const writing = await getWritingForEdit(writingId)
-      if (!writing || writing.sync_status === "deleted") {
-        return
-      }
-
-      const trimmedTitle = nextTitle.trim() || "Untitled writing"
-      if ((writing.title?.trim() || "Untitled writing") === trimmedTitle) {
-        return
-      }
-
-      const nowIso = new Date().toISOString()
-      if (isTauriRuntime()) {
-        const result = await (await getDocumentService()).renameWriting({
-          writingId: writing.id,
-          title: trimmedTitle,
-          updatedAt: nowIso,
-        })
-        if (result.error) {
-          return
-        }
-        await loadDeskActivity()
-        return
-      }
-
-      await enqueueWritingUpsert({
-        ...writing,
-        title: trimmedTitle,
-        version: writing.version + 1,
-        updated_at: nowIso,
-        content_updated_at: nowIso,
-        local_updated_at: Date.now(),
-      })
-      await loadDeskActivity()
-      void loadRecipientPreviewsAsync()
-    },
-    [loadDeskActivity, loadRecipientPreviewsAsync],
   )
 
   const saveWritingTitle = useCallback(
@@ -733,9 +656,20 @@ export default function DeskPage() {
         return
       }
 
-      await saveWritingTitleById(renameTarget.id, nextTitle)
+      await renameWriting(renameTarget.id, nextTitle)
+      await loadDeskActivity()
+      void loadRecipientPreviewsAsync()
     },
-    [renameTarget, saveWritingTitleById],
+    [renameTarget, loadDeskActivity, loadRecipientPreviewsAsync],
+  )
+
+  const handleTitleChange = useCallback(
+    async (writingId: string, nextTitle: string) => {
+      await renameWriting(writingId, nextTitle)
+      await loadDeskActivity()
+      void loadRecipientPreviewsAsync()
+    },
+    [loadDeskActivity, loadRecipientPreviewsAsync],
   )
 
   const getWritingMarkdownPayload = useCallback((writingId: string) => {
@@ -830,7 +764,7 @@ export default function DeskPage() {
 
   const deleteWritingFromPreview = useCallback(
     async (writingId: string) => {
-      await enqueueWritingDelete(writingId)
+      await deleteWriting(writingId)
       await loadDeskActivity()
       void loadRecipientPreviewsAsync()
     },
@@ -913,41 +847,23 @@ export default function DeskPage() {
               onDeselectAll={deselectAll}
               onDelete={() => setIsBulkDeleteOpen(true)}
               onStatusChange={async (status) => {
-                for (const writingId of Array.from(selectedIds)) {
-                  await changeWritingStatus(writingId, status)
-                }
+                await bulkChangeStatus(selectedIds, status)
               }}
               onArtifactTypeChange={async (artifactType) => {
-                for (const writingId of Array.from(selectedIds)) {
-                  await changeWritingArtifactType(writingId, artifactType)
-                }
+                await bulkChangeArtifactType(selectedIds, artifactType)
               }}
               collectionOptions={collectionOptions}
               onAddToCollection={async (collectionId) => {
-                for (const writingId of Array.from(selectedIds)) {
-                  const currentIds = getWritingCollectionIds(writingId, writingCollections)
-                  if (currentIds.includes(collectionId)) continue
-                  await setLocalWritingCollections(
-                    writingId,
-                    dedupeCollectionIds([...currentIds, collectionId]),
-                  )
-                }
-                void getSyncService().scheduleFlush()
+                await bulkAddToCollection(selectedIds, collectionId, writingCollections)
               }}
               onCreateCollection={async (name) => {
                 const ownerId = getLocalDBScope()
-                const collection = await createLocalCollection({
-                  ownerId: ownerId === "anonymous" ? null : ownerId,
+                await bulkCreateCollection(
+                  selectedIds,
                   name,
-                })
-                for (const writingId of Array.from(selectedIds)) {
-                  const currentIds = getWritingCollectionIds(writingId, writingCollections)
-                  await setLocalWritingCollections(
-                    writingId,
-                    dedupeCollectionIds([...currentIds, collection.id]),
-                  )
-                }
-                void getSyncService().scheduleFlush()
+                  ownerId === "anonymous" ? null : ownerId,
+                  writingCollections,
+                )
               }}
             />
           )}
@@ -974,7 +890,7 @@ export default function DeskPage() {
               onCopyMarkdown={copyWritingMarkdown}
               onDownloadMarkdown={downloadWritingMarkdown}
               onDeleteRequest={async (id) => {
-                await enqueueWritingDelete(id)
+                await deleteWriting(id)
                 await loadDeskActivity()
                 void loadRecipientPreviewsAsync()
               }}
@@ -989,9 +905,7 @@ export default function DeskPage() {
             onOpenChange={setIsBulkDeleteOpen}
             count={selectedCount}
             onConfirm={async () => {
-              for (const id of Array.from(selectedIds)) {
-                await enqueueWritingDelete(id)
-              }
+              await bulkDelete(selectedIds)
               deselectAll()
               await loadDeskActivity()
               void loadRecipientPreviewsAsync()
@@ -1040,7 +954,7 @@ export default function DeskPage() {
             onAssignWorkspace={assignWorkspace}
             onUnassignWorkspace={unassignWorkspace}
             onCreateWorkspace={createWorkspaceAndAssign}
-            onTitleChange={saveWritingTitleById}
+            onTitleChange={handleTitleChange}
             onOpenFullWriting={openFullWriting}
             onExportMarkdown={downloadWritingMarkdown}
             onExportDocument={exportWritingDocument}

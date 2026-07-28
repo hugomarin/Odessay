@@ -422,6 +422,35 @@ describe("desktop document service after compatibility retirement", () => {
     )
   })
 
+  it("updates desktop metadata without rewriting the canonical markdown", async () => {
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).updateWritingMetadata({
+      writingId: id,
+      status: "done",
+      artifactType: "skill",
+      version: 2,
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(mocks.saveFile).not.toHaveBeenCalled()
+    expect(mocks.tauriWrite).not.toHaveBeenCalled()
+    expect(mocks.workspaceSync).not.toHaveBeenCalled()
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        document: expect.objectContaining({
+          id,
+          status: "done",
+          artifactType: "skill",
+          version: 2,
+        }),
+        binding: expect.objectContaining({ canonicalPath: path, contentHash: "blake3:a" }),
+        mutation: expect.objectContaining({ operation: "upsert" }),
+      }),
+    )
+  })
+
   it("removes the local markdown and queues the confirmed cloud archive", async () => {
     mocks.catalogGet.mockResolvedValue({ ...catalogRecord, cloudPresent: true, cloudAccountId: "acct-1" })
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
