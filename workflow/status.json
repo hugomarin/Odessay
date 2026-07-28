@@ -3285,6 +3285,16 @@
       "commit": "3ebca2e02a512393083c5e71e057b1a2c48105a8",
       "date": "2026-07-23",
       "notes": "Epic closed at review (10/10 PASS). Direct scope was the docs-only ADR D7 amendment (merged 2026-07-22): 'files in place' forbids system-initiated rehoming, not explicit user moves — conscious moves preserve binding (UUID/inode/content_hash match); metadata-only assignment scoped to presentation-only workspaces. All plan slices delivered via sub-issues, each independently reviewed and merged: ODE-401 (UI stops faking relocate success, 10.0), ODE-402 (atomic physical relocate primitive managed→folder, 9.5), ODE-403 (folder-backed Move to workspace + stale assignment cleanup, 9.8), ODE-404 (sync queue silent-miss/stall hardening, 9.0). relocateDesktopWriting no longer a stub — ODE-374 regression closed."
+    },
+    {
+      "what": "feat(workspace): add safe editing parity with Desk [ODE-381]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-381",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-381/bring-desk-editing-parity-to-workspace-rows-statustype-dropdowns-row",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/359",
+      "commit": "5e40d2148e490dad1a651e6c87ab772917315181",
+      "date": "2026-07-28",
+      "notes": "Approved 10.0/10 after three technical review rounds and explicit owner acceptance. Workspace rows now share Desk status/artifact mutations, row actions, preview/rename/collections, selection and bulk controls. Metadata-only updates never rewrite canonical .md content; cloud-only sync uses verified partial UPDATE without body replacement; zero-row updates fail recoverably; bulk catalog projection emits one logical change. Evidence: 173 files/1161 tests reported PASS, focused 53/53 PASS, delivery gate 0 required failures, Traceability and Vercel SUCCESS, packaged Tauri DMG and owner-validated recording. Owner explicitly accepted the final outcome and waived separate screenshot and Workspace-specific runtime TTI capture requirements."
     }
   ]
 }
