@@ -10,6 +10,7 @@ import type {
   WritingCollectionMembership,
   WritingRecord,
   WritingSummary,
+  UpdateWritingMetadataInput,
 } from "@/lib/services/contracts/document-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import {
@@ -137,6 +138,16 @@ export class FilesystemDocumentService implements DocumentService {
     for (const listener of this.savedListeners) {
       listener(writingId)
     }
+  }
+
+  async updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>> {
+    void input
+    return err("UNAVAILABLE", "FilesystemDocumentService does not own document metadata")
+  }
+
+  async updateWritingsMetadata(input: { updates: UpdateWritingMetadataInput[] }): Promise<ServiceResponse<WritingRecord[]>> {
+    void input
+    return err("UNAVAILABLE", "FilesystemDocumentService does not own document metadata")
   }
 
   // ─── Auto-save (debounced) ─────────────────────────────────────────────────

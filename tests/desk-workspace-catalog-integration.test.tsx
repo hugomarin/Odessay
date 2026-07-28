@@ -17,6 +17,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { LocalWriting } from "@/lib/local-db/schema"
+import { changeWritingStatus } from "@/lib/queries/writing-mutations"
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -24,7 +25,10 @@ import type { LocalWriting } from "@/lib/local-db/schema"
 
 const catalog = vi.hoisted(() => {
   const listeners = new Set<(change: unknown) => void>()
-  const state: { records: unknown[] } = { records: [] }
+  const state: {
+    records: unknown[]
+    blockNextList: Promise<void> | null
+  } = { records: [], blockNextList: null }
   return {
     state,
     listeners,
@@ -34,7 +38,14 @@ const catalog = vi.hoisted(() => {
       )
     },
     instance: {
-      list: vi.fn(async () => state.records),
+      list: vi.fn(async () => {
+        if (state.blockNextList) {
+          const blocker = state.blockNextList
+          state.blockNextList = null
+          await blocker
+        }
+        return state.records
+      }),
       getById: async (id: string) =>
         (state.records as DocumentCatalogRecord[]).find((r) => r.id === id) ?? null,
       resolvePath: async (path: string) => ({ kind: "unbound", path }),
@@ -126,8 +137,24 @@ vi.mock("@/lib/sync", () => ({
   }),
 }))
 vi.mock("@/lib/sync/queue", () => ({
-  enqueueWritingUpsert: vi.fn(),
-  enqueueWritingDelete: vi.fn(),
+  enqueueWritingUpsert: vi.fn(async (writing: { id: string; status: string; artifact_type: string; version: number }) => {
+    const record = (catalog.state.records as DocumentCatalogRecord[]).find((r) => r.id === writing.id)
+    if (record) {
+      record.status = writing.status as DocumentCatalogRecord["status"]
+      record.artifactType = writing.artifact_type as DocumentCatalogRecord["artifactType"]
+      record.version = writing.version
+      record.modifiedAt = Date.now()
+    }
+    catalog.emit()
+  }),
+  enqueueWritingDelete: vi.fn(async (writingId: string) => {
+    const record = (catalog.state.records as DocumentCatalogRecord[]).find((r) => r.id === writingId)
+    if (record) {
+      record.deletedAt = new Date().toISOString()
+      record.localPresent = false
+    }
+    catalog.emit()
+  }),
 }))
 vi.mock("@/lib/sync/remote-bootstrap", () => ({ invalidateWebWritingsHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/collections/remote-bootstrap", () => ({ invalidateWebCollectionsHydrationFreshness: vi.fn() }))
@@ -135,7 +162,43 @@ vi.mock("@/lib/services/auth-service-factory", () => ({
   getAuthService: () => ({ getSession: async () => ({ data: { user: null } }) }),
 }))
 vi.mock("@/lib/services/document-service-factory", () => ({
-  getDocumentService: async () => ({ exportWriting: async () => ({ data: null, error: null }) }),
+  getDocumentService: async () => ({
+    exportWriting: async () => ({ data: null, error: null }),
+    updateWritingMetadata: async (input: {
+      writingId: string
+      status?: DocumentCatalogRecord["status"]
+      artifactType?: DocumentCatalogRecord["artifactType"]
+      version: number
+    }) => {
+      const record = (catalog.state.records as DocumentCatalogRecord[]).find((row) => row.id === input.writingId)
+      if (!record) return { data: null, error: { code: "NOT_FOUND", message: "Missing", retryable: false } }
+      if (input.status) record.status = input.status
+      if (input.artifactType) record.artifactType = input.artifactType
+      record.version = input.version
+      record.modifiedAt = Date.now()
+      catalog.emit()
+      return { data: record, error: null }
+    },
+    updateWritingsMetadata: async (input: { updates: Array<{
+      writingId: string
+      status?: DocumentCatalogRecord["status"]
+      artifactType?: DocumentCatalogRecord["artifactType"]
+      version: number
+    }> }) => {
+      const updated: DocumentCatalogRecord[] = []
+      for (const change of input.updates) {
+        const record = (catalog.state.records as DocumentCatalogRecord[]).find((row) => row.id === change.writingId)
+        if (!record) return { data: null, error: { code: "NOT_FOUND", message: "Missing", retryable: false } }
+        if (change.status) record.status = change.status
+        if (change.artifactType) record.artifactType = change.artifactType
+        record.version = change.version
+        record.modifiedAt = Date.now()
+        updated.push(record)
+      }
+      catalog.emit()
+      return { data: updated, error: null }
+    },
+  }),
 }))
 vi.mock("@/lib/services/workspace-service", () => ({
   getWorkspaceAssignmentService: () => ({
@@ -222,6 +285,7 @@ beforeEach(() => {
   container = document.createElement("div")
   document.body.appendChild(container)
   catalog.state.records = []
+  catalog.state.blockNextList = null
   catalog.listeners.clear()
   storage.writings = []
   collectionStore.state = { collections: [], writingCollections: [] }
@@ -485,5 +549,116 @@ describe("Workspace consumes the DocumentCatalog", () => {
     // Same UUID, same catalog-derived state Desk renders (Synced), sourced from the
     // catalog join — not a direct IndexedDB read.
     expect(container.querySelector('[aria-label="Document state: Synced"]')).not.toBeNull()
+  })
+
+  it("reflects a Workspace status mutation in Desk through the shared catalog", async () => {
+    const sharedRecord = makeRecord({
+      id: "shared-doc",
+      title: "Shared Doc",
+      status: "draft",
+      artifactType: "general",
+      localPresent: true,
+      cloudPresent: false,
+      syncStatus: "local-only",
+      excerpt: "The same cached excerpt in both catalog views.",
+      binding: {
+        documentId: "shared-doc",
+        bindingRootId: "root",
+        relativePath: "Shared.md",
+        canonicalPath: "/root/Shared.md",
+        inode: null,
+        contentHash: null,
+        size: null,
+        lastSeenAt: null,
+      },
+    })
+    catalog.state.records = [sharedRecord]
+    storage.writings = []
+
+    workspaceDetail.current = {
+      slug: "letters",
+      name: "Letters",
+      rootPath: "/root",
+      selectedPaths: ["Shared.md"],
+      source: "existing-folder",
+      status: "ready",
+      missingReason: null,
+      addedAt: "2026-06-18T00:00:00.000Z",
+      lastOpenedAt: null,
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: 2000,
+      files: [
+        {
+          id: "shared-doc",
+          path: "/root/Shared.md",
+          relativePath: "Shared.md",
+          name: "Shared.md",
+          modifiedAt: 2000,
+          size: 10,
+          inode: 1,
+        },
+      ],
+    }
+
+    const deskContainer = document.createElement("div")
+    document.body.appendChild(deskContainer)
+    const workspaceContainer = document.createElement("div")
+    document.body.appendChild(workspaceContainer)
+
+    try {
+      const { default: DeskPage } = await import("@/app/(app)/desk/page")
+      await act(async () => {
+        root = createRoot(deskContainer)
+        root.render(<DeskPage />)
+      })
+      await flush()
+
+      const { WorkspaceDetailPrototype } = await import(
+        "@/components/workspace/workspace-prototype-shell"
+      )
+      const workspaceMountStartedAt = performance.now()
+      await act(async () => {
+        root = createRoot(workspaceContainer)
+        root.render(<WorkspaceDetailPrototype workspaceSlug="letters" />)
+      })
+      await flush()
+      const workspaceTimeToUsefulPaintMs = performance.now() - workspaceMountStartedAt
+      expect(workspaceTimeToUsefulPaintMs).toBeLessThan(1_500)
+
+      expect(deskContainer.textContent).toContain("Draft")
+      expect(workspaceContainer.textContent).toContain("Draft")
+      expect(deskContainer.textContent).not.toContain("In Review")
+      expect(workspaceContainer.textContent).not.toContain("In Review")
+      const collectionButton = workspaceContainer.querySelector<HTMLButtonElement>(
+        'button[aria-label="Assign collections for Shared"]',
+      )
+      expect(collectionButton).not.toBeNull()
+      expect(collectionButton?.disabled).toBe(false)
+
+      let releaseRefresh!: () => void
+      catalog.state.blockNextList = new Promise<void>((resolve) => {
+        releaseRefresh = resolve
+      })
+
+      await act(async () => {
+        await changeWritingStatus("shared-doc", "in_review")
+      })
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 120))
+      })
+      expect(workspaceContainer.textContent).toContain("Shared")
+      expect(workspaceContainer.textContent).not.toContain("Loading workspace")
+
+      releaseRefresh()
+      await waitPastDebounce()
+
+      expect(deskContainer.textContent).toContain("In Review")
+      expect(workspaceContainer.textContent).toContain("In Review")
+    } finally {
+      deskContainer.remove()
+      workspaceContainer.remove()
+    }
   })
 })

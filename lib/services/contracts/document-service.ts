@@ -53,6 +53,18 @@ export type SaveWritingInput = {
   writing: WritingRecord
 }
 
+export type UpdateWritingMetadataInput = {
+  writingId: string
+  status?: WritingStatus
+  artifactType?: ArtifactType
+  version: number
+  updatedAt: string
+}
+
+export type UpdateWritingsMetadataInput = {
+  updates: UpdateWritingMetadataInput[]
+}
+
 export type RenameWritingInput = {
   writingId: string
   title: string | null
@@ -96,6 +108,8 @@ export interface DocumentService {
   listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>>
   openWriting(writingId: string): Promise<ServiceResponse<WritingRecord>>
   saveWriting(input: SaveWritingInput): Promise<ServiceResponse<WritingRecord>>
+  updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>>
+  updateWritingsMetadata(input: UpdateWritingsMetadataInput): Promise<ServiceResponse<WritingRecord[]>>
   renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>>
   deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>>
   listWritingCollections(writingId: string): Promise<ServiceResponse<WritingCollectionMembership[]>>
@@ -157,6 +171,22 @@ export const DOCUMENT_SERVICE_CONTRACT = {
       input: ["WritingRecord including version and timestamps"],
       output: ["saved WritingRecord"],
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "CONFLICT", "DB_ERROR"],
+    },
+    {
+      name: "updateWritingMetadata",
+      kind: "command",
+      summary: "Update document metadata without entering the canonical content write-path.",
+      input: ["writingId", "status and/or artifactType", "version", "updatedAt"],
+      output: ["updated WritingRecord"],
+      errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "DB_ERROR"],
+    },
+    {
+      name: "updateWritingsMetadata",
+      kind: "command",
+      summary: "Commit a metadata-only batch and publish one logical catalog change for all affected UUIDs.",
+      input: ["updates[]"],
+      output: ["updated WritingRecord[]"],
+      errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "NOT_FOUND", "DB_ERROR"],
     },
     {
       name: "renameWriting",

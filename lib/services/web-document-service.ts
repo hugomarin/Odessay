@@ -4,6 +4,7 @@ import type {
   ListWritingsInput,
   RenameWritingInput,
   SaveWritingInput,
+  UpdateWritingMetadataInput,
   DeleteWritingInput,
   ExportWritingInput,
   SetWritingCollectionsInput,
@@ -157,6 +158,40 @@ export const webDocumentService: DocumentService = {
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
+  },
+
+  async updateWritingMetadata(input: UpdateWritingMetadataInput): Promise<ServiceResponse<WritingRecord>> {
+    try {
+      const existing = await localDB.writings.get(input.writingId)
+      if (!existing || existing.sync_status === "deleted") return err({
+        code: "NOT_FOUND",
+        message: `Writing ${input.writingId} not found`,
+        retryable: false,
+      })
+      const next = {
+        ...existing,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.artifactType ? { artifact_type: input.artifactType } : {}),
+        version: input.version,
+        updated_at: input.updatedAt,
+        metadata_updated_at: input.updatedAt,
+        local_updated_at: Date.now(),
+      }
+      await enqueueWritingUpsert(next)
+      return ok(localWritingToRecord(next))
+    } catch (error) {
+      return err(makeServiceError(error, "DB_ERROR"))
+    }
+  },
+
+  async updateWritingsMetadata(input) {
+    const updated: WritingRecord[] = []
+    for (const change of input.updates) {
+      const result = await this.updateWritingMetadata(change)
+      if (result.error || !result.data) return { data: null, error: result.error }
+      updated.push(result.data)
+    }
+    return ok(updated)
   },
 
   async renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>> {

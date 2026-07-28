@@ -9,6 +9,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -29,6 +30,13 @@ import {
   TriangleAlert,
   Trash2,
 } from "lucide-react";
+import { useWritingSelection } from "@/hooks/useWritingSelection";
+import { BulkActionBar } from "@/components/desk/bulk-action-bar";
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
+import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal";
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
+import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
 import { FolderTreePicker } from "@/components/workspace/folder-tree-picker";
 import { LibraryControlsBar } from "@/components/library/library-controls-bar";
 import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters";
@@ -48,10 +56,16 @@ import { TablePropertySelector } from "@/components/ui/table-property-selector";
 import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table";
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
 import {
+  WRITING_STATUS_VALUES,
   getWritingStatusLabel,
   normalizeWritingStatus,
+  type WritingStatus,
 } from "@/lib/writings/status";
-import { getArtifactTypeLabel } from "@/lib/writings/artifact-type";
+import {
+  ARTIFACT_TYPE_VALUES,
+  getArtifactTypeLabel,
+  type ArtifactType,
+} from "@/lib/writings/artifact-type";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -96,7 +110,23 @@ import {
 } from "@/lib/queries/workspace-catalog-source";
 import type { CollectionOption } from "@/lib/collections/collections";
 import { buildCollectionOptions } from "@/lib/collections/collections";
-import { loadCollectionState } from "@/lib/queries/desk-catalog-source";
+import { getLocalDBScope, getWritingForEdit, loadCollectionState } from "@/lib/queries/desk-catalog-source";
+import {
+  bulkAddToCollection,
+  bulkChangeArtifactType,
+  bulkChangeStatus,
+  bulkCreateCollection,
+  bulkDelete,
+  changeWritingArtifactType,
+  changeWritingStatus,
+  createAndAssignCollection,
+  deleteWriting,
+  renameWriting,
+  toggleWritingCollection as toggleWritingCollectionMutation,
+} from "@/lib/queries/writing-mutations";
+import type { DeskActivityRow } from "@/lib/queries/desk-activity";
+import type { LocalWritingCollection } from "@/lib/local-db/schema";
+import { buildWritingRouteHref } from "@/lib/writings/writing-route";
 import {
   deriveDocumentStateFromSignals,
   type DocumentState,
@@ -941,6 +971,23 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
     Record<string, string[]>
   >({});
+  const hasLoadedWorkspaceRef = useRef(false);
+  const { settings } = useUserSettingsContext();
+  const {
+    selectedIds,
+    toggleSelection,
+    selectAll,
+    deselectAll,
+    hasSelection,
+    selectedCount,
+  } = useWritingSelection();
+  const [renameTarget, setRenameTarget] = useState<{
+    id: string;
+    title: string;
+    bodyText: string;
+  } | null>(null);
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
   const {
     dateFilter: fileDateFilter,
     setDateFilter: setFileDateFilter,
@@ -951,7 +998,10 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   } = useWorkspaceTableFilters();
 
   const loadWorkspace = useCallback(async () => {
-    setIsLoading(true);
+    const isInitialLoad = !hasLoadedWorkspaceRef.current;
+    if (isInitialLoad) {
+      setIsLoading(true);
+    }
     setErrorMessage(null);
 
     try {
@@ -982,13 +1032,18 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       setDocumentJoin(join);
       setCollectionOptions(buildCollectionOptions(collectionState.collections));
       setCollectionIdsByWritingId(idsByWritingId);
-      await service.markWorkspaceOpened(workspaceSlug);
+      if (isInitialLoad) {
+        await service.markWorkspaceOpened(workspaceSlug);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load workspace",
       );
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad) {
+        hasLoadedWorkspaceRef.current = true;
+        setIsLoading(false);
+      }
     }
   }, [workspaceSlug]);
 
@@ -1028,6 +1083,256 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       items,
     }));
   }, [fileGroupBy, visibleFiles]);
+
+  const getRowKey = useCallback(
+    (file: WorkspaceFile) => documentJoin.get(file.path)?.id ?? file.id,
+    [documentJoin],
+  );
+
+  const visibleWritingIds = useMemo(
+    () =>
+      visibleFiles
+        .map((file) => documentJoin.get(file.path)?.id)
+        .filter((id): id is string => Boolean(id)),
+    [visibleFiles, documentJoin],
+  );
+
+  const allVisibleSelected =
+    visibleWritingIds.length > 0 &&
+    visibleWritingIds.every((id) => selectedIds.has(id));
+
+  const writingCollections = useMemo<LocalWritingCollection[]>(
+    () =>
+      Object.entries(collectionIdsByWritingId).flatMap(([writingId, ids]) =>
+        ids.map((collectionId, index) => ({
+          id: `${writingId}-${collectionId}-${index}`,
+          writing_id: writingId,
+          collection_id: collectionId,
+          added_at: "",
+          local_updated_at: 0,
+        })),
+      ),
+    [collectionIdsByWritingId],
+  );
+
+  const previewRows = useMemo<DeskActivityRow[]>(
+    () =>
+      visibleFiles.map((file) => {
+        const document = documentJoin.get(file.path);
+        const writingId = document?.id ?? file.id;
+        const status = document?.status ?? "draft";
+        const artifactType = document?.artifactType ?? "general";
+        return {
+          id: writingId,
+          title: file.name.replace(/\.(md|mdx)$/i, ""),
+          excerpt: document?.excerpt ?? "",
+          localPath: file.path,
+          stateLabel: getWritingStatusLabel(status),
+          stateTone: normalizeWritingStatus(status),
+          documentState: deriveWorkspaceFileDocumentState(file, documentJoin),
+          artifactType,
+          recipientPreviews: [],
+          dateLabel: formatFileTimestamp(file.modifiedAt),
+          isNew: false,
+          destinationHref: buildWritingRouteHref("/write", {
+            id: writingId,
+            slug: null,
+          }),
+          workspaceSlug: workspace?.slug ?? null,
+          workspaceName: workspace?.name ?? null,
+        };
+      }),
+    [visibleFiles, documentJoin, workspace],
+  );
+
+  const previewIndex = useMemo(
+    () =>
+      previewWritingId === null
+        ? null
+        : previewRows.findIndex((row) => row.id === previewWritingId),
+    [previewRows, previewWritingId],
+  );
+
+  const openRenameWriting = useCallback(
+    async (file: WorkspaceFile) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      const writing = await getWritingForEdit(document.id);
+      if (!writing) {
+        return;
+      }
+      setRenameTarget({
+        id: writing.id,
+        title: writing.title?.trim() || "Untitled writing",
+        bodyText: writing.body_text,
+      });
+    },
+    [documentJoin],
+  );
+
+  const openWritingPreview = useCallback(
+    (file: WorkspaceFile) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      setPreviewWritingId(document.id);
+    },
+    [documentJoin],
+  );
+
+  const handleDeleteFile = useCallback(
+    async (file: WorkspaceFile) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      await deleteWriting(document.id);
+      await loadWorkspace();
+    },
+    [documentJoin, loadWorkspace],
+  );
+
+  const handleRenameConfirm = useCallback(
+    async (nextTitle: string) => {
+      if (!renameTarget) {
+        return;
+      }
+      await renameWriting(renameTarget.id, nextTitle);
+      await loadWorkspace();
+      setRenameTarget(null);
+    },
+    [renameTarget, loadWorkspace],
+  );
+
+  const handleStatusChange = useCallback(
+    async (file: WorkspaceFile, status: WritingStatus) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      await changeWritingStatus(document.id, status);
+      await loadWorkspace();
+    },
+    [documentJoin, loadWorkspace],
+  );
+
+  const handleArtifactTypeChange = useCallback(
+    async (file: WorkspaceFile, artifactType: ArtifactType) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      await changeWritingArtifactType(document.id, artifactType);
+      await loadWorkspace();
+    },
+    [documentJoin, loadWorkspace],
+  );
+
+  const handleCollectionToggle = useCallback(
+    async (file: WorkspaceFile, collectionId: string) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      await toggleWritingCollectionMutation(
+        document.id,
+        collectionId,
+        writingCollections,
+      );
+      await loadWorkspace();
+    },
+    [documentJoin, writingCollections, loadWorkspace],
+  );
+
+  const handleCreateCollection = useCallback(
+    async (file: WorkspaceFile, name: string) => {
+      const document = documentJoin.get(file.path);
+      if (!document) {
+        return;
+      }
+      const ownerId = getLocalDBScope();
+      await createAndAssignCollection(
+        document.id,
+        name,
+        ownerId === "anonymous" ? null : ownerId,
+        writingCollections,
+      );
+      await loadWorkspace();
+    },
+    [documentJoin, writingCollections, loadWorkspace],
+  );
+
+  const handleTitleChange = useCallback(
+    async (writingId: string, title: string) => {
+      await renameWriting(writingId, title);
+      await loadWorkspace();
+    },
+    [loadWorkspace],
+  );
+
+  const handlePreviewDelete = useCallback(
+    async (writingId: string) => {
+      await deleteWriting(writingId);
+      setPreviewWritingId(null);
+      await loadWorkspace();
+    },
+    [loadWorkspace],
+  );
+
+  const handleBulkDelete = useCallback(async () => {
+    await bulkDelete(selectedIds);
+    deselectAll();
+    await loadWorkspace();
+  }, [selectedIds, deselectAll, loadWorkspace]);
+
+  const handleBulkStatusChange = useCallback(
+    async (status: WritingStatus) => {
+      await bulkChangeStatus(selectedIds, status);
+      await loadWorkspace();
+    },
+    [selectedIds, loadWorkspace],
+  );
+
+  const handleBulkArtifactTypeChange = useCallback(
+    async (artifactType: ArtifactType) => {
+      await bulkChangeArtifactType(selectedIds, artifactType);
+      await loadWorkspace();
+    },
+    [selectedIds, loadWorkspace],
+  );
+
+  const handleBulkAddToCollection = useCallback(
+    async (collectionId: string) => {
+      await bulkAddToCollection(selectedIds, collectionId, writingCollections);
+      await loadWorkspace();
+    },
+    [selectedIds, writingCollections, loadWorkspace],
+  );
+
+  const handleBulkCreateCollection = useCallback(
+    async (name: string) => {
+      const ownerId = getLocalDBScope();
+      await bulkCreateCollection(
+        selectedIds,
+        name,
+        ownerId === "anonymous" ? null : ownerId,
+        writingCollections,
+      );
+      await loadWorkspace();
+    },
+    [selectedIds, writingCollections, loadWorkspace],
+  );
+
+  const enabledStatuses = useMemo(
+    () =>
+      WRITING_STATUS_VALUES.filter(
+        (status) => !settings.disabledStatuses.includes(status),
+      ),
+    [settings.disabledStatuses],
+  );
 
   useEffect(() => {
     const handleFocus = () => void loadWorkspace();
@@ -1078,6 +1383,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         render: (file) => {
           const document = documentJoin.get(file.path);
           const writingTitle = file.name.replace(/\.(md|mdx)$/i, "");
+          const hasDocument = Boolean(document);
           return (
             <ArtifactWritingCell
               title={writingTitle}
@@ -1091,23 +1397,78 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               actions={
                 <>
                   <ArtifactWritingAction
-                    disabled
-                    label={`Rename ${writingTitle} (coming soon)`}
+                    disabled={!hasDocument}
+                    label={
+                      hasDocument
+                        ? `Rename ${writingTitle}`
+                        : `Rename ${writingTitle} (not bound)`
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (!hasDocument) {
+                        return;
+                      }
+                      void openRenameWriting(file);
+                    }}
                   >
                     <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
                   </ArtifactWritingAction>
                   <ArtifactWritingAction
-                    disabled
-                    label={`Preview ${writingTitle} (coming soon)`}
+                    disabled={!hasDocument}
+                    label={
+                      hasDocument
+                        ? `Preview ${writingTitle}`
+                        : `Preview ${writingTitle} (not bound)`
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (!hasDocument) {
+                        return;
+                      }
+                      openWritingPreview(file);
+                    }}
                   >
                     <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
                   </ArtifactWritingAction>
-                  <ArtifactWritingAction
-                    disabled
-                    label={`Assign collections for ${writingTitle} (coming soon)`}
-                  >
-                    <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
-                  </ArtifactWritingAction>
+                  {hasDocument ? (
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <CollectionAssignmentMenu
+                        collections={collectionOptions}
+                        selectedIds={
+                          collectionIdsByWritingId[document!.id] ?? []
+                        }
+                        align="start"
+                        title="Collections"
+                        description="Choose labels for this writing."
+                        onToggleCollection={(collectionId) =>
+                          void handleCollectionToggle(file, collectionId)
+                        }
+                        onCreateCollection={(name) =>
+                          void handleCreateCollection(file, name)
+                        }
+                        trigger={
+                          <ArtifactWritingAction
+                            label={`Assign collections for ${writingTitle}`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Tag
+                              className="h-[14px] w-[14px]"
+                              strokeWidth={1.5}
+                            />
+                          </ArtifactWritingAction>
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <ArtifactWritingAction
+                      disabled
+                      label={`Assign collections for ${writingTitle} (not bound)`}
+                    >
+                      <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                    </ArtifactWritingAction>
+                  )}
                 </>
               }
               collections={
@@ -1130,20 +1491,47 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         width: "w-[144px]",
         className: "px-2",
         render: (file) => {
-          // The .md file IS the canonical document (ADR identidad D1/D9). Show the
-          // bound document's real status via the binding; a "solo local" file with
-          // no record yet defaults to draft until first sync (D9).
+          const document = documentJoin.get(file.path);
           const status = normalizeWritingStatus(
-            documentJoin.get(file.path)?.status ?? "draft",
+            document?.status ?? "draft",
           );
+          const hasDocument = Boolean(document);
           return (
-            <TablePropertySelector
-              readOnly
-              className="min-w-[128px]"
-              ariaLabel={`Status ${getWritingStatusLabel(status)}`}
-              icon={<WritingStatusIcon status={status} />}
-              label={getWritingStatusLabel(status)}
-            />
+            <div onClick={(event) => event.stopPropagation()}>
+              <TablePropertySelector
+                readOnly={!hasDocument}
+                className="min-w-[128px]"
+                ariaLabel={`Change status for ${file.name}`}
+                icon={<WritingStatusIcon status={status} />}
+                label={getWritingStatusLabel(status)}
+                contentClassName="w-[248px]"
+              >
+                {hasDocument &&
+                  enabledStatuses.map((status) => (
+                    <DropdownMenuItem
+                      key={status}
+                      className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleStatusChange(file, status);
+                      }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <WritingStatusIcon status={status} />
+                        {getWritingStatusLabel(status)}
+                      </span>
+                      {normalizeWritingStatus(
+                        document?.status ?? "draft",
+                      ) === status ? (
+                        <span
+                          className="h-2.5 w-2.5 rounded-full bg-ink"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+              </TablePropertySelector>
+            </div>
           );
         },
       },
@@ -1153,16 +1541,45 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         width: "w-[156px]",
         className: "px-2",
         render: (file) => {
+          const document = documentJoin.get(file.path);
           const artifactType =
-            documentJoin.get(file.path)?.artifactType ?? "general";
+            document?.artifactType ?? "general";
+          const hasDocument = Boolean(document);
           return (
-            <TablePropertySelector
-              readOnly
-              className="min-w-[140px]"
-              ariaLabel={`Artifact ${getArtifactTypeLabel(artifactType)}`}
-              icon={<ArtifactTypeIcon artifactType={artifactType} />}
-              label={getArtifactTypeLabel(artifactType)}
-            />
+            <div onClick={(event) => event.stopPropagation()}>
+              <TablePropertySelector
+                readOnly={!hasDocument}
+                className="min-w-[140px]"
+                ariaLabel={`Change artifact type for ${file.name}`}
+                icon={<ArtifactTypeIcon artifactType={artifactType} />}
+                label={getArtifactTypeLabel(artifactType)}
+                contentClassName="w-[248px]"
+              >
+                {hasDocument &&
+                  ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                    <DropdownMenuItem
+                      key={artifactType}
+                      className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleArtifactTypeChange(file, artifactType);
+                      }}
+                    >
+                      <span className="flex items-center gap-3">
+                        <ArtifactTypeIcon artifactType={artifactType} />
+                        {getArtifactTypeLabel(artifactType)}
+                      </span>
+                      {(document?.artifactType ?? "general") ===
+                      artifactType ? (
+                        <span
+                          className="h-2.5 w-2.5 rounded-full bg-ink"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+              </TablePropertySelector>
+            </div>
           );
         },
       },
@@ -1191,42 +1608,73 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
         align: "end",
         width: "w-[56px]",
         className: "pl-2 pr-4",
-        render: (file) => (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label={`Actions for ${file.name}`}
-                onClick={(event) => event.stopPropagation()}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-              >
-                <MoreHorizontal
-                  className="h-[14px] w-[14px]"
-                  strokeWidth={1.5}
-                />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          return (
+            <div
+              className="flex items-center justify-end gap-2"
               onClick={(event) => event.stopPropagation()}
             >
-              <DropdownMenuItem
-                className="cursor-pointer gap-2 text-[13px]"
-                onClick={() => void openInEditor(file)}
-              >
-                <ExternalLink className="h-[12px] w-[12px]" strokeWidth={1.5} />
-                Open in editor
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ),
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Actions for ${file.name}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  >
+                    <MoreHorizontal
+                      className="h-[14px] w-[14px]"
+                      strokeWidth={1.5}
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 text-[13px]"
+                    onClick={() => void openInEditor(file)}
+                  >
+                    <ExternalLink
+                      className="h-[12px] w-[12px]"
+                      strokeWidth={1.5}
+                    />
+                    Open in editor
+                  </DropdownMenuItem>
+                  {document ? (
+                    <DropdownMenuItem
+                      className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive"
+                      onClick={() => void handleDeleteFile(file)}
+                    >
+                      <Trash2
+                        className="h-[12px] w-[12px]"
+                        strokeWidth={1.5}
+                      />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
       },
     ],
     [
       collectionIdsByWritingId,
       collectionOptions,
       documentJoin,
+      enabledStatuses,
+      handleArtifactTypeChange,
+      handleCollectionToggle,
+      handleCreateCollection,
+      handleDeleteFile,
+      handleStatusChange,
       openInEditor,
+      openRenameWriting,
+      openWritingPreview,
       workspace?.name,
     ],
   );
@@ -1549,15 +1997,42 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   <ArtifactTable
                     groups={fileGroups}
                     columns={fileColumns}
-                    getRowId={(file) => file.id}
-                    getRowAriaLabel={(file) => `Open ${file.name} in editor`}
+                    getRowId={getRowKey}
+                    getRowAriaLabel={(file) =>
+                      documentJoin.get(file.path)
+                        ? `Open ${file.name} in editor`
+                        : `${file.name} is read-only on Workspace`
+                    }
                     onRowClick={(file) => void openInEditor(file)}
-                    renderLeading={(file) => (
-                      <ArtifactRowSelection
-                        disabled
-                        label={`Select ${file.name} (coming soon)`}
-                      />
-                    )}
+                    isRowSelected={(file) =>
+                      selectedIds.has(
+                        documentJoin.get(file.path)?.id ?? file.id,
+                      )
+                    }
+                    renderLeading={(file) => {
+                      const document = documentJoin.get(file.path);
+                      const writingId = document?.id;
+                      if (!writingId) {
+                        return (
+                          <ArtifactRowSelection
+                            disabled
+                            label={`Select ${file.name} (not bound)`}
+                          />
+                        );
+                      }
+                      const isSelected = selectedIds.has(writingId);
+                      return (
+                        <ArtifactRowSelection
+                          selected={isSelected}
+                          onToggle={() => toggleSelection(writingId)}
+                          label={
+                            isSelected
+                              ? `Deselect ${file.name}`
+                              : `Select ${file.name}`
+                          }
+                        />
+                      );
+                    }}
                     showHeader={false}
                     tableClassName="min-w-[920px] table-fixed"
                     rowCellClassName="py-6"
@@ -1567,8 +2042,99 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 </div>
               )}
             </section>
+
+            {hasSelection && (
+              <BulkActionBar
+                selectedCount={selectedCount}
+                visibleCount={visibleWritingIds.length}
+                allVisibleSelected={allVisibleSelected}
+                onSelectAll={() => selectAll(visibleWritingIds)}
+                onDeselectAll={deselectAll}
+                onDelete={() => setIsBulkDeleteOpen(true)}
+                onStatusChange={handleBulkStatusChange}
+                onArtifactTypeChange={handleBulkArtifactTypeChange}
+                collectionOptions={collectionOptions}
+                onAddToCollection={handleBulkAddToCollection}
+                onCreateCollection={handleBulkCreateCollection}
+              />
+            )}
           </div>
         </div>
+
+        <RenameWritingModal
+          open={renameTarget !== null}
+          title={renameTarget?.title ?? "Untitled writing"}
+          bodyText={renameTarget?.bodyText ?? ""}
+          writingId={renameTarget?.id}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRenameTarget(null);
+            }
+          }}
+          onConfirm={(nextTitle) => {
+            void handleRenameConfirm(nextTitle);
+            setRenameTarget(null);
+          }}
+        />
+
+        <DeleteWritingDialog
+          open={isBulkDeleteOpen}
+          onOpenChange={setIsBulkDeleteOpen}
+          count={selectedCount}
+          onConfirm={handleBulkDelete}
+        />
+
+        <WritingPreviewModal
+          open={previewWritingId !== null && previewIndex !== null}
+          rows={previewRows}
+          currentIndex={previewIndex}
+          collectionOptions={collectionOptions}
+          collectionIdsByWritingId={collectionIdsByWritingId}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPreviewWritingId(null);
+            }
+          }}
+          onIndexChange={(index) => {
+            const nextRow = previewRows[index];
+            if (nextRow) {
+              setPreviewWritingId(nextRow.id);
+            }
+          }}
+          onToggleCollection={async (writingId, collectionId) => {
+            await toggleWritingCollectionMutation(
+              writingId,
+              collectionId,
+              writingCollections,
+            );
+            await loadWorkspace();
+          }}
+          onCreateCollection={async (writingId, name) => {
+            const ownerId = getLocalDBScope();
+            await createAndAssignCollection(
+              writingId,
+              name,
+              ownerId === "anonymous" ? null : ownerId,
+              writingCollections,
+            );
+            await loadWorkspace();
+          }}
+          onStatusChange={async (writingId, status) => {
+            await changeWritingStatus(writingId, status);
+            await loadWorkspace();
+          }}
+          onArtifactTypeChange={async (writingId, artifactType) => {
+            await changeWritingArtifactType(writingId, artifactType);
+            await loadWorkspace();
+          }}
+          onTitleChange={handleTitleChange}
+          onOpenFullWriting={(writingId) => {
+            router.push(
+              buildWritingRouteHref("/write", { id: writingId, slug: null }),
+            );
+          }}
+          onDelete={handlePreviewDelete}
+        />
 
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent hideClose className="max-w-[560px] rounded-[24px] p-0">

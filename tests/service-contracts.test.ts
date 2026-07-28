@@ -42,6 +42,7 @@ import {
   type ListWritingsInput,
   type RenameWritingInput,
   type SaveWritingInput,
+  type UpdateWritingMetadataInput,
   type SetWritingCollectionsInput,
   type WritingCollectionMembership,
   type WritingRecord,
@@ -172,6 +173,10 @@ describe("service contracts", () => {
     expectTypeOf<DocumentService["saveWriting"]>().toEqualTypeOf<
       (input: SaveWritingInput) => Promise<ServiceResponse<WritingRecord>>
     >()
+    expectTypeOf<DocumentService["updateWritingMetadata"]>().toEqualTypeOf<
+      (input: UpdateWritingMetadataInput) => Promise<ServiceResponse<WritingRecord>>
+    >()
+    expectTypeOf<DocumentService["updateWritingsMetadata"]>().toBeFunction()
     expectTypeOf<DocumentService["renameWriting"]>().toEqualTypeOf<
       (input: RenameWritingInput) => Promise<ServiceResponse<WritingRecord>>
     >()

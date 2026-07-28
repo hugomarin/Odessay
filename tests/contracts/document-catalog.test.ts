@@ -91,6 +91,21 @@ describe("DocumentCatalog contract", () => {
     unsubscribe()
   })
 
+  it("emits one bulk CatalogChange for N metadata commits", async () => {
+    const catalog = new SqliteDocumentCatalog("/tmp/catalog-bulk.db")
+    const changes: Array<{ documentIds: string[]; reason: string }> = []
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
+    await catalog.commitBulkDualWrite([
+      { document: { ...nativeRow, id: "doc-1" }, binding: null, mutation: null },
+      { document: { ...nativeRow, id: "doc-2" }, binding: null, mutation: null },
+      { document: { ...nativeRow, id: "doc-3" }, binding: null, mutation: null },
+    ])
+    expect(mocks.catalogWrite).toHaveBeenCalledTimes(3)
+    expect(changes).toHaveLength(1)
+    expect(changes[0]).toMatchObject({ documentIds: ["doc-1", "doc-2", "doc-3"], reason: "bulk" })
+    unsubscribe()
+  })
+
   it("shares one CatalogChange bus across desktop writers for the same database", async () => {
     const reader = new SqliteDocumentCatalog("/tmp/shared-catalog.db")
     const writer = new SqliteDocumentCatalog("/tmp/shared-catalog.db")
