@@ -138,7 +138,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     for (const input of inputs) {
       await tauriCatalogDualWrite(this.dbPath, input)
     }
-    const documentIds = inputs.map(({ document }) => document.id)
+    const documentIds = inputs.map(({ document: catalogRecord }) => catalogRecord.id)
     this.emit(documentIds, "bulk")
   }
 
