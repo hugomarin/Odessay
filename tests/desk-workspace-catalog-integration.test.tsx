@@ -25,7 +25,10 @@ import { changeWritingStatus } from "@/lib/queries/writing-mutations"
 
 const catalog = vi.hoisted(() => {
   const listeners = new Set<(change: unknown) => void>()
-  const state: { records: unknown[] } = { records: [] }
+  const state: {
+    records: unknown[]
+    blockNextList: Promise<void> | null
+  } = { records: [], blockNextList: null }
   return {
     state,
     listeners,
@@ -35,7 +38,14 @@ const catalog = vi.hoisted(() => {
       )
     },
     instance: {
-      list: vi.fn(async () => state.records),
+      list: vi.fn(async () => {
+        if (state.blockNextList) {
+          const blocker = state.blockNextList
+          state.blockNextList = null
+          await blocker
+        }
+        return state.records
+      }),
       getById: async (id: string) =>
         (state.records as DocumentCatalogRecord[]).find((r) => r.id === id) ?? null,
       resolvePath: async (path: string) => ({ kind: "unbound", path }),
@@ -256,6 +266,7 @@ beforeEach(() => {
   container = document.createElement("div")
   document.body.appendChild(container)
   catalog.state.records = []
+  catalog.state.blockNextList = null
   catalog.listeners.clear()
   storage.writings = []
   collectionStore.state = { collections: [], writingCollections: [] }
@@ -597,10 +608,28 @@ describe("Workspace consumes the DocumentCatalog", () => {
       expect(workspaceContainer.textContent).toContain("Draft")
       expect(deskContainer.textContent).not.toContain("In Review")
       expect(workspaceContainer.textContent).not.toContain("In Review")
+      const collectionButton = workspaceContainer.querySelector<HTMLButtonElement>(
+        'button[aria-label="Assign collections for Shared"]',
+      )
+      expect(collectionButton).not.toBeNull()
+      expect(collectionButton?.disabled).toBe(false)
+
+      let releaseRefresh!: () => void
+      catalog.state.blockNextList = new Promise<void>((resolve) => {
+        releaseRefresh = resolve
+      })
 
       await act(async () => {
         await changeWritingStatus("shared-doc", "in_review")
       })
+
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 120))
+      })
+      expect(workspaceContainer.textContent).toContain("Shared")
+      expect(workspaceContainer.textContent).not.toContain("Loading workspace")
+
+      releaseRefresh()
       await waitPastDebounce()
 
       expect(deskContainer.textContent).toContain("In Review")

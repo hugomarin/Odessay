@@ -41,7 +41,7 @@ export function CollectionAssignmentMenu({
     <>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        <PopoverContent align={align} className="w-[280px] p-0">
+        <PopoverContent align={align} className="z-[70] w-[280px] p-0">
           <div className="border-b-[0.5px] border-border px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">

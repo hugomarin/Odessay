@@ -9,6 +9,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -970,6 +971,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
     Record<string, string[]>
   >({});
+  const hasLoadedWorkspaceRef = useRef(false);
   const { settings } = useUserSettingsContext();
   const {
     selectedIds,
@@ -996,7 +998,10 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   } = useWorkspaceTableFilters();
 
   const loadWorkspace = useCallback(async () => {
-    setIsLoading(true);
+    const isInitialLoad = !hasLoadedWorkspaceRef.current;
+    if (isInitialLoad) {
+      setIsLoading(true);
+    }
     setErrorMessage(null);
 
     try {
@@ -1027,13 +1032,18 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       setDocumentJoin(join);
       setCollectionOptions(buildCollectionOptions(collectionState.collections));
       setCollectionIdsByWritingId(idsByWritingId);
-      await service.markWorkspaceOpened(workspaceSlug);
+      if (isInitialLoad) {
+        await service.markWorkspaceOpened(workspaceSlug);
+      }
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to load workspace",
       );
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad) {
+        hasLoadedWorkspaceRef.current = true;
+        setIsLoading(false);
+      }
     }
   }, [workspaceSlug]);
 
@@ -1422,7 +1432,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   >
                     <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
                   </ArtifactWritingAction>
-                  {hasDocument && collectionOptions.length > 0 ? (
+                  {hasDocument ? (
                     <div onClick={(event) => event.stopPropagation()}>
                       <CollectionAssignmentMenu
                         collections={collectionOptions}
