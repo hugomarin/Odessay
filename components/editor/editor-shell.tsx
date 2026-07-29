@@ -485,6 +485,9 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
   const forceNewWritingRequestedRef = useRef(false)
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const isCreatingWorkspaceTabRef = useRef(false)
+  const isDraftMaterializingRef = useRef(false)
+  const queuedDraftSnapshotRef = useRef<Editor | null>(null)
+  const ephemeralDraftWritingIdRef = useRef<string | null>(null)
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
   const markdownSelectionRef = useRef<MarkdownSelectionSnapshot | null>(null)
@@ -867,7 +870,6 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
       const nowIso = new Date().toISOString()
       const activeId = currentWritingIdRef.current
-      const nextId = activeId ?? createWritingId()
       const baseCreatedAt = createdAtRef.current ?? nowIso
       const nextVersion = versionRef.current + 1
       const nextBodyText = editorInstance.getText()
@@ -882,24 +884,111 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
             ? titleRef.current.trim() || UNTITLED_WRITING_TITLE
             : nextDerivedTitle
 
-      if (!activeId) {
-        const nextWritingSession = createNewWritingSessionState(nextId)
-        currentWritingIdRef.current = nextWritingSession.activeWritingId
-        setCurrentWritingId(nextWritingSession.activeWritingId)
-        setHydrationWritingId(nextWritingSession.hydrationWritingId)
+      const isEmptyContent = nextBodyText.trim() === ""
 
-        if (!routeWritingId && !navigatedToDraftRef.current) {
-          navigatedToDraftRef.current = true
-          if (isPerfHarness()) {
-            replaceEditorHistory(`/write/${nextId}`)
-          } else if (!isDesktopRuntime()) {
-            router.replace(`/write/${nextId}`)
+      if (!activeId) {
+        if (isDesktopRuntime()) {
+          // Desktop: never materialize a contentless writing. The first real
+          // input/paste triggers one atomic draft creation with the initial body.
+          if (isEmptyContent) {
+            return
+          }
+          if (isDraftMaterializingRef.current) {
+            queuedDraftSnapshotRef.current = editorInstance
+            return
+          }
+          isDraftMaterializingRef.current = true
+          try {
+            const result = await createDesktopDraft({
+              writingId:
+                ephemeralDraftWritingIdRef.current ??
+                (ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId),
+              title: nextTitle,
+              initialBodyJson: editorInstance.getJSON() as Record<string, unknown>,
+              initialBodyText: nextBodyText,
+            })
+            if (result.error || !result.data) {
+              throw new Error(result.error?.message ?? "Failed to create desktop draft")
+            }
+            const materializedId = result.data.id
+            const materializedCreatedAt = result.data.createdAt
+            const materializedTitle = result.data.title?.trim() || DESKTOP_UNTITLED_WRITING_TITLE
+
+            currentWritingIdRef.current = materializedId
+            ephemeralDraftWritingIdRef.current = null
+            setCurrentWritingId(materializedId)
+            setHydrationWritingId(materializedId)
+            createdAtRef.current = materializedCreatedAt
+            setCreatedAt(materializedCreatedAt)
+            setTitle(materializedTitle)
+            titleRef.current = materializedTitle
+            setHasExplicitTitle(false)
+            hasExplicitTitleRef.current = false
+            versionRef.current = 1
+            setVersion(1)
+            setWritingSlug(null)
+            writingSlugRef.current = null
+            setWritingStatus("draft")
+            statusRef.current = "draft"
+            setArtifactType("general")
+            artifactTypeRef.current = "general"
+            setWritingVisibility("private")
+            visibilityRef.current = "private"
+            setLifecycle("local-only")
+            lifecycleRef.current = "local-only"
+            navigatedToDraftRef.current = true
+
+            openWritingTab({
+              writingId: materializedId,
+              title: materializedTitle,
+              saveState: "saved-local",
+              hasPendingSync: false,
+              replaceDraft: true,
+            })
+
+            // createDesktopDraft already committed the initial content through
+            // the normative desktop write path. Do not immediately save the
+            // same snapshot again. If another update arrived while allocation
+            // was in flight, flush the latest editor state once against the
+            // materialized UUID.
+            isDraftMaterializingRef.current = false
+            setSyncStatus("saved-local")
+            const queuedSnapshot = queuedDraftSnapshotRef.current
+            queuedDraftSnapshotRef.current = null
+            if (queuedSnapshot) {
+              await persistEditorSnapshot(queuedSnapshot)
+            }
+            return
+          } catch (error) {
+            isDraftMaterializingRef.current = false
+            queuedDraftSnapshotRef.current = editorInstance
+            console.error("[editor] failed to materialize desktop draft", error)
+            setSyncStatus(
+              typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving",
+            )
+            return
+          }
+        } else {
+          const nextId = activeId ?? createWritingId()
+          const nextWritingSession = createNewWritingSessionState(nextId)
+          currentWritingIdRef.current = nextWritingSession.activeWritingId
+          setCurrentWritingId(nextWritingSession.activeWritingId)
+          setHydrationWritingId(nextWritingSession.hydrationWritingId)
+
+          if (!routeWritingId && !navigatedToDraftRef.current) {
+            navigatedToDraftRef.current = true
+            if (isPerfHarness()) {
+              replaceEditorHistory(`/write/${nextId}`)
+            } else if (!isDesktopRuntime()) {
+              router.replace(`/write/${nextId}`)
+            }
           }
         }
       }
 
       setSyncStatus("saving")
 
+      const nextId = currentWritingIdRef.current ?? createWritingId()
       const nextLifecycle = !activeId ? "local-only" : lifecycleRef.current
 
       const nextRecord: WritingRecord = {
@@ -909,7 +998,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         content: {
           richText: editorInstance.getJSON() as Record<string, unknown>,
           markdown: null,
-          plainText: nextBodyText,
+          plainText: editorInstance.getText(),
           canonicalSource: "rich-text",
         },
         slug: null,
@@ -1424,13 +1513,33 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         }
       }
 
+    // In desktop an empty session must converge to EditorEmptyState instead of
+    // eagerly spawning a contentless draft tab. Web keeps its current behavior.
+    if (isDesktopRuntime() && editorSession.tabs.length === 0) {
+      return
+    }
+
     openDraftTab()
   }, [editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   // Eagerly create a stable local identity for blank /write so the first
   // paste/input never races against identity creation. This is the explicit
   // owner of the blank-draft -> identified-local-writing transition.
+  // Desktop drafts stay ephemeral until real content is entered, so this eager
+  // materialization is skipped there; identity is created on the first input/paste.
   useEffect(() => {
+    if (isDesktopRuntime()) {
+      if (
+        sessionLoaded &&
+        !routeWritingId &&
+        !currentWritingIdRef.current &&
+        !ephemeralDraftWritingIdRef.current
+      ) {
+        ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
+      }
+      return
+    }
+
     if (forceNewWriting || !sessionLoaded || routeWritingId || identityEnsuredRef.current || currentWritingIdRef.current) {
       return
     }
@@ -4986,10 +5095,22 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
       }
     }
 
-    // Block publishTabState while we are mid-creation. In desktop we do not set
-    // hydrationWritingId to the placeholder id (the real id comes from createDesktopDraft),
-    // so publishTabState would otherwise run with the stale displayTitle from the
-    // previous writing and corrupt/replace an existing tab.
+    // Desktop: drafts remain ephemeral until the user enters real content.
+    // Just open/focus a draft tab; never persist a contentless writing here.
+    if (isDesktopRuntime()) {
+      persistCurrentWorkspaceViewState()
+      openDraftTab()
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
+          editorEl?.focus()
+        })
+      })
+      return
+    }
+
+    // Block publishTabState while we are mid-creation. Web claims the final id
+    // synchronously so persistEditorSnapshot never races against it.
     isCreatingWorkspaceTabRef.current = true
 
     persistCurrentWorkspaceViewState()
@@ -5000,21 +5121,14 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
     const nowIso = new Date().toISOString()
     const nextWritingId = createWritingId()
-    const nextTitle = isDesktopRuntime()
-      ? DESKTOP_UNTITLED_WRITING_TITLE
-      : deriveAutoTitle("", nowIso)
+    const nextTitle = deriveAutoTitle("", nowIso)
 
     // Claim ownership of the blank-draft -> identified-local-writing transition
     // synchronously so persistEditorSnapshot never races against it.
     currentWritingIdRef.current = nextWritingId
     setCurrentWritingId(nextWritingId)
-    // In desktop the real draft id comes from createDesktopDraft below. Setting
-    // hydration to this placeholder id triggers openWriting against a file that
-    // does not exist yet (NOT_FOUND). Web keeps nextWritingId as the final id.
-    if (!isDesktopRuntime()) {
-      setHydrationWritingId(nextWritingId)
-      replaceEditorHistory(`/write/${nextWritingId}`)
-    }
+    setHydrationWritingId(nextWritingId)
+    replaceEditorHistory(`/write/${nextWritingId}`)
 
     const finishCreation = () => {
       isCreatingWorkspaceTabRef.current = false
@@ -5046,17 +5160,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
     if (isActiveDraft) {
       try {
-        if (isDesktopRuntime()) {
-          const result = await createDesktopDraft({ title: nextTitle })
-          if (result.error || !result.data) {
-            throw new Error(result.error?.message ?? "Failed to create desktop draft")
-          }
-          currentWritingIdRef.current = result.data.id
-          setCurrentWritingId(result.data.id)
-          setHydrationWritingId(result.data.id)
-        } else {
-          await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
-        }
+        await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
       } catch {
         // If save fails, revert the optimistic claim so persistEditorSnapshot
         // can fall back to identity-on-first-input.
@@ -5086,17 +5190,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     try {
-      if (isDesktopRuntime()) {
-        const result = await createDesktopDraft({ title: nextTitle })
-        if (result.error || !result.data) {
-          throw new Error(result.error?.message ?? "Failed to create desktop draft")
-        }
-        currentWritingIdRef.current = result.data.id
-        setCurrentWritingId(result.data.id)
-        setHydrationWritingId(result.data.id)
-      } else {
-        await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
-      }
+      await (await getDocumentService()).saveWriting({ writing: blankDraftRecord })
     } catch {
       currentWritingIdRef.current = null
       setCurrentWritingId(null)
