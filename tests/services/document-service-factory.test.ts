@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   getDesktopSettings: vi.fn(async () => ({ data: { workspaces: [] }, error: null })),
   upsertBindingRoot: vi.fn(),
   refreshReconcilerRoots: vi.fn(),
+  syncFlush: vi.fn(),
 }))
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
@@ -33,6 +34,9 @@ vi.mock("@/lib/services/desktop/runtime-detection", () => ({
 }))
 vi.mock("@/lib/services/auth-service-factory", () => ({
   getAuthService: () => ({ getSession: mocks.authGetSession }),
+}))
+vi.mock("@/lib/sync/sync-service-factory", () => ({
+  getSyncService: () => ({ flushPending: mocks.syncFlush }),
 }))
 vi.mock("@tauri-apps/api/path", () => ({
   appConfigDir: async () => "/config",
@@ -141,6 +145,10 @@ describe("desktop document service after compatibility retirement", () => {
         status: "authenticated",
         user: { id: "account-1", email: null, pendingEmail: null, emailConfirmedAt: null, displayName: null, username: null },
       },
+      error: null,
+    })
+    mocks.syncFlush.mockResolvedValue({
+      data: { processedMutations: 1, failedMutations: [], nextRetryAt: null },
       error: null,
     })
     mocks.catalogGet.mockResolvedValue(catalogRecord)
@@ -497,6 +505,32 @@ describe("desktop document service after compatibility retirement", () => {
         archiveState: "archived",
       }),
     ])
+  })
+
+  it("waits for cloud acknowledgement before completing a permanent delete", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "deleted",
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).permanentlyDeleteWriting({ writingId: id })
+
+    expect(result.error).toBeNull()
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        mutation: expect.objectContaining({
+          operation: "delete",
+          payloadJson: expect.stringContaining("permanent-delete"),
+        }),
+      }),
+    )
+    expect(mocks.syncFlush).toHaveBeenCalledTimes(1)
   })
 
   it("persists markdown, then manifest, then SQLite mutation", async () => {

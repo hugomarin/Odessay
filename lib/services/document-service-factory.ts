@@ -472,6 +472,7 @@ class DesktopDocumentService implements DocumentService {
     try {
       const current = await this.runtime.catalog.getById(input.writingId)
       if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
+      const mutationId = crypto.randomUUID()
       await this.runtime.catalog.commitDualWrite({
         document: {
           id: current.id, localPresent: current.localPresent, cloudPresent: current.cloudPresent,
@@ -481,10 +482,14 @@ class DesktopDocumentService implements DocumentService {
           createdAt: current.createdAt, modifiedAt: current.modifiedAt,
         },
         binding: null,
-        mutation: { id: crypto.randomUUID(), operation: "delete", payloadJson: JSON.stringify({ mutationKind: "permanent-delete", updatedAt: new Date().toISOString() }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
+        mutation: { id: mutationId, operation: "delete", payloadJson: JSON.stringify({ mutationKind: "permanent-delete", updatedAt: new Date().toISOString() }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
       })
       const { getSyncService } = await import("@/lib/sync/sync-service-factory")
-      void getSyncService().scheduleFlush()
+      const flushed = await getSyncService().flushPending()
+      if (flushed.error) return { data: null, error: flushed.error }
+      if (flushed.data?.failedMutations.includes(mutationId)) {
+        return err("UNAVAILABLE", "The archived writing could not be permanently deleted")
+      }
       return ok(undefined)
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }

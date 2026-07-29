@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   selectEq: vi.fn(),
   update: vi.fn(),
+  remove: vi.fn(),
   insert: vi.fn(),
   from: vi.fn(),
   catalogGet: vi.fn(),
@@ -13,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listPending: vi.fn(),
   listMetadataPending: vi.fn(),
   updateStatus: vi.fn(),
+  purgeDocument: vi.fn(),
 }))
 
 vi.mock("@tauri-apps/api/path", () => ({
@@ -39,6 +41,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogApplyCollectionSnapshot: vi.fn(),
   tauriCatalogUpdateMetadataMutationStatus: vi.fn(),
   tauriCatalogUpdateMutationStatus: mocks.updateStatus,
+  tauriCatalogPurgeDocument: mocks.purgeDocument,
   tauriOpenFile: vi.fn(),
 }))
 
@@ -71,6 +74,9 @@ function wireSupabaseTables() {
     update: (row: unknown, opts: unknown) => ({
       eq: () => ({ eq: () => mocks.update(row, opts) }),
     }),
+    delete: (opts: unknown) => ({
+      eq: () => ({ eq: () => ({ not: () => mocks.remove(opts) }) }),
+    }),
     insert: (row: unknown, opts: unknown) => mocks.insert(row, opts),
   }))
 }
@@ -85,6 +91,7 @@ describe("desktopCatalogSyncService", () => {
     mocks.listMetadataPending.mockResolvedValue([])
     mocks.applyCloudSnapshots.mockResolvedValue(undefined)
     mocks.updateStatus.mockResolvedValue(undefined)
+    mocks.purgeDocument.mockResolvedValue(undefined)
     wireSupabaseTables()
   })
 
@@ -284,6 +291,32 @@ describe("desktopCatalogSyncService", () => {
     expect(mocks.applyCloudSnapshots).toHaveBeenCalledWith([
       expect.objectContaining({ id: "doc-1", cloudPresent: false, syncStatus: "deleted" }),
     ])
+  })
+
+  it("purges locally when a permanent delete finds the cloud row already absent", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({
+      localPresent: false, cloudPresent: false, syncStatus: "deleted",
+      deletedAt: "2026-07-22T11:00:00Z",
+    }))
+    mocks.listPending.mockResolvedValue([mutationRow({
+      operation: "delete",
+      payloadJson: JSON.stringify({
+        mutationKind: "permanent-delete",
+        updatedAt: "2026-07-29T14:22:04Z",
+      }),
+    })])
+    mocks.remove.mockResolvedValue({ error: null, count: 0 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.updateStatus).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3", "m1", "synced", 0, null, null,
+    )
+    expect(mocks.purgeDocument).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3", "doc-1",
+    )
   })
 
   // ── ODE-404 regression (b): cloud_present=1 lands in the same flush ─────────

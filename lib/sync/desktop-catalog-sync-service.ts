@@ -202,7 +202,9 @@ async function processMutation(
       const { error, count } = await supabase.from("writings").delete({ count: "exact" })
         .eq("id", mutation.documentId).eq("author_id", userId).not("deleted_at", "is", null)
       if (error) throw new Error(error.message)
-      if (requireAffectedRows(count) === 0) throw new Error("Archived cloud writing was not permanently deleted")
+      // Permanent deletion is idempotent. A zero-row response means the cloud
+      // tombstone is already absent, so the durable local purge may converge.
+      requireAffectedRows(count)
       return
     }
     const deletedAt = payloadValue(payload, "deletedAt", "deleted_at") ?? updatedAt
