@@ -5105,7 +5105,32 @@ export function EditorShell({
     // Just open/focus a draft tab; never persist a contentless writing here.
     if (isDesktopRuntime()) {
       persistCurrentWorkspaceViewState()
+
+      // Detach the previous document before the draft tab can receive focus.
+      // Merely changing the active session tab leaves TipTap and the save path
+      // bound to the previous UUID until React effects run, so the first input
+      // can otherwise append to (and persist over) the previous document.
+      currentWritingIdRef.current = null
+      setCurrentWritingId(null)
+      setHydrationWritingId(null)
+      ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
+      navigatedToDraftRef.current = false
+
+      if (richUpdateRafRef.current !== null) {
+        window.cancelAnimationFrame(richUpdateRafRef.current)
+        richUpdateRafRef.current = null
+        richUpdateEditorRef.current = null
+      }
+
+      if (editor) {
+        isApplyingContentRef.current = true
+        editor.commands.setContent(EMPTY_EDITOR_JSON)
+        isApplyingContentRef.current = false
+        updateDerivedEditorState(editor)
+      }
+
       openDraftTab()
+      replaceEditorHistory("/write")
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
@@ -5218,7 +5243,7 @@ export function EditorShell({
         editorEl?.focus()
       })
     })
-  }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
+  }, [currentWritingId, editor, editorSession.tabs, persistCurrentWorkspaceViewState, updateDerivedEditorState])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
 
   selectAdjacentTabRef.current = (direction) => {

@@ -82,13 +82,17 @@ const editorState = vi.hoisted(() => ({
 
 const topbarState = vi.hoisted(() => ({
   onCloseTab: null as ((tabId: string) => void) | null,
+  onNewTab: null as (() => void) | null,
 }))
 
 const noopCommand = vi.hoisted(() => vi.fn(() => true))
+const setContentCommand = vi.hoisted(() => vi.fn(() => true))
 
 const editorStub = vi.hoisted(() => {
   const base = {
-    commands: new Proxy({}, { get: () => noopCommand }) as Record<string, () => boolean>,
+    commands: new Proxy({}, {
+      get: (_target, prop) => prop === "setContent" ? setContentCommand : noopCommand,
+    }) as Record<string, () => boolean>,
     chain: () => ({
       focus: () => ({
         setTextSelection: () => ({ run: noopCommand }),
@@ -321,8 +325,9 @@ vi.mock("@/lib/editor/footnote-node", () => ({
 }))
 
 vi.mock("@/components/editor/editor-topbar", () => ({
-  EditorTopbar: (props: { onCloseTab?: (tabId: string) => void }) => {
+  EditorTopbar: (props: { onCloseTab?: (tabId: string) => void; onNewTab?: () => void }) => {
     topbarState.onCloseTab = props.onCloseTab ?? null
+    topbarState.onNewTab = props.onNewTab ?? null
     return null
   },
 }))
@@ -372,6 +377,8 @@ beforeEach(async () => {
   resetEditorState()
   resetEditorSessionStoreForTests()
   topbarState.onCloseTab = null
+  topbarState.onNewTab = null
+  setContentCommand.mockClear()
   mocks.createDesktopDraft.mockReset()
   mocks.createDesktopDraft.mockImplementation(async () => {
     mocks.filesystemWrite()
@@ -469,6 +476,34 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     expect(mocks.catalogWrite).toHaveBeenCalledTimes(1)
     expect(mocks.syncEnqueue).toHaveBeenCalledTimes(1)
     expect(mocks.cloudWrite).not.toHaveBeenCalled()
+  })
+
+  it("detaches and clears an existing writing before the new draft accepts input", async () => {
+    await act(async () => root?.render(<EditorShell writingId="existing-writing" />))
+    await vi.waitFor(() => expect(topbarState.onNewTab).not.toBeNull())
+
+    editorState.text = "Existing document content"
+    editorState.json = {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: editorState.text }] }],
+    }
+    editorState.isEmpty = false
+    setContentCommand.mockClear()
+
+    await act(async () => {
+      topbarState.onNewTab?.()
+    })
+
+    expect(setContentCommand).toHaveBeenCalledWith({ type: "doc", content: [] })
+    expect(getEditorSessionState().session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID)
+    expect(mocks.createDesktopDraft).not.toHaveBeenCalled()
+
+    await simulateEditorInput("First new words")
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    expect(mocks.createDesktopDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ initialBodyText: "First new words" }),
+    )
+    expect(mocks.saveWriting).not.toHaveBeenCalled()
   })
 
   it("does not duplicate identity when concurrent updates race during materialization", async () => {
