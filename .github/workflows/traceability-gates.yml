@@ -31,11 +31,11 @@ jobs:
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 
-      - name: Build app for perf capture
-        run: npm run build
-
       - name: Check desktop draft lifecycle
         run: npm run test:desktop:draft-lifecycle
+
+      - name: Build app for perf capture
+        run: npm run build
 
       - name: Check process docs sync
         run: npm run ops:process:sync
