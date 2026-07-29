@@ -1,4 +1,4 @@
-import { EditorShell } from "@/components/editor/editor-shell"
+import { WriteNewHarnessClient } from "./write-new-harness-client"
 
 // Perf harness for the "create new writing → paste" scenario (ODE-82).
 // Renders EditorShell without a writingId so the new-writing creation path is exercised.
@@ -10,5 +10,5 @@ export default function WriteNewHarnessPage() {
     return null
   }
 
-  return <EditorShell />
+  return <WriteNewHarnessClient />
 }

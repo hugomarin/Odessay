@@ -24,6 +24,7 @@
     "ops:documents:audit": "node scripts/document-cleanup/audit-desktop-documents.mjs",
     "ops:documents:cleanup": "node scripts/document-cleanup/apply-desktop-cleanup.mjs",
     "test:parity": "node scripts/run-parity-tests.mjs",
+    "test:desktop:draft-lifecycle": "node scripts/check-desktop-draft-lifecycle.mjs",
     "seed:phase1": "npx tsx scripts/seed-phase-1.ts",
     "test": "vitest run",
     "tauri:dev": "tauri dev",

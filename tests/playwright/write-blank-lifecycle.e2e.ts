@@ -1,30 +1,31 @@
 import { expect, test } from "@playwright/test"
 
-test("blank writing stays local-first until first sync", async ({ page }) => {
+/**
+ * @contract ODE-406 — contentless desktop lifecycle
+ * @service DocumentService.createDraft()
+ */
+test("contentless desktop lifecycle has zero durable effects", async ({ page }) => {
   await page.goto("/perf/write-new-harness")
 
+  await expect(page.getByTestId("desktop-draft-lifecycle-counters")).toBeAttached()
+  await expect(page.getByTestId("editor-empty-state")).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.location.pathname)).toBe("/perf/write-new-harness")
+  await expect.poll(() => page.evaluate(() => window.__ODESSAY_DESKTOP_DRAFT_LIFECYCLE__)).toMatchObject({
+    installed: true,
+    materializations: 0,
+    filesystemWrites: 0,
+    manifestWrites: 0,
+    catalogWrites: 0,
+    syncEnqueues: 0,
+    cloudWrites: 0,
+  })
+
+  await page.getByTestId("editor-empty-state").getByRole("button", { name: "New writing" }).click()
   await expect(page.getByTestId("editor-topbar")).toBeVisible()
   await expect(page.getByTestId("editor-writing-area")).toBeVisible()
-  await expect.poll(() => page.evaluate(() => window.location.pathname)).toMatch(
-    /\/write\/[0-9a-f-]{36}$/,
-  )
-  await expect(page.getByText("Saved locally")).toBeVisible()
-
-  await page.getByRole("button", { name: "Properties panel" }).click()
-  await expect(page.getByTestId("editor-panel-properties")).toBeVisible()
-  await expect(
-    page.getByText("Sharing, collections, PDF, and Word become available after the first sync."),
-  ).toBeVisible()
-  await expect(page.getByRole("button", { name: "Generate link" })).toBeDisabled()
-
-  await page.getByRole("button", { name: "Export as…" }).click()
-  await expect(page.getByRole("button", { name: "Markdown (.md)" })).toBeEnabled()
-  await expect(page.getByRole("button", { name: "PDF (.pdf)" })).toBeDisabled()
-  await expect(page.getByRole("button", { name: "Word (.docx)" })).toBeDisabled()
+  await expect(page.getByText("Saved locally")).toHaveCount(0)
 
   await page.goto("/perf/write-new-harness")
-  await expect.poll(() => page.evaluate(() => window.location.pathname)).toMatch(
-    /\/write\/[0-9a-f-]{36}$/,
-  )
-  await expect(page.getByText("Saved locally")).toBeVisible()
+  await expect.poll(() => page.evaluate(() => window.__ODESSAY_DESKTOP_DRAFT_LIFECYCLE__?.materializations)).toBe(0)
+  await expect(page.getByText("Saved locally")).toHaveCount(0)
 })

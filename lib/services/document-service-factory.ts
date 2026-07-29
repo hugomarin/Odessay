@@ -34,6 +34,7 @@ import {
   type DesktopCatalogDualWriteInput,
 } from "@/lib/services/desktop/tauri-commands"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
+import { getDesktopDraftLifecycleHarness } from "@/lib/testing/desktop-draft-lifecycle-harness"
 
 type DesktopRuntimeServices = {
   writingsDir: string
@@ -446,6 +447,39 @@ export async function getDocumentService(): Promise<DocumentService> {
 }
 
 export async function createDesktopDraft(options: DesktopDraftOptions = {}) {
+  const harness = getDesktopDraftLifecycleHarness()
+  if (harness?.installed) {
+    harness.materializations += 1
+    harness.filesystemWrites += 1
+    harness.manifestWrites += 1
+    harness.catalogWrites += 1
+    harness.syncEnqueues += 1
+    const now = new Date().toISOString()
+    const id = options.writingId ?? crypto.randomUUID()
+    return ok<WritingRecord>({
+      id,
+      authorId: null,
+      title: options.title?.trim() || UNTITLED_DOCUMENT_NAME,
+      content: {
+        richText: options.initialBodyJson ?? { type: "doc", content: [] },
+        markdown: null,
+        plainText: options.initialBodyText ?? "",
+        canonicalSource: "rich-text",
+      },
+      slug: null,
+      status: "draft",
+      artifactType: "general",
+      visibility: "private",
+      parentId: null,
+      correspondenceId: null,
+      version: 1,
+      deletedAt: null,
+      createdAt: now,
+      updatedAt: now,
+      contentUpdatedAt: now,
+      metadataUpdatedAt: now,
+    })
+  }
   const service = await getDocumentService()
   if (!(service instanceof DesktopDocumentService)) return err<WritingRecord>("UNAVAILABLE", "Desktop runtime required")
   return service.createDraft(options)

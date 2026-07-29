@@ -15,6 +15,8 @@ const isTauriBuild = process.env.NEXT_PUBLIC_TAURI_BUILD === "true"
 export const isTauriRuntime = (): boolean =>
   typeof window !== "undefined" &&
   (isTauriBuild ||
+    (window as unknown as { __ODESSAY_DESKTOP_DRAFT_LIFECYCLE__?: { installed?: boolean } })
+      .__ODESSAY_DESKTOP_DRAFT_LIFECYCLE__?.installed === true ||
     typeof (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
       "undefined")
 

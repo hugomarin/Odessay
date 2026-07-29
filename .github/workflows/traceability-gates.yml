@@ -34,6 +34,9 @@ jobs:
       - name: Build app for perf capture
         run: npm run build
 
+      - name: Check desktop draft lifecycle
+        run: npm run test:desktop:draft-lifecycle
+
       - name: Check process docs sync
         run: npm run ops:process:sync
 
