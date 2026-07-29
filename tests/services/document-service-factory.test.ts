@@ -1,10 +1,11 @@
 /** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 
 const mocks = vi.hoisted(() => ({
   desktop: true,
   catalogGet: vi.fn(),
-  catalogList: vi.fn(async () => []),
+  catalogList: vi.fn<() => Promise<DocumentCatalogRecord[]>>(async () => []),
   catalogResolve: vi.fn(),
   catalogDetach: vi.fn(),
   applyReconcile: vi.fn(),
@@ -78,7 +79,7 @@ vi.mock("@/lib/services/web-document-service", () => ({
 
 const id = "11111111-1111-4111-8111-111111111111"
 const path = "/docs/Letter.md"
-const catalogRecord = {
+const catalogRecord: DocumentCatalogRecord = {
   id,
   localPresent: true,
   cloudPresent: false,
@@ -443,6 +444,44 @@ describe("desktop document service after compatibility retirement", () => {
 
     expect(result.error?.code).toBe("NOT_FOUND")
     expect(mocks.openFile).not.toHaveBeenCalled()
+  })
+
+  it("returns only archived catalog rows and paginates after filtering", async () => {
+    const archivedAt = "2026-01-02T00:00:00.000Z"
+    const archivedRecord = {
+      ...catalogRecord,
+      id: "22222222-2222-4222-8222-222222222222",
+      title: "Archived letter",
+      deletedAt: archivedAt,
+    }
+    const secondArchivedRecord = {
+      ...archivedRecord,
+      id: "33333333-3333-4333-8333-333333333333",
+      title: "Second archived letter",
+    }
+    mocks.catalogList.mockResolvedValue([
+      catalogRecord,
+      archivedRecord,
+      secondArchivedRecord,
+    ])
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).listWritings({
+      includeDeleted: true,
+      archivedOnly: true,
+      limit: 1,
+      offset: 1,
+    })
+
+    expect(mocks.catalogList).toHaveBeenCalledWith({ includeDeleted: true, limit: 5000 })
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: secondArchivedRecord.id,
+        deletedAt: archivedAt,
+        archiveState: "archived",
+      }),
+    ])
   })
 
   it("persists markdown, then manifest, then SQLite mutation", async () => {

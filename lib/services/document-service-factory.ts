@@ -220,7 +220,15 @@ class DesktopDocumentService implements DocumentService {
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     try {
       const rows = await this.runtime.catalog.list({ includeDeleted: input?.includeDeleted, limit: 5000 })
-      return ok(rows.map(toSummary))
+      const filteredRows = input?.archivedOnly
+        ? rows.filter((row) => row.deletedAt !== null)
+        : rows
+      const offset = Math.max(0, input?.offset ?? 0)
+      const limit = input?.limit == null ? undefined : Math.max(0, input.limit)
+      const page = limit == null
+        ? filteredRows.slice(offset)
+        : filteredRows.slice(offset, offset + limit)
+      return ok(page.map(toSummary))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
 
