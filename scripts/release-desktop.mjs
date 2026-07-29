@@ -91,6 +91,13 @@ function main() {
     console.log(`[desktop:release] WARNING: DMG will connect to local dev server (${appUrl}). Do not distribute this build.`)
   }
 
+  try {
+    execSync("npm run test:desktop:draft-lifecycle", { stdio: "inherit", cwd: root })
+  } catch (err) {
+    console.error("[desktop:release] desktop draft lifecycle gate failed — release aborted.")
+    process.exit(err.status || 1)
+  }
+
   // 3. Build — beforeBuildCommand in tauri.conf.json handles the Next.js static export prep
   try {
     execSync("npm run tauri:build", { stdio: "inherit", cwd: root })

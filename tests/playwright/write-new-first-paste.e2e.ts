@@ -1,18 +1,26 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
 
-test("blank /write gets stable identity before first paste and content persists", async ({ page }) => {
+async function readCounters(page: Page) {
+  return JSON.parse((await page.getByTestId("desktop-draft-lifecycle-counters").textContent()) ?? "{}")
+}
+
+/**
+ * @contract ODE-406 — first real desktop content materializes exactly once
+ * @service DocumentService.createDraft()
+ */
+test("first desktop paste creates exactly one durable identity", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true })
+  })
   // Use the perf harness so the test runs outside the auth-protected layout
   await page.goto("/perf/write-new-harness")
 
-  // Wait for the editor to be ready
+  await expect(page.getByTestId("editor-empty-state")).toBeVisible()
+  await page.getByTestId("editor-empty-state").getByRole("button", { name: "New writing" }).click()
   await expect(page.getByTestId("editor-topbar")).toBeVisible()
   await expect(page.getByTestId("editor-writing-area")).toBeVisible()
 
-  // The URL should promote to /write/{id} eagerly before any input.
-  // Poll because identity creation is async (localDB write + session update).
-  await expect.poll(() => page.evaluate(() => window.location.pathname)).toMatch(
-    /\/write\/[0-9a-f-]{36}$/,
-  )
+  await expect.poll(async () => (await readCounters(page)).materializations).toBe(0)
 
   // First paste should persist immediately
   const editor = page.locator(".odessay-editor-content")
@@ -22,6 +30,17 @@ test("blank /write gets stable identity before first paste and content persists"
   // Content should be visible in the editor
   await expect(editor).toContainText("First paste content")
 
-  // Tab title should reflect the content (first 48 chars used as auto-title)
-  await expect(page.getByRole("button", { name: /open first paste content/i })).toBeVisible()
+  await expect.poll(() => readCounters(page)).toMatchObject({
+    materializations: 1,
+    filesystemWrites: 1,
+    manifestWrites: 1,
+    catalogWrites: 1,
+    syncEnqueues: 1,
+    cloudWrites: 0,
+  })
+
+  await expect(page.getByText("Saved locally")).toBeVisible()
+  await page.getByRole("button", { name: "Close Untitled" }).click()
+  await expect(page.getByTestId("editor-empty-state")).toBeVisible()
+  await expect.poll(async () => (await readCounters(page)).materializations).toBe(1)
 })

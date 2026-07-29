@@ -101,6 +101,17 @@ describe("editorSessionStore", () => {
     expect(getEditorSessionState().session.active_tab_id).toBe("writing-4");
   });
 
+  it("keeps tabs empty and active_tab_id null after closing the last tab", async () => {
+    await initializeEditorSessionStore();
+    openWritingTab({ writingId: "writing-only", title: "Only writing" });
+
+    expect(closeTab("writing-only")).toBeNull();
+    expect(getEditorSessionState().session).toMatchObject({
+      tabs: [],
+      active_tab_id: null,
+    });
+  });
+
   it("appends newly opened writing tabs to the end of the rail", async () => {
     await initializeEditorSessionStore();
     openWritingTab({ writingId: "writing-1", title: "First draft" });
@@ -254,6 +265,21 @@ describe("editorSessionStore", () => {
       const session = getEditorSessionState().session;
       expect(session.tabs.map((tab) => tab.writing_id)).toEqual(["writing-2"]);
       expect(session.active_tab_id).toBe("writing-2");
+    });
+
+    it("is idempotent when the unavailable cloud-only tab is the last tab", async () => {
+      await initializeEditorSessionStore();
+      openWritingTab({ writingId: "cloud-only", title: "Cloud only" });
+
+      expect(reconcileUnavailableWritingTab("cloud-only")).toMatchObject({
+        removed: true,
+        fallbackTabId: null,
+      });
+      expect(reconcileUnavailableWritingTab("cloud-only")).toMatchObject({
+        removed: false,
+        fallbackTabId: null,
+      });
+      expect(getEditorSessionState().session).toMatchObject({ tabs: [], active_tab_id: null });
     });
   });
 });

@@ -148,6 +148,43 @@ describe("desktop document service after compatibility retirement", () => {
     })
   })
 
+  describe("createDesktopDraft lifecycle (ODE-406)", () => {
+    it("has zero durable effects until called with real content, then commits one ordered transition", async () => {
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+      expect(mocks.saveFile).not.toHaveBeenCalled()
+      expect(mocks.workspaceSync).not.toHaveBeenCalled()
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+
+      const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+      const result = await createDesktopDraft({
+        writingId: id,
+        title: "Untitled",
+        initialBodyText: "First words",
+        initialBodyJson: {
+          type: "doc",
+          content: [{ type: "paragraph", content: [{ type: "text", text: "First words" }] }],
+        },
+      })
+
+      expect(result.error).toBeNull()
+      expect(mocks.createDraft).toHaveBeenCalledTimes(1)
+      expect(mocks.saveFile).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceSync).toHaveBeenCalledTimes(1)
+      expect(mocks.dualWrite).toHaveBeenCalledTimes(1)
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        "/config/desktop-index.sqlite3",
+        expect.objectContaining({
+          document: expect.objectContaining({ id, localPresent: true, syncStatus: "pending" }),
+          mutation: expect.objectContaining({ operation: "upsert", status: "pending" }),
+        }),
+      )
+      expect(mocks.saveFile.mock.invocationCallOrder[0])
+        .toBeLessThan(mocks.workspaceSync.mock.invocationCallOrder[0])
+      expect(mocks.workspaceSync.mock.invocationCallOrder[0])
+        .toBeLessThan(mocks.dualWrite.mock.invocationCallOrder[0])
+    })
+  })
+
   describe("relocateDesktopWriting (ODE-402)", () => {
     const managedRecord = {
       ...catalogRecord,

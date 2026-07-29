@@ -134,11 +134,17 @@ Clasificación:
 
 Cuándo reutilizarlos:
 
-- identidad temprana del writing
+- identidad diferida del writing desktop hasta el primer contenido real
 - persistencia local-first inicial
 - canonicalización de rutas
 - guard de mobile
 - regresiones de lifecycle
+
+Contrato vigente (ODE-406):
+
+- `write-blank-lifecycle` verifica cero materializaciones y cero efectos durables antes de contenido
+- `write-new-first-paste` verifica exactamente una identidad/materialización tras el primer paste
+- en desktop, `/write` no se promueve eager a `/write/{id}` y `Saved locally` no aparece antes de contenido
 
 Overlap conocido:
 

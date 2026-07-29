@@ -166,7 +166,7 @@ import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { getAIService } from "@/lib/services/ai-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
-  createDesktopDraft,
+  createDesktopDraft as createProductionDesktopDraft,
   getDocumentService,
   importDesktopWritingFile,
 } from "@/lib/services/document-service-factory"
@@ -213,6 +213,7 @@ import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/
 type EditorShellProps = {
   writingId?: string
   forceNewWriting?: boolean
+  createDesktopDraftOverride?: typeof createProductionDesktopDraft
 }
 
 type SelectionSnapshot = {
@@ -407,8 +408,13 @@ const isPerfHarness = () =>
   window.location.pathname.startsWith("/perf/") &&
   !new URLSearchParams(window.location.search).has("run-corrections")
 
-export function EditorShell({ writingId, forceNewWriting = false }: EditorShellProps) {
+export function EditorShell({
+  writingId,
+  forceNewWriting = false,
+  createDesktopDraftOverride,
+}: EditorShellProps) {
   const router = useRouter()
+  const createDesktopDraftFn = createDesktopDraftOverride ?? createProductionDesktopDraft
   const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
   const routeWritingId = writingId ?? null
   const initialHydrationSession = createRouteHydrationSessionState(routeWritingId)
@@ -899,7 +905,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
           }
           isDraftMaterializingRef.current = true
           try {
-            const result = await createDesktopDraft({
+            const result = await createDesktopDraftFn({
               writingId:
                 ephemeralDraftWritingIdRef.current ??
                 (ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId),
@@ -1035,7 +1041,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         setSyncStatus(typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving")
       }
     },
-    [routeWritingId, router],
+    [createDesktopDraftFn, routeWritingId, router],
   )
 
   const runRichModeUpdateSideEffects = useCallback(
@@ -1520,7 +1526,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     openDraftTab()
-  }, [editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   // Eagerly create a stable local identity for blank /write so the first
   // paste/input never races against identity creation. This is the explicit
@@ -1561,7 +1567,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
 
       try {
         if (isDesktopRuntime()) {
-          const result = await createDesktopDraft({ title: nextTitle })
+          const result = await createDesktopDraftFn({ title: nextTitle })
           if (result.error || !result.data) {
             throw new Error(result.error?.message ?? "Failed to create desktop draft")
           }
@@ -1640,7 +1646,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     }
 
     void ensureIdentity()
-  }, [editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
+  }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
   useEffect(() => {
     setSidebarMode("collapsed")
@@ -5099,7 +5105,32 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
     // Just open/focus a draft tab; never persist a contentless writing here.
     if (isDesktopRuntime()) {
       persistCurrentWorkspaceViewState()
+
+      // Detach the previous document before the draft tab can receive focus.
+      // Merely changing the active session tab leaves TipTap and the save path
+      // bound to the previous UUID until React effects run, so the first input
+      // can otherwise append to (and persist over) the previous document.
+      currentWritingIdRef.current = null
+      setCurrentWritingId(null)
+      setHydrationWritingId(null)
+      ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
+      navigatedToDraftRef.current = false
+
+      if (richUpdateRafRef.current !== null) {
+        window.cancelAnimationFrame(richUpdateRafRef.current)
+        richUpdateRafRef.current = null
+        richUpdateEditorRef.current = null
+      }
+
+      if (editor) {
+        isApplyingContentRef.current = true
+        editor.commands.setContent(EMPTY_EDITOR_JSON)
+        isApplyingContentRef.current = false
+        updateDerivedEditorState(editor)
+      }
+
       openDraftTab()
+      replaceEditorHistory("/write")
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           const editorEl = document.querySelector<HTMLElement>(".odessay-editor-content")
@@ -5212,7 +5243,7 @@ export function EditorShell({ writingId, forceNewWriting = false }: EditorShellP
         editorEl?.focus()
       })
     })
-  }, [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState])
+  }, [currentWritingId, editor, editorSession.tabs, persistCurrentWorkspaceViewState, updateDerivedEditorState])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
 
   selectAdjacentTabRef.current = (direction) => {
