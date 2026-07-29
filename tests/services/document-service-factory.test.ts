@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   desktop: true,
   catalogGet: vi.fn(),
   catalogList: vi.fn<() => Promise<DocumentCatalogRecord[]>>(async () => []),
+  authGetSession: vi.fn(),
   catalogResolve: vi.fn(),
   catalogDetach: vi.fn(),
   applyReconcile: vi.fn(),
@@ -29,6 +30,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
   isDesktopRuntime: () => mocks.desktop,
+}))
+vi.mock("@/lib/services/auth-service-factory", () => ({
+  getAuthService: () => ({ getSession: mocks.authGetSession }),
 }))
 vi.mock("@tauri-apps/api/path", () => ({
   appConfigDir: async () => "/config",
@@ -132,6 +136,13 @@ describe("desktop document service after compatibility retirement", () => {
     vi.resetModules()
     vi.clearAllMocks()
     mocks.desktop = true
+    mocks.authGetSession.mockResolvedValue({
+      data: {
+        status: "authenticated",
+        user: { id: "account-1", email: null, pendingEmail: null, emailConfirmedAt: null, displayName: null, username: null },
+      },
+      error: null,
+    })
     mocks.catalogGet.mockResolvedValue(catalogRecord)
     mocks.openFile.mockResolvedValue({
       data: { ...writing, id: path, content: { ...writing.content, markdown: "Hello", richText: null } },
@@ -473,7 +484,11 @@ describe("desktop document service after compatibility retirement", () => {
       offset: 1,
     })
 
-    expect(mocks.catalogList).toHaveBeenCalledWith({ includeDeleted: true, limit: 5000 })
+    expect(mocks.catalogList).toHaveBeenCalledWith({
+      cloudAccountId: "account-1",
+      includeDeleted: true,
+      limit: 5000,
+    })
     expect(result.error).toBeNull()
     expect(result.data).toEqual([
       expect.objectContaining({

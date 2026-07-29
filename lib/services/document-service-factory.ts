@@ -219,7 +219,13 @@ class DesktopDocumentService implements DocumentService {
 
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     try {
-      const rows = await this.runtime.catalog.list({ includeDeleted: input?.includeDeleted, limit: 5000 })
+      const { getAuthService } = await import("@/lib/services/auth-service-factory")
+      const session = await getAuthService().getSession()
+      const rows = await this.runtime.catalog.list({
+        cloudAccountId: session.data?.user?.id ?? null,
+        includeDeleted: input?.includeDeleted,
+        limit: 5000,
+      })
       const filteredRows = input?.archivedOnly
         ? rows.filter((row) => row.deletedAt !== null)
         : rows
