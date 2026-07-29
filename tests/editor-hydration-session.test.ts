@@ -7,6 +7,12 @@ import {
 } from "../lib/editor/hydration-session"
 
 describe("editor hydration session state", () => {
+  it("keeps contentless /write without a durable identity or hydration target", () => {
+    expect(createRouteHydrationSessionState(null)).toEqual({
+      activeWritingId: null,
+      hydrationWritingId: null,
+    })
+  })
   it("hydrates the route writing on the initial load", () => {
     expect(createRouteHydrationSessionState("writing-1")).toEqual({
       activeWritingId: "writing-1",
@@ -43,5 +49,9 @@ describe("editor hydration session state", () => {
       activeWritingId: identity.writingId,
       hydrationWritingId: null,
     })
+  })
+
+  it("does not turn navigation away from a blank route into hydration", () => {
+    expect(resolveExternalWritingLoad(null, null)).toBeNull()
   })
 })

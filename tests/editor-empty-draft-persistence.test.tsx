@@ -57,13 +57,15 @@ const desktopDraftRecord = vi.hoisted(() => ({
 }))
 
 const mocks = vi.hoisted(() => ({
+  filesystemWrite: vi.fn(),
+  manifestWrite: vi.fn(),
+  catalogWrite: vi.fn(),
+  syncEnqueue: vi.fn(),
+  cloudWrite: vi.fn(),
   createDesktopDraft: vi.fn<(input?: DraftInput) => Promise<{
     error: { code: string; message: string } | null
     data: typeof desktopDraftRecord | null
-  }>>(async () => ({
-    error: null,
-    data: desktopDraftRecord,
-  })),
+  }>>(),
   saveWriting: vi.fn(async (input: { writing: TestWriting }) => ({
     error: null,
     data: input.writing,
@@ -370,7 +372,19 @@ beforeEach(async () => {
   resetEditorState()
   resetEditorSessionStoreForTests()
   topbarState.onCloseTab = null
-  mocks.createDesktopDraft.mockClear()
+  mocks.createDesktopDraft.mockReset()
+  mocks.createDesktopDraft.mockImplementation(async () => {
+    mocks.filesystemWrite()
+    mocks.manifestWrite()
+    mocks.catalogWrite()
+    mocks.syncEnqueue()
+    return { error: null, data: desktopDraftRecord }
+  })
+  mocks.filesystemWrite.mockClear()
+  mocks.manifestWrite.mockClear()
+  mocks.catalogWrite.mockClear()
+  mocks.syncEnqueue.mockClear()
+  mocks.cloudWrite.mockClear()
   mocks.saveWriting.mockClear()
   mocks.openWriting.mockClear()
   window.confirm = vi.fn(() => true)
@@ -399,10 +413,32 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
 
     expect(mocks.createDesktopDraft).not.toHaveBeenCalled()
     expect(mocks.saveWriting).not.toHaveBeenCalled()
+    expect(mocks.filesystemWrite).not.toHaveBeenCalled()
+    expect(mocks.manifestWrite).not.toHaveBeenCalled()
+    expect(mocks.catalogWrite).not.toHaveBeenCalled()
+    expect(mocks.syncEnqueue).not.toHaveBeenCalled()
+    expect(mocks.cloudWrite).not.toHaveBeenCalled()
 
     const session = getEditorSessionState().session
     expect(session.tabs).toHaveLength(0)
     expect(session.active_tab_id).toBeNull()
+  })
+
+  it("does not materialize across an empty unmount and remount", async () => {
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(getEditorSessionState().loaded).toBe(true))
+
+    await act(async () => root?.unmount())
+    root = createRoot(container)
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(getEditorSessionState().loaded).toBe(true))
+
+    expect(mocks.createDesktopDraft).not.toHaveBeenCalled()
+    expect(mocks.filesystemWrite).not.toHaveBeenCalled()
+    expect(mocks.manifestWrite).not.toHaveBeenCalled()
+    expect(mocks.catalogWrite).not.toHaveBeenCalled()
+    expect(mocks.syncEnqueue).not.toHaveBeenCalled()
+    expect(mocks.cloudWrite).not.toHaveBeenCalled()
   })
 
   it("materializes exactly one desktop writing on the first real input", async () => {
@@ -428,6 +464,11 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     )
 
     expect(mocks.saveWriting).not.toHaveBeenCalled()
+    expect(mocks.filesystemWrite).toHaveBeenCalledTimes(1)
+    expect(mocks.manifestWrite).toHaveBeenCalledTimes(1)
+    expect(mocks.catalogWrite).toHaveBeenCalledTimes(1)
+    expect(mocks.syncEnqueue).toHaveBeenCalledTimes(1)
+    expect(mocks.cloudWrite).not.toHaveBeenCalled()
   })
 
   it("does not duplicate identity when concurrent updates race during materialization", async () => {

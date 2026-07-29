@@ -1,17 +1,22 @@
-import { expect, test } from "@playwright/test"
+import { expect, test, type Page } from "@playwright/test"
+
+const readCounters = async (page: Page) =>
+  JSON.parse((await page.getByTestId("desktop-draft-lifecycle-counters").textContent()) ?? "{}")
 
 /**
  * @contract ODE-406 — contentless desktop lifecycle
  * @service DocumentService.createDraft()
  */
 test("contentless desktop lifecycle has zero durable effects", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true })
+  })
   await page.goto("/perf/write-new-harness")
 
   await expect(page.getByTestId("desktop-draft-lifecycle-counters")).toBeAttached()
   await expect(page.getByTestId("editor-empty-state")).toBeVisible()
   await expect.poll(() => page.evaluate(() => window.location.pathname)).toBe("/perf/write-new-harness")
-  await expect.poll(() => page.evaluate(() => window.__ODESSAY_DESKTOP_DRAFT_LIFECYCLE__)).toMatchObject({
-    installed: true,
+  await expect.poll(() => readCounters(page)).toMatchObject({
     materializations: 0,
     filesystemWrites: 0,
     manifestWrites: 0,
@@ -24,8 +29,11 @@ test("contentless desktop lifecycle has zero durable effects", async ({ page }) 
   await expect(page.getByTestId("editor-topbar")).toBeVisible()
   await expect(page.getByTestId("editor-writing-area")).toBeVisible()
   await expect(page.getByText("Saved locally")).toHaveCount(0)
+  await page.getByRole("button", { name: "Close Untitled" }).click()
+  await expect(page.getByTestId("editor-empty-state")).toBeVisible()
+  await expect.poll(async () => (await readCounters(page)).materializations).toBe(0)
 
   await page.goto("/perf/write-new-harness")
-  await expect.poll(() => page.evaluate(() => window.__ODESSAY_DESKTOP_DRAFT_LIFECYCLE__?.materializations)).toBe(0)
+  await expect.poll(async () => (await readCounters(page)).materializations).toBe(0)
   await expect(page.getByText("Saved locally")).toHaveCount(0)
 })
