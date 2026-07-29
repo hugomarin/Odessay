@@ -43,11 +43,19 @@ export type WritingRecord = {
 
 export type WritingSummary = Omit<WritingRecord, "content"> & {
   excerpt: string | null
+  archiveState?: "archived" | "pending-deletion" | "error"
 }
 
 export type ListWritingsInput = {
   includeDeleted?: boolean
+  archivedOnly?: boolean
+  limit?: number
+  offset?: number
 }
+
+export type RestoreWritingInput = { writingId: string; updatedAt: string }
+export type PermanentlyDeleteWritingInput = { writingId: string }
+export type DownloadWritingInput = { writingId: string }
 
 export type SaveWritingInput = {
   writing: WritingRecord
@@ -89,7 +97,7 @@ export type SetWritingCollectionsInput = {
   updatedAt?: string
 }
 
-export type DocumentExportFormat = "pdf" | "docx"
+export type DocumentExportFormat = "pdf" | "docx" | "markdown"
 
 export type ExportWritingInput = {
   writingId: string
@@ -112,6 +120,9 @@ export interface DocumentService {
   updateWritingsMetadata(input: UpdateWritingsMetadataInput): Promise<ServiceResponse<WritingRecord[]>>
   renameWriting(input: RenameWritingInput): Promise<ServiceResponse<WritingRecord>>
   deleteWriting(input: DeleteWritingInput): Promise<ServiceResponse<WritingRecord>>
+  restoreWriting(input: RestoreWritingInput): Promise<ServiceResponse<WritingRecord>>
+  permanentlyDeleteWriting(input: PermanentlyDeleteWritingInput): Promise<ServiceResponse<void>>
+  downloadWriting(input: DownloadWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>>
   listWritingCollections(writingId: string): Promise<ServiceResponse<WritingCollectionMembership[]>>
   setWritingCollections(input: SetWritingCollectionsInput): Promise<ServiceResponse<WritingCollectionMembership[]>>
   exportWriting(input: ExportWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>>

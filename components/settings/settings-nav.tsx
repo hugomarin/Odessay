@@ -6,9 +6,8 @@ import { cn } from "@/lib/utils"
 
 const SETTINGS_NAV_ITEMS = [
   { href: "/settings/account", label: "Account" },
-  { href: "/settings/writing", label: "Writing" },
-  { href: "/settings/privacy", label: "Privacy", dimmed: true },
-  { href: "/settings/billing", label: "Billing", dimmed: true },
+  { href: "/settings/status", label: "Status" },
+  { href: "/settings/archived", label: "Archived writings" },
 ]
 
 export function SettingsNav() {
@@ -28,9 +27,7 @@ export function SettingsNav() {
               "block rounded-[8px] px-[10px] py-[8px] text-[14px] transition-colors",
               isActive
                 ? "bg-muted font-medium text-ink"
-                : item.dimmed
-                  ? "pointer-events-none text-ink-4"
-                  : "text-ink-3 hover:bg-muted hover:text-ink-2",
+                : "text-ink-3 hover:bg-muted hover:text-ink-2",
             )}
           >
             {item.label}

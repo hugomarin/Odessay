@@ -11,6 +11,9 @@ import type {
   WritingCollectionMembership,
   WritingRecord,
   WritingSummary,
+  RestoreWritingInput,
+  PermanentlyDeleteWritingInput,
+  DownloadWritingInput,
 } from "@/lib/services/contracts/document-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
 import { localDB } from "@/lib/local-db"
@@ -92,8 +95,22 @@ function err<T>(error: ServiceError): ServiceResponse<T> {
 export const webDocumentService: DocumentService = {
   async listWritings(input?: ListWritingsInput): Promise<ServiceResponse<WritingSummary[]>> {
     try {
+      if (input?.archivedOnly) {
+        const response = await fetch(`/api/writings/archived?limit=${input.limit ?? 25}&offset=${input.offset ?? 0}`)
+        const payload = await response.json().catch(() => null) as { data?: Array<Record<string, unknown>>; error?: { message?: string } } | null
+        if (!response.ok) return err({ code: response.status === 401 ? "UNAUTHORIZED" : "UNAVAILABLE", message: payload?.error?.message ?? "Could not load archived writings", retryable: response.status >= 500 })
+        return ok((payload?.data ?? []).map((row) => ({
+          id: String(row.id), authorId: String(row.author_id), title: row.title == null ? null : String(row.title),
+          slug: row.slug == null ? null : String(row.slug), status: row.status as WritingRecord["status"],
+          artifactType: normalizeArtifactType(typeof row.artifact_type === "string" ? row.artifact_type : null), visibility: row.visibility as WritingRecord["visibility"],
+          parentId: row.parent_id == null ? null : String(row.parent_id), correspondenceId: row.correspondence_id == null ? null : String(row.correspondence_id),
+          version: Number(row.version), deletedAt: String(row.deleted_at), createdAt: String(row.created_at), updatedAt: String(row.updated_at), excerpt: null,
+          archiveState: "archived",
+        })))
+      }
       const locals = await localDB.writings.getAll({ includeDeleted: input?.includeDeleted })
       const summaries: WritingSummary[] = locals
+        .filter((local) => !input?.archivedOnly || Boolean(local.deleted_at))
         .map((local) => ({
           id: local.id,
           authorId: local.author_id ?? null,
@@ -111,9 +128,12 @@ export const webDocumentService: DocumentService = {
           contentUpdatedAt: local.content_updated_at ?? null,
           metadataUpdatedAt: local.metadata_updated_at ?? null,
           excerpt: local.body_text?.slice(0, 200) ?? null,
+          archiveState: local.deleted_at
+            ? (local.sync_status === "pending" ? "pending-deletion" : local.sync_status === "failed" ? "error" : "archived") as WritingSummary["archiveState"]
+            : undefined,
         }))
-        .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
-      return ok(summaries)
+        .sort((left, right) => new Date(right.deletedAt ?? right.createdAt).getTime() - new Date(left.deletedAt ?? left.createdAt).getTime())
+      return ok(summaries.slice(input?.offset ?? 0, (input?.offset ?? 0) + (input?.limit ?? summaries.length)))
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
@@ -239,6 +259,53 @@ export const webDocumentService: DocumentService = {
     } catch (error) {
       return err(makeServiceError(error, "DB_ERROR"))
     }
+  },
+
+  async restoreWriting(input: RestoreWritingInput): Promise<ServiceResponse<WritingRecord>> {
+    try {
+      const response = await fetch(`/api/writings/${encodeURIComponent(input.writingId)}/lifecycle`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore", updated_at: input.updatedAt }),
+      })
+      const payload = await response.json().catch(() => null) as { data?: Record<string, unknown>; error?: { message?: string } } | null
+      if (!response.ok || !payload?.data) return err({ code: response.status === 404 ? "NOT_FOUND" : "UNAVAILABLE", message: payload?.error?.message ?? "Restore failed", retryable: response.status >= 500 })
+      const local = await localDB.writings.get(input.writingId)
+      if (!local) return ok({
+        id: input.writingId, authorId: String(payload.data.author_id ?? ""), title: payload.data.title == null ? null : String(payload.data.title),
+        content: { markdown: null, richText: null, plainText: "", canonicalSource: "pending-document-contract" },
+        slug: payload.data.slug == null ? null : String(payload.data.slug), status: (payload.data.status ?? "draft") as WritingRecord["status"],
+        artifactType: normalizeArtifactType(typeof payload.data.artifact_type === "string" ? payload.data.artifact_type : null), visibility: (payload.data.visibility ?? "private") as WritingRecord["visibility"],
+        parentId: payload.data.parent_id == null ? null : String(payload.data.parent_id), correspondenceId: payload.data.correspondence_id == null ? null : String(payload.data.correspondence_id),
+        version: Number(payload.data.version ?? 1), deletedAt: null, createdAt: String(payload.data.created_at ?? input.updatedAt), updatedAt: String(payload.data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
+      })
+      const restored: LocalWriting = { ...local, deleted_at: null, sync_status: "synced", lifecycle: "server-confirmed", updated_at: input.updatedAt, local_updated_at: Date.now() }
+      await localDB.syncQueue.deleteForEntity("writing", input.writingId)
+      await localDB.writings.save(restored)
+      return ok(localWritingToRecord(restored))
+    } catch (error) { return err(makeServiceError(error, "UNAVAILABLE")) }
+  },
+
+  async permanentlyDeleteWriting(input: PermanentlyDeleteWritingInput): Promise<ServiceResponse<void>> {
+    try {
+      const response = await fetch(`/api/writings/${encodeURIComponent(input.writingId)}/lifecycle`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete-permanently" }),
+      })
+      const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null
+      if (!response.ok) return err({ code: response.status === 404 ? "NOT_FOUND" : "UNAVAILABLE", message: payload?.error?.message ?? "Permanent deletion failed", retryable: response.status >= 500 })
+      await localDB.writings.purge?.(input.writingId)
+      return ok(undefined)
+    } catch (error) { return err(makeServiceError(error, "UNAVAILABLE")) }
+  },
+
+  async downloadWriting(input: DownloadWritingInput): Promise<ServiceResponse<ExportedDocumentArtifact>> {
+    try {
+      const response = await fetch(`/api/writings/${encodeURIComponent(input.writingId)}/lifecycle?action=download`)
+      if (!response.ok) return err({ code: response.status === 404 ? "NOT_FOUND" : "UNAVAILABLE", message: "Download failed", retryable: response.status >= 500 })
+      const bytes = new Uint8Array(await response.arrayBuffer())
+      const disposition = response.headers.get("content-disposition") ?? ""
+      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? `${input.writingId}.md`
+      return ok({ writingId: input.writingId, format: "markdown", fileName, mimeType: "text/markdown", bytes })
+    } catch (error) { return err(makeServiceError(error, "UNAVAILABLE")) }
   },
 
   async listWritingCollections(writingId: string): Promise<ServiceResponse<WritingCollectionMembership[]>> {

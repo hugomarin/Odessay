@@ -264,7 +264,7 @@ El `id` del usuario autenticado (`auth.uid()`) se usa en todas las RLS policies 
 |-------|--------|--------|--------|--------|
 | profiles | username, display_name, bio: público. Resto: solo propio (`auth.uid() = id`) | Vía trigger | Solo propio | No permitido |
 | correspondences | Visible para todos los participantes (autores de writings en la correspondencia) | Automático vía trigger | Solo updated_at vía trigger | No permitido |
-| writings | `private`: solo author. `shared`: author + en writing_shares. `public`: todos | Solo autenticados (`author_id = auth.uid()`) | Solo author | Solo author, solo draft |
+| writings | `private`: solo author. `shared`: author + en writing_shares. `public`: todos | Solo autenticados (`author_id = auth.uid()`) | Solo author | Solo author y únicamente cuando `deleted_at is not null`; el hard-delete nace desde Settings > Archived writings |
 | collections | `private`: solo owner. `public`: todos | Solo autenticados (`owner_id = auth.uid()`) | Solo owner | Solo owner |
 | writing_collections | Hereda visibilidad del writing y collection | Solo owner de la collection | No (borrar y recrear) | Solo owner |
 | writing_shares | Author del writing + shared_with_id | Solo author del writing | Solo author del writing | Solo author del writing |

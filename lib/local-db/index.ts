@@ -28,6 +28,7 @@ type LocalDB = {
     getAll: (filters?: WritingListFilters) => Promise<LocalWriting[]>;
     detachLocalFile: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
+    purge?: (id: string) => Promise<void>;
     saveWithRebind: (input: {
       remoteWriting: LocalWriting;
       candidate: LocalWriting;
@@ -700,6 +701,25 @@ const softDeleteWriting = async (id: string) => {
   });
 };
 
+const purgeWriting = async (id: string) => {
+  const database = await openDatabase();
+  const transaction = database.transaction(
+    [LOCAL_DB_STORES.writings, LOCAL_DB_STORES.writingCollections, LOCAL_DB_STORES.syncMutations],
+    "readwrite",
+  );
+  transaction.objectStore(LOCAL_DB_STORES.writings).delete(id);
+  const memberships = transaction.objectStore(LOCAL_DB_STORES.writingCollections);
+  for (const row of (await runRequest(memberships.getAll())) as LocalWritingCollection[]) {
+    if (row.writing_id === id) memberships.delete(row.id);
+  }
+  const mutations = transaction.objectStore(LOCAL_DB_STORES.syncMutations);
+  for (const row of (await runRequest(mutations.getAll())) as SyncMutation[]) {
+    if (row.entity_kind === "writing" && row.entity_id === id) mutations.delete(row.id);
+  }
+  await waitForTransaction(transaction, `Purge writing ${id}`);
+  emitLocalDBChange();
+};
+
 const detachWritingLocalFile = async (id: string) => {
   const existing = await getWriting(id);
 
@@ -1257,6 +1277,7 @@ const localDBInstance: LocalDB = {
     getAll: getAllWritings,
     detachLocalFile: detachWritingLocalFile,
     delete: softDeleteWriting,
+    purge: purgeWriting,
     saveWithRebind: saveWritingWithRebind,
   },
   collections: {

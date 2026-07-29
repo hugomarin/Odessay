@@ -11,6 +11,9 @@ import type {
   WritingCollectionMembership,
   WritingRecord,
   WritingSummary,
+  RestoreWritingInput,
+  PermanentlyDeleteWritingInput,
+  DownloadWritingInput,
 } from "@/lib/services/contracts/document-service"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
@@ -106,6 +109,9 @@ function toSummary(record: DocumentCatalogRecord): WritingSummary {
     visibility: record.visibility ?? "private", parentId: null, correspondenceId: null,
     version: Math.max(1, record.version ?? 1), deletedAt: record.deletedAt, createdAt, updatedAt,
     excerpt: record.excerpt ?? null,
+    archiveState: record.deletedAt
+      ? record.syncStatus === "pending" ? "pending-deletion" : record.syncStatus === "failed" ? "error" : "archived"
+      : undefined,
   }
 }
 
@@ -423,6 +429,56 @@ class DesktopDocumentService implements DocumentService {
       })
       return ok(deleted)
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
+  }
+
+  async restoreWriting(input: RestoreWritingInput): Promise<ServiceResponse<WritingRecord>> {
+    try {
+      const current = await this.runtime.catalog.getById(input.writingId)
+      if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
+      const restored = { ...current, deletedAt: null, syncStatus: "pending" as const, modifiedAt: Date.parse(input.updatedAt) }
+      await this.runtime.catalog.commitDualWrite({
+        document: {
+          id: restored.id, localPresent: restored.localPresent, cloudPresent: restored.cloudPresent,
+          cloudAccountId: restored.cloudAccountId, syncStatus: restored.syncStatus, title: restored.title,
+          slug: restored.slug, status: restored.status, artifactType: restored.artifactType,
+          visibility: restored.visibility, version: restored.version, deletedAt: restored.deletedAt,
+          createdAt: restored.createdAt, modifiedAt: restored.modifiedAt,
+        },
+        binding: current.binding ? {
+          bindingRootId: current.binding.bindingRootId, rootPath: current.binding.canonicalPath.slice(0, -(current.binding.relativePath.length + 1)), manifestVersion: 2, visibleAsWorkspace: false,
+          relativePath: current.binding.relativePath, canonicalPath: current.binding.canonicalPath, inode: current.binding.inode, contentHash: current.binding.contentHash, size: current.binding.size, lastSeenAt: current.binding.lastSeenAt,
+        } : null,
+        mutation: { id: crypto.randomUUID(), operation: "upsert", payloadJson: JSON.stringify({ mutationKind: "restore", deletedAt: null, version: Math.max(1, current.version ?? 1), updatedAt: input.updatedAt }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
+      })
+      return ok(toWriting(restored, {}, ""))
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
+  }
+
+  async permanentlyDeleteWriting(input: PermanentlyDeleteWritingInput): Promise<ServiceResponse<void>> {
+    try {
+      const current = await this.runtime.catalog.getById(input.writingId)
+      if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
+      await this.runtime.catalog.commitDualWrite({
+        document: {
+          id: current.id, localPresent: current.localPresent, cloudPresent: current.cloudPresent,
+          cloudAccountId: current.cloudAccountId, syncStatus: "pending", title: current.title,
+          slug: current.slug, status: current.status, artifactType: current.artifactType,
+          visibility: current.visibility, version: current.version, deletedAt: current.deletedAt,
+          createdAt: current.createdAt, modifiedAt: current.modifiedAt,
+        },
+        binding: null,
+        mutation: { id: crypto.randomUUID(), operation: "delete", payloadJson: JSON.stringify({ mutationKind: "permanent-delete", updatedAt: new Date().toISOString() }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
+      })
+      const { getSyncService } = await import("@/lib/sync/sync-service-factory")
+      void getSyncService().scheduleFlush()
+      return ok(undefined)
+    } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
+  }
+
+  async downloadWriting(input: DownloadWritingInput): Promise<ServiceResponse<import("@/lib/services/contracts/document-service").ExportedDocumentArtifact>> {
+    const current = await this.runtime.catalog.getById(input.writingId)
+    if (current?.binding?.canonicalPath) return this.runtime.filesystem.downloadWriting({ writingId: current.binding.canonicalPath })
+    return webDocumentService.downloadWriting(input)
   }
 
   async listWritingCollections(id: string): Promise<ServiceResponse<WritingCollectionMembership[]>> {
