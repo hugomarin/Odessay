@@ -13,6 +13,7 @@ import {
   evaluateEmbeddedRuntimeHost,
   findLocalRuntimeHosts,
   formatEmbeddedHostFailure,
+  readRuntimeManifest,
   stripCspMeta,
 } from "@/scripts/lib/desktop-runtime-host.mjs"
 
@@ -73,39 +74,112 @@ describe("findLocalRuntimeHosts", () => {
 })
 
 describe("evaluateEmbeddedRuntimeHost", () => {
-  it("rejects a bundle that embeds localhost", () => {
+  it("rejects an artifact whose declared host is local", () => {
     const verdict = evaluateEmbeddedRuntimeHost({
+      manifest: { appUrl: "http://localhost:3000" },
       assets: [
-        { path: "_next/static/chunks/main.js", contents: 'fetch("http://localhost:3000/api/margins/transcribe")' },
-        { path: "_next/static/chunks/other.js", contents: 'fetch("https://odessay.vercel.app/api/ai")' },
+        { path: "_next/static/chunks/main.js", contents: 'const h="http://localhost:3000"' },
+        { path: "_next/static/chunks/other.js", contents: "const x = 1" },
       ],
     })
 
     expect(verdict.ok).toBe(false)
-    expect(verdict.scanned).toBe(2)
-    expect(verdict.offenders).toEqual([
-      { path: "_next/static/chunks/main.js", hosts: ["http://localhost:3000"] },
-    ])
-    expect(formatEmbeddedHostFailure(verdict.offenders)).toContain("NEXT_PUBLIC_APP_URL=https://odessay.vercel.app")
+    expect(verdict.reason).toBe("local-host")
+    expect(verdict.appUrl).toBe("http://localhost:3000")
+    expect(verdict.carriers).toEqual(["_next/static/chunks/main.js"])
+    expect(formatEmbeddedHostFailure(verdict)).toContain("NEXT_PUBLIC_APP_URL=https://odessay.vercel.app")
   })
 
-  it("accepts a bundle that only reaches the hosted runtime", () => {
+  it("accepts an artifact that declares and embeds the hosted runtime", () => {
     const verdict = evaluateEmbeddedRuntimeHost({
-      assets: [{ path: "main.js", contents: 'fetch("https://odessay.vercel.app/api/margins/transcribe")' }],
+      manifest: { appUrl: "https://odessay.vercel.app/" },
+      assets: [{ path: "main.js", contents: 'const h="https://odessay.vercel.app"' }],
     })
 
     expect(verdict.ok).toBe(true)
-    expect(verdict.offenders).toEqual([])
+    expect(verdict.reason).toBe("remote-host")
+    expect(verdict.appUrl).toBe("https://odessay.vercel.app")
   })
 
-  it("still reports offenders under --allow-localhost, but does not block", () => {
+  it("does not blame a dependency that ships its own local default", () => {
+    // gotrue-js embeds `http://localhost:9999` as an unused constant. A blanket
+    // scan would fail every production bundle on it.
     const verdict = evaluateEmbeddedRuntimeHost({
-      assets: [{ path: "main.js", contents: 'fetch("http://localhost:3000/api")' }],
+      manifest: { appUrl: "https://odessay.vercel.app" },
+      assets: [
+        { path: "auth.js", contents: 'o="http://localhost:9999"' },
+        { path: "app.js", contents: 'h="https://odessay.vercel.app"' },
+      ],
+    })
+
+    expect(verdict.ok).toBe(true)
+    expect(verdict.reason).toBe("remote-host")
+  })
+
+  it("refuses to certify an artifact that never declared its host", () => {
+    for (const manifest of [null, {}, { appUrl: "   " }]) {
+      const verdict = evaluateEmbeddedRuntimeHost({
+        manifest,
+        assets: [{ path: "main.js", contents: 'h="https://odessay.vercel.app"' }],
+      })
+      expect(verdict.ok).toBe(false)
+      expect(verdict.reason).toBe("missing-manifest")
+    }
+    expect(
+      formatEmbeddedHostFailure({
+        ok: false,
+        reason: "missing-manifest",
+        scanned: 1,
+        appUrl: null,
+        carriers: [],
+      }),
+    ).toContain("cannot be verified")
+  })
+
+  it("fails when the manifest and the shipped bundle disagree", () => {
+    const verdict = evaluateEmbeddedRuntimeHost({
+      manifest: { appUrl: "https://odessay.vercel.app" },
+      assets: [{ path: "main.js", contents: 'h="http://localhost:3000"' }],
+    })
+
+    expect(verdict.ok).toBe(false)
+    expect(verdict.reason).toBe("manifest-mismatch")
+    expect(formatEmbeddedHostFailure(verdict)).toContain("disagree")
+  })
+
+  it("still names the local host under --allow-localhost, but does not block", () => {
+    const verdict = evaluateEmbeddedRuntimeHost({
+      manifest: { appUrl: "http://localhost:3000" },
+      assets: [{ path: "main.js", contents: 'h="http://localhost:3000"' }],
       allowLocalhost: true,
     })
 
     expect(verdict.ok).toBe(true)
-    expect(verdict.offenders).toHaveLength(1)
+    expect(verdict.reason).toBe("local-host")
+  })
+})
+
+describe("readRuntimeManifest", () => {
+  it("reads the manifest from the first candidate that has one", () => {
+    const empty = makeBundle({ "main.js": "x" })
+    const withManifest = makeBundle({
+      "odessay-runtime.json": JSON.stringify({ appUrl: "https://odessay.vercel.app", tauriBuild: true }),
+    })
+
+    expect(readRuntimeManifest([empty, withManifest]).manifest).toEqual({
+      appUrl: "https://odessay.vercel.app",
+      tauriBuild: true,
+    })
+  })
+
+  it("treats an unreadable manifest as absent rather than valid", () => {
+    const broken = makeBundle({ "odessay-runtime.json": "{ not json" })
+
+    expect(readRuntimeManifest([broken]).manifest).toBeNull()
+  })
+
+  it("returns null when no candidate declares a runtime host", () => {
+    expect(readRuntimeManifest([makeBundle({ "main.js": "x" }), null])).toEqual({ path: null, manifest: null })
   })
 })
 

@@ -47,29 +47,43 @@ export function findLocalRuntimeHosts(contents, { isHtml = false } = {}) {
   return [...new Set(matches.map((match) => match.toLowerCase()))]
 }
 
+export const RUNTIME_MANIFEST_FILENAME = "odessay-runtime.json"
+
 /**
- * Evaluate every scanned asset of a desktop artifact.
+ * Evaluate the runtime host a desktop artifact will actually call.
  *
- * @param {{ assets: Array<{ path: string, contents: string }>, allowLocalhost?: boolean }} input
- * @returns {{ ok: boolean, scanned: number, offenders: Array<{ path: string, hosts: string[] }> }}
+ * A blanket "no local origin anywhere" scan is not usable: dependencies ship
+ * their own local defaults (gotrue-js embeds `http://localhost:9999`), so it
+ * fails a perfectly good production bundle. The export writes a manifest naming
+ * the host it inlined; this checks that value and then corroborates it by
+ * finding the same literal in the shipped assets — so a stale manifest, or one
+ * that disagrees with the bundle, is a failure rather than a rubber stamp.
+ *
+ * @param {{
+ *   manifest: { appUrl?: string } | null,
+ *   assets: Array<{ path: string, contents: string }>,
+ *   allowLocalhost?: boolean,
+ * }} input
  */
-export function evaluateEmbeddedRuntimeHost({ assets, allowLocalhost = false }) {
-  const offenders = []
+export function evaluateEmbeddedRuntimeHost({ manifest, assets, allowLocalhost = false }) {
+  const scanned = assets?.length ?? 0
 
-  for (const asset of assets ?? []) {
-    const hosts = findLocalRuntimeHosts(asset.contents, {
-      isHtml: asset.path.toLowerCase().endsWith(".html"),
-    })
-    if (hosts.length > 0) {
-      offenders.push({ path: asset.path, hosts })
-    }
+  if (!manifest || typeof manifest.appUrl !== "string" || !manifest.appUrl.trim()) {
+    return { ok: false, reason: "missing-manifest", scanned, appUrl: null, carriers: [] }
   }
 
-  return {
-    ok: allowLocalhost || offenders.length === 0,
-    scanned: assets?.length ?? 0,
-    offenders,
+  const appUrl = manifest.appUrl.trim().replace(/\/+$/, "")
+  const carriers = (assets ?? []).filter((asset) => asset.contents.includes(appUrl)).map((asset) => asset.path)
+
+  if (carriers.length === 0) {
+    return { ok: false, reason: "manifest-mismatch", scanned, appUrl, carriers }
   }
+
+  if (isLocalRuntimeHost(appUrl)) {
+    return { ok: Boolean(allowLocalhost), reason: "local-host", scanned, appUrl, carriers }
+  }
+
+  return { ok: true, reason: "remote-host", scanned, appUrl, carriers }
 }
 
 export const SCANNABLE_ASSET_EXTENSIONS = [".js", ".mjs", ".html"]
@@ -110,13 +124,47 @@ export function collectFrontendAssets(candidateDirs) {
   return { baseDir: null, assets: [] }
 }
 
+const REBUILD_HINT = `      Rebuild with: NEXT_PUBLIC_APP_URL=https://odessay.vercel.app npm run desktop:release:prod:signed`
+
 /**
- * Render an offender list as a build-log block with the fix inline.
+ * Read the manifest the static export wrote, from the first candidate directory
+ * that has one. Returns `null` when no artifact declares its runtime host.
  */
-export function formatEmbeddedHostFailure(offenders) {
-  const report = offenders.map((offender) => `      ${offender.path} → ${offender.hosts.join(", ")}`).join("\n")
+export function readRuntimeManifest(candidateDirs) {
+  for (const dir of candidateDirs) {
+    if (!dir) continue
+    const path = join(dir, RUNTIME_MANIFEST_FILENAME)
+    if (!existsSync(path)) continue
+    try {
+      return { path, manifest: JSON.parse(readFileSync(path, "utf8")) }
+    } catch {
+      return { path, manifest: null }
+    }
+  }
+  return { path: null, manifest: null }
+}
+
+/** Render a verdict as a build-log block with the fix inline. */
+export function formatEmbeddedHostFailure(verdict) {
+  if (verdict.reason === "missing-manifest") {
+    return (
+      `The artifact does not declare the runtime host it was built with ` +
+      `(${RUNTIME_MANIFEST_FILENAME} missing or unreadable).\n` +
+      `      Refusing to publish an artifact whose runtime host cannot be verified.\n${REBUILD_HINT}`
+    )
+  }
+
+  if (verdict.reason === "manifest-mismatch") {
+    return (
+      `The declared runtime host (${verdict.appUrl}) does not appear in any of the ` +
+      `${verdict.scanned} shipped asset(s) — the manifest and the bundle disagree.\n${REBUILD_HINT}`
+    )
+  }
+
   return (
-    `Embedded runtime host points at localhost in ${offenders.length} asset(s):\n${report}\n` +
-    `      Rebuild with: NEXT_PUBLIC_APP_URL=https://odessay.vercel.app npm run desktop:release:prod:signed`
+    `The artifact embeds a local runtime host (${verdict.appUrl}) in ` +
+    `${verdict.carriers.length} asset(s): ${verdict.carriers.slice(0, 3).join(", ")}${
+      verdict.carriers.length > 3 ? ", …" : ""
+    }\n      It will fail on every machine except the one that built it.\n${REBUILD_HINT}`
   )
 }

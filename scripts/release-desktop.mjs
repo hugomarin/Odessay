@@ -25,6 +25,7 @@ import {
   evaluateEmbeddedRuntimeHost,
   findLocalRuntimeHosts,
   formatEmbeddedHostFailure,
+  readRuntimeManifest,
 } from "./lib/desktop-runtime-host.mjs"
 
 const RELEASES_DIR = "dist/releases"
@@ -116,10 +117,9 @@ function main() {
   // checks what the build actually baked into the shipped frontend, which is
   // what the app will call at runtime on someone else's machine.
   const builtApp = findAppBundle(join(root, APP_BUNDLE_DIR))
-  const embedded = collectFrontendAssets([
-    builtApp ? join(builtApp, "Contents", "Resources") : null,
-    join(root, "dist"),
-  ].filter(Boolean))
+  const candidateDirs = [builtApp ? join(builtApp, "Contents", "Resources") : null, join(root, "dist")]
+  const embedded = collectFrontendAssets(candidateDirs)
+  const { manifest } = readRuntimeManifest(candidateDirs)
 
   if (embedded.assets.length === 0) {
     console.error(
@@ -130,17 +130,19 @@ function main() {
     process.exit(1)
   }
 
-  const embeddedVerdict = evaluateEmbeddedRuntimeHost({ assets: embedded.assets, allowLocalhost })
+  const embeddedVerdict = evaluateEmbeddedRuntimeHost({ manifest, assets: embedded.assets, allowLocalhost })
   if (!embeddedVerdict.ok) {
-    console.error(`[desktop:release] INVALID EMBEDDED RUNTIME HOST\n  ${formatEmbeddedHostFailure(embeddedVerdict.offenders)}`)
+    console.error(`[desktop:release] INVALID EMBEDDED RUNTIME HOST\n  ${formatEmbeddedHostFailure(embeddedVerdict)}`)
     process.exit(1)
   }
-  if (embeddedVerdict.offenders.length > 0) {
+  if (embeddedVerdict.reason === "local-host") {
     console.log(
-      `[desktop:release] WARNING: ${embeddedVerdict.offenders.length} asset(s) embed a localhost runtime host. Do not distribute this build.`
+      `[desktop:release] WARNING: the artifact embeds ${embeddedVerdict.appUrl}. Do not distribute this build.`
     )
   } else {
-    console.log(`[desktop:release] ✓ No localhost runtime host embedded in ${embeddedVerdict.scanned} frontend asset(s)`)
+    console.log(
+      `[desktop:release] ✓ Embedded runtime host is remote: ${embeddedVerdict.appUrl} (found in ${embeddedVerdict.carriers.length} of ${embeddedVerdict.scanned} asset(s))`
+    )
   }
 
   // 4. Locate the DMG produced by Tauri

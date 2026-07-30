@@ -26,6 +26,7 @@ import {
   evaluateEmbeddedRuntimeHost,
   findLocalRuntimeHosts,
   formatEmbeddedHostFailure,
+  readRuntimeManifest,
 } from "./lib/desktop-runtime-host.mjs"
 
 const RELEASES_DIR = "dist/releases"
@@ -277,20 +278,22 @@ if (appUrl && findLocalRuntimeHosts(appUrl).length > 0) {
 // 3e. The host actually embedded in the shipped frontend (ODE-409). The env var
 // above describes the intended build; this reads what the artifact will really
 // call at runtime, which is what the writer experiences.
-const embedded = collectFrontendAssets([appResourcesPath(mountedApp), join(root, "dist")])
+const candidateDirs = [appResourcesPath(mountedApp), join(root, "dist")]
+const embedded = collectFrontendAssets(candidateDirs)
+const { manifest } = readRuntimeManifest(candidateDirs)
+
 if (embedded.assets.length === 0) {
   warn("No frontend assets found to scan for an embedded runtime host — verify the static export was bundled")
 } else {
-  const verdict = evaluateEmbeddedRuntimeHost({ assets: embedded.assets, allowLocalhost })
-  if (verdict.offenders.length === 0) {
-    ok(`No local runtime host embedded in ${verdict.scanned} frontend asset(s) from ${embedded.baseDir}`)
+  const verdict = evaluateEmbeddedRuntimeHost({ manifest, assets: embedded.assets, allowLocalhost })
+  if (verdict.reason === "remote-host") {
+    ok(
+      `Embedded runtime host is remote: ${verdict.appUrl} (found in ${verdict.carriers.length} of ${verdict.scanned} asset(s) from ${embedded.baseDir})`,
+    )
+  } else if (verdict.ok) {
+    warn(`${formatEmbeddedHostFailure(verdict)}\n      (--allow-localhost given — this build is not distributable)`)
   } else {
-    const message = formatEmbeddedHostFailure(verdict.offenders)
-    if (allowLocalhost) {
-      warn(`${message}\n      (--allow-localhost given — this build is not distributable)`)
-    } else {
-      fail(message)
-    }
+    fail(formatEmbeddedHostFailure(verdict))
   }
 }
 
