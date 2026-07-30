@@ -37,6 +37,38 @@ const DEFAULT_GAP = 8
 const DEFAULT_MARGIN = 8
 const DEFAULT_TOP_BOUNDARY = 54
 
+/**
+ * Geometry equality (ODE-409).
+ *
+ * Scroll/resize handlers recompute anchors continuously. Emitting a fresh
+ * anchor object when nothing actually moved re-renders every overlay consumer
+ * and — before ODE-409 — re-ran effects keyed on the anchor identity, which is
+ * what wiped an in-progress annotation draft. Owners use these comparators to
+ * keep the previous object when the geometry is unchanged.
+ */
+export function areFloatingOverlayAnchorsEqual(
+  a: (FloatingOverlayAnchor & { y?: number }) | null | undefined,
+  b: (FloatingOverlayAnchor & { y?: number }) | null | undefined,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.x === b.x && a.top === b.top && a.bottom === b.bottom && a.y === b.y
+}
+
+export function areFloatingOverlayPositionsEqual(
+  a: FloatingOverlayPosition | null | undefined,
+  b: FloatingOverlayPosition | null | undefined,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.left === b.left &&
+    a.top === b.top &&
+    a.maxHeight === b.maxHeight &&
+    a.placement === b.placement
+  )
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), Math.max(min, max))
 }

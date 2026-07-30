@@ -6,7 +6,11 @@ import type { ReactNode } from "react"
 import { ReadingTopbar } from "./reading-topbar"
 import { ReadingContent } from "./reading-content"
 import { SelectionPopup, type SelectionPopupPosition } from "./margins/selection-popup"
-import { AnnotationBubble, type AnnotationBubblePosition } from "./margins/annotation-bubble"
+import {
+  AnnotationBubble,
+  nextAnnotationSessionId,
+  type AnnotationBubblePosition,
+} from "./margins/annotation-bubble"
 import { HighlightLayer, findTextPosition, type MarginHighlight } from "./margins/highlight-layer"
 import { MarginsPanel } from "./margins/margins-panel"
 import type { SelectionPreviewRect } from "./margins/selection-preview-layer"
@@ -14,6 +18,7 @@ import type { MarginData } from "./margins/margin-entry"
 import { applyAnnotationToBody, getBodyMarkdown } from "@/lib/editor/annotation-document"
 import { buildAiAnnotationCopy } from "@/lib/editor/footnote-extension"
 import { buildSelectionGeometry } from "@/lib/reading/selection-geometry"
+import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-position"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,6 +29,21 @@ type SelectionInfo = {
   popupPosition: SelectionPopupPosition
   bubblePosition: AnnotationBubblePosition
   selectionRects: SelectionPreviewRect[]
+}
+
+function areSelectionPreviewRectsEqual(a: SelectionPreviewRect[], b: SelectionPreviewRect[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((rect, index) => {
+    const other = b[index]
+    return (
+      rect.key === other.key &&
+      rect.top === other.top &&
+      rect.left === other.left &&
+      rect.width === other.width &&
+      rect.height === other.height
+    )
+  })
 }
 
 // ─── Offset helpers ───────────────────────────────────────────────────────────
@@ -192,6 +212,9 @@ export function ReadingInteractiveShell({
   const [marginPanelOpen, setMarginPanelOpen] = useState(false)
   const [selectionInfo, setSelectionInfo] = useState<SelectionInfo | null>(null)
   const [annotationType, setAnnotationType] = useState<"personal" | "ai" | "footnote" | null>(null)
+  // Draft identity, minted when the reader opens a bubble and held until the
+  // draft is confirmed or dismissed — geometry updates never touch it (ODE-409).
+  const [annotationSessionId, setAnnotationSessionId] = useState<string | null>(null)
   const [margins, setMargins] = useState<MarginData[]>([])
   const [currentBodyJson, setCurrentBodyJson] = useState<JSONContent | null>(writing.bodyJson)
   const [currentBodyText, setCurrentBodyText] = useState<string>(writing.bodyText)
@@ -264,6 +287,7 @@ export function ReadingInteractiveShell({
     selectionRangeRef.current = null
     setSelectionInfo(null)
     setAnnotationType(null)
+    setAnnotationSessionId(null)
   }, [])
 
   useEffect(() => {
@@ -350,16 +374,32 @@ export function ReadingInteractiveShell({
         return
       }
 
-      setSelectionInfo((prev) =>
-        prev
-          ? {
-              ...prev,
-              popupPosition: geometry.popupPosition,
-              bubblePosition: geometry.bubblePosition,
-              selectionRects: geometry.previewRects,
-            }
-          : prev,
-      )
+      // ODE-409: keep the previous objects when the geometry did not move, so a
+      // scroll that changes nothing cannot look like a new annotation session
+      // to the bubble.
+      setSelectionInfo((prev) => {
+        if (!prev) return prev
+
+        const popupPosition = areFloatingOverlayAnchorsEqual(prev.popupPosition, geometry.popupPosition)
+          ? prev.popupPosition
+          : geometry.popupPosition
+        const bubblePosition = areFloatingOverlayAnchorsEqual(prev.bubblePosition, geometry.bubblePosition)
+          ? prev.bubblePosition
+          : geometry.bubblePosition
+        const selectionRects = areSelectionPreviewRectsEqual(prev.selectionRects, geometry.previewRects)
+          ? prev.selectionRects
+          : geometry.previewRects
+
+        if (
+          popupPosition === prev.popupPosition &&
+          bubblePosition === prev.bubblePosition &&
+          selectionRects === prev.selectionRects
+        ) {
+          return prev
+        }
+
+        return { ...prev, popupPosition, bubblePosition, selectionRects }
+      })
     }
 
     window.addEventListener("resize", syncSelectionGeometry)
@@ -384,6 +424,7 @@ export function ReadingInteractiveShell({
 
   function handleSelectType(type: "personal" | "ai" | "footnote") {
     setAnnotationType(type)
+    setAnnotationSessionId(nextAnnotationSessionId())
   }
 
   function handleAnnotateConfirm(note: string, selectedType = annotationType) {
@@ -588,6 +629,7 @@ export function ReadingInteractiveShell({
       {isAuthenticated && annotationType && (
         <AnnotationBubble
           position={annotationBubblePosition}
+          sessionId={annotationSessionId}
           type={annotationType}
           onConfirm={handleAnnotateConfirm}
           onCancel={dismissSelection}
