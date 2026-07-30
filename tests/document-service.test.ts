@@ -394,6 +394,39 @@ describe("webDocumentService", () => {
     })
   })
 
+  describe("restoreWriting", () => {
+    it("sends the observed version and persists the increment returned by the server", async () => {
+      await localDB.writings.save(makeLocalWriting({ version: 4, deleted_at: "2026-07-29T12:00:00.000Z", sync_status: "deleted" }))
+      const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        data: { id: "writing-1", version: 5, updated_at: "2026-07-29T20:30:02.000Z", deleted_at: null },
+        error: null,
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      vi.stubGlobal("fetch", fetchMock)
+
+      const result = await webDocumentService.restoreWriting({
+        writingId: "writing-1",
+        version: 4,
+        updatedAt: "2026-07-29T20:30:02.000Z",
+      })
+
+      expect(result.error).toBeNull()
+      expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({ action: "restore", version: 4 })
+      const local = await localDB.writings.get("writing-1")
+      expect(local).toMatchObject({ version: 5, deleted_at: null, sync_status: "synced" })
+    })
+
+    it("maps a stale server restore to a non-retryable conflict", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+        data: null,
+        error: { code: "VERSION_CONFLICT", message: "This archived writing changed." },
+      }), { status: 409, headers: { "Content-Type": "application/json" } })))
+
+      const result = await webDocumentService.restoreWriting({ writingId: "writing-1", version: 4, updatedAt: "2026-07-29T20:30:02.000Z" })
+
+      expect(result.error).toMatchObject({ code: "CONFLICT", retryable: false })
+    })
+  })
+
   describe("listWritings", () => {
     it("returns summaries ordered by created_at DESC", async () => {
       await localDB.writings.save(

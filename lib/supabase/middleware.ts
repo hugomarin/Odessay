@@ -73,6 +73,12 @@ export const updateSession = async (request: NextRequest) => {
     })
   }
 
+  if (process.env.ODE_TEST_LINK_FIXTURES === "1" && pathname.startsWith("/evidence/")) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
   let response = NextResponse.next({
     request,
   })

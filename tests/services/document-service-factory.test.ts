@@ -546,6 +546,7 @@ describe("desktop document service after compatibility retirement", () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).restoreWriting({
       writingId: id,
+      version: 1,
       updatedAt: "2026-07-29T20:30:02.000Z",
     })
 
@@ -560,6 +561,26 @@ describe("desktop document service after compatibility retirement", () => {
       }),
     )
     expect(mocks.syncFlush).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects a stale desktop restore before writing a mutation", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      version: 2,
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).restoreWriting({
+      writingId: id,
+      version: 1,
+      updatedAt: "2026-07-29T20:30:02.000Z",
+    })
+
+    expect(result.error).toMatchObject({ code: "CONFLICT" })
+    expect(mocks.dualWrite).not.toHaveBeenCalled()
+    expect(mocks.syncFlush).not.toHaveBeenCalled()
   })
 
   it("keeps a failed restore archived and reports the cloud failure", async () => {
@@ -583,6 +604,7 @@ describe("desktop document service after compatibility retirement", () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).restoreWriting({
       writingId: id,
+      version: 1,
       updatedAt: "2026-07-29T20:30:02.000Z",
     })
 
@@ -596,7 +618,12 @@ describe("desktop document service after compatibility retirement", () => {
           deletedAt: archived.deletedAt,
           syncStatus: "failed",
         }),
-        mutation: null,
+        mutation: expect.objectContaining({
+          operation: "upsert",
+          status: "failed",
+          payloadJson: expect.stringContaining("restore"),
+          nextRetryAt: expect.any(Number),
+        }),
       }),
     )
   })

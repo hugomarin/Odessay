@@ -53,7 +53,7 @@ export type ListWritingsInput = {
   offset?: number
 }
 
-export type RestoreWritingInput = { writingId: string; updatedAt: string }
+export type RestoreWritingInput = { writingId: string; version: number; updatedAt: string }
 export type PermanentlyDeleteWritingInput = { writingId: string }
 export type DownloadWritingInput = { writingId: string }
 

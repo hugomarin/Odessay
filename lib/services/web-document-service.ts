@@ -265,10 +265,14 @@ export const webDocumentService: DocumentService = {
     try {
       const response = await fetch(`/api/writings/${encodeURIComponent(input.writingId)}/lifecycle`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restore", updated_at: input.updatedAt }),
+        body: JSON.stringify({ action: "restore", version: input.version, updated_at: input.updatedAt }),
       })
       const payload = await response.json().catch(() => null) as { data?: Record<string, unknown>; error?: { message?: string } } | null
-      if (!response.ok || !payload?.data) return err({ code: response.status === 404 ? "NOT_FOUND" : "UNAVAILABLE", message: payload?.error?.message ?? "Restore failed", retryable: response.status >= 500 })
+      if (!response.ok || !payload?.data) return err({
+        code: response.status === 404 ? "NOT_FOUND" : response.status === 409 ? "CONFLICT" : "UNAVAILABLE",
+        message: payload?.error?.message ?? "Restore failed",
+        retryable: response.status >= 500,
+      })
       const local = await localDB.writings.get(input.writingId)
       if (!local) return ok({
         id: input.writingId, authorId: String(payload.data.author_id ?? ""), title: payload.data.title == null ? null : String(payload.data.title),
@@ -278,7 +282,15 @@ export const webDocumentService: DocumentService = {
         parentId: payload.data.parent_id == null ? null : String(payload.data.parent_id), correspondenceId: payload.data.correspondence_id == null ? null : String(payload.data.correspondence_id),
         version: Number(payload.data.version ?? 1), deletedAt: null, createdAt: String(payload.data.created_at ?? input.updatedAt), updatedAt: String(payload.data.updated_at ?? input.updatedAt), lifecycle: "server-confirmed",
       })
-      const restored: LocalWriting = { ...local, deleted_at: null, sync_status: "synced", lifecycle: "server-confirmed", updated_at: input.updatedAt, local_updated_at: Date.now() }
+      const restored: LocalWriting = {
+        ...local,
+        deleted_at: null,
+        sync_status: "synced",
+        lifecycle: "server-confirmed",
+        version: Number(payload.data.version ?? input.version + 1),
+        updated_at: String(payload.data.updated_at ?? input.updatedAt),
+        local_updated_at: Date.now(),
+      }
       await localDB.syncQueue.deleteForEntity("writing", input.writingId)
       await localDB.writings.save(restored)
       return ok(localWritingToRecord(restored))

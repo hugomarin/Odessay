@@ -449,8 +449,17 @@ class DesktopDocumentService implements DocumentService {
     try {
       const current = await this.runtime.catalog.getById(input.writingId)
       if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
+      if (current.version !== input.version) return err("CONFLICT", `Archived writing ${input.writingId} changed before it could be restored`)
       const mutationId = crypto.randomUUID()
-      const restored = { ...current, deletedAt: null, syncStatus: "pending" as const, modifiedAt: Date.parse(input.updatedAt) }
+      const mutationCreatedAt = Date.now()
+      const mutationPayload = JSON.stringify({
+        mutationKind: "restore",
+        deletedAt: null,
+        expectedVersion: input.version,
+        version: input.version + 1,
+        updatedAt: input.updatedAt,
+      })
+      const restored = { ...current, deletedAt: null, syncStatus: "pending" as const, version: input.version + 1, modifiedAt: Date.parse(input.updatedAt) }
       await this.runtime.catalog.commitDualWrite({
         document: {
           id: restored.id, localPresent: restored.localPresent, cloudPresent: restored.cloudPresent,
@@ -463,7 +472,7 @@ class DesktopDocumentService implements DocumentService {
           bindingRootId: current.binding.bindingRootId, rootPath: current.binding.canonicalPath.slice(0, -(current.binding.relativePath.length + 1)), manifestVersion: 2, visibleAsWorkspace: false,
           relativePath: current.binding.relativePath, canonicalPath: current.binding.canonicalPath, inode: current.binding.inode, contentHash: current.binding.contentHash, size: current.binding.size, lastSeenAt: current.binding.lastSeenAt,
         } : null,
-        mutation: { id: mutationId, operation: "upsert", payloadJson: JSON.stringify({ mutationKind: "restore", deletedAt: null, version: Math.max(1, current.version ?? 1), updatedAt: input.updatedAt }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
+        mutation: { id: mutationId, operation: "upsert", payloadJson: mutationPayload, status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: mutationCreatedAt, lastError: null },
       })
       const { getSyncService } = await import("@/lib/sync/sync-service-factory")
       const flushed = await getSyncService().flushPending()
@@ -480,7 +489,16 @@ class DesktopDocumentService implements DocumentService {
             bindingRootId: current.binding.bindingRootId, rootPath: current.binding.canonicalPath.slice(0, -(current.binding.relativePath.length + 1)), manifestVersion: 2, visibleAsWorkspace: false,
             relativePath: current.binding.relativePath, canonicalPath: current.binding.canonicalPath, inode: current.binding.inode, contentHash: current.binding.contentHash, size: current.binding.size, lastSeenAt: current.binding.lastSeenAt,
           } : null,
-          mutation: null,
+          mutation: {
+            id: mutationId,
+            operation: "upsert",
+            payloadJson: mutationPayload,
+            status: "failed",
+            attemptCount: 1,
+            nextRetryAt: flushed.data?.nextRetryAt ?? Date.now() + 1_000,
+            createdAt: mutationCreatedAt,
+            lastError: flushed.error?.message ?? "The archived writing could not be restored",
+          },
         })
         if (flushed.error) return { data: null, error: flushed.error }
         return err("UNAVAILABLE", "The archived writing could not be restored")
