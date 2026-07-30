@@ -15,8 +15,9 @@
  */
 import { execSync } from "node:child_process"
 import globPkg from "glob"
-import { renameSync, existsSync } from "node:fs"
+import { renameSync, existsSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { RUNTIME_MANIFEST_FILENAME } from "./lib/desktop-runtime-host.mjs"
 
 const { sync } = globPkg
 const root = process.cwd()
@@ -101,6 +102,17 @@ try {
     stdio: "inherit",
     cwd: root,
   })
+
+  // ODE-409: record the runtime host this export actually inlined. The release
+  // and bundle gates read this instead of guessing from a raw localhost scan,
+  // which dependencies poison with their own local defaults.
+  const manifest = {
+    appUrl: (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, ""),
+    tauriBuild: true,
+    generatedAt: new Date().toISOString(),
+  }
+  writeFileSync(join(root, "dist", RUNTIME_MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + "\n", "utf8")
+  console.log(`[tauri-build] Runtime host recorded: ${manifest.appUrl || "(unset)"}`)
 } catch (err) {
   exitCode = err.status || 1
 } finally {

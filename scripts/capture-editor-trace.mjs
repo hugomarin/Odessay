@@ -68,7 +68,7 @@ function parseArgs(argv) {
     }
 
     if (arg === "--scenario") {
-      if (value !== "editor" && value !== "notes-annotations") {
+      if (value !== "editor" && value !== "notes-annotations" && value !== "annotation-bubble") {
         fail(`Invalid scenario "${value}".`);
       }
       options.scenario = value;
@@ -161,6 +161,41 @@ async function prepareHarness(page, targetUrl, timeoutMs, scenario) {
     return;
   }
 
+  if (scenario === "annotation-bubble") {
+    // ODE-409: measure typing *inside* the annotation bubble. The draft is
+    // local to the overlay, so keystrokes must not reach editor reconciliation
+    // or emit persistence — and scroll/resize must not restart the session.
+    await page.getByRole("button", { name: "Markdown" }).click();
+    const markdown = page.getByLabel("Markdown source");
+    await markdown.fill(
+      Array.from({ length: 24 }, (_, index) => `Paragraph ${index + 1} ends here with enough words to wrap.`).join(
+        "\n\n",
+      ),
+    );
+    await page.getByRole("button", { name: "Rich" }).click();
+
+    const lastParagraph = page.locator(".odessay-editor-content p").last();
+    await lastParagraph.evaluate((element) => element.scrollIntoView({ block: "end" }));
+    await lastParagraph.click();
+    await page.keyboard.press("End");
+    await page.keyboard.press(process.platform === "darwin" ? "Shift+Meta+ArrowLeft" : "Shift+Control+ArrowLeft");
+
+    const popup = page.getByTestId("selection-popup");
+    await popup.waitFor({ state: "visible", timeout: timeoutMs });
+    await popup.getByRole("button", { name: "Annotate passage" }).click();
+
+    const bubble = page.getByTestId("annotation-bubble");
+    await bubble.waitFor({ state: "visible", timeout: timeoutMs });
+    const draft = bubble.getByRole("textbox", { name: "Annotation text" });
+    await draft.waitFor({ state: "visible", timeout: timeoutMs });
+    // Warm-up so first-open work stays out of the measured window.
+    await draft.click();
+    await draft.pressSequentially("warmup", { delay: 10 });
+    await draft.fill("");
+    await page.waitForTimeout(300);
+    return;
+  }
+
   const editor = page.locator(".odessay-editor-content").first();
   await editor.click();
 
@@ -208,6 +243,43 @@ async function runMeasuredScenario(page, targetUrl, scenario) {
       element.scrollTop = element.scrollHeight;
     });
     await page.waitForTimeout(900);
+    return;
+  }
+
+  if (scenario === "annotation-bubble") {
+    const bubble = page.getByTestId("annotation-bubble");
+    const draft = bubble.getByRole("textbox", { name: "Annotation text" });
+
+    await draft.click();
+    await page.keyboard.type(
+      "Una nota de anotación suficientemente larga para que el textarea produzca scroll interno mientras el escritor sigue tecleando.",
+      { delay: 6 },
+    );
+
+    try {
+      const origin = new URL(targetUrl).origin;
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+      await page.evaluate(async () => {
+        await navigator.clipboard.writeText(" Un fragmento pegado dentro del bubble.");
+      });
+      await draft.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+    } catch {
+      // Ignore clipboard restrictions in perf environments that do not expose it.
+    }
+
+    // Reposition the overlay repeatedly while the draft is open.
+    for (const distance of [40, 80, 40]) {
+      await page.evaluate((amount) => window.scrollTo(0, Math.max(0, window.scrollY - amount)), distance);
+      await page.waitForTimeout(80);
+    }
+    await draft.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await page.setViewportSize({ width: 900, height: 520 });
+    await page.waitForTimeout(120);
+
+    await page.keyboard.type(" El texto continúa después de reposicionar el bubble.", { delay: 6 });
+    await page.waitForTimeout(600);
     return;
   }
 

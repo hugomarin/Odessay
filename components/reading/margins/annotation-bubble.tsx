@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Mic } from "lucide-react"
 import { VoiceRecorderControls } from "./voice-recorder-controls"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -14,6 +14,16 @@ export type AnnotationBubblePosition = FloatingOverlayAnchor & { y: number }
 
 type AnnotationBubbleProps = {
   position: AnnotationBubblePosition | null
+  /**
+   * Identity of the editing session (ODE-409).
+   *
+   * The draft belongs to a *session*, not to a geometry. Owners mint a new id
+   * when the user opens the bubble over a different selection, and reuse it for
+   * the whole life of that draft — scroll, resize and flip all reposition the
+   * overlay without touching the id, so the text and the recording survive.
+   * Omitting it keeps a single session for as long as the bubble stays open.
+   */
+  sessionId?: string | null
   type?: "personal" | "ai" | "footnote"
   onConfirm: (note: string) => void | Promise<void>
   onCancel: () => void
@@ -21,7 +31,30 @@ type AnnotationBubbleProps = {
 
 const AI_QUICK_CHIPS = ["eliminar", "modificar", "expandir", "valida esto", "simplifica", "mantén tono"]
 
-export function AnnotationBubble({ position, type = "personal", onConfirm, onCancel }: AnnotationBubbleProps) {
+const IMPLICIT_SESSION_KEY = "annotation-bubble:open"
+
+let annotationSessionCounter = 0
+
+/**
+ * Mint an identity for a newly opened annotation draft (ODE-409). Owners call
+ * this once, when the user asks for a bubble — never while repositioning one.
+ */
+export function nextAnnotationSessionId(): string {
+  annotationSessionCounter += 1
+  return `annotation-session-${annotationSessionCounter}`
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
+}
+
+export function AnnotationBubble({
+  position,
+  sessionId,
+  type = "personal",
+  onConfirm,
+  onCancel,
+}: AnnotationBubbleProps) {
   const [note, setNote] = useState("")
   const [isSubmittingVoice, setIsSubmittingVoice] = useState(false)
   const [voiceError, setVoiceError] = useState<string | null>(null)
@@ -49,16 +82,37 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     preferredPlacement: "below",
   })
 
-  // Focus textarea when shown
+  // ─── Session lifecycle (ODE-409) ───────────────────────────────────────────
+  // `position` changes on every scroll, resize and flip. Keying the draft reset
+  // on it made "reposition" indistinguishable from "open a new annotation",
+  // which is what erased text and restarted recordings. The draft is keyed on
+  // session identity instead; geometry is free to change as often as it needs.
+  const sessionKey = position ? (sessionId ?? IMPLICIT_SESSION_KEY) : null
+  const initializedSessionRef = useRef<string | null>(null)
+  const sessionTokenRef = useRef(0)
+  const transcriptionAbortRef = useRef<AbortController | null>(null)
+  const autoTranscribedBlobRef = useRef<Blob | null>(null)
+
   useEffect(() => {
-    if (position) {
-      setNote("")
-      setVoiceError(null)
-      setIsSubmittingVoice(false)
-      reset()
+    if (sessionKey === initializedSessionRef.current) return
+    initializedSessionRef.current = sessionKey
+
+    // Invalidate anything still in flight for the session we are leaving so a
+    // late transcript can never land on a different (or closed) draft.
+    sessionTokenRef.current += 1
+    transcriptionAbortRef.current?.abort()
+    transcriptionAbortRef.current = null
+    autoTranscribedBlobRef.current = null
+
+    setNote("")
+    setVoiceError(null)
+    setIsSubmittingVoice(false)
+    reset()
+
+    if (sessionKey !== null) {
       requestAnimationFrame(() => textareaRef.current?.focus())
     }
-  }, [position, reset])
+  }, [sessionKey, reset])
 
   useEffect(() => {
     if (errorMessage) {
@@ -66,27 +120,57 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     }
   }, [errorMessage])
 
-  // For AI type: auto-transcribe when recording stops and load text into textarea
-  useEffect(() => {
-    if (type !== "ai" || state !== "stopped" || !blob) return
+  const runTranscription = useCallback(
+    async (audio: Blob, mode: "apply-to-note" | "confirm") => {
+      const token = sessionTokenRef.current
+      transcriptionAbortRef.current?.abort()
+      const controller = new AbortController()
+      transcriptionAbortRef.current = controller
 
-    setVoiceError(null)
-    setIsSubmittingVoice(true)
+      setVoiceError(null)
+      setIsSubmittingVoice(true)
 
-    transcribeVoiceNote(blob)
-      .then((transcript) => {
+      try {
+        const transcript = await transcribeVoiceNote(audio, { signal: controller.signal })
+        if (sessionTokenRef.current !== token) return
+
+        if (mode === "confirm") {
+          await onConfirm(transcript)
+          reset()
+          return
+        }
+
         setNote(transcript)
         reset()
         requestAnimationFrame(() => textareaRef.current?.focus())
-      })
-      .catch((err: unknown) => {
-        setVoiceError(err instanceof Error ? err.message : "Transcription failed.")
-      })
-      .finally(() => {
-        setIsSubmittingVoice(false)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, blob, type])
+      } catch (error) {
+        // A stale session or an explicit cancel must not surface an error on a
+        // draft the user already moved on from.
+        if (sessionTokenRef.current !== token || isAbortError(error)) return
+        // The recording is deliberately left intact so Retry reuses this blob.
+        setVoiceError(error instanceof Error ? error.message : "Transcription failed.")
+      } finally {
+        if (sessionTokenRef.current === token) {
+          setIsSubmittingVoice(false)
+        }
+        if (transcriptionAbortRef.current === controller) {
+          transcriptionAbortRef.current = null
+        }
+      }
+    },
+    [onConfirm, reset],
+  )
+
+  // For AI type: auto-transcribe when recording stops and load text into the
+  // textarea. Each blob is attempted exactly once — a failure waits for Retry
+  // instead of looping.
+  useEffect(() => {
+    if (type !== "ai" || state !== "stopped" || !blob) return
+    if (autoTranscribedBlobRef.current === blob) return
+
+    autoTranscribedBlobRef.current = blob
+    void runTranscription(blob, "apply-to-note")
+  }, [type, state, blob, runTranscription])
 
   // Dismiss on Escape, confirm on Enter (without shift)
   useEffect(() => {
@@ -134,21 +218,15 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
     await onConfirm(type === "personal" ? trimmed : trimmed)
   }
 
-  async function handleVoiceSubmit() {
+  function handleVoiceSubmit() {
     if (!blob) return
+    void runTranscription(blob, "confirm")
+  }
 
-    setVoiceError(null)
-    setIsSubmittingVoice(true)
-
-    try {
-      const transcript = await transcribeVoiceNote(blob)
-      await onConfirm(transcript)
-      reset()
-    } catch (error) {
-      setVoiceError(error instanceof Error ? error.message : "Transcription failed.")
-    } finally {
-      setIsSubmittingVoice(false)
-    }
+  // Retry reuses the exact blob that failed — nothing is re-recorded (ODE-409).
+  function handleRetryTranscription() {
+    if (!blob) return
+    void runTranscription(blob, type === "ai" ? "apply-to-note" : "confirm")
   }
 
   const isMicDisabled = !isSupported || permissionDenied
@@ -174,6 +252,10 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
   const canSubmitText = type === "personal" || note.trim().length > 0
 
   function handleDiscardVoice() {
+    sessionTokenRef.current += 1
+    transcriptionAbortRef.current?.abort()
+    transcriptionAbortRef.current = null
+    autoTranscribedBlobRef.current = null
     setVoiceError(null)
     setIsSubmittingVoice(false)
     reset()
@@ -214,9 +296,8 @@ export function AnnotationBubble({ position, type = "personal", onConfirm, onCan
           onPause={pause}
           onResume={resume}
           onStop={stop}
-          onSubmit={() => {
-            void handleVoiceSubmit()
-          }}
+          onSubmit={handleVoiceSubmit}
+          onRetry={blob ? handleRetryTranscription : undefined}
           onDiscard={handleDiscardVoice}
         />
       ) : (
