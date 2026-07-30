@@ -29,6 +29,11 @@ type VoiceRecorderControlsProps = {
   onResume: () => void
   onStop: () => void
   onSubmit: () => void
+  /**
+   * Re-run transcription with the recording that is already captured (ODE-409).
+   * Rendered next to a failure so the writer can recover without re-recording.
+   */
+  onRetry?: () => void
   onDiscard: () => void
 }
 
@@ -43,11 +48,15 @@ export function VoiceRecorderControls({
   onResume,
   onStop,
   onSubmit,
+  onRetry,
   onDiscard,
 }: VoiceRecorderControlsProps) {
   const bars = buildWaveformBars(waveformData)
   const canSubmit = state === "stopped" && !isSubmitting
   const canStop = state === "recording" || state === "paused"
+  // A failed transcription keeps its blob, so the recording can be retried.
+  // A failed *recording* has nothing to retry — only the message applies.
+  const canRecover = Boolean(onRetry) && state === "stopped"
 
   return (
     <div className="flex flex-col gap-4">
@@ -143,7 +152,30 @@ export function VoiceRecorderControls({
         </div>
       </div>
 
-      {errorMessage ? <p className="font-sans text-[12px] leading-relaxed text-destructive">{errorMessage}</p> : null}
+      {errorMessage ? (
+        <div className="flex flex-col gap-2" data-testid="voice-recorder-error">
+          <p className="font-sans text-[12px] leading-relaxed text-destructive">{errorMessage}</p>
+          {canRecover ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onRetry}
+                disabled={isSubmitting}
+                className="rounded-[7px] border-[0.5px] border-border px-3 py-1 font-sans text-[12px] text-ink-2 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={onDiscard}
+                className="rounded-[7px] px-3 py-1 font-sans text-[12px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              >
+                Discard
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }
