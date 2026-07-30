@@ -611,6 +611,215 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
         .map_err(|e| format!("catalog dual-write commit: {e}"))
 }
 
+fn apply_dual_write(tx: &rusqlite::Transaction, input: &CatalogDualWriteInput) -> Result<(), String> {
+    let d = &input.document;
+    tx.execute("INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,deleted_at_cache,created_at,modified_at)
+      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
+      ON CONFLICT(id) DO UPDATE SET local_present=excluded.local_present,cloud_present=excluded.cloud_present,
+      cloud_account_id=excluded.cloud_account_id,sync_status=excluded.sync_status,title_cache=excluded.title_cache,
+      slug_cache=excluded.slug_cache,status_cache=excluded.status_cache,artifact_type_cache=excluded.artifact_type_cache,
+      visibility_cache=excluded.visibility_cache,version_cache=excluded.version_cache,deleted_at_cache=excluded.deleted_at_cache,
+      modified_at=excluded.modified_at",
+      params![d.id,d.local_present as i64,d.cloud_present as i64,d.cloud_account_id,d.sync_status,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.deleted_at,d.created_at,d.modified_at])
+      .map_err(|e| format!("catalog dual-write document: {e}"))?;
+    if let Some(b) = &input.binding {
+        let existing_root_id: Option<String> = tx
+            .query_row(
+                "SELECT id FROM binding_roots WHERE root_path=?1",
+                params![b.root_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("catalog dual-write root lookup: {e}"))?;
+        let root_id = match existing_root_id {
+            Some(id) => id,
+            None => {
+                tx.execute(
+                    "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)",
+                    params![b.binding_root_id, b.root_path, b.manifest_version, b.visible_as_workspace as i64],
+                )
+                .map_err(|e| format!("catalog dual-write root: {e}"))?;
+                b.binding_root_id.clone()
+            }
+        };
+        tx.execute("INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
+          VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
+          ON CONFLICT(document_id) DO UPDATE SET binding_root_id=excluded.binding_root_id,relative_path=excluded.relative_path,
+          canonical_path=excluded.canonical_path,inode=excluded.inode,content_hash=excluded.content_hash,size=excluded.size,last_seen_at=excluded.last_seen_at",
+          params![d.id,root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at])
+          .map_err(|e| format!("catalog dual-write binding: {e}"))?;
+    }
+    if d.deleted_at.is_some() {
+        tx.execute(
+            "DELETE FROM document_bindings WHERE document_id=?1",
+            params![d.id],
+        )
+        .map_err(|e| format!("catalog dual-write delete binding: {e}"))?;
+    }
+    if let Some(m) = &input.mutation {
+        tx.execute("INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
+          ON CONFLICT(id) DO UPDATE SET status=excluded.status,attempt_count=excluded.attempt_count,next_retry_at=excluded.next_retry_at,last_error=excluded.last_error",
+          params![m.id,d.id,m.operation,m.payload_json,m.status,m.attempt_count,m.next_retry_at,m.created_at,m.last_error])
+          .map_err(|e| format!("catalog dual-write mutation: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Atomic batch dual-write. Every input commits in one SQLite transaction so the TS
+/// catalog can emit a single CatalogChange for the whole batch (ODE-408).
+#[tauri::command]
+pub fn catalog_bulk_dual_write(
+    db_path: String,
+    inputs: Vec<CatalogDualWriteInput>,
+) -> Result<Vec<String>, String> {
+    if inputs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog bulk dual-write begin: {e}"))?;
+    for input in &inputs {
+        apply_dual_write(&tx, input)?;
+    }
+    tx.commit()
+        .map_err(|e| format!("catalog bulk dual-write commit: {e}"))?;
+    Ok(inputs.into_iter().map(|input| input.document.id).collect())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BindingRootDocumentCount {
+    pub total: i64,
+    pub cloud: i64,
+}
+
+/// Count documents tied to a BindingRoot for the workspace-removal preview dialog.
+#[tauri::command]
+pub fn catalog_count_binding_root_documents(
+    db_path: String,
+    binding_root_id: String,
+) -> Result<BindingRootDocumentCount, String> {
+    let conn = open_db(&db_path)?;
+    let (total, cloud): (i64, i64) = conn
+        .query_row(
+            "SELECT COUNT(d.id), COALESCE(SUM(CASE WHEN d.cloud_present=1 THEN 1 ELSE 0 END), 0)
+             FROM documents d JOIN document_bindings b ON b.document_id=d.id
+             WHERE b.binding_root_id=?1",
+            params![binding_root_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|e| format!("catalog count binding root documents: {e}"))?;
+    Ok(BindingRootDocumentCount { total, cloud })
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRemovalDocumentRow {
+    pub id: String,
+    pub cloud_present: bool,
+    pub cloud_account_id: Option<String>,
+    pub version: Option<i64>,
+    pub title: Option<String>,
+    pub slug: Option<String>,
+    pub status: Option<String>,
+    pub artifact_type: Option<String>,
+    pub visibility: Option<String>,
+}
+
+/// Remove a workspace's BindingRoot from the active catalog.
+/// - Local-only documents: detach binding, set local_present=0, sync_status='deleted'.
+/// - Cloud documents: detach binding, set local_present=0, keep cloud_present=1,
+///   set deleted_at_cache, enqueue a durable soft-delete mutation.
+/// Returns affected document ids so the TS catalog can emit one CatalogChange.
+#[tauri::command]
+pub fn catalog_apply_workspace_removal(
+    db_path: String,
+    binding_root_id: String,
+    deleted_at: String,
+    updated_at: String,
+    now_millis: i64,
+) -> Result<Vec<String>, String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog workspace removal begin: {e}"))?;
+
+    let mut stmt = tx
+        .prepare(
+            "SELECT d.id, d.cloud_present, d.cloud_account_id, d.version_cache,
+                    d.title_cache, d.slug_cache, d.status_cache, d.artifact_type_cache, d.visibility_cache
+             FROM documents d JOIN document_bindings b ON b.document_id=d.id
+             WHERE b.binding_root_id=?1",
+        )
+        .map_err(|e| format!("catalog workspace removal prepare: {e}"))?;
+    let rows: Vec<WorkspaceRemovalDocumentRow> = stmt
+        .query_map(params![binding_root_id], |row| {
+            Ok(WorkspaceRemovalDocumentRow {
+                id: row.get(0)?,
+                cloud_present: row.get::<_, i64>(1)? != 0,
+                cloud_account_id: row.get(2)?,
+                version: row.get(3)?,
+                title: row.get(4)?,
+                slug: row.get(5)?,
+                status: row.get(6)?,
+                artifact_type: row.get(7)?,
+                visibility: row.get(8)?,
+            })
+        })
+        .map_err(|e| format!("catalog workspace removal query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog workspace removal row: {e}"))?;
+    drop(stmt);
+
+    let mut affected_ids = Vec::with_capacity(rows.len());
+    for row in rows {
+        affected_ids.push(row.id.clone());
+        tx.execute(
+            "DELETE FROM document_bindings WHERE document_id=?1",
+            params![row.id],
+        )
+        .map_err(|e| format!("catalog workspace removal detach binding: {e}"))?;
+
+        if row.cloud_present {
+            let version = row.version.unwrap_or(1);
+            let mutation_id = uuid::Uuid::new_v4().to_string();
+            let payload = serde_json::json!({
+                "version": version,
+                "deletedAt": deleted_at,
+                "updatedAt": updated_at,
+            })
+            .to_string();
+            tx.execute(
+                "INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+                 VALUES(?1,?2,'delete',?3,'pending',0,NULL,?4,NULL)",
+                params![mutation_id, row.id, payload, now_millis],
+            )
+            .map_err(|e| format!("catalog workspace removal mutation: {e}"))?;
+            tx.execute(
+                "UPDATE documents SET local_present=0, sync_status='pending', deleted_at_cache=?1,
+                 excerpt_cache=NULL, excerpt_content_hash=NULL, modified_at=?2
+                 WHERE id=?3",
+                params![deleted_at, now_millis, row.id],
+            )
+            .map_err(|e| format!("catalog workspace removal cloud document: {e}"))?;
+        } else {
+            tx.execute(
+                "UPDATE documents SET local_present=0, sync_status='deleted', deleted_at_cache=NULL,
+                 excerpt_cache=NULL, excerpt_content_hash=NULL
+                 WHERE id=?1",
+                params![row.id],
+            )
+            .map_err(|e| format!("catalog workspace removal local document: {e}"))?;
+        }
+    }
+
+    tx.commit()
+        .map_err(|e| format!("catalog workspace removal commit: {e}"))?;
+    Ok(affected_ids)
+}
+
 /// Project a complete cloud metadata burst without changing filesystem facts.
 /// Cloud hydration owns cloud presence/account/metadata only; an existing local
 /// binding and `local_present` always survive this transaction.

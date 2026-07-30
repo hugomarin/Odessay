@@ -4,8 +4,8 @@ import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-ca
 import { WebDocumentCatalog } from "@/lib/services/web-document-catalog"
 
 const mocks = vi.hoisted(() => ({
-  catalogGet: vi.fn(), catalogResolve: vi.fn(), catalogList: vi.fn(), catalogWrite: vi.fn(), catalogDetach: vi.fn(),
-  catalogHydrateExcerpts: vi.fn(),
+  catalogGet: vi.fn(), catalogResolve: vi.fn(), catalogList: vi.fn(), catalogWrite: vi.fn(), catalogBulkWrite: vi.fn(),
+  catalogDetach: vi.fn(), catalogHydrateExcerpts: vi.fn(),
   writingGet: vi.fn(), writingGetByPath: vi.fn(), writingGetAll: vi.fn(), writingSave: vi.fn(), writingDetach: vi.fn(),
   localListener: null as null | (() => void),
 }))
@@ -15,6 +15,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogResolvePath: mocks.catalogResolve,
   tauriCatalogList: mocks.catalogList,
   tauriCatalogDualWrite: mocks.catalogWrite,
+  tauriCatalogBulkDualWrite: mocks.catalogBulkWrite,
   tauriCatalogDetachLocalFile: mocks.catalogDetach,
   tauriCatalogHydrateExcerpts: mocks.catalogHydrateExcerpts,
 }))
@@ -67,6 +68,7 @@ describe("DocumentCatalog contract", () => {
     mocks.catalogResolve.mockResolvedValue(nativeRow)
     mocks.catalogList.mockResolvedValue([nativeRow])
     mocks.catalogWrite.mockResolvedValue(undefined)
+    mocks.catalogBulkWrite.mockResolvedValue(undefined)
     mocks.catalogDetach.mockResolvedValue(undefined)
     mocks.catalogHydrateExcerpts.mockResolvedValue([])
     mocks.writingGet.mockResolvedValue(localWriting)
@@ -100,7 +102,7 @@ describe("DocumentCatalog contract", () => {
       { document: { ...nativeRow, id: "doc-2" }, binding: null, mutation: null },
       { document: { ...nativeRow, id: "doc-3" }, binding: null, mutation: null },
     ])
-    expect(mocks.catalogWrite).toHaveBeenCalledTimes(3)
+    expect(mocks.catalogBulkWrite).toHaveBeenCalledTimes(1)
     expect(changes).toHaveLength(1)
     expect(changes[0]).toMatchObject({ documentIds: ["doc-1", "doc-2", "doc-3"], reason: "bulk" })
     unsubscribe()

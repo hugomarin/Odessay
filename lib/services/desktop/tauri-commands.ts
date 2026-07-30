@@ -158,6 +158,18 @@ export async function tauriCatalogDualWrite(dbPath: string, input: DesktopCatalo
   return invoke<void>("catalog_dual_write", { dbPath, input })
 }
 
+export async function tauriCatalogBulkDualWrite(dbPath: string, inputs: DesktopCatalogDualWriteInput[]): Promise<void> {
+  return invoke<void>("catalog_bulk_dual_write", { dbPath, inputs })
+}
+
+export async function tauriCatalogCountBindingRootDocuments(dbPath: string, bindingRootId: string): Promise<{ total: number; cloud: number }> {
+  return invoke<{ total: number; cloud: number }>("catalog_count_binding_root_documents", { dbPath, bindingRootId })
+}
+
+export async function tauriCatalogApplyWorkspaceRemoval(dbPath: string, bindingRootId: string, deletedAt: string, updatedAt: string): Promise<string[]> {
+  return invoke<string[]>("catalog_apply_workspace_removal", { dbPath, bindingRootId, deletedAt, updatedAt, nowMillis: Date.now() })
+}
+
 export async function tauriCatalogApplyCloudSnapshots(
   dbPath: string,
   snapshots: DesktopCloudSnapshotInput[],

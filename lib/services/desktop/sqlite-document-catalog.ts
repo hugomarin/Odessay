@@ -10,6 +10,9 @@ import type {
 import {
   tauriCatalogApplyReconcile,
   tauriCatalogApplyCloudSnapshots,
+  tauriCatalogApplyWorkspaceRemoval,
+  tauriCatalogBulkDualWrite,
+  tauriCatalogCountBindingRootDocuments,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
   tauriCatalogGetById,
@@ -135,11 +138,55 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
 
   async commitBulkDualWrite(inputs: DesktopCatalogDualWriteInput[]): Promise<void> {
     if (inputs.length === 0) return
-    for (const input of inputs) {
-      await tauriCatalogDualWrite(this.dbPath, input)
-    }
+    await tauriCatalogBulkDualWrite(this.dbPath, inputs)
     const documentIds = inputs.map(({ document: catalogRecord }) => catalogRecord.id)
     this.emit(documentIds, "bulk")
+  }
+
+  async countByBindingRoot(bindingRootId: string): Promise<{ total: number; cloud: number }> {
+    return tauriCatalogCountBindingRootDocuments(this.dbPath, bindingRootId)
+  }
+
+  /**
+   * Documents that were archived in cloud when a workspace was removed, but whose
+   * local `.md` is now present again after the root was re-added. Local wins.
+   */
+  async listReactivatableDocuments(bindingRootId: string): Promise<DocumentCatalogRecord[]> {
+    const rows = await tauriCatalogList(this.dbPath, { includeDeleted: true, limit: 5000 })
+    return rows
+      .map(toRecord)
+      .filter(
+        (record) =>
+          record.binding?.bindingRootId === bindingRootId &&
+          record.localPresent &&
+          record.deletedAt !== null,
+      )
+  }
+
+  /**
+   * Remove an entire BindingRoot from the active catalog (ODE-408).
+   * Local-only documents are detached and hidden; cloud documents are soft-deleted
+   * and queued for sync. Files and `.odessay/index.json` on disk are untouched.
+   */
+  async applyWorkspaceRemoval(
+    bindingRootId: string,
+    deletedAt: string,
+    updatedAt: string,
+  ): Promise<CatalogChange> {
+    const documentIds = await tauriCatalogApplyWorkspaceRemoval(
+      this.dbPath,
+      bindingRootId,
+      deletedAt,
+      updatedAt,
+    )
+    const change = {
+      transactionId: crypto.randomUUID(),
+      documentIds,
+      reason: "bulk",
+      occurredAt: Date.now(),
+    } satisfies CatalogChange
+    listenersByDatabase.get(this.dbPath)?.forEach((listener) => listener(change))
+    return change
   }
 
   /**

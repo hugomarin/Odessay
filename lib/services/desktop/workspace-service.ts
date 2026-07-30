@@ -18,6 +18,9 @@ import {
 } from "@/lib/services/document-service-factory";
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
 import { refreshWorkspaceReconcilerRoots } from "./desktop-workspace-reconciler";
+import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog";
+import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization";
+import { join } from "@tauri-apps/api/path";
 import {
   isOdessayInternalPath,
   isOdessaySelfWriteEvent,
@@ -31,6 +34,7 @@ import {
   tauriWriteFile,
   tauriWorkspaceCreate,
   tauriWorkspaceSync,
+  type DesktopCatalogDualWriteInput,
   type DesktopWorkspaceSnapshot,
 } from "@/lib/services/desktop/tauri-commands";
 import type {
@@ -53,6 +57,17 @@ import {
 const MAX_PREVIEW_LENGTH = 420;
 
 let workspaceServicePromise: Promise<DesktopWorkspaceService> | null = null;
+let catalogPromise: Promise<SqliteDocumentCatalog> | null = null;
+
+async function resolveDesktopCatalog(): Promise<SqliteDocumentCatalog> {
+  if (!catalogPromise) {
+    catalogPromise = (async () => {
+      const configDir = await appConfigDir();
+      return new SqliteDocumentCatalog(await join(configDir, "desktop-index.sqlite3"));
+    })();
+  }
+  return catalogPromise;
+}
 
 function slugifyWorkspaceName(value: string) {
   const slug = value
@@ -340,32 +355,36 @@ export class DesktopWorkspaceService {
       createdAt: existingBindingRoot?.createdAt ?? nowIso,
     });
 
-    if (existing) {
-      await refreshWorkspaceReconcilerRoots();
-      return existing;
-    }
-
-    const baseName = explicitName?.trim() || snapshot.name;
-    const baseSlug = slugifyWorkspaceName(baseName);
-    let slug = baseSlug;
-    let suffix = 2;
-
-    while (records.some((record) => record.slug === slug)) {
-      slug = `${baseSlug}-${suffix}`;
-      suffix += 1;
-    }
-
-    const nextRecord: WorkspaceRecord = {
-      slug,
-      name: baseName,
+    const nextRecord: WorkspaceRecord = existing ?? {
+      slug: slugifyWorkspaceName(explicitName?.trim() || snapshot.name),
+      name: explicitName?.trim() || snapshot.name,
       rootPath,
       source,
       addedAt: nowIso,
       lastOpenedAt: null,
     };
 
-    await this.writeRecords([...records, nextRecord]);
+    if (!existing) {
+      const baseSlug = nextRecord.slug;
+      let slug = baseSlug;
+      let suffix = 2;
+
+      while (records.some((record) => record.slug === slug)) {
+        slug = `${baseSlug}-${suffix}`;
+        suffix += 1;
+      }
+
+      nextRecord.slug = slug;
+      await this.writeRecords([...records, nextRecord]);
+    }
+
     await refreshWorkspaceReconcilerRoots();
+
+    // If this root was previously removed, any surviving local `.md` files have
+    // just been re-bound by the reconciler. Re-upload their current contents so
+    // the cloud archive is reversed (local wins).
+    await this.reactivateArchivedCloudDocuments(snapshot.bindingRootId);
+
     return nextRecord;
   }
 
@@ -452,9 +471,57 @@ export class DesktopWorkspaceService {
     return { ...target, name: normalizedName };
   }
 
+  async previewWorkspaceRemoval(slug: string): Promise<{ total: number; cloud: number }> {
+    const records = await this.readRecords();
+    const target = records.find((record) => record.slug === slug);
+    if (!target?.rootPath) {
+      return { total: 0, cloud: 0 };
+    }
+    const bindingRoots = await this.settingsService.getBindingRoots();
+    const root = bindingRoots.find(
+      (root) =>
+        root.rootPath === target.rootPath ||
+        (target.rootPath && root.rootPath === target.rootPath.replace(/[\\/]+$/, "")),
+    );
+    if (!root) {
+      return { total: 0, cloud: 0 };
+    }
+    const catalog = await resolveDesktopCatalog();
+    return catalog.countByBindingRoot(root.id);
+  }
+
   async removeWorkspace(slug: string): Promise<void> {
     const records = await this.readRecords();
+    const target = records.find((record) => record.slug === slug);
     const nextRecords = records.filter((record) => record.slug !== slug);
+
+    if (target?.rootPath) {
+      const bindingRoots = await this.settingsService.getBindingRoots();
+      const normalizedTargetRoot = target.rootPath.replace(/[\\/]+$/, "");
+      const root = bindingRoots.find(
+        (root) =>
+          root.rootPath === normalizedTargetRoot ||
+          root.rootPath === target.rootPath,
+      );
+
+      if (root) {
+        const catalog = await resolveDesktopCatalog();
+        const nowIso = new Date().toISOString();
+        await catalog.applyWorkspaceRemoval(root.id, nowIso, nowIso);
+
+        // Remove the binding root from active observation. The manifest
+        // `.odessay/index.json` and files on disk are intentionally preserved.
+        const remainingRoots = bindingRoots.filter(
+          (candidate) =>
+            candidate.rootPath !== normalizedTargetRoot &&
+            candidate.rootPath !== target.rootPath,
+        );
+        await this.settingsService.updateDesktopSettings({
+          bindingRoots: remainingRoots,
+        });
+      }
+    }
+
     await this.writeRecords(nextRecords);
 
     // Keep assignments honest: a writing can no longer point at a removed
@@ -465,6 +532,113 @@ export class DesktopWorkspaceService {
       nextRecords.map((record) => record.slug),
     );
     await this.writeAssignments(pruned);
+
+    // Reconfigure the global watcher so the removed root is no longer observed.
+    await refreshWorkspaceReconcilerRoots();
+  }
+
+  /**
+   * After a workspace root is re-added, any cloud-archived document whose local
+   * `.md` file is still present (and was just re-bound by the reconciler) should
+   * be restored from the local copy. Local wins: clear the archive marker, bump
+   * the version, and enqueue an upsert so the cloud record is overwritten with
+   * the current local content (ODE-408).
+   */
+  private async reactivateArchivedCloudDocuments(bindingRootId: string): Promise<void> {
+    const catalog = await resolveDesktopCatalog();
+    const candidates = await catalog.listReactivatableDocuments(bindingRootId);
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const now = Date.now();
+    const inputs: DesktopCatalogDualWriteInput[] = [];
+
+    for (const record of candidates) {
+      if (!record.binding) {
+        continue;
+      }
+
+      const markdown = await tauriOpenFile(record.binding.canonicalPath);
+      let snapshot;
+      try {
+        snapshot = parseDocumentFileToSnapshot(markdown).snapshot;
+      } catch {
+        continue;
+      }
+
+      const version = Math.max(1, (record.version ?? 0) + 1);
+      const title = record.title ?? filenameToTitle(record.binding.relativePath);
+      const status = record.status ?? "draft";
+      const artifactType = record.artifactType ?? "general";
+      const visibility = record.visibility ?? "private";
+      const rootPath = record.binding.canonicalPath.slice(
+        0,
+        -(record.binding.relativePath.length + 1),
+      );
+      const catalogDocument = {
+        id: record.id,
+        localPresent: true,
+        cloudPresent: record.cloudPresent,
+        cloudAccountId: record.cloudAccountId,
+        syncStatus: "pending",
+        title,
+        slug: record.slug,
+        status,
+        artifactType,
+        visibility,
+        version,
+        deletedAt: null,
+        createdAt: record.createdAt,
+        modifiedAt: now,
+      };
+
+      inputs.push({
+        document: catalogDocument,
+        binding: {
+          bindingRootId: record.binding.bindingRootId,
+          rootPath,
+          manifestVersion: 2,
+          visibleAsWorkspace: true,
+          relativePath: record.binding.relativePath,
+          canonicalPath: record.binding.canonicalPath,
+          inode: record.binding.inode,
+          contentHash: record.binding.contentHash,
+          size: record.binding.size,
+          lastSeenAt: record.binding.lastSeenAt,
+        },
+        mutation: {
+          id: crypto.randomUUID(),
+          operation: "upsert",
+          payloadJson: JSON.stringify({
+            title,
+            bodyText: snapshot.bodyText,
+            bodyJson: snapshot.bodyJson,
+            slug: record.slug,
+            status,
+            artifactType,
+            visibility,
+            parentId: null,
+            correspondenceId: null,
+            version,
+            updatedAt: nowIso,
+            deletedAt: null,
+          }),
+          status: "pending",
+          attemptCount: 0,
+          nextRetryAt: null,
+          createdAt: now,
+          lastError: null,
+        },
+      });
+    }
+
+    if (inputs.length === 0) {
+      return;
+    }
+
+    await catalog.commitBulkDualWrite(inputs);
   }
 
   // ─── Document ↔ workspace membership ─────────────────────────────────────────

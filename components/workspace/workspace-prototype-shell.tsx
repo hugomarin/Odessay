@@ -138,7 +138,12 @@ type AddWorkspaceStep =
 
 type WorkspaceActionState =
   | { type: "rename"; workspace: WorkspaceSummary | WorkspaceDetail }
-  | { type: "remove"; workspace: WorkspaceSummary | WorkspaceDetail }
+  | {
+      type: "remove";
+      workspace: WorkspaceSummary | WorkspaceDetail;
+      total: number;
+      cloud: number;
+    }
   | null;
 
 function formatUpdatedAt(timestamp: number | null) {
@@ -444,6 +449,24 @@ function DesktopWorkspaceIndex() {
   const [selectedWorkspaceFiles, setSelectedWorkspaceFiles] = useState<
     Set<string>
   >(new Set());
+
+  const promptRemoveWorkspace = useCallback(
+    async (workspace: WorkspaceSummary) => {
+      try {
+        const service = await getDesktopWorkspaceService();
+        const preview = await service.previewWorkspaceRemoval(workspace.slug);
+        setWorkspaceAction({ type: "remove", workspace, ...preview });
+        setWorkspaceActionValue(workspace.name);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to preview workspace removal",
+        );
+      }
+    },
+    [],
+  );
 
   const loadIndex = useCallback(async () => {
     setIsLoading(true);
@@ -788,10 +811,7 @@ function DesktopWorkspaceIndex() {
                             setWorkspaceAction({ type: "rename", workspace });
                             setWorkspaceActionValue(workspace.name);
                           }}
-                          onRemove={() => {
-                            setWorkspaceAction({ type: "remove", workspace });
-                            setWorkspaceActionValue(workspace.name);
-                          }}
+                          onRemove={() => void promptRemoveWorkspace(workspace)}
                         />
                       </div>
                       {workspace.status === "missing" ? (
@@ -866,10 +886,7 @@ function DesktopWorkspaceIndex() {
                         setWorkspaceAction({ type: "rename", workspace });
                         setWorkspaceActionValue(workspace.name);
                       }}
-                      onRemove={() => {
-                        setWorkspaceAction({ type: "remove", workspace });
-                        setWorkspaceActionValue(workspace.name);
-                      }}
+                      onRemove={() => void promptRemoveWorkspace(workspace)}
                     />
                   </div>
                 </div>
@@ -996,6 +1013,24 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     sortBy: fileSortBy,
     setSortBy: setFileSortBy,
   } = useWorkspaceTableFilters();
+
+  const promptRemoveWorkspace = useCallback(
+    async (workspace: WorkspaceSummary | WorkspaceDetail) => {
+      try {
+        const service = await getDesktopWorkspaceService();
+        const preview = await service.previewWorkspaceRemoval(workspace.slug);
+        setWorkspaceAction({ type: "remove", workspace, ...preview });
+        setWorkspaceActionValue(workspace.name);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to preview workspace removal",
+        );
+      }
+    },
+    [],
+  );
 
   const loadWorkspace = useCallback(async () => {
     const isInitialLoad = !hasLoadedWorkspaceRef.current;
@@ -1784,10 +1819,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => {
-                  setWorkspaceAction({ type: "remove", workspace });
-                  setWorkspaceActionValue(workspace.name);
-                }}
+                onClick={() => void promptRemoveWorkspace(workspace)}
               >
                 <Trash2 className="h-4 w-4" strokeWidth={1.5} />
                 Remove from Artifact Studio
@@ -1844,10 +1876,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                       setWorkspaceAction({ type: "rename", workspace });
                       setWorkspaceActionValue(workspace.name);
                     }}
-                    onRemove={() => {
-                      setWorkspaceAction({ type: "remove", workspace });
-                      setWorkspaceActionValue(workspace.name);
-                    }}
+                    onRemove={() => void promptRemoveWorkspace(workspace)}
                   />
                 </div>
               </div>
@@ -2319,8 +2348,17 @@ function WorkspaceActionDialog({
                 Remove workspace
               </DialogTitle>
               <DialogDescription className="text-[16px] leading-7 text-ink-3">
-                Artifact Studio will forget this workspace, but the local folder
-                and its files stay untouched.
+                {action.total === 0
+                  ? "Artifact Studio will stop watching this workspace. No tracked documents will be affected."
+                  : `This workspace has ${action.total} tracked document${action.total === 1 ? "" : "s"}.${
+                      action.cloud > 0
+                        ? ` ${action.cloud} synced document${action.cloud === 1 ? "" : "s"} will be archived in the cloud.`
+                        : ""
+                    }${
+                      action.total > action.cloud
+                        ? ` ${action.total - action.cloud} local-only document${action.total - action.cloud === 1 ? "" : "s"} will be hidden from the workspace.`
+                        : ""
+                    } The local folder, .md files, and .odessay index stay untouched.`}
               </DialogDescription>
             </DialogHeader>
             <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
