@@ -25,12 +25,22 @@ function supabase(archivedResult: QueryResult, updateResult: QueryResult) {
   const archived = query(archivedResult)
   const update = query(updateResult)
   const updateCall = vi.fn(() => update)
+  const deleteBuilder = query({ data: null, error: null })
+  const deleteCall = vi.fn(() => deleteBuilder)
   const from = vi.fn(() => ({
     select: vi.fn(() => archived),
     update: updateCall,
-    delete: vi.fn(() => query({ data: null, error: null })),
+    delete: deleteCall,
   }))
-  return { client: { from }, archived, update, updateCall }
+  return { client: { from }, archived, update, updateCall, delete: deleteBuilder, deleteCall }
+}
+
+function deleteRequest() {
+  return new Request("http://localhost/api/writings/writing-1/lifecycle", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "delete-permanently" }),
+  })
 }
 
 function restoreRequest(version = 4) {
@@ -95,5 +105,21 @@ describe("POST /api/writings/[id]/lifecycle", () => {
     const response = await POST(restoreRequest(4), context)
     expect(response.status).toBe(409)
     expect((await response.json()).error.code).toBe("VERSION_CONFLICT")
+  })
+
+  it("permanently deletes only the owner archived row", async () => {
+    getCurrentUserFromRequestMock.mockResolvedValue({ userId: "author-1" })
+    const database = supabase({ data: { id: "writing-1", version: 2 }, error: null }, { data: null, error: null })
+    createClientMock.mockResolvedValue(database.client)
+
+    const response = await POST(deleteRequest(), context)
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data).toEqual({ id: "writing-1" })
+    expect(database.deleteCall).toHaveBeenCalled()
+    expect(database.delete.eq).toHaveBeenCalledWith("id", "writing-1")
+    expect(database.delete.eq).toHaveBeenCalledWith("author_id", "author-1")
+    expect(database.delete.not).toHaveBeenCalledWith("deleted_at", "is", null)
   })
 })
