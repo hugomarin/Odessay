@@ -226,7 +226,7 @@ test.describe("floating selection overlays stay inside the viewport", () => {
 
 const LONG_NOTE = `${"Una nota larga que el escritor no quiere perder. ".repeat(24)}\nSegunda línea de la nota.`
 
-async function openAnnotationBubbleInEditor(page: Page, { seed = true } = {}) {
+async function openAnnotationBubbleInEditor(page: Page, { seed = true, paragraph = -1 } = {}) {
   if (seed) {
     await openEditorHarness(page)
     await switchToMarkdown(page)
@@ -237,7 +237,8 @@ async function openAnnotationBubbleInEditor(page: Page, { seed = true } = {}) {
     await switchToRich(page)
   }
 
-  const lastParagraph = page.locator(".odessay-editor-content p").last()
+  const paragraphs = page.locator(".odessay-editor-content p")
+  const lastParagraph = paragraph < 0 ? paragraphs.nth((await paragraphs.count()) + paragraph) : paragraphs.nth(paragraph)
   await lastParagraph.evaluate((element) => element.scrollIntoView({ block: "end" }))
   await lastParagraph.click()
   await page.keyboard.press("End")
@@ -332,8 +333,9 @@ test.describe("an open annotation draft survives repositioning", () => {
     await bubble.getByRole("button", { name: "Cancel" }).click()
     await expect(bubble).toBeHidden()
 
+    // Reopen over a *different* passage: a new session, not a resumed one.
     await page.setViewportSize({ width: 1100, height: 420 })
-    const reopened = await openAnnotationBubbleInEditor(page, { seed: false })
+    const reopened = await openAnnotationBubbleInEditor(page, { seed: false, paragraph: -3 })
     await expect(reopened.getByRole("textbox", { name: "Annotation text" })).toHaveValue("")
   })
 
