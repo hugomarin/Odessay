@@ -20,6 +20,12 @@ import { readFileSync, mkdirSync, copyFileSync, existsSync, readdirSync, writeFi
 import { execSync } from "node:child_process"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import {
+  collectFrontendAssets,
+  evaluateEmbeddedRuntimeHost,
+  findLocalRuntimeHosts,
+  formatEmbeddedHostFailure,
+} from "./lib/desktop-runtime-host.mjs"
 
 const RELEASES_DIR = "dist/releases"
 const DMG_BUNDLE_DIR = "src-tauri/target/release/bundle/dmg"
@@ -70,7 +76,7 @@ function main() {
 
   // 2. Web runtime URL check — prevent shipping a DMG that points to localhost
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || ""
-  const isLocalhost = /localhost|127\.0\.0\.1/.test(appUrl)
+  const isLocalhost = findLocalRuntimeHosts(appUrl).length > 0
   if (isLocalhost && !allowLocalhost) {
     console.error(
       `[desktop:release] INVALID WEB RUNTIME URL\n` +
@@ -104,6 +110,37 @@ function main() {
   } catch (err) {
     console.error("[desktop:release] tauri build failed — see output above.")
     process.exit(err.status || 1)
+  }
+
+  // 3b. Embedded runtime host gate (ODE-409). Step 2 checked the *intent*; this
+  // checks what the build actually baked into the shipped frontend, which is
+  // what the app will call at runtime on someone else's machine.
+  const builtApp = findAppBundle(join(root, APP_BUNDLE_DIR))
+  const embedded = collectFrontendAssets([
+    builtApp ? join(builtApp, "Contents", "Resources") : null,
+    join(root, "dist"),
+  ].filter(Boolean))
+
+  if (embedded.assets.length === 0) {
+    console.error(
+      "[desktop:release] EMBEDDED HOST UNVERIFIABLE\n" +
+        "  No frontend assets were found to scan — the static export did not reach the bundle.\n" +
+        "  Refusing to publish an artifact whose runtime host cannot be verified."
+    )
+    process.exit(1)
+  }
+
+  const embeddedVerdict = evaluateEmbeddedRuntimeHost({ assets: embedded.assets, allowLocalhost })
+  if (!embeddedVerdict.ok) {
+    console.error(`[desktop:release] INVALID EMBEDDED RUNTIME HOST\n  ${formatEmbeddedHostFailure(embeddedVerdict.offenders)}`)
+    process.exit(1)
+  }
+  if (embeddedVerdict.offenders.length > 0) {
+    console.log(
+      `[desktop:release] WARNING: ${embeddedVerdict.offenders.length} asset(s) embed a localhost runtime host. Do not distribute this build.`
+    )
+  } else {
+    console.log(`[desktop:release] ✓ No localhost runtime host embedded in ${embeddedVerdict.scanned} frontend asset(s)`)
   }
 
   // 4. Locate the DMG produced by Tauri
