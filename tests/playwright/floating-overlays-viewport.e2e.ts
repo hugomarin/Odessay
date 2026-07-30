@@ -147,6 +147,32 @@ async function selectEdgeWord(paragraph: Locator, edge: "left" | "right") {
   }, edge)
 }
 
+/**
+ * Select a word and wait for the reading view's selection popup.
+ *
+ * The reading shell opens the popup from a `mouseup` listener it attaches on
+ * mount. A synthetic `mouseup` is a one-shot event: dispatch it before React has
+ * hydrated and it is simply lost, with nothing to retry — which is what made
+ * this suite flaky right after `page.goto`. Re-dispatching until the popup shows
+ * removes the race without weakening the assertion.
+ */
+async function openSelectionPopup(page: Page, paragraph: Locator, edge: "left" | "right") {
+  const popup = page.getByTestId("selection-popup")
+
+  await expect
+    .poll(
+      async () => {
+        if (await popup.isVisible().catch(() => false)) return true
+        await selectEdgeWord(paragraph, edge)
+        return popup.isVisible().catch(() => false)
+      },
+      { timeout: 15_000, intervals: [100, 200, 300, 500] },
+    )
+    .toBe(true)
+
+  return popup
+}
+
 test.describe("floating selection overlays stay inside the viewport", () => {
   test.describe.configure({ timeout: 90_000 })
   test.use({ viewport: { width: 760, height: 360 } })
@@ -188,10 +214,8 @@ test.describe("floating selection overlays stay inside the viewport", () => {
     const paragraphs = page.locator("#reading-text .prose-odessay p")
     const lastParagraph = paragraphs.last()
     await lastParagraph.evaluate((element) => element.scrollIntoView({ block: "end" }))
-    await selectEdgeWord(lastParagraph, "right")
 
-    const popup = page.getByTestId("selection-popup")
-    await expect(popup).toBeVisible()
+    const popup = await openSelectionPopup(page, lastParagraph, "right")
     await popup.getByRole("button", { name: "Annotate passage" }).click()
     const bubble = page.getByTestId("annotation-bubble")
     await expect(bubble).toBeVisible()
@@ -208,8 +232,7 @@ test.describe("floating selection overlays stay inside the viewport", () => {
     await page.getByRole("button", { name: "Cancel" }).click()
     const firstParagraph = paragraphs.first()
     await firstParagraph.evaluate((element) => element.scrollIntoView({ block: "start" }))
-    await selectEdgeWord(firstParagraph, "left")
-    await expect(popup).toBeVisible()
+    await openSelectionPopup(page, firstParagraph, "left")
     await popup.getByRole("button", { name: "Annotate passage" }).click()
     await expect(bubble).toBeVisible()
     await expectInsideViewport(bubble, page)
@@ -254,13 +277,35 @@ async function openAnnotationBubbleInEditor(page: Page, { seed = true, paragraph
 }
 
 /**
+ * Wait until the overlay stops moving and return its settled `y`.
+ *
+ * Entering voice mode changes the bubble's height, which reflows it a frame
+ * later. Sampling the box mid-reflow makes the "did it move?" comparison read a
+ * transient value, which is a flaky baseline rather than a real one.
+ */
+async function settledBubbleY(bubble: Locator) {
+  let previous: number | undefined
+  await expect
+    .poll(
+      async () => {
+        const y = (await bubble.boundingBox())?.y
+        const settled = y !== undefined && y === previous
+        previous = y
+        return settled
+      },
+      { timeout: 5_000, intervals: [80, 80, 120, 200] },
+    )
+    .toBe(true)
+  return previous as number
+}
+
+/**
  * Scroll the document and wait until the bubble has actually been repositioned.
  * Asserting the move keeps these tests from silently going vacuous: a draft that
  * survives a reposition that never happened proves nothing.
  */
 async function scrollAndExpectBubbleToMove(page: Page, bubble: Locator, distance: number) {
-  const before = await bubble.boundingBox()
-  expect(before).not.toBeNull()
+  const before = await settledBubbleY(bubble)
 
   const start = await page.evaluate(() => window.scrollY)
   // Scroll toward whichever end has room, so the anchor always moves.
@@ -274,7 +319,7 @@ async function scrollAndExpectBubbleToMove(page: Page, bubble: Locator, distance
 
   await expect
     .poll(async () => (await bubble.boundingBox())?.y, { timeout: 5_000 })
-    .not.toBe(before?.y)
+    .not.toBe(before)
 }
 
 test.describe("an open annotation draft survives repositioning", () => {
