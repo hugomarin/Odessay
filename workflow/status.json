@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-07-29",
+  "last_updated": "2026-07-30",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -106,6 +106,16 @@
     "notes": "Fase 5 cerrada: ODE-204–ODE-206. Fase 6 activa desde 2026-05-28. Completados: ODE-207 (Tauri shell), ODE-208 (FilesystemDocumentService), ODE-209 (Rich+Source mode sobre .md), ODE-210 (LocalIndex+AssetService+SettingsService), ODE-212 (perf-budgets grace_lte), ODE-213 (native app menu + filesystem open + desktop shortcuts), ODE-214 (native macOS menu bar). Pendientes: ODE-211 (DoD validation harness). DoD en workflow/define/dod-fase-6.md. wf-define ejecutado 2026-05-29."
   },
   "built": [
+    {
+      "what": "Build Settings archived writings with download, restore, and permanent cloud deletion [ODE-407]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-407",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-407/build-settings-archived-writings-with-download-restore-and-permanent",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/362",
+      "commit": "54ad6061",
+      "date": "2026-07-30",
+      "notes": "Settings adds 'Archived writings' alongside the renamed 'Status' section. Web and desktop services list, download, restore, and permanently delete soft-deleted writings. RLS policies and behavioral pgtap tests enforce owner-only archive access. Route restore validates version and uses conditional update to detect races; UI surfaces per-row errors with retry. Playwright covers navigation, empty state, restore, and cancel/confirm of permanent deletion. Traceability gates PASS; Vercel preview PASS."
+    },
     {
       "what": "test(desktop): add automated regression gate for contentless desktop draft lifecycle [ODE-406]",
       "phase": "Fase 9 — Workspace: Filesystem y Nube",
