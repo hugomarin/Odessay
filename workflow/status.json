@@ -107,6 +107,16 @@
   },
   "built": [
     {
+      "what": "test(desktop): add automated regression gate for contentless desktop draft lifecycle [ODE-406]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-406",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-406/add-an-automated-regression-gate-for-contentless-desktop-writing",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/361",
+      "commit": "53eff63",
+      "date": "2026-07-29",
+      "notes": "Closes ODE-406. Merged PR #361 as 53eff63e435b37b6facaf557fb9f07dc5b7864b2."
+    },
+    {
       "what": "fix(desktop): stabilize desktop navigation and editor tabs. Smooths sidebar collapse, prevents transient tab/file-state corruption, replaces unsupported WKWebView HTML5 tab drag-and-drop with pointer events, restores tab select/close/rename in WKWebView, reads packaged-build writing navigation from window.location, and falls back to the cached local record when the canonical Markdown file is missing. Releases app-v0.3.2 through app-v0.3.6. [ODE-365]",
       "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto",
       "issue": "ODE-365",
