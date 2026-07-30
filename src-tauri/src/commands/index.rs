@@ -843,6 +843,23 @@ pub fn catalog_detach_local_file(db_path: String, id: String) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn catalog_purge_document(db_path: String, id: String) -> Result<(), String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog purge begin: {e}"))?;
+    tx.execute(
+        "DELETE FROM writing_collections WHERE writing_id=?1",
+        params![id],
+    )
+    .map_err(|e| format!("catalog purge memberships: {e}"))?;
+    tx.execute("DELETE FROM documents WHERE id=?1", params![id])
+        .map_err(|e| format!("catalog purge document: {e}"))?;
+    tx.commit()
+        .map_err(|e| format!("catalog purge commit: {e}"))
+}
+
+#[tauri::command]
 pub fn catalog_update_mutation_status(
     db_path: String,
     mutation_id: String,
@@ -1424,6 +1441,31 @@ mod catalog_tests {
         assert!(record.local_present);
         assert!(!record.cloud_present);
         assert_eq!(record.sync_status, "local-only");
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn permanent_delete_ack_purges_catalog_and_durable_queue_atomically() {
+        let path = temp_db();
+        let mut archived = input("doc-purge", "/tmp/root/purge.md", "mutation-purge");
+        archived.document.local_present = false;
+        archived.document.cloud_present = true;
+        archived.document.deleted_at = Some("2026-07-29T00:00:00Z".into());
+        archived.binding = None;
+        archived.mutation.as_mut().unwrap().operation = "delete".into();
+        catalog_dual_write(path.clone(), archived).unwrap();
+
+        catalog_purge_document(path.clone(), "doc-purge".into()).unwrap();
+
+        assert!(catalog_get_by_id(path.clone(), "doc-purge".into()).unwrap().is_none());
+        let conn = open_db(&path).unwrap();
+        let mutations: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sync_mutations WHERE document_id='doc-purge'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(mutations, 0);
+        drop(conn);
         let _ = fs::remove_file(path);
     }
 

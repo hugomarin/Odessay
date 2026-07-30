@@ -18,6 +18,7 @@ import {
   tauriCatalogApplyCollectionSnapshot,
   tauriCatalogEnqueueMutation,
   tauriCatalogListPendingMetadataMutations,
+  tauriCatalogPurgeDocument,
   tauriCatalogListPendingMutations,
   tauriCatalogUpdateMetadataMutationStatus,
   tauriCatalogUpdateMutationStatus,
@@ -186,7 +187,44 @@ async function processMutation(
   const version = Number(payload.version ?? 1)
   const supabase = createDesktopClient()
 
+  if (payload.mutationKind === "restore") {
+    const { error, count } = await supabase.from("writings").update({
+      deleted_at: null, updated_at: updatedAt, version,
+    }, { count: "exact" }).eq("id", mutation.documentId).eq("author_id", userId)
+    if (error) throw new Error(error.message)
+    if (requireAffectedRows(count) === 0) throw new Error("Archived cloud writing was not restored")
+    ctx.cloudConfirmed.add(mutation.documentId)
+    if (!record) throw new Error("Restored writing is absent from the desktop catalog")
+    ctx.confirmedSnapshots.push({
+      id: record.id,
+      localPresent: false,
+      cloudPresent: true,
+      cloudAccountId: userId,
+      syncStatus: "synced",
+      deletedAt: null,
+      contentHash: null,
+      title: record.title,
+      slug: record.slug,
+      status: record.status,
+      artifactType: record.artifactType,
+      visibility: record.visibility,
+      version,
+      createdAt: record.createdAt,
+      modifiedAt: Date.parse(updatedAt),
+    })
+    return
+  }
+
   if (mutation.operation === "delete") {
+    if (payload.mutationKind === "permanent-delete") {
+      const { error, count } = await supabase.from("writings").delete({ count: "exact" })
+        .eq("id", mutation.documentId).eq("author_id", userId).not("deleted_at", "is", null)
+      if (error) throw new Error(error.message)
+      // Permanent deletion is idempotent. A zero-row response means the cloud
+      // tombstone is already absent, so the durable local purge may converge.
+      requireAffectedRows(count)
+      return
+    }
     const deletedAt = payloadValue(payload, "deletedAt", "deleted_at") ?? updatedAt
     const { error, count } = await supabase.from("writings").update({
       deleted_at: deletedAt,
@@ -423,6 +461,10 @@ export const desktopCatalogSyncService: SyncService = {
         try {
           await processMutation(userId, mutation, ctx)
           await tauriCatalogUpdateMutationStatus(store.dbPath, mutation.id, "synced", mutation.attemptCount, null, null)
+          const completedPayload = JSON.parse(mutation.payloadJson) as Record<string, unknown>
+          if (completedPayload.mutationKind === "permanent-delete") {
+            await tauriCatalogPurgeDocument(store.dbPath, mutation.documentId)
+          }
         } catch (error) {
           failed.push(mutation.id)
           const attempts = mutation.attemptCount + 1

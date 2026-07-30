@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest"
+import { afterEach, describe, expect, it, beforeEach } from "vitest"
 import { vi } from "vitest"
 
 vi.mock("@/lib/supabase/shared", () => ({
@@ -68,6 +68,10 @@ describe("updateSession", () => {
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
   })
 
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   function makeRequest(pathname: string) {
     return new NextRequest(new URL(`https://example.com${pathname}`))
   }
@@ -109,6 +113,22 @@ describe("updateSession", () => {
   it("still redirects unauthenticated users away from private routes", async () => {
     const request = makeRequest("/desk")
     const response = await updateSession(request)
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toContain("/login")
+  })
+
+  it("allows local evidence routes only when the test fixture flag is enabled", async () => {
+    vi.stubEnv("ODE_TEST_LINK_FIXTURES", "1")
+    const response = await updateSession(makeRequest("/evidence/settings-archived"))
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get("location")).toBeNull()
+    expect(mockGetUser).not.toHaveBeenCalled()
+  })
+
+  it("keeps evidence routes private without the local fixture flag", async () => {
+    const response = await updateSession(makeRequest("/evidence/settings-archived"))
+
     expect(response.status).toBe(307)
     expect(response.headers.get("location")).toContain("/login")
   })

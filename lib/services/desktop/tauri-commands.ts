@@ -232,6 +232,10 @@ export async function tauriCatalogUpdateMutationStatus(
   return invoke<void>("catalog_update_mutation_status", { dbPath, mutationId, status, attemptCount, nextRetryAt, lastError })
 }
 
+export async function tauriCatalogPurgeDocument(dbPath: string, id: string): Promise<void> {
+  return invoke<void>("catalog_purge_document", { dbPath, id })
+}
+
 export type DesktopCatalogMutationRow = {
   id: string
   documentId: string

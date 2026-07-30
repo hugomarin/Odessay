@@ -150,6 +150,21 @@ export class FilesystemDocumentService implements DocumentService {
     return err("UNAVAILABLE", "FilesystemDocumentService does not own document metadata")
   }
 
+  async restoreWriting(): Promise<ServiceResponse<WritingRecord>> {
+    return err("UNAVAILABLE", "FilesystemDocumentService does not own cloud lifecycle")
+  }
+
+  async permanentlyDeleteWriting(): Promise<ServiceResponse<void>> {
+    return err("UNAVAILABLE", "FilesystemDocumentService does not own cloud lifecycle")
+  }
+
+  async downloadWriting(input: { writingId: string }): Promise<ServiceResponse<ExportedDocumentArtifact>> {
+    try {
+      const markdown = await tauriOpenFile(input.writingId)
+      return ok({ writingId: input.writingId, format: "markdown", fileName: input.writingId.split(/[\\/]/).pop() ?? "writing.md", mimeType: "text/markdown", bytes: new TextEncoder().encode(markdown) })
+    } catch (error) { return err("STORAGE_ERROR", error instanceof Error ? error.message : "Download failed") }
+  }
+
   // ─── Auto-save (debounced) ─────────────────────────────────────────────────
 
   /**

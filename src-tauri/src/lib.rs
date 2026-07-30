@@ -280,6 +280,7 @@ pub fn run() {
             commands::index::catalog_list,
             commands::index::catalog_hydrate_excerpts,
             commands::index::catalog_detach_local_file,
+            commands::index::catalog_purge_document,
             commands::index::catalog_apply_reconcile,
             commands::index::catalog_update_mutation_status,
             commands::index::catalog_enqueue_mutation,

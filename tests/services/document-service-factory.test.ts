@@ -1,10 +1,12 @@
 /** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 
 const mocks = vi.hoisted(() => ({
   desktop: true,
   catalogGet: vi.fn(),
-  catalogList: vi.fn(async () => []),
+  catalogList: vi.fn<() => Promise<DocumentCatalogRecord[]>>(async () => []),
+  authGetSession: vi.fn(),
   catalogResolve: vi.fn(),
   catalogDetach: vi.fn(),
   applyReconcile: vi.fn(),
@@ -24,10 +26,17 @@ const mocks = vi.hoisted(() => ({
   getDesktopSettings: vi.fn(async () => ({ data: { workspaces: [] }, error: null })),
   upsertBindingRoot: vi.fn(),
   refreshReconcilerRoots: vi.fn(),
+  syncFlush: vi.fn(),
 }))
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
   isDesktopRuntime: () => mocks.desktop,
+}))
+vi.mock("@/lib/services/auth-service-factory", () => ({
+  getAuthService: () => ({ getSession: mocks.authGetSession }),
+}))
+vi.mock("@/lib/sync/sync-service-factory", () => ({
+  getSyncService: () => ({ flushPending: mocks.syncFlush }),
 }))
 vi.mock("@tauri-apps/api/path", () => ({
   appConfigDir: async () => "/config",
@@ -78,7 +87,7 @@ vi.mock("@/lib/services/web-document-service", () => ({
 
 const id = "11111111-1111-4111-8111-111111111111"
 const path = "/docs/Letter.md"
-const catalogRecord = {
+const catalogRecord: DocumentCatalogRecord = {
   id,
   localPresent: true,
   cloudPresent: false,
@@ -131,6 +140,17 @@ describe("desktop document service after compatibility retirement", () => {
     vi.resetModules()
     vi.clearAllMocks()
     mocks.desktop = true
+    mocks.authGetSession.mockResolvedValue({
+      data: {
+        status: "authenticated",
+        user: { id: "account-1", email: null, pendingEmail: null, emailConfirmedAt: null, displayName: null, username: null },
+      },
+      error: null,
+    })
+    mocks.syncFlush.mockResolvedValue({
+      data: { processedMutations: 1, failedMutations: [], nextRetryAt: null },
+      error: null,
+    })
     mocks.catalogGet.mockResolvedValue(catalogRecord)
     mocks.openFile.mockResolvedValue({
       data: { ...writing, id: path, content: { ...writing.content, markdown: "Hello", richText: null } },
@@ -443,6 +463,169 @@ describe("desktop document service after compatibility retirement", () => {
 
     expect(result.error?.code).toBe("NOT_FOUND")
     expect(mocks.openFile).not.toHaveBeenCalled()
+  })
+
+  it("returns only archived catalog rows and paginates after filtering", async () => {
+    const archivedAt = "2026-01-02T00:00:00.000Z"
+    const archivedRecord = {
+      ...catalogRecord,
+      id: "22222222-2222-4222-8222-222222222222",
+      title: "Archived letter",
+      deletedAt: archivedAt,
+    }
+    const secondArchivedRecord = {
+      ...archivedRecord,
+      id: "33333333-3333-4333-8333-333333333333",
+      title: "Second archived letter",
+    }
+    mocks.catalogList.mockResolvedValue([
+      catalogRecord,
+      archivedRecord,
+      secondArchivedRecord,
+    ])
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).listWritings({
+      includeDeleted: true,
+      archivedOnly: true,
+      limit: 1,
+      offset: 1,
+    })
+
+    expect(mocks.catalogList).toHaveBeenCalledWith({
+      cloudAccountId: "account-1",
+      includeDeleted: true,
+      limit: 5000,
+    })
+    expect(result.error).toBeNull()
+    expect(result.data).toEqual([
+      expect.objectContaining({
+        id: secondArchivedRecord.id,
+        deletedAt: archivedAt,
+        archiveState: "archived",
+      }),
+    ])
+  })
+
+  it("waits for cloud acknowledgement before completing a permanent delete", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "deleted",
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).permanentlyDeleteWriting({ writingId: id })
+
+    expect(result.error).toBeNull()
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        mutation: expect.objectContaining({
+          operation: "delete",
+          payloadJson: expect.stringContaining("permanent-delete"),
+        }),
+      }),
+    )
+    expect(mocks.syncFlush).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for cloud acknowledgement before completing a restore", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "deleted",
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).restoreWriting({
+      writingId: id,
+      version: 1,
+      updatedAt: "2026-07-29T20:30:02.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        mutation: expect.objectContaining({
+          operation: "upsert",
+          payloadJson: expect.stringContaining("restore"),
+        }),
+      }),
+    )
+    expect(mocks.syncFlush).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects a stale desktop restore before writing a mutation", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      version: 2,
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).restoreWriting({
+      writingId: id,
+      version: 1,
+      updatedAt: "2026-07-29T20:30:02.000Z",
+    })
+
+    expect(result.error).toMatchObject({ code: "CONFLICT" })
+    expect(mocks.dualWrite).not.toHaveBeenCalled()
+    expect(mocks.syncFlush).not.toHaveBeenCalled()
+  })
+
+  it("keeps a failed restore archived and reports the cloud failure", async () => {
+    const archived = {
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "deleted" as const,
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    }
+    mocks.catalogGet.mockResolvedValue(archived)
+    mocks.syncFlush.mockImplementation(async () => {
+      const optimisticWrite = mocks.dualWrite.mock.calls[0]?.[1] as { mutation?: { id?: string } }
+      return {
+        data: { processedMutations: 1, failedMutations: [optimisticWrite.mutation?.id], nextRetryAt: null },
+        error: null,
+      }
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).restoreWriting({
+      writingId: id,
+      version: 1,
+      updatedAt: "2026-07-29T20:30:02.000Z",
+    })
+
+    expect(result.error).toMatchObject({ code: "UNAVAILABLE" })
+    expect(mocks.dualWrite).toHaveBeenCalledTimes(2)
+    expect(mocks.dualWrite).toHaveBeenLastCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        document: expect.objectContaining({
+          id,
+          deletedAt: archived.deletedAt,
+          syncStatus: "failed",
+        }),
+        mutation: expect.objectContaining({
+          operation: "upsert",
+          status: "failed",
+          payloadJson: expect.stringContaining("restore"),
+          nextRetryAt: expect.any(Number),
+        }),
+      }),
+    )
   })
 
   it("persists markdown, then manifest, then SQLite mutation", async () => {
