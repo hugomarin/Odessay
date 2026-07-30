@@ -293,6 +293,41 @@ describe("desktopCatalogSyncService", () => {
     ])
   })
 
+  it("restores idempotently and projects the active cloud row in the same flush", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "pending",
+      deletedAt: null,
+    }))
+    mocks.listPending.mockResolvedValue([mutationRow({
+      payloadJson: JSON.stringify({
+        mutationKind: "restore",
+        version: 3,
+        updatedAt: "2026-07-29T20:30:02Z",
+      }),
+    })])
+    mocks.update.mockResolvedValue({ error: null, count: 1 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.update).toHaveBeenCalledWith({
+      deleted_at: null,
+      updated_at: "2026-07-29T20:30:02Z",
+      version: 3,
+    }, { count: "exact" })
+    expect(mocks.applyCloudSnapshots).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "doc-1",
+        cloudPresent: true,
+        deletedAt: null,
+        syncStatus: "synced",
+      }),
+    ])
+  })
+
   it("purges locally when a permanent delete finds the cloud row already absent", async () => {
     mocks.catalogGet.mockResolvedValue(catalogRecord({
       localPresent: false, cloudPresent: false, syncStatus: "deleted",

@@ -190,10 +190,28 @@ async function processMutation(
   if (payload.mutationKind === "restore") {
     const { error, count } = await supabase.from("writings").update({
       deleted_at: null, updated_at: updatedAt, version,
-    }, { count: "exact" }).eq("id", mutation.documentId).eq("author_id", userId).not("deleted_at", "is", null)
+    }, { count: "exact" }).eq("id", mutation.documentId).eq("author_id", userId)
     if (error) throw new Error(error.message)
     if (requireAffectedRows(count) === 0) throw new Error("Archived cloud writing was not restored")
     ctx.cloudConfirmed.add(mutation.documentId)
+    if (!record) throw new Error("Restored writing is absent from the desktop catalog")
+    ctx.confirmedSnapshots.push({
+      id: record.id,
+      localPresent: false,
+      cloudPresent: true,
+      cloudAccountId: userId,
+      syncStatus: "synced",
+      deletedAt: null,
+      contentHash: null,
+      title: record.title,
+      slug: record.slug,
+      status: record.status,
+      artifactType: record.artifactType,
+      visibility: record.visibility,
+      version,
+      createdAt: record.createdAt,
+      modifiedAt: Date.parse(updatedAt),
+    })
     return
   }
 

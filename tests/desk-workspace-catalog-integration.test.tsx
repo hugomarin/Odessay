@@ -61,6 +61,8 @@ const catalog = vi.hoisted(() => {
 })
 
 const storage = vi.hoisted(() => ({ writings: [] as LocalWriting[] }))
+const localScope = vi.hoisted(() => ({ value: "anonymous" as string }))
+const authSession = vi.hoisted(() => ({ userId: null as string | null }))
 const collectionStore = vi.hoisted(() => ({
   state: { collections: [] as unknown[], writingCollections: [] as unknown[] },
   load: vi.fn(),
@@ -87,7 +89,7 @@ vi.mock("@/lib/local-db", () => ({
     collections: { getAll: async () => [] },
     writingCollections: { listAll: async () => [] },
   },
-  getLocalDBScope: () => "anonymous",
+  getLocalDBScope: () => localScope.value,
   subscribeToLocalDBScopeChanges: () => () => {},
   subscribeToLocalDBChanges: () => () => {},
 }))
@@ -158,8 +160,13 @@ vi.mock("@/lib/sync/queue", () => ({
 }))
 vi.mock("@/lib/sync/remote-bootstrap", () => ({ invalidateWebWritingsHydrationFreshness: vi.fn() }))
 vi.mock("@/lib/collections/remote-bootstrap", () => ({ invalidateWebCollectionsHydrationFreshness: vi.fn() }))
-vi.mock("@/lib/services/auth-service-factory", () => ({
-  getAuthService: () => ({ getSession: async () => ({ data: { user: null } }) }),
+vi.mock("@/lib/services/desktop-auth-service", () => ({
+  desktopAuthService: {
+    getSession: async () => ({
+      data: { user: authSession.userId ? { id: authSession.userId } : null },
+      error: null,
+    }),
+  },
 }))
 vi.mock("@/lib/services/document-service-factory", () => ({
   getDocumentService: async () => ({
@@ -288,6 +295,8 @@ beforeEach(() => {
   catalog.state.blockNextList = null
   catalog.listeners.clear()
   storage.writings = []
+  localScope.value = "anonymous"
+  authSession.userId = null
   collectionStore.state = { collections: [], writingCollections: [] }
   collectionStore.load.mockImplementation(async () => collectionStore.state)
   collectionStore.set.mockImplementation(async (writingId: string, collectionIds: string[]) => {
@@ -312,6 +321,34 @@ afterEach(() => {
 })
 
 describe("Desk consumes the DocumentCatalog", () => {
+  it("includes cloud-only rows for the authenticated desktop account", async () => {
+    authSession.userId = "account-1"
+    catalog.state.records = [
+      makeRecord({
+        id: "cloud-restored",
+        title: "Restored cloud writing",
+        localPresent: false,
+        cloudPresent: true,
+        cloudAccountId: "account-1",
+        syncStatus: "synced",
+      }),
+    ]
+
+    const { loadDeskCatalogData } = await import("@/lib/queries/desk-catalog-source")
+    const result = await loadDeskCatalogData()
+
+    expect(catalog.instance.list).toHaveBeenCalledWith({
+      cloudAccountId: "account-1",
+      limit: 10_000,
+    })
+    expect(result.writings).toEqual([
+      expect.objectContaining({
+        id: "cloud-restored",
+        lifecycle: "server-confirmed",
+      }),
+    ])
+  })
+
   it("renders the catalog base set and its state, not the local-only stragglers", async () => {
     catalog.state.records = [
       makeRecord({

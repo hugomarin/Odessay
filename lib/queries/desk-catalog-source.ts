@@ -144,8 +144,11 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
   const userId = scope === "anonymous" ? null : scope
 
   if (isDesktopRuntime()) {
+    const { desktopAuthService } = await import("@/lib/services/desktop-auth-service")
+    const session = await desktopAuthService.getSession()
+    const desktopUserId = session.data?.user?.id ?? null
     const [records, metadata] = await Promise.all([
-      loadCatalogRecords({ limit: CATALOG_LIST_LIMIT }),
+      loadCatalogRecords({ cloudAccountId: desktopUserId, limit: CATALOG_LIST_LIMIT }),
       loadDesktopCollections(),
     ])
     const documentStateById: Record<string, DocumentState> = {}
@@ -153,7 +156,7 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
       documentStateById[record.id] = deriveDocumentStateFromCatalogRecord(record)
       return synthesizeWritingFromRecord(record)
     })
-    return { writings, documentStateById, ...metadata, userId }
+    return { writings, documentStateById, ...metadata, userId: desktopUserId }
   }
 
   const [localWritings, collections, writingCollections] = await Promise.all([

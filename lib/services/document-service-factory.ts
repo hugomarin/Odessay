@@ -449,6 +449,7 @@ class DesktopDocumentService implements DocumentService {
     try {
       const current = await this.runtime.catalog.getById(input.writingId)
       if (!current?.deletedAt) return err("NOT_FOUND", `Archived writing ${input.writingId} not found`)
+      const mutationId = crypto.randomUUID()
       const restored = { ...current, deletedAt: null, syncStatus: "pending" as const, modifiedAt: Date.parse(input.updatedAt) }
       await this.runtime.catalog.commitDualWrite({
         document: {
@@ -462,8 +463,28 @@ class DesktopDocumentService implements DocumentService {
           bindingRootId: current.binding.bindingRootId, rootPath: current.binding.canonicalPath.slice(0, -(current.binding.relativePath.length + 1)), manifestVersion: 2, visibleAsWorkspace: false,
           relativePath: current.binding.relativePath, canonicalPath: current.binding.canonicalPath, inode: current.binding.inode, contentHash: current.binding.contentHash, size: current.binding.size, lastSeenAt: current.binding.lastSeenAt,
         } : null,
-        mutation: { id: crypto.randomUUID(), operation: "upsert", payloadJson: JSON.stringify({ mutationKind: "restore", deletedAt: null, version: Math.max(1, current.version ?? 1), updatedAt: input.updatedAt }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
+        mutation: { id: mutationId, operation: "upsert", payloadJson: JSON.stringify({ mutationKind: "restore", deletedAt: null, version: Math.max(1, current.version ?? 1), updatedAt: input.updatedAt }), status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: Date.now(), lastError: null },
       })
+      const { getSyncService } = await import("@/lib/sync/sync-service-factory")
+      const flushed = await getSyncService().flushPending()
+      if (flushed.error || flushed.data?.failedMutations.includes(mutationId)) {
+        await this.runtime.catalog.commitDualWrite({
+          document: {
+            id: current.id, localPresent: current.localPresent, cloudPresent: current.cloudPresent,
+            cloudAccountId: current.cloudAccountId, syncStatus: "failed", title: current.title,
+            slug: current.slug, status: current.status, artifactType: current.artifactType,
+            visibility: current.visibility, version: current.version, deletedAt: current.deletedAt,
+            createdAt: current.createdAt, modifiedAt: current.modifiedAt,
+          },
+          binding: current.binding ? {
+            bindingRootId: current.binding.bindingRootId, rootPath: current.binding.canonicalPath.slice(0, -(current.binding.relativePath.length + 1)), manifestVersion: 2, visibleAsWorkspace: false,
+            relativePath: current.binding.relativePath, canonicalPath: current.binding.canonicalPath, inode: current.binding.inode, contentHash: current.binding.contentHash, size: current.binding.size, lastSeenAt: current.binding.lastSeenAt,
+          } : null,
+          mutation: null,
+        })
+        if (flushed.error) return { data: null, error: flushed.error }
+        return err("UNAVAILABLE", "The archived writing could not be restored")
+      }
       return ok(toWriting(restored, {}, ""))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }

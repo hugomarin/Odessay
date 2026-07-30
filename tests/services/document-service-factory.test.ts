@@ -533,6 +533,74 @@ describe("desktop document service after compatibility retirement", () => {
     expect(mocks.syncFlush).toHaveBeenCalledTimes(1)
   })
 
+  it("waits for cloud acknowledgement before completing a restore", async () => {
+    mocks.catalogGet.mockResolvedValue({
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "deleted",
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).restoreWriting({
+      writingId: id,
+      updatedAt: "2026-07-29T20:30:02.000Z",
+    })
+
+    expect(result.error).toBeNull()
+    expect(mocks.dualWrite).toHaveBeenCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        mutation: expect.objectContaining({
+          operation: "upsert",
+          payloadJson: expect.stringContaining("restore"),
+        }),
+      }),
+    )
+    expect(mocks.syncFlush).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps a failed restore archived and reports the cloud failure", async () => {
+    const archived = {
+      ...catalogRecord,
+      localPresent: false,
+      cloudPresent: false,
+      syncStatus: "deleted" as const,
+      deletedAt: "2026-01-02T00:00:00.000Z",
+      binding: null,
+    }
+    mocks.catalogGet.mockResolvedValue(archived)
+    mocks.syncFlush.mockImplementation(async () => {
+      const optimisticWrite = mocks.dualWrite.mock.calls[0]?.[1] as { mutation?: { id?: string } }
+      return {
+        data: { processedMutations: 1, failedMutations: [optimisticWrite.mutation?.id], nextRetryAt: null },
+        error: null,
+      }
+    })
+
+    const { getDocumentService } = await import("@/lib/services/document-service-factory")
+    const result = await (await getDocumentService()).restoreWriting({
+      writingId: id,
+      updatedAt: "2026-07-29T20:30:02.000Z",
+    })
+
+    expect(result.error).toMatchObject({ code: "UNAVAILABLE" })
+    expect(mocks.dualWrite).toHaveBeenCalledTimes(2)
+    expect(mocks.dualWrite).toHaveBeenLastCalledWith(
+      "/config/desktop-index.sqlite3",
+      expect.objectContaining({
+        document: expect.objectContaining({
+          id,
+          deletedAt: archived.deletedAt,
+          syncStatus: "failed",
+        }),
+        mutation: null,
+      }),
+    )
+  })
+
   it("persists markdown, then manifest, then SQLite mutation", async () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).saveWriting({ writing })
