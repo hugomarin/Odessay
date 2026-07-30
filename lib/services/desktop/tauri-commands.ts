@@ -158,8 +158,9 @@ export async function tauriCatalogDualWrite(dbPath: string, input: DesktopCatalo
   return invoke<void>("catalog_dual_write", { dbPath, input })
 }
 
-export async function tauriCatalogBulkDualWrite(dbPath: string, inputs: DesktopCatalogDualWriteInput[]): Promise<void> {
-  return invoke<void>("catalog_bulk_dual_write", { dbPath, inputs })
+/** Returns the ids written, in input order, so the caller can emit one CatalogChange. */
+export async function tauriCatalogBulkDualWrite(dbPath: string, inputs: DesktopCatalogDualWriteInput[]): Promise<string[]> {
+  return invoke<string[]>("catalog_bulk_dual_write", { dbPath, inputs })
 }
 
 export async function tauriCatalogCountBindingRootDocuments(dbPath: string, bindingRootId: string): Promise<{ total: number; cloud: number }> {
@@ -168,6 +169,15 @@ export async function tauriCatalogCountBindingRootDocuments(dbPath: string, bind
 
 export async function tauriCatalogApplyWorkspaceRemoval(dbPath: string, bindingRootId: string, deletedAt: string, updatedAt: string): Promise<string[]> {
   return invoke<string[]>("catalog_apply_workspace_removal", { dbPath, bindingRootId, deletedAt, updatedAt, nowMillis: Date.now() })
+}
+
+/**
+ * Re-adding a previously removed folder: restores local-only documents to the
+ * active catalog and returns only the cloud-archived ones, which still need the
+ * "local wins" upsert. Filtering happens in SQL — never load the whole catalog.
+ */
+export async function tauriCatalogReactivateBindingRoot(dbPath: string, bindingRootId: string): Promise<DesktopCatalogRow[]> {
+  return invoke<DesktopCatalogRow[]>("catalog_reactivate_binding_root", { dbPath, bindingRootId })
 }
 
 export async function tauriCatalogApplyCloudSnapshots(

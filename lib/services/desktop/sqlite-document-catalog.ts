@@ -13,6 +13,7 @@ import {
   tauriCatalogApplyWorkspaceRemoval,
   tauriCatalogBulkDualWrite,
   tauriCatalogCountBindingRootDocuments,
+  tauriCatalogReactivateBindingRoot,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
   tauriCatalogGetById,
@@ -148,19 +149,19 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
   }
 
   /**
-   * Documents that were archived in cloud when a workspace was removed, but whose
-   * local `.md` is now present again after the root was re-added. Local wins.
+   * Re-adding a previously removed workspace folder (ODE-408).
+   *
+   * Restores local-only documents to the active catalog in SQLite and returns
+   * only the ones that were archived *in cloud* and whose local `.md` is present
+   * again — those still need the "local wins" content upsert, which the caller
+   * applies through the normal dual-write path.
+   *
+   * A local-only document is never returned here: it has no cloud row, so
+   * re-adding its folder must not enqueue anything toward Supabase.
    */
-  async listReactivatableDocuments(bindingRootId: string): Promise<DocumentCatalogRecord[]> {
-    const rows = await tauriCatalogList(this.dbPath, { includeDeleted: true, limit: 5000 })
-    return rows
-      .map(toRecord)
-      .filter(
-        (record) =>
-          record.binding?.bindingRootId === bindingRootId &&
-          record.localPresent &&
-          record.deletedAt !== null,
-      )
+  async reactivateBindingRoot(bindingRootId: string): Promise<DocumentCatalogRecord[]> {
+    const rows = await tauriCatalogReactivateBindingRoot(this.dbPath, bindingRootId)
+    return rows.map(toRecord)
   }
 
   /**

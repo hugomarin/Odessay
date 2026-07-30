@@ -276,6 +276,7 @@ pub fn run() {
             commands::index::catalog_bulk_dual_write,
             commands::index::catalog_count_binding_root_documents,
             commands::index::catalog_apply_workspace_removal,
+            commands::index::catalog_reactivate_binding_root,
             commands::index::catalog_apply_cloud_snapshots,
             commands::index::catalog_find_eligible_cloud_hash,
             commands::index::catalog_get_by_id,

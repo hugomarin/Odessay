@@ -20,7 +20,8 @@ const tauriMocks = vi.hoisted(() => ({
   tauriCatalogList: vi.fn(async () => [] as unknown[]),
   tauriCatalogCountBindingRootDocuments: vi.fn(async () => ({ total: 0, cloud: 0 })),
   tauriCatalogApplyWorkspaceRemoval: vi.fn(async () => [] as string[]),
-  tauriCatalogBulkDualWrite: vi.fn(async () => undefined),
+  tauriCatalogReactivateBindingRoot: vi.fn(async () => [] as unknown[]),
+  tauriCatalogBulkDualWrite: vi.fn(async () => [] as string[]),
 }));
 const reconcilerMocks = vi.hoisted(() => ({ refreshRoots: vi.fn() }));
 const factoryMocks = vi.hoisted(() => ({
@@ -65,6 +66,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogList: tauriMocks.tauriCatalogList,
   tauriCatalogCountBindingRootDocuments: tauriMocks.tauriCatalogCountBindingRootDocuments,
   tauriCatalogApplyWorkspaceRemoval: tauriMocks.tauriCatalogApplyWorkspaceRemoval,
+  tauriCatalogReactivateBindingRoot: tauriMocks.tauriCatalogReactivateBindingRoot,
   tauriCatalogBulkDualWrite: tauriMocks.tauriCatalogBulkDualWrite,
 }));
 vi.mock("@/lib/editor/document-serialization", () => ({
@@ -199,7 +201,8 @@ describe("DesktopWorkspaceService assignments", () => {
     tauriMocks.tauriCatalogList.mockReset().mockResolvedValue([]);
     tauriMocks.tauriCatalogCountBindingRootDocuments.mockReset().mockResolvedValue({ total: 0, cloud: 0 });
     tauriMocks.tauriCatalogApplyWorkspaceRemoval.mockReset().mockResolvedValue([]);
-    tauriMocks.tauriCatalogBulkDualWrite.mockReset().mockResolvedValue(undefined);
+    tauriMocks.tauriCatalogReactivateBindingRoot.mockReset().mockResolvedValue([]);
+    tauriMocks.tauriCatalogBulkDualWrite.mockReset().mockResolvedValue([]);
     reconcilerMocks.refreshRoots.mockReset();
     factoryMocks.relocateDesktopWriting.mockReset();
     // Default: the writing has no local file, so membership stays metadata-only.
@@ -576,6 +579,56 @@ describe("workspace removal (ODE-408)", () => {
     expect(reconcilerMocks.refreshRoots).toHaveBeenCalled();
   });
 
+  const archivedCloudRow = () => ({
+    id: "doc-1",
+    localPresent: true,
+    cloudPresent: true,
+    cloudAccountId: "user-1",
+    syncStatus: "pending",
+    title: "Note",
+    slug: "note",
+    status: "draft",
+    artifactType: "general",
+    visibility: "private",
+    version: 5,
+    deletedAt: "2026-07-29T00:00:00.000Z",
+    createdAt: 1,
+    modifiedAt: 2,
+    excerpt: null,
+    excerptContentHash: null,
+    bindingRootId: "root-new",
+    relativePath: "Note.md",
+    canonicalPath: "/Users/me/new-workspace/Note.md",
+    inode: 1,
+    contentHash: "hash",
+    size: 20,
+    lastSeenAt: Date.now(),
+  });
+
+  const mockReAddSnapshot = () => {
+    tauriMocks.tauriWorkspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/new-workspace",
+      bindingRootId: "root-new",
+      name: "New Workspace",
+      selectedPaths: ["Note.md"],
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: Date.now(),
+      files: [
+        {
+          id: "doc-1",
+          path: "/Users/me/new-workspace/Note.md",
+          relativePath: "Note.md",
+          name: "Note.md",
+          modifiedAt: Date.now(),
+          size: 20,
+          inode: 1,
+          contentHash: "hash",
+        },
+      ],
+    });
+  };
+
   it("reactivates archived cloud documents when the workspace folder is re-added", async () => {
     await settings.updateDesktopSettings({ bindingRoots: [] });
     tauriMocks.tauriWorkspaceSync.mockResolvedValue({
@@ -599,32 +652,8 @@ describe("workspace removal (ODE-408)", () => {
         },
       ],
     });
-    tauriMocks.tauriCatalogList.mockResolvedValue([
-      {
-        id: "doc-1",
-        localPresent: true,
-        cloudPresent: true,
-        cloudAccountId: "user-1",
-        syncStatus: "pending",
-        title: "Note",
-        slug: "note",
-        status: "draft",
-        artifactType: "general",
-        visibility: "private",
-        version: 5,
-        deletedAt: "2026-07-29T00:00:00.000Z",
-        createdAt: 1,
-        modifiedAt: 2,
-        excerpt: null,
-        excerptContentHash: null,
-        bindingRootId: "root-new",
-        relativePath: "Note.md",
-        canonicalPath: "/Users/me/new-workspace/Note.md",
-        inode: 1,
-        contentHash: "hash",
-        size: 20,
-        lastSeenAt: Date.now(),
-      },
+    tauriMocks.tauriCatalogReactivateBindingRoot.mockResolvedValue([
+      archivedCloudRow(),
     ]);
     tauriMocks.tauriOpenFile.mockResolvedValue("# Note\n\nReactivated content");
 
@@ -649,6 +678,126 @@ describe("workspace removal (ODE-408)", () => {
     expect(payload.deletedAt).toBeNull();
     expect(payload.bodyText).toBe("Reactivated content");
     expect(payload.version).toBe(6);
+    // Local wins: the binding root path comes from the freshly synced snapshot,
+    // never reconstructed by slicing the canonical path.
+    expect(input.binding!.rootPath).toBe("/Users/me/new-workspace");
+  });
+
+  it("never enqueues a cloud mutation when the re-added root has only local-only documents", async () => {
+    await settings.updateDesktopSettings({ bindingRoots: [] });
+    mockReAddSnapshot();
+    // A local-only document is restored inside `catalog_reactivate_binding_root`
+    // itself and is deliberately absent from the returned set, so it can never
+    // reach the sync queue. Inventing a cloud record for it is exactly what the
+    // brief forbids.
+    tauriMocks.tauriCatalogReactivateBindingRoot.mockResolvedValue([]);
+
+    await service.addExistingWorkspaceWithSelection("/Users/me/new-workspace", [
+      "Note.md",
+    ]);
+
+    expect(tauriMocks.tauriCatalogReactivateBindingRoot).toHaveBeenCalledWith(
+      "/tmp/cfg/desktop-index.sqlite3",
+      "root-new",
+    );
+    expect(tauriMocks.tauriCatalogBulkDualWrite).not.toHaveBeenCalled();
+  });
+
+  it("keeps the workspace registered when reactivation fails to read a local file", async () => {
+    await settings.updateDesktopSettings({ bindingRoots: [] });
+    mockReAddSnapshot();
+    tauriMocks.tauriCatalogReactivateBindingRoot.mockResolvedValue([
+      archivedCloudRow(),
+    ]);
+    tauriMocks.tauriOpenFile.mockRejectedValue(new Error("EACCES"));
+
+    const added = await service.addExistingWorkspaceWithSelection(
+      "/Users/me/new-workspace",
+      ["Note.md"],
+    );
+
+    // The adoption already committed the WorkspaceRecord and the BindingRoot; a
+    // reactivation failure must not report it as failed nor half-write the batch.
+    expect(added?.rootPath).toBe("/Users/me/new-workspace");
+    expect(settings.store.bindingRoots).toHaveLength(1);
+    expect(tauriMocks.tauriCatalogBulkDualWrite).not.toHaveBeenCalled();
+  });
+
+  it("removes a workspace whose folder is not a BindingRoot without touching the catalog", async () => {
+    await settings.updateDesktopSettings({ bindingRoots: [] });
+
+    await service.removeWorkspace("drafts");
+
+    // A presentation-only / pre-BindingRoot workspace has nothing to retire, but
+    // must still be removable.
+    expect(tauriMocks.tauriCatalogApplyWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(await service.listWorkspaces()).toEqual([
+      expect.objectContaining({ slug: "letters" }),
+    ]);
+  });
+
+  it("resolves the BindingRoot even when the workspace path carries a trailing separator", async () => {
+    await settings.updateDesktopSettings({
+      bindingRoots: [{ ...bindingRoot, rootPath: "/Users/me/drafts/" }],
+    });
+    tauriMocks.tauriCatalogCountBindingRootDocuments.mockResolvedValue({
+      total: 2,
+      cloud: 1,
+    });
+
+    // Both stores are normalized before comparing: a one-sided comparison used to
+    // miss the root and silently skip the catalog half of the removal.
+    expect(await service.previewWorkspaceRemoval("drafts")).toEqual({
+      total: 2,
+      cloud: 1,
+    });
+
+    await service.removeWorkspace("drafts");
+
+    expect(tauriMocks.tauriCatalogApplyWorkspaceRemoval).toHaveBeenCalledTimes(1);
+    expect(settings.store.bindingRoots).toEqual([]);
+  });
+
+  it("is idempotent when the removal is retried after a partial failure", async () => {
+    await settings.updateDesktopSettings({ bindingRoots: [bindingRoot] });
+
+    await service.removeWorkspace("drafts");
+    // Retry after e.g. an app restart: the root is already gone, so the second
+    // pass must converge instead of throwing or re-running the catalog write.
+    await service.removeWorkspace("drafts");
+
+    expect(tauriMocks.tauriCatalogApplyWorkspaceRemoval).toHaveBeenCalledTimes(1);
+    expect(settings.store.bindingRoots).toEqual([]);
+    expect(await service.listWorkspaces()).toEqual([
+      expect.objectContaining({ slug: "letters" }),
+    ]);
+  });
+
+  it("stops observing the removed root before returning", async () => {
+    await settings.updateDesktopSettings({ bindingRoots: [bindingRoot] });
+
+    await service.removeWorkspace("drafts");
+
+    // The reconciler reloads roots from settings, which no longer contain the
+    // removed one — a late filesystem event cannot reproject its documents.
+    expect(settings.store.bindingRoots).toEqual([]);
+    const refreshCallOrder =
+      reconcilerMocks.refreshRoots.mock.invocationCallOrder.at(-1) ?? 0;
+    const removalCallOrder =
+      tauriMocks.tauriCatalogApplyWorkspaceRemoval.mock.invocationCallOrder.at(-1) ?? 0;
+    expect(refreshCallOrder).toBeGreaterThan(removalCallOrder);
+  });
+
+  it("removing the last workspace leaves no substitute writing behind", async () => {
+    await settings.updateDesktopSettings({ bindingRoots: [bindingRoot] });
+
+    await service.removeWorkspace("drafts");
+    await service.removeWorkspace("letters");
+
+    expect(await service.listWorkspaces()).toEqual([]);
+    // No draft is minted as a fallback for an empty Desk.
+    expect(tauriMocks.tauriCreateFile).not.toHaveBeenCalled();
+    expect(tauriMocks.tauriWriteFile).not.toHaveBeenCalled();
   });
 });
 });

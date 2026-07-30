@@ -16,7 +16,10 @@ import {
   relocateDesktopWriting,
   relocateDesktopWritingByCanonicalPath,
 } from "@/lib/services/document-service-factory";
-import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
+import {
+  DesktopSettingsService,
+  type BindingRootSettingRecord,
+} from "@/lib/services/desktop/desktop-settings-service";
 import { refreshWorkspaceReconcilerRoots } from "./desktop-workspace-reconciler";
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog";
 import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization";
@@ -383,7 +386,18 @@ export class DesktopWorkspaceService {
     // If this root was previously removed, any surviving local `.md` files have
     // just been re-bound by the reconciler. Re-upload their current contents so
     // the cloud archive is reversed (local wins).
-    await this.reactivateArchivedCloudDocuments(snapshot.bindingRootId);
+    //
+    // The workspace and its BindingRoot are already durably registered at this
+    // point, so a reactivation failure must not present a completed adoption as
+    // failed. It is idempotent: the next add, restart or rescan retries it.
+    try {
+      await this.reactivateArchivedCloudDocuments(
+        snapshot.bindingRootId,
+        snapshot.rootPath,
+      );
+    } catch (error) {
+      console.error("Workspace reactivation failed after re-add", error);
+    }
 
     return nextRecord;
   }
@@ -471,18 +485,37 @@ export class DesktopWorkspaceService {
     return { ...target, name: normalizedName };
   }
 
+  /**
+   * Resolve the BindingRoot backing a workspace record.
+   *
+   * `WorkspaceRecord.rootPath` is the raw path the user picked while the
+   * BindingRoot stores the canonicalized one, so both sides are normalized here.
+   * The previous one-sided comparison could miss a root that does exist and make
+   * removal skip the catalog silently, leaving the documents visible in Desk
+   * with no workspace to remove them from.
+   *
+   * A genuine miss (no root observes this folder) is not an error: a
+   * presentation-only or pre-BindingRoot workspace has nothing to retire from
+   * the catalog, and must still be removable.
+   */
+  private async resolveBindingRootFor(
+    rootPath: string,
+  ): Promise<BindingRootSettingRecord | null> {
+    const normalize = (value: string) => value.replace(/[\\/]+$/, "");
+    const target = normalize(rootPath);
+    const bindingRoots = await this.settingsService.getBindingRoots();
+    return (
+      bindingRoots.find((root) => normalize(root.rootPath) === target) ?? null
+    );
+  }
+
   async previewWorkspaceRemoval(slug: string): Promise<{ total: number; cloud: number }> {
     const records = await this.readRecords();
     const target = records.find((record) => record.slug === slug);
     if (!target?.rootPath) {
       return { total: 0, cloud: 0 };
     }
-    const bindingRoots = await this.settingsService.getBindingRoots();
-    const root = bindingRoots.find(
-      (root) =>
-        root.rootPath === target.rootPath ||
-        (target.rootPath && root.rootPath === target.rootPath.replace(/[\\/]+$/, "")),
-    );
+    const root = await this.resolveBindingRootFor(target.rootPath);
     if (!root) {
       return { total: 0, cloud: 0 };
     }
@@ -496,13 +529,7 @@ export class DesktopWorkspaceService {
     const nextRecords = records.filter((record) => record.slug !== slug);
 
     if (target?.rootPath) {
-      const bindingRoots = await this.settingsService.getBindingRoots();
-      const normalizedTargetRoot = target.rootPath.replace(/[\\/]+$/, "");
-      const root = bindingRoots.find(
-        (root) =>
-          root.rootPath === normalizedTargetRoot ||
-          root.rootPath === target.rootPath,
-      );
+      const root = await this.resolveBindingRootFor(target.rootPath);
 
       if (root) {
         const catalog = await resolveDesktopCatalog();
@@ -511,13 +538,11 @@ export class DesktopWorkspaceService {
 
         // Remove the binding root from active observation. The manifest
         // `.odessay/index.json` and files on disk are intentionally preserved.
-        const remainingRoots = bindingRoots.filter(
-          (candidate) =>
-            candidate.rootPath !== normalizedTargetRoot &&
-            candidate.rootPath !== target.rootPath,
-        );
+        // Filter by id, not by path: the id is what the catalog was just keyed
+        // on, so the two stores cannot disagree about which root was retired.
+        const bindingRoots = await this.settingsService.getBindingRoots();
         await this.settingsService.updateDesktopSettings({
-          bindingRoots: remainingRoots,
+          bindingRoots: bindingRoots.filter((candidate) => candidate.id !== root.id),
         });
       }
     }
@@ -544,9 +569,14 @@ export class DesktopWorkspaceService {
    * the version, and enqueue an upsert so the cloud record is overwritten with
    * the current local content (ODE-408).
    */
-  private async reactivateArchivedCloudDocuments(bindingRootId: string): Promise<void> {
+  private async reactivateArchivedCloudDocuments(
+    bindingRootId: string,
+    rootPath: string,
+  ): Promise<void> {
     const catalog = await resolveDesktopCatalog();
-    const candidates = await catalog.listReactivatableDocuments(bindingRootId);
+    // Restores local-only documents in SQLite and returns only the cloud-archived
+    // ones. A local-only document can never reach the mutation queue below.
+    const candidates = await catalog.reactivateBindingRoot(bindingRootId);
     if (candidates.length === 0) {
       return;
     }
@@ -554,17 +584,26 @@ export class DesktopWorkspaceService {
     const nowIso = new Date().toISOString();
     const now = Date.now();
     const inputs: DesktopCatalogDualWriteInput[] = [];
+    const skipped: string[] = [];
 
     for (const record of candidates) {
       if (!record.binding) {
         continue;
       }
 
-      const markdown = await tauriOpenFile(record.binding.canonicalPath);
+      // A file that vanished or stopped parsing between the rescan and this loop
+      // is skipped, not fatal: its cloud copy stays archived and recoverable from
+      // Settings > Archived writings instead of blocking the whole re-add.
       let snapshot;
       try {
+        const markdown = await tauriOpenFile(record.binding.canonicalPath);
         snapshot = parseDocumentFileToSnapshot(markdown).snapshot;
-      } catch {
+      } catch (error) {
+        skipped.push(record.binding.relativePath);
+        console.error(
+          `Could not reactivate "${record.binding.relativePath}" from local content`,
+          error,
+        );
         continue;
       }
 
@@ -573,10 +612,6 @@ export class DesktopWorkspaceService {
       const status = record.status ?? "draft";
       const artifactType = record.artifactType ?? "general";
       const visibility = record.visibility ?? "private";
-      const rootPath = record.binding.canonicalPath.slice(
-        0,
-        -(record.binding.relativePath.length + 1),
-      );
       const catalogDocument = {
         id: record.id,
         localPresent: true,
@@ -634,11 +669,15 @@ export class DesktopWorkspaceService {
       });
     }
 
-    if (inputs.length === 0) {
-      return;
+    if (inputs.length > 0) {
+      await catalog.commitBulkDualWrite(inputs);
     }
 
-    await catalog.commitBulkDualWrite(inputs);
+    if (skipped.length > 0) {
+      console.error(
+        `Re-added the workspace, but ${skipped.length} archived writing(s) could not be restored from the local file and remain in Settings > Archived writings: ${skipped.join(", ")}`,
+      );
+    }
   }
 
   // ─── Document ↔ workspace membership ─────────────────────────────────────────

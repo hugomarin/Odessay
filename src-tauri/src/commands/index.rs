@@ -188,8 +188,17 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
                AND newer.status IN ('pending','failed')
                AND (newer.created_at>older.created_at OR (newer.created_at=older.created_at AND newer.id>older.id))
            );
+         -- `deleted_at_cache` is a CLOUD tombstone: it is what Settings > Archived
+         -- writings lists. Only a document with a cloud row can carry one. A
+         -- local-only document retired from the active catalog (ODE-408 workspace
+         -- removal) is `sync_status='deleted'` with no tombstone by design, and
+         -- stamping it here would fabricate a cloud archive it never had.
          UPDATE documents SET deleted_at_cache='legacy'
-           WHERE sync_status='deleted' AND deleted_at_cache IS NULL;
+           WHERE sync_status='deleted' AND deleted_at_cache IS NULL AND cloud_present=1;
+         -- Self-heal installs where the unscoped backfill above already stamped
+         -- local-only rows before that guard existed.
+         UPDATE documents SET deleted_at_cache=NULL
+           WHERE deleted_at_cache='legacy' AND cloud_present=0;
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
            ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
          UPDATE catalog_schema SET version=7 WHERE singleton=1;"
@@ -550,6 +559,14 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
     let tx = conn
         .transaction()
         .map_err(|e| format!("catalog dual-write begin: {e}"))?;
+    apply_dual_write(&tx, &input)?;
+    tx.commit()
+        .map_err(|e| format!("catalog dual-write commit: {e}"))
+}
+
+/// The dual-write body, shared by the single-document command and the batch one
+/// so both paths can never drift apart. Caller owns the transaction.
+fn apply_dual_write(tx: &rusqlite::Transaction, input: &CatalogDualWriteInput) -> Result<(), String> {
     let d = &input.document;
     tx.execute("INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,deleted_at_cache,created_at,modified_at)
       VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
@@ -567,62 +584,6 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
         // upsert only on `id` would then hit UNIQUE(root_path). Reuse an existing
         // root id for this path instead of inserting a second row for it, and bind
         // the document to that resolved id.
-        let existing_root_id: Option<String> = tx
-            .query_row(
-                "SELECT id FROM binding_roots WHERE root_path=?1",
-                params![b.root_path],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| format!("catalog dual-write root lookup: {e}"))?;
-        let root_id = match existing_root_id {
-            Some(id) => id,
-            None => {
-                tx.execute(
-                    "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)",
-                    params![b.binding_root_id, b.root_path, b.manifest_version, b.visible_as_workspace as i64],
-                )
-                .map_err(|e| format!("catalog dual-write root: {e}"))?;
-                b.binding_root_id.clone()
-            }
-        };
-        tx.execute("INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
-          VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
-          ON CONFLICT(document_id) DO UPDATE SET binding_root_id=excluded.binding_root_id,relative_path=excluded.relative_path,
-          canonical_path=excluded.canonical_path,inode=excluded.inode,content_hash=excluded.content_hash,size=excluded.size,last_seen_at=excluded.last_seen_at",
-          params![d.id,root_id,b.relative_path,b.canonical_path,b.inode,b.content_hash,b.size,b.last_seen_at])
-          .map_err(|e| format!("catalog dual-write binding: {e}"))?;
-    }
-    if d.deleted_at.is_some() {
-        tx.execute(
-            "DELETE FROM document_bindings WHERE document_id=?1",
-            params![d.id],
-        )
-        .map_err(|e| format!("catalog dual-write delete binding: {e}"))?;
-    }
-    if let Some(m) = &input.mutation {
-        tx.execute("INSERT INTO sync_mutations(id,document_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
-          VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)
-          ON CONFLICT(id) DO UPDATE SET status=excluded.status,attempt_count=excluded.attempt_count,next_retry_at=excluded.next_retry_at,last_error=excluded.last_error",
-          params![m.id,d.id,m.operation,m.payload_json,m.status,m.attempt_count,m.next_retry_at,m.created_at,m.last_error])
-          .map_err(|e| format!("catalog dual-write mutation: {e}"))?;
-    }
-    tx.commit()
-        .map_err(|e| format!("catalog dual-write commit: {e}"))
-}
-
-fn apply_dual_write(tx: &rusqlite::Transaction, input: &CatalogDualWriteInput) -> Result<(), String> {
-    let d = &input.document;
-    tx.execute("INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,deleted_at_cache,created_at,modified_at)
-      VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
-      ON CONFLICT(id) DO UPDATE SET local_present=excluded.local_present,cloud_present=excluded.cloud_present,
-      cloud_account_id=excluded.cloud_account_id,sync_status=excluded.sync_status,title_cache=excluded.title_cache,
-      slug_cache=excluded.slug_cache,status_cache=excluded.status_cache,artifact_type_cache=excluded.artifact_type_cache,
-      visibility_cache=excluded.visibility_cache,version_cache=excluded.version_cache,deleted_at_cache=excluded.deleted_at_cache,
-      modified_at=excluded.modified_at",
-      params![d.id,d.local_present as i64,d.cloud_present as i64,d.cloud_account_id,d.sync_status,d.title,d.slug,d.status,d.artifact_type,d.visibility,d.version,d.deleted_at,d.created_at,d.modified_at])
-      .map_err(|e| format!("catalog dual-write document: {e}"))?;
-    if let Some(b) = &input.binding {
         let existing_root_id: Option<String> = tx
             .query_row(
                 "SELECT id FROM binding_roots WHERE root_path=?1",
@@ -730,6 +691,8 @@ pub struct WorkspaceRemovalDocumentRow {
 
 /// Remove a workspace's BindingRoot from the active catalog.
 /// - Local-only documents: detach binding, set local_present=0, sync_status='deleted'.
+///   `deleted_at_cache` stays NULL on purpose — that column is a CLOUD tombstone
+///   and a document with no cloud row must never be listed in Archived writings.
 /// - Cloud documents: detach binding, set local_present=0, keep cloud_present=1,
 ///   set deleted_at_cache, enqueue a durable soft-delete mutation.
 /// Returns affected document ids so the TS catalog can emit one CatalogChange.
@@ -818,6 +781,54 @@ pub fn catalog_apply_workspace_removal(
     tx.commit()
         .map_err(|e| format!("catalog workspace removal commit: {e}"))?;
     Ok(affected_ids)
+}
+
+/// Reactivate a BindingRoot after the same folder is re-added (ODE-408).
+///
+/// Runs as one transaction over the rows the reconciler has just re-bound:
+/// - Local-only documents retired by `catalog_apply_workspace_removal` return to
+///   the active catalog (`sync_status='local-only'`). They never had a cloud row,
+///   so nothing is enqueued and nothing is uploaded.
+/// - Cloud-archived documents are RETURNED, not mutated. The caller reads the
+///   current `.md` and applies the "local wins" upsert through the normal
+///   dual-write path, which is where content and versioning belong.
+///
+/// The `cloud_present=1` filter lives in SQL precisely so a local-only document
+/// can never enter the cloud-upsert batch.
+#[tauri::command]
+pub fn catalog_reactivate_binding_root(
+    db_path: String,
+    binding_root_id: String,
+) -> Result<Vec<CatalogRow>, String> {
+    let mut conn = open_db(&db_path)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("catalog reactivate root begin: {e}"))?;
+
+    tx.execute(
+        "UPDATE documents SET sync_status='local-only'
+         WHERE sync_status='deleted' AND cloud_present=0 AND local_present=1
+           AND id IN (SELECT document_id FROM document_bindings WHERE binding_root_id=?1)",
+        params![binding_root_id],
+    )
+    .map_err(|e| format!("catalog reactivate local-only: {e}"))?;
+
+    let mut stmt = tx
+        .prepare(&format!(
+            "{CATALOG_SELECT} WHERE b.binding_root_id=?1 AND d.local_present=1
+             AND d.cloud_present=1 AND d.deleted_at_cache IS NOT NULL"
+        ))
+        .map_err(|e| format!("catalog reactivate prepare: {e}"))?;
+    let rows: Vec<CatalogRow> = stmt
+        .query_map(params![binding_root_id], map_catalog_row)
+        .map_err(|e| format!("catalog reactivate query: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog reactivate row: {e}"))?;
+    drop(stmt);
+
+    tx.commit()
+        .map_err(|e| format!("catalog reactivate commit: {e}"))?;
+    Ok(rows)
 }
 
 /// Project a complete cloud metadata burst without changing filesystem facts.
@@ -2097,6 +2108,179 @@ mod catalog_tests {
         assert_eq!(snapshot.writing_collections.len(), 1);
         assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
         assert_eq!(catalog_schema_version(path.clone()).unwrap(), 7);
+        let _ = fs::remove_file(path);
+    }
+
+    /// Seed one document bound to `root-1` with the requested cloud presence.
+    fn seed_bound_document(path: &str, id: &str, cloud_present: bool) {
+        let mut seed = input(id, &format!("/tmp/root/{id}.md"), &format!("m-{id}"));
+        seed.document.cloud_present = cloud_present;
+        seed.document.cloud_account_id = cloud_present.then(|| "user-1".to_string());
+        seed.document.sync_status = if cloud_present { "synced" } else { "local-only" }.into();
+        seed.mutation = None;
+        catalog_dual_write(path.to_string(), seed).unwrap();
+    }
+
+    fn deleted_at_cache_of(path: &str, id: &str) -> Option<String> {
+        open_db(path)
+            .unwrap()
+            .query_row(
+                "SELECT deleted_at_cache FROM documents WHERE id=?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    /// ODE-408: `deleted_at_cache` is a CLOUD tombstone and drives Settings >
+    /// Archived writings. A local-only document has no cloud row, so removing its
+    /// workspace must never stamp one — not even through the schema normalizer
+    /// that `open_db` runs on every connection.
+    #[test]
+    fn workspace_removal_never_fabricates_a_cloud_tombstone_for_local_only() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "2026-07-30T00:00:00Z".into(),
+            "2026-07-30T00:00:00Z".into(),
+            10,
+        )
+        .unwrap();
+
+        // Every `open_db` re-runs the normalizer; this is the call that used to
+        // convert the local-only row into a fake archived one.
+        assert_eq!(deleted_at_cache_of(&path, "local-doc"), None);
+
+        let pending: i64 = open_db(&path)
+            .unwrap()
+            .query_row("SELECT COUNT(*) FROM sync_mutations", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(pending, 0, "a local-only document must not queue cloud work");
+
+        // Gone from the active catalog, and absent from Archived writings, which
+        // lists rows carrying a tombstone.
+        let active = catalog_list(path.clone(), None, false, false, 100).unwrap();
+        assert!(active.iter().all(|row| row.id != "local-doc"));
+        let archived = catalog_list(path.clone(), None, true, false, 100).unwrap();
+        assert!(archived
+            .iter()
+            .filter(|row| row.deleted_at.is_some())
+            .all(|row| row.id != "local-doc"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    /// The normalizer self-heals installs that were stamped before it was scoped
+    /// to cloud-backed rows.
+    #[test]
+    fn schema_normalizer_clears_legacy_tombstones_from_local_only_rows() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+        open_db(&path)
+            .unwrap()
+            .execute(
+                "UPDATE documents SET sync_status='deleted', deleted_at_cache='legacy' WHERE id=?1",
+                params!["local-doc"],
+            )
+            .unwrap();
+
+        // Reopening runs the normalizer.
+        assert_eq!(deleted_at_cache_of(&path, "local-doc"), None);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn workspace_removal_soft_deletes_cloud_documents_and_queues_one_mutation() {
+        let path = temp_db();
+        seed_bound_document(&path, "cloud-doc", true);
+
+        let affected = catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "2026-07-30T00:00:00Z".into(),
+            "2026-07-30T00:00:00Z".into(),
+            10,
+        )
+        .unwrap();
+        assert_eq!(affected, vec!["cloud-doc".to_string()]);
+
+        assert_eq!(
+            deleted_at_cache_of(&path, "cloud-doc"),
+            Some("2026-07-30T00:00:00Z".into())
+        );
+
+        let conn = open_db(&path).unwrap();
+        let (count, operation): (i64, String) = conn
+            .query_row(
+                "SELECT COUNT(*), COALESCE(MAX(operation),'') FROM sync_mutations WHERE document_id=?1",
+                params!["cloud-doc"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "one durable soft-delete, never N per view");
+        assert_eq!(operation, "delete");
+
+        // Soft delete: the cloud row is still ours, so it stays listed as archived.
+        let archived = catalog_list(path.clone(), Some("user-1".into()), true, false, 100).unwrap();
+        assert!(archived
+            .iter()
+            .any(|row| row.id == "cloud-doc" && row.deleted_at.is_some()));
+
+        drop(conn);
+        let _ = fs::remove_file(path);
+    }
+
+    /// Re-adding the folder: local-only documents come back on their own, and only
+    /// cloud-archived ones are handed to the caller for the "local wins" upsert.
+    #[test]
+    fn reactivate_binding_root_restores_local_only_and_returns_only_cloud_archived() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+        seed_bound_document(&path, "cloud-doc", true);
+
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "2026-07-30T00:00:00Z".into(),
+            "2026-07-30T00:00:00Z".into(),
+            10,
+        )
+        .unwrap();
+
+        // The reconciler re-binds both files from the surviving manifest. It only
+        // moves local presence and the binding — unlike dual-write, it never
+        // clears the cloud tombstone, which is why reactivation has work to do.
+        let conn = open_db(&path).unwrap();
+        for id in ["local-doc", "cloud-doc"] {
+            conn.execute(
+                "INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
+                 VALUES(?1,'root-1',?2,?3,NULL,NULL,NULL,3)",
+                params![id, format!("{id}.md"), format!("/tmp/root/{id}.md")],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE documents SET local_present=1 WHERE id=?1",
+                params![id],
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        let returned = catalog_reactivate_binding_root(path.clone(), "root-1".into()).unwrap();
+
+        assert_eq!(
+            returned.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            vec!["cloud-doc"],
+            "a local-only document must never enter the cloud upsert batch"
+        );
+
+        // The local-only one is back in the active catalog without any cloud work.
+        let active = catalog_list(path.clone(), None, false, false, 100).unwrap();
+        assert!(active.iter().any(|row| row.id == "local-doc"));
+
         let _ = fs::remove_file(path);
     }
 }
