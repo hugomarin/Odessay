@@ -99,13 +99,48 @@ if (issueIds.length === 0) {
 const baseRef = resolveBaseRef();
 const headRef = eventPullRequestShas.head ?? "HEAD";
 console.log(`[ops:delivery:gate] Comparing ${baseRef}..${headRef}.`);
-// A PR's commits are exactly those reachable from HEAD but not from its base.
-// Do not expand back to a locally inferred merge-base: that can include history
-// already owned by the base when checkout refs have been rewritten or merged.
-const commitSubjects = execSync(`git log --pretty=%s ${baseRef}..${headRef}`, {
-  encoding: "utf8",
-})
-  .split("\n")
+async function githubPullRequestCommitSubjects() {
+  const repository = process.env.GITHUB_REPOSITORY?.trim();
+  if (
+    process.env.GITHUB_ACTIONS !== "true" ||
+    !repository ||
+    !eventPullRequestShas.base ||
+    !eventPullRequestShas.head
+  ) {
+    return null;
+  }
+
+  const response = await fetch(
+    `https://api.github.com/repos/${repository}/compare/${eventPullRequestShas.base}...${eventPullRequestShas.head}`,
+    {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "odessay-delivery-gate",
+        ...(process.env.GITHUB_TOKEN
+          ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
+          : {}),
+      },
+    },
+  );
+  if (!response.ok) {
+    fail(`GitHub compare API failed with ${response.status}.`);
+  }
+  const comparison = await response.json();
+  if (!Array.isArray(comparison.commits)) {
+    fail("GitHub compare API returned no commit list.");
+  }
+  return comparison.commits.map((entry) => entry.commit.message.split("\n")[0]);
+}
+
+// In CI, GitHub's compare endpoint is the authority for the PR commit set. This
+// avoids runner-specific reachability differences after a branch incorporates
+// main. Local runs keep the fast, offline Git range.
+const commitSubjects = (
+  (await githubPullRequestCommitSubjects()) ??
+  execSync(`git log --pretty=%s ${baseRef}..${headRef}`, {
+    encoding: "utf8",
+  }).split("\n")
+)
   .map((line) => line.trim())
   .filter(Boolean)
   .filter((line) => !line.startsWith("Merge "));
