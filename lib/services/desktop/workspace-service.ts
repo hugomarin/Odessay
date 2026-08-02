@@ -36,6 +36,8 @@ import {
   tauriOpenFile,
   tauriWriteFile,
   tauriWorkspaceCreate,
+  tauriWorkspaceInspect,
+  tauriWorkspaceRepairManifestBindings,
   tauriWorkspaceSync,
   type DesktopCatalogDualWriteInput,
   type DesktopWorkspaceSnapshot,
@@ -207,7 +209,7 @@ export class DesktopWorkspaceService {
   }
 
   async inspectWorkspace(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
-    return tauriWorkspaceSync(rootPath);
+    return tauriWorkspaceInspect(rootPath);
   }
 
   private async readRecords(): Promise<WorkspaceRecord[]> {
@@ -217,7 +219,10 @@ export class DesktopWorkspaceService {
   }
 
   private async writeRecords(records: WorkspaceRecord[]) {
-    await this.settingsService.updateDesktopSettings({ workspaces: records });
+    const result = await this.settingsService.updateDesktopSettings({ workspaces: records });
+    if (result.error) {
+      throw new Error(`Failed to persist Workspaces: ${result.error.message}`);
+    }
   }
 
   async getLayout(): Promise<WorkspaceLayout> {
@@ -226,9 +231,12 @@ export class DesktopWorkspaceService {
   }
 
   async setLayout(layout: WorkspaceLayout) {
-    await this.settingsService.updateDesktopSettings({
+    const result = await this.settingsService.updateDesktopSettings({
       workspaceLayout: layout,
     });
+    if (result.error) {
+      throw new Error(`Failed to persist Workspace layout: ${result.error.message}`);
+    }
   }
 
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
@@ -387,17 +395,13 @@ export class DesktopWorkspaceService {
     // just been re-bound by the reconciler. Re-upload their current contents so
     // the cloud archive is reversed (local wins).
     //
-    // The workspace and its BindingRoot are already durably registered at this
-    // point, so a reactivation failure must not present a completed adoption as
-    // failed. It is idempotent: the next add, restart or rescan retries it.
-    try {
-      await this.reactivateArchivedCloudDocuments(
-        snapshot.bindingRootId,
-        snapshot.rootPath,
-      );
-    } catch (error) {
-      console.error("Workspace reactivation failed after re-add", error);
-    }
+    // The Workspace registration is already durable. If reactivation is partial,
+    // surface the recoverable error while keeping the chooser open: confirming
+    // again reruns this idempotent path instead of silently stranding cloud docs.
+    await this.reactivateArchivedCloudDocuments(
+      snapshot.bindingRootId,
+      snapshot.rootPath,
+    );
 
     return nextRecord;
   }
@@ -524,39 +528,86 @@ export class DesktopWorkspaceService {
   }
 
   async removeWorkspace(slug: string): Promise<void> {
-    const records = await this.readRecords();
+    const settingsSnapshot = await this.settingsService.getDesktopSettings();
+    if (settingsSnapshot.error || !settingsSnapshot.data) {
+      throw new Error(
+        `Failed to read Workspace settings: ${settingsSnapshot.error?.message ?? "settings unavailable"}`,
+      );
+    }
+    const records = settingsSnapshot.data.workspaces ?? [];
     const target = records.find((record) => record.slug === slug);
     const nextRecords = records.filter((record) => record.slug !== slug);
-
-    if (target?.rootPath) {
-      const root = await this.resolveBindingRootFor(target.rootPath);
-
-      if (root) {
-        const catalog = await resolveDesktopCatalog();
-        const nowIso = new Date().toISOString();
-        await catalog.applyWorkspaceRemoval(root.id, nowIso, nowIso);
-
-        // Remove the binding root from active observation. The manifest
-        // `.odessay/index.json` and files on disk are intentionally preserved.
-        // Filter by id, not by path: the id is what the catalog was just keyed
-        // on, so the two stores cannot disagree about which root was retired.
-        const bindingRoots = await this.settingsService.getBindingRoots();
-        await this.settingsService.updateDesktopSettings({
-          bindingRoots: bindingRoots.filter((candidate) => candidate.id !== root.id),
-        });
-      }
-    }
-
-    await this.writeRecords(nextRecords);
-
-    // Keep assignments honest: a writing can no longer point at a removed
-    // workspace. The file itself is untouched ("files in place").
-    const assignments = await this.readAssignments();
-    const pruned = pruneAssignments(
+    const assignments = settingsSnapshot.data.workspaceAssignments ?? {};
+    const prunedAssignments = pruneAssignments(
       assignments,
       nextRecords.map((record) => record.slug),
     );
-    await this.writeAssignments(pruned);
+    const bindingRoots = settingsSnapshot.data.bindingRoots ?? [];
+    const normalize = (value: string) => value.replace(/[\\/]+$/, "");
+    const root = target?.rootPath
+      ? bindingRoots.find(
+          (candidate) => normalize(candidate.rootPath) === normalize(target.rootPath),
+        ) ?? null
+      : null;
+
+    let catalog: SqliteDocumentCatalog | null = null;
+    if (root) {
+      catalog = await resolveDesktopCatalog();
+      const boundDocuments = await catalog.listByBindingRoot(root.id);
+      const missingBinding = boundDocuments.find((catalogEntry) => !catalogEntry.binding);
+      if (missingBinding) {
+        throw new Error(
+          `Cannot safely remove Workspace: catalog binding is incomplete for ${missingBinding.id}`,
+        );
+      }
+      await tauriWorkspaceRepairManifestBindings(
+        root.rootPath,
+        root.id,
+        boundDocuments.map((catalogEntry) => ({
+          documentId: catalogEntry.id,
+          relativePath: catalogEntry.binding!.relativePath,
+          inode: catalogEntry.binding!.inode,
+          contentHash: catalogEntry.binding!.contentHash,
+          lastSeen: catalogEntry.binding!.lastSeenAt,
+          size: catalogEntry.binding!.size,
+        })),
+      );
+    }
+
+    // One Settings write owns the organizational transition. Never ignore its
+    // ServiceResponse: a failed write must leave catalog/cloud untouched.
+    const settingsWrite = await this.settingsService.updateDesktopSettings({
+      workspaces: nextRecords,
+      workspaceAssignments: prunedAssignments,
+      bindingRoots: root
+        ? bindingRoots.filter((candidate) => candidate.id !== root.id)
+        : bindingRoots,
+    });
+    if (settingsWrite.error) {
+      throw new Error(`Failed to remove Workspace: ${settingsWrite.error.message}`);
+    }
+
+    if (root && catalog) {
+      try {
+        const nowIso = new Date().toISOString();
+        await catalog.applyWorkspaceRemoval(root.id, nowIso, nowIso);
+      } catch (error) {
+        // Compensate the Settings transition so retry still has the BindingRoot
+        // and Workspace metadata needed to complete the operation.
+        const rollback = await this.settingsService.updateDesktopSettings({
+          workspaces: records,
+          workspaceAssignments: assignments,
+          bindingRoots,
+        });
+        await refreshWorkspaceReconcilerRoots();
+        if (rollback.error) {
+          throw new Error(
+            `Workspace removal failed and Settings rollback also failed: ${rollback.error.message}`,
+          );
+        }
+        throw error;
+      }
+    }
 
     // Reconfigure the global watcher so the removed root is no longer observed.
     await refreshWorkspaceReconcilerRoots();
@@ -674,8 +725,8 @@ export class DesktopWorkspaceService {
     }
 
     if (skipped.length > 0) {
-      console.error(
-        `Re-added the workspace, but ${skipped.length} archived writing(s) could not be restored from the local file and remain in Settings > Archived writings: ${skipped.join(", ")}`,
+      throw new Error(
+        `Workspace added, but ${skipped.length} archived writing(s) could not be restored from the local file and remain in Settings > Archived writings: ${skipped.join(", ")}. Fix the file and choose Add workspace again to retry.`,
       );
     }
   }
@@ -698,9 +749,12 @@ export class DesktopWorkspaceService {
   }
 
   private async writeAssignments(assignments: WorkspaceAssignmentMap) {
-    await this.settingsService.updateDesktopSettings({
+    const result = await this.settingsService.updateDesktopSettings({
       workspaceAssignments: assignments,
     });
+    if (result.error) {
+      throw new Error(`Failed to persist Workspace assignments: ${result.error.message}`);
+    }
   }
 
   /** Lists registered workspaces as lightweight assignment targets (no FS sync). */

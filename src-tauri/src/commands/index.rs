@@ -675,6 +675,26 @@ pub fn catalog_count_binding_root_documents(
     Ok(BindingRootDocumentCount { total, cloud })
 }
 
+/// Return every document currently bound to one root without a client-side
+/// LIMIT. Used only for manifest recovery before a root is retired.
+#[tauri::command]
+pub fn catalog_list_binding_root_documents(
+    db_path: String,
+    binding_root_id: String,
+) -> Result<Vec<CatalogRow>, String> {
+    let conn = open_db(&db_path)?;
+    let mut stmt = conn
+        .prepare(&format!(
+            "{CATALOG_SELECT} WHERE b.binding_root_id=?1 ORDER BY b.relative_path"
+        ))
+        .map_err(|e| format!("catalog list binding root documents prepare: {e}"))?;
+    let rows = stmt
+        .query_map(params![binding_root_id], map_catalog_row)
+        .map_err(|e| format!("catalog list binding root documents query: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog list binding root documents row: {e}"))
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceRemovalDocumentRow {
@@ -2130,6 +2150,25 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap()
+    }
+
+    #[test]
+    fn lists_every_document_bound_to_a_root_for_manifest_recovery() {
+        let path = temp_db();
+        seed_bound_document(&path, "document-b", false);
+        seed_bound_document(&path, "document-a", true);
+
+        let rows = catalog_list_binding_root_documents(path.clone(), "root-1".into()).unwrap();
+
+        assert_eq!(
+            rows.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            vec!["document-a", "document-b"]
+        );
+        assert!(rows
+            .iter()
+            .all(|row| row.binding_root_id.as_deref() == Some("root-1")));
+
+        let _ = fs::remove_file(path);
     }
 
     /// ODE-408: `deleted_at_cache` is a CLOUD tombstone and drives Settings >

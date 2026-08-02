@@ -30,6 +30,15 @@ export type DesktopWorkspaceSnapshot = {
   files: DesktopWorkspaceFile[]
 }
 
+export type DesktopManifestBindingRepair = {
+  documentId: string
+  relativePath: string
+  inode: number | null
+  contentHash: string | null
+  lastSeen: number | null
+  size: number | null
+}
+
 export type DesktopCatalogRow = {
   id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
   syncStatus: string; title: string | null; slug: string | null; status: string | null
@@ -129,6 +138,22 @@ export async function tauriWorkspaceCreate(parentPath: string, name: string): Pr
   return invoke<string>("workspace_create", { parentPath, name })
 }
 
+export async function tauriWorkspaceInspect(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
+  return invoke<DesktopWorkspaceSnapshot>("workspace_inspect", { rootPath })
+}
+
+export async function tauriWorkspaceRepairManifestBindings(
+  rootPath: string,
+  bindingRootId: string,
+  bindings: DesktopManifestBindingRepair[],
+): Promise<number> {
+  return invoke<number>("workspace_repair_manifest_bindings", {
+    rootPath,
+    bindingRootId,
+    bindings,
+  })
+}
+
 export async function tauriWorkspaceSync(
   rootPath: string,
   selectedPaths?: string[],
@@ -165,6 +190,10 @@ export async function tauriCatalogBulkDualWrite(dbPath: string, inputs: DesktopC
 
 export async function tauriCatalogCountBindingRootDocuments(dbPath: string, bindingRootId: string): Promise<{ total: number; cloud: number }> {
   return invoke<{ total: number; cloud: number }>("catalog_count_binding_root_documents", { dbPath, bindingRootId })
+}
+
+export async function tauriCatalogListBindingRootDocuments(dbPath: string, bindingRootId: string): Promise<DesktopCatalogRow[]> {
+  return invoke<DesktopCatalogRow[]>("catalog_list_binding_root_documents", { dbPath, bindingRootId })
 }
 
 export async function tauriCatalogApplyWorkspaceRemoval(dbPath: string, bindingRootId: string, deletedAt: string, updatedAt: string): Promise<string[]> {

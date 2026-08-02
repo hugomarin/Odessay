@@ -13,6 +13,7 @@ import {
   tauriCatalogApplyWorkspaceRemoval,
   tauriCatalogBulkDualWrite,
   tauriCatalogCountBindingRootDocuments,
+  tauriCatalogListBindingRootDocuments,
   tauriCatalogReactivateBindingRoot,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
@@ -146,6 +147,10 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
 
   async countByBindingRoot(bindingRootId: string): Promise<{ total: number; cloud: number }> {
     return tauriCatalogCountBindingRootDocuments(this.dbPath, bindingRootId)
+  }
+
+  async listByBindingRoot(bindingRootId: string): Promise<DocumentCatalogRecord[]> {
+    return (await tauriCatalogListBindingRootDocuments(this.dbPath, bindingRootId)).map(toRecord)
   }
 
   /**
