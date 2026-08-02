@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useState, type RefObject } from "react"
 import {
+  areFloatingOverlayPositionsEqual,
   calculateFloatingOverlayPosition,
   type FloatingOverlayAnchor,
   type FloatingOverlayPlacement,
@@ -35,14 +36,16 @@ export function useFloatingOverlayPosition({
       frameId = window.requestAnimationFrame(() => {
         frameId = null
         const rect = overlay.getBoundingClientRect()
-        setPosition(
-          calculateFloatingOverlayPosition({
-            anchor,
-            overlay: { width: rect.width, height: rect.height },
-            viewport: { width: window.innerWidth, height: window.innerHeight },
-            preferredPlacement,
-          }),
-        )
+        const next = calculateFloatingOverlayPosition({
+          anchor,
+          overlay: { width: rect.width, height: rect.height },
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          preferredPlacement,
+        })
+        // ODE-409: only publish a new object when the geometry actually moved.
+        // A ResizeObserver fires for content growth (typing, waveform, error
+        // text); re-rendering consumers on every one of those is churn.
+        setPosition((current) => (areFloatingOverlayPositionsEqual(current, next) ? current : next))
       })
     }
 

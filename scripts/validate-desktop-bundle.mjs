@@ -21,6 +21,13 @@ import { readFileSync, existsSync, readdirSync, statSync } from "node:fs"
 import { execSync } from "node:child_process"
 import { join, resolve, basename } from "node:path"
 import { fileURLToPath } from "node:url"
+import {
+  collectFrontendAssets,
+  evaluateEmbeddedRuntimeHost,
+  findLocalRuntimeHosts,
+  formatEmbeddedHostFailure,
+  readRuntimeManifest,
+} from "./lib/desktop-runtime-host.mjs"
 
 const RELEASES_DIR = "dist/releases"
 const TAURI_CONF = "src-tauri/tauri.conf.json"
@@ -51,12 +58,14 @@ function section(title) {
 const args = process.argv.slice(2)
 let dmgPath = ""
 let appPath = ""
+const allowLocalhost = args.includes("--allow-localhost")
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--dmg" && args[i + 1]) dmgPath = resolve(args[i + 1])
   if (args[i] === "--app" && args[i + 1]) appPath = resolve(args[i + 1])
 }
 
 const root = process.cwd()
+
 
 /* ─── Helpers ─── */
 function latestDmg() {
@@ -254,12 +263,38 @@ if (pkg.version === tauriConf.version) {
 
 // 3d. NEXT_PUBLIC_APP_URL must not be localhost in a release build
 const appUrl = process.env.NEXT_PUBLIC_APP_URL || pkg?.config?.appUrl || ""
-if (appUrl && /localhost|127\.0\.0\.1/.test(appUrl)) {
-  warn(`NEXT_PUBLIC_APP_URL points to localhost (${appUrl}) — DMG will fail outside this machine`)
+if (appUrl && findLocalRuntimeHosts(appUrl).length > 0) {
+  if (allowLocalhost) {
+    warn(`NEXT_PUBLIC_APP_URL points to localhost (${appUrl}) — --allow-localhost given, not distributable`)
+  } else {
+    fail(`NEXT_PUBLIC_APP_URL points to localhost (${appUrl}) — DMG will fail outside this machine`)
+  }
 } else if (appUrl) {
   ok(`NEXT_PUBLIC_APP_URL is remote: ${appUrl}`)
 } else {
   warn("NEXT_PUBLIC_APP_URL not set — verify the default points to production")
+}
+
+// 3e. The host actually embedded in the shipped frontend (ODE-409). The env var
+// above describes the intended build; this reads what the artifact will really
+// call at runtime, which is what the writer experiences.
+const candidateDirs = [appResourcesPath(mountedApp), join(root, "dist")]
+const embedded = collectFrontendAssets(candidateDirs)
+const { manifest } = readRuntimeManifest(candidateDirs)
+
+if (embedded.assets.length === 0) {
+  warn("No frontend assets found to scan for an embedded runtime host — verify the static export was bundled")
+} else {
+  const verdict = evaluateEmbeddedRuntimeHost({ manifest, assets: embedded.assets, allowLocalhost })
+  if (verdict.reason === "remote-host") {
+    ok(
+      `Embedded runtime host is remote: ${verdict.appUrl} (found in ${verdict.carriers.length} of ${verdict.scanned} asset(s) from ${embedded.baseDir})`,
+    )
+  } else if (verdict.ok) {
+    warn(`${formatEmbeddedHostFailure(verdict)}\n      (--allow-localhost given — this build is not distributable)`)
+  } else {
+    fail(formatEmbeddedHostFailure(verdict))
+  }
 }
 
 /* ═══════════════════════════════════════

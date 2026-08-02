@@ -21,7 +21,11 @@ import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dial
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
-import { AnnotationBubble, type AnnotationBubblePosition } from "@/components/reading/margins/annotation-bubble"
+import {
+  AnnotationBubble,
+  nextAnnotationSessionId,
+  type AnnotationBubblePosition,
+} from "@/components/reading/margins/annotation-bubble"
 import { SelectionPopup, type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
@@ -50,6 +54,7 @@ import {
   deleteStandaloneHighlight,
   resolveStandaloneHighlightRange,
 } from "@/lib/editor/annotation-highlight"
+import { areFloatingOverlayAnchorsEqual } from "@/lib/reading/floating-overlay-position"
 import { resolveEscapeIntent } from "@/lib/editor/panel-behavior"
 import { applyPanelMarkdownChange, applyPanelMetaChange } from "@/lib/editor/panel-sync"
 import {
@@ -227,6 +232,8 @@ type PendingAnnotationSnapshot = {
   to: number
   text: string
   position: AnnotationBubblePosition
+  /** Draft identity — stable across repositioning (ODE-409). */
+  sessionId: string
   annotationType?: "personal" | "ai" | "footnote"
 }
 
@@ -3228,6 +3235,7 @@ export function EditorShell({
         to: pendingRichSelection.to,
         text: pendingRichSelection.text,
         position: pendingRichSelection.bubblePosition,
+        sessionId: nextAnnotationSessionId(),
         annotationType,
       })
       setPendingRichSelection(null)
@@ -3347,20 +3355,44 @@ export function EditorShell({
   useEffect(() => {
     if (!editor || (!pendingRichSelection && !pendingAnnotation)) return
 
-    const syncOpenOverlayPosition = () => {
+    const syncOpenOverlayPosition = (event?: Event) => {
+      // ODE-409: `scroll` is listened to in the capture phase, so scrolling the
+      // bubble's own textarea reaches this handler. The document geometry has
+      // not moved in that case — recomputing it is pure churn.
+      const eventTarget = event?.target
+      if (
+        eventTarget instanceof Element &&
+        eventTarget.closest(".AnnotationBubble, .SelectionPopup")
+      ) {
+        return
+      }
+
       if (pendingRichSelection) {
         const positions = getRichSelectionOverlayPositions(pendingRichSelection.from, pendingRichSelection.to)
         if (positions) {
-          setPendingRichSelection((current) => (current ? { ...current, ...positions } : current))
+          setPendingRichSelection((current) => {
+            if (!current) return current
+            if (
+              areFloatingOverlayAnchorsEqual(current.popupPosition, positions.popupPosition) &&
+              areFloatingOverlayAnchorsEqual(current.bubblePosition, positions.bubblePosition)
+            ) {
+              return current
+            }
+            return { ...current, ...positions }
+          })
         }
       }
 
       if (pendingAnnotation) {
         const positions = getRichSelectionOverlayPositions(pendingAnnotation.from, pendingAnnotation.to)
         if (positions) {
-          setPendingAnnotation((current) =>
-            current ? { ...current, position: positions.bubblePosition } : current,
-          )
+          setPendingAnnotation((current) => {
+            if (!current) return current
+            if (areFloatingOverlayAnchorsEqual(current.position, positions.bubblePosition)) {
+              return current
+            }
+            return { ...current, position: positions.bubblePosition }
+          })
         }
       }
     }
@@ -6087,6 +6119,7 @@ export function EditorShell({
 
       <AnnotationBubble
         position={pendingAnnotation?.position ?? null}
+        sessionId={pendingAnnotation?.sessionId ?? null}
         type={pendingAnnotation?.annotationType ?? "personal"}
         onConfirm={handleConfirmAnnotation}
         onCancel={() => setPendingAnnotation(null)}
