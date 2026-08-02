@@ -555,16 +555,17 @@ function DesktopWorkspaceIndex() {
       return;
     }
 
-    const selectedPaths = compressWorkspaceSelection(
-      pendingWorkspaceTree,
-      selectedWorkspaceFiles,
-    );
-    if (!selectedPaths.length) {
+    if (selectedWorkspaceFiles.size === 0) {
       setErrorMessage(
         "Select at least one markdown file or folder to include.",
       );
       return;
     }
+
+    const selectedPaths = compressWorkspaceSelection(
+      pendingWorkspaceTree,
+      selectedWorkspaceFiles,
+    );
 
     setIsSubmitting(true);
     setErrorMessage(null);

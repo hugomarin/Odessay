@@ -203,7 +203,19 @@ describe("DesktopWorkspaceService assignments", () => {
     tauriMocks.tauriOpenFile.mockReset();
     tauriMocks.tauriWriteFile.mockReset();
     tauriMocks.tauriWorkspaceCreate.mockReset();
-    tauriMocks.tauriWorkspaceInspect.mockReset();
+    tauriMocks.tauriWorkspaceInspect.mockReset().mockResolvedValue({
+      rootPath: "/Users/me/new-workspace",
+      bindingRootId: "binding-root-from-manifest",
+      name: "New Workspace",
+      selectedPaths: [],
+      fileCount: 2,
+      folderCount: 0,
+      updatedAt: 1,
+      files: [
+        { relativePath: "Included.md" },
+        { relativePath: "Not selected.md" },
+      ],
+    });
     tauriMocks.tauriWorkspaceRepairManifestBindings.mockReset().mockResolvedValue(0);
     tauriMocks.tauriWorkspaceSync.mockReset();
     tauriMocks.tauriCatalogList.mockReset().mockResolvedValue([]);
@@ -262,6 +274,42 @@ describe("DesktopWorkspaceService assignments", () => {
       }),
     ]);
     expect(reconcilerMocks.refreshRoots).toHaveBeenCalledTimes(1);
+  });
+
+  it("adopts the complete folder as an open root scope so future markdown files are discovered", async () => {
+    tauriMocks.tauriWorkspaceInspect.mockResolvedValue({
+      rootPath: "/Users/me/new-workspace",
+      bindingRootId: "binding-root-from-manifest",
+      name: "New Workspace",
+      selectedPaths: ["Included.md"],
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: 1,
+      files: [{ relativePath: "Included.md" }],
+    });
+    tauriMocks.tauriWorkspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/new-workspace",
+      bindingRootId: "binding-root-from-manifest",
+      name: "New Workspace",
+      selectedPaths: [],
+      fileCount: 1,
+      folderCount: 0,
+      updatedAt: 1,
+      files: [],
+    });
+
+    await service.addExistingWorkspaceWithSelection(
+      "/Users/me/new-workspace",
+      ["Included.md"],
+    );
+
+    expect(tauriMocks.tauriWorkspaceSync).toHaveBeenCalledWith(
+      "/Users/me/new-workspace",
+      [],
+    );
+    expect(settings.store.bindingRoots).toEqual([
+      expect.objectContaining({ selectedPaths: [] }),
+    ]);
   });
 
   it("inspects every markdown file without applying the manifest selection", async () => {

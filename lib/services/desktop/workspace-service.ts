@@ -102,6 +102,27 @@ function isPathInsideRoot(path: string, rootPath: string) {
   return path.startsWith(`${normalizedRoot}/`);
 }
 
+function workspaceScopeIncludes(relativePath: string, selectedPaths: string[]) {
+  return selectedPaths.some(
+    (selectedPath) =>
+      relativePath === selectedPath || relativePath.startsWith(`${selectedPath}/`),
+  );
+}
+
+function normalizeAdoptedWorkspaceScope(
+  snapshot: DesktopWorkspaceSnapshot,
+  selectedPaths: string[],
+) {
+  if (
+    selectedPaths.length > 0 &&
+    snapshot.files.length > 0 &&
+    snapshot.files.every((file) => workspaceScopeIncludes(file.relativePath, selectedPaths))
+  ) {
+    return [];
+  }
+  return selectedPaths;
+}
+
 function formatWorkspaceFromSnapshot(
   record: WorkspaceRecord,
   snapshot: DesktopWorkspaceSnapshot,
@@ -318,11 +339,12 @@ export class DesktopWorkspaceService {
     rootPath: string,
     selectedPaths: string[],
   ): Promise<WorkspaceRecord | null> {
+    const inspected = await tauriWorkspaceInspect(rootPath);
     return this.registerWorkspace(
       rootPath,
       "existing-folder",
       undefined,
-      selectedPaths,
+      normalizeAdoptedWorkspaceScope(inspected, selectedPaths),
     );
   }
 
