@@ -26,24 +26,30 @@ function hasRef(ref) {
   }
 }
 
-function pullRequestBaseSha() {
+function pullRequestShas() {
   const eventPath = process.env.GITHUB_EVENT_PATH?.trim();
-  if (!eventPath) return null;
+  if (!eventPath) return { base: null, head: null };
   try {
     const event = JSON.parse(readFileSync(eventPath, "utf8"));
-    const sha = event?.pull_request?.base?.sha;
-    return typeof sha === "string" && commitExists(sha) ? sha : null;
+    const validSha = (sha) =>
+      typeof sha === "string" && commitExists(sha) ? sha : null;
+    return {
+      base: validSha(event?.pull_request?.base?.sha),
+      head: validSha(event?.pull_request?.head?.sha),
+    };
   } catch {
-    return null;
+    return { base: null, head: null };
   }
 }
+
+const eventPullRequestShas = pullRequestShas();
 
 function resolveBaseRef() {
   // A PR event carries the immutable base SHA used to calculate the diff. Prefer
   // it over local branch names: actions/checkout may leave a stale or ambiguous
   // `main` ref even with full history, causing the gate to inspect repository
   // history that is already part of the PR base.
-  const eventBaseSha = pullRequestBaseSha();
+  const eventBaseSha = eventPullRequestShas.base;
   if (eventBaseSha) return eventBaseSha;
 
   const fromCi = process.env.GITHUB_BASE_REF?.trim();
@@ -91,11 +97,12 @@ if (issueIds.length === 0) {
   );
 }
 const baseRef = resolveBaseRef();
-console.log(`[ops:delivery:gate] Comparing against ${baseRef}.`);
+const headRef = eventPullRequestShas.head ?? "HEAD";
+console.log(`[ops:delivery:gate] Comparing ${baseRef}..${headRef}.`);
 // A PR's commits are exactly those reachable from HEAD but not from its base.
 // Do not expand back to a locally inferred merge-base: that can include history
 // already owned by the base when checkout refs have been rewritten or merged.
-const commitSubjects = execSync(`git log --pretty=%s ${baseRef}..HEAD`, {
+const commitSubjects = execSync(`git log --pretty=%s ${baseRef}..${headRef}`, {
   encoding: "utf8",
 })
   .split("\n")
