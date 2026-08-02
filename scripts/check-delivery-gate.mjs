@@ -92,10 +92,10 @@ if (issueIds.length === 0) {
 }
 const baseRef = resolveBaseRef();
 console.log(`[ops:delivery:gate] Comparing against ${baseRef}.`);
-const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
-  encoding: "utf8",
-}).trim();
-const commitSubjects = execSync(`git log --pretty=%s ${mergeBase}..HEAD`, {
+// A PR's commits are exactly those reachable from HEAD but not from its base.
+// Do not expand back to a locally inferred merge-base: that can include history
+// already owned by the base when checkout refs have been rewritten or merged.
+const commitSubjects = execSync(`git log --pretty=%s ${baseRef}..HEAD`, {
   encoding: "utf8",
 })
   .split("\n")
