@@ -26,7 +26,26 @@ function hasRef(ref) {
   }
 }
 
+function pullRequestBaseSha() {
+  const eventPath = process.env.GITHUB_EVENT_PATH?.trim();
+  if (!eventPath) return null;
+  try {
+    const event = JSON.parse(readFileSync(eventPath, "utf8"));
+    const sha = event?.pull_request?.base?.sha;
+    return typeof sha === "string" && commitExists(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveBaseRef() {
+  // A PR event carries the immutable base SHA used to calculate the diff. Prefer
+  // it over local branch names: actions/checkout may leave a stale or ambiguous
+  // `main` ref even with full history, causing the gate to inspect repository
+  // history that is already part of the PR base.
+  const eventBaseSha = pullRequestBaseSha();
+  if (eventBaseSha) return eventBaseSha;
+
   const fromCi = process.env.GITHUB_BASE_REF?.trim();
   if (fromCi) {
     const remoteRef = `origin/${fromCi}`;
@@ -72,6 +91,7 @@ if (issueIds.length === 0) {
   );
 }
 const baseRef = resolveBaseRef();
+console.log(`[ops:delivery:gate] Comparing against ${baseRef}.`);
 const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
   encoding: "utf8",
 }).trim();
