@@ -20,7 +20,10 @@ import {
   DesktopSettingsService,
   type BindingRootSettingRecord,
 } from "@/lib/services/desktop/desktop-settings-service";
-import { refreshWorkspaceReconcilerRoots } from "./desktop-workspace-reconciler";
+import {
+  recoverInterruptedWorkspaceRemovals,
+  refreshWorkspaceReconcilerRoots,
+} from "./desktop-workspace-reconciler";
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog";
 import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization";
 import { join } from "@tauri-apps/api/path";
@@ -234,6 +237,10 @@ export class DesktopWorkspaceService {
   }
 
   private async readRecords(): Promise<WorkspaceRecord[]> {
+    await recoverInterruptedWorkspaceRemovals(
+      this.settingsService,
+      await resolveDesktopCatalog(),
+    );
     const result = await this.settingsService.getDesktopSettings();
     const workspaces = result.data?.workspaces ?? [];
     return Array.isArray(workspaces) ? workspaces : [];
@@ -378,6 +385,11 @@ export class DesktopWorkspaceService {
       (root) =>
         root.id === snapshot.bindingRootId || root.rootPath === snapshot.rootPath,
     );
+    // Explicit user consent is the only transition that lifts a previous
+    // SQLite retirement fence. Do this before Settings so a crash cannot leave
+    // a visible root that the catalog still considers removed.
+    const catalog = await resolveDesktopCatalog();
+    await catalog.activateBindingRoot(snapshot.bindingRootId, snapshot.rootPath);
     await this.settingsService.upsertBindingRoot({
       id: snapshot.bindingRootId,
       rootPath: snapshot.rootPath,
@@ -596,8 +608,14 @@ export class DesktopWorkspaceService {
       );
     }
 
-    // One Settings write owns the organizational transition. Never ignore its
-    // ServiceResponse: a failed write must leave catalog/cloud untouched.
+    if (root && catalog) {
+      const nowIso = new Date().toISOString();
+      await catalog.applyWorkspaceRemoval(root.id, root.rootPath, nowIso, nowIso);
+    }
+
+    // SQLite commits the durable removal fence first. If the process stops or
+    // Settings cannot be written after this point, startup recovery completes
+    // this organizational projection before watchers are configured.
     const settingsWrite = await this.settingsService.updateDesktopSettings({
       workspaces: nextRecords,
       workspaceAssignments: prunedAssignments,
@@ -606,29 +624,10 @@ export class DesktopWorkspaceService {
         : bindingRoots,
     });
     if (settingsWrite.error) {
-      throw new Error(`Failed to remove Workspace: ${settingsWrite.error.message}`);
-    }
-
-    if (root && catalog) {
-      try {
-        const nowIso = new Date().toISOString();
-        await catalog.applyWorkspaceRemoval(root.id, nowIso, nowIso);
-      } catch (error) {
-        // Compensate the Settings transition so retry still has the BindingRoot
-        // and Workspace metadata needed to complete the operation.
-        const rollback = await this.settingsService.updateDesktopSettings({
-          workspaces: records,
-          workspaceAssignments: assignments,
-          bindingRoots,
-        });
-        await refreshWorkspaceReconcilerRoots();
-        if (rollback.error) {
-          throw new Error(
-            `Workspace removal failed and Settings rollback also failed: ${rollback.error.message}`,
-          );
-        }
-        throw error;
-      }
+      await refreshWorkspaceReconcilerRoots();
+      throw new Error(
+        `Workspace removal is durable but Settings cleanup must be retried: ${settingsWrite.error.message}`,
+      );
     }
 
     // Reconfigure the global watcher so the removed root is no longer observed.

@@ -196,8 +196,22 @@ export async function tauriCatalogListBindingRootDocuments(dbPath: string, bindi
   return invoke<DesktopCatalogRow[]>("catalog_list_binding_root_documents", { dbPath, bindingRootId })
 }
 
-export async function tauriCatalogApplyWorkspaceRemoval(dbPath: string, bindingRootId: string, deletedAt: string, updatedAt: string): Promise<string[]> {
-  return invoke<string[]>("catalog_apply_workspace_removal", { dbPath, bindingRootId, deletedAt, updatedAt, nowMillis: Date.now() })
+export async function tauriCatalogApplyWorkspaceRemoval(dbPath: string, bindingRootId: string, rootPath: string, deletedAt: string, updatedAt: string): Promise<string[]> {
+  return invoke<string[]>("catalog_apply_workspace_removal", { dbPath, bindingRootId, rootPath, deletedAt, updatedAt, nowMillis: Date.now() })
+}
+
+export type DesktopRetiredBindingRoot = {
+  id: string
+  rootPath: string
+  retiredAt: number
+}
+
+export async function tauriCatalogListRetiredBindingRoots(dbPath: string): Promise<DesktopRetiredBindingRoot[]> {
+  return invoke<DesktopRetiredBindingRoot[]>("catalog_list_retired_binding_roots", { dbPath })
+}
+
+export async function tauriCatalogActivateBindingRoot(dbPath: string, bindingRootId: string, rootPath: string): Promise<void> {
+  return invoke<void>("catalog_activate_binding_root", { dbPath, bindingRootId, rootPath })
 }
 
 /**
@@ -268,8 +282,8 @@ export type DesktopCatalogReconcileInput = {
 export async function tauriCatalogApplyReconcile(
   dbPath: string,
   input: DesktopCatalogReconcileInput,
-): Promise<void> {
-  return invoke<void>("catalog_apply_reconcile", { dbPath, input })
+): Promise<boolean> {
+  return invoke<boolean>("catalog_apply_reconcile", { dbPath, input })
 }
 
 export async function tauriCatalogUpdateMutationStatus(

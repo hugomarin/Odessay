@@ -31,7 +31,8 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
             root_path TEXT UNIQUE NOT NULL,
             manifest_version INTEGER NOT NULL,
             visible_as_workspace INTEGER NOT NULL DEFAULT 0 CHECK (visible_as_workspace IN (0, 1)),
-            last_scanned_at INTEGER
+            last_scanned_at INTEGER,
+            retired_at INTEGER
         );
         CREATE TABLE IF NOT EXISTS documents (
             id TEXT PRIMARY KEY,
@@ -176,6 +177,25 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
         )
         .map_err(|e| format!("catalog migration add excerpt_content_hash: {e}"))?;
     }
+    let has_retired_at = {
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(binding_roots)")
+            .map_err(|e| format!("catalog migration inspect retired root: {e}"))?;
+        let columns = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("catalog migration list root columns: {e}"))?;
+        let found = columns
+            .filter_map(Result::ok)
+            .any(|name| name == "retired_at");
+        found
+    };
+    if !has_retired_at {
+        conn.execute(
+            "ALTER TABLE binding_roots ADD COLUMN retired_at INTEGER",
+            [],
+        )
+        .map_err(|e| format!("catalog migration add retired_at: {e}"))?;
+    }
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_catalog_cloud_hash ON documents(cloud_content_hash) WHERE cloud_present=1 AND cloud_content_hash IS NOT NULL;
          DROP TABLE IF EXISTS writings_index;
@@ -201,7 +221,7 @@ fn ensure_catalog_v2(conn: &Connection) -> Result<(), String> {
            WHERE deleted_at_cache='legacy' AND cloud_present=0;
          INSERT INTO catalog_schema(singleton, version) VALUES (1, 3)
            ON CONFLICT(singleton) DO UPDATE SET version = MAX(version, excluded.version);
-         UPDATE catalog_schema SET version=7 WHERE singleton=1;"
+         UPDATE catalog_schema SET version=8 WHERE singleton=1;"
     ).map_err(|e| format!("catalog migration v3: {e}"))?;
     Ok(())
 }
@@ -566,7 +586,10 @@ pub fn catalog_dual_write(db_path: String, input: CatalogDualWriteInput) -> Resu
 
 /// The dual-write body, shared by the single-document command and the batch one
 /// so both paths can never drift apart. Caller owns the transaction.
-fn apply_dual_write(tx: &rusqlite::Transaction, input: &CatalogDualWriteInput) -> Result<(), String> {
+fn apply_dual_write(
+    tx: &rusqlite::Transaction,
+    input: &CatalogDualWriteInput,
+) -> Result<(), String> {
     let d = &input.document;
     tx.execute("INSERT INTO documents(id,local_present,cloud_present,cloud_account_id,sync_status,title_cache,slug_cache,status_cache,artifact_type_cache,visibility_cache,version_cache,deleted_at_cache,created_at,modified_at)
       VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)
@@ -584,16 +607,19 @@ fn apply_dual_write(tx: &rusqlite::Transaction, input: &CatalogDualWriteInput) -
         // upsert only on `id` would then hit UNIQUE(root_path). Reuse an existing
         // root id for this path instead of inserting a second row for it, and bind
         // the document to that resolved id.
-        let existing_root_id: Option<String> = tx
+        let existing_root: Option<(String, Option<i64>)> = tx
             .query_row(
-                "SELECT id FROM binding_roots WHERE root_path=?1",
+                "SELECT id,retired_at FROM binding_roots WHERE root_path=?1",
                 params![b.root_path],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()
             .map_err(|e| format!("catalog dual-write root lookup: {e}"))?;
-        let root_id = match existing_root_id {
-            Some(id) => id,
+        let root_id = match existing_root {
+            Some((_, Some(_))) => {
+                return Err("catalog dual-write rejected retired binding root".into())
+            }
+            Some((id, None)) => id,
             None => {
                 tx.execute(
                     "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)",
@@ -709,6 +735,55 @@ pub struct WorkspaceRemovalDocumentRow {
     pub visibility: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RetiredBindingRootRow {
+    pub id: String,
+    pub root_path: String,
+    pub retired_at: i64,
+}
+
+/// Durable recovery record for a cross-store workspace removal. Settings is an
+/// organizational projection and may still contain this root if the process
+/// stopped after SQLite committed. Startup uses this list to finish that write.
+#[tauri::command]
+pub fn catalog_list_retired_binding_roots(
+    db_path: String,
+) -> Result<Vec<RetiredBindingRootRow>, String> {
+    let conn = open_db(&db_path)?;
+    let mut stmt = conn
+        .prepare("SELECT id,root_path,retired_at FROM binding_roots WHERE retired_at IS NOT NULL")
+        .map_err(|e| format!("catalog retired roots prepare: {e}"))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(RetiredBindingRootRow {
+                id: row.get(0)?,
+                root_path: row.get(1)?,
+                retired_at: row.get(2)?,
+            })
+        })
+        .map_err(|e| format!("catalog retired roots query: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("catalog retired roots row: {e}"))
+}
+
+/// Explicit user consent to add/re-add a folder is the only operation allowed
+/// to lift the durable retirement fence. Reconciliation itself never does so.
+#[tauri::command]
+pub fn catalog_activate_binding_root(
+    db_path: String,
+    binding_root_id: String,
+    root_path: String,
+) -> Result<(), String> {
+    let conn = open_db(&db_path)?;
+    conn.execute(
+        "UPDATE binding_roots SET retired_at=NULL WHERE id=?1 OR root_path=?2",
+        params![binding_root_id, root_path],
+    )
+    .map_err(|e| format!("catalog activate binding root: {e}"))?;
+    Ok(())
+}
+
 /// Remove a workspace's BindingRoot from the active catalog.
 /// - Local-only documents: detach binding, set local_present=0, sync_status='deleted'.
 ///   `deleted_at_cache` stays NULL on purpose — that column is a CLOUD tombstone
@@ -720,6 +795,7 @@ pub struct WorkspaceRemovalDocumentRow {
 pub fn catalog_apply_workspace_removal(
     db_path: String,
     binding_root_id: String,
+    root_path: String,
     deleted_at: String,
     updated_at: String,
     now_millis: i64,
@@ -728,6 +804,47 @@ pub fn catalog_apply_workspace_removal(
     let tx = conn
         .transaction()
         .map_err(|e| format!("catalog workspace removal begin: {e}"))?;
+
+    // This is the durable commit point for the cross-store operation. It fences
+    // callbacks that were queued by the watcher before Settings is updated and
+    // makes retries idempotent (no duplicate cloud-delete mutation).
+    let root_state: Option<(String, Option<i64>)> = tx
+        .query_row(
+            "SELECT id,retired_at FROM binding_roots
+             WHERE id=?1 OR root_path=?2
+             ORDER BY CASE WHEN id=?1 THEN 0 ELSE 1 END
+             LIMIT 1",
+            params![binding_root_id, root_path],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| format!("catalog workspace removal inspect root: {e}"))?;
+    let effective_root_id = match root_state {
+        Some((_, Some(_))) => {
+            tx.commit()
+                .map_err(|e| format!("catalog workspace removal idempotent commit: {e}"))?;
+            return Ok(Vec::new());
+        }
+        Some((existing_id, None)) => {
+            tx.execute(
+                "UPDATE binding_roots SET retired_at=?1 WHERE id=?2",
+                params![now_millis, existing_id],
+            )
+            .map_err(|e| format!("catalog workspace removal retire root: {e}"))?;
+            existing_id
+        }
+        None => {
+            // Removal may race the root's first projection. Persist a tombstone
+            // anyway so the already-queued watcher callback cannot create it.
+            tx.execute(
+                "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace,retired_at)
+                 VALUES(?1,?2,2,1,?3)",
+                params![binding_root_id, root_path, now_millis],
+            )
+            .map_err(|e| format!("catalog workspace removal create fence: {e}"))?;
+            binding_root_id.clone()
+        }
+    };
 
     let mut stmt = tx
         .prepare(
@@ -738,7 +855,7 @@ pub fn catalog_apply_workspace_removal(
         )
         .map_err(|e| format!("catalog workspace removal prepare: {e}"))?;
     let rows: Vec<WorkspaceRemovalDocumentRow> = stmt
-        .query_map(params![binding_root_id], |row| {
+        .query_map(params![effective_root_id], |row| {
             Ok(WorkspaceRemovalDocumentRow {
                 id: row.get(0)?,
                 cloud_present: row.get::<_, i64>(1)? != 0,
@@ -1009,11 +1126,34 @@ pub struct CatalogReconcileInput {
 pub fn catalog_apply_reconcile(
     db_path: String,
     input: CatalogReconcileInput,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let mut conn = open_db(&db_path)?;
     let tx = conn
         .transaction()
         .map_err(|e| format!("catalog reconcile begin: {e}"))?;
+
+    // A callback may already be scanning when removal starts. The SQLite fence
+    // is checked in the same transaction as projection, so that stale callback
+    // cannot recreate bindings even if it captured the old in-memory root.
+    if let Some(binding) = input.upserts.first() {
+        let retired: bool = tx
+            .query_row(
+                "SELECT retired_at IS NOT NULL FROM binding_roots
+                 WHERE id=?1 OR root_path=?2
+                 ORDER BY CASE WHEN id=?1 THEN 0 ELSE 1 END
+                 LIMIT 1",
+                params![binding.binding_root_id, binding.root_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("catalog reconcile retirement fence: {e}"))?
+            .unwrap_or(false);
+        if retired {
+            tx.commit()
+                .map_err(|e| format!("catalog reconcile fenced commit: {e}"))?;
+            return Ok(false);
+        }
+    }
 
     for b in &input.upserts {
         tx.execute(
@@ -1059,7 +1199,8 @@ pub fn catalog_apply_reconcile(
     }
 
     tx.commit()
-        .map_err(|e| format!("catalog reconcile commit: {e}"))
+        .map_err(|e| format!("catalog reconcile commit: {e}"))?;
+    Ok(true)
 }
 
 #[tauri::command]
@@ -1508,10 +1649,18 @@ mod catalog_tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 7);
+        let retired_root_column: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('binding_roots') WHERE name='retired_at'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 8);
         assert_eq!(cloud_hash_column, 1);
         assert_eq!(deleted_at_column, 1);
         assert_eq!(excerpt_columns, 2);
+        assert_eq!(retired_root_column, 1);
         eprintln!("catalog_startup_ms={startup_ms:.3}");
         assert!(startup_ms < 1000.0, "catalog startup exceeded 1s budget");
         drop(conn);
@@ -1697,13 +1846,17 @@ mod catalog_tests {
 
         catalog_purge_document(path.clone(), "doc-purge".into()).unwrap();
 
-        assert!(catalog_get_by_id(path.clone(), "doc-purge".into()).unwrap().is_none());
+        assert!(catalog_get_by_id(path.clone(), "doc-purge".into())
+            .unwrap()
+            .is_none());
         let conn = open_db(&path).unwrap();
-        let mutations: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM sync_mutations WHERE document_id='doc-purge'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let mutations: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_mutations WHERE document_id='doc-purge'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(mutations, 0);
         drop(conn);
         let _ = fs::remove_file(path);
@@ -2127,7 +2280,7 @@ mod catalog_tests {
         assert_eq!(snapshot.collections[0].name, "Research");
         assert_eq!(snapshot.writing_collections.len(), 1);
         assert_eq!(snapshot.writing_collections[0].writing_id, "doc-1");
-        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 7);
+        assert_eq!(catalog_schema_version(path.clone()).unwrap(), 8);
         let _ = fs::remove_file(path);
     }
 
@@ -2136,7 +2289,12 @@ mod catalog_tests {
         let mut seed = input(id, &format!("/tmp/root/{id}.md"), &format!("m-{id}"));
         seed.document.cloud_present = cloud_present;
         seed.document.cloud_account_id = cloud_present.then(|| "user-1".to_string());
-        seed.document.sync_status = if cloud_present { "synced" } else { "local-only" }.into();
+        seed.document.sync_status = if cloud_present {
+            "synced"
+        } else {
+            "local-only"
+        }
+        .into();
         seed.mutation = None;
         catalog_dual_write(path.to_string(), seed).unwrap();
     }
@@ -2183,6 +2341,7 @@ mod catalog_tests {
         catalog_apply_workspace_removal(
             path.clone(),
             "root-1".into(),
+            "/tmp/root".into(),
             "2026-07-30T00:00:00Z".into(),
             "2026-07-30T00:00:00Z".into(),
             10,
@@ -2197,7 +2356,10 @@ mod catalog_tests {
             .unwrap()
             .query_row("SELECT COUNT(*) FROM sync_mutations", [], |row| row.get(0))
             .unwrap();
-        assert_eq!(pending, 0, "a local-only document must not queue cloud work");
+        assert_eq!(
+            pending, 0,
+            "a local-only document must not queue cloud work"
+        );
 
         // Gone from the active catalog, and absent from Archived writings, which
         // lists rows carrying a tombstone.
@@ -2239,6 +2401,7 @@ mod catalog_tests {
         let affected = catalog_apply_workspace_removal(
             path.clone(),
             "root-1".into(),
+            "/tmp/root".into(),
             "2026-07-30T00:00:00Z".into(),
             "2026-07-30T00:00:00Z".into(),
             10,
@@ -2272,6 +2435,147 @@ mod catalog_tests {
         let _ = fs::remove_file(path);
     }
 
+    /// Simulates a process stop after SQLite commits but before Settings is
+    /// cleaned. Reopening the database retains the fence, and retrying removal
+    /// cannot enqueue a second cloud delete.
+    #[test]
+    fn workspace_removal_fence_survives_restart_and_is_idempotent() {
+        let path = temp_db();
+        seed_bound_document(&path, "cloud-doc", true);
+
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "/tmp/root".into(),
+            "2026-08-02T00:00:00Z".into(),
+            "2026-08-02T00:00:00Z".into(),
+            20,
+        )
+        .unwrap();
+
+        let retired = catalog_list_retired_binding_roots(path.clone()).unwrap();
+        assert_eq!(retired.len(), 1);
+        assert_eq!(retired[0].id, "root-1");
+
+        let retry = catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "/tmp/root".into(),
+            "2026-08-02T00:00:01Z".into(),
+            "2026-08-02T00:00:01Z".into(),
+            21,
+        )
+        .unwrap();
+        assert!(retry.is_empty());
+
+        let conn = open_db(&path).unwrap();
+        let mutations: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_mutations WHERE document_id='cloud-doc' AND operation='delete'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(mutations, 1);
+        drop(conn);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn workspace_removal_resolves_an_existing_root_by_path() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+
+        let affected = catalog_apply_workspace_removal(
+            path.clone(),
+            "settings-root".into(),
+            "/tmp/root".into(),
+            "2026-08-02T00:00:00Z".into(),
+            "2026-08-02T00:00:00Z".into(),
+            20,
+        )
+        .unwrap();
+        assert_eq!(affected, vec!["local-doc".to_string()]);
+
+        let retired = catalog_list_retired_binding_roots(path.clone()).unwrap();
+        assert_eq!(retired.len(), 1);
+        assert_eq!(retired[0].id, "root-1");
+
+        let conn = open_db(&path).unwrap();
+        let stale_settings_root: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM binding_roots WHERE id='settings-root'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stale_settings_root, 0);
+        drop(conn);
+        let _ = fs::remove_file(path);
+    }
+
+    /// Models the watcher callback already queued before removal. Its stale
+    /// snapshot reaches SQLite after the fence and must be ignored atomically.
+    #[test]
+    fn retired_root_rejects_late_watcher_reprojection() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "/tmp/root".into(),
+            "2026-08-02T00:00:00Z".into(),
+            "2026-08-02T00:00:00Z".into(),
+            20,
+        )
+        .unwrap();
+
+        let applied = catalog_apply_reconcile(
+            path.clone(),
+            CatalogReconcileInput {
+                upserts: vec![CatalogLocalBindingInput {
+                    binding_root_id: "stale-watcher-root".into(),
+                    root_path: "/tmp/root".into(),
+                    manifest_version: 2,
+                    visible_as_workspace: true,
+                    document_id: "local-doc".into(),
+                    relative_path: "local-doc.md".into(),
+                    canonical_path: "/tmp/root/local-doc.md".into(),
+                    inode: Some(1),
+                    content_hash: Some("blake3:late".into()),
+                    size: Some(10),
+                    last_seen_at: Some(30),
+                    title: "local-doc".into(),
+                    created_at: Some(1),
+                    modified_at: Some(30),
+                }],
+                detached: vec![],
+            },
+        )
+        .unwrap();
+        assert!(!applied);
+
+        let conn = open_db(&path).unwrap();
+        let bindings: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM document_bindings WHERE binding_root_id='root-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let local_present: i64 = conn
+            .query_row(
+                "SELECT local_present FROM documents WHERE id='local-doc'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(bindings, 0);
+        assert_eq!(local_present, 0);
+        drop(conn);
+        let _ = fs::remove_file(path);
+    }
+
     /// Re-adding the folder: local-only documents come back on their own, and only
     /// cloud-archived ones are handed to the caller for the "local wins" upsert.
     #[test]
@@ -2283,11 +2587,14 @@ mod catalog_tests {
         catalog_apply_workspace_removal(
             path.clone(),
             "root-1".into(),
+            "/tmp/root".into(),
             "2026-07-30T00:00:00Z".into(),
             "2026-07-30T00:00:00Z".into(),
             10,
         )
         .unwrap();
+
+        catalog_activate_binding_root(path.clone(), "root-1".into(), "/tmp/root".into()).unwrap();
 
         // The reconciler re-binds both files from the surviving manifest. It only
         // moves local presence and the binding — unlike dual-write, it never
@@ -2311,7 +2618,10 @@ mod catalog_tests {
         let returned = catalog_reactivate_binding_root(path.clone(), "root-1".into()).unwrap();
 
         assert_eq!(
-            returned.iter().map(|row| row.id.as_str()).collect::<Vec<_>>(),
+            returned
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["cloud-doc"],
             "a local-only document must never enter the cloud upsert batch"
         );

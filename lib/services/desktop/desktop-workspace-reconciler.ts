@@ -42,6 +42,56 @@ type Runtime = {
 
 let runtimePromise: Promise<Runtime | null> | null = null
 
+function normalizeRootPath(value: string): string {
+  return value.replace(/[\\/]+$/, "")
+}
+
+/**
+ * Complete a workspace removal that committed its durable SQLite fence before
+ * the process stopped (or before Settings became writable). This recovery runs
+ * before any watcher is configured, so an obsolete Settings root is never made
+ * observable again during startup.
+ */
+export async function recoverInterruptedWorkspaceRemovals(
+  settings: DesktopSettingsService,
+  catalog: SqliteDocumentCatalog,
+): Promise<void> {
+  const retiredRoots = await catalog.listRetiredBindingRoots()
+  if (retiredRoots.length === 0) return
+
+  const snapshot = await settings.getDesktopSettings()
+  if (snapshot.error || !snapshot.data) {
+    throw new Error(
+      `Failed to recover workspace removal: ${snapshot.error?.message ?? "settings unavailable"}`,
+    )
+  }
+
+  const retiredIds = new Set(retiredRoots.map((root) => root.id))
+  const retiredPaths = new Set(retiredRoots.map((root) => normalizeRootPath(root.rootPath)))
+  const workspaces = (snapshot.data.workspaces ?? []).filter(
+    (workspace) => !retiredPaths.has(normalizeRootPath(workspace.rootPath)),
+  )
+  const activeSlugs = new Set(workspaces.map((workspace) => workspace.slug))
+  const workspaceAssignments = Object.fromEntries(
+    Object.entries(snapshot.data.workspaceAssignments ?? {}).filter(([, slug]) =>
+      activeSlugs.has(slug),
+    ),
+  )
+  const bindingRoots = (snapshot.data.bindingRoots ?? []).filter(
+    (root) =>
+      !retiredIds.has(root.id) && !retiredPaths.has(normalizeRootPath(root.rootPath)),
+  )
+
+  const result = await settings.updateDesktopSettings({
+    workspaces,
+    workspaceAssignments,
+    bindingRoots,
+  })
+  if (result.error) {
+    throw new Error(`Failed to recover workspace removal: ${result.error.message}`)
+  }
+}
+
 async function configureRootWatcher(
   runtime: Runtime,
   roots: ReconcilerRoot[],
@@ -108,6 +158,8 @@ async function buildRuntime(): Promise<Runtime | null> {
   const catalog = new SqliteDocumentCatalog(
     await join(configDir, "desktop-index.sqlite3"),
   )
+
+  await recoverInterruptedWorkspaceRemovals(settings, catalog)
 
   const loadRoots = async (): Promise<ReconcilerRoot[]> => {
     const managedPath = await join(configDir, MANAGED_ROOT_DIRNAME)

@@ -23,6 +23,8 @@ const tauriMocks = vi.hoisted(() => ({
   tauriCatalogCountBindingRootDocuments: vi.fn(async () => ({ total: 0, cloud: 0 })),
   tauriCatalogListBindingRootDocuments: vi.fn(async () => [] as unknown[]),
   tauriCatalogApplyWorkspaceRemoval: vi.fn(async () => [] as string[]),
+  tauriCatalogListRetiredBindingRoots: vi.fn(async () => [] as unknown[]),
+  tauriCatalogActivateBindingRoot: vi.fn(async () => undefined),
   tauriCatalogReactivateBindingRoot: vi.fn(async () => [] as unknown[]),
   tauriCatalogBulkDualWrite: vi.fn(async () => [] as string[]),
 }));
@@ -72,6 +74,8 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogCountBindingRootDocuments: tauriMocks.tauriCatalogCountBindingRootDocuments,
   tauriCatalogListBindingRootDocuments: tauriMocks.tauriCatalogListBindingRootDocuments,
   tauriCatalogApplyWorkspaceRemoval: tauriMocks.tauriCatalogApplyWorkspaceRemoval,
+  tauriCatalogListRetiredBindingRoots: tauriMocks.tauriCatalogListRetiredBindingRoots,
+  tauriCatalogActivateBindingRoot: tauriMocks.tauriCatalogActivateBindingRoot,
   tauriCatalogReactivateBindingRoot: tauriMocks.tauriCatalogReactivateBindingRoot,
   tauriCatalogBulkDualWrite: tauriMocks.tauriCatalogBulkDualWrite,
 }));
@@ -87,6 +91,7 @@ vi.mock("@/lib/editor/document-serialization", () => ({
   })),
 }));
 vi.mock("@/lib/services/desktop/desktop-workspace-reconciler", () => ({
+  recoverInterruptedWorkspaceRemovals: vi.fn(async () => undefined),
   refreshWorkspaceReconcilerRoots: reconcilerMocks.refreshRoots,
 }));
 
@@ -222,6 +227,8 @@ describe("DesktopWorkspaceService assignments", () => {
     tauriMocks.tauriCatalogCountBindingRootDocuments.mockReset().mockResolvedValue({ total: 0, cloud: 0 });
     tauriMocks.tauriCatalogListBindingRootDocuments.mockReset().mockResolvedValue([]);
     tauriMocks.tauriCatalogApplyWorkspaceRemoval.mockReset().mockResolvedValue([]);
+    tauriMocks.tauriCatalogListRetiredBindingRoots.mockReset().mockResolvedValue([]);
+    tauriMocks.tauriCatalogActivateBindingRoot.mockReset().mockResolvedValue(undefined);
     tauriMocks.tauriCatalogReactivateBindingRoot.mockReset().mockResolvedValue([]);
     tauriMocks.tauriCatalogBulkDualWrite.mockReset().mockResolvedValue([]);
     reconcilerMocks.refreshRoots.mockReset();
@@ -647,6 +654,7 @@ describe("workspace removal (ODE-408)", () => {
     expect(tauriMocks.tauriCatalogApplyWorkspaceRemoval).toHaveBeenCalledWith(
       "/tmp/cfg/desktop-index.sqlite3",
       "root-drafts",
+      "/Users/me/drafts",
       expect.any(String),
       expect.any(String),
     );
@@ -697,7 +705,7 @@ describe("workspace removal (ODE-408)", () => {
     );
   });
 
-  it("does not touch the catalog when the Settings transition fails", async () => {
+  it("keeps a durable SQLite fence when Settings cleanup fails", async () => {
     await settings.updateDesktopSettings({ bindingRoots: [bindingRoot] });
     settings.updateDesktopSettings.mockResolvedValueOnce({
       data: null,
@@ -705,16 +713,16 @@ describe("workspace removal (ODE-408)", () => {
     } as never);
 
     await expect(service.removeWorkspace("drafts")).rejects.toThrow(
-      "Failed to remove Workspace: disk full",
+      "Workspace removal is durable but Settings cleanup must be retried: disk full",
     );
 
-    expect(tauriMocks.tauriCatalogApplyWorkspaceRemoval).not.toHaveBeenCalled();
+    expect(tauriMocks.tauriCatalogApplyWorkspaceRemoval).toHaveBeenCalledTimes(1);
     expect(await service.listWorkspaces()).toEqual(
       expect.arrayContaining([expect.objectContaining({ slug: "drafts" })]),
     );
   });
 
-  it("rolls Settings back when the catalog removal fails", async () => {
+  it("leaves Settings untouched when the durable catalog removal fails", async () => {
     await settings.updateDesktopSettings({ bindingRoots: [bindingRoot] });
     tauriMocks.tauriCatalogApplyWorkspaceRemoval.mockRejectedValueOnce(
       new Error("sqlite busy"),
@@ -726,7 +734,7 @@ describe("workspace removal (ODE-408)", () => {
     expect(settings.store.workspaces).toEqual(
       expect.arrayContaining([expect.objectContaining({ slug: "drafts" })]),
     );
-    expect(reconcilerMocks.refreshRoots).toHaveBeenCalled();
+    expect(reconcilerMocks.refreshRoots).not.toHaveBeenCalled();
   });
 
   const archivedCloudRow = () => ({

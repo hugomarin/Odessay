@@ -6,6 +6,8 @@ import { WebDocumentCatalog } from "@/lib/services/web-document-catalog"
 const mocks = vi.hoisted(() => ({
   catalogGet: vi.fn(), catalogResolve: vi.fn(), catalogList: vi.fn(), catalogWrite: vi.fn(), catalogBulkWrite: vi.fn(),
   catalogDetach: vi.fn(), catalogHydrateExcerpts: vi.fn(),
+  catalogApplyReconcile: vi.fn(),
+  catalogApplyWorkspaceRemoval: vi.fn(),
   writingGet: vi.fn(), writingGetByPath: vi.fn(), writingGetAll: vi.fn(), writingSave: vi.fn(), writingDetach: vi.fn(),
   localListener: null as null | (() => void),
 }))
@@ -18,6 +20,8 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogBulkDualWrite: mocks.catalogBulkWrite,
   tauriCatalogDetachLocalFile: mocks.catalogDetach,
   tauriCatalogHydrateExcerpts: mocks.catalogHydrateExcerpts,
+  tauriCatalogApplyReconcile: mocks.catalogApplyReconcile,
+  tauriCatalogApplyWorkspaceRemoval: mocks.catalogApplyWorkspaceRemoval,
 }))
 
 vi.mock("@/lib/local-db", () => ({
@@ -71,6 +75,8 @@ describe("DocumentCatalog contract", () => {
     mocks.catalogBulkWrite.mockResolvedValue(undefined)
     mocks.catalogDetach.mockResolvedValue(undefined)
     mocks.catalogHydrateExcerpts.mockResolvedValue([])
+    mocks.catalogApplyReconcile.mockResolvedValue(true)
+    mocks.catalogApplyWorkspaceRemoval.mockResolvedValue([])
     mocks.writingGet.mockResolvedValue(localWriting)
     mocks.writingGetByPath.mockResolvedValue(localWriting)
     mocks.writingGetAll.mockResolvedValue([localWriting])
@@ -123,6 +129,53 @@ describe("DocumentCatalog contract", () => {
     })
 
     expect(changes).toHaveLength(1)
+    unsubscribe()
+  })
+
+  it("emits no CatalogChange when SQLite fences a late watcher transaction", async () => {
+    const catalog = new SqliteDocumentCatalog("/tmp/retired-root.db")
+    const changes: unknown[] = []
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
+    mocks.catalogApplyReconcile.mockResolvedValueOnce(false)
+
+    const result = await catalog.applyReconcileTransaction({
+      transactionId: "late-watcher",
+      bindingRootId: "retired-root",
+      rootPath: "/tmp/retired",
+      visibleAsWorkspace: true,
+      upserts: [{
+        documentId: "doc-1",
+        bindingRootId: "retired-root",
+        relativePath: "Doc.md",
+        canonicalPath: "/tmp/retired/Doc.md",
+        inode: null,
+        contentHash: "blake3:late",
+        size: 10,
+        modifiedAt: 2,
+        strategy: "path",
+      }],
+      detached: [],
+    })
+
+    expect(result.documentIds).toEqual([])
+    expect(changes).toEqual([])
+    unsubscribe()
+  })
+
+  it("emits no CatalogChange when a workspace-removal retry is already retired", async () => {
+    const catalog = new SqliteDocumentCatalog("/tmp/retired-root.db")
+    const changes: unknown[] = []
+    const unsubscribe = catalog.subscribe((change) => changes.push(change))
+
+    const result = await catalog.applyWorkspaceRemoval(
+      "retired-root",
+      "/tmp/retired",
+      "2026-08-02T00:00:00Z",
+      "2026-08-02T00:00:00Z",
+    )
+
+    expect(result.documentIds).toEqual([])
+    expect(changes).toEqual([])
     unsubscribe()
   })
 

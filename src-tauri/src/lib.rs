@@ -277,6 +277,8 @@ pub fn run() {
             commands::index::catalog_count_binding_root_documents,
             commands::index::catalog_list_binding_root_documents,
             commands::index::catalog_apply_workspace_removal,
+            commands::index::catalog_list_retired_binding_roots,
+            commands::index::catalog_activate_binding_root,
             commands::index::catalog_reactivate_binding_root,
             commands::index::catalog_apply_cloud_snapshots,
             commands::index::catalog_find_eligible_cloud_hash,

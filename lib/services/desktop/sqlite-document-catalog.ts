@@ -11,9 +11,11 @@ import {
   tauriCatalogApplyReconcile,
   tauriCatalogApplyCloudSnapshots,
   tauriCatalogApplyWorkspaceRemoval,
+  tauriCatalogActivateBindingRoot,
   tauriCatalogBulkDualWrite,
   tauriCatalogCountBindingRootDocuments,
   tauriCatalogListBindingRootDocuments,
+  tauriCatalogListRetiredBindingRoots,
   tauriCatalogReactivateBindingRoot,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
@@ -23,6 +25,7 @@ import {
   tauriCatalogResolvePath,
   type DesktopCatalogDualWriteInput,
   type DesktopCatalogRow,
+  type DesktopRetiredBindingRoot,
 } from "@/lib/services/desktop/tauri-commands"
 import type { ReconcileCommit } from "@/lib/services/desktop/workspace-reconciler"
 import { filenameToTitle } from "@/lib/desktop/document-naming"
@@ -153,6 +156,14 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
     return (await tauriCatalogListBindingRootDocuments(this.dbPath, bindingRootId)).map(toRecord)
   }
 
+  async listRetiredBindingRoots(): Promise<DesktopRetiredBindingRoot[]> {
+    return tauriCatalogListRetiredBindingRoots(this.dbPath)
+  }
+
+  async activateBindingRoot(bindingRootId: string, rootPath: string): Promise<void> {
+    await tauriCatalogActivateBindingRoot(this.dbPath, bindingRootId, rootPath)
+  }
+
   /**
    * Re-adding a previously removed workspace folder (ODE-408).
    *
@@ -176,12 +187,14 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
    */
   async applyWorkspaceRemoval(
     bindingRootId: string,
+    rootPath: string,
     deletedAt: string,
     updatedAt: string,
   ): Promise<CatalogChange> {
     const documentIds = await tauriCatalogApplyWorkspaceRemoval(
       this.dbPath,
       bindingRootId,
+      rootPath,
       deletedAt,
       updatedAt,
     )
@@ -191,7 +204,9 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
       reason: "bulk",
       occurredAt: Date.now(),
     } satisfies CatalogChange
-    listenersByDatabase.get(this.dbPath)?.forEach((listener) => listener(change))
+    if (documentIds.length > 0) {
+      listenersByDatabase.get(this.dbPath)?.forEach((listener) => listener(change))
+    }
     return change
   }
 
@@ -213,7 +228,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
    * never written here — only local presence and the binding move.
    */
   async applyReconcileTransaction(commit: ReconcileCommit): Promise<CatalogChange> {
-    await tauriCatalogApplyReconcile(this.dbPath, {
+    const applied = await tauriCatalogApplyReconcile(this.dbPath, {
       upserts: commit.upserts.map((entry) => ({
         bindingRootId: commit.bindingRootId,
         rootPath: commit.rootPath,
@@ -232,6 +247,14 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
       })),
       detached: commit.detached,
     })
+    if (!applied) {
+      return {
+        transactionId: commit.transactionId,
+        documentIds: [],
+        reason: "bulk",
+        occurredAt: Date.now(),
+      }
+    }
     const documentIds = [
       ...commit.upserts.map((entry) => entry.documentId!),
       ...commit.detached,
