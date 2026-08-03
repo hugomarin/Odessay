@@ -279,6 +279,19 @@ export class DesktopWorkspaceService {
     }
   }
 
+  async getWorkspaceContainingPath(canonicalPath: string): Promise<WorkspaceDetail | null> {
+    const records = await this.readRecords()
+    const normalizedPath = canonicalPath.replace(/\\/g, "/")
+    const record = records
+      .filter((candidate) => {
+        const root = candidate.rootPath.replace(/\\/g, "/").replace(/\/+$/, "")
+        return normalizedPath === root || normalizedPath.startsWith(`${root}/`)
+      })
+      .sort((left, right) => right.rootPath.length - left.rootPath.length)[0]
+
+    return record ? this.getWorkspace(record.slug) : null
+  }
+
   async addExistingWorkspace(): Promise<WorkspaceRecord | null> {
     const rootPath = await this.pickExistingWorkspaceRoot();
     if (!rootPath) {

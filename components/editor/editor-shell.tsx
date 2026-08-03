@@ -214,6 +214,7 @@ import {
 import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
 import { useHydrationProgress } from "@/lib/sync/hydration-progress"
 import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/catalog-title-events"
+import type { EditorNavigationMode } from "@/components/editor/panels/editor-navigation-sidebar"
 
 type EditorShellProps = {
   writingId?: string
@@ -448,7 +449,7 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
-  const [isTableOfContentsOpen, setIsTableOfContentsOpen] = useState(true)
+  const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>("toc")
   const [tableOfContentsItems, setTableOfContentsItems] = useState<TableOfContentDataItem[]>([])
   const [selectedTableOfContentsItemId, setSelectedTableOfContentsItemId] = useState<string | null>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
@@ -5278,6 +5279,18 @@ export function EditorShell({
   }, [currentWritingId, editor, editorSession.tabs, persistCurrentWorkspaceViewState, updateDerivedEditorState])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
 
+  const handleOpenWorkspaceDocument = useCallback(async (documentId: string) => {
+    const outcome = await openDocumentById(documentId)
+    if (outcome.status !== "opened" && outcome.status !== "conflict") {
+      throw new Error(describeOpenOutcome(outcome))
+    }
+    const openedTitle = outcome.record.title ?? UNTITLED_WRITING_TITLE
+    currentWritingIdRef.current = documentId
+    setCurrentWritingId(documentId)
+    setHydrationWritingId(documentId)
+    openWritingTab({ writingId: documentId, slug: outcome.record.slug, title: openedTitle, saveState: "saved-local", hasPendingSync: false })
+  }, [])
+
   selectAdjacentTabRef.current = (direction) => {
     const tabs = editorSession.tabs
     if (tabs.length <= 1) {
@@ -5713,7 +5726,7 @@ export function EditorShell({
                 <div
                   className={cn(
                     "relative flex min-h-0 flex-1",
-                    !isFocusMode && isTableOfContentsOpen && "pl-64",
+                    !isFocusMode && navigationMode && "pl-64",
                   )}
                 >
                   {!isFocusMode ? (
@@ -5722,8 +5735,10 @@ export function EditorShell({
                         items={tableOfContentsItems}
                         activeItemId={selectedTableOfContentsItemId}
                         onNavigate={navigateToTableOfContentsItem}
-                        isOpen={isTableOfContentsOpen}
-                        onToggleOpen={() => setIsTableOfContentsOpen((current) => !current)}
+                        activeWritingId={currentWritingId}
+                        onOpenDocument={handleOpenWorkspaceDocument}
+                        mode={navigationMode}
+                        onModeChange={setNavigationMode}
                       />
                     </Suspense>
                   ) : null}

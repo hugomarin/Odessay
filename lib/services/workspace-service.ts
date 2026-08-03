@@ -4,7 +4,10 @@ import type {
   WorkspaceAssignmentMap,
   WorkspaceAssignmentOption,
 } from "@/lib/workspace/assignment"
-import type { WorkspaceDetail } from "@/lib/workspace/types"
+import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
+import { loadWorkspaceDocumentJoin } from "@/lib/queries/workspace-catalog-source"
+import { subscribeToCatalog } from "@/lib/queries/document-catalog"
+import type { ContextualWorkspace, WorkspaceDetail } from "@/lib/workspace/types"
 
 /**
  * Runtime-agnostic entry point for document↔workspace assignment, shared by Desk
@@ -134,4 +137,42 @@ export function getWorkspaceAssignmentService(): WorkspaceAssignmentService {
   }
 
   return desktopServiceSingleton
+}
+
+export async function loadContextualWorkspace(documentId: string): Promise<ContextualWorkspace | null> {
+  if (!isTauriRuntime()) return null
+
+  const catalog = await getDocumentCatalog()
+  const record = await catalog.getById(documentId)
+  const canonicalPath = record?.binding?.canonicalPath
+  if (!canonicalPath) return null
+
+  const service = await getDesktopWorkspaceService()
+  const workspace = await service.getWorkspaceContainingPath(canonicalPath)
+  if (!workspace) return null
+
+  const documentJoin = workspace.status === "ready"
+    ? await loadWorkspaceDocumentJoin(workspace.rootPath)
+    : new Map()
+
+  return {
+    slug: workspace.slug,
+    name: workspace.name,
+    status: workspace.status,
+    missingReason: workspace.missingReason,
+    documents: workspace.files.map((file) => {
+      const document = documentJoin.get(file.path)
+      return {
+        id: document?.id ?? null,
+        name: file.name,
+        relativePath: file.relativePath,
+        state: document?.state ?? "rebuilding",
+        openable: Boolean(document?.id),
+      }
+    }),
+  }
+}
+
+export function subscribeToContextualWorkspaceChanges(onChange: () => void): () => void {
+  return subscribeToCatalog(() => onChange())
 }
