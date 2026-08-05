@@ -57,3 +57,94 @@ and performing removal in the packaged app.
 Cloud-backed archival is covered at the native catalog/application boundary with
 real SQLite transactions and a durable queue. The packaged fixture was kept
 local-only deliberately so acceptance did not mutate a real user cloud record.
+
+---
+
+# Cloud lifecycle — packaged desktop evidence
+
+Captured 2026-08-04 against a release build of the branch
+(`npm run desktop:release:prod`), signed into a real account, with **two synced
+documents**. This run covers what the 2026-08-02 pass deliberately left out: the
+cloud archive/restore lifecycle on the packaged surface.
+
+## Fixture
+
+Folder `~/Documents/ode408/` with `Alpha.md` and `Beta.md`, both reaching the
+`Synced` badge before removal.
+
+| | UUID | inode at adoption |
+|---|---|---|
+| Alpha.md | `155950b3-eee3-47a4-8cb5-afc7fa6daef5` | 148181389 |
+| Beta.md | `ff3a4ca5-6893-4b63-acca-8c90a4ddef3b` | 148181324 |
+
+`bindingRootId`: `f70a727a-4564-4eba-8d09-f8e0023528d1`
+
+`selectedPaths` normalized from `["Alpha.md","Beta.md"]` to `[]` on re-adoption —
+the expected collapse to whole-folder scope when every file is covered.
+
+## Confirmation dialog
+
+Verbatim, with two synced documents:
+
+> This workspace has 2 tracked documents. 2 synced documents will be archived in
+> the cloud. The local folder, .md files, and .odessay index stay untouched.
+
+Counts resolved correctly (2 tracked / 2 synced) and the local-only clause was
+correctly absent. Cancelling produced no change to workspace, catalog or files.
+
+## Offline removal and cloud archive
+
+1. Network disabled, then Remove from Artifact Studio confirmed.
+2. Both documents left Desk immediately — no wait on the network (41 → 39).
+3. Cloud mutations queued durably with no connectivity.
+4. Network restored: both appeared in Settings → Archived writings as
+   **Cloud archived**, dated Aug 4, and did **not** return to Desk.
+
+## Re-add — local wins, identity preserved
+
+Across three complete remove/re-add cycles, including one that exposed and then
+verified the fixes below:
+
+- Same UUIDs and same `bindingRootId` throughout; no duplicate rows.
+- Both documents returned to Desk as `Synced` and left Archived writings.
+- The externally edited `.md` won: its content replaced the cloud copy, with no
+  conflict UI and no overwrite of the local file.
+- In one cycle both files were removed and re-added untouched; their SHA-256
+  values were byte-for-byte identical before and after.
+
+**Identity survived an inode change.** `Alpha.md` was edited by an editor that
+saves atomically (write-temp-then-rename), so its inode moved from `148181389` to
+`148191038` while `Beta.md` kept `148181324`. The UUID was preserved regardless,
+confirming the manifest ledger — not inode correlation — governs identity.
+
+## Two defects found by this run
+
+Both were correctness bugs invisible to unit tests, caused by the same confusion
+between **cloud ownership** (`cloud_account_id`, survives archival) and **cloud
+liveness** (`cloud_present`, which hydration sets to 0 for a tombstoned row).
+
+1. **Reactivation never matched after a restart** (fixed in `87c8f11`).
+   `catalog_reactivate_binding_root` required `cloud_present=1 AND
+   deleted_at_cache IS NOT NULL` — unsatisfiable once hydration has run. A
+   document that survived an app restart was reclassified as local-only and
+   stranded: hidden from Desk, still tombstoned in Archived writings.
+2. **Removal misclassified an already-archived document** (fixed in `55e003e`).
+   `catalog_apply_workspace_removal` branched on `cloud_present`, so a second
+   removal sent a cloud-owned document down the local-only path: no tombstone, no
+   queued mutation. It then disappeared from Desk *and* from Archived writings.
+
+Both fixes carry native regressions verified to fail against the previous SQL.
+The remaining sites of the same confusion are presentation-only and tracked in
+ODE-416.
+
+## Out of scope, blocked by ODE-415
+
+The criterion *"offline, synced documents appear as archived/pending"* could not
+be observed: with no connectivity, opening Settings crashes the whole application
+with `SecurityError: Attempt to use history.replaceState() more than 100 times per
+10 seconds`. Root cause is in the Settings account page, unrelated to workspace
+removal, and reproduces by navigating to Settings offline without touching
+Workspaces. Filed as ODE-415.
+
+What that criterion protects — that removal converges locally and mutations
+survive without network — **is** proven above.
