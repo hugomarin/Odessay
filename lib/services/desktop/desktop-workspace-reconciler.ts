@@ -82,6 +82,18 @@ export async function recoverInterruptedWorkspaceRemovals(
       !retiredIds.has(root.id) && !retiredPaths.has(normalizeRootPath(root.rootPath)),
   )
 
+  // A retired root stays fenced in SQLite until its folder is re-added, so the
+  // presence of one is not evidence that Settings still needs cleaning. Each of
+  // the three values above is a filter of its source, so equal sizes means the
+  // cleanup already converged on an earlier run. Writing anyway would turn every
+  // `readRecords()` — and every bootstrap — into a persistent store mutation.
+  const converged =
+    workspaces.length === (snapshot.data.workspaces ?? []).length &&
+    bindingRoots.length === (snapshot.data.bindingRoots ?? []).length &&
+    Object.keys(workspaceAssignments).length ===
+      Object.keys(snapshot.data.workspaceAssignments ?? {}).length
+  if (converged) return
+
   const result = await settings.updateDesktopSettings({
     workspaces,
     workspaceAssignments,
