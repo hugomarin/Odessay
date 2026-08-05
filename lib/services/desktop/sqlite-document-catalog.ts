@@ -10,6 +10,13 @@ import type {
 import {
   tauriCatalogApplyReconcile,
   tauriCatalogApplyCloudSnapshots,
+  tauriCatalogApplyWorkspaceRemoval,
+  tauriCatalogActivateBindingRoot,
+  tauriCatalogBulkDualWrite,
+  tauriCatalogCountBindingRootDocuments,
+  tauriCatalogListBindingRootDocuments,
+  tauriCatalogListRetiredBindingRoots,
+  tauriCatalogReactivateBindingRoot,
   tauriCatalogDetachLocalFile,
   tauriCatalogDualWrite,
   tauriCatalogGetById,
@@ -18,6 +25,7 @@ import {
   tauriCatalogResolvePath,
   type DesktopCatalogDualWriteInput,
   type DesktopCatalogRow,
+  type DesktopRetiredBindingRoot,
 } from "@/lib/services/desktop/tauri-commands"
 import type { ReconcileCommit } from "@/lib/services/desktop/workspace-reconciler"
 import { filenameToTitle } from "@/lib/desktop/document-naming"
@@ -135,11 +143,71 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
 
   async commitBulkDualWrite(inputs: DesktopCatalogDualWriteInput[]): Promise<void> {
     if (inputs.length === 0) return
-    for (const input of inputs) {
-      await tauriCatalogDualWrite(this.dbPath, input)
-    }
+    await tauriCatalogBulkDualWrite(this.dbPath, inputs)
     const documentIds = inputs.map(({ document: catalogRecord }) => catalogRecord.id)
     this.emit(documentIds, "bulk")
+  }
+
+  async countByBindingRoot(bindingRootId: string): Promise<{ total: number; cloud: number }> {
+    return tauriCatalogCountBindingRootDocuments(this.dbPath, bindingRootId)
+  }
+
+  async listByBindingRoot(bindingRootId: string): Promise<DocumentCatalogRecord[]> {
+    return (await tauriCatalogListBindingRootDocuments(this.dbPath, bindingRootId)).map(toRecord)
+  }
+
+  async listRetiredBindingRoots(): Promise<DesktopRetiredBindingRoot[]> {
+    return tauriCatalogListRetiredBindingRoots(this.dbPath)
+  }
+
+  async activateBindingRoot(bindingRootId: string, rootPath: string): Promise<void> {
+    await tauriCatalogActivateBindingRoot(this.dbPath, bindingRootId, rootPath)
+  }
+
+  /**
+   * Re-adding a previously removed workspace folder (ODE-408).
+   *
+   * Restores local-only documents to the active catalog in SQLite and returns
+   * only the ones that were archived *in cloud* and whose local `.md` is present
+   * again — those still need the "local wins" content upsert, which the caller
+   * applies through the normal dual-write path.
+   *
+   * A local-only document is never returned here: it has no cloud row, so
+   * re-adding its folder must not enqueue anything toward Supabase.
+   */
+  async reactivateBindingRoot(bindingRootId: string): Promise<DocumentCatalogRecord[]> {
+    const rows = await tauriCatalogReactivateBindingRoot(this.dbPath, bindingRootId)
+    return rows.map(toRecord)
+  }
+
+  /**
+   * Remove an entire BindingRoot from the active catalog (ODE-408).
+   * Local-only documents are detached and hidden; cloud documents are soft-deleted
+   * and queued for sync. Files and `.odessay/index.json` on disk are untouched.
+   */
+  async applyWorkspaceRemoval(
+    bindingRootId: string,
+    rootPath: string,
+    deletedAt: string,
+    updatedAt: string,
+  ): Promise<CatalogChange> {
+    const documentIds = await tauriCatalogApplyWorkspaceRemoval(
+      this.dbPath,
+      bindingRootId,
+      rootPath,
+      deletedAt,
+      updatedAt,
+    )
+    const change = {
+      transactionId: crypto.randomUUID(),
+      documentIds,
+      reason: "bulk",
+      occurredAt: Date.now(),
+    } satisfies CatalogChange
+    if (documentIds.length > 0) {
+      listenersByDatabase.get(this.dbPath)?.forEach((listener) => listener(change))
+    }
+    return change
   }
 
   /**
@@ -160,7 +228,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
    * never written here — only local presence and the binding move.
    */
   async applyReconcileTransaction(commit: ReconcileCommit): Promise<CatalogChange> {
-    await tauriCatalogApplyReconcile(this.dbPath, {
+    const applied = await tauriCatalogApplyReconcile(this.dbPath, {
       upserts: commit.upserts.map((entry) => ({
         bindingRootId: commit.bindingRootId,
         rootPath: commit.rootPath,
@@ -179,6 +247,14 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
       })),
       detached: commit.detached,
     })
+    if (!applied) {
+      return {
+        transactionId: commit.transactionId,
+        documentIds: [],
+        reason: "bulk",
+        occurredAt: Date.now(),
+      }
+    }
     const documentIds = [
       ...commit.upserts.map((entry) => entry.documentId!),
       ...commit.detached,

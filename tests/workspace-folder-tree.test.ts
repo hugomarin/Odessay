@@ -56,6 +56,13 @@ describe("workspace folder tree helpers", () => {
     expect(compressWorkspaceSelection(tree, selected)).toEqual(["archive", "drafts"])
   })
 
+  it("represents selecting the complete Workspace as an open root scope", () => {
+    const tree = buildWorkspaceFolderTree(files)
+    const selected = buildDefaultWorkspaceSelection(files)
+
+    expect(compressWorkspaceSelection(tree, selected)).toEqual([])
+  })
+
   it("collects descendant files for a nested folder", () => {
     const tree = buildWorkspaceFolderTree(files)
     const drafts = tree.find((node) => node.path === "drafts")

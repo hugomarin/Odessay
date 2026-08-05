@@ -16,8 +16,17 @@ import {
   relocateDesktopWriting,
   relocateDesktopWritingByCanonicalPath,
 } from "@/lib/services/document-service-factory";
-import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service";
-import { refreshWorkspaceReconcilerRoots } from "./desktop-workspace-reconciler";
+import {
+  DesktopSettingsService,
+  type BindingRootSettingRecord,
+} from "@/lib/services/desktop/desktop-settings-service";
+import {
+  recoverInterruptedWorkspaceRemovals,
+  refreshWorkspaceReconcilerRoots,
+} from "./desktop-workspace-reconciler";
+import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog";
+import { parseDocumentFileToSnapshot } from "@/lib/editor/document-serialization";
+import { join } from "@tauri-apps/api/path";
 import {
   isOdessayInternalPath,
   isOdessaySelfWriteEvent,
@@ -30,7 +39,10 @@ import {
   tauriOpenFile,
   tauriWriteFile,
   tauriWorkspaceCreate,
+  tauriWorkspaceInspect,
+  tauriWorkspaceRepairManifestBindings,
   tauriWorkspaceSync,
+  type DesktopCatalogDualWriteInput,
   type DesktopWorkspaceSnapshot,
 } from "@/lib/services/desktop/tauri-commands";
 import type {
@@ -53,6 +65,17 @@ import {
 const MAX_PREVIEW_LENGTH = 420;
 
 let workspaceServicePromise: Promise<DesktopWorkspaceService> | null = null;
+let catalogPromise: Promise<SqliteDocumentCatalog> | null = null;
+
+async function resolveDesktopCatalog(): Promise<SqliteDocumentCatalog> {
+  if (!catalogPromise) {
+    catalogPromise = (async () => {
+      const configDir = await appConfigDir();
+      return new SqliteDocumentCatalog(await join(configDir, "desktop-index.sqlite3"));
+    })();
+  }
+  return catalogPromise;
+}
 
 function slugifyWorkspaceName(value: string) {
   const slug = value
@@ -80,6 +103,27 @@ function pathBasename(value: string) {
 function isPathInsideRoot(path: string, rootPath: string) {
   const normalizedRoot = rootPath.replace(/[\\/]+$/, "");
   return path.startsWith(`${normalizedRoot}/`);
+}
+
+function workspaceScopeIncludes(relativePath: string, selectedPaths: string[]) {
+  return selectedPaths.some(
+    (selectedPath) =>
+      relativePath === selectedPath || relativePath.startsWith(`${selectedPath}/`),
+  );
+}
+
+function normalizeAdoptedWorkspaceScope(
+  snapshot: DesktopWorkspaceSnapshot,
+  selectedPaths: string[],
+) {
+  if (
+    selectedPaths.length > 0 &&
+    snapshot.files.length > 0 &&
+    snapshot.files.every((file) => workspaceScopeIncludes(file.relativePath, selectedPaths))
+  ) {
+    return [];
+  }
+  return selectedPaths;
 }
 
 function formatWorkspaceFromSnapshot(
@@ -189,17 +233,24 @@ export class DesktopWorkspaceService {
   }
 
   async inspectWorkspace(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
-    return tauriWorkspaceSync(rootPath);
+    return tauriWorkspaceInspect(rootPath);
   }
 
   private async readRecords(): Promise<WorkspaceRecord[]> {
+    await recoverInterruptedWorkspaceRemovals(
+      this.settingsService,
+      await resolveDesktopCatalog(),
+    );
     const result = await this.settingsService.getDesktopSettings();
     const workspaces = result.data?.workspaces ?? [];
     return Array.isArray(workspaces) ? workspaces : [];
   }
 
   private async writeRecords(records: WorkspaceRecord[]) {
-    await this.settingsService.updateDesktopSettings({ workspaces: records });
+    const result = await this.settingsService.updateDesktopSettings({ workspaces: records });
+    if (result.error) {
+      throw new Error(`Failed to persist Workspaces: ${result.error.message}`);
+    }
   }
 
   async getLayout(): Promise<WorkspaceLayout> {
@@ -208,9 +259,12 @@ export class DesktopWorkspaceService {
   }
 
   async setLayout(layout: WorkspaceLayout) {
-    await this.settingsService.updateDesktopSettings({
+    const result = await this.settingsService.updateDesktopSettings({
       workspaceLayout: layout,
     });
+    if (result.error) {
+      throw new Error(`Failed to persist Workspace layout: ${result.error.message}`);
+    }
   }
 
   async listWorkspaces(): Promise<WorkspaceSummary[]> {
@@ -305,11 +359,12 @@ export class DesktopWorkspaceService {
     rootPath: string,
     selectedPaths: string[],
   ): Promise<WorkspaceRecord | null> {
+    const inspected = await tauriWorkspaceInspect(rootPath);
     return this.registerWorkspace(
       rootPath,
       "existing-folder",
       undefined,
-      selectedPaths,
+      normalizeAdoptedWorkspaceScope(inspected, selectedPaths),
     );
   }
 
@@ -343,6 +398,11 @@ export class DesktopWorkspaceService {
       (root) =>
         root.id === snapshot.bindingRootId || root.rootPath === snapshot.rootPath,
     );
+    // Explicit user consent is the only transition that lifts a previous
+    // SQLite retirement fence. Do this before Settings so a crash cannot leave
+    // a visible root that the catalog still considers removed.
+    const catalog = await resolveDesktopCatalog();
+    await catalog.activateBindingRoot(snapshot.bindingRootId, snapshot.rootPath);
     await this.settingsService.upsertBindingRoot({
       id: snapshot.bindingRootId,
       rootPath: snapshot.rootPath,
@@ -353,32 +413,43 @@ export class DesktopWorkspaceService {
       createdAt: existingBindingRoot?.createdAt ?? nowIso,
     });
 
-    if (existing) {
-      await refreshWorkspaceReconcilerRoots();
-      return existing;
-    }
-
-    const baseName = explicitName?.trim() || snapshot.name;
-    const baseSlug = slugifyWorkspaceName(baseName);
-    let slug = baseSlug;
-    let suffix = 2;
-
-    while (records.some((record) => record.slug === slug)) {
-      slug = `${baseSlug}-${suffix}`;
-      suffix += 1;
-    }
-
-    const nextRecord: WorkspaceRecord = {
-      slug,
-      name: baseName,
+    const nextRecord: WorkspaceRecord = existing ?? {
+      slug: slugifyWorkspaceName(explicitName?.trim() || snapshot.name),
+      name: explicitName?.trim() || snapshot.name,
       rootPath,
       source,
       addedAt: nowIso,
       lastOpenedAt: null,
     };
 
-    await this.writeRecords([...records, nextRecord]);
+    if (!existing) {
+      const baseSlug = nextRecord.slug;
+      let slug = baseSlug;
+      let suffix = 2;
+
+      while (records.some((record) => record.slug === slug)) {
+        slug = `${baseSlug}-${suffix}`;
+        suffix += 1;
+      }
+
+      nextRecord.slug = slug;
+      await this.writeRecords([...records, nextRecord]);
+    }
+
     await refreshWorkspaceReconcilerRoots();
+
+    // If this root was previously removed, any surviving local `.md` files have
+    // just been re-bound by the reconciler. Re-upload their current contents so
+    // the cloud archive is reversed (local wins).
+    //
+    // The Workspace registration is already durable. If reactivation is partial,
+    // surface the recoverable error while keeping the chooser open: confirming
+    // again reruns this idempotent path instead of silently stranding cloud docs.
+    await this.reactivateArchivedCloudDocuments(
+      snapshot.bindingRootId,
+      snapshot.rootPath,
+    );
+
     return nextRecord;
   }
 
@@ -465,19 +536,237 @@ export class DesktopWorkspaceService {
     return { ...target, name: normalizedName };
   }
 
-  async removeWorkspace(slug: string): Promise<void> {
-    const records = await this.readRecords();
-    const nextRecords = records.filter((record) => record.slug !== slug);
-    await this.writeRecords(nextRecords);
+  /**
+   * Resolve the BindingRoot backing a workspace record.
+   *
+   * `WorkspaceRecord.rootPath` is the raw path the user picked while the
+   * BindingRoot stores the canonicalized one, so both sides are normalized here.
+   * The previous one-sided comparison could miss a root that does exist and make
+   * removal skip the catalog silently, leaving the documents visible in Desk
+   * with no workspace to remove them from.
+   *
+   * A genuine miss (no root observes this folder) is not an error: a
+   * presentation-only or pre-BindingRoot workspace has nothing to retire from
+   * the catalog, and must still be removable.
+   */
+  private async resolveBindingRootFor(
+    rootPath: string,
+  ): Promise<BindingRootSettingRecord | null> {
+    const normalize = (value: string) => value.replace(/[\\/]+$/, "");
+    const target = normalize(rootPath);
+    const bindingRoots = await this.settingsService.getBindingRoots();
+    return (
+      bindingRoots.find((root) => normalize(root.rootPath) === target) ?? null
+    );
+  }
 
-    // Keep assignments honest: a writing can no longer point at a removed
-    // workspace. The file itself is untouched ("files in place").
-    const assignments = await this.readAssignments();
-    const pruned = pruneAssignments(
+  async previewWorkspaceRemoval(slug: string): Promise<{ total: number; cloud: number }> {
+    const records = await this.readRecords();
+    const target = records.find((record) => record.slug === slug);
+    if (!target?.rootPath) {
+      return { total: 0, cloud: 0 };
+    }
+    const root = await this.resolveBindingRootFor(target.rootPath);
+    if (!root) {
+      return { total: 0, cloud: 0 };
+    }
+    const catalog = await resolveDesktopCatalog();
+    return catalog.countByBindingRoot(root.id);
+  }
+
+  async removeWorkspace(slug: string): Promise<void> {
+    const settingsSnapshot = await this.settingsService.getDesktopSettings();
+    if (settingsSnapshot.error || !settingsSnapshot.data) {
+      throw new Error(
+        `Failed to read Workspace settings: ${settingsSnapshot.error?.message ?? "settings unavailable"}`,
+      );
+    }
+    const records = settingsSnapshot.data.workspaces ?? [];
+    const target = records.find((record) => record.slug === slug);
+    const nextRecords = records.filter((record) => record.slug !== slug);
+    const assignments = settingsSnapshot.data.workspaceAssignments ?? {};
+    const prunedAssignments = pruneAssignments(
       assignments,
       nextRecords.map((record) => record.slug),
     );
-    await this.writeAssignments(pruned);
+    const bindingRoots = settingsSnapshot.data.bindingRoots ?? [];
+    const normalize = (value: string) => value.replace(/[\\/]+$/, "");
+    const root = target?.rootPath
+      ? bindingRoots.find(
+          (candidate) => normalize(candidate.rootPath) === normalize(target.rootPath),
+        ) ?? null
+      : null;
+
+    let catalog: SqliteDocumentCatalog | null = null;
+    if (root) {
+      catalog = await resolveDesktopCatalog();
+      const boundDocuments = await catalog.listByBindingRoot(root.id);
+      const missingBinding = boundDocuments.find((catalogEntry) => !catalogEntry.binding);
+      if (missingBinding) {
+        throw new Error(
+          `Cannot safely remove Workspace: catalog binding is incomplete for ${missingBinding.id}`,
+        );
+      }
+      await tauriWorkspaceRepairManifestBindings(
+        root.rootPath,
+        root.id,
+        boundDocuments.map((catalogEntry) => ({
+          documentId: catalogEntry.id,
+          relativePath: catalogEntry.binding!.relativePath,
+          inode: catalogEntry.binding!.inode,
+          contentHash: catalogEntry.binding!.contentHash,
+          lastSeen: catalogEntry.binding!.lastSeenAt,
+          size: catalogEntry.binding!.size,
+        })),
+      );
+    }
+
+    if (root && catalog) {
+      const nowIso = new Date().toISOString();
+      await catalog.applyWorkspaceRemoval(root.id, root.rootPath, nowIso, nowIso);
+    }
+
+    // SQLite commits the durable removal fence first. If the process stops or
+    // Settings cannot be written after this point, startup recovery completes
+    // this organizational projection before watchers are configured.
+    const settingsWrite = await this.settingsService.updateDesktopSettings({
+      workspaces: nextRecords,
+      workspaceAssignments: prunedAssignments,
+      bindingRoots: root
+        ? bindingRoots.filter((candidate) => candidate.id !== root.id)
+        : bindingRoots,
+    });
+    if (settingsWrite.error) {
+      await refreshWorkspaceReconcilerRoots();
+      throw new Error(
+        `Workspace removal is durable but Settings cleanup must be retried: ${settingsWrite.error.message}`,
+      );
+    }
+
+    // Reconfigure the global watcher so the removed root is no longer observed.
+    await refreshWorkspaceReconcilerRoots();
+  }
+
+  /**
+   * After a workspace root is re-added, any cloud-archived document whose local
+   * `.md` file is still present (and was just re-bound by the reconciler) should
+   * be restored from the local copy. Local wins: clear the archive marker, bump
+   * the version, and enqueue an upsert so the cloud record is overwritten with
+   * the current local content (ODE-408).
+   */
+  private async reactivateArchivedCloudDocuments(
+    bindingRootId: string,
+    rootPath: string,
+  ): Promise<void> {
+    const catalog = await resolveDesktopCatalog();
+    // Restores local-only documents in SQLite and returns only the cloud-archived
+    // ones. A local-only document can never reach the mutation queue below.
+    const candidates = await catalog.reactivateBindingRoot(bindingRootId);
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const now = Date.now();
+    const inputs: DesktopCatalogDualWriteInput[] = [];
+    const skipped: string[] = [];
+
+    for (const record of candidates) {
+      if (!record.binding) {
+        continue;
+      }
+
+      // A file that vanished or stopped parsing between the rescan and this loop
+      // is skipped, not fatal: its cloud copy stays archived and recoverable from
+      // Settings > Archived writings instead of blocking the whole re-add.
+      let snapshot;
+      try {
+        const markdown = await tauriOpenFile(record.binding.canonicalPath);
+        snapshot = parseDocumentFileToSnapshot(markdown).snapshot;
+      } catch (error) {
+        skipped.push(record.binding.relativePath);
+        console.error(
+          `Could not reactivate "${record.binding.relativePath}" from local content`,
+          error,
+        );
+        continue;
+      }
+
+      const version = Math.max(1, (record.version ?? 0) + 1);
+      const title = record.title ?? filenameToTitle(record.binding.relativePath);
+      const status = record.status ?? "draft";
+      const artifactType = record.artifactType ?? "general";
+      const visibility = record.visibility ?? "private";
+      const catalogDocument = {
+        id: record.id,
+        localPresent: true,
+        // Reactivation only ever runs on rows that already own a cloud record.
+        // Hydration projects an archived row as `cloudPresent: false` (a tombstone
+        // is "not present"), so passing that through would send the queued upsert
+        // down the INSERT path and bounce it off the existing primary key.
+        cloudPresent: true,
+        cloudAccountId: record.cloudAccountId,
+        syncStatus: "pending",
+        title,
+        slug: record.slug,
+        status,
+        artifactType,
+        visibility,
+        version,
+        deletedAt: null,
+        createdAt: record.createdAt,
+        modifiedAt: now,
+      };
+
+      inputs.push({
+        document: catalogDocument,
+        binding: {
+          bindingRootId: record.binding.bindingRootId,
+          rootPath,
+          manifestVersion: 2,
+          visibleAsWorkspace: true,
+          relativePath: record.binding.relativePath,
+          canonicalPath: record.binding.canonicalPath,
+          inode: record.binding.inode,
+          contentHash: record.binding.contentHash,
+          size: record.binding.size,
+          lastSeenAt: record.binding.lastSeenAt,
+        },
+        mutation: {
+          id: crypto.randomUUID(),
+          operation: "upsert",
+          payloadJson: JSON.stringify({
+            title,
+            bodyText: snapshot.bodyText,
+            bodyJson: snapshot.bodyJson,
+            slug: record.slug,
+            status,
+            artifactType,
+            visibility,
+            parentId: null,
+            correspondenceId: null,
+            version,
+            updatedAt: nowIso,
+            deletedAt: null,
+          }),
+          status: "pending",
+          attemptCount: 0,
+          nextRetryAt: null,
+          createdAt: now,
+          lastError: null,
+        },
+      });
+    }
+
+    if (inputs.length > 0) {
+      await catalog.commitBulkDualWrite(inputs);
+    }
+
+    if (skipped.length > 0) {
+      throw new Error(
+        `Workspace added, but ${skipped.length} archived writing(s) could not be restored from the local file and remain in Settings > Archived writings: ${skipped.join(", ")}. Fix the file and choose Add workspace again to retry.`,
+      );
+    }
   }
 
   // ─── Document ↔ workspace membership ─────────────────────────────────────────
@@ -498,9 +787,12 @@ export class DesktopWorkspaceService {
   }
 
   private async writeAssignments(assignments: WorkspaceAssignmentMap) {
-    await this.settingsService.updateDesktopSettings({
+    const result = await this.settingsService.updateDesktopSettings({
       workspaceAssignments: assignments,
     });
+    if (result.error) {
+      throw new Error(`Failed to persist Workspace assignments: ${result.error.message}`);
+    }
   }
 
   /** Lists registered workspaces as lightweight assignment targets (no FS sync). */

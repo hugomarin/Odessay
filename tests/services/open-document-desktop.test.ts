@@ -171,6 +171,60 @@ describe("open-document-desktop", () => {
     expect(mocks.catalogRegisterBinding).not.toHaveBeenCalled()
   })
 
+  it("preserves a full Workspace scope when opening one previously unbound file", async () => {
+    const path = "/Users/me/Writings/c.md"
+    mocks.catalogResolvePath.mockResolvedValue({ kind: "unbound", path })
+    mocks.getBindingRoots.mockResolvedValue([{
+      id: "root-writings", rootPath: "/Users/me/Writings", kind: "external",
+      visibleAsWorkspace: true, selectedPaths: [], consentedAt: "now", createdAt: "now",
+    }])
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/Writings", bindingRootId: "root-writings", name: "Writings",
+      selectedPaths: [], fileCount: 3, folderCount: 0, updatedAt: 3,
+      files: [
+        { id: "doc-a", path: "/Users/me/Writings/a.md", relativePath: "a.md", name: "a.md", modifiedAt: 1, size: 1, inode: 1, contentHash: "ha" },
+        { id: "doc-b", path: "/Users/me/Writings/b.md", relativePath: "b.md", name: "b.md", modifiedAt: 2, size: 1, inode: 2, contentHash: "hb" },
+        { id: "doc-c", path, relativePath: "c.md", name: "c.md", modifiedAt: 3, size: 1, inode: 3, contentHash: "hc" },
+      ],
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "path", path })
+
+    expect(result).toMatchObject({ status: "opened", documentId: "doc-c" })
+    expect(mocks.workspaceSync).toHaveBeenCalledWith("/Users/me/Writings", [])
+    expect(mocks.workspaceSync).not.toHaveBeenCalledWith("/Users/me/Writings", ["c.md"])
+  })
+
+  it("extends a limited external scope additively instead of replacing siblings", async () => {
+    const path = "/Users/me/Notes/new.md"
+    mocks.catalogResolvePath.mockResolvedValue({ kind: "unbound", path })
+    mocks.getBindingRoots.mockResolvedValue([{
+      id: "root-notes", rootPath: "/Users/me/Notes", kind: "external",
+      visibleAsWorkspace: false, selectedPaths: ["existing.md"], consentedAt: "now", createdAt: "now",
+    }])
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/Notes", bindingRootId: "root-notes", name: "Notes",
+      selectedPaths: ["existing.md", "new.md"], fileCount: 2, folderCount: 0, updatedAt: 2,
+      files: [
+        { id: "doc-existing", path: "/Users/me/Notes/existing.md", relativePath: "existing.md", name: "existing.md", modifiedAt: 1, size: 1, inode: 1, contentHash: "he" },
+        { id: "doc-new", path, relativePath: "new.md", name: "new.md", modifiedAt: 2, size: 1, inode: 2, contentHash: "hn" },
+      ],
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "path", path })
+
+    expect(result).toMatchObject({ status: "opened", documentId: "doc-new" })
+    expect(mocks.workspaceSync).toHaveBeenCalledWith(
+      "/Users/me/Notes",
+      ["existing.md", "new.md"],
+    )
+    expect(mocks.upsertBindingRoot).toHaveBeenCalledWith(
+      expect.objectContaining({ selectedPaths: ["existing.md", "new.md"] }),
+    )
+  })
+
   it("does not revive an id from retired desktop IndexedDB compatibility", async () => {
     mocks.catalogGetById.mockResolvedValue(null)
     mocks.localGet.mockResolvedValue({

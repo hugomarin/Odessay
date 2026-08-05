@@ -43,6 +43,17 @@ pub struct WorkspaceSnapshot {
     pub files: Vec<WorkspaceFileSnapshot>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceManifestBindingRepair {
+    pub document_id: String,
+    pub relative_path: String,
+    pub inode: Option<u64>,
+    pub content_hash: Option<String>,
+    pub last_seen: Option<u64>,
+    pub size: Option<u64>,
+}
+
 const WORKSPACE_INDEX_VERSION: u8 = 2;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -211,6 +222,134 @@ pub fn workspace_create(parent_path: String, name: String) -> Result<String, Str
 
     fs::create_dir_all(&target).map_err(|e| format!("workspace_create create_dir_all: {e}"))?;
     Ok(target.to_string_lossy().to_string())
+}
+
+/// Read every Markdown file under a folder without mutating its manifest or
+/// narrowing its persisted selection. The Workspace chooser uses this command
+/// so a damaged/stale `selectedPaths` cannot hide files before the user chooses
+/// the scope they want to adopt.
+#[tauri::command]
+pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String> {
+    let root = Path::new(&root_path);
+    if !root.is_dir() {
+        return Err(format!(
+            "workspace_inspect: folder not found: {}",
+            root.display()
+        ));
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("workspace_inspect: canonicalize root: {e}"))?;
+    let index_path = canonical_root
+        .join(WORKSPACE_DIR_NAME)
+        .join(WORKSPACE_INDEX_FILE_NAME);
+    let existing_index = read_workspace_index(&index_path)?;
+    let mut files = Vec::new();
+    let mut folder_count = 0usize;
+    visit_workspace(
+        &canonical_root,
+        &canonical_root,
+        &mut files,
+        &mut folder_count,
+    )?;
+
+    for file in &mut files {
+        if let Some(entry) = existing_index.files.get(&file.relative_path) {
+            file.id = entry.id.clone();
+            file.content_hash = entry.content_hash.clone().unwrap_or_default();
+        }
+    }
+    files.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
+    let updated_at = files.first().map(|file| file.modified_at);
+    let name = canonical_root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("Workspace")
+        .to_string();
+
+    Ok(WorkspaceSnapshot {
+        root_path,
+        binding_root_id: existing_index.binding_root_id.unwrap_or_default(),
+        name,
+        file_count: files.len(),
+        folder_count,
+        updated_at,
+        selected_paths: normalize_selected_paths(existing_index.selected_paths)?,
+        files,
+    })
+}
+
+/// Merge recoverable SQLite binding evidence back into the durable manifest.
+/// This is deliberately additive and leaves `selectedPaths` untouched: scope is
+/// user intent, while the UUID mapping must survive removal/re-add even for a
+/// file that is temporarily outside the active projection.
+#[tauri::command]
+pub fn workspace_repair_manifest_bindings(
+    root_path: String,
+    binding_root_id: String,
+    bindings: Vec<WorkspaceManifestBindingRepair>,
+) -> Result<usize, String> {
+    let root = Path::new(&root_path);
+    if !root.is_dir() {
+        return Err(format!(
+            "workspace_repair_manifest_bindings: folder not found: {}",
+            root.display()
+        ));
+    }
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("workspace_repair_manifest_bindings: canonicalize root: {e}"))?;
+    let workspace_dir = prepare_workspace_index_dir(&canonical_root)?;
+    let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
+    let mut index = read_workspace_index(&index_path)?;
+
+    if let Some(existing_id) = index.binding_root_id.as_ref() {
+        if existing_id != &binding_root_id {
+            return Err(format!(
+                "workspace_repair_manifest_bindings: BindingRoot identity conflict: manifest={existing_id}, catalog={binding_root_id}"
+            ));
+        }
+    }
+
+    let mut repaired = 0usize;
+    for binding in bindings {
+        let normalized = normalize_selected_paths(vec![binding.relative_path.clone()])?;
+        let relative_path = normalized.into_iter().next().ok_or_else(|| {
+            "workspace_repair_manifest_bindings: relativePath is required".to_string()
+        })?;
+        if binding.document_id.trim().is_empty() {
+            return Err(format!(
+                "workspace_repair_manifest_bindings: documentId is required for {relative_path}"
+            ));
+        }
+
+        let next = WorkspaceIndexEntry {
+            id: binding.document_id,
+            inode: binding.inode.unwrap_or(0),
+            content_hash: binding.content_hash,
+            last_seen: binding.last_seen.unwrap_or(0),
+            size: binding.size.unwrap_or(0),
+        };
+        if let Some(current) = index.files.get(&relative_path) {
+            if current.id != next.id {
+                return Err(format!(
+                    "workspace_repair_manifest_bindings: document identity conflict at {relative_path}: manifest={}, catalog={}",
+                    current.id, next.id
+                ));
+            }
+            // The manifest is authoritative. SQLite may carry older inode/hash
+            // hints, so an already-present binding is never rewritten from the
+            // operational projection.
+            continue;
+        }
+        index.files.insert(relative_path, next);
+        repaired += 1;
+    }
+
+    index.version = WORKSPACE_INDEX_VERSION;
+    index.binding_root_id = Some(binding_root_id);
+    write_workspace_index_atomic(&workspace_dir, &index)?;
+    Ok(repaired)
 }
 
 /// Read-only preflight for the application-layer UUID minter. Returns paths
@@ -743,6 +882,114 @@ mod tests {
         assert_eq!(next_snapshot.files[0].id, initial_id);
         assert_eq!(next_snapshot.selected_paths, vec!["after.md"]);
 
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_inspect_lists_every_markdown_without_rewriting_selected_scope() {
+        let root = temp_workspace_root("inspect-all-without-mutation");
+        fs::write(root.join("a.md"), "A\n").expect("write a");
+        fs::write(root.join("b.md"), "B\n").expect("write b");
+        fs::write(root.join("c.md"), "C\n").expect("write c");
+
+        workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec!["a.md".into()]),
+            None,
+        )
+        .expect("sync selected file");
+        let index_path = root
+            .join(WORKSPACE_DIR_NAME)
+            .join(WORKSPACE_INDEX_FILE_NAME);
+        let before = fs::read_to_string(&index_path).expect("read manifest before inspect");
+
+        let inspected = super::workspace_inspect(root.to_string_lossy().to_string())
+            .expect("inspect complete root");
+        let after = fs::read_to_string(&index_path).expect("read manifest after inspect");
+
+        assert_eq!(inspected.files.len(), 3);
+        assert_eq!(inspected.selected_paths, vec!["a.md"]);
+        assert_eq!(before, after, "inspection must be read-only");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn manifest_repair_preserves_all_catalog_ids_without_changing_scope() {
+        let root = temp_workspace_root("repair-before-removal");
+        fs::write(root.join("a.md"), "A\n").expect("write a");
+        fs::write(root.join("b.md"), "B\n").expect("write b");
+        fs::write(root.join("c.md"), "C\n").expect("write c");
+
+        let initial = workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec!["a.md".into()]),
+            Some(HashMap::from([("a.md".into(), "doc-a".into())])),
+        )
+        .expect("create narrowed manifest");
+
+        let repaired = super::workspace_repair_manifest_bindings(
+            root.to_string_lossy().to_string(),
+            initial.binding_root_id.clone(),
+            vec![
+                WorkspaceManifestBindingRepair {
+                    document_id: "doc-b".into(),
+                    relative_path: "b.md".into(),
+                    inode: Some(inode_for_path(&root.join("b.md"))),
+                    content_hash: Some(content_hash_for_markdown_file(&root.join("b.md")).unwrap()),
+                    last_seen: Some(2),
+                    size: Some(2),
+                },
+                WorkspaceManifestBindingRepair {
+                    document_id: "doc-c".into(),
+                    relative_path: "c.md".into(),
+                    inode: Some(inode_for_path(&root.join("c.md"))),
+                    content_hash: Some(content_hash_for_markdown_file(&root.join("c.md")).unwrap()),
+                    last_seen: Some(3),
+                    size: Some(2),
+                },
+            ],
+        )
+        .expect("repair manifest from catalog");
+        assert_eq!(repaired, 2);
+
+        let repaired_index = read_workspace_index(
+            &root
+                .join(WORKSPACE_DIR_NAME)
+                .join(WORKSPACE_INDEX_FILE_NAME),
+        )
+        .expect("read repaired manifest");
+        assert_eq!(repaired_index.selected_paths, vec!["a.md"]);
+        assert_eq!(repaired_index.files.len(), 3);
+        assert_eq!(repaired_index.files["a.md"].id, "doc-a");
+        assert_eq!(repaired_index.files["b.md"].id, "doc-b");
+        assert_eq!(repaired_index.files["c.md"].id, "doc-c");
+
+        // Re-adding the root at full scope reuses every recovered UUID.
+        let readded = workspace_sync(root.to_string_lossy().to_string(), Some(Vec::new()), None)
+            .expect("re-add complete root");
+        let ids = readded
+            .files
+            .iter()
+            .map(|file| (file.relative_path.as_str(), file.id.as_str()))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(ids["a.md"], "doc-a");
+        assert_eq!(ids["b.md"], "doc-b");
+        assert_eq!(ids["c.md"], "doc-c");
+
+        let conflict = super::workspace_repair_manifest_bindings(
+            root.to_string_lossy().to_string(),
+            initial.binding_root_id,
+            vec![WorkspaceManifestBindingRepair {
+                document_id: "sqlite-wrong-id".into(),
+                relative_path: "a.md".into(),
+                inode: None,
+                content_hash: None,
+                last_seen: None,
+                size: None,
+            }],
+        )
+        .expect_err("manifest identity must win over SQLite repair evidence");
+        assert!(conflict.contains("document identity conflict"));
         cleanup(&root);
     }
 

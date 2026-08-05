@@ -46,6 +46,18 @@ function relativeTo(rootPath: string, path: string): string {
   return path.startsWith(prefix) ? path.slice(prefix.length) : basename(path)
 }
 
+function scopeContains(relativePath: string, selectedPaths: string[]): boolean {
+  return selectedPaths.length === 0 || selectedPaths.some(
+    (selectedPath) => relativePath === selectedPath || relativePath.startsWith(`${selectedPath}/`),
+  )
+}
+
+function scopeForExplicitOpen(relativePath: string, selectedPaths: string[] | undefined): string[] | undefined {
+  if (!selectedPaths || selectedPaths.length === 0) return selectedPaths
+  if (scopeContains(relativePath, selectedPaths)) return selectedPaths
+  return Array.from(new Set([...selectedPaths, relativePath]))
+}
+
 async function buildDesktopOpenDocumentUseCase() {
   const configDir = await appConfigDir()
   const settings = new DesktopSettingsService(configDir)
@@ -74,6 +86,7 @@ async function buildDesktopOpenDocumentUseCase() {
           bindingRootId: rootMatch.id,
           rootPath: rootMatch.rootPath,
           relativePath: relativeTo(rootMatch.rootPath, path),
+          selectedPaths: rootMatch.selectedPaths,
         },
       }
     }
@@ -93,6 +106,7 @@ async function buildDesktopOpenDocumentUseCase() {
           bindingRootId: snapshot.bindingRootId,
           rootPath: workspaceMatch.rootPath,
           relativePath: relativeTo(workspaceMatch.rootPath, path),
+          selectedPaths: snapshot.selectedPaths,
         },
       }
     }
@@ -137,13 +151,34 @@ async function buildDesktopOpenDocumentUseCase() {
       )
     }
 
-    return { bindingRootId, rootPath: input.parentDir, relativePath }
+    return {
+      bindingRootId,
+      rootPath: input.parentDir,
+      relativePath,
+      selectedPaths: snapshot.selectedPaths,
+    }
   }
 
   async function readFileEvidence(
     input: BindingRootMatch & { path: string },
   ): Promise<FileOpenEvidence> {
-    const snapshot = await tauriWorkspaceSync(input.rootPath, [input.relativePath])
+    // Opening one file is an additive scope operation. Passing a singleton array
+    // here used to replace a full Workspace scope and atomically discard every
+    // sibling binding from `.odessay/index.json`.
+    const selectedPaths = scopeForExplicitOpen(input.relativePath, input.selectedPaths)
+    const snapshot = await tauriWorkspaceSync(input.rootPath, selectedPaths)
+    if (
+      input.selectedPaths &&
+      (snapshot.selectedPaths.length !== input.selectedPaths.length ||
+        snapshot.selectedPaths.some((path, index) => path !== input.selectedPaths![index]))
+    ) {
+      const current = (await settings.getBindingRoots()).find(
+        (root) => root.id === input.bindingRootId,
+      )
+      if (current) {
+        await settings.upsertBindingRoot({ ...current, selectedPaths: snapshot.selectedPaths })
+      }
+    }
     const file =
       snapshot.files.find((entry) => entry.relativePath === input.relativePath) ??
       snapshot.files.find((entry) => entry.path === input.path)
