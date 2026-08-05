@@ -687,7 +687,11 @@ export class DesktopWorkspaceService {
       const catalogDocument = {
         id: record.id,
         localPresent: true,
-        cloudPresent: record.cloudPresent,
+        // Reactivation only ever runs on rows that already own a cloud record.
+        // Hydration projects an archived row as `cloudPresent: false` (a tombstone
+        // is "not present"), so passing that through would send the queued upsert
+        // down the INSERT path and bounce it off the existing primary key.
+        cloudPresent: true,
         cloudAccountId: record.cloudAccountId,
         syncStatus: "pending",
         title,

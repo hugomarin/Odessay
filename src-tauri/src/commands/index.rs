@@ -930,8 +930,12 @@ pub fn catalog_apply_workspace_removal(
 ///   current `.md` and applies the "local wins" upsert through the normal
 ///   dual-write path, which is where content and versioning belong.
 ///
-/// The `cloud_present=1` filter lives in SQL precisely so a local-only document
-/// can never enter the cloud-upsert batch.
+/// Telling the two classes apart is `cloud_account_id`, NOT `cloud_present`.
+/// Cloud hydration projects an archived row as `cloud_present=0` (see
+/// `cloudSnapshotFromRow`: `cloudPresent: !row.deleted_at`), so after any app
+/// restart an archived document has a cloud record and `cloud_present=0` at the
+/// same time. `cloud_account_id` survives archival and is NULL for a document
+/// that never reached the cloud, which is exactly the distinction needed here.
 #[tauri::command]
 pub fn catalog_reactivate_binding_root(
     db_path: String,
@@ -942,9 +946,14 @@ pub fn catalog_reactivate_binding_root(
         .transaction()
         .map_err(|e| format!("catalog reactivate root begin: {e}"))?;
 
+    // `deleted_at_cache IS NULL` is what keeps this off cloud-archived rows: a
+    // hydrated archived document also sits at cloud_present=0 + local_present=1,
+    // and reclassifying it as local-only would strand it — hidden from Desk,
+    // still tombstoned in Archived writings, and invisible to the SELECT below.
     tx.execute(
         "UPDATE documents SET sync_status='local-only'
          WHERE sync_status='deleted' AND cloud_present=0 AND local_present=1
+           AND deleted_at_cache IS NULL AND cloud_account_id IS NULL
            AND id IN (SELECT document_id FROM document_bindings WHERE binding_root_id=?1)",
         params![binding_root_id],
     )
@@ -953,7 +962,8 @@ pub fn catalog_reactivate_binding_root(
     let mut stmt = tx
         .prepare(&format!(
             "{CATALOG_SELECT} WHERE b.binding_root_id=?1 AND d.local_present=1
-             AND d.cloud_present=1 AND d.deleted_at_cache IS NOT NULL"
+             AND d.deleted_at_cache IS NOT NULL
+             AND (d.cloud_present=1 OR d.cloud_account_id IS NOT NULL)"
         ))
         .map_err(|e| format!("catalog reactivate prepare: {e}"))?;
     let rows: Vec<CatalogRow> = stmt
@@ -2627,6 +2637,124 @@ mod catalog_tests {
         );
 
         // The local-only one is back in the active catalog without any cloud work.
+        let active = catalog_list(path.clone(), None, false, false, 100).unwrap();
+        assert!(active.iter().any(|row| row.id == "local-doc"));
+
+        let _ = fs::remove_file(path);
+    }
+
+    /// Regression, found on the packaged DMG 2026-08-04.
+    ///
+    /// Cloud hydration projects an archived document as `cloud_present=0`
+    /// (`cloudPresent: !row.deleted_at`), so after any app restart an archived row
+    /// has a cloud record AND `cloud_present=0`. Reactivation used to require
+    /// `cloud_present=1`, a condition that becomes unsatisfiable at that point:
+    /// the document was reclassified as local-only and stranded — hidden from
+    /// Desk, still tombstoned in Archived writings, never restored.
+    #[test]
+    fn reactivate_binding_root_restores_a_cloud_document_archived_across_a_restart() {
+        let path = temp_db();
+        seed_bound_document(&path, "cloud-doc", true);
+
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "/tmp/root".into(),
+            "2026-08-04T00:00:00Z".into(),
+            "2026-08-04T00:00:00Z".into(),
+            10,
+        )
+        .unwrap();
+
+        // Startup hydration of the tombstoned cloud row: presence drops to 0 while
+        // the account and the tombstone survive. This is the state the old filter
+        // could never match.
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "UPDATE documents SET cloud_present=0, sync_status='deleted' WHERE id='cloud-doc'",
+            [],
+        )
+        .unwrap();
+        // The reconciler re-binds the surviving `.md` after the folder is re-added.
+        conn.execute(
+            "INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
+             VALUES('cloud-doc','root-1','cloud-doc.md','/tmp/root/cloud-doc.md',NULL,NULL,NULL,3)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE documents SET local_present=1 WHERE id='cloud-doc'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let returned = catalog_reactivate_binding_root(path.clone(), "root-1".into()).unwrap();
+
+        assert_eq!(
+            returned
+                .iter()
+                .map(|row| row.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["cloud-doc"],
+            "an archived cloud document must still be reactivatable after hydration"
+        );
+
+        // And it must not have been silently reclassified as local-only on the way.
+        let sync_status: String = open_db(&path)
+            .unwrap()
+            .query_row(
+                "SELECT sync_status FROM documents WHERE id='cloud-doc'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_ne!(
+            sync_status, "local-only",
+            "a cloud-archived document is not a local-only document"
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    /// The companion guard: a genuine local-only document — no cloud account, no
+    /// tombstone — still returns to the active catalog and still stays out of the
+    /// cloud batch.
+    #[test]
+    fn reactivate_binding_root_still_excludes_a_genuine_local_only_document() {
+        let path = temp_db();
+        seed_bound_document(&path, "local-doc", false);
+
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "/tmp/root".into(),
+            "2026-08-04T00:00:00Z".into(),
+            "2026-08-04T00:00:00Z".into(),
+            10,
+        )
+        .unwrap();
+
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "INSERT INTO document_bindings(document_id,binding_root_id,relative_path,canonical_path,inode,content_hash,size,last_seen_at)
+             VALUES('local-doc','root-1','local-doc.md','/tmp/root/local-doc.md',NULL,NULL,NULL,3)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE documents SET local_present=1 WHERE id='local-doc'",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let returned = catalog_reactivate_binding_root(path.clone(), "root-1".into()).unwrap();
+
+        assert!(
+            returned.is_empty(),
+            "a local-only document must never enter the cloud upsert batch"
+        );
         let active = catalog_list(path.clone(), None, false, false, 100).unwrap();
         assert!(active.iter().any(|row| row.id == "local-doc"));
 
