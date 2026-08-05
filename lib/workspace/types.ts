@@ -1,3 +1,5 @@
+import type { DocumentState } from "@/lib/writings/document-state"
+
 export type WorkspaceLayout = "grid" | "list"
 
 export type WorkspaceSource = "existing-folder" | "scratch"
@@ -39,3 +41,32 @@ export type WorkspaceDetail = {
 }
 
 export type WorkspaceSummary = Omit<WorkspaceDetail, "files">
+
+export type WorkspaceViewMode = "worktree"
+
+export type ContextualWorkspaceDocument = {
+  id: string | null
+  name: string
+  relativePath: string
+  state: DocumentState
+  openable: boolean
+}
+
+export type ContextualWorkspace = {
+  slug: string
+  name: string
+  status: WorkspaceStatus
+  missingReason: string | null
+  documents: ContextualWorkspaceDocument[]
+}
+
+/**
+ * Why the editor has no Workspace to show. `unsupported-runtime` and
+ * `no-membership` are different claims: the first says the runtime cannot
+ * answer, the second says it answered no. Collapsing them makes web assert a
+ * non-membership it has no way of knowing.
+ */
+export type ContextualWorkspaceOutcome =
+  | { kind: "workspace"; workspace: ContextualWorkspace }
+  | { kind: "unsupported-runtime" }
+  | { kind: "no-membership" }

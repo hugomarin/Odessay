@@ -1,120 +1,117 @@
-"use client"
+"use client";
 
-import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
-import { ListTree, X } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useCallback, useState } from "react";
+import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents";
+import { FolderTree, ListTree } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  EditorNavigationSidebar,
+  NavigationModeButton,
+  type EditorNavigationMode,
+} from "./editor-navigation-sidebar";
+import { WorkspaceTreePanel } from "./workspace-tree-panel";
 
-type TableOfContentsPanelProps = {
-  items: TableOfContentDataItem[]
-  activeItemId: string | null
-  onNavigate: (item: TableOfContentDataItem) => void
-  isOpen: boolean
-  onToggleOpen: () => void
-}
+type Props = {
+  items: TableOfContentDataItem[];
+  activeItemId: string | null;
+  onNavigate: (item: TableOfContentDataItem) => void;
+  activeWritingId: string | null;
+  onOpenDocument: (id: string) => Promise<void>;
+  mode: EditorNavigationMode;
+  onModeChange: (mode: EditorNavigationMode) => void;
+};
 
-const getIndentClass = (level: number) => {
-  if (level <= 1) return "pl-2"
-  if (level === 2) return "pl-6"
-  return "pl-10"
-}
+const indent = (level: number) =>
+  level <= 1 ? "pl-2" : level === 2 ? "pl-6" : "pl-10";
 
 export function TableOfContentsPanel({
   items,
   activeItemId,
   onNavigate,
-  isOpen,
-  onToggleOpen,
-}: TableOfContentsPanelProps) {
-  const scrollActiveId = items.find((item) => item.isActive)?.id ?? null
-  const visibleActiveId = activeItemId ?? scrollActiveId
+  activeWritingId,
+  onOpenDocument,
+  mode,
+  onModeChange,
+}: Props) {
+  const [workspaceCount, setWorkspaceCount] = useState<number | undefined>();
+  const onCountChange = useCallback(
+    (count?: number) => setWorkspaceCount(count),
+    [],
+  );
+  const visibleActiveId =
+    activeItemId ?? items.find((item) => item.isActive)?.id ?? null;
+  const controls = (
+    <>
+      <NavigationModeButton
+        active={mode === "toc"}
+        label="TOC"
+        onClick={() => onModeChange(mode === "toc" ? null : "toc")}
+      >
+        <ListTree className="h-3.5 w-3.5" strokeWidth={1.5} />
+      </NavigationModeButton>
+      <NavigationModeButton
+        active={mode === "workspace"}
+        label="Workspace"
+        onClick={() => onModeChange(mode === "workspace" ? null : "workspace")}
+      >
+        <FolderTree className="h-3.5 w-3.5" strokeWidth={1.5} />
+      </NavigationModeButton>
+    </>
+  );
 
   return (
-    <div
-      className="pointer-events-none fixed top-[76px] z-30 flex max-h-[calc(100vh-76px-40px)] flex-col items-start transition-[left] duration-300 ease-layout"
-      style={{ left: "calc(var(--app-shell-left-offset, 52px) + 12px)" }}
-      aria-label="Table of contents"
+    <EditorNavigationSidebar
+      mode={mode}
+      title={mode === "workspace" ? "Workspace" : "Contents"}
+      count={mode === "workspace" ? workspaceCount : items.length || undefined}
+      controls={controls}
+      onClose={() => onModeChange(null)}
     >
-      <button
-        type="button"
-        onClick={onToggleOpen}
-        className="pointer-events-auto inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
-        aria-label={isOpen ? "Hide table of contents" : "Show table of contents"}
-        aria-pressed={isOpen}
-      >
-        <ListTree className="h-[13px] w-[13px]" strokeWidth={1.5} aria-hidden="true" />
-      </button>
-
-      {isOpen ? (
-        <aside
-          id="editor-panel-table-of-contents"
-          data-section="editor-panel-table-of-contents"
-          data-testid="editor-panel-table-of-contents"
-          className="pointer-events-auto mt-2 max-h-[calc(100vh-76px-40px-40px)] w-[232px] overflow-y-auto rounded-[10px] border-[0.5px] border-border/40 bg-transparent p-3.5"
-        >
-          <div className="mb-2 flex items-center justify-between">
-            <div className="flex min-w-0 items-center gap-2">
-              <p className="truncate text-[10px] font-semibold uppercase tracking-[0.07em] text-ink-4">
-                Contents
-              </p>
-              {items.length > 0 ? (
-                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[9px] font-medium text-ink-3">
-                  {items.length}
-                </span>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              onClick={onToggleOpen}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-              aria-label="Hide table of contents"
-            >
-              <X className="h-[11px] w-[11px]" strokeWidth={1.5} />
-            </button>
-          </div>
-
-          {items.length === 0 ? (
-            <div className="px-2 py-3">
-              <p className="font-lora text-[12px] italic leading-relaxed text-ink-4">
-                Sin secciones todavía.
-              </p>
-            </div>
-          ) : (
-            <nav aria-label="Document sections">
-              <ul className="space-y-px">
-                {items.map((item) => {
-                  const isActive = item.id === visibleActiveId
-
-                  return (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => onNavigate(item)}
-                        aria-current={isActive ? "location" : undefined}
+      {mode === "toc" ? (
+        items.length === 0 ? (
+          <p className="px-2 py-3 font-lora text-[12px] italic text-ink-4">
+            Sin secciones todavía.
+          </p>
+        ) : (
+          <nav aria-label="Document sections">
+            <ul className="space-y-px">
+              {items.map((item) => {
+                const active = item.id === visibleActiveId;
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(item)}
+                      aria-current={active ? "location" : undefined}
+                      className={cn(
+                        "relative flex min-h-7 w-full items-center rounded-[6px] pr-2 text-left text-[11px] leading-snug text-ink-3 hover:bg-muted hover:text-ink",
+                        indent(item.level),
+                        active &&
+                          "bg-muted text-ink before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:bg-cursor",
+                      )}
+                    >
+                      <span
                         className={cn(
-                          "group flex min-h-7 w-full items-center rounded-[7px] pr-2 text-left font-sans text-[11px] leading-snug transition-colors",
-                          getIndentClass(item.level),
-                          isActive
-                            ? "bg-[hsl(220,40%,92%)]/70 text-[hsl(220,50%,40%)]"
-                            : "text-ink-3 hover:bg-muted/70 hover:text-ink",
+                          "truncate",
+                          item.originalLevel <= 1 && "font-medium",
                         )}
                       >
-                        <span
-                          className={cn(
-                            "block min-w-0 truncate",
-                            item.originalLevel <= 1 ? "font-medium" : "font-normal",
-                          )}
-                        >
-                          {item.textContent}
-                        </span>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </nav>
-          )}
-        </aside>
+                        {item.textContent}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        )
+      ) : mode === "workspace" ? (
+        <WorkspaceTreePanel
+          activeWritingId={activeWritingId}
+          onOpenDocument={onOpenDocument}
+          onCountChange={onCountChange}
+        />
       ) : null}
-    </div>
-  )
+    </EditorNavigationSidebar>
+  );
 }
