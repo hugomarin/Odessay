@@ -882,7 +882,12 @@ pub fn catalog_apply_workspace_removal(
         )
         .map_err(|e| format!("catalog workspace removal detach binding: {e}"))?;
 
-        if row.cloud_present {
+        // Ownership of a cloud record is `cloud_account_id`, NOT `cloud_present`.
+        // Hydration projects an already-tombstoned row as `cloud_present=0`, so
+        // keying on presence alone sends a synced document down the local-only
+        // branch: no tombstone, no queued mutation, `sync_status='deleted'` — it
+        // vanishes from Desk without ever appearing in Archived writings.
+        if row.cloud_present || row.cloud_account_id.is_some() {
             let version = row.version.unwrap_or(1);
             let mutation_id = uuid::Uuid::new_v4().to_string();
             let payload = serde_json::json!({
@@ -2714,6 +2719,70 @@ mod catalog_tests {
             "a cloud-archived document is not a local-only document"
         );
 
+        let _ = fs::remove_file(path);
+    }
+
+    /// Regression, found on the packaged DMG 2026-08-04 (second cycle).
+    ///
+    /// Removal classified documents by `cloud_present`, the same faulty proxy the
+    /// reactivation filter used. A document already tombstoned in the cloud
+    /// hydrates to `cloud_present=0`, so removing its workspace a second time sent
+    /// it down the local-only branch: no tombstone written, no mutation queued,
+    /// `sync_status='deleted'`. It then disappeared from Desk *and* from Archived
+    /// writings — reachable from nowhere.
+    #[test]
+    fn workspace_removal_treats_a_hydrated_archived_document_as_cloud_owned() {
+        let path = temp_db();
+        seed_bound_document(&path, "cloud-doc", true);
+
+        // Hydration of an already-archived cloud row: presence drops, the account
+        // survives. This is the state a second removal used to misread.
+        open_db(&path)
+            .unwrap()
+            .execute(
+                "UPDATE documents SET cloud_present=0 WHERE id='cloud-doc'",
+                [],
+            )
+            .unwrap();
+
+        catalog_apply_workspace_removal(
+            path.clone(),
+            "root-1".into(),
+            "/tmp/root".into(),
+            "2026-08-04T00:00:00Z".into(),
+            "2026-08-04T00:00:00Z".into(),
+            10,
+        )
+        .unwrap();
+
+        let conn = open_db(&path).unwrap();
+        let (sync_status, deleted_at): (String, Option<String>) = conn
+            .query_row(
+                "SELECT sync_status, deleted_at_cache FROM documents WHERE id='cloud-doc'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            deleted_at,
+            Some("2026-08-04T00:00:00Z".into()),
+            "a cloud-owned document must be tombstoned so Archived writings can list it"
+        );
+        assert_ne!(
+            sync_status, "deleted",
+            "the local-only branch would strand it outside both Desk and Archived writings"
+        );
+
+        let queued: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sync_mutations WHERE document_id='cloud-doc' AND operation='delete'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(queued, 1, "the durable soft-delete must still be enqueued");
+
+        drop(conn);
         let _ = fs::remove_file(path);
     }
 
