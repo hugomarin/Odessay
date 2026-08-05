@@ -7,7 +7,14 @@ import type {
 import { getDocumentCatalog } from "@/lib/services/document-catalog-factory"
 import { loadWorkspaceDocumentJoin } from "@/lib/queries/workspace-catalog-source"
 import { subscribeToCatalog } from "@/lib/queries/document-catalog"
-import type { ContextualWorkspace, WorkspaceDetail } from "@/lib/workspace/types"
+import type { CatalogChange } from "@/lib/services/contracts/document-catalog"
+import type { DocumentState } from "@/lib/writings/document-state"
+import type {
+  ContextualWorkspace,
+  ContextualWorkspaceDocument,
+  ContextualWorkspaceOutcome,
+  WorkspaceDetail,
+} from "@/lib/workspace/types"
 
 /**
  * Runtime-agnostic entry point for document↔workspace assignment, shared by Desk
@@ -139,40 +146,155 @@ export function getWorkspaceAssignmentService(): WorkspaceAssignmentService {
   return desktopServiceSingleton
 }
 
-export async function loadContextualWorkspace(documentId: string): Promise<ContextualWorkspace | null> {
-  if (!isTauriRuntime()) return null
+/**
+ * Resolves the Workspace of a writing by scanning its root. This is the
+ * authoritative read — it discovers files that reconciliation has not reached
+ * yet — but it costs a full `tauriWorkspaceSync` of the root plus a manifest
+ * write, so it belongs to writing changes and explicit retries, never to a
+ * catalog notification. Use `refreshContextualWorkspaceDocuments` for those.
+ *
+ * The outcome is discriminated because three different situations used to
+ * collapse into `null`, and the UI rendered all of them as "this writing does
+ * not belong to a Workspace" — a claim that is simply false on web, where the
+ * runtime cannot answer the question at all.
+ */
+export async function loadContextualWorkspace(
+  documentId: string,
+): Promise<ContextualWorkspaceOutcome> {
+  if (!isTauriRuntime()) return { kind: "unsupported-runtime" }
 
   const catalog = await getDocumentCatalog()
   const record = await catalog.getById(documentId)
   const canonicalPath = record?.binding?.canonicalPath
-  if (!canonicalPath) return null
+  if (!canonicalPath) return { kind: "no-membership" }
 
   const service = await getDesktopWorkspaceService()
   const workspace = await service.getWorkspaceContainingPath(canonicalPath)
-  if (!workspace) return null
+  if (!workspace) return { kind: "no-membership" }
 
   const documentJoin = workspace.status === "ready"
     ? await loadWorkspaceDocumentJoin(workspace.rootPath)
     : new Map()
 
   return {
-    slug: workspace.slug,
-    name: workspace.name,
-    status: workspace.status,
-    missingReason: workspace.missingReason,
-    documents: workspace.files.map((file) => {
-      const document = documentJoin.get(file.path)
-      return {
-        id: document?.id ?? null,
-        name: file.name,
-        relativePath: file.relativePath,
-        state: document?.state ?? "rebuilding",
-        openable: Boolean(document?.id),
-      }
-    }),
+    kind: "workspace",
+    workspace: {
+      slug: workspace.slug,
+      name: workspace.name,
+      status: workspace.status,
+      missingReason: workspace.missingReason,
+      documents: workspace.files.map((file) => {
+        const document = documentJoin.get(file.path)
+        return {
+          id: document?.id ?? null,
+          name: file.name,
+          relativePath: file.relativePath,
+          state: document?.state ?? "rebuilding",
+          openable: Boolean(document?.id),
+        }
+      }),
+    },
   }
 }
 
-export function subscribeToContextualWorkspaceChanges(onChange: () => void): () => void {
-  return subscribeToCatalog(() => onChange())
+const basename = (path: string) => path.split("/").pop() ?? path
+
+function sameDocuments(
+  left: ContextualWorkspaceDocument[],
+  right: ContextualWorkspaceDocument[],
+): boolean {
+  if (left.length !== right.length) return false
+  return left.every((document, index) => {
+    const other = right[index]
+    return (
+      document.id === other.id &&
+      document.name === other.name &&
+      document.relativePath === other.relativePath &&
+      document.state === other.state &&
+      document.openable === other.openable
+    )
+  })
+}
+
+/**
+ * Applies a catalog change to an already-loaded Workspace without touching the
+ * filesystem: it reads the catalog join for the root and patches only the
+ * documents the change names. Saving the active writing emits an `upsert` on
+ * every autosave, and resolving that through `loadContextualWorkspace` would
+ * rescan the whole root — a second full scan right after the one `persist`
+ * already performed.
+ *
+ * Returns `null` when nothing the tree renders actually changed, so an autosave
+ * that only bumps content produces no re-render at all. Documents registered
+ * under this root by the same transaction are appended, and documents that left
+ * the catalog are dropped, so add/move/remove stay reactive.
+ */
+export async function refreshContextualWorkspaceDocuments(
+  workspace: ContextualWorkspace,
+  changedDocumentIds: string[],
+): Promise<ContextualWorkspace | null> {
+  if (!isTauriRuntime()) return null
+  if (workspace.status !== "ready") return null
+
+  const service = await getDesktopWorkspaceService()
+  const record = await service.findWorkspaceRecord(workspace.slug)
+  if (!record) return null
+
+  const root = record.rootPath.replace(/[\\/]+$/, "")
+  const documentJoin = await loadWorkspaceDocumentJoin(record.rootPath)
+  const byId = new Map<string, { relativePath: string; state: DocumentState }>()
+  for (const [canonicalPath, info] of documentJoin) {
+    const normalized = canonicalPath.replace(/\\/g, "/")
+    byId.set(info.id, {
+      relativePath: normalized.startsWith(`${root}/`)
+        ? normalized.slice(root.length + 1)
+        : normalized,
+      state: info.state,
+    })
+  }
+
+  const changed = new Set(changedDocumentIds)
+  const kept = new Set<string>()
+  const documents: ContextualWorkspaceDocument[] = []
+
+  for (const document of workspace.documents) {
+    if (document.id) kept.add(document.id)
+    if (!document.id || !changed.has(document.id)) {
+      documents.push(document)
+      continue
+    }
+    const entry = byId.get(document.id)
+    // The change removed it from this root — a move out, or a delete.
+    if (!entry) continue
+    documents.push({
+      id: document.id,
+      name: basename(entry.relativePath),
+      relativePath: entry.relativePath,
+      state: entry.state,
+      openable: true,
+    })
+  }
+
+  for (const id of changed) {
+    if (kept.has(id)) continue
+    const entry = byId.get(id)
+    if (!entry) continue
+    documents.push({
+      id,
+      name: basename(entry.relativePath),
+      relativePath: entry.relativePath,
+      state: entry.state,
+      openable: true,
+    })
+  }
+
+  return sameDocuments(workspace.documents, documents)
+    ? null
+    : { ...workspace, documents }
+}
+
+export function subscribeToContextualWorkspaceChanges(
+  onChange: (change: CatalogChange) => void,
+): () => void {
+  return subscribeToCatalog(onChange)
 }

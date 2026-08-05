@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, FileText, Folder, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   loadContextualWorkspace,
+  refreshContextualWorkspaceDocuments,
   subscribeToContextualWorkspaceChanges,
 } from "@/lib/services/workspace-service";
 import type {
   ContextualWorkspace,
   ContextualWorkspaceDocument,
+  ContextualWorkspaceOutcome,
 } from "@/lib/workspace/types";
 
 export type WorkspaceTreeFolder = {
@@ -48,13 +50,21 @@ export function buildWorkspaceTree(
 function FolderNode({
   folder,
   activeId,
+  collapsedPaths,
+  onToggle,
   onOpen,
 }: {
   folder: WorkspaceTreeFolder;
   activeId: string | null;
+  collapsedPaths: ReadonlySet<string>;
+  onToggle: (path: string) => void;
   onOpen: (id: string) => Promise<void>;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  // Expansion lives in the panel, keyed by folder path: a rebuild of the tree
+  // (a reconciled add/move/remove) must not reopen the folders the author
+  // deliberately collapsed. Tracking the collapsed set rather than the expanded
+  // one keeps "expanded by default" true for folders that appear later.
+  const expanded = !collapsedPaths.has(folder.path);
   return (
     <li>
       <button
@@ -63,7 +73,7 @@ function FolderNode({
         aria-expanded={expanded}
         // Folders group documents; only a document can be the tree's selection.
         aria-selected={false}
-        onClick={() => setExpanded((value) => !value)}
+        onClick={() => onToggle(folder.path)}
         className="flex min-h-7 w-full items-center gap-1.5 rounded-[6px] px-2 text-left text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
       >
         <ChevronRight
@@ -83,6 +93,8 @@ function FolderNode({
               key={child.path}
               folder={child}
               activeId={activeId}
+              collapsedPaths={collapsedPaths}
+              onToggle={onToggle}
               onOpen={onOpen}
             />
           ))}
@@ -141,34 +153,105 @@ export function WorkspaceTreePanel({
   onOpenDocument: (id: string) => Promise<void>;
   onCountChange: (count?: number) => void;
 }) {
-  const [workspace, setWorkspace] = useState<ContextualWorkspace | null>(null);
+  const [outcome, setOutcome] = useState<ContextualWorkspaceOutcome | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
   const generation = useRef(0);
   const refreshTimer = useRef<number | null>(null);
-  const [revision, setRevision] = useState(0);
+  const pendingIds = useRef<Set<string>>(new Set());
+  const pendingStructural = useRef(false);
+  const workspaceRef = useRef<ContextualWorkspace | null>(null);
+  const activeWritingIdRef = useRef(activeWritingId);
+  const [retryToken, setRetryToken] = useState(0);
+
+  const workspace = outcome?.kind === "workspace" ? outcome.workspace : null;
+  workspaceRef.current = workspace;
+  activeWritingIdRef.current = activeWritingId;
+
+  const applyOutcome = useCallback(
+    (next: ContextualWorkspaceOutcome) => {
+      setOutcome(next);
+      onCountChange(
+        next.kind === "workspace" ? next.workspace.documents.length : undefined,
+      );
+    },
+    [onCountChange],
+  );
+
+  // A catalog notification never resolves through the scanning loader: the
+  // active writing emits an `upsert` on every autosave, and rescanning the root
+  // for each one duplicates the scan `persist` just did, blanks the tree behind
+  // a loading state and discards the author's expand/collapse. Only a change we
+  // cannot express as a document patch falls back to a full reload, and even
+  // that one refreshes in the background.
+  const runBackgroundRefresh = useCallback(async () => {
+    const request = generation.current;
+    const writingId = activeWritingIdRef.current;
+    if (!writingId) return;
+
+    const changedIds = Array.from(pendingIds.current);
+    const structural = pendingStructural.current;
+    pendingIds.current.clear();
+    pendingStructural.current = false;
+
+    const current = workspaceRef.current;
+    try {
+      if (current && !structural) {
+        const patched = await refreshContextualWorkspaceDocuments(
+          current,
+          changedIds,
+        );
+        if (request !== generation.current) return;
+        // `null` means nothing the tree renders moved — no re-render at all.
+        if (patched) applyOutcome({ kind: "workspace", workspace: patched });
+        return;
+      }
+      const result = await loadContextualWorkspace(writingId);
+      if (request !== generation.current) return;
+      applyOutcome(result);
+    } catch (reason: unknown) {
+      if (request !== generation.current) return;
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "No se pudo cargar el Workspace",
+      );
+    }
+  }, [applyOutcome]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToContextualWorkspaceChanges(() => {
+    const unsubscribe = subscribeToContextualWorkspaceChanges((change) => {
+      if (change.reason === "upsert" || change.reason === "bulk") {
+        for (const id of change.documentIds) pendingIds.current.add(id);
+      } else {
+        pendingStructural.current = true;
+      }
       if (refreshTimer.current !== null)
         window.clearTimeout(refreshTimer.current);
-      refreshTimer.current = window.setTimeout(
-        () => setRevision((value) => value + 1),
-        100,
-      );
+      refreshTimer.current = window.setTimeout(() => {
+        refreshTimer.current = null;
+        void runBackgroundRefresh();
+      }, 100);
     });
     return () => {
       unsubscribe();
       if (refreshTimer.current !== null)
         window.clearTimeout(refreshTimer.current);
     };
-  }, []);
+  }, [runBackgroundRefresh]);
 
   useEffect(() => {
     const request = ++generation.current;
+    pendingIds.current.clear();
+    pendingStructural.current = false;
     if (!activeWritingId) {
-      setWorkspace(null);
+      setOutcome(null);
       setLoading(false);
       setError(null);
       onCountChange();
@@ -179,8 +262,7 @@ export function WorkspaceTreePanel({
     void loadContextualWorkspace(activeWritingId)
       .then((result) => {
         if (request !== generation.current) return;
-        setWorkspace(result);
-        onCountChange(result?.documents.length);
+        applyOutcome(result);
         setLoading(false);
       })
       .catch((reason: unknown) => {
@@ -193,7 +275,16 @@ export function WorkspaceTreePanel({
         setLoading(false);
         onCountChange();
       });
-  }, [activeWritingId, onCountChange, revision]);
+  }, [activeWritingId, applyOutcome, onCountChange, retryToken]);
+
+  const handleToggleFolder = useCallback((path: string) => {
+    setCollapsedPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
 
   const tree = useMemo(
     () => buildWorkspaceTree(workspace?.documents ?? []),
@@ -221,7 +312,7 @@ export function WorkspaceTreePanel({
         <p>{error}</p>
         <button
           type="button"
-          onClick={() => setRevision((value) => value + 1)}
+          onClick={() => setRetryToken((value) => value + 1)}
           className="mt-2 flex items-center gap-1 text-ink"
         >
           <RefreshCw className="h-3 w-3" strokeWidth={1.5} />
@@ -233,6 +324,14 @@ export function WorkspaceTreePanel({
     return (
       <p className="px-2 py-4 font-lora text-[12px] italic text-ink-4">
         No hay un writing activo.
+      </p>
+    );
+  // Web cannot read the filesystem, so it cannot know whether this writing
+  // belongs to a Workspace. Saying it does not would be a claim we cannot make.
+  if (outcome?.kind === "unsupported-runtime")
+    return (
+      <p className="px-2 py-4 font-lora text-[12px] italic leading-relaxed text-ink-4">
+        El Workspace de un writing solo está disponible en la app de escritorio.
       </p>
     );
   if (!workspace)
@@ -286,6 +385,8 @@ export function WorkspaceTreePanel({
             key={folder.path}
             folder={folder}
             activeId={activeWritingId}
+            collapsedPaths={collapsedPaths}
+            onToggle={handleToggleFolder}
             onOpen={handleOpen}
           />
         ))}
