@@ -29,7 +29,7 @@ export function EditorNavigationSidebar({
       data-testid="editor-navigation-sidebar"
     >
       {mode ? (
-        <aside className="flex h-full w-64 flex-col border-r-[0.5px] border-border bg-sb">
+        <aside className="flex h-full w-64 flex-col overflow-hidden border-r-[0.5px] border-border bg-sb">
           <div className="flex h-10 shrink-0 items-center gap-1 border-b-[0.5px] border-border px-3">
             {controls}
           </div>
@@ -51,7 +51,11 @@ export function EditorNavigationSidebar({
               <X className="h-3 w-3" strokeWidth={1.5} />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-2">{children}</div>
+          {/* `overscroll-contain` keeps a wheel gesture over the tree from
+              chaining to the shell once the list hits its end. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+            {children}
+          </div>
         </aside>
       ) : (
         <div className="flex h-11 items-center gap-1 px-3">{controls}</div>

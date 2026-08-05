@@ -5619,9 +5619,14 @@ export function EditorShell({
     tableModalOpen,
   ])
 
+  // The editor is a fixed-height frame, not a scrolling page: the topbar is
+  // sticky, the status bar and the notes panel are `fixed`, and every content
+  // area owns its own scroller. With `min-h-screen` the layout could grow past
+  // the shell's <main> and let it scroll, dragging the absolutely positioned
+  // navigation sidebar out of view above the frame.
   return (
-    <section id="editor" data-page="editor" className="min-h-screen bg-bg">
-      <div className="EditorLayout hidden min-h-screen flex-col md:flex">
+    <section id="editor" data-page="editor" className="h-screen overflow-hidden bg-bg">
+      <div className="EditorLayout hidden h-full min-h-0 flex-col md:flex">
         {!isFocusMode && isTopbarVisible ? (
           <EditorTopbar
             editor={editor}
