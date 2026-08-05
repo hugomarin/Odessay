@@ -24,7 +24,11 @@ test("Studio navigation switches between one shared Contents and Workspace sideb
     sidebar.getByText("Workspace", { exact: true }).last(),
   ).toBeVisible();
   await expect(
-    sidebar.getByText("Este writing no pertenece a un Workspace."),
+    // The harness runs in a browser, where the runtime cannot read the
+    // filesystem — it must say so instead of denying membership.
+    sidebar.getByText("solo está disponible en la app de escritorio", {
+      exact: false,
+    }),
   ).toBeVisible();
   await expect(sidebar.getByText("Contents", { exact: true })).toHaveCount(0);
   await page.screenshot({
@@ -47,7 +51,9 @@ test("both sidebar modes occupy the same box inside a frame that never scrolls",
 
   await page.getByRole("button", { name: "Workspace" }).click();
   await expect(
-    page.getByText("Este writing no pertenece a un Workspace."),
+    page.getByText("solo está disponible en la app de escritorio", {
+      exact: false,
+    }),
   ).toBeVisible();
   const workspaceBox = await aside.boundingBox();
 

@@ -5,15 +5,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ContextualWorkspace } from "@/lib/workspace/types";
 
 const loadContextualWorkspace = vi.fn();
-const catalogListeners = new Set<() => void>();
+const refreshContextualWorkspaceDocuments = vi.fn();
+type CatalogListener = (change: {
+  transactionId: string;
+  documentIds: string[];
+  reason: "upsert" | "detach" | "cloud-snapshot" | "migration" | "bulk";
+  occurredAt: number;
+}) => void;
+const catalogListeners = new Set<CatalogListener>();
 
 vi.mock("@/lib/services/workspace-service", () => ({
   loadContextualWorkspace: (id: string) => loadContextualWorkspace(id),
-  subscribeToContextualWorkspaceChanges: (listener: () => void) => {
+  refreshContextualWorkspaceDocuments: (
+    workspace: ContextualWorkspace,
+    ids: string[],
+  ) => refreshContextualWorkspaceDocuments(workspace, ids),
+  subscribeToContextualWorkspaceChanges: (listener: CatalogListener) => {
     catalogListeners.add(listener);
     return () => catalogListeners.delete(listener);
   },
 }));
+
+/** Emit a catalog change the way the SQLite catalog does after a save. */
+function emitCatalogChange(
+  documentIds: string[],
+  reason: "upsert" | "bulk" | "detach" = "upsert",
+) {
+  for (const listener of catalogListeners) {
+    listener({
+      transactionId: `tx-${Math.random()}`,
+      documentIds,
+      reason,
+      occurredAt: Date.now(),
+    });
+  }
+}
 
 const { WorkspaceTreePanel } = await import(
   "@/components/editor/panels/workspace-tree-panel"
@@ -40,6 +66,11 @@ function workspaceWith(
   };
 }
 
+const found = (
+  documents: ContextualWorkspace["documents"],
+  overrides: Partial<ContextualWorkspace> = {},
+) => ({ kind: "workspace" as const, workspace: workspaceWith(documents, overrides) });
+
 const activeDocument = {
   id: ACTIVE_ID,
   name: "aplyca-analisis.md",
@@ -63,6 +94,8 @@ describe("WorkspaceTreePanel", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     loadContextualWorkspace.mockReset();
+    refreshContextualWorkspaceDocuments.mockReset();
+    refreshContextualWorkspaceDocuments.mockResolvedValue(null);
     catalogListeners.clear();
     container = document.createElement("div");
     document.body.append(container);
@@ -95,7 +128,7 @@ describe("WorkspaceTreePanel", () => {
 
   it("marks the active writing as the selected tree row", async () => {
     loadContextualWorkspace.mockResolvedValue(
-      workspaceWith([activeDocument, siblingDocument]),
+      found([activeDocument, siblingDocument]),
     );
 
     render(ACTIVE_ID);
@@ -125,7 +158,7 @@ describe("WorkspaceTreePanel", () => {
   });
 
   it("keeps Workspace mode with an empty state when the writing has no Workspace", async () => {
-    loadContextualWorkspace.mockResolvedValue(null);
+    loadContextualWorkspace.mockResolvedValue({ kind: "no-membership" });
 
     render(ACTIVE_ID);
     await settle();
@@ -138,7 +171,7 @@ describe("WorkspaceTreePanel", () => {
 
   it("reports an unavailable root without treating it as an empty Workspace", async () => {
     loadContextualWorkspace.mockResolvedValue(
-      workspaceWith([activeDocument], {
+      found([activeDocument], {
         status: "missing",
         missingReason: "La carpeta ya no existe en disco.",
       }),
@@ -159,7 +192,7 @@ describe("WorkspaceTreePanel", () => {
 
     expect(container.textContent).toContain("catalog offline");
 
-    loadContextualWorkspace.mockResolvedValue(workspaceWith([activeDocument]));
+    loadContextualWorkspace.mockResolvedValue(found([activeDocument]));
     const retry = Array.from(
       container.querySelectorAll("button"),
     ).find((button) => button.textContent?.includes("Reintentar"));
@@ -171,16 +204,28 @@ describe("WorkspaceTreePanel", () => {
     expect(container.querySelector('[role="tree"]')).not.toBeNull();
   });
 
+  it("says Workspace is desktop-only instead of denying membership on web", async () => {
+    loadContextualWorkspace.mockResolvedValue({ kind: "unsupported-runtime" });
+
+    render(ACTIVE_ID);
+    await settle();
+
+    expect(container.textContent).toContain("solo está disponible en la app");
+    expect(container.textContent).not.toContain(
+      "no pertenece a un Workspace",
+    );
+  });
+
   it("discards a stale response that resolves after the writing changed", async () => {
-    let resolveFirst: (value: ContextualWorkspace) => void = () => {};
+    let resolveFirst: (value: unknown) => void = () => {};
     loadContextualWorkspace
       .mockImplementationOnce(
         () =>
-          new Promise<ContextualWorkspace>((resolve) => {
+          new Promise((resolve) => {
             resolveFirst = resolve;
           }),
       )
-      .mockResolvedValueOnce(workspaceWith([siblingDocument]));
+      .mockResolvedValueOnce(found([siblingDocument]));
 
     render(ACTIVE_ID);
     render(OTHER_ID);
@@ -189,9 +234,7 @@ describe("WorkspaceTreePanel", () => {
     // The first writing's Workspace lands late — it must not overwrite the tree
     // that already belongs to the writing the author switched to.
     await act(async () => {
-      resolveFirst(
-        workspaceWith([activeDocument], { name: "Workspace anterior" }),
-      );
+      resolveFirst(found([activeDocument], { name: "Workspace anterior" }));
     });
     await settle();
 
@@ -200,21 +243,14 @@ describe("WorkspaceTreePanel", () => {
     expect(container.textContent).not.toContain("aplyca-analisis");
   });
 
-  it("coalesces a burst of catalog changes into a single tree rebuild", async () => {
-    loadContextualWorkspace.mockResolvedValue(workspaceWith([activeDocument]));
+  it("coalesces a burst of catalog changes into a single refresh", async () => {
+    loadContextualWorkspace.mockResolvedValue(found([activeDocument]));
 
     render(ACTIVE_ID);
     await settle();
-    expect(loadContextualWorkspace).toHaveBeenCalledTimes(1);
 
-    // One bulk reconciliation emits notifications spread over time, each gap
-    // shorter than the 100ms debounce window. Every notification must push the
-    // rebuild forward rather than queue its own — otherwise a long burst
-    // reloads the tree repeatedly while the author is typing.
     for (let index = 0; index < 8; index += 1) {
-      act(() => {
-        catalogListeners.forEach((listener) => listener());
-      });
+      act(() => emitCatalogChange([OTHER_ID]));
       await act(async () => {
         vi.advanceTimersByTime(40);
       });
@@ -224,6 +260,86 @@ describe("WorkspaceTreePanel", () => {
     });
     await settle();
 
-    expect(loadContextualWorkspace).toHaveBeenCalledTimes(2);
+    expect(refreshContextualWorkspaceDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it("never rescans the root for discrete autosaves of the active writing", async () => {
+    loadContextualWorkspace.mockResolvedValue(found([activeDocument]));
+
+    render(ACTIVE_ID);
+    await settle();
+    expect(loadContextualWorkspace).toHaveBeenCalledTimes(1);
+
+    // The real trigger is not a burst: each autosave is its own event, seconds
+    // apart, so every one opens a fresh debounce window. Resolving those
+    // through the scanning loader would rescan the whole Workspace root — a
+    // second full scan right after the one `persist` already did.
+    for (let index = 0; index < 3; index += 1) {
+      act(() => emitCatalogChange([ACTIVE_ID]));
+      await act(async () => {
+        vi.advanceTimersByTime(5_000);
+      });
+      await settle();
+    }
+
+    expect(loadContextualWorkspace).toHaveBeenCalledTimes(1);
+    expect(refreshContextualWorkspaceDocuments).toHaveBeenCalledTimes(3);
+    for (const call of refreshContextualWorkspaceDocuments.mock.calls) {
+      expect(call[1]).toContain(ACTIVE_ID);
+    }
+    // The tree stayed on screen the whole time: no loading state, no remount.
+    expect(container.querySelector('[role="tree"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("Cargando Workspace");
+  });
+
+  it("keeps folders the author collapsed across a tree rebuild", async () => {
+    const nested = {
+      ...siblingDocument,
+      relativePath: "04-sesiones/sesion.md",
+    };
+    loadContextualWorkspace.mockResolvedValue(found([activeDocument, nested]));
+
+    render(ACTIVE_ID);
+    await settle();
+
+    const folder = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
+    ).find((row) => row.textContent?.includes("04-sesiones"));
+    await act(async () => {
+      folder?.click();
+    });
+    expect(folder?.getAttribute("aria-expanded")).toBe("false");
+    const documentRows = () =>
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
+      ).map((row) => row.textContent?.trim());
+    expect(documentRows()).not.toContain("sesion");
+
+    // A reconciled add/move/remove legitimately rebuilds the tree. The author's
+    // collapsed folders must survive it.
+    refreshContextualWorkspaceDocuments.mockResolvedValueOnce(
+      workspaceWith([
+        activeDocument,
+        nested,
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          name: "nuevo.md",
+          relativePath: "nuevo.md",
+          state: "synced" as const,
+          openable: true,
+        },
+      ]),
+    );
+    act(() => emitCatalogChange(["33333333-3333-4333-8333-333333333333"]));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    await settle();
+
+    expect(container.textContent).toContain("nuevo");
+    const rebuilt = Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
+    ).find((row) => row.textContent?.includes("04-sesiones"));
+    expect(rebuilt?.getAttribute("aria-expanded")).toBe("false");
   });
 });
