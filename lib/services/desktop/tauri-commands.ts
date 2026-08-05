@@ -30,6 +30,15 @@ export type DesktopWorkspaceSnapshot = {
   files: DesktopWorkspaceFile[]
 }
 
+export type DesktopManifestBindingRepair = {
+  documentId: string
+  relativePath: string
+  inode: number | null
+  contentHash: string | null
+  lastSeen: number | null
+  size: number | null
+}
+
 export type DesktopCatalogRow = {
   id: string; localPresent: boolean; cloudPresent: boolean; cloudAccountId: string | null
   syncStatus: string; title: string | null; slug: string | null; status: string | null
@@ -129,6 +138,22 @@ export async function tauriWorkspaceCreate(parentPath: string, name: string): Pr
   return invoke<string>("workspace_create", { parentPath, name })
 }
 
+export async function tauriWorkspaceInspect(rootPath: string): Promise<DesktopWorkspaceSnapshot> {
+  return invoke<DesktopWorkspaceSnapshot>("workspace_inspect", { rootPath })
+}
+
+export async function tauriWorkspaceRepairManifestBindings(
+  rootPath: string,
+  bindingRootId: string,
+  bindings: DesktopManifestBindingRepair[],
+): Promise<number> {
+  return invoke<number>("workspace_repair_manifest_bindings", {
+    rootPath,
+    bindingRootId,
+    bindings,
+  })
+}
+
 export async function tauriWorkspaceSync(
   rootPath: string,
   selectedPaths?: string[],
@@ -156,6 +181,46 @@ export async function tauriCatalogSchemaVersion(dbPath: string): Promise<number>
 
 export async function tauriCatalogDualWrite(dbPath: string, input: DesktopCatalogDualWriteInput): Promise<void> {
   return invoke<void>("catalog_dual_write", { dbPath, input })
+}
+
+/** Returns the ids written, in input order, so the caller can emit one CatalogChange. */
+export async function tauriCatalogBulkDualWrite(dbPath: string, inputs: DesktopCatalogDualWriteInput[]): Promise<string[]> {
+  return invoke<string[]>("catalog_bulk_dual_write", { dbPath, inputs })
+}
+
+export async function tauriCatalogCountBindingRootDocuments(dbPath: string, bindingRootId: string): Promise<{ total: number; cloud: number }> {
+  return invoke<{ total: number; cloud: number }>("catalog_count_binding_root_documents", { dbPath, bindingRootId })
+}
+
+export async function tauriCatalogListBindingRootDocuments(dbPath: string, bindingRootId: string): Promise<DesktopCatalogRow[]> {
+  return invoke<DesktopCatalogRow[]>("catalog_list_binding_root_documents", { dbPath, bindingRootId })
+}
+
+export async function tauriCatalogApplyWorkspaceRemoval(dbPath: string, bindingRootId: string, rootPath: string, deletedAt: string, updatedAt: string): Promise<string[]> {
+  return invoke<string[]>("catalog_apply_workspace_removal", { dbPath, bindingRootId, rootPath, deletedAt, updatedAt, nowMillis: Date.now() })
+}
+
+export type DesktopRetiredBindingRoot = {
+  id: string
+  rootPath: string
+  retiredAt: number
+}
+
+export async function tauriCatalogListRetiredBindingRoots(dbPath: string): Promise<DesktopRetiredBindingRoot[]> {
+  return invoke<DesktopRetiredBindingRoot[]>("catalog_list_retired_binding_roots", { dbPath })
+}
+
+export async function tauriCatalogActivateBindingRoot(dbPath: string, bindingRootId: string, rootPath: string): Promise<void> {
+  return invoke<void>("catalog_activate_binding_root", { dbPath, bindingRootId, rootPath })
+}
+
+/**
+ * Re-adding a previously removed folder: restores local-only documents to the
+ * active catalog and returns only the cloud-archived ones, which still need the
+ * "local wins" upsert. Filtering happens in SQL — never load the whole catalog.
+ */
+export async function tauriCatalogReactivateBindingRoot(dbPath: string, bindingRootId: string): Promise<DesktopCatalogRow[]> {
+  return invoke<DesktopCatalogRow[]>("catalog_reactivate_binding_root", { dbPath, bindingRootId })
 }
 
 export async function tauriCatalogApplyCloudSnapshots(
@@ -217,8 +282,8 @@ export type DesktopCatalogReconcileInput = {
 export async function tauriCatalogApplyReconcile(
   dbPath: string,
   input: DesktopCatalogReconcileInput,
-): Promise<void> {
-  return invoke<void>("catalog_apply_reconcile", { dbPath, input })
+): Promise<boolean> {
+  return invoke<boolean>("catalog_apply_reconcile", { dbPath, input })
 }
 
 export async function tauriCatalogUpdateMutationStatus(

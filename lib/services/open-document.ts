@@ -64,6 +64,8 @@ export type BindingRootMatch = {
   bindingRootId: string
   rootPath: string
   relativePath: string
+  /** Current manifest scope. Empty means the complete root is observed. */
+  selectedPaths?: string[]
 }
 
 export type BindingRootLocation =

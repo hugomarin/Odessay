@@ -159,6 +159,14 @@ export function compressWorkspaceSelection(
   tree: WorkspaceFolderTreeNode[],
   selectedFiles: ReadonlySet<string>,
 ) {
+  const availableFileCount = tree.reduce((total, node) => total + node.fileCount, 0)
+  // An empty selectedPaths array is the durable representation of a complete
+  // BindingRoot. Preserve that intent so files created later are discovered by
+  // the global reconciler instead of freezing the scope to today's file list.
+  if (availableFileCount > 0 && selectedFiles.size === availableFileCount) {
+    return []
+  }
+
   const compressed: string[] = []
 
   for (const node of tree) {

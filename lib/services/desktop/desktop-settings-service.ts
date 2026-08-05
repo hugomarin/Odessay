@@ -171,7 +171,10 @@ export class DesktopSettingsService implements SettingsService {
       consentedAt: null,
       createdAt: new Date().toISOString(),
     }
-    await this.updateDesktopSettings({ bindingRoots: [...roots, managed] })
+    const result = await this.updateDesktopSettings({ bindingRoots: [...roots, managed] })
+    if (result.error) {
+      throw new Error(`Failed to persist managed BindingRoot: ${result.error.message}`)
+    }
     return managed
   }
 
@@ -186,7 +189,10 @@ export class DesktopSettingsService implements SettingsService {
     const next = roots.some(matches)
       ? roots.map((root) => (matches(root) ? record : root))
       : [...roots, record]
-    await this.updateDesktopSettings({ bindingRoots: next })
+    const result = await this.updateDesktopSettings({ bindingRoots: next })
+    if (result.error) {
+      throw new Error(`Failed to persist BindingRoot: ${result.error.message}`)
+    }
   }
 
   async clearAllSettings(): Promise<ServiceResponse<void>> {
