@@ -61,6 +61,8 @@ function FolderNode({
         type="button"
         role="treeitem"
         aria-expanded={expanded}
+        // Folders group documents; only a document can be the tree's selection.
+        aria-selected={false}
         onClick={() => setExpanded((value) => !value)}
         className="flex min-h-7 w-full items-center gap-1.5 rounded-[6px] px-2 text-left text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
       >
@@ -114,6 +116,7 @@ function DocumentNode({
         type="button"
         role="treeitem"
         disabled={!document.openable || !document.id}
+        aria-selected={active}
         aria-current={active ? "page" : undefined}
         onClick={() => document.id && void onOpen(document.id)}
         className={cn(
