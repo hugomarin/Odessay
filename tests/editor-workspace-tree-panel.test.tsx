@@ -108,13 +108,17 @@ describe("WorkspaceTreePanel", () => {
     vi.useRealTimers();
   });
 
-  const render = (activeWritingId: string | null, onOpen = vi.fn()) =>
+  const render = (
+    activeWritingId: string | null,
+    onOpen = vi.fn(),
+    onCountChange = vi.fn(),
+  ) =>
     act(() => {
       root.render(
         <WorkspaceTreePanel
           activeWritingId={activeWritingId}
           onOpenDocument={onOpen}
-          onCountChange={vi.fn()}
+          onCountChange={onCountChange}
         />,
       );
     });
@@ -183,6 +187,24 @@ describe("WorkspaceTreePanel", () => {
     expect(container.textContent).toContain("Aplyca no está disponible.");
     expect(container.textContent).toContain("La carpeta ya no existe en disco.");
     expect(container.querySelector('[role="tree"]')).toBeNull();
+  });
+
+  it("reports no document count for an unavailable root", async () => {
+    const onCountChange = vi.fn();
+    loadContextualWorkspace.mockResolvedValue(
+      found([activeDocument], {
+        status: "missing",
+        missingReason: "Workspace folder is unavailable",
+      }),
+    );
+
+    render(ACTIVE_ID, vi.fn(), onCountChange);
+    await settle();
+
+    // A `0` badge beside the name reads as "this Workspace is empty", which is
+    // the confusion the unavailable state exists to prevent.
+    expect(onCountChange).toHaveBeenCalledWith(undefined);
+    expect(onCountChange).not.toHaveBeenCalledWith(0);
   });
 
   it("surfaces a recoverable error with retry instead of collapsing the panel", async () => {

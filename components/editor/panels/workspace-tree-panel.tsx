@@ -177,8 +177,14 @@ export function WorkspaceTreePanel({
   const applyOutcome = useCallback(
     (next: ContextualWorkspaceOutcome) => {
       setOutcome(next);
+      // Only a readable root has a document count. An unavailable root has no
+      // count at all: rendering `0` next to its name reads as "this Workspace
+      // is empty", which is the exact confusion the unavailable state exists to
+      // prevent.
       onCountChange(
-        next.kind === "workspace" ? next.workspace.documents.length : undefined,
+        next.kind === "workspace" && next.workspace.status === "ready"
+          ? next.workspace.documents.length
+          : undefined,
       );
     },
     [onCountChange],
