@@ -15,7 +15,10 @@ export type AccountIdentity = {
 }
 
 export type AuthSession = {
-  status: "anonymous" | "authenticated" | "pending-email-change"
+  // `unverified` (desktop): the server could not be reached to validate the
+  // token, but a locally stored session identity exists. It is NOT proof of a
+  // missing session — only `anonymous` justifies redirecting to login.
+  status: "anonymous" | "authenticated" | "pending-email-change" | "unverified"
   user: AccountIdentity | null
 }
 
@@ -93,6 +96,7 @@ export const AUTH_SERVICE_CONTRACT = {
   owner: "architecture-first",
   invariants: [
     "AuthService returns explicit anonymous/authenticated state and does not force callers to infer it from thrown transport errors.",
+    "A transport or server failure during session resolution is not proof of a missing session: adapters return `unverified` with the locally stored identity (or UNAVAILABLE when no local identity exists), and only an explicit `anonymous` result justifies a login redirect.",
     "Profile and credential mutations are account capabilities; Supabase session mechanics remain adapter details.",
     "Desktop may implement only a subset initially, but missing capabilities must surface as contract-level UNAVAILABLE or UNSUPPORTED outcomes.",
   ],
@@ -133,7 +137,8 @@ export const AUTH_SERVICE_CONTRACT = {
     {
       name: "getSession",
       kind: "session",
-      summary: "Resolve the active session and normalized account identity.",
+      summary:
+        "Resolve the active session and normalized account identity. Distinguishes `anonymous` (no session — the only result that justifies a login redirect) from `unverified` (server unreachable, locally stored identity returned — never a redirect reason).",
       input: ["none"],
       output: ["AuthSession"],
       errorCodes: ["UNAVAILABLE", "UNKNOWN"],

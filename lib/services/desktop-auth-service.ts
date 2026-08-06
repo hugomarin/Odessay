@@ -67,6 +67,37 @@ function sessionFromUser(user: {
 
 let inFlightSessionRequest: Promise<ServiceResponse<AuthSession>> | null = null
 
+// Duck-typed over @supabase/auth-js error classes (AuthSessionMissingError,
+// AuthApiError) so the adapter does not depend on SDK internals: only a
+// missing stored session or a server-side rejection of the token (401/403)
+// is real evidence of "no session".
+function isNoSessionError(error: { name?: unknown; status?: unknown }): boolean {
+  if (error.name === "AuthSessionMissingError") return true
+  if (error.name === "AuthApiError" && (error.status === 401 || error.status === 403)) return true
+  return false
+}
+
+// Reads the session persisted by the desktop client (Keychain) without any
+// network call — unlike supabase.auth.getSession(), which may attempt a
+// token refresh when the access token is expired. Used to recover the local
+// identity when the server cannot verify the session (offline).
+async function readStoredSessionUser(
+  supabase: unknown,
+): Promise<Parameters<typeof mapIdentity>[0] | null> {
+  try {
+    const storageKey = (supabase as { storageKey?: string }).storageKey
+    if (!storageKey) return null
+    const raw = await keychainStorage.getItem(storageKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { user?: Parameters<typeof mapIdentity>[0] | null }
+    const user = parsed?.user
+    if (!user || typeof user.id !== "string") return null
+    return user
+  } catch {
+    return null
+  }
+}
+
 async function checkDesktopUsernameAvailability(
   input: CheckUsernameAvailabilityInput,
 ): Promise<ServiceResponse<UsernameAvailability>> {
@@ -278,11 +309,27 @@ export const desktopAuthService: AuthService = {
         const supabase = createDesktopClient()
         const { data, error } = await supabase.auth.getUser()
 
-        if (error) {
-          return err(toServiceError("UNAVAILABLE", error.message, true))
+        if (!error) {
+          return ok(sessionFromUser(data.user))
         }
 
-        return ok(sessionFromUser(data.user))
+        // A missing stored session or a server-side token rejection (401/403)
+        // is the only real evidence of "no session" — only this justifies a
+        // login redirect downstream.
+        if (isNoSessionError(error)) {
+          return ok<AuthSession>({ status: "anonymous", user: null })
+        }
+
+        // Transport or 5xx failure (offline, server down): the session could
+        // not be verified, which is NOT proof that it does not exist. Fall
+        // back to the locally stored identity so the app keeps working with
+        // local data and no consumer mistakes this for a sign-out (ODE-415).
+        const storedUser = await readStoredSessionUser(supabase)
+        if (storedUser) {
+          return ok<AuthSession>({ status: "unverified", user: mapIdentity(storedUser) })
+        }
+
+        return err(toServiceError("UNAVAILABLE", error.message, true))
       } catch (error) {
         return err(
           toServiceError(
