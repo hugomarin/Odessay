@@ -58,6 +58,7 @@ Para cualquier trabajo que toque desktop, Desk, Workspace, Open Document, watche
 - **BindingRoot externo:** abrir un archivo fuera de roots requiere confirmación para registrar su carpeta padre; `selectedPaths` empieza limitado al archivo y `visible_as_workspace` no se activa por defecto.
 - **IndexedDB:** sigue siendo el adapter local-first de web. En desktop es compatibilidad transitoria y se retira solo tras cosechar todos los scopes, bindings y mutaciones pendientes.
 - **Apertura:** la entrada pública puede ser `{ kind: "id" }` o `{ kind: "path" }`, pero debe agotar reconciliación antes de acuñar identidad y converger a `OpenDocument(UUID)` antes de hidratar el editor. Workspace no hace seed manual de IndexedDB.
+- **Delegación entre servicios:** un UUID nunca se trata como ruta de filesystem. Toda operación que necesite delegar a un adapter de filesystem resuelve primero `UUID → canonical_path` mediante el `DocumentCatalog`; esta regla aplica dentro de servicios y no solo en la UI.
 - **Guardado:** el orden desktop es `.md` atómico → manifest atómico → SQLite + enqueue en transacción → sync cloud en background.
 - **Boundaries:** la UI no depende directamente de SQLite, manifests, IndexedDB, Supabase, Tauri ni rutas de filesystem para decidir identidad o estado.
 - **Errores:** `NOT_FOUND`, binding huérfano, hash ambiguo o falla de filesystem son resultados recuperables; nunca crean un draft ni otro estado durable como fallback.
