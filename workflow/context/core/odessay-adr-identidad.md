@@ -53,6 +53,8 @@ Lo único local en disco, además del propio `.md`, es un **índice de binding d
 
 Hay un solo punto de acuñación: el `crypto.randomUUID` del writing, generado offline en el cliente, que Supabase adopta como PK al sincronizar. **El índice de workspace adopta ese id** en lugar de generar su `Uuid::new_v4`. Se elimina la fractura de dos UUID desconectados.
 
+La ruta es evidencia de binding, no identidad documental. Un valor con forma de UUID representa identidad y nunca se interpreta como una ruta de filesystem.
+
 ### D6 — Identidad = UUID estable + manojo de pistas (con hash)
 
 El binding archivo↔UUID se mantiene con **ruta + inode + content_hash**. Se agrega el **content_hash** (hoy solo hay inode+size), recomendado **BLAKE3**, calculado sobre el markdown canónico en el watcher de Rust, en el debounce (no por evento crudo), solo sobre el archivo cambiado.

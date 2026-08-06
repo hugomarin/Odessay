@@ -326,7 +326,7 @@
     {
       "path": "workflow/define/context-hygiene-prompt.md",
       "type": "ops",
-      "description": "Prompt acotado para auditorías de context rot entre skills y workflow, con foco en AI writing assist, ProseMirror/decorations y consistencia de referencias."
+      "description": "Prompt para auditorías de context rot entre skills, Linear y workflow, con foco en AI writing assist y arquitectura documental desktop, incluida la promoción de invariantes normativos ratificados en issues cerrados."
     },
     {
       "path": "workflow/new features/Odessay-Funcionalidad-propuesta-Context-Workspace.md",

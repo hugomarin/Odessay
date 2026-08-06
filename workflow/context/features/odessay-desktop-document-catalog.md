@@ -402,6 +402,8 @@ openDocument(input): Promise<OpenDocumentResult>
 
 Ambas entradas convergen a UUID antes de hidratar el editor.
 
+Para toda operación de servicio que reciba un UUID y deba delegar en un adapter de filesystem, la resolución `UUID → canonical_path` pasa primero por `DocumentCatalog.getById`. El adapter recibe la ruta resuelta; ningún servicio delega el UUID como si fuera una ruta ni consulta una fuente paralela para resolverlo.
+
 ### Desk
 
 ```text
