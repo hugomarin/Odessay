@@ -135,16 +135,16 @@ liveness** (`cloud_present`, which hydration sets to 0 for a tombstoned row).
 
 Both fixes carry native regressions verified to fail against the previous SQL.
 The remaining sites of the same confusion are presentation-only and tracked in
-ODE-416.
+ODE-417.
 
-## Out of scope, blocked by ODE-415
+## Out of scope, blocked by ODE-416
 
 The criterion *"offline, synced documents appear as archived/pending"* could not
 be observed: with no connectivity, opening Settings crashes the whole application
 with `SecurityError: Attempt to use history.replaceState() more than 100 times per
 10 seconds`. Root cause is in the Settings account page, unrelated to workspace
 removal, and reproduces by navigating to Settings offline without touching
-Workspaces. Filed as ODE-415.
+Workspaces. Filed as ODE-416.
 
 What that criterion protects — that removal converges locally and mutations
 survive without network — **is** proven above.
