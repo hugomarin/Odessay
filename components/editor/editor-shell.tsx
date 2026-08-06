@@ -136,7 +136,7 @@ import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
-import { downloadBlob as downloadBlobUtil, saveBinaryArtifact } from "@/lib/utils/download"
+import { saveBinaryArtifact } from "@/lib/utils/download"
 import { useEditorSelection, type MarkdownSelectionSnapshot } from "@/hooks/useEditorSelection"
 import { logCorrectionEvent } from "@/lib/observability/corrections-log"
 import {
@@ -5510,19 +5510,19 @@ export function EditorShell({
     void handleMenuOpenFile(pending.path, pending.content)
   }, [sessionLoaded, handleMenuOpenFile])
 
-  const downloadBlob = useCallback((blob: Blob, filename: string) => {
-    downloadBlobUtil(blob, filename)
-  }, [])
-
   const exportMarkdown = useCallback(async () => {
     const bodyMarkdown = getBodyMarkdown()
     if (bodyMarkdown === null) {
-      return
+      return false
     }
 
-    const blob = new Blob([`${bodyMarkdown.trimEnd()}\n`], { type: "text/markdown;charset=utf-8" })
-    downloadBlob(blob, `${exportFileBaseName}.md`)
-  }, [downloadBlob, exportFileBaseName, getBodyMarkdown])
+    const bytes = new TextEncoder().encode(`${bodyMarkdown.trimEnd()}\n`)
+    return saveBinaryArtifact({
+      bytes,
+      fileName: `${exportFileBaseName}.md`,
+      mimeType: "text/markdown;charset=utf-8",
+    })
+  }, [exportFileBaseName, getBodyMarkdown])
 
   const exportBinary = useCallback(
     async (format: "pdf" | "docx") => {

@@ -1,5 +1,6 @@
 /** @vitest-environment happy-dom */
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import ts from "typescript"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 
 const mocks = vi.hoisted(() => ({
@@ -15,7 +16,9 @@ const mocks = vi.hoisted(() => ({
   saveFile: vi.fn(),
   deleteFile: vi.fn(),
   renameFile: vi.fn(),
+  downloadWriting: vi.fn(),
   exportFile: vi.fn(),
+  webExport: vi.fn(),
   workspaceSync: vi.fn(),
   dualWrite: vi.fn(),
   bulkDualWrite: vi.fn(),
@@ -71,6 +74,7 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
     saveWriting = mocks.saveFile
     deleteWriting = mocks.deleteFile
     renameWriting = mocks.renameFile
+    downloadWriting = mocks.downloadWriting
     exportWriting = mocks.exportFile
   },
 }))
@@ -82,7 +86,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriRelocateFile: mocks.tauriRelocate,
 }))
 vi.mock("@/lib/services/web-document-service", () => ({
-  webDocumentService: { listWritings: vi.fn() },
+  webDocumentService: { listWritings: vi.fn(), exportWriting: mocks.webExport },
 }))
 
 const id = "11111111-1111-4111-8111-111111111111"
@@ -162,6 +166,31 @@ describe("desktop document service after compatibility retirement", () => {
       error: null,
     })
     mocks.createDraft.mockResolvedValue({ data: { path, writing: { ...writing, id: path } }, error: null })
+    mocks.renameFile.mockResolvedValue({ data: { ...writing, id: path, title: "Renamed" }, error: null })
+    mocks.downloadWriting.mockResolvedValue({
+      data: {
+        writingId: path,
+        format: "pdf" as const,
+        fileName: "Letter.pdf",
+        mimeType: "application/pdf",
+        bytes: new Uint8Array([1, 2, 3]),
+      },
+      error: null,
+    })
+    mocks.exportFile.mockResolvedValue({
+      data: {
+        writingId: path,
+        format: "pdf" as const,
+        fileName: "Letter.pdf",
+        mimeType: "application/pdf",
+        bytes: new Uint8Array([1, 2, 3]),
+      },
+      error: null,
+    })
+    mocks.webExport.mockResolvedValue({
+      data: null,
+      error: { code: "UNAVAILABLE", message: "This document has no local copy on this machine" },
+    })
     mocks.workspaceSync.mockResolvedValue({
       rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
       files: [{ id, path, relativePath: "Letter.md", inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 2 }],
@@ -736,5 +765,122 @@ describe("desktop document service after compatibility retirement", () => {
       expect.any(String),
       expect.objectContaining({ mutation: expect.objectContaining({ operation: "delete" }) }),
     )
+  })
+
+  describe("DesktopDocumentService filesystem boundary contract", () => {
+    function getFilesystemDelegatingMethods(sourcePath: string) {
+      const sourceText = ts.sys.readFile(sourcePath)
+      if (!sourceText) throw new Error(`Could not read ${sourcePath}`)
+      const sourceFile = ts.createSourceFile(sourcePath, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+
+      const methods: { name: string; shape: "id" | "writingId" | "writingRecord" }[] = []
+
+      function visit(node: ts.Node) {
+        if (ts.isClassDeclaration(node) && node.name?.text === "DesktopDocumentService") {
+          for (const member of node.members) {
+            if (!ts.isMethodDeclaration(member) || !member.name || !ts.isIdentifier(member.name)) continue
+            const methodName = member.name.text
+            if (methodName === "constructor") continue
+
+            const bodyText = member.getText(sourceFile)
+            if (!bodyText.includes("this.runtime.filesystem") && !bodyText.includes("this.persist(")) continue
+
+            const param = member.parameters[0]
+            if (!param) continue
+
+            const paramName = param.name.getText(sourceFile)
+            const paramType = param.type?.getText(sourceFile) ?? ""
+
+            let shape: "id" | "writingId" | "writingRecord" | null = null
+            if (paramName === "id" && paramType === "string") {
+              shape = "id"
+            } else if (paramType === "SaveWritingInput") shape = "writingRecord"
+            else if (paramType.endsWith("WritingInput")) shape = "writingId"
+
+            if (shape) methods.push({ name: methodName, shape })
+          }
+        }
+        ts.forEachChild(node, visit)
+      }
+      visit(sourceFile)
+      return methods
+    }
+
+    function extractIdentifier(callArg: unknown): string | null {
+      if (typeof callArg === "string") return callArg
+      if (callArg && typeof callArg === "object") {
+        const record = callArg as Record<string, unknown>
+        if (typeof record.writingId === "string") return record.writingId
+        if (record.writing && typeof record.writing === "object") {
+          const writing = record.writing as Record<string, unknown>
+          if (typeof writing.id === "string") return writing.id
+        }
+      }
+      return null
+    }
+
+    const sourcePath = `${process.cwd()}/lib/services/document-service-factory.ts`
+    it("never passes a raw document UUID through any filesystem-delegating service method", async () => {
+      const methods = getFilesystemDelegatingMethods(sourcePath)
+      expect(methods.length).toBeGreaterThan(0)
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const service = await getDocumentService()
+
+      for (const method of methods) {
+        vi.clearAllMocks()
+        mocks.catalogGet.mockResolvedValue(catalogRecord)
+        mocks.openFile.mockResolvedValue({
+          data: { ...writing, id: path, content: { ...writing.content, markdown: "Hello", richText: null } },
+          error: null,
+        })
+        mocks.renameFile.mockResolvedValue({ data: { ...writing, id: path, title: "Renamed" }, error: null })
+        mocks.createDraft.mockResolvedValue({ data: { path, writing: { ...writing, id: path } }, error: null })
+
+        let input: unknown
+        if (method.shape === "id") input = id
+        else if (method.shape === "writingId") {
+          input = { writingId: id, format: "pdf" as const, version: 2, updatedAt: "2026-01-02T00:00:00.000Z", deletedAt: "2026-01-02T00:00:00.000Z", title: "Renamed" }
+        } else {
+          input = { writing: { ...writing, id } }
+        }
+
+        await (service[method.name as keyof typeof service] as (input: unknown) => Promise<unknown>)(input)
+
+        const filesystemCalls = [
+          ...mocks.openFile.mock.calls,
+          ...mocks.saveFile.mock.calls,
+          ...mocks.deleteFile.mock.calls,
+          ...mocks.renameFile.mock.calls,
+          ...mocks.downloadWriting.mock.calls,
+          ...mocks.exportFile.mock.calls,
+        ]
+        for (const [callArg] of filesystemCalls) {
+          const identifier = extractIdentifier(callArg)
+          expect(identifier).not.toBe(id)
+        }
+      }
+    })
+
+    it("falls back to web export for a cloud-only record without durable local effects", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord,
+        localPresent: false,
+        cloudPresent: true,
+        cloudAccountId: "account-1",
+        binding: null,
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).exportWriting({ writingId: id, format: "pdf" })
+
+      expect(result.error).toEqual({
+        code: "UNAVAILABLE",
+        message: "This document has no local copy on this machine",
+      })
+      expect(mocks.webExport).toHaveBeenCalledWith({ writingId: id, format: "pdf" })
+      expect(mocks.exportFile).not.toHaveBeenCalled()
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+      expect(mocks.bulkDualWrite).not.toHaveBeenCalled()
+    })
   })
 })
