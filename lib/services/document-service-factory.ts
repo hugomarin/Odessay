@@ -549,7 +549,13 @@ class DesktopDocumentService implements DocumentService {
     await setDesktopWritingCollections(input.writingId, input.collectionIds)
     return this.listWritingCollections(input.writingId)
   }
-  async exportWriting(input: ExportWritingInput) { return this.runtime.filesystem.exportWriting(input) }
+  async exportWriting(input: ExportWritingInput): Promise<ServiceResponse<import("@/lib/services/contracts/document-service").ExportedDocumentArtifact>> {
+    const current = await this.runtime.catalog.getById(input.writingId)
+    if (current?.binding?.canonicalPath) {
+      return this.runtime.filesystem.exportWriting({ writingId: current.binding.canonicalPath, format: input.format })
+    }
+    return webDocumentService.exportWriting(input)
+  }
 }
 
 let desktopServicePromise: Promise<DocumentService> | null = null
