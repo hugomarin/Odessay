@@ -24,6 +24,7 @@ export type PersistedCorrectionBlockRecord = {
   block_hash: string;
   suggestions: PublicationSuggestion[];
   model: string;
+  engine_revision: string | null;
   created_at: string;
   latency_ms: number | null;
   prompt_tokens: number | null;
@@ -46,6 +47,7 @@ export const mapPersistedCorrectionRecordToLocal = (
   blockHash: record.block_hash,
   suggestions: record.suggestions,
   model: record.model,
+  engineRevision: record.engine_revision ?? null,
   createdAt: record.created_at,
   latencyMs: record.latency_ms,
   promptTokens: record.prompt_tokens,
@@ -130,6 +132,7 @@ export const hydrateCorrectionBlocksFromRemote = (writingId: string): Promise<Lo
         block_hash: block.blockHash,
         suggestions: block.suggestions,
         model: block.model,
+        engine_revision: block.engineRevision,
         created_at: block.createdAt,
         latency_ms: block.latencyMs,
         prompt_tokens: block.promptTokens,
@@ -196,6 +199,7 @@ export const persistCorrectionBlockRemotely = async ({
             blockHash: block.blockHash,
             suggestions: block.suggestions,
             model: block.model,
+            engineRevision: block.engineRevision,
             createdAt: block.createdAt,
             latencyMs: block.latencyMs,
             promptTokens: block.promptTokens,

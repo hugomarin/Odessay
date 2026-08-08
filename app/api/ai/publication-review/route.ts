@@ -4,8 +4,10 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  BLOCK_CORRECTIONS_MAX_TOKENS,
-  CORRECTION_BLOCK_BATCH_SIZE,
+  CORRECTION_PACKAGE_MAX_BLOCKS,
+  CORRECTION_PACKAGE_MAX_CHARS,
+  CORRECTION_PACKAGE_MAX_INPUT_TOKENS,
+  CORRECTION_PACKAGE_OUTPUT_TOKENS,
 } from "@/lib/ai/corrections-config";
 import {
   buildMechanicalCorrectionsPrompt,
@@ -43,7 +45,7 @@ const requestSchema = z.object({
     id: z.string().trim().min(1),
     text: z.string().trim().min(1),
     hash: z.string().trim().min(1),
-  })).min(1).max(CORRECTION_BLOCK_BATCH_SIZE).optional(),
+  })).min(1).optional(),
   correctionMemory: z.object({
     entries: z.array(memoryEntrySchema).default([]),
   }).optional(),
@@ -60,6 +62,43 @@ const requestSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Either correctionBlock or correctionBlocks is required.",
+      path: ["correctionBlocks"],
+    });
+    return;
+  }
+
+  const blocks = value.correctionBlocks ?? (value.correctionBlock ? [value.correctionBlock] : []);
+  const charsPerToken = 3.8;
+  const promptOverheadChars = 1_600;
+  const blockOverheadChars = 32;
+
+  if (blocks.length > CORRECTION_PACKAGE_MAX_BLOCKS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Package exceeds maximum block count (${CORRECTION_PACKAGE_MAX_BLOCKS}).`,
+      path: ["correctionBlocks"],
+    });
+  }
+
+  const bodyChars = blocks.reduce(
+    (sum, block) => sum + block.text.length + block.id.length + blockOverheadChars,
+    0,
+  );
+
+  if (bodyChars > CORRECTION_PACKAGE_MAX_CHARS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Package exceeds maximum character count (${CORRECTION_PACKAGE_MAX_CHARS}).`,
+      path: ["correctionBlocks"],
+    });
+  }
+
+  const estimatedInputTokens = Math.ceil((promptOverheadChars + bodyChars) / charsPerToken);
+
+  if (estimatedInputTokens > CORRECTION_PACKAGE_MAX_INPUT_TOKENS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Package exceeds estimated input token budget (${CORRECTION_PACKAGE_MAX_INPUT_TOKENS}).`,
       path: ["correctionBlocks"],
     });
   }
@@ -197,24 +236,22 @@ const mechanicalCorrectionsResponseFormat = {
   },
 } as const;
 
-const getCorrectionsMaxTokens = (blockCount: number) => BLOCK_CORRECTIONS_MAX_TOKENS * Math.max(1, blockCount);
+const getCorrectionsMaxTokens = () => CORRECTION_PACKAGE_OUTPUT_TOKENS;
 
 async function callCorrectionsModel({
   config,
   promptText,
-  blockCount,
   strictJson,
   structuredOutput = true,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
-  blockCount: number;
   strictJson: boolean;
   structuredOutput?: boolean;
 }): Promise<{ text: string; usage: CorrectionsUsage }> {
   const requestBody = {
     model: config.model,
-    max_tokens: getCorrectionsMaxTokens(blockCount),
+    max_tokens: getCorrectionsMaxTokens(),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
     ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
@@ -283,7 +320,7 @@ async function callCorrectionsModel({
       console.info(
         `[corrections] structured output provider failure status=${response.status}; retrying without response_format`,
       );
-      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
     }
 
     if (response.status === 400 || response.status === 422) {
@@ -339,7 +376,7 @@ async function callCorrectionsModel({
   if (!text) {
     if (structuredOutput) {
       console.info("[corrections] model returned empty content with structured output; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
     }
     throw new CorrectionRouteError({
       status: 502,
@@ -408,7 +445,6 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const firstResponse = await callCorrectionsModel({
     config,
     promptText,
-    blockCount: blocks.length,
     strictJson: false,
   });
   const t1 = Date.now();
@@ -438,7 +474,6 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     const retryResponse = await callCorrectionsModel({
       config,
       promptText,
-      blockCount: blocks.length,
       strictJson: true,
     });
     const retryJsonText = extractJsonPayload(retryResponse.text);

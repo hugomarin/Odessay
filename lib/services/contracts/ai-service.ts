@@ -136,6 +136,8 @@ export type PersistedCorrectionBlock = {
   blockHash: string
   suggestions: PersistedCorrectionSuggestion[]
   model: string
+  /** Correction engine revision. Obsolete revisions must not be admitted as current results. */
+  engineRevision: string | null
   createdAt: string
   latencyMs: number | null
   promptTokens: number | null

@@ -38,6 +38,7 @@ const persistedCorrectionBlockSchema = z.object({
   block_hash: z.string().trim().min(1),
   suggestions: z.array(publicationSuggestionSchema),
   model: z.string().trim().min(1),
+  engine_revision: z.string().nullable().optional(),
   created_at: z.string().datetime(),
   latency_ms: z.number().int().nullable(),
   prompt_tokens: z.number().int().nullable(),

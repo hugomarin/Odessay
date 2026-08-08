@@ -215,6 +215,7 @@ export const desktopAIService: AIService = {
                 block_hash: input.block.blockHash,
                 suggestions: input.block.suggestions,
                 model: input.block.model,
+                engine_revision: input.block.engineRevision,
                 created_at: input.block.createdAt,
                 latency_ms: input.block.latencyMs,
                 prompt_tokens: input.block.promptTokens,

@@ -5,6 +5,11 @@ type CorrectionLike = {
   blockId: string;
 };
 
+/**
+ * @deprecated Manual full-document analysis uses token-bounded packaging via
+ * `lib/corrections/engine/packaging.ts`. This helper is retained only for legacy
+ * single-block routes and existing test fixtures.
+ */
 export const takeCorrectionBatch = <T extends CorrectionBlockInput>(
   queue: T[],
   batchSize = CORRECTION_BLOCK_BATCH_SIZE,

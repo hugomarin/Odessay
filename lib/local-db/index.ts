@@ -544,6 +544,34 @@ const openDatabase = () => {
       if (oldVersion > 0 && oldVersion < 10 && database.objectStoreNames.contains("publication-reviews")) {
         database.deleteObjectStore("publication-reviews");
       }
+
+      // ODE-415: correction cache now carries an engineRevision field. Old rows
+      // without it are treated as stale lazily; we normalize missing values to
+      // null so the schema is consistent without deleting legacy cache rows.
+      if (oldVersion > 0 && oldVersion < 16 && database.objectStoreNames.contains(LOCAL_DB_STORES.correctionBlocks)) {
+        const transaction = request.transaction;
+
+        if (transaction) {
+          const correctionStore = transaction.objectStore(LOCAL_DB_STORES.correctionBlocks);
+          const cursor = correctionStore.openCursor();
+
+          cursor.onsuccess = () => {
+            const result = cursor.result;
+
+            if (!result) {
+              return;
+            }
+
+            const block = result.value as LocalCorrectionBlock & { engineRevision?: string | null };
+
+            if (!("engineRevision" in block)) {
+              result.update({ ...block, engineRevision: null });
+            }
+
+            result.continue();
+          };
+        }
+      }
     };
 
     request.onsuccess = () => {

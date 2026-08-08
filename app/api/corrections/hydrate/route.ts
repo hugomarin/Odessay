@@ -76,7 +76,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase
     .from("correction_blocks")
     .select(
-      "id, writing_id, block_id, block_hash, suggestions, model, created_at, latency_ms, prompt_tokens, completion_tokens",
+      "id, writing_id, block_id, block_hash, suggestions, model, engine_revision, created_at, latency_ms, prompt_tokens, completion_tokens",
     )
     .eq("writing_id", parsedQuery.data.writingId)
     .order("created_at", { ascending: true });
