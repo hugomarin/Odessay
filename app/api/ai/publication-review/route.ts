@@ -255,6 +255,7 @@ async function callCorrectionsModel({
     max_tokens: getCorrectionsMaxTokens(),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
+    reasoning_effort: "none",
     ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
     messages: [
       {
