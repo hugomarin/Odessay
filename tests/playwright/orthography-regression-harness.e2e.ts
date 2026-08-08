@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { mkdir } from "node:fs/promises"
 import type { PublicationReviewRequest } from "@/lib/services/contracts/ai-service"
 import {
   buildOrthographyRegressionCorrections,
@@ -38,6 +39,12 @@ const waitForCorrectionPanelCount = async (page: Page, count: number) => {
 
     return page.locator("#editor-panel-corrections li").count()
   }, { timeout: 15_000 }).toBe(count)
+}
+
+const captureOutcome = async (page: Page, name: string) => {
+  if (process.env.ODE_CAPTURE_OUTCOME !== "1") return
+  await mkdir("artifacts/ode-415", { recursive: true })
+  await page.screenshot({ path: `artifacts/ode-415/${name}.png`, fullPage: true })
 }
 
 test("manual analysis stays idle while writing and starts accessibly on explicit action", async ({ page }) => {
@@ -99,6 +106,7 @@ test("manual analysis stays idle while writing and starts accessibly on explicit
 
   await page.getByRole("button", { name: "Corrections" }).click()
   const analyzeButton = page.getByRole("button", { name: "Analyze writing and spelling" })
+  await captureOutcome(page, "manual-analysis-idle")
   await analyzeButton.focus()
   await page.keyboard.press("Enter")
   await reviewStarted
@@ -107,8 +115,10 @@ test("manual analysis stays idle while writing and starts accessibly on explicit
   await expect(runningButton).toContainText("Cancel")
   await expect(runningButton).toHaveAttribute("aria-busy", "true")
   await expect(page.locator("#corrections-analysis-status")).toContainText(/Analyzed \d+ of \d+ blocks/)
+  await captureOutcome(page, "manual-analysis-running")
   await expect.poll(() => reviewBodies.length).toBeGreaterThan(0)
   await expect(page.getByText("Analysis complete.")).toBeVisible()
+  await captureOutcome(page, "manual-analysis-complete")
 })
 
 test("orthography regression harness preserves apply, invalidation, and persisted state across reload", async ({
@@ -210,6 +220,7 @@ test("orthography regression harness preserves apply, invalidation, and persiste
   await expect(correctionsPanel).toContainText("Solo asi")
   await expect(correctionsPanel).toContainText("Tendremos una buen producto")
   await expect(correctionsPanel).toContainText("Por ejemplo cuando")
+  await captureOutcome(page, "manual-analysis-results")
 
   await expect(page.locator(".pub-suggestion-pending", { hasText: "funcioando" })).toHaveCount(1)
   await expect(page.locator(".pub-suggestion-pending", { hasText: "Solo asi" })).toHaveCount(1)
