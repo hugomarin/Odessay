@@ -127,6 +127,7 @@ export type PublicationReviewResult = {
   corrections: MechanicalCorrection[]
   uncertain: MechanicalUncertainNote[]
   usage: AiUsage | null
+  engineRevision?: string | null
 }
 
 export type PersistedCorrectionBlock = {

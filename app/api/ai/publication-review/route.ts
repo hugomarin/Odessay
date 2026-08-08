@@ -4,6 +4,7 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
+  CORRECTION_ENGINE_REVISION,
   CORRECTION_PACKAGE_MAX_BLOCKS,
   CORRECTION_PACKAGE_MAX_CHARS,
   CORRECTION_PACKAGE_MAX_INPUT_TOKENS,
@@ -527,7 +528,8 @@ const createJsonResponsePayload = ({
     sourceHash: requestBody.sourceHash,
     sourceMarkdown: requestBody.markdown,
     model,
-    contractVersion: "mechanical-corrections-v1" as const,
+    engineRevision: CORRECTION_ENGINE_REVISION,
+    contractVersion: "mechanical-corrections-v2" as const,
     canonicalReview: adapted.canonical,
     language: adapted.canonical.language,
     corrections: adapted.canonical.corrections,

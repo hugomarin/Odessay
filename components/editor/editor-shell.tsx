@@ -8,6 +8,7 @@ import type { Editor } from "@tiptap/react"
 import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
+import { useManualCorrections } from "@/hooks/useManualCorrections"
 import { cn } from "@/lib/utils"
 import {
   mapLocalSyncStatusToSaveState,
@@ -106,7 +107,7 @@ import {
   stableFingerprintFromStoredFingerprint,
 } from "@/lib/corrections/engine/identity"
 import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
-import { CORRECTION_BLOCK_BATCH_SIZE } from "@/lib/ai/corrections-config"
+import { CORRECTION_BLOCK_BATCH_SIZE, CORRECTION_ENGINE_REVISION } from "@/lib/ai/corrections-config"
 import {
   getMissingCorrectionBlockIds,
   takeCorrectionBatch,
@@ -457,7 +458,6 @@ export function EditorShell({
   const [automaticCorrectionSuggestions, setAutomaticCorrectionSuggestions] = useState<PublicationSuggestion[]>([])
   const [correctionToast, setCorrectionToast] = useState<CorrectionToastState | null>(null)
   const [externalFileNotice, setExternalFileNotice] = useState<ExternalFileNotice | null>(null)
-  const [correctionsEnabled, setCorrectionsEnabled] = useState(true)
   const [showCorrections, setShowCorrections] = useState(true)
   const [learnedWords, setLearnedWords] = useState<LearnedWordEntry[]>([])
   const [learnedWordsLoading, setLearnedWordsLoading] = useState(false)
@@ -529,7 +529,7 @@ export function EditorShell({
   } | null>(null)
   const suppressNextSelectionPopupRef = useRef(false)
   const currentDocumentMarkdownRef = useRef("")
-  const correctionsEnabledRef = useRef(true)
+  const correctionsEnabledRef = useRef(false)
   const automaticCorrectionSuggestionsRef = useRef<PublicationSuggestion[]>([])
   const learnedWordsRef = useRef<LearnedWordEntry[]>([])
   const learnedWordsLoadedRef = useRef(false)
@@ -1404,18 +1404,6 @@ export function EditorShell({
 
     setEditorPublicationSuggestions(editor, [...suggestionsById.values()])
   }, [editor, mode, automaticCorrectionSuggestions, showCorrections])
-
-  useEffect(() => {
-    correctionsEnabledRef.current = correctionsEnabled
-  }, [correctionsEnabled])
-
-  useEffect(() => {
-    if (correctionsEnabled) {
-      return
-    }
-
-    resetCorrectionQueueState()
-  }, [correctionsEnabled, resetCorrectionQueueState])
 
   useEffect(() => {
     resetCorrectionQueueState()
@@ -3837,6 +3825,28 @@ export function EditorShell({
     [],
   )
 
+  const {
+    runState: correctionAnalysisRunState,
+    progress: correctionAnalysisProgress,
+    startAnalysis: startCorrectionAnalysis,
+    retryFailedPackages: retryFailedCorrectionPackages,
+    cancelAnalysis: cancelCorrectionAnalysis,
+  } = useManualCorrections({
+    editorRef: editorInstanceRef,
+    currentWritingIdRef,
+    titleRef,
+    learnedWordsRef,
+    persistedCorrectionBlocksRef,
+    readCorrectionMemory,
+    admitCorrectionSuggestions,
+    applyCorrectionSuggestionUpdate,
+    normalizeAutomaticSuggestion,
+    persistCorrectionBlockWriteThrough,
+    updatePersistedBlocksFromSuggestions,
+    logCorrectionEvent,
+    showCorrectionToast,
+  })
+
   const getBlockSuggestions = useCallback(
     (blockId: string, sourceHash?: string) =>
       automaticCorrectionSuggestionsRef.current.filter(
@@ -4180,6 +4190,7 @@ export function EditorShell({
                 blockHash: block.hash,
                 suggestions: normalizedSuggestions,
                 model: result.data.usage?.model ?? "web-route",
+                engineRevision: result.data.engineRevision ?? CORRECTION_ENGINE_REVISION,
                 createdAt: new Date().toISOString(),
                 latencyMs: Date.now() - requestStartedAt,
                 promptTokens: result.data.usage?.promptTokens ?? null,
@@ -6058,8 +6069,11 @@ export function EditorShell({
               <CorrectionsPanel
                 suggestions={automaticCorrectionSuggestions}
                 markdown={currentDocumentMarkdown}
-                correctionsEnabled={correctionsEnabled}
                 showCorrections={showCorrections}
+                analysisStatus={{
+                  runState: correctionAnalysisRunState,
+                  progress: correctionAnalysisProgress,
+                }}
                 onAcceptSuggestion={handleAcceptCorrection}
                 onRejectSuggestion={handleRejectCorrection}
                 onLearnWord={handleLearnWord}
@@ -6068,7 +6082,9 @@ export function EditorShell({
                 learnedWords={learnedWords}
                 learnedWordsLoading={learnedWordsLoading}
                 onRemoveLearnedWord={handleRemoveLearnedWord}
-                onCorrectionsEnabledChange={setCorrectionsEnabled}
+                onAnalyze={startCorrectionAnalysis}
+                onRetryFailed={retryFailedCorrectionPackages}
+                onCancel={cancelCorrectionAnalysis}
                 onShowCorrectionsChange={setShowCorrections}
                 onClose={closeActivePanel}
               />

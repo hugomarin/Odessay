@@ -61,6 +61,7 @@ type PublicationReviewPayload = {
   uncertain?: PublicationReviewResult["uncertain"]
   promptTokens?: number | null
   completionTokens?: number | null
+  engineRevision?: string | null
 }
 
 type LearnedWordsPayload = {
@@ -151,6 +152,7 @@ export const desktopAIService: AIService = {
           completionTokens: parsed.data.completionTokens ?? null,
           latencyMs: null,
         },
+        engineRevision: parsed.data.engineRevision ?? null,
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not review this text right now.")

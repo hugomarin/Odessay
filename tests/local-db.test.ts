@@ -6,6 +6,7 @@ import {
   setLocalDBScope,
   subscribeToLocalDBScopeChanges,
 } from "../lib/local-db";
+import { CORRECTION_ENGINE_REVISION } from "@/lib/ai/corrections-config";
 import { createEmptyEditorSession } from "../lib/local-db/editor-sessions";
 import type { LocalCorrectionBlock, LocalWriting, PublicationSuggestion, SyncMutation } from "../lib/local-db/schema";
 
@@ -70,6 +71,7 @@ const createCorrectionBlock = (
   blockHash: id.split(":").at(-1) ?? id,
   suggestions: [createSuggestion(`suggestion-${id}`)],
   model: "test-model",
+  engineRevision: CORRECTION_ENGINE_REVISION,
   createdAt,
   latencyMs: 120,
   promptTokens: 10,

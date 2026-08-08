@@ -562,10 +562,10 @@ const openDatabase = () => {
               return;
             }
 
-            const block = result.value as LocalCorrectionBlock & { engineRevision?: string | null };
+            const block = result.value as Record<string, unknown>;
 
             if (!("engineRevision" in block)) {
-              result.update({ ...block, engineRevision: null });
+              result.update({ ...block, engineRevision: null } as LocalCorrectionBlock);
             }
 
             result.continue();

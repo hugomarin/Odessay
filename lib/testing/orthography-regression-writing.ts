@@ -1,5 +1,6 @@
 import { Editor } from "@tiptap/core"
 import { adaptCorrectionsContract } from "@/lib/ai/corrections-contract-adapter"
+import { CORRECTION_ENGINE_REVISION } from "@/lib/ai/corrections-config"
 import { collectCorrectionBlocks } from "@/lib/editor/correction-trigger-plugin"
 import { createEditorExtensions } from "@/lib/editor/extensions"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
@@ -69,6 +70,7 @@ export const createOrthographyRegressionCorrectionBlocks = (): LocalCorrectionBl
           blockHash: block.hash,
           suggestions,
           model: "orthography-fixture",
+          engineRevision: CORRECTION_ENGINE_REVISION,
           createdAt: ORTHOGRAPHY_REGRESSION_CREATED_AT,
           latencyMs: 12,
           promptTokens: 64,

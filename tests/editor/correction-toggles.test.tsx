@@ -6,16 +6,15 @@ import React from "react"
 import { renderToString } from "react-dom/server"
 import { CorrectionsPanel } from "@/components/editor/panels/corrections-panel"
 
-describe("CorrectionsPanel toggles", () => {
-  it("renders with correctionsEnabled and showCorrections toggles", () => {
-    const onCorrectionsEnabledChange = vi.fn()
+describe("CorrectionsPanel analysis trigger", () => {
+  it("renders with analyze button and showCorrections toggle", () => {
+    const onAnalyze = vi.fn()
     const onShowCorrectionsChange = vi.fn()
 
     const html = renderToString(
       React.createElement(CorrectionsPanel, {
         suggestions: [],
         markdown: "",
-        correctionsEnabled: true,
         showCorrections: true,
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
@@ -25,23 +24,23 @@ describe("CorrectionsPanel toggles", () => {
         learnedWords: [],
         learnedWordsLoading: false,
         onRemoveLearnedWord: () => {},
-        onCorrectionsEnabledChange,
+        onAnalyze,
         onShowCorrectionsChange,
         onClose: () => {},
       }),
     )
 
-    expect(html).toContain("Active corrections")
+    expect(html).toContain("Analyze document")
     expect(html).toContain("Show corrections")
   })
 
-  it("renders with toggles disabled when props are false", () => {
+  it("renders with analysis button disabled while running", () => {
     const html = renderToString(
       React.createElement(CorrectionsPanel, {
         suggestions: [],
         markdown: "",
-        correctionsEnabled: false,
         showCorrections: false,
+        analysisStatus: { runState: "running", progress: { completedBlocks: 1, totalBlocks: 3 } },
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
         onLearnWord: () => {},
@@ -50,13 +49,13 @@ describe("CorrectionsPanel toggles", () => {
         learnedWords: [],
         learnedWordsLoading: false,
         onRemoveLearnedWord: () => {},
-        onCorrectionsEnabledChange: () => {},
+        onAnalyze: () => {},
         onShowCorrectionsChange: () => {},
         onClose: () => {},
       }),
     )
 
-    expect(html).toContain("Active corrections")
+    expect(html).toContain("Analyze document")
     expect(html).toContain("Show corrections")
   })
 
@@ -76,7 +75,6 @@ describe("CorrectionsPanel toggles", () => {
           },
         ],
         markdown: "Odessay",
-        correctionsEnabled: true,
         showCorrections: true,
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
@@ -93,7 +91,7 @@ describe("CorrectionsPanel toggles", () => {
         ],
         learnedWordsLoading: false,
         onRemoveLearnedWord: () => {},
-        onCorrectionsEnabledChange: () => {},
+        onAnalyze: () => {},
         onShowCorrectionsChange: () => {},
         onClose: () => {},
       }),

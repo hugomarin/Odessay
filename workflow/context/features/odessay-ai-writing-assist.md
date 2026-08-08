@@ -23,7 +23,7 @@ No reemplaza `odessay-ai-editor.md` (editor residente de observaciones). Esta sp
 ### Alcance
 - Detectar errores mecánicos (ortografía, acentos, typos, concordancia básica, puntuación, spacing, duplicaciones).
 - Mostrar correcciones inline por bloque con aceptar/rechazar.
-- Toggle global de activación/desactivación de correcciones automáticas.
+- Botón manual "Analyze document" para ejecutar una revisión completa del documento.
 - Toggle de visibilidad de decoraciones inline.
 - Sugerir un título en flujo explícito de renombre.
 
@@ -58,10 +58,10 @@ Un documento de 400 palabras distribuido en ~12 párrafos no debe generar 12 lla
 
 ### 3. Separar "qué analizar" de "cuándo analizarlo"
 
-El trigger de activación no debe depender de la longitud del texto.
+El análisis se ejecuta bajo demanda del usuario.
 
 - **Qué:** todo bloque con texto válido (`paragraph`, `heading`, `listItem`, `taskItem`, excluyendo `codeBlock`) es candidato a corrección.
-- **Cuándo:** se controla por debounce de inactividad de 2s. El debounce extendido de 5s para paste masivo fue retirado del spec en ODE-351; batching absorbe el volumen sin introducir una segunda ventana temporal.
+- **Cuándo:** el usuario presiona "Analyze document" en el panel de correcciones; no hay debounce automático de inactividad.
 - No hay umbral mínimo de palabras. Un párrafo de 3 palabras con un typo mecánico se corrige igual que uno de 30.
 
 ### 4. Smart invalidation
@@ -103,19 +103,22 @@ El `PublicationPanel` legacy fue eliminado. El botón del topbar dice "Correctio
 
 **Decisión:** no reintroducir modo `document`. Si se necesita revisión completa del documento, implementarla como batch de bloques sobre el contrato `block-batch` existente.
 
-### Flujo de corrección automática
+### Flujo de corrección manual
 
 ```
-[Usuario escribe] → [ProseMirror plugin detecta dirty blocks] → [Debounce 2s]
-→ [Enviar bloque(s) a /api/ai/publication-review] → [Modelo responde]
-→ [Decoraciones inline + panel Ortografía] → [Usuario acepta/rechaza]
+[Usuario abre panel Corrections] → [Presiona "Analyze document"]
+→ [Frontend empaqueta todos los bloques válidos]
+→ [Envía bloques a /api/ai/publication-review en batches]
+→ [Modelo responde]
+→ [Decoraciones inline + panel Corrections] → [Usuario acepta/rechaza]
 ```
 
 **Componentes activos:**
-- `correction-trigger-plugin.ts` — detecta nodos modificados en transacciones ProseMirror.
+- `hooks/useManualCorrections.ts` — orquestación manual: recopila bloques, empaqueta, envía requests, aplica sugerencias y persiste resultados.
+- `correction-trigger-plugin.ts` — sigue detectando nodos y proporcionando `CorrectionTriggerBlock`; ya no encola automáticamente, solo describe el documento actual.
 - `publication-suggestion-extension.ts` — pinta decoraciones inline y burbujas de acción.
-- `CorrectionsPanel` — lista de sugerencias pendientes con toggles de activación/visibilidad.
-- `editor-shell.tsx` — orquesta el flujo completo: recibe dirty blocks, maneja debounce, encola requests, aplica sugerencias, controla toggles.
+- `CorrectionsPanel` — lista de sugerencias pendientes y botón "Analyze document" con estado idle/running/partial/failed/completed/cancelled.
+- `editor-shell.tsx` — conecta el hook, el panel y las acciones Accept/Reject/Learn/AcceptAll/RejectAll.
 
 ### Mapeo frontend ↔ backend
 
@@ -227,8 +230,11 @@ Corregir errores mecánicos con alta confianza y reemplazos mínimos, preservand
 
 ### Trigger
 
-- **Automático:** debounce por inactividad de escritura (2s). El plugin ProseMirror identifica bloques dirty tras cada transacción.
-- **Manual:** no existe actualmente en la UI. El botón "Reanalyze" del panel legacy fue eliminado.
+- **Manual:** el usuario presiona el botón "Analyze document" en `CorrectionsPanel`.
+- El hook `useManualCorrections` recopila todos los bloques válidos del documento, los empaqueta en lotes y envía requests concurrentes (máximo 2 en paralelo).
+- Los bloques cuyo `blockHash` ya está cacheado con la `engineRevision` vigente se aplican desde IndexedDB/Supabase sin llamar al modelo.
+- Si un paquete falla, el estado pasa a `partial` y el botón ofrece "Retry"; `retryFailedPackages` reenvía solo los paquetes fallidos.
+- **Automático:** no existe actualmente en la UI; el debounce legacy fue removido en ODE-415.
 
 ### Estado actual de elegibilidad e invalidación
 
@@ -315,10 +321,10 @@ El sistema actual no cumple aún todos los principios de construcción. Estos so
 |-----------|--------------|-----|
 | Persistir para no reprocesar | Persistencia IndexedDB + Supabase con write-through | Completado en ODE-165 |
 | Velocidad mediante batching | `correctionBlocks[]` de hasta 5 bloques por llamada | Completado en ODE-351; fallback legacy singular tolerado durante transición |
-| Separar qué/cuándo | Todo bloque válido con texto es elegible; debounce controla cuándo se analiza | Completado en ODE-327 |
+| Separar qué/cuándo | Todo bloque válido con texto es elegible; análisis manual bajo demanda | Completado en ODE-415 |
 | Smart invalidation | Stale invalidation con keep/drop/replace | Mejorado en ODE-163 |
 | Observabilidad | `logCorrectionEvent` con discriminated union de 8 eventos | Completado en ODE-161 |
-| Control de usuario | Toggles de activación y visibilidad de correcciones | Completado en ODE-167 |
+| Control de usuario | Botón manual "Analyze document" y toggle de visibilidad de decoraciones | Completado en ODE-415 |
 
 Estos gaps están documentados como trabajo pendiente. Cada cambio debe avanzar hacia los principios sin romper el flujo existente.
 
@@ -380,6 +386,8 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 ## Referencias de implementación
 
 ### Activos
+- `hooks/useManualCorrections.ts` — orquestación del análisis manual de correcciones
+- `lib/ai/corrections-config.ts` — batch size, presupuesto de tokens y `CORRECTION_ENGINE_REVISION` actual
 - `app/api/ai/publication-review/route.ts` — endpoint de correcciones (modo `block-batch`)
 - `app/api/corrections/learned-words/route.ts` — diccionario de palabras aprendidas (list/create/delete)
 - `lib/ai/corrections.ts` — schema, prompt builder, normalización
@@ -387,7 +395,7 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 - `lib/corrections/learned-words.ts` — normalización y helpers del diccionario
 - `lib/editor/correction-trigger-plugin.ts` — detección de dirty blocks
 - `lib/editor/publication-suggestion-extension.ts` — decoraciones inline
-- `components/editor/panels/corrections-panel.tsx` — panel lateral con toggles y lista de learned words
+- `components/editor/panels/corrections-panel.tsx` — panel lateral con botón de análisis y lista de learned words
 - `components/editor/editor-shell.tsx` — orquestación del flujo
 - `lib/corrections/persistence.ts` — persistencia remota e IndexedDB de correction blocks
 - `lib/services/contracts/ai-service.ts` — contrato `AIService` con operaciones de learned words

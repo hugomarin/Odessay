@@ -84,7 +84,7 @@ Definidas en `lib/editor/extensions.ts` con `createEditorExtensions()`.
 
 ### Custom Odessay extensions
 - `FindReplaceExtension` (`lib/editor/find-replace.ts`)
-- `CorrectionTriggerExtension` (`lib/editor/correction-trigger-plugin.ts`) — detección de dirty blocks para correcciones AI
+- `CorrectionTriggerExtension` (`lib/editor/correction-trigger-plugin.ts`) — expone bloques del documento para correcciones AI; ya no encola automáticamente, `useManualCorrections` lo consulta bajo demanda
 - `PublicationSuggestionExtension` (`lib/editor/publication-suggestion-extension.ts`)
 - `AnnotationReferenceNode` (`lib/editor/footnote-node.ts`) — antes `FootnoteReferenceNode`; el schema acepta ambos nombres de nodo por compatibilidad
 - `FootnoteExtension` (`lib/editor/footnote-extension.ts`)
