@@ -369,11 +369,36 @@ Nota: ODE-502 eliminó `summary`, `severity`/`confidence` obligatorios, y el arr
 
 ---
 
+## Cambio de modelo: validación incremental
+
+Cuando un issue cambia tanto la lógica del subsistema como el proveedor/modelo subyacente, hay que desacoplar las dos fuentes de fallo antes de atribuir un bug al desarrollo o al modelo.
+
+**Regla recomendada:**
+
+1. **Validar el nuevo desarrollo con el modelo anterior** (si sigue operativo) o con un modelo de referencia estable. Esto aísla regresiones introducidas por los cambios de arquitectura, contrato o flujo.
+2. **Validar el mismo desarrollo con el nuevo modelo**. Los fallos que aparecen solo aquí se clasifican como comportamiento específico del proveedor.
+3. **Documentar la diferencia** en el Context Report del BUILD con ejemplos de request/response.
+
+**Ejemplo concreto de ODE-415:**
+
+- El cambio a análisis manual + paquetes multibloque funciona localmente con respuestas mockeadas y con modelos que copian `blockId` exacto.
+- Qwen 3.7 Plus, al recibir ids largos (`correction-block:0.0:demo-a:12`) en un paquete multibloque, los resumía a `0.0`, `0.1`, etc., haciendo que `normalizeCanonicalCorrections` descartara todas las correcciones.
+- Ese comportamiento no es una regresión del desarrollo en sentido estricto, pero tampoco es un error del modelo aislado: la nueva arquitectura multibloque expuso una diferencia de contrato con el proveedor.
+- Fix aplicado: enviar ids temporales simples (`block-0`, `block-1`) al modelo y restaurar los ids internos antes de la normalización, más `reasoning_effort: "none"` para evitar que el thinking consuma el budget de salida.
+
+**Implicación para prompts:**
+
+- Tratar cualquier identificador enviado al modelo como **opaco y no necesariamente reproducible carácter por carácter**.
+- Si el pipeline depende de la identidad exacta, agregar una capa de mapeo model-side ↔ internal-side en lugar de confiar en que el LLM preserve el string.
+
+---
+
 ## Criterios de aceptación transversales
 
 - No regresión en `title suggestions` al cambiar flujo de corrections.
 - No regresión en endpoints AI no relacionados.
 - Logs suficientes para depurar: blockId/sourceHash, descarte de chunk stale, parse/retry de JSON.
+- Si el issue cambia el modelo de correcciones, validación incremental: modelo anterior primero, nuevo modelo después; documentar diferencias de contrato/proveedor.
 - E2E/manual QA obligatorio con:
   - texto corto con 3-5 typos;
   - texto largo de al menos 300 palabras;
