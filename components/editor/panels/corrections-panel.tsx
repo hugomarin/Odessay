@@ -90,10 +90,10 @@ export function CorrectionsPanel({
       case "failed":
         return "Retry analysis";
       case "cancelled":
-        return "Analyze document";
+        return "Analyze writing and spelling";
       case "idle":
       default:
-        return "Analyze document";
+        return "Analyze writing and spelling";
     }
   })();
 
@@ -126,12 +126,9 @@ export function CorrectionsPanel({
       <div className="space-y-3 border-b-[0.5px] border-border px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <label
-              htmlFor="corrections-analyze-button"
-              className="block text-[12px] font-medium text-ink"
-            >
-              Analyze document
-            </label>
+            <p className="text-[12px] font-medium text-ink">
+              Analyze writing and spelling
+            </p>
             <p className="text-[11px] text-ink-4">
               Run a full-document AI correction review.
             </p>
@@ -140,8 +137,10 @@ export function CorrectionsPanel({
             id="corrections-analyze-button"
             type="button"
             onClick={isRunning ? onCancel : isPartialOrFailed ? onRetryFailed : onAnalyze}
+            aria-busy={isRunning}
+            aria-describedby="corrections-analysis-status"
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-[6px] border border-border px-2.5 text-[11px] font-medium transition-colors",
+              "inline-flex h-7 items-center gap-1.5 rounded-[6px] border-[0.5px] border-border px-2.5 text-[11px] font-medium transition-colors",
               isRunning
                 ? "text-ink-3 hover:bg-bg hover:text-ink"
                 : "text-ink-3 hover:bg-bg hover:text-ink",
@@ -156,28 +155,30 @@ export function CorrectionsPanel({
           </button>
         </div>
 
-        {isRunning && progress.totalBlocks > 0 ? (
-          <div className="flex items-center gap-2 text-[11px] text-ink-3">
-            <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
-            <span>
-              Analyzed {progress.completedBlocks} of {progress.totalBlocks} blocks
-            </span>
-          </div>
-        ) : null}
+        <div id="corrections-analysis-status" role="status" aria-live="polite">
+          {isRunning && progress.totalBlocks > 0 ? (
+            <div className="flex items-center gap-2 text-[11px] text-ink-3">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
+              <span>
+                Analyzed {progress.completedBlocks} of {progress.totalBlocks} blocks
+              </span>
+            </div>
+          ) : null}
 
-        {runState === "completed" ? (
-          <p className="text-[11px] text-ink-4">Analysis complete.</p>
-        ) : null}
+          {runState === "completed" ? (
+            <p className="text-[11px] text-ink-4">Analysis complete.</p>
+          ) : null}
 
-        {runState === "cancelled" ? (
-          <p className="text-[11px] text-ink-4">Analysis was cancelled.</p>
-        ) : null}
+          {runState === "cancelled" ? (
+            <p className="text-[11px] text-ink-4">Analysis was cancelled.</p>
+          ) : null}
 
-        {isPartialOrFailed ? (
-          <p className="text-[11px] text-ink-4">
-            Some correction packages failed. Use the Retry button to run them again.
-          </p>
-        ) : null}
+          {isPartialOrFailed ? (
+            <p className="text-[11px] text-ink-4">
+              Some correction packages failed. Use the Retry button to run them again.
+            </p>
+          ) : null}
+        </div>
 
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">

@@ -194,6 +194,7 @@ Persistencia de correcciones mecánicas por bloque. Supabase es la fuente de ver
 | block_hash | text | not null | Hash del texto del bloque |
 | suggestions | jsonb | not null | Array de sugerencias persistidas para ese bloque |
 | model | text | not null | Modelo que generó la corrección |
+| engine_revision | text | nullable | Revisión del prompt/modelo; filas de otra revisión no se admiten como resultados actuales |
 | created_at | timestamptz | default now() | Momento de la corrección persistida |
 | latency_ms | integer | nullable | Latencia de la request al proveedor AI |
 | prompt_tokens | integer | nullable | Tokens de prompt consumidos |

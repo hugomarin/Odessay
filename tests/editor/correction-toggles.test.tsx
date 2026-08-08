@@ -30,11 +30,11 @@ describe("CorrectionsPanel analysis trigger", () => {
       }),
     )
 
-    expect(html).toContain("Analyze document")
+    expect(html).toContain("Analyze writing and spelling")
     expect(html).toContain("Show corrections")
   })
 
-  it("renders with analysis button disabled while running", () => {
+  it("renders the cancellable analysis action with busy semantics while running", () => {
     const html = renderToString(
       React.createElement(CorrectionsPanel, {
         suggestions: [],
@@ -55,8 +55,36 @@ describe("CorrectionsPanel analysis trigger", () => {
       }),
     )
 
-    expect(html).toContain("Analyze document")
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain("Cancel")
     expect(html).toContain("Show corrections")
+  })
+
+  it("exposes a recoverable partial state with an explicit retry action", () => {
+    const html = renderToString(
+      React.createElement(CorrectionsPanel, {
+        suggestions: [],
+        markdown: "",
+        showCorrections: true,
+        analysisStatus: { runState: "partial", progress: { completedBlocks: 4, totalBlocks: 6 } },
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onLearnWord: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        learnedWords: [],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
+        onAnalyze: () => {},
+        onRetryFailed: () => {},
+        onShowCorrectionsChange: () => {},
+        onClose: () => {},
+      }),
+    )
+
+    expect(html).toContain("Retry")
+    expect(html).toContain("Some correction packages failed")
+    expect(html).toContain('role="status"')
   })
 
   it("shows the learn word action for spelling suggestions and lists learned words", () => {

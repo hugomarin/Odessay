@@ -40,6 +40,77 @@ const waitForCorrectionPanelCount = async (page: Page, count: number) => {
   }, { timeout: 15_000 }).toBe(count)
 }
 
+test("manual analysis stays idle while writing and starts accessibly on explicit action", async ({ page }) => {
+  const reviewBodies: PublicationReviewRequest[] = []
+  let releaseReview: (() => void) | null = null
+  const reviewStarted = new Promise<void>((resolve) => {
+    releaseReview = resolve
+  })
+
+  await page.route("**/api/corrections/hydrate?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ data: [], error: null }),
+  }))
+  await page.route("**/api/corrections/persist", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ data: { persistedId: null, deletedIds: [], syncedAt: null }, error: null }),
+  }))
+  await page.route("**/api/ai/publication-review", async (route) => {
+    reviewBodies.push(route.request().postDataJSON() as PublicationReviewRequest)
+    releaseReview?.()
+    await new Promise((resolve) => setTimeout(resolve, 1_000))
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        data: {
+          summary: "No corrections.",
+          language: "es",
+          corrections: [],
+          uncertain: [],
+          promptTokens: 64,
+          completionTokens: 4,
+          totalTokens: 68,
+          engineRevision: "mechanical-corrections-v2:qwen3p7-plus",
+        },
+        error: null,
+      }),
+    })
+  })
+
+  await page.goto("/perf/orthography-harness?reset=1")
+  await expect(page.getByTestId("editor-writing-area")).toBeVisible()
+  await page.evaluate(async () => {
+    const harness = (window as typeof window & {
+      __ODE_ORTHOGRAPHY_HARNESS__?: { clearCorrectionBlocks: () => Promise<void> }
+    }).__ODE_ORTHOGRAPHY_HARNESS__
+    await harness?.clearCorrectionBlocks()
+  })
+  await page.reload()
+  await expect(page.getByTestId("editor-writing-area")).toBeVisible()
+
+  const editor = page.locator(".odessay-editor-content")
+  await editor.click()
+  await page.keyboard.type(" Texto nuevo sin análisis automático.")
+  await page.waitForTimeout(500)
+  expect(reviewBodies).toHaveLength(0)
+
+  await page.getByRole("button", { name: "Corrections" }).click()
+  const analyzeButton = page.getByRole("button", { name: "Analyze writing and spelling" })
+  await analyzeButton.focus()
+  await page.keyboard.press("Enter")
+  await reviewStarted
+
+  const runningButton = page.locator("#corrections-analyze-button")
+  await expect(runningButton).toContainText("Cancel")
+  await expect(runningButton).toHaveAttribute("aria-busy", "true")
+  await expect(page.locator("#corrections-analysis-status")).toContainText(/Analyzed \d+ of \d+ blocks/)
+  await expect.poll(() => reviewBodies.length).toBeGreaterThan(0)
+  await expect(page.getByText("Analysis complete.")).toBeVisible()
+})
+
 test("orthography regression harness preserves apply, invalidation, and persisted state across reload", async ({
   page,
 }) => {

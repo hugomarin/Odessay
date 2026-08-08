@@ -110,6 +110,7 @@ const requestSchema = z.object({
 type CorrectionsUsage = {
   promptTokens: number | null;
   completionTokens: number | null;
+  totalTokens: number | null;
 };
 
 type CorrectionRouteErrorDetails = {
@@ -361,6 +362,7 @@ async function callCorrectionsModel({
     usage?: {
       prompt_tokens?: number;
       completion_tokens?: number;
+      total_tokens?: number;
     };
   };
 
@@ -396,6 +398,7 @@ async function callCorrectionsModel({
     usage: {
       promptTokens: payload.usage?.prompt_tokens ?? null,
       completionTokens: payload.usage?.completion_tokens ?? null,
+      totalTokens: payload.usage?.total_tokens ?? null,
     },
   };
 }
@@ -559,6 +562,7 @@ const createJsonResponsePayload = ({
     fallbackUsed: false,
     promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage?.completionTokens ?? null,
+    totalTokens: usage?.totalTokens ?? null,
   };
 };
 
@@ -582,6 +586,7 @@ const logRequestMetrics = ({
     latencyMs,
     promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage?.completionTokens ?? null,
+    totalTokens: usage?.totalTokens ?? null,
   });
 };
 

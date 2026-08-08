@@ -118,6 +118,7 @@ export type AiUsage = {
   model: string
   promptTokens: number | null
   completionTokens: number | null
+  totalTokens: number | null
   latencyMs: number | null
 }
 

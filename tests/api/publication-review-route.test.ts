@@ -63,7 +63,7 @@ describe("POST /api/ai/publication-review", () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       expect(body.stream).toBeUndefined()
-      expect(body.max_tokens).toBe(768)
+      expect(body.max_tokens).toBe(512)
       expect(body.response_format).toMatchObject({
         type: "json_schema",
         json_schema: {
@@ -81,10 +81,11 @@ describe("POST /api/ai/publication-review", () => {
             {
               message: {
                 content:
-                  '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:pub-test:1","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
+                  '{"summary":"One correction.","language":"es","corrections":[{"blockId":"block-0","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba","reason":"Typo."}],"uncertain":[]}',
               },
             },
           ],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
         }),
         { status: 200, headers: { "content-type": "application/json" } },
       )
@@ -101,14 +102,19 @@ describe("POST /api/ai/publication-review", () => {
       block_id: "correction-block:pub-test:1",
       replacement_text: "prueba",
     })
+    expect(payload.data).toMatchObject({
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+    })
   })
 
-  it("uses the explicit 768 token budget for block-level correction calls", async () => {
+  it("uses the package token budget and restores the original block id", async () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
-      expect(body.max_tokens).toBe(768)
-      expect(body.messages[1].content).toContain("[correction-block:blk-test:12]")
-      expect(body.messages[1].content).not.toContain("[block-1]")
+      expect(body.max_tokens).toBe(512)
+      expect(body.messages[1].content).toContain("[block-0]")
+      expect(body.messages[1].content).not.toContain("[correction-block:blk-test:12]")
 
       return new Response(
         JSON.stringify({
@@ -116,7 +122,7 @@ describe("POST /api/ai/publication-review", () => {
             {
               message: {
                 content:
-                  '{"summary":"One correction.","language":"es","corrections":[{"blockId":"correction-block:blk-test:12","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba"}],"uncertain":[]}',
+                  '{"summary":"One correction.","language":"es","corrections":[{"blockId":"block-0","type":"spelling","severity":"medium","confidence":"high","originalText":"prueva","replacementText":"prueba"}],"uncertain":[]}',
               },
             },
           ],
@@ -145,12 +151,12 @@ describe("POST /api/ai/publication-review", () => {
     })
   })
 
-  it("accepts batched correction blocks and scales the token budget by block count", async () => {
+  it("accepts batched correction blocks and restores every original block id", async () => {
     const providerFetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
-      expect(body.max_tokens).toBe(1536)
-      expect(body.messages[1].content).toContain("[correction-block:blk-test:1]")
-      expect(body.messages[1].content).toContain("[correction-block:blk-test:2]")
+      expect(body.max_tokens).toBe(512)
+      expect(body.messages[1].content).toContain("[block-0]")
+      expect(body.messages[1].content).toContain("[block-1]")
 
       return new Response(
         JSON.stringify({
@@ -158,7 +164,7 @@ describe("POST /api/ai/publication-review", () => {
             {
               message: {
                 content:
-                  '{"summary":"Two corrections.","language":"es","corrections":[{"blockId":"correction-block:blk-test:1","type":"spelling","originalText":"prueva","replacementText":"prueba"},{"blockId":"correction-block:blk-test:2","type":"accent","originalText":"asi","replacementText":"así"}],"uncertain":[]}',
+                  '{"summary":"Two corrections.","language":"es","corrections":[{"blockId":"block-0","type":"spelling","originalText":"prueva","replacementText":"prueba"},{"blockId":"block-1","type":"accent","originalText":"asi","replacementText":"así"}],"uncertain":[]}',
               },
             },
           ],

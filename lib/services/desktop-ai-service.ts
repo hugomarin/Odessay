@@ -61,6 +61,7 @@ type PublicationReviewPayload = {
   uncertain?: PublicationReviewResult["uncertain"]
   promptTokens?: number | null
   completionTokens?: number | null
+  totalTokens?: number | null
   engineRevision?: string | null
 }
 
@@ -150,6 +151,7 @@ export const desktopAIService: AIService = {
           model: "desktop-proxy",
           promptTokens: parsed.data.promptTokens ?? null,
           completionTokens: parsed.data.completionTokens ?? null,
+          totalTokens: parsed.data.totalTokens ?? null,
           latencyMs: null,
         },
         engineRevision: parsed.data.engineRevision ?? null,

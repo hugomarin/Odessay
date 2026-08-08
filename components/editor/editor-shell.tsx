@@ -4404,7 +4404,7 @@ export function EditorShell({
       suppressedCorrectionFlushTimerRef.current = window.setTimeout(() => {
         suppressedCorrectionFlushTimerRef.current = null
 
-        if (modeRef.current !== "rich" || !correctionsEnabledRef.current) {
+        if (modeRef.current !== "rich") {
           deferredSuppressedCorrectionBlocksRef.current = {
             blocksById: new Map(),
             flushAt: null,
@@ -4455,9 +4455,9 @@ export function EditorShell({
           void deletePersistedBlocksForPosition(currentWritingIdRef.current, block)
         }
 
-        const applyStaleInvalidation = () => {
+        const applyStaleInvalidation = (markResolvableStale = true) => {
           applyCorrectionSuggestionUpdate((current) => {
-            const invalidation = invalidateBlockSuggestions(current, block)
+            const invalidation = invalidateBlockSuggestions(current, block, Date.now(), markResolvableStale)
 
             for (const suggestionId of invalidation.droppedIds) {
               logCorrectionEvent({
@@ -4480,7 +4480,12 @@ export function EditorShell({
         }
 
         if (!isCorrectionBlockEligible(block)) {
-          applyStaleInvalidation()
+          applyStaleInvalidation(correctionsEnabledRef.current)
+          continue
+        }
+
+        if (!correctionsEnabledRef.current) {
+          applyStaleInvalidation(false)
           continue
         }
 
@@ -4514,7 +4519,7 @@ export function EditorShell({
 
       acknowledgeCorrectionDirtyBlocks(editor, blocks.map((block) => block.id))
 
-      if (modeRef.current !== "rich" || !correctionsEnabledRef.current) {
+      if (modeRef.current !== "rich") {
         return
       }
 

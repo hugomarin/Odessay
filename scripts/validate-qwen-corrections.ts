@@ -99,7 +99,7 @@ async function callFireworks(
   config: ReturnType<typeof getAIProviderConfig>,
   promptText: string,
   structuredOutput: boolean,
-): Promise<{ text: string; usage: { promptTokens: number | null; completionTokens: number | null; model: string } }> {
+): Promise<{ text: string; usage: { promptTokens: number | null; completionTokens: number | null; totalTokens: number | null; model: string } }> {
   const requestBody = {
     model: config.model,
     max_tokens: CORRECTION_PACKAGE_OUTPUT_TOKENS,
@@ -138,6 +138,7 @@ async function callFireworks(
     usage: {
       promptTokens: usage.prompt_tokens ?? null,
       completionTokens: usage.completion_tokens ?? null,
+      totalTokens: usage.total_tokens ?? null,
       model: json.model ?? config.model,
     },
   };

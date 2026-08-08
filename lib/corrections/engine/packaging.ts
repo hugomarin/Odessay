@@ -128,6 +128,17 @@ export const packageCorrectionBlocks = <T extends PackageableBlock>(
     }
 
     const blockChars = block.text.length + block.id.length + blockOverheadChars;
+    const blockInputTokens = Math.ceil((promptOverheadChars + blockChars) / charsPerToken);
+
+    if (blockChars > maxCharsPerPackage || blockInputTokens > maxInputTokens) {
+      skippedBlocks.push(block);
+      skippedReasons.set(
+        block.id,
+        `block exceeds package budget (${blockChars} chars, ${blockInputTokens} estimated tokens)`,
+      );
+      continue;
+    }
+
     const nextBodyChars = currentBodyChars + blockChars;
     const nextInputTokens = Math.ceil((promptOverheadChars + nextBodyChars) / charsPerToken);
 
