@@ -12,7 +12,9 @@ import {
 } from "@/lib/ai/corrections-config";
 import {
   buildMechanicalCorrectionsPrompt,
+  buildModelReadyCorrectionBlocks,
   normalizeCanonicalCorrections,
+  restoreRealCorrectionBlockIds,
   type CanonicalCorrectionsResponse,
   type CorrectionBlock,
 } from "@/lib/ai/corrections";
@@ -418,14 +420,27 @@ const normalizeCorrectionModelText = ({
   fallbackLanguage,
   learnedWords,
   correctionMemory,
+  idMap,
 }: {
   text: string;
   blocks: CorrectionBlock[];
   fallbackLanguage: ReturnType<typeof detectCorrectionLanguage>;
   learnedWords: string[];
   correctionMemory: z.infer<typeof requestSchema>["correctionMemory"];
+  idMap?: Map<string, string>;
 }) => {
   const parsedJson = parseModelJson(text);
+
+  if (idMap && typeof parsedJson === "object" && parsedJson !== null) {
+    const parsed = parsedJson as { corrections?: unknown[]; uncertain?: unknown[] };
+    if (Array.isArray(parsed.corrections)) {
+      parsed.corrections = restoreRealCorrectionBlockIds(parsed.corrections as { blockId: string }[], idMap);
+    }
+    if (Array.isArray(parsed.uncertain)) {
+      parsed.uncertain = restoreRealCorrectionBlockIds(parsed.uncertain as { blockId: string }[], idMap);
+    }
+  }
+
   const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
 
   return applyMemory(canonical, correctionMemory);
@@ -435,10 +450,11 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
   const blocks = getCorrectionBlocksFromRequest(requestBody);
+  const { modelBlocks, idMap } = buildModelReadyCorrectionBlocks(blocks);
   const sourceText = blocks.map((block) => block.text).join("\n\n");
   const fallbackLanguage = detectCorrectionLanguage(sourceText);
   const learnedWords = getLearnedWordsFromRequest(requestBody);
-  const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
+  const promptText = buildMechanicalCorrectionsPrompt(modelBlocks, learnedWords);
 
   console.info(
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
@@ -459,6 +475,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
       fallbackLanguage,
       learnedWords,
       correctionMemory: requestBody.correctionMemory,
+      idMap,
     });
     const t2 = Date.now();
     console.info(`[corrections] first parse ok totalLatencyMs=${t2 - t0}`);
@@ -487,6 +504,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
         fallbackLanguage,
         learnedWords,
         correctionMemory: requestBody.correctionMemory,
+        idMap,
       });
       const t2 = Date.now();
       console.info(`[corrections] retry parse ok totalLatencyMs=${t2 - t0}`);

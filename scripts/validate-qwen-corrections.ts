@@ -11,7 +11,9 @@
 
 import {
   buildMechanicalCorrectionsPrompt,
+  buildModelReadyCorrectionBlocks,
   normalizeCanonicalCorrections,
+  restoreRealCorrectionBlockIds,
   type CorrectionBlock,
 } from "@/lib/ai/corrections";
 import { getAIProviderConfig } from "@/lib/ai/provider-config";
@@ -184,7 +186,8 @@ async function main() {
   }
   console.log();
 
-  const promptText = buildMechanicalCorrectionsPrompt(SAMPLE_BLOCKS, LEARNED_WORDS);
+  const { modelBlocks, idMap } = buildModelReadyCorrectionBlocks(SAMPLE_BLOCKS);
+  const promptText = buildMechanicalCorrectionsPrompt(modelBlocks, LEARNED_WORDS);
   console.log("--- Prompt sent to model ---");
   console.log(promptText);
   console.log("--- End prompt ---\n");
@@ -209,6 +212,22 @@ async function main() {
   } catch (error) {
     console.error("Failed to parse JSON:", error instanceof Error ? error.message : String(error));
     process.exit(1);
+  }
+
+  if (typeof parsed === "object" && parsed !== null) {
+    const parsedObj = parsed as { corrections?: unknown[]; uncertain?: unknown[] };
+    if (Array.isArray(parsedObj.corrections)) {
+      parsedObj.corrections = restoreRealCorrectionBlockIds(
+        parsedObj.corrections as { blockId: string }[],
+        idMap,
+      );
+    }
+    if (Array.isArray(parsedObj.uncertain)) {
+      parsedObj.uncertain = restoreRealCorrectionBlockIds(
+        parsedObj.uncertain as { blockId: string }[],
+        idMap,
+      );
+    }
   }
 
   console.log("--- Parsed JSON ---");

@@ -191,3 +191,35 @@ Rules:
 Blocks:
 ${blocks.map((block) => `[${block.id}]\n${block.text}`).join("\n\n")}
 `;
+
+/**
+ * Build a temporary id mapping so the model receives simple, copy-pasteable
+ * block ids while the internal pipeline keeps stable `correction-block:*` ids.
+ * This prevents the model from “summarizing” long block ids into partial ids
+ * like "0.0" and losing the association with the original block.
+ */
+export function buildModelReadyCorrectionBlocks(blocks: CorrectionBlock[]): {
+  modelBlocks: CorrectionBlock[];
+  idMap: Map<string, string>;
+} {
+  const idMap = new Map<string, string>();
+  const modelBlocks = blocks.map((block, index) => {
+    const modelId = `block-${index}`;
+    idMap.set(modelId, block.id);
+    return { ...block, id: modelId };
+  });
+  return { modelBlocks, idMap };
+}
+
+/**
+ * Restore original block ids on corrections returned by the model.
+ */
+export function restoreRealCorrectionBlockIds<T extends { blockId: string }>(
+  items: T[],
+  idMap: Map<string, string>,
+): T[] {
+  return items.map((item) => ({
+    ...item,
+    blockId: idMap.get(item.blockId) ?? item.blockId,
+  }));
+}
