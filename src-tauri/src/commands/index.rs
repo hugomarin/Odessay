@@ -1171,12 +1171,30 @@ pub fn catalog_apply_reconcile(
     }
 
     for b in &input.upserts {
-        tx.execute(
-            "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)
-             ON CONFLICT(id) DO UPDATE SET root_path=excluded.root_path,manifest_version=excluded.manifest_version,visible_as_workspace=excluded.visible_as_workspace",
-            params![b.binding_root_id, b.root_path, b.manifest_version, b.visible_as_workspace as i64],
-        )
-        .map_err(|e| format!("catalog reconcile root: {e}"))?;
+        // A physical directory has one binding-root identity even when different
+        // writers name it differently. Resolve by the UNIQUE physical path before
+        // inserting, mirroring `apply_dual_write`, and use that resolved id for the
+        // document binding below.
+        let existing_root_id: Option<String> = tx
+            .query_row(
+                "SELECT id FROM binding_roots WHERE root_path=?1",
+                params![b.root_path],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("catalog reconcile root lookup: {e}"))?;
+        let root_id = match existing_root_id {
+            Some(id) => id,
+            None => {
+                tx.execute(
+                    "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace) VALUES(?1,?2,?3,?4)
+                     ON CONFLICT(id) DO UPDATE SET root_path=excluded.root_path,manifest_version=excluded.manifest_version,visible_as_workspace=excluded.visible_as_workspace",
+                    params![b.binding_root_id, b.root_path, b.manifest_version, b.visible_as_workspace as i64],
+                )
+                .map_err(|e| format!("catalog reconcile root: {e}"))?;
+                b.binding_root_id.clone()
+            }
+        };
 
         // Preserve cloud metadata on conflict: only local presence/mtime move.
         tx.execute(
@@ -1194,7 +1212,7 @@ pub fn catalog_apply_reconcile(
              VALUES(?1,?2,?3,?4,?5,?6,?7,?8)
              ON CONFLICT(document_id) DO UPDATE SET binding_root_id=excluded.binding_root_id,relative_path=excluded.relative_path,
              canonical_path=excluded.canonical_path,inode=excluded.inode,content_hash=excluded.content_hash,size=excluded.size,last_seen_at=excluded.last_seen_at",
-            params![b.document_id, b.binding_root_id, b.relative_path, b.canonical_path, b.inode, b.content_hash, b.size, b.last_seen_at],
+            params![b.document_id, root_id, b.relative_path, b.canonical_path, b.inode, b.content_hash, b.size, b.last_seen_at],
         )
         .map_err(|e| format!("catalog reconcile binding: {e}"))?;
     }
@@ -1800,6 +1818,65 @@ mod catalog_tests {
             .unwrap();
         assert_eq!(row.binding_root_id.as_deref(), Some("manifest-root"));
         assert_eq!(row.canonical_path.as_deref(), Some("/tmp/shared/b.md"));
+
+        drop(conn);
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn reconcile_reuses_existing_binding_root_for_the_same_path() {
+        let path = temp_db();
+
+        let reconcile = |binding_root_id: &str, document_id: &str, filename: &str| {
+            catalog_apply_reconcile(
+                path.clone(),
+                CatalogReconcileInput {
+                    upserts: vec![CatalogLocalBindingInput {
+                        binding_root_id: binding_root_id.into(),
+                        root_path: "/tmp/reconciled-root".into(),
+                        manifest_version: 2,
+                        visible_as_workspace: false,
+                        document_id: document_id.into(),
+                        relative_path: filename.into(),
+                        canonical_path: format!("/tmp/reconciled-root/{filename}"),
+                        inode: None,
+                        content_hash: None,
+                        size: None,
+                        last_seen_at: Some(2),
+                        title: filename.trim_end_matches(".md").into(),
+                        created_at: Some(1),
+                        modified_at: Some(2),
+                    }],
+                    detached: vec![],
+                },
+            )
+            .unwrap();
+        };
+
+        reconcile("manifest-root", "doc-a", "a.md");
+        reconcile("workspace-root", "doc-b", "b.md");
+
+        let conn = open_db(&path).unwrap();
+        let root_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM binding_roots WHERE root_path='/tmp/reconciled-root'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            root_count, 1,
+            "one physical directory keeps one binding root"
+        );
+
+        let row = catalog_get_by_id(path.clone(), "doc-b".into())
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.binding_root_id.as_deref(), Some("manifest-root"));
+        assert_eq!(
+            row.canonical_path.as_deref(),
+            Some("/tmp/reconciled-root/b.md")
+        );
 
         drop(conn);
         let _ = fs::remove_file(path);
