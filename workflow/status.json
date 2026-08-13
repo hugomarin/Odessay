@@ -3465,6 +3465,16 @@
       "commit": "c49f61f",
       "date": "2026-08-13",
       "notes": "Shipped via wf-ship; PR abierto para merge manual. Reusa filenameToTitle en la apertura desktop; extrae components/sharing/preview-link-section.tsx y el helper compartido lib/utils/clipboard.ts, eliminando ShareLinkState local en favor de PreviewLinkState canonico; acota resolveStalePersistedBlockIds a 500 filas ordenadas por created_at desc. El fix de estabilidad e2e llego a causa raiz: Next 15 parchea window.history.replaceState y convertia el rewrite de URL del harness en una navegacion RSC a /write/<id>, que redirige a /login server-side; replaceEditorHistory usa ahora History.prototype.replaceState y el guard isPerfHarness latchea. Voice recorder e2e 5/5 (antes 1/5). typecheck PASS; lint PASS con 6 warnings preexistentes; Vitest 189/190 archivos con desk-activity.test.ts fallando por zona horaria tambien en main; delivery gate PASS."
+    },
+    {
+      "what": "fix(catalog): derive cloud ownership from account binding [ODE-417]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-417",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-417/discriminate-cloud-ownership-by-cloud-account-id-not-cloud-present-in",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/379",
+      "commit": "d9b06c6",
+      "date": "2026-08-13",
+      "notes": "Aprobado 9.3/10 en la primera ronda y mergeado por wf-review. Cierra en TypeScript la misma confusion que ODE-408 corrigio en la capa nativa: la propiedad cloud se deriva de cloudAccountId y cloudPresent queda reservado para vigencia. Un documento sincronizado y luego archivado deja de presentarse como Local only. Agrega el estado canonico archived con copy y tooltip en el badge unico, mapea lifecycle desde propiedad en desk-catalog-source y document-service-factory, y enruta la mutacion de un writing archivado cloud-owned por un unico UPDATE verificado, conservando el INSERT verificado solo cuando la fila cloud realmente falta. Preserva la paridad ODE-373 con una sola derivacion compartida y no altera el comportamiento web. Evidencia: typecheck PASS, lint PASS con 6 warnings preexistentes, Vitest 191 archivos/1346 tests PASS, delivery gate PASS, CI traceability y Vercel preview en verde, y waterfall required cubierto por regresion determinista de 1 UPDATE y 0 INSERTs. Findings no bloqueantes: P2 el failure mode de fila purgada no se autocorrige por hidratacion como asume el brief (preexistente, requiere deteccion de purga); P3 archived precede a pending en la derivacion."
     }
   ]
 }
