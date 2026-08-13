@@ -223,11 +223,9 @@ export function WorkspaceTreePanel({
       applyOutcome(result);
     } catch (reason: unknown) {
       if (request !== generation.current) return;
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "No se pudo cargar el Workspace",
-      );
+      // A background refresh is best-effort. Keep the last good tree visible;
+      // the blocking error state belongs exclusively to initial load/retry.
+      console.error("Workspace background refresh failed", reason);
     }
   }, [applyOutcome]);
 
@@ -398,7 +396,7 @@ export function WorkspaceTreePanel({
         ))}
         {tree.documents.map((document) => (
           <DocumentNode
-            key={document.relativePath}
+            key={document.id ?? document.relativePath}
             document={document}
             activeId={activeWritingId}
             onOpen={handleOpen}
