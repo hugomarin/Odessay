@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   traceability:
     runs-on: ubuntu-latest
@@ -70,6 +73,7 @@ jobs:
 
       - name: Check delivery gate
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPS_PERF_TRACE_PATH: artifacts/perf/editor-ci-trace.json.gz
           OPS_PERF_REPORT_PATH: artifacts/perf/editor-ci-report.json
           OPS_PERF_METRICS_PATH: artifacts/perf/editor-ci-metrics.json

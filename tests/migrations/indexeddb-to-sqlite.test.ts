@@ -6,7 +6,7 @@ import {
   type MigrationCheckpoint,
   type MigrationCheckpointStore,
   type MigrationScopeReader,
-} from "@/lib/migrations/indexeddb-to-sqlite"
+} from "@/scripts/migrations/indexeddb-to-sqlite"
 import type { DesktopCatalogDualWriteInput } from "@/lib/services/desktop/tauri-commands"
 import type {
   LocalDBScopeSnapshot,
