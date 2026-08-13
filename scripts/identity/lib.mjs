@@ -264,3 +264,53 @@ export function loadEnvFile(envPath = ".env.local") {
 export function printJson(value) {
   console.log(JSON.stringify(value, null, 2));
 }
+
+/**
+ * Minimal strict CLI parser used by identity migration scripts.
+ * - Rejects unknown flags and unknown positional arguments by default.
+ * - Flags that require a value fail early if the value is missing.
+ */
+export function parseCliArgs(argv, { flags, defaults, allowPositionals = false }) {
+  const options = { ...defaults };
+  const positionals = [];
+
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+
+    if (arg === "-h" || arg === "--help") {
+      return { help: true, options, positionals };
+    }
+
+    if (arg.startsWith("-")) {
+      const flag = flags[arg];
+      if (!flag) {
+        throw new Error(`Unknown argument: ${arg}`);
+      }
+      if (flag.type === "value") {
+        const next = argv[i + 1];
+        if (next === undefined || next.startsWith("-")) {
+          throw new Error(`Missing value for ${arg}`);
+        }
+        if (flag.multiple) {
+          if (!Array.isArray(options[flag.key])) {
+            options[flag.key] = [];
+          }
+          options[flag.key].push(next);
+        } else {
+          options[flag.key] = next;
+        }
+        i += 1;
+      } else {
+        options[flag.key] = true;
+      }
+      continue;
+    }
+
+    if (!allowPositionals) {
+      throw new Error(`Unknown argument: ${arg}`);
+    }
+    positionals.push(arg);
+  }
+
+  return { options, positionals };
+}

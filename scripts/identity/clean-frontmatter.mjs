@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   collectMarkdownFiles,
   loadEnvFile,
+  parseCliArgs,
   pathExists,
   printJson,
   readJson,
@@ -17,35 +18,29 @@ const ODESSAY_FRONTMATTER_KEYS = new Set(["id", "slug", "status", "visibility", 
 const CLOUD_METADATA_KEYS = new Set(["slug", "status", "visibility", "version"]);
 
 function parseArgs(argv) {
-  const options = {
-    roots: [],
-    envPath: ".env.local",
-    apply: false,
-    cloud: false,
-    backupDir: null,
-    json: false,
-  };
+  const { help, options } = parseCliArgs(argv, {
+    defaults: {
+      roots: [],
+      envPath: ".env.local",
+      apply: false,
+      cloud: false,
+      backupDir: null,
+      json: false,
+    },
+    flags: {
+      "--workspace-root": { type: "value", key: "roots", multiple: true },
+      "--env": { type: "value", key: "envPath" },
+      "--backup-dir": { type: "value", key: "backupDir" },
+      "--apply": { type: "boolean", key: "apply" },
+      "--cloud": { type: "boolean", key: "cloud" },
+      "--json": { type: "boolean", key: "json" },
+    },
+    allowPositionals: false,
+  });
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--workspace-root") {
-      options.roots.push(argv[++index]);
-    } else if (arg === "--env") {
-      options.envPath = argv[++index];
-    } else if (arg === "--backup-dir") {
-      options.backupDir = argv[++index];
-    } else if (arg === "--apply") {
-      options.apply = true;
-    } else if (arg === "--cloud") {
-      options.cloud = true;
-    } else if (arg === "--json") {
-      options.json = true;
-    } else if (arg === "-h" || arg === "--help") {
-      printHelp();
-      process.exit(0);
-    } else {
-      options.roots.push(arg);
-    }
+  if (help) {
+    printHelp();
+    process.exit(0);
   }
 
   if (options.roots.length === 0) {
@@ -385,10 +380,23 @@ async function main() {
     { total: 0, changed: 0, cleaned: 0, unchanged: 0, failed: 0 },
   );
 
+  const cloudSummary = options.cloud
+    ? workspaces.reduce(
+        (acc, workspace) => {
+          acc.checked += workspace.cloud.checked;
+          acc.missing.push(...workspace.cloud.missing);
+          acc.updated.push(...workspace.cloud.updated);
+          acc.skipped.push(...workspace.cloud.skipped);
+          return acc;
+        },
+        { enabled: true, checked: 0, missing: [], updated: [], skipped: [] },
+      )
+    : { enabled: false };
+
   const result = {
     generatedAt: new Date().toISOString(),
     dryRun: !options.apply,
-    cloud: options.cloud,
+    cloud: cloudSummary,
     summary,
     workspaces,
   };

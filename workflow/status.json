@@ -107,6 +107,16 @@
   },
   "built": [
     {
+      "what": "Harden identity migration CLI parsing, cloud tests, and backup projections [ODE-313]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-313",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-313/harden-identity-migration-cli-parsing-cloud-tests-and-backup",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/377",
+      "commit": "fa55502",
+      "date": "2026-08-13",
+      "notes": "Adds shared parseCliArgs helper so harvest-ids and clean-frontmatter reject unknown arguments and missing values. backup-restore now uses explicit Supabase column projections. Cloud summary output fixed to aggregate workspace results. Added deterministic HTTP-double tests for --cloud mode. Validation: env:check PASS, ops:status:drift OK, typecheck PASS, lint PASS (pre-existing editor-shell warnings), identity-harvest-scripts.test.ts 16/16 PASS, ops:delivery:gate PASS."
+    },
+    {
       "what": "Fix DOCX export MIME type built from a truncated constant [ODE-386]",
       "phase": "Fase 9 — Workspace: Filesystem y Nube",
       "issue": "ODE-386",
