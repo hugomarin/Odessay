@@ -7,7 +7,6 @@ import Code from "@tiptap/extension-code"
 import CodeBlock from "@tiptap/extension-code-block"
 import Document from "@tiptap/extension-document"
 import Heading from "@tiptap/extension-heading"
-import Image from "@tiptap/extension-image"
 import History from "@tiptap/extension-history"
 import HorizontalRule from "@tiptap/extension-horizontal-rule"
 import Italic from "@tiptap/extension-italic"
@@ -35,6 +34,11 @@ import { CorrectionTriggerExtension } from "@/lib/editor/correction-trigger-plug
 import { FrontmatterNode } from "@/lib/editor/frontmatter-node"
 import { PublicationSuggestionExtension } from "@/lib/editor/publication-suggestion-extension"
 import { AnnotationHighlight } from "@/lib/editor/annotation-highlight"
+import {
+  LocalImageExtension,
+  type LocalImageBackupRequest,
+  type ResolvedLocalImage,
+} from "@/lib/editor/local-image-extension"
 
 export const EMPTY_EDITOR_JSON: JSONContent = {
   type: "doc",
@@ -44,6 +48,8 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
   tableOfContentsScrollParent?: () => HTMLElement | Window
+  resolveLocalImage?: (source: string) => Promise<ResolvedLocalImage>
+  onRequestLocalImageBackup?: (request: LocalImageBackupRequest) => void
 }
 
 export const createEditorExtensions = (options: CreateEditorExtensionsOptions = {}): Extensions => {
@@ -75,9 +81,11 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     Italic.extend({ addKeyboardShortcuts: () => ({}) }),
     Strike.extend({ addKeyboardShortcuts: () => ({}) }),
     AnnotationHighlight.extend({ addKeyboardShortcuts: () => ({}) }),
-    Image.extend({ addKeyboardShortcuts: () => ({}) }).configure({
+    LocalImageExtension.extend({ addKeyboardShortcuts: () => ({}) }).configure({
       allowBase64: false,
       inline: false,
+      resolveLocalImage: options.resolveLocalImage,
+      onRequestBackup: options.onRequestLocalImageBackup,
     }),
     Link.configure({
       openOnClick: false,

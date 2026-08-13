@@ -1,10 +1,11 @@
 import type {
   AssetService,
+  LocalImageAsset,
   UploadImageAssetInput,
   WritingAsset,
 } from "@/lib/services/contracts/asset-service"
 import type { ServiceError, ServiceResponse } from "@/lib/services/contracts/service-types"
-import { tauriResolveAssetPath } from "@/lib/services/desktop/tauri-commands"
+import { tauriReadLocalImageAsset, tauriResolveAssetPath } from "@/lib/services/desktop/tauri-commands"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { desktopCatalogSyncService } from "@/lib/sync/desktop-catalog-sync-service"
 
@@ -24,6 +25,20 @@ function err<T>(code: ServiceError["code"], message: string, retryable = false):
 }
 
 export class DesktopAssetService implements AssetService {
+  async readLocalImageAsset(input: {
+    documentPath: string
+    source: string
+  }): Promise<ServiceResponse<LocalImageAsset>> {
+    try {
+      const asset = await tauriReadLocalImageAsset(input.documentPath, input.source)
+      return ok({ ...asset, bytes: new Uint8Array(asset.bytes) })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      const code = message.includes("unsupported image type") ? "INVALID_INPUT" : "NOT_FOUND"
+      return err(code, message)
+    }
+  }
+
   async resolveAssetPath(docPath: string, relativePath: string): Promise<ServiceResponse<string>> {
     try {
       const absolute = await tauriResolveAssetPath(docPath, relativePath)

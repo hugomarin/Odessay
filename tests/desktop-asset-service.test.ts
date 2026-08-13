@@ -42,6 +42,18 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
     if (!mockFiles.has(resolved)) throw new Error(`Asset not found: ${resolved}`)
     return resolved
   }),
+  tauriReadLocalImageAsset: vi.fn(async (documentPath: string, source: string) => {
+    const dir = documentPath.split("/").slice(0, -1).join("/")
+    const sourcePath = source.startsWith("/") ? source : `${dir}/${source}`
+    if (!mockFiles.has(sourcePath)) throw new Error(`Asset not found: ${sourcePath}`)
+    return {
+      sourcePath,
+      fileName: sourcePath.split("/").pop()!,
+      mimeType: "image/png",
+      sizeBytes: 3,
+      bytes: [1, 2, 3],
+    }
+  }),
 }))
 
 vi.mock("@/lib/supabase/desktop-client", () => ({
@@ -74,6 +86,21 @@ describe("DesktopAssetService", () => {
     const result = await service.resolveAssetPath(docPath, "images/missing.png")
     expect(result.data).toBeNull()
     expect(result.error?.code).toBe("NOT_FOUND")
+  })
+
+  it("readLocalImageAsset returns validated bytes for relative and absolute paths", async () => {
+    const documentPath = "/home/user/writings/essay.md"
+    mockFiles.set("/home/user/writings/images/photo.png", "png-content")
+
+    const relative = await service.readLocalImageAsset({ documentPath, source: "images/photo.png" })
+    const absolute = await service.readLocalImageAsset({
+      documentPath,
+      source: "/home/user/writings/images/photo.png",
+    })
+
+    expect(relative.error).toBeNull()
+    expect(relative.data?.bytes).toEqual(new Uint8Array([1, 2, 3]))
+    expect(absolute.data?.sourcePath).toBe("/home/user/writings/images/photo.png")
   })
 
   it("uploadImageAsset returns UNAUTHORIZED when not authenticated", async () => {

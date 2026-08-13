@@ -23,7 +23,19 @@ export type WritingAsset = {
   sizeBytes: number
 }
 
+export type LocalImageAsset = {
+  sourcePath: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  bytes: Uint8Array
+}
+
 export interface AssetService {
+  readLocalImageAsset(input: {
+    documentPath: string
+    source: string
+  }): Promise<ServiceResponse<LocalImageAsset>>
   uploadImageAsset(input: UploadImageAssetInput): Promise<ServiceResponse<WritingAsset>>
 }
 
@@ -46,6 +58,14 @@ export const ASSET_SERVICE_CONTRACT = {
   ],
   errorEnvelope: SERVICE_RESPONSE_ENVELOPE,
   operations: [
+    {
+      name: "readLocalImageAsset",
+      kind: "query",
+      summary: "Resolve and read a validated image referenced by desktop Markdown.",
+      input: ["documentPath", "source"],
+      output: ["LocalImageAsset"],
+      errorCodes: ["NOT_FOUND", "INVALID_INPUT", "UNSUPPORTED"],
+    },
     {
       name: "uploadImageAsset",
       kind: "command",
