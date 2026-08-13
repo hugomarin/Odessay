@@ -5381,7 +5381,7 @@ export function EditorShell({
       const bodyJson = parseResult.success ? parseResult.snapshot.bodyJson : EMPTY_EDITOR_JSON
       const bodyText = parseResult.success ? parseResult.snapshot.bodyText : ""
       const nextTitle = isDesktopRuntime()
-        ? _path.split("/").pop()?.replace(/\.md$/i, "") || DESKTOP_UNTITLED_WRITING_TITLE
+        ? filenameToTitle(_path) || DESKTOP_UNTITLED_WRITING_TITLE
         : deriveAutoTitle(bodyText, nowIso)
 
       const record: WritingRecord = {
