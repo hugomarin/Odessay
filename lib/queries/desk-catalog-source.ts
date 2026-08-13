@@ -135,9 +135,9 @@ function mergeRecordWithLocal(
 }
 
 /**
- * Load Desk's base set from the DocumentCatalog and join local enrichment. When
- * the catalog read is not enabled (desktop, dual-write off) it falls back to the
- * legacy local set so the shipping app is unchanged.
+ * Load Desk's base set from the DocumentCatalog and join local enrichment. In
+ * desktop the catalog read path is the authoritative source; the legacy local
+ * fallback is retained only as a reversible rollback switch for the web runtime.
  */
 export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
   const scope = getLocalDBScope()
