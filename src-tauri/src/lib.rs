@@ -271,6 +271,7 @@ pub fn run() {
             commands::document::relocate_file,
             commands::document::list_recent_files,
             commands::document::resolve_asset_path,
+            commands::document::read_local_image_asset,
             commands::index::catalog_schema_version,
             commands::index::catalog_dual_write,
             commands::index::catalog_bulk_dual_write,

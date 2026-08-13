@@ -149,6 +149,13 @@ vi.mock("@/lib/services/desktop/runtime-detection", () => ({
   isDesktopRuntime: () => runtime.isDesktop,
 }))
 
+vi.mock("@/lib/services/asset-service-factory", () => ({
+  getAssetService: () => ({
+    readLocalImageAsset: vi.fn(),
+    uploadImageAsset: vi.fn(),
+  }),
+}))
+
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(async () => () => {}),
 }))

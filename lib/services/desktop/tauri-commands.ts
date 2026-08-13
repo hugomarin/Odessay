@@ -132,6 +132,21 @@ export async function tauriResolveAssetPath(
   return invoke<string>("resolve_asset_path", { docPath, relativePath })
 }
 
+export type DesktopLocalImageAsset = {
+  sourcePath: string
+  fileName: string
+  mimeType: string
+  sizeBytes: number
+  bytes: number[]
+}
+
+export async function tauriReadLocalImageAsset(
+  documentPath: string,
+  source: string,
+): Promise<DesktopLocalImageAsset> {
+  return invoke<DesktopLocalImageAsset>("read_local_image_asset", { documentPath, source })
+}
+
 // ─── Workspace ───────────────────────────────────────────────────────────────
 
 export async function tauriWorkspaceCreate(parentPath: string, name: string): Promise<string> {

@@ -29,6 +29,7 @@ import {
 } from "@/components/reading/margins/annotation-bubble"
 import { SelectionPopup, type SelectionPopupPosition } from "@/components/reading/margins/selection-popup"
 import { InsertFootnoteModal } from "@/components/editor/modals/insert-footnote-modal"
+import { BackupImageModal } from "@/components/editor/modals/backup-image-modal"
 import { InsertImageModal } from "@/components/editor/modals/insert-image-modal"
 import { InsertLinkModal } from "@/components/editor/modals/insert-link-modal"
 import { InsertTableModal } from "@/components/editor/modals/insert-table-modal"
@@ -134,6 +135,8 @@ import {
   type EditorSpellcheckPreference,
 } from "@/lib/editor/spellcheck"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
+import { isLocalImageSource, type LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
+import { backUpLocalImage } from "@/lib/editor/local-image-backup"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
 import { calculateTextMetrics } from "@/lib/editor/text-metrics"
@@ -170,6 +173,7 @@ import type {
 } from "@/lib/local-db/schema"
 import { subscribeToSyncStatusChanges } from "@/lib/sync/events"
 import { getAIService } from "@/lib/services/ai-service-factory"
+import { getAssetService } from "@/lib/services/asset-service-factory"
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service"
 import {
   createDesktopDraft as createProductionDesktopDraft,
@@ -493,6 +497,9 @@ export function EditorShell({
   const [footnoteModalOpen, setFootnoteModalOpen] = useState(false)
   const [tableModalOpen, setTableModalOpen] = useState(false)
   const [imageModalOpen, setImageModalOpen] = useState(false)
+  const [localImageBackup, setLocalImageBackup] = useState<LocalImageBackupRequest | null>(null)
+  const [localImageBackupUploading, setLocalImageBackupUploading] = useState(false)
+  const [localImageBackupError, setLocalImageBackupError] = useState<string | null>(null)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [isTopbarVisible, setIsTopbarVisible] = useState(true)
   const [isTabBarVisible, setIsTabBarVisible] = useState(true)
@@ -621,6 +628,25 @@ export function EditorShell({
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
     return editorViewport ?? window
   }, [])
+  const resolveImage = useCallback(async (source: string) => {
+    const service = getAssetService()
+    if (!isLocalImageSource(source)) {
+      const resolved = await service.resolveImageAssetUrl?.(source)
+      return { renderUrl: resolved?.data ?? source }
+    }
+    const documentPath = currentCanonicalPathRef.current
+    if (!documentPath) throw new Error("Save this document before loading local images")
+    const result = await service.readLocalImageAsset({ documentPath, source })
+    if (result.error) throw new Error(result.error.message)
+    const objectUrl = URL.createObjectURL(
+      new Blob([result.data.bytes.buffer as ArrayBuffer], { type: result.data.mimeType }),
+    )
+    return { renderUrl: objectUrl, revoke: () => URL.revokeObjectURL(objectUrl) }
+  }, [])
+  const requestLocalImageBackup = useCallback((request: LocalImageBackupRequest) => {
+    setLocalImageBackup(request)
+    setLocalImageBackupError(null)
+  }, [])
   const editorExtensions = useMemo(
     () =>
       createEditorExtensions({
@@ -628,8 +654,10 @@ export function EditorShell({
           setTableOfContentsItems([...items])
         },
         tableOfContentsScrollParent: getTableOfContentsScrollParent,
+        resolveImage: isDesktopRuntime() ? resolveImage : undefined,
+        onRequestLocalImageBackup: isDesktopRuntime() ? requestLocalImageBackup : undefined,
       }),
-    [getTableOfContentsScrollParent],
+    [getTableOfContentsScrollParent, requestLocalImageBackup, resolveImage],
   )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -1070,8 +1098,10 @@ export function EditorShell({
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
+        return true
       } catch {
         setSyncStatus(typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving")
+        return false
       }
     },
     [createDesktopDraftFn, routeWritingId, router],
@@ -1898,6 +1928,9 @@ export function EditorShell({
       if (hydratedWriting) {
         const { writing, canonicalPath, lifecycle: hydratedLifecycle, syncStatus: hydratedSyncStatus } =
           hydratedWriting
+        // Local image node views resolve relative sources during setContent, so
+        // the document path must be available before ProseMirror creates them.
+        currentCanonicalPathRef.current = canonicalPath
         isApplyingContentRef.current = true
         // Load JSON first to get the markdown serialization, then re-parse as markdown
         // so that footnote references are converted to footnoteReference nodes.
@@ -2006,7 +2039,6 @@ export function EditorShell({
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
-        currentCanonicalPathRef.current = canonicalPath
         updateDerivedEditorState(editor)
 
         const activeTab =
@@ -3711,6 +3743,36 @@ export function EditorShell({
     },
     [editor, markdownValue, persistEditorSnapshot, queueMarkdownSelectionRestore],
   )
+
+  const handleBackupLocalImage = useCallback(async () => {
+    const request = localImageBackup
+    const documentPath = currentCanonicalPathRef.current
+    const writingId = currentWritingIdRef.current
+    if (!request || !documentPath || !writingId) return
+
+    setLocalImageBackupUploading(true)
+    setLocalImageBackupError(null)
+    try {
+      const result = await backUpLocalImage({
+        service: getAssetService(),
+        writingId,
+        documentPath,
+        source: request.source,
+        alt: request.alt,
+        replaceSource: request.replaceSource,
+        persistDocument: async () => editor ? (await persistEditorSnapshot(editor)) === true : false,
+      })
+      if (result.error) {
+        setLocalImageBackupError(result.error.message)
+        return
+      }
+      setLocalImageBackup(null)
+    } catch {
+      setLocalImageBackupError("Unable to back up this image. Its local path was preserved.")
+    } finally {
+      setLocalImageBackupUploading(false)
+    }
+  }, [editor, localImageBackup, persistEditorSnapshot])
 
   const handleInsertFootnote = useCallback(
     (note: string) => {
@@ -6184,6 +6246,20 @@ export function EditorShell({
         writingId={currentWritingId ?? ""}
         onOpenChange={setImageModalOpen}
         onConfirm={handleInsertImage}
+      />
+
+      <BackupImageModal
+        open={localImageBackup !== null}
+        source={localImageBackup?.source ?? null}
+        uploading={localImageBackupUploading}
+        error={localImageBackupError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setLocalImageBackup(null)
+            setLocalImageBackupError(null)
+          }
+        }}
+        onConfirm={() => void handleBackupLocalImage()}
       />
 
       <SelectionPopup

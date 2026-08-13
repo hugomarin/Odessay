@@ -14,6 +14,7 @@ const mockFlushPending = vi.fn()
 const mockSupabase = {
   auth: {
     getUser: vi.fn(),
+    getSession: vi.fn(),
   },
   storage: {
     from: vi.fn(() => ({
@@ -42,6 +43,18 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
     if (!mockFiles.has(resolved)) throw new Error(`Asset not found: ${resolved}`)
     return resolved
   }),
+  tauriReadLocalImageAsset: vi.fn(async (documentPath: string, source: string) => {
+    const dir = documentPath.split("/").slice(0, -1).join("/")
+    const sourcePath = source.startsWith("/") ? source : `${dir}/${source}`
+    if (!mockFiles.has(sourcePath)) throw new Error(`Asset not found: ${sourcePath}`)
+    return {
+      sourcePath,
+      fileName: sourcePath.split("/").pop()!,
+      mimeType: "image/png",
+      sizeBytes: 3,
+      bytes: [1, 2, 3],
+    }
+  }),
 }))
 
 vi.mock("@/lib/supabase/desktop-client", () => ({
@@ -55,6 +68,7 @@ describe("DesktopAssetService", () => {
     mockFiles.clear()
     service = new DesktopAssetService()
     vi.clearAllMocks()
+    process.env.NEXT_PUBLIC_APP_URL = "https://app.odessay.test"
     // Default: parent writing row already present in the cloud.
     mockWritingsCount.mockResolvedValue({ count: 1, error: null })
     mockFlushPending.mockResolvedValue({ data: { processedMutations: 0, failedMutations: [], nextRetryAt: null }, error: null })
@@ -76,6 +90,21 @@ describe("DesktopAssetService", () => {
     expect(result.error?.code).toBe("NOT_FOUND")
   })
 
+  it("readLocalImageAsset returns validated bytes for relative and absolute paths", async () => {
+    const documentPath = "/home/user/writings/essay.md"
+    mockFiles.set("/home/user/writings/images/photo.png", "png-content")
+
+    const relative = await service.readLocalImageAsset({ documentPath, source: "images/photo.png" })
+    const absolute = await service.readLocalImageAsset({
+      documentPath,
+      source: "/home/user/writings/images/photo.png",
+    })
+
+    expect(relative.error).toBeNull()
+    expect(relative.data?.bytes).toEqual(new Uint8Array([1, 2, 3]))
+    expect(absolute.data?.sourcePath).toBe("/home/user/writings/images/photo.png")
+  })
+
   it("uploadImageAsset returns UNAUTHORIZED when not authenticated", async () => {
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user: null }, error: new Error("no session") })
 
@@ -90,15 +119,11 @@ describe("DesktopAssetService", () => {
     expect(result.error?.code).toBe("UNAUTHORIZED")
   })
 
-  it("uploadImageAsset uploads to storage, inserts DB record, and returns asset with signed URL", async () => {
+  it("uploadImageAsset uploads to storage, inserts DB record, and returns a durable asset URL", async () => {
     const user = { id: "user-123" }
     mockSupabase.auth.getUser.mockResolvedValue({ data: { user }, error: null })
     mockStorageUpload.mockResolvedValue({ error: null })
     mockFromInsert.mockResolvedValue({ error: null })
-    mockStorageCreateSignedUrl.mockResolvedValue({
-      data: { signedUrl: "https://cdn.example.com/signed-url" },
-      error: null,
-    })
 
     const result = await service.uploadImageAsset({
       writingId: "doc-1",
@@ -112,7 +137,7 @@ describe("DesktopAssetService", () => {
     expect(result.error).toBeNull()
     expect(result.data).toMatchObject({
       writingId: "doc-1",
-      url: "https://cdn.example.com/signed-url",
+      url: expect.stringMatching(/^https:\/\/app\.odessay\.test\/api\/writing-assets\/[0-9a-f-]+$/),
       alt: "A test image",
       mimeType: "image/png",
       sizeBytes: 1024,
@@ -121,7 +146,28 @@ describe("DesktopAssetService", () => {
 
     expect(mockStorageUpload).toHaveBeenCalledOnce()
     expect(mockFromInsert).toHaveBeenCalledOnce()
-    expect(mockStorageCreateSignedUrl).toHaveBeenCalledOnce()
+    expect(mockStorageCreateSignedUrl).not.toHaveBeenCalled()
+  })
+
+  it("resolves a durable asset URL through the authenticated web route", async () => {
+    mockSupabase.auth.getSession.mockResolvedValue({
+      data: { session: { access_token: "desktop-token" } },
+      error: null,
+    })
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      url: "https://storage.example.com/signed-render-url",
+    } as Response)
+
+    const result = await service.resolveImageAssetUrl(
+      "https://app.odessay.test/api/writing-assets/123e4567-e89b-12d3-a456-426614174000",
+    )
+
+    expect(result.data).toBe("https://storage.example.com/signed-render-url")
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      { headers: { Authorization: "Bearer desktop-token" } },
+    )
   })
 
   it("uploadImageAsset returns STORAGE_ERROR on upload failure", async () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import type { AssetService, UploadImageAssetInput, WritingAsset } from "@/lib/services/contracts/asset-service"
+import type { AssetService, LocalImageAsset, UploadImageAssetInput, WritingAsset } from "@/lib/services/contracts/asset-service"
 import type { ServiceResponse } from "@/lib/services/contracts/service-types"
 import { err, ok } from "@/lib/services/service-response"
 
@@ -10,6 +10,18 @@ type UploadApiResult = {
 }
 
 export class WebAssetService implements AssetService {
+  async resolveImageAssetUrl(source: string): Promise<ServiceResponse<string>> {
+    return ok(source)
+  }
+
+  async readLocalImageAsset(): Promise<ServiceResponse<LocalImageAsset>> {
+    return err({
+      code: "UNSUPPORTED",
+      message: "Local image files are available in the desktop app",
+      retryable: false,
+    })
+  }
+
   async uploadImageAsset(input: UploadImageAssetInput): Promise<ServiceResponse<WritingAsset>> {
     const formData = new FormData()
     const blob = new Blob([input.bytes.buffer as ArrayBuffer], { type: input.contentType })

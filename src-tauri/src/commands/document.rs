@@ -290,6 +290,104 @@ pub fn resolve_asset_path(doc_path: String, relative_path: String) -> Result<Str
     Ok(canonical.to_string_lossy().to_string())
 }
 
+const MAX_LOCAL_IMAGE_BYTES: u64 = 25 * 1024 * 1024;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalImageAsset {
+    source_path: String,
+    file_name: String,
+    mime_type: String,
+    size_bytes: u64,
+    bytes: Vec<u8>,
+}
+
+fn image_mime_type(path: &Path) -> Option<&'static str> {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => Some("image/png"),
+        Some("jpg") | Some("jpeg") => Some("image/jpeg"),
+        Some("webp") => Some("image/webp"),
+        Some("gif") => Some("image/gif"),
+        _ => None,
+    }
+}
+
+fn decode_local_image_source(source: &str) -> Result<String, String> {
+    let path = source.strip_prefix("file://").unwrap_or(source);
+    let bytes = path.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' && index + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[index + 1..index + 3])
+                .map_err(|_| "read_local_image_asset: invalid percent encoding".to_string())?;
+            let value = u8::from_str_radix(hex, 16)
+                .map_err(|_| "read_local_image_asset: invalid percent encoding".to_string())?;
+            decoded.push(value);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded)
+        .map_err(|_| "read_local_image_asset: source is not valid UTF-8".to_string())
+}
+
+/// Read one image referenced by a materialized Markdown document. The command
+/// resolves both relative and absolute paths without widening the WebView's fs
+/// capability or exposing an unrestricted asset protocol.
+#[tauri::command]
+pub fn read_local_image_asset(
+    document_path: String,
+    source: String,
+) -> Result<LocalImageAsset, String> {
+    let decoded_source = decode_local_image_source(&source)?;
+    let canonical = Path::new(&document_path)
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(decoded_source)
+        .canonicalize()
+        .map_err(|e| format!("read_local_image_asset: {e}"))?;
+    let mime_type = image_mime_type(&canonical).ok_or_else(|| {
+        format!(
+            "read_local_image_asset: unsupported image type: {}",
+            canonical.display()
+        )
+    })?;
+    let metadata =
+        fs::metadata(&canonical).map_err(|e| format!("read_local_image_asset metadata: {e}"))?;
+    if !metadata.is_file() {
+        return Err(format!(
+            "read_local_image_asset: not a file: {}",
+            canonical.display()
+        ));
+    }
+    if metadata.len() > MAX_LOCAL_IMAGE_BYTES {
+        return Err(format!(
+            "read_local_image_asset: image exceeds 25 MB: {}",
+            canonical.display()
+        ));
+    }
+    let bytes = fs::read(&canonical).map_err(|e| format!("read_local_image_asset read: {e}"))?;
+    Ok(LocalImageAsset {
+        source_path: canonical.to_string_lossy().to_string(),
+        file_name: canonical
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("image")
+            .to_string(),
+        mime_type: mime_type.to_string(),
+        size_bytes: metadata.len(),
+        bytes,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,6 +397,59 @@ mod tests {
         let root = std::env::temp_dir().join(format!("odessay-relocate-{test_name}-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp dir");
         root
+    }
+
+    #[test]
+    fn read_local_image_asset_resolves_relative_and_absolute_sources() {
+        let root = temp_dir("read-local-image");
+        let document_path = root.join("essay.md");
+        let image_dir = root.join("images");
+        let image_path = image_dir.join("photo.png");
+        fs::create_dir_all(&image_dir).expect("create image dir");
+        fs::write(&document_path, "![Photo](images/photo.png)\n").expect("write markdown");
+        fs::write(&image_path, [0x89, b'P', b'N', b'G']).expect("write image");
+
+        let relative = read_local_image_asset(
+            document_path.to_string_lossy().to_string(),
+            "images/photo.png".into(),
+        )
+        .expect("read relative image");
+        let absolute = read_local_image_asset(
+            document_path.to_string_lossy().to_string(),
+            image_path.to_string_lossy().to_string(),
+        )
+        .expect("read absolute image");
+        let file_url = read_local_image_asset(
+            document_path.to_string_lossy().to_string(),
+            format!("file://{}", image_path.to_string_lossy()).replace("photo.png", "photo%2Epng"),
+        )
+        .expect("read file URL image");
+
+        assert_eq!(relative.source_path, absolute.source_path);
+        assert_eq!(relative.source_path, file_url.source_path);
+        assert_eq!(relative.mime_type, "image/png");
+        assert_eq!(relative.file_name, "photo.png");
+        assert_eq!(relative.bytes, vec![0x89, b'P', b'N', b'G']);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn read_local_image_asset_rejects_non_image_files() {
+        let root = temp_dir("reject-local-non-image");
+        let document_path = root.join("essay.md");
+        let text_path = root.join("notes.txt");
+        fs::write(&document_path, "Body\n").expect("write markdown");
+        fs::write(&text_path, "not an image\n").expect("write text");
+
+        let result = read_local_image_asset(
+            document_path.to_string_lossy().to_string(),
+            text_path.to_string_lossy().to_string(),
+        );
+
+        assert!(result
+            .expect_err("reject unsupported extension")
+            .contains("unsupported image type"));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
