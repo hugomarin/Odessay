@@ -3425,6 +3425,16 @@
       "commit": "5edcafe",
       "date": "2026-08-13",
       "notes": "SHIP completed with PR open for manual merge. catalog_apply_reconcile now resolves binding_roots by UNIQUE root_path before inserting and writes document_bindings with the resolved existing id, matching catalog_dual_write and preserving one physical-directory identity across reconciler/workspace writers. Regression proves two proposed root ids for the same path keep one row and the original manifest-root id. Evidence: Rust 49 passed/0 failed/1 ignored, typecheck PASS, lint PASS with 6 pre-existing editor-shell warnings, Vitest 190 files/1324 tests PASS, delivery gate PASS. Performance, Presentation and Network contracts not required."
+    },
+    {
+      "what": "chore(editor/web): title derivation, clipboard/PreviewLink dedup, bounded correction query, perf-harness nav guards [ODE-389]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-389",
+      "linear_url": "https://linear.app/z9ne/issue/ODE-389/editorweb-cleanup-title-derivation-clipboardpreviewlink",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/376",
+      "commit": "c49f61f",
+      "date": "2026-08-13",
+      "notes": "Shipped via wf-ship; PR abierto para merge manual. Reusa filenameToTitle en la apertura desktop; extrae components/sharing/preview-link-section.tsx y el helper compartido lib/utils/clipboard.ts, eliminando ShareLinkState local en favor de PreviewLinkState canonico; acota resolveStalePersistedBlockIds a 500 filas ordenadas por created_at desc. El fix de estabilidad e2e llego a causa raiz: Next 15 parchea window.history.replaceState y convertia el rewrite de URL del harness en una navegacion RSC a /write/<id>, que redirige a /login server-side; replaceEditorHistory usa ahora History.prototype.replaceState y el guard isPerfHarness latchea. Voice recorder e2e 5/5 (antes 1/5). typecheck PASS; lint PASS con 6 warnings preexistentes; Vitest 189/190 archivos con desk-activity.test.ts fallando por zona horaria tambien en main; delivery gate PASS."
     }
   ]
 }
