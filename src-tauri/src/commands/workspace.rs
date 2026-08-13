@@ -165,6 +165,51 @@ fn matches_selected_paths(relative_path: &str, selected_paths: &[String]) -> boo
     })
 }
 
+/// Older Workspace choosers persisted "select everything" as the top-level
+/// folders plus the root files that existed at adoption time. That freezes the
+/// root-file scope: a later `new.md` is invisible even though the author chose
+/// every folder. The current contract uses an empty selection for a complete
+/// BindingRoot, so upgrade that legacy shape when the only newly out-of-scope
+/// files are at the root.
+///
+/// This only runs for a persisted selection (`workspace_sync(..., None, ...)`).
+/// A caller supplying an explicit selection keeps that exact intent.
+fn is_legacy_complete_root_scope(
+    selected_paths: &[String],
+    files: &[WorkspaceFileSnapshot],
+    existing_index: &WorkspaceIndexDocument,
+) -> bool {
+    if selected_paths.is_empty() {
+        return false;
+    }
+
+    let top_level_folders = files
+        .iter()
+        .filter_map(|file| file.relative_path.split_once('/').map(|(folder, _)| folder))
+        .collect::<HashSet<_>>();
+    if top_level_folders.is_empty()
+        || !top_level_folders
+            .iter()
+            .all(|folder| selected_paths.iter().any(|selected| selected == folder))
+    {
+        return false;
+    }
+
+    let has_new_root_file = files.iter().any(|file| {
+        !file.relative_path.contains('/')
+            && !matches_selected_paths(&file.relative_path, selected_paths)
+            && !existing_index.files.contains_key(&file.relative_path)
+    });
+    if !has_new_root_file {
+        return false;
+    }
+
+    files
+        .iter()
+        .filter(|file| !matches_selected_paths(&file.relative_path, selected_paths))
+        .all(|file| !file.relative_path.contains('/'))
+}
+
 fn count_included_folders(files: &[WorkspaceFileSnapshot]) -> usize {
     let mut folders = HashSet::new();
 
@@ -375,7 +420,8 @@ pub fn workspace_unbound_paths(
         .join(WORKSPACE_DIR_NAME)
         .join(WORKSPACE_INDEX_FILE_NAME);
     let existing_index = read_workspace_index(&index_path)?;
-    let effective_selected = match selected_paths {
+    let uses_persisted_selection = selected_paths.is_none();
+    let mut effective_selected = match selected_paths {
         Some(paths) => normalize_selected_paths(paths)?,
         None => normalize_selected_paths(existing_index.selected_paths.clone())?,
     };
@@ -387,6 +433,11 @@ pub fn workspace_unbound_paths(
         &mut files,
         &mut folder_count,
     )?;
+    if uses_persisted_selection
+        && is_legacy_complete_root_scope(&effective_selected, &files, &existing_index)
+    {
+        effective_selected.clear();
+    }
     let mut paths = files
         .into_iter()
         .filter(|file| matches_selected_paths(&file.relative_path, &effective_selected))
@@ -422,6 +473,7 @@ pub fn workspace_sync(
 
     let index_path = workspace_dir.join(WORKSPACE_INDEX_FILE_NAME);
     let existing_index = read_workspace_index(&index_path)?;
+    let uses_persisted_selection = selected_paths.is_none();
     let mut effective_selected_paths = match selected_paths {
         Some(selected_paths) => normalize_selected_paths(selected_paths)?,
         None => normalize_selected_paths(existing_index.selected_paths.clone())?,
@@ -435,6 +487,12 @@ pub fn workspace_sync(
         &mut files,
         &mut folder_count,
     )?;
+
+    if uses_persisted_selection
+        && is_legacy_complete_root_scope(&effective_selected_paths, &files, &existing_index)
+    {
+        effective_selected_paths.clear();
+    }
 
     // An exact-file selection follows a Finder rename by inode. Update the scope
     // before filtering so the renamed file remains visible and the manifest
@@ -910,6 +968,68 @@ mod tests {
         assert_eq!(inspected.files.len(), 3);
         assert_eq!(inspected.selected_paths, vec!["a.md"]);
         assert_eq!(before, after, "inspection must be read-only");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_upgrades_legacy_complete_scope_for_new_root_files() {
+        let root = temp_workspace_root("upgrade-legacy-complete-root-scope");
+        fs::create_dir_all(root.join("drafts")).expect("create drafts folder");
+        fs::create_dir_all(root.join("research")).expect("create research folder");
+        fs::write(root.join("drafts/letter.md"), "Letter\n").expect("write draft");
+        fs::write(root.join("research/notes.md"), "Notes\n").expect("write research");
+        fs::write(root.join("overview.md"), "Overview\n").expect("write root file");
+
+        let initial = workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec![
+                "drafts".into(),
+                "research".into(),
+                "overview.md".into(),
+            ]),
+            None,
+        )
+        .expect("create legacy complete selection");
+        assert_eq!(initial.files.len(), 3);
+        assert_eq!(initial.selected_paths.len(), 3);
+
+        fs::write(root.join("new-root-file.md"), "New\n").expect("write new root file");
+        let upgraded = workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("upgrade persisted complete selection");
+
+        assert!(upgraded.selected_paths.is_empty());
+        assert_eq!(upgraded.files.len(), 4);
+        assert!(upgraded
+            .files
+            .iter()
+            .any(|file| file.relative_path == "new-root-file.md"));
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_keeps_legacy_partial_scope_when_a_folder_is_excluded() {
+        let root = temp_workspace_root("keep-legacy-partial-root-scope");
+        fs::create_dir_all(root.join("included")).expect("create included folder");
+        fs::create_dir_all(root.join("excluded")).expect("create excluded folder");
+        fs::write(root.join("included/letter.md"), "Letter\n").expect("write included");
+        fs::write(root.join("excluded/notes.md"), "Notes\n").expect("write excluded");
+
+        workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec!["included".into()]),
+            None,
+        )
+        .expect("create partial selection");
+        fs::write(root.join("new-root-file.md"), "New\n").expect("write new root file");
+
+        let unchanged = workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("preserve persisted partial selection");
+
+        assert_eq!(unchanged.selected_paths, vec!["included"]);
+        assert_eq!(unchanged.files.len(), 1);
+        assert_eq!(unchanged.files[0].relative_path, "included/letter.md");
+
         cleanup(&root);
     }
 
