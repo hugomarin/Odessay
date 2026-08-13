@@ -82,9 +82,35 @@ describe("CorrectionsPanel analysis trigger", () => {
       }),
     )
 
-    expect(html).toContain("Retry")
-    expect(html).toContain("Some correction packages failed")
+    expect(html).toContain("Retry failed sections")
+    expect(html).toContain("Some sections couldn’t be analyzed")
     expect(html).toContain('role="status"')
+  })
+
+  it("explains a total failure with a friendly try-again action", () => {
+    const html = renderToString(
+      React.createElement(CorrectionsPanel, {
+        suggestions: [],
+        markdown: "",
+        showCorrections: true,
+        analysisStatus: { runState: "failed", progress: { completedBlocks: 0, totalBlocks: 6 } },
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onLearnWord: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        learnedWords: [],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
+        onAnalyze: () => {},
+        onRetryFailed: () => {},
+        onShowCorrectionsChange: () => {},
+        onClose: () => {},
+      }),
+    )
+
+    expect(html).toContain("Try again")
+    expect(html).toContain("We couldn’t analyze this document")
   })
 
   it("shows the learn word action for spelling suggestions and lists learned words", () => {

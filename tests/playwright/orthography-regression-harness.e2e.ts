@@ -117,7 +117,7 @@ test("manual analysis stays idle while writing and starts accessibly on explicit
   await expect(page.locator("#corrections-analysis-status")).toContainText(/Analyzed \d+ of \d+ blocks/)
   await captureOutcome(page, "manual-analysis-running")
   await expect.poll(() => reviewBodies.length).toBeGreaterThan(0)
-  await expect(page.getByText("Analysis complete.")).toBeVisible()
+  await expect(page.getByText("Review complete.")).toBeVisible()
   await captureOutcome(page, "manual-analysis-complete")
 })
 
@@ -149,9 +149,9 @@ test("manual analysis exposes a recoverable provider failure", async ({ page }) 
   await page.getByRole("button", { name: "Corrections" }).click()
   await page.getByRole("button", { name: "Analyze writing and spelling" }).click()
 
-  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible()
   await expect(page.locator("#corrections-analysis-status")).toContainText(
-    "Some correction packages failed",
+    "We couldn’t analyze this document",
   )
   await captureOutcome(page, "manual-analysis-partial-error")
 })

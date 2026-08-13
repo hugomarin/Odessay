@@ -445,7 +445,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
           completed: totalBlocks - skippedBlocks.length,
           total: totalBlocks,
           message: skippedPackages.length > 0
-            ? "Some blocks exceeded the correction limits. Retry to continue."
+            ? "Some sections couldn’t be analyzed. Your existing results are safe."
             : undefined,
         },
         skippedPackages.length > 0 ? 5000 : 2000,
@@ -474,8 +474,8 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
           completed: progressRef.current.completedBlocks,
           total: totalBlocks,
           message: nextRunState === "failed"
-            ? "Correction analysis failed. Retry to continue."
-            : "Some correction packages failed. Retry to continue.",
+            ? "We couldn’t analyze this document. Check your connection and try again."
+            : "Some sections couldn’t be analyzed. Your existing results are safe.",
         },
         5000,
       )
@@ -528,8 +528,8 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
           completed: progressRef.current.completedBlocks,
           total: totalBlocks,
           message: nextRunState === "failed"
-            ? "Correction analysis failed. Retry again to continue."
-            : "Some correction packages still failed. Retry again to continue.",
+            ? "We still couldn’t analyze this document. Check your connection and try again."
+            : "Some sections still couldn’t be analyzed. Your existing results are safe.",
         },
         5000,
       )

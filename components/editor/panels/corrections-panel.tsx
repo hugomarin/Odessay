@@ -87,8 +87,9 @@ export function CorrectionsPanel({
       case "completed":
         return "Analyze again";
       case "partial":
+        return "Retry failed sections";
       case "failed":
-        return "Retry analysis";
+        return "Try again";
       case "cancelled":
         return "Analyze writing and spelling";
       case "idle":
@@ -130,7 +131,7 @@ export function CorrectionsPanel({
               Analyze writing and spelling
             </p>
             <p className="text-[11px] text-ink-4">
-              Run a full-document AI correction review.
+              Review this document for spelling, grammar, and punctuation.
             </p>
           </div>
           <button
@@ -140,7 +141,7 @@ export function CorrectionsPanel({
             aria-busy={isRunning}
             aria-describedby="corrections-analysis-status"
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-[6px] border-[0.5px] border-border px-2.5 text-[11px] font-medium transition-colors",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] border-[0.5px] border-border px-2.5 text-[11px] font-medium transition-colors",
               isRunning
                 ? "text-ink-3 hover:bg-bg hover:text-ink"
                 : "text-ink-3 hover:bg-bg hover:text-ink",
@@ -151,7 +152,7 @@ export function CorrectionsPanel({
             ) : canRetry ? (
               <RefreshCw className="h-3 w-3" strokeWidth={1.7} />
             ) : null}
-            <span>{isRunning ? "Cancel" : isPartialOrFailed ? "Retry" : analysisButtonLabel}</span>
+            <span>{isRunning ? "Cancel" : analysisButtonLabel}</span>
           </button>
         </div>
 
@@ -160,22 +161,30 @@ export function CorrectionsPanel({
             <div className="flex items-center gap-2 text-[11px] text-ink-3">
               <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
               <span>
-                Analyzed {progress.completedBlocks} of {progress.totalBlocks} blocks
+                Checking {progress.completedBlocks} of {progress.totalBlocks} sections…
               </span>
             </div>
           ) : null}
 
           {runState === "completed" ? (
-            <p className="text-[11px] text-ink-4">Analysis complete.</p>
+            <p className="text-[11px] text-ink-4">Review complete.</p>
           ) : null}
 
           {runState === "cancelled" ? (
-            <p className="text-[11px] text-ink-4">Analysis was cancelled.</p>
+            <p className="text-[11px] text-ink-4">
+              Review stopped. You can start again whenever you’re ready.
+            </p>
           ) : null}
 
-          {isPartialOrFailed ? (
+          {runState === "partial" ? (
             <p className="text-[11px] text-ink-4">
-              Some correction packages failed. Use the Retry button to run them again.
+              Some sections couldn’t be analyzed. Your existing results are safe.
+            </p>
+          ) : null}
+
+          {runState === "failed" ? (
+            <p className="text-[11px] text-ink-4">
+              We couldn’t analyze this document. Check your connection and try again.
             </p>
           ) : null}
         </div>
