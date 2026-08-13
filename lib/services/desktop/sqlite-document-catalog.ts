@@ -28,7 +28,7 @@ import {
   type DesktopRetiredBindingRoot,
 } from "@/lib/services/desktop/tauri-commands"
 import type { ReconcileCommit } from "@/lib/services/desktop/workspace-reconciler"
-import { filenameToTitle } from "@/lib/desktop/document-naming"
+import { filenameToTitle, splitCanonicalPath } from "@/lib/desktop/document-naming"
 
 function toRecord(row: DesktopCatalogRow): DocumentCatalogRecord {
   return {
@@ -271,7 +271,7 @@ export class SqliteDocumentCatalog implements DocumentCatalog {
 }
 
 function toDualWriteInput(input: RegisterBindingInput): DesktopCatalogDualWriteInput {
-  const rootPath = input.binding.canonicalPath.slice(0, -(input.binding.relativePath.length + 1))
+  const { rootPath } = splitCanonicalPath(input.binding.canonicalPath)
   return {
     document: input.document,
     binding: { ...input.binding, rootPath, manifestVersion: 2, visibleAsWorkspace: false },

@@ -98,6 +98,10 @@ describe("desktop adapter boundary compliance", () => {
       const sourceWithoutComments = source
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/\/\/.*$/gm, "")
+        // Strip string literals so MIME types, log messages and URLs do not
+        // trigger false positives for forbidden global patterns (e.g. the
+        // canonical DOCX MIME contains "document.").
+        .replace(/`[^`]*`|"[^"]*"|'[^']*'/g, "")
       for (const pattern of forbiddenGlobalPatterns) {
         expect(
           sourceWithoutComments.includes(pattern),
