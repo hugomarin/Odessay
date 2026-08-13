@@ -2139,7 +2139,12 @@ export function EditorShell({
         }
 
         setWritingSlug(localWriting.slug)
-        if (!isDesktopRuntime()) {
+        if (isPerfHarness()) {
+          // ODE-389: a cold harness has no session, so a real navigation lands
+          // on /login and takes the editor down mid-test. Keep the URL in sync
+          // without leaving the harness route.
+          replaceEditorHistory(`/write/${localWriting.slug}`)
+        } else if (!isDesktopRuntime()) {
           router.replace(`/write/${localWriting.slug}`)
         }
       })()
@@ -5434,7 +5439,10 @@ export function EditorShell({
         saveState: "saved-local",
         hasPendingSync: false,
       })
-      if (!isDesktopRuntime()) {
+      if (isPerfHarness()) {
+        // ODE-389: same cold-harness guard as the other editor navigations.
+        replaceEditorHistory(`/write/${nextWritingId}`)
+      } else if (!isDesktopRuntime()) {
         router.push(`/write/${nextWritingId}`)
       }
     },
