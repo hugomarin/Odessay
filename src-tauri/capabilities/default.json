@@ -14,9 +14,6 @@
     "shell:allow-open",
     "dialog:allow-open",
     "dialog:allow-save",
-    "dialog:allow-confirm",
-    "dialog:allow-message",
-    "dialog:allow-ask",
     "updater:default",
     "process:allow-restart"
   ]
