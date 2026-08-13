@@ -7,6 +7,8 @@ const supabaseAuthMock = vi.hoisted(() => ({
 
 const ownershipMaybeSingleMock = vi.hoisted(() => vi.fn())
 const persistedBlocksEqMock = vi.hoisted(() => vi.fn())
+const persistedBlocksOrderMock = vi.hoisted(() => vi.fn())
+const persistedBlocksLimitMock = vi.hoisted(() => vi.fn())
 const deleteInMock = vi.hoisted(() => vi.fn())
 const upsertSingleMock = vi.hoisted(() => vi.fn())
 
@@ -27,7 +29,15 @@ const adminFromMock = vi.hoisted(() =>
     if (table === "correction_blocks") {
       return {
         select: vi.fn(() => ({
-          eq: persistedBlocksEqMock,
+          eq: (...args: unknown[]) => {
+            persistedBlocksEqMock(...args)
+            return {
+              order: (...orderArgs: unknown[]) => {
+                persistedBlocksOrderMock(...orderArgs)
+                return { limit: persistedBlocksLimitMock }
+              },
+            }
+          },
         })),
         delete: vi.fn(() => ({
           eq: vi.fn(() => ({
@@ -71,6 +81,8 @@ describe("POST /api/corrections/persist", () => {
     supabaseAuthMock.getUser.mockReset()
     ownershipMaybeSingleMock.mockReset()
     persistedBlocksEqMock.mockReset()
+    persistedBlocksOrderMock.mockReset()
+    persistedBlocksLimitMock.mockReset()
     deleteInMock.mockReset()
     upsertSingleMock.mockReset()
     adminFromMock.mockClear()
@@ -116,7 +128,7 @@ describe("POST /api/corrections/persist", () => {
       data: { user: { id: "user-1" } },
     })
     ownershipMaybeSingleMock.mockResolvedValue({ data: { id: "writing-1" }, error: null })
-    persistedBlocksEqMock.mockResolvedValue({ data: [], error: null })
+    persistedBlocksLimitMock.mockResolvedValue({ data: [], error: null })
     deleteInMock.mockResolvedValue({ error: null })
     upsertSingleMock.mockResolvedValue({ data: { id: "auto-correction:writing-1:blk-1" }, error: null })
 
@@ -146,6 +158,9 @@ describe("POST /api/corrections/persist", () => {
     expect(body.data.deletedIds).toEqual(["auto-correction:writing-1:blk-old"])
     expect(deleteInMock).toHaveBeenCalledWith("id", ["auto-correction:writing-1:blk-old"])
     expect(upsertSingleMock).toHaveBeenCalledTimes(1)
+    // ODE-389: the stale-candidate scan must stay bounded, newest blocks first.
+    expect(persistedBlocksOrderMock).toHaveBeenCalledWith("created_at", { ascending: false })
+    expect(persistedBlocksLimitMock).toHaveBeenCalledWith(500)
   })
 
   it("deletes stale logical versions when the same block shifts position after a manual edit", async () => {
@@ -153,7 +168,7 @@ describe("POST /api/corrections/persist", () => {
       data: { user: { id: "user-1" } },
     })
     ownershipMaybeSingleMock.mockResolvedValue({ data: { id: "writing-1" }, error: null })
-    persistedBlocksEqMock.mockResolvedValue({
+    persistedBlocksLimitMock.mockResolvedValue({
       data: [
         {
           id: "auto-correction:writing-1:blk-old",

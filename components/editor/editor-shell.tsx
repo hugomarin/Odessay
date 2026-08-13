@@ -303,7 +303,13 @@ function replaceEditorHistory(nextHref: string) {
     return
   }
 
-  window.history.replaceState(null, "", nextHref)
+  // ODE-389: Next 15's App Router patches `window.history.replaceState` to sync
+  // its own state, which turns this URL rewrite into a real RSC navigation to
+  // /write/<id>. On the perf harness that route has no session, so the server
+  // redirects to /login and the editor is replaced mid-test. Going through the
+  // unpatched prototype method updates the address bar only, which is all this
+  // helper ever wanted.
+  History.prototype.replaceState.call(window.history, null, "", nextHref)
 }
 
 const NotesPanel = lazy(() =>
@@ -412,10 +418,29 @@ const createWritingId = () => {
   throw new Error("Unable to generate a UUID for the writing.")
 }
 
-const isPerfHarness = () =>
-  typeof window !== "undefined" &&
-  window.location.pathname.startsWith("/perf/") &&
-  !new URLSearchParams(window.location.search).has("run-corrections")
+// ODE-389: the harness guard latches. `replaceEditorHistory` rewrites the URL
+// to /write/<id>, so re-reading `window.location` after the first guarded
+// navigation reports a non-harness path and the next navigation escapes to the
+// real router — which, on a cold harness with no session, lands on /login and
+// tears the editor down mid-test. Once the harness is observed it stays
+// observed for the lifetime of the page.
+let perfHarnessDetected = false
+
+const isPerfHarness = () => {
+  if (typeof window === "undefined") {
+    return false
+  }
+
+  if (perfHarnessDetected) {
+    return true
+  }
+
+  perfHarnessDetected =
+    window.location.pathname.startsWith("/perf/") &&
+    !new URLSearchParams(window.location.search).has("run-corrections")
+
+  return perfHarnessDetected
+}
 
 export function EditorShell({
   writingId,
@@ -2139,7 +2164,12 @@ export function EditorShell({
         }
 
         setWritingSlug(localWriting.slug)
-        if (!isDesktopRuntime()) {
+        if (isPerfHarness()) {
+          // ODE-389: a cold harness has no session, so a real navigation lands
+          // on /login and takes the editor down mid-test. Keep the URL in sync
+          // without leaving the harness route.
+          replaceEditorHistory(`/write/${localWriting.slug}`)
+        } else if (!isDesktopRuntime()) {
           router.replace(`/write/${localWriting.slug}`)
         }
       })()
@@ -5381,7 +5411,7 @@ export function EditorShell({
       const bodyJson = parseResult.success ? parseResult.snapshot.bodyJson : EMPTY_EDITOR_JSON
       const bodyText = parseResult.success ? parseResult.snapshot.bodyText : ""
       const nextTitle = isDesktopRuntime()
-        ? _path.split("/").pop()?.replace(/\.md$/i, "") || DESKTOP_UNTITLED_WRITING_TITLE
+        ? filenameToTitle(_path) || DESKTOP_UNTITLED_WRITING_TITLE
         : deriveAutoTitle(bodyText, nowIso)
 
       const record: WritingRecord = {
@@ -5434,7 +5464,10 @@ export function EditorShell({
         saveState: "saved-local",
         hasPendingSync: false,
       })
-      if (!isDesktopRuntime()) {
+      if (isPerfHarness()) {
+        // ODE-389: same cold-harness guard as the other editor navigations.
+        replaceEditorHistory(`/write/${nextWritingId}`)
+      } else if (!isDesktopRuntime()) {
         router.push(`/write/${nextWritingId}`)
       }
     },
