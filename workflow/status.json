@@ -3445,6 +3445,26 @@
       "commit": "5edcafe",
       "date": "2026-08-13",
       "notes": "SHIP completed with PR open for manual merge. catalog_apply_reconcile now resolves binding_roots by UNIQUE root_path before inserting and writes document_bindings with the resolved existing id, matching catalog_dual_write and preserving one physical-directory identity across reconciler/workspace writers. Regression proves two proposed root ids for the same path keep one row and the original manifest-root id. Evidence: Rust 49 passed/0 failed/1 ignored, typecheck PASS, lint PASS with 6 pre-existing editor-shell warnings, Vitest 190 files/1324 tests PASS, delivery gate PASS. Performance, Presentation and Network contracts not required."
+    },
+    {
+      "what": "Reconcile the remaining status.json rule contradiction in issue briefs [ODE-391]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-391",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-391/reconcile-the-remaining-statusjson-rule-contradiction-in-issue-briefs",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/375",
+      "commit": "b480207",
+      "date": "2026-08-13",
+      "notes": "SHIP completed with PR #375 open for manual merge. Removes the contradictory rule in skill-product-manager that required listing workflow/status.json in Files affected for every issue. Aligns with the current contract: feature branches do not touch workflow/status.json during BUILD/REVIEW; SHIP updates it on the feature branch per workflow/workflow.md. Search confirms a single coherent rule remains. Also fixes a stale test import from ODE-388's module move that blocked typecheck. Evidence: typecheck PASS, lint PASS with pre-existing editor-shell warnings, Vitest 191 files/1333 tests PASS, ops:delivery:gate PASS."
+    },
+    {
+      "what": "Make CI traceability validate the pull-request merge ref [ODE-392]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-392",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-392/make-ci-traceability-validate-the-pull-request-merge-ref",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/375",
+      "commit": "b480207",
+      "date": "2026-08-13",
+      "notes": "SHIP completed with PR #375 open for manual merge. Changes traceability-gates.yml to check out refs/pull/${{ github.event.pull_request.number }}/merge instead of github.event.pull_request.head.sha, so the gate validates the merged tree and no longer fails on drift that exists only in main. Keeps fetch-depth: 0 for drift history. No schema changes to workflow/status.json. Also includes mechanical fix of stale indexeddb-to-sqlite test import left by ODE-388. Evidence: YAML validated, typecheck PASS, lint PASS with pre-existing editor-shell warnings, Vitest 191 files/1333 tests PASS, ops:delivery:gate PASS."
     }
   ]
 }
