@@ -3465,6 +3465,26 @@
       "commit": "c49f61f",
       "date": "2026-08-13",
       "notes": "Shipped via wf-ship; PR abierto para merge manual. Reusa filenameToTitle en la apertura desktop; extrae components/sharing/preview-link-section.tsx y el helper compartido lib/utils/clipboard.ts, eliminando ShareLinkState local en favor de PreviewLinkState canonico; acota resolveStalePersistedBlockIds a 500 filas ordenadas por created_at desc. El fix de estabilidad e2e llego a causa raiz: Next 15 parchea window.history.replaceState y convertia el rewrite de URL del harness en una navegacion RSC a /write/<id>, que redirige a /login server-side; replaceEditorHistory usa ahora History.prototype.replaceState y el guard isPerfHarness latchea. Voice recorder e2e 5/5 (antes 1/5). typecheck PASS; lint PASS con 6 warnings preexistentes; Vitest 189/190 archivos con desk-activity.test.ts fallando por zona horaria tambien en main; delivery gate PASS."
+    },
+    {
+      "what": "fix(workspace): preserve cataloged bindings under discovery exclusions [ODE-418]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-418",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-418/workspace-sync-scans-dependency-directories-and-floods-the-worktree",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/378",
+      "commit": "4cac8e7",
+      "date": "2026-08-13",
+      "notes": "Shipped via wf-ship with PR open for manual merge. The Rust discovery contract excludes dependency/build directories while traversing only manifest-bound paths inside excluded trees, preserving the existing UUID and preventing new sibling discovery. Tests cover all minimum exclusions plus a mixed bound/unbound node_modules fixture. Typecheck PASS; lint PASS with 6 pre-existing warnings; Vitest 191 files/1342 tests PASS; Rust 51 passed/1 ignored; delivery gate PASS."
+    },
+    {
+      "what": "fix(workspace): deduplicate reconciliation and preserve last good tree [ODE-419]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-419",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-419/workspace-worktree-fila-duplicada-al-reconciliar-un-archivo-y-error",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/378",
+      "commit": "4cac8e7",
+      "date": "2026-08-13",
+      "notes": "Shipped via wf-ship in the shared ODE-418/ODE-419 PR. Contextual refresh replaces an unreconciled row in place when the catalog resolves its UUID, uses UUID-backed React keys, coalesces catalog bursts, and keeps the last good tree visible when background refresh fails. Performance gate: 13 PASS, 1 WARN within threshold, 0 required failures, 0 long tasks; delivery gate PASS."
     }
   ]
 }
