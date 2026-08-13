@@ -1,9 +1,12 @@
 import { execFile } from "node:child_process"
 import fs from "node:fs/promises"
+import { createServer } from "node:http"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
+
+import type { IncomingMessage, ServerResponse } from "node:http"
 
 const execFileAsync = promisify(execFile)
 const repoRoot = path.resolve(__dirname, "..")
@@ -37,6 +40,75 @@ async function createBackup(root: string) {
   tempRoots.push(backupDir)
   await runJson(backupScript, ["backup", "--workspace-root", root, "--backup-dir", backupDir])
   return backupDir
+}
+
+function parseRequestBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on("data", (chunk) => chunks.push(chunk))
+    req.on("end", () => {
+      try {
+        const raw = Buffer.concat(chunks).toString("utf8")
+        resolve(raw ? JSON.parse(raw) : null)
+      } catch (error) {
+        reject(error)
+      }
+    })
+    req.on("error", reject)
+  })
+}
+
+interface FakeServer {
+  url: string
+  requests: { method: string; path: string; body: unknown }[]
+  close: () => Promise<void>
+}
+
+function createFakeSupabaseServer(
+  handler: (req: IncomingMessage, res: ServerResponse, body: unknown) => void | Promise<void>,
+): Promise<FakeServer> {
+  const requests: FakeServer["requests"] = []
+  const server = createServer(async (req, res) => {
+    const body = await parseRequestBody(req)
+    requests.push({ method: req.method ?? "GET", path: req.url ?? "/", body })
+    await handler(req, res, body)
+  })
+  return new Promise((resolve, reject) => {
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address()
+      if (!address || typeof address === "string") {
+        reject(new Error("Failed to bind fake server"))
+        return
+      }
+      resolve({
+        url: `http://127.0.0.1:${address.port}`,
+        requests,
+        close: () => new Promise((res, rej) => server.close((err) => (err ? rej(err) : res()))),
+      })
+    })
+    server.on("error", reject)
+  })
+}
+
+async function runWithCloudServer(
+  script: string,
+  args: string[],
+  workspaceRoot: string,
+  handler: (req: IncomingMessage, res: ServerResponse, body: unknown) => void | Promise<void>,
+) {
+  const server = await createFakeSupabaseServer(handler)
+  tempRoots.push(workspaceRoot)
+  const envPath = path.join(workspaceRoot, ".env.cloud-test")
+  await fs.writeFile(
+    envPath,
+    `NEXT_PUBLIC_SUPABASE_URL=${server.url}\nSUPABASE_SERVICE_ROLE_KEY=fake-service-role-key\n`,
+    "utf8",
+  )
+  try {
+    return { result: await runJson(script, [...args, "--env", envPath, "--cloud"]), requests: server.requests }
+  } finally {
+    await server.close()
+  }
 }
 
 afterEach(async () => {
@@ -362,5 +434,225 @@ describe("identity harvest scripts", () => {
     await expect(fs.readFile(path.join(root, "letter.md"), "utf8")).resolves.toBe(
       "---\nid: writing-id\n---\n\nChanged\n",
     )
+  })
+
+  it("rejects unknown arguments and missing values in harvest-ids", async () => {
+    await expect(
+      execFileAsync("node", [harvestScript, "--workspace-root"], { cwd: repoRoot }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Missing value for --workspace-root"),
+    })
+
+    await expect(
+      execFileAsync("node", [harvestScript, "--unknown-flag"], { cwd: repoRoot }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Unknown argument: --unknown-flag"),
+    })
+
+    await expect(
+      execFileAsync("node", [harvestScript, "--env", "--apply"], { cwd: repoRoot }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Missing value for --env"),
+    })
+  })
+
+  it("rejects unknown arguments and missing values in clean-frontmatter", async () => {
+    await expect(
+      execFileAsync("node", [cleanScript, "--backup-dir"], { cwd: repoRoot }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Missing value for --backup-dir"),
+    })
+
+    await expect(
+      execFileAsync("node", [cleanScript, "positional-root"], { cwd: repoRoot }),
+    ).rejects.toMatchObject({
+      stderr: expect.stringContaining("Unknown argument: positional-root"),
+    })
+  })
+
+  it("harvest-ids --cloud dry-run queries cloud rows without writing", async () => {
+    const root = await makeTempWorkspace()
+    await fs.writeFile(
+      path.join(root, "letter.md"),
+      "---\nid: writing-from-frontmatter\n---\n\nHello\n",
+      "utf8",
+    )
+
+    const { result, requests } = await runWithCloudServer(
+      harvestScript,
+      ["--workspace-root", root],
+      root,
+      (_req, res, _body) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify([{ id: "writing-from-frontmatter", content_hash: "old-hash" }]))
+      },
+    )
+
+    expect(result.cloud).toMatchObject({
+      enabled: true,
+      existing: 1,
+      missing: 0,
+      updated: [],
+      inserted: [],
+    })
+    expect(requests.some((r) => r.method === "GET" && r.path.includes("/rest/v1/writings"))).toBe(true)
+    expect(requests.some((r) => r.method === "PATCH")).toBe(false)
+  })
+
+  it("harvest-ids --cloud --apply updates existing cloud rows", async () => {
+    const root = await makeTempWorkspace()
+    await fs.writeFile(
+      path.join(root, "letter.md"),
+      "---\nid: writing-from-frontmatter\n---\n\nHello\n",
+      "utf8",
+    )
+    const backupDir = await createBackup(root)
+
+    const { result } = await runWithCloudServer(
+      harvestScript,
+      ["--workspace-root", root, "--apply", "--backup-dir", backupDir, "--author-id", "a1b2c3d4-0001-0001-0001-000000000001"],
+      root,
+      (req, res, body) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        if (req.method === "GET") {
+          res.end(JSON.stringify([{ id: "writing-from-frontmatter", content_hash: "old-hash" }]))
+          return
+        }
+        if (req.method === "PATCH") {
+          expect(body).toMatchObject({
+            content_hash: expect.stringMatching(/^blake3:[0-9a-f]{64}$/),
+          })
+          res.end("[]")
+          return
+        }
+        res.end("[]")
+      },
+    )
+
+    expect(result.cloud).toMatchObject({
+      enabled: true,
+      existing: 1,
+      missing: 0,
+      updated: ["writing-from-frontmatter"],
+      inserted: [],
+    })
+  })
+
+  it("clean-frontmatter --cloud dry-run checks cloud rows without writing", async () => {
+    const root = await makeTempWorkspace()
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "letter.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(
+      path.join(root, "letter.md"),
+      "---\nid: writing-id\nslug: hello\nstatus: draft\nvisibility: private\nversion: 2\n---\n\nHello\n",
+      "utf8",
+    )
+
+    const { result, requests } = await runWithCloudServer(
+      cleanScript,
+      ["--workspace-root", root],
+      root,
+      (_req, res, _body) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end(JSON.stringify([{ id: "writing-id", slug: "hello", status: "draft", visibility: "private", version: 2 }]))
+      },
+    )
+
+    expect(result.summary).toMatchObject({ total: 1, changed: 1, failed: 0 })
+    expect(result.cloud).toMatchObject({
+      enabled: true,
+      checked: 1,
+      missing: [],
+      updated: [],
+      skipped: [],
+    })
+    expect(requests.some((r) => r.method === "GET" && r.path.includes("/rest/v1/writings"))).toBe(true)
+    expect(requests.some((r) => r.method === "PATCH")).toBe(false)
+  })
+
+  it("clean-frontmatter --cloud --apply updates cloud metadata", async () => {
+    const root = await makeTempWorkspace()
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "letter.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(
+      path.join(root, "letter.md"),
+      "---\nid: writing-id\nslug: hello\nstatus: draft\nvisibility: private\nversion: 2\n---\n\nHello\n",
+      "utf8",
+    )
+    const backupDir = await createBackup(root)
+
+    const patched: unknown[] = []
+    const { result } = await runWithCloudServer(
+      cleanScript,
+      ["--workspace-root", root, "--apply", "--backup-dir", backupDir],
+      root,
+      (req, res, body) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        if (req.method === "GET") {
+          res.end(JSON.stringify([{ id: "writing-id", slug: "hello", status: "draft", visibility: "private", version: 2 }]))
+          return
+        }
+        if (req.method === "PATCH") {
+          patched.push(body)
+          res.end("[]")
+          return
+        }
+        res.end("[]")
+      },
+    )
+
+    expect(result.cloud).toMatchObject({
+      enabled: true,
+      checked: 1,
+      missing: [],
+      updated: ["writing-id"],
+      skipped: [],
+    })
+    expect(patched).toHaveLength(1)
+    expect(patched[0]).toMatchObject({
+      slug: "hello",
+      status: "draft",
+      visibility: "private",
+      version: 2,
+    })
+  })
+
+  it("clean-frontmatter --cloud fails when cloud writing is missing", async () => {
+    const root = await makeTempWorkspace()
+    await fs.mkdir(path.join(root, ".odessay"), { recursive: true })
+    await fs.writeFile(
+      path.join(root, ".odessay/index.json"),
+      JSON.stringify({ version: 1, selectedPaths: [], files: { "letter.md": { id: "writing-id" } } }),
+      "utf8",
+    )
+    await fs.writeFile(
+      path.join(root, "letter.md"),
+      "---\nid: writing-id\nstatus: draft\n---\n\nHello\n",
+      "utf8",
+    )
+
+    const { result } = await runWithCloudServer(
+      cleanScript,
+      ["--workspace-root", root],
+      root,
+      (_req, res, _body) => {
+        res.writeHead(200, { "Content-Type": "application/json" })
+        res.end("[]")
+      },
+    )
+
+    expect(result.summary).toMatchObject({ total: 1, changed: 1, failed: 1 })
+    expect(result.workspaces[0].docs[0]).toMatchObject({
+      status: "failed",
+      failureReason: expect.stringContaining("missing cloud writing row"),
+    })
   })
 })
