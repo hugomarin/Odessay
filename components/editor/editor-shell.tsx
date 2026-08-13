@@ -3832,6 +3832,7 @@ export function EditorShell({
     retryFailedPackages: retryFailedCorrectionPackages,
     cancelAnalysis: cancelCorrectionAnalysis,
   } = useManualCorrections({
+    currentWritingId,
     editorRef: editorInstanceRef,
     currentWritingIdRef,
     titleRef,

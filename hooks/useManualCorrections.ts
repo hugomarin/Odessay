@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { Editor } from "@tiptap/core"
 import { collectCorrectionBlocks, getCurrentCorrectionBlock, type CorrectionTriggerBlock } from "@/lib/editor/correction-trigger-plugin"
 import {
@@ -40,6 +40,7 @@ type CorrectionToast = {
 }
 
 type ManualCorrectionsInput = {
+  currentWritingId: string | null
   editorRef: React.RefObject<Editor | null>
   currentWritingIdRef: React.RefObject<string | null>
   titleRef: React.RefObject<string>
@@ -112,9 +113,23 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
 
   const runIdRef = useRef<unknown>(null)
   const cancelledRef = useRef(false)
+  const previousWritingIdRef = useRef(input.currentWritingId)
 
   const inputRef = useRef(input)
   inputRef.current = input
+
+  useEffect(() => {
+    if (previousWritingIdRef.current === input.currentWritingId) {
+      return
+    }
+
+    previousWritingIdRef.current = input.currentWritingId
+    cancelledRef.current = true
+    runIdRef.current = null
+    setFailedPackages([])
+    setProgress({ completedBlocks: 0, totalBlocks: 0 })
+    setRunState("idle")
+  }, [input.currentWritingId])
 
   const isCurrentRun = useCallback((runId: unknown) => {
     return !cancelledRef.current && runIdRef.current === runId
@@ -144,6 +159,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
       result: Awaited<ReturnType<ReturnType<typeof getAIService>["reviewPublication"]>>,
       requestStartedAt: number,
       requestWritingId: string,
+      runId: unknown,
     ): Promise<{ success: boolean; suggestionCount: number }> => {
       if (result.error || !result.data) {
         return { success: false, suggestionCount: 0 }
@@ -152,7 +168,11 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
       const { current: input } = inputRef
       const editor = input.editorRef.current
 
-      if (!editor) {
+      if (
+        !editor ||
+        !isCurrentRun(runId) ||
+        input.currentWritingIdRef.current !== requestWritingId
+      ) {
         return { success: false, suggestionCount: 0 }
       }
 
@@ -183,6 +203,13 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
       let suggestionCount = 0
 
       for (const block of pkg.blocks) {
+        if (
+          !isCurrentRun(runId) ||
+          input.currentWritingIdRef.current !== requestWritingId
+        ) {
+          return { success: false, suggestionCount }
+        }
+
         const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
         if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
@@ -230,7 +257,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
 
       return { success: true, suggestionCount }
     },
-    [],
+    [isCurrentRun],
   )
 
   const runPackages = useCallback(
@@ -320,6 +347,7 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
             result,
             requestStartedAt,
             requestWritingId,
+            runId,
           )
 
           if (!success) {
@@ -374,8 +402,13 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
     const allBlocks = collectCorrectionBlocks(editor.state.doc).filter(
       (block) => block.text.trim().length > 0,
     )
-    const { packages } = packageCorrectionBlocks(allBlocks)
-    const totalBlocks = packages.reduce((sum, pkg) => sum + pkg.blocks.length, 0)
+    const { packages, skippedBlocks } = packageCorrectionBlocks(allBlocks)
+    const skippedPackages: CorrectionPackage<CorrectionTriggerBlock>[] = skippedBlocks.map((block) => ({
+      blocks: [block],
+      estimatedInputTokens: 0,
+      estimatedOutputTokens: 0,
+    }))
+    const totalBlocks = allBlocks.length
     let completedBlocks = 0
 
     const cachedBlockHashes = new Set<string>()
@@ -403,20 +436,27 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
       .filter((pkg) => pkg.blocks.length > 0)
 
     if (pendingPackages.length === 0) {
-      setProgress({ completedBlocks: totalBlocks, totalBlocks })
-      setRunState("completed")
+      setProgress({ completedBlocks: totalBlocks - skippedBlocks.length, totalBlocks })
+      setFailedPackages(skippedPackages)
+      setRunState(skippedPackages.length > 0 ? "partial" : "completed")
       input.showCorrectionToast(
         {
-          phase: "complete",
-          completed: totalBlocks,
+          phase: skippedPackages.length > 0 ? "error" : "complete",
+          completed: totalBlocks - skippedBlocks.length,
           total: totalBlocks,
+          message: skippedPackages.length > 0
+            ? "Some blocks exceeded the correction limits. Retry to continue."
+            : undefined,
         },
-        2000,
+        skippedPackages.length > 0 ? 5000 : 2000,
       )
       return
     }
 
-    const failed = await runPackages(pendingPackages, allBlocks, runId, totalBlocks, completedBlocks, false)
+    const failed = [
+      ...skippedPackages,
+      ...await runPackages(pendingPackages, allBlocks, runId, totalBlocks, completedBlocks, false),
+    ]
 
     if (cancelledRef.current) {
       return
