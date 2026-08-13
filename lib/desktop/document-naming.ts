@@ -47,6 +47,21 @@ export function filenameToTitle(filename: string): string {
 }
 
 /**
+ * Split an absolute canonical path into its root directory and relative file
+ * segment. The separator is the last slash or backslash. This is a pure string
+ * operation: it does not access the filesystem.
+ *
+ * Returns `{ rootPath: ".", relativePath: path }` when the path has no parent
+ * segment, so callers never receive an empty rootPath.
+ */
+export function splitCanonicalPath(path: string): { rootPath: string; relativePath: string } {
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"))
+  return separator < 0
+    ? { rootPath: ".", relativePath: path }
+    : { rootPath: path.slice(0, separator), relativePath: path.slice(separator + 1) }
+}
+
+/**
  * Resolve a unique filename inside a directory, appending " 2", " 3", … when
  * the desired name already exists. Comparison is case-insensitive to respect
  * case-insensitive filesystems (APFS/HFS+/NTFS).
