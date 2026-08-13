@@ -107,6 +107,26 @@
   },
   "built": [
     {
+      "what": "Fix DOCX export MIME type built from a truncated constant [ODE-386]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-386",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-386/fix-docx-export-mime-type-built-from-a-truncated-constant",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/374",
+      "commit": "69fd0f2",
+      "date": "2026-08-13",
+      "notes": "Replaces the truncated array-joined DOCX MIME constant with the canonical literal and adds unit tests for MIME-only DOCX detection. Also adjusts the desktop adapter boundary test to ignore string literals when scanning for forbidden browser globals. typecheck PASS, lint PASS (pre-existing editor-shell warnings only), 191 vitest files / 1333 tests PASS, cargo build PASS, ops:delivery:gate PASS."
+    },
+    {
+      "what": "Desktop catalog cleanup: unused capabilities, unbounded title map, fragile rootPath, dead migration module [ODE-388]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-388",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-388/desktop-catalog-cleanup-unused-capabilities-unbounded-title-map",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/374",
+      "commit": "69fd0f2",
+      "date": "2026-08-13",
+      "notes": "Bundle of four low-risk cleanups: removes unused Tauri dialog capabilities, caps the catalog title event cache with LRU eviction and adds a clear hook, derives rootPath with a canonical split helper instead of fragile slicing, and moves the dead IndexedDB-to-SQLite migration module to scripts/migrations as historical tooling. Updates stale docstring in desk-catalog-source. typecheck PASS, lint PASS (pre-existing editor-shell warnings only), 191 vitest files / 1333 tests PASS, cargo build PASS, ops:delivery:gate PASS."
+    },
+    {
       "what": "Build Settings archived writings with download, restore, and permanent cloud deletion [ODE-407]",
       "phase": "Fase 9 — Workspace: Filesystem y Nube",
       "issue": "ODE-407",
