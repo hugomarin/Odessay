@@ -9,6 +9,18 @@ const WORKSPACE_DIR_NAME: &str = ".odessay";
 const LEGACY_WORKSPACE_DIR_NAME: &str = concat!(".ody", "ssey");
 const WORKSPACE_INDEX_FILE_NAME: &str = "index.json";
 const CONTENT_HASH_PREFIX: &str = "blake3";
+const DISCOVERY_EXCLUDED_DIRECTORIES: &[&str] = &[
+    ".git",
+    ".next",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "target",
+    "venv",
+];
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct WorkspaceFileSnapshot {
@@ -121,8 +133,7 @@ fn should_ignore_entry(name: &str, is_dir: bool) -> bool {
     if name == WORKSPACE_DIR_NAME
         || name == LEGACY_WORKSPACE_DIR_NAME
         || name == ".trash"
-        || name == ".git"
-        || name == "node_modules"
+        || (is_dir && DISCOVERY_EXCLUDED_DIRECTORIES.contains(&name))
     {
         return true;
     }
@@ -246,11 +257,14 @@ pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String>
     let existing_index = read_workspace_index(&index_path)?;
     let mut files = Vec::new();
     let mut folder_count = 0usize;
+    let bound_paths = existing_index.files.keys().cloned().collect::<HashSet<_>>();
     visit_workspace(
         &canonical_root,
         &canonical_root,
         &mut files,
         &mut folder_count,
+        &bound_paths,
+        false,
     )?;
 
     for file in &mut files {
@@ -259,6 +273,7 @@ pub fn workspace_inspect(root_path: String) -> Result<WorkspaceSnapshot, String>
             file.content_hash = entry.content_hash.clone().unwrap_or_default();
         }
     }
+    folder_count = count_included_folders(&files);
     files.sort_by(|a, b| b.modified_at.cmp(&a.modified_at));
     let updated_at = files.first().map(|file| file.modified_at);
     let name = canonical_root
@@ -381,11 +396,14 @@ pub fn workspace_unbound_paths(
     };
     let mut files = Vec::new();
     let mut folder_count = 0usize;
+    let bound_paths = existing_index.files.keys().cloned().collect::<HashSet<_>>();
     visit_workspace(
         &canonical_root,
         &canonical_root,
         &mut files,
         &mut folder_count,
+        &bound_paths,
+        false,
     )?;
     let mut paths = files
         .into_iter()
@@ -429,11 +447,14 @@ pub fn workspace_sync(
 
     let mut files = Vec::new();
     let mut folder_count = 0usize;
+    let bound_paths = existing_index.files.keys().cloned().collect::<HashSet<_>>();
     visit_workspace(
         &canonical_root,
         &canonical_root,
         &mut files,
         &mut folder_count,
+        &bound_paths,
+        false,
     )?;
 
     // An exact-file selection follows a Finder rename by inode. Update the scope
@@ -672,6 +693,8 @@ fn visit_workspace(
     current: &Path,
     files: &mut Vec<WorkspaceFileSnapshot>,
     folder_count: &mut usize,
+    bound_paths: &HashSet<String>,
+    bound_only: bool,
 ) -> Result<(), String> {
     let entries = fs::read_dir(current).map_err(|e| format!("workspace_sync read_dir: {e}"))?;
 
@@ -684,25 +707,43 @@ fn visit_workspace(
             .metadata()
             .map_err(|e| format!("workspace_sync metadata: {e}"))?;
 
-        if should_ignore_entry(&name, metadata.is_dir()) {
-            continue;
-        }
-
-        if metadata.is_dir() {
-            *folder_count += 1;
-            visit_workspace(root, &path, files, folder_count)?;
-            continue;
-        }
-
-        if !is_markdown_file(&path) {
-            continue;
-        }
-
         let relative_path = path
             .strip_prefix(root)
             .map_err(|e| format!("workspace_sync relative path: {e}"))?
             .to_string_lossy()
             .replace('\\', "/");
+
+        let has_bound_descendant = metadata.is_dir()
+            && bound_paths
+                .iter()
+                .any(|bound| bound.starts_with(&format!("{relative_path}/")));
+
+        if should_ignore_entry(&name, metadata.is_dir()) {
+            // Exclusions govern admission, not durable identity. Traverse an
+            // excluded subtree only along paths already present in the manifest
+            // so those bindings remain observable without discovering siblings.
+            if has_bound_descendant
+                && name != WORKSPACE_DIR_NAME
+                && name != LEGACY_WORKSPACE_DIR_NAME
+                && name != ".trash"
+            {
+                visit_workspace(root, &path, files, folder_count, bound_paths, true)?;
+            }
+            continue;
+        }
+
+        if metadata.is_dir() {
+            if bound_only && !has_bound_descendant {
+                continue;
+            }
+            *folder_count += 1;
+            visit_workspace(root, &path, files, folder_count, bound_paths, bound_only)?;
+            continue;
+        }
+
+        if !is_markdown_file(&path) || (bound_only && !bound_paths.contains(&relative_path)) {
+            continue;
+        }
         let modified_at = metadata
             .modified()
             .ok()
@@ -805,6 +846,80 @@ mod tests {
 
         assert_eq!(snapshot.files.len(), 1);
         assert_eq!(snapshot.files[0].relative_path, "visible.md");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_excludes_dependency_directories_from_discovery() {
+        let root = temp_workspace_root("exclude-dependency-directories");
+        for directory in DISCOVERY_EXCLUDED_DIRECTORIES {
+            let path = root.join(directory);
+            fs::create_dir_all(&path).expect("create excluded directory");
+            fs::write(path.join("noise.md"), directory).expect("write excluded markdown");
+        }
+        fs::write(root.join("visible.md"), "visible").expect("write visible markdown");
+
+        let snapshot = workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("sync workspace with excluded directories");
+
+        assert_eq!(snapshot.file_count, 1);
+        assert_eq!(snapshot.files[0].relative_path, "visible.md");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_sync_preserves_bound_file_inside_excluded_directory_only() {
+        let root = temp_workspace_root("preserve-bound-excluded-file");
+        let excluded = root.join("node_modules").join("package");
+        fs::create_dir_all(&excluded).expect("create excluded package directory");
+        let bound_path = excluded.join("bound.md");
+        fs::write(&bound_path, "bound").expect("write bound markdown");
+        fs::write(excluded.join("noise.md"), "noise").expect("write unbound neighbor");
+
+        let durable_id = "11111111-1111-4111-8111-111111111111";
+        let workspace_dir = prepare_workspace_index_dir(&root).expect("prepare workspace index");
+        let manifest = WorkspaceIndexDocument {
+            version: WORKSPACE_INDEX_VERSION,
+            binding_root_id: Some("22222222-2222-4222-8222-222222222222".into()),
+            selected_paths: Vec::new(),
+            files: HashMap::from([(
+                "node_modules/package/bound.md".into(),
+                WorkspaceIndexEntry {
+                    id: durable_id.into(),
+                    inode: inode_for_path(&bound_path),
+                    content_hash: Some(
+                        content_hash_for_markdown_file(&bound_path).expect("hash bound file"),
+                    ),
+                    last_seen: 0,
+                    size: fs::metadata(&bound_path).expect("bound metadata").len(),
+                },
+            )]),
+        };
+        write_workspace_index_atomic(&workspace_dir, &manifest).expect("write legacy binding");
+
+        let snapshot = super::workspace_sync(root.to_string_lossy().to_string(), None, None)
+            .expect("sync existing binding under exclusion");
+
+        assert_eq!(snapshot.file_count, 1);
+        assert_eq!(
+            snapshot.files[0].relative_path,
+            "node_modules/package/bound.md"
+        );
+        assert_eq!(snapshot.files[0].id, durable_id);
+        let next_manifest = read_workspace_index(
+            &root
+                .join(WORKSPACE_DIR_NAME)
+                .join(WORKSPACE_INDEX_FILE_NAME),
+        )
+        .expect("read rewritten manifest");
+        assert_eq!(next_manifest.files.len(), 1);
+        assert_eq!(
+            next_manifest.files["node_modules/package/bound.md"].id,
+            durable_id
+        );
+        assert!(!next_manifest
+            .files
+            .contains_key("node_modules/package/noise.md"));
         cleanup(&root);
     }
 

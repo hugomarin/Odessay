@@ -255,9 +255,34 @@ export async function refreshContextualWorkspaceDocuments(
 
   const changed = new Set(changedDocumentIds)
   const kept = new Set<string>()
+  const changedByPath = new Map(
+    Array.from(changed)
+      .map((id) => {
+        const entry = byId.get(id)
+        return entry ? ([entry.relativePath, id] as const) : null
+      })
+      .filter((entry): entry is readonly [string, string] => entry !== null),
+  )
   const documents: ContextualWorkspaceDocument[] = []
 
   for (const document of workspace.documents) {
+    const reconciledId = !document.id
+      ? changedByPath.get(document.relativePath)
+      : undefined
+    if (reconciledId) {
+      const entry = byId.get(reconciledId)
+      if (entry) {
+        kept.add(reconciledId)
+        documents.push({
+          id: reconciledId,
+          name: basename(entry.relativePath),
+          relativePath: entry.relativePath,
+          state: entry.state,
+          openable: true,
+        })
+        continue
+      }
+    }
     if (document.id) kept.add(document.id)
     if (!document.id || !changed.has(document.id)) {
       documents.push(document)

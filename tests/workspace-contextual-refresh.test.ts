@@ -146,6 +146,20 @@ describe("refreshContextualWorkspaceDocuments", () => {
     ).toBe("02-discovery/nuevo.md")
   })
 
+  it("replaces an unreconciled row when the catalog assigns its UUID", async () => {
+    loadWorkspaceDocumentJoin.mockResolvedValue(
+      join([...READY_JOIN, [`${ROOT}/borrador.md`, NEW_ID, "local"]]),
+    )
+
+    const result = await refreshContextualWorkspaceDocuments(workspace, [NEW_ID])
+    const rows = result?.documents.filter(
+      (entry) => entry.relativePath === "borrador.md",
+    )
+
+    expect(rows).toHaveLength(1)
+    expect(rows?.[0]).toMatchObject({ id: NEW_ID, openable: true, state: "local" })
+  })
+
   it("drops a document that left the root", async () => {
     loadWorkspaceDocumentJoin.mockResolvedValue(
       join([[`${ROOT}/03-analisis/analisis.md`, ACTIVE_ID, "synced"]]),

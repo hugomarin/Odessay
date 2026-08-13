@@ -96,6 +96,7 @@ describe("WorkspaceTreePanel", () => {
     loadContextualWorkspace.mockReset();
     refreshContextualWorkspaceDocuments.mockReset();
     refreshContextualWorkspaceDocuments.mockResolvedValue(null);
+    vi.spyOn(console, "error").mockImplementation(() => {});
     catalogListeners.clear();
     container = document.createElement("div");
     document.body.append(container);
@@ -106,6 +107,7 @@ describe("WorkspaceTreePanel", () => {
     act(() => root.unmount());
     container.remove();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   const render = (
@@ -283,6 +285,30 @@ describe("WorkspaceTreePanel", () => {
     await settle();
 
     expect(refreshContextualWorkspaceDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the last good tree visible when a background refresh fails", async () => {
+    loadContextualWorkspace.mockResolvedValue(found([activeDocument]));
+    refreshContextualWorkspaceDocuments.mockRejectedValueOnce(
+      new Error("catalog temporarily unavailable"),
+    );
+
+    render(ACTIVE_ID);
+    await settle();
+    act(() => emitCatalogChange([ACTIVE_ID]));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    await settle();
+
+    expect(container.querySelector('[role="tree"]')).not.toBeNull();
+    expect(container.textContent).toContain("aplyca-analisis");
+    expect(container.textContent).not.toContain("catalog temporarily unavailable");
+    expect(container.textContent).not.toContain("Reintentar");
+    expect(console.error).toHaveBeenCalledWith(
+      "Workspace background refresh failed",
+      expect.any(Error),
+    );
   });
 
   it("never rescans the root for discrete autosaves of the active writing", async () => {
