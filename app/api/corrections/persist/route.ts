@@ -89,15 +89,28 @@ async function ensureOwnedWriting(supabase: ReturnType<typeof createAdminClient>
   return { ok: true as const };
 }
 
+/**
+ * Upper bound on persisted correction blocks scanned when looking for stale
+ * siblings of the block being written. A document's live block set is far
+ * smaller than this; the cap only trims legacy rows that can no longer match.
+ */
+const STALE_BLOCK_CANDIDATE_LIMIT = 500
+
 async function resolveStalePersistedBlockIds(
   supabase: ReturnType<typeof createAdminClient>,
   writingId: string,
   block: z.infer<typeof persistedCorrectionBlockSchema>,
 ) {
+  // ODE-389: the candidate scan used to pull every persisted block for the
+  // writing. Legacy writings can accumulate thousands of rows, so the scan is
+  // bounded and ordered newest-first — staleness only ever resolves against
+  // recent blocks, and older rows are cascade-deleted with the writing anyway.
   const { data, error } = await supabase
     .from("correction_blocks")
     .select("id, block_id, block_hash")
     .eq("writing_id", writingId)
+    .order("created_at", { ascending: false })
+    .limit(STALE_BLOCK_CANDIDATE_LIMIT)
 
   if (error) {
     return { data: null, error }
