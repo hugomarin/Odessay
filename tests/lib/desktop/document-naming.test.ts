@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   filenameToTitle,
   resolveUniqueFilename,
+  splitCanonicalPath,
   titleToFilename,
 } from "@/lib/desktop/document-naming"
 
@@ -39,6 +40,29 @@ describe("document-naming", () => {
     it("falls back to Untitled for empty or whitespace-only titles", () => {
       expect(titleToFilename("")).toBe("Untitled.md")
       expect(titleToFilename("   ")).toBe("Untitled.md")
+    })
+  })
+
+  describe("splitCanonicalPath", () => {
+    it("splits POSIX paths into root and relative segments", () => {
+      expect(splitCanonicalPath("/home/user/Documents/Carta.md")).toEqual({
+        rootPath: "/home/user/Documents",
+        relativePath: "Carta.md",
+      })
+    })
+
+    it("splits Windows paths into root and relative segments", () => {
+      expect(splitCanonicalPath("C:\\Users\\user\\Documents\\Carta.md")).toEqual({
+        rootPath: "C:\\Users\\user\\Documents",
+        relativePath: "Carta.md",
+      })
+    })
+
+    it("returns a sentinel root for a bare filename", () => {
+      expect(splitCanonicalPath("Carta.md")).toEqual({
+        rootPath: ".",
+        relativePath: "Carta.md",
+      })
     })
   })
 
