@@ -7,6 +7,7 @@ import {
   collectMarkdownFiles,
   loadEnvFile,
   mintWritingId,
+  parseCliArgs,
   pathExists,
   printJson,
   readJson,
@@ -16,38 +17,31 @@ import {
 } from "./lib.mjs";
 
 function parseArgs(argv) {
-  const options = {
-    roots: [],
-    envPath: ".env.local",
-    apply: false,
-    cloud: false,
-    authorId: null,
-    backupDir: null,
-    json: false,
-  };
+  const { help, options } = parseCliArgs(argv, {
+    defaults: {
+      roots: [],
+      envPath: ".env.local",
+      apply: false,
+      cloud: false,
+      authorId: null,
+      backupDir: null,
+      json: false,
+    },
+    flags: {
+      "--workspace-root": { type: "value", key: "roots", multiple: true },
+      "--env": { type: "value", key: "envPath" },
+      "--author-id": { type: "value", key: "authorId" },
+      "--backup-dir": { type: "value", key: "backupDir" },
+      "--apply": { type: "boolean", key: "apply" },
+      "--cloud": { type: "boolean", key: "cloud" },
+      "--json": { type: "boolean", key: "json" },
+    },
+    allowPositionals: false,
+  });
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--workspace-root") {
-      options.roots.push(argv[++index]);
-    } else if (arg === "--env") {
-      options.envPath = argv[++index];
-    } else if (arg === "--author-id") {
-      options.authorId = argv[++index];
-    } else if (arg === "--backup-dir") {
-      options.backupDir = argv[++index];
-    } else if (arg === "--apply") {
-      options.apply = true;
-    } else if (arg === "--cloud") {
-      options.cloud = true;
-    } else if (arg === "--json") {
-      options.json = true;
-    } else if (arg === "-h" || arg === "--help") {
-      printHelp();
-      process.exit(0);
-    } else {
-      options.roots.push(arg);
-    }
+  if (help) {
+    printHelp();
+    process.exit(0);
   }
 
   if (options.roots.length === 0) {
@@ -348,10 +342,23 @@ async function main() {
     { total: 0, harvested: 0, minted: 0, alreadyRegistered: 0, failed: 0 },
   );
 
+  const cloudSummary = options.cloud
+    ? workspaces.reduce(
+        (acc, workspace) => {
+          acc.existing += workspace.cloud.existing;
+          acc.missing += workspace.cloud.missing;
+          acc.updated.push(...workspace.cloud.updated);
+          acc.inserted.push(...workspace.cloud.inserted);
+          return acc;
+        },
+        { enabled: true, existing: 0, missing: 0, updated: [], inserted: [] },
+      )
+    : { enabled: false };
+
   const result = {
     generatedAt: new Date().toISOString(),
     dryRun: !options.apply,
-    cloud: options.cloud,
+    cloud: cloudSummary,
     summary,
     workspaces,
   };
