@@ -465,13 +465,17 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
     setFailedPackages(failed)
 
     if (failed.length > 0) {
-      setRunState("partial")
+      const failedBlockCount = failed.reduce((sum, pkg) => sum + pkg.blocks.length, 0)
+      const nextRunState = totalBlocks - failedBlockCount > 0 ? "partial" : "failed"
+      setRunState(nextRunState)
       input.showCorrectionToast(
         {
           phase: "error",
           completed: progressRef.current.completedBlocks,
           total: totalBlocks,
-          message: "Some correction packages failed. Retry to continue.",
+          message: nextRunState === "failed"
+            ? "Correction analysis failed. Retry to continue."
+            : "Some correction packages failed. Retry to continue.",
         },
         5000,
       )
@@ -515,13 +519,17 @@ export function useManualCorrections(input: ManualCorrectionsInput): ManualCorre
     setFailedPackages(failed)
 
     if (failed.length > 0) {
-      setRunState("partial")
+      const failedBlockCount = failed.reduce((sum, pkg) => sum + pkg.blocks.length, 0)
+      const nextRunState = totalBlocks - failedBlockCount > 0 ? "partial" : "failed"
+      setRunState(nextRunState)
       input.showCorrectionToast(
         {
           phase: "error",
           completed: progressRef.current.completedBlocks,
           total: totalBlocks,
-          message: "Some correction packages still failed. Retry again to continue.",
+          message: nextRunState === "failed"
+            ? "Correction analysis failed. Retry again to continue."
+            : "Some correction packages still failed. Retry again to continue.",
         },
         5000,
       )

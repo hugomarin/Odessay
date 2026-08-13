@@ -88,7 +88,7 @@ test("manual analysis stays idle while writing and starts accessibly on explicit
   })
 
   await page.goto("/perf/orthography-harness?reset=1")
-  await expect(page.getByTestId("editor-writing-area")).toBeVisible()
+  await expect(page.getByTestId("editor-writing-area")).toBeVisible({ timeout: 15_000 })
   await page.evaluate(async () => {
     const harness = (window as typeof window & {
       __ODE_ORTHOGRAPHY_HARNESS__?: { clearCorrectionBlocks: () => Promise<void> }
@@ -119,6 +119,41 @@ test("manual analysis stays idle while writing and starts accessibly on explicit
   await expect.poll(() => reviewBodies.length).toBeGreaterThan(0)
   await expect(page.getByText("Analysis complete.")).toBeVisible()
   await captureOutcome(page, "manual-analysis-complete")
+})
+
+test("manual analysis exposes a recoverable provider failure", async ({ page }) => {
+  await page.route("**/api/corrections/hydrate?**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ data: [], error: null }),
+  }))
+  await page.route("**/api/ai/publication-review", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({
+      data: null,
+      error: { code: "UNAVAILABLE", message: "Provider unavailable", retryable: true },
+    }),
+  }))
+
+  await page.goto("/perf/orthography-harness?reset=1")
+  await expect(page.getByTestId("editor-writing-area")).toBeVisible({ timeout: 15_000 })
+  await page.evaluate(async () => {
+    const harness = (window as typeof window & {
+      __ODE_ORTHOGRAPHY_HARNESS__?: { clearCorrectionBlocks: () => Promise<void> }
+    }).__ODE_ORTHOGRAPHY_HARNESS__
+    await harness?.clearCorrectionBlocks()
+  })
+  await page.reload()
+  await expect(page.getByTestId("editor-writing-area")).toBeVisible({ timeout: 15_000 })
+  await page.getByRole("button", { name: "Corrections" }).click()
+  await page.getByRole("button", { name: "Analyze writing and spelling" }).click()
+
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible()
+  await expect(page.locator("#corrections-analysis-status")).toContainText(
+    "Some correction packages failed",
+  )
+  await captureOutcome(page, "manual-analysis-partial-error")
 })
 
 test("orthography regression harness preserves apply, invalidation, and persisted state across reload", async ({
