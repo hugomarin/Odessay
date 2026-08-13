@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   collectMarkdownFiles,
   loadEnvFile,
+  parseCliArgs,
   pathExists,
   printJson,
   readJson,
@@ -14,42 +15,74 @@ import {
   writeJson,
 } from "./lib.mjs";
 
-function parseArgs(argv) {
-  const options = {
-    command: null,
-    workspaceRoot: null,
-    backupDir: null,
-    envPath: ".env.local",
-    cloud: false,
-    apply: false,
-    json: false,
-  };
+const WRITINGS_COLUMNS = [
+  "id",
+  "author_id",
+  "title",
+  "body_json",
+  "body_text",
+  "slug",
+  "status",
+  "visibility",
+  "parent_id",
+  "correspondence_id",
+  "version",
+  "sync_status",
+  "deleted_at",
+  "created_at",
+  "updated_at",
+  "content_updated_at",
+  "metadata_updated_at",
+  "content_hash",
+  "artifact_type",
+].join(",");
 
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "backup" || arg === "verify" || arg === "restore") {
-      options.command = arg;
-    } else if (arg === "--workspace-root") {
-      options.workspaceRoot = argv[++index];
-    } else if (arg === "--backup-dir") {
-      options.backupDir = argv[++index];
-    } else if (arg === "--env") {
-      options.envPath = argv[++index];
-    } else if (arg === "--cloud") {
-      options.cloud = true;
-    } else if (arg === "--apply") {
-      options.apply = true;
-    } else if (arg === "--json") {
-      options.json = true;
-    } else if (arg === "-h" || arg === "--help") {
-      printHelp();
-      process.exit(0);
-    } else {
-      throw new Error(`Unknown argument: ${arg}`);
-    }
+const MARGINS_COLUMNS = [
+  "id",
+  "reader_id",
+  "writing_id",
+  "anchor_start",
+  "anchor_end",
+  "anchor_text",
+  "note",
+  "shared",
+  "shared_at",
+  "created_at",
+  "updated_at",
+  "type",
+  "text",
+  "resolved",
+  "archived",
+].join(",");
+
+function parseArgs(argv) {
+  const { help, options, positionals } = parseCliArgs(argv, {
+    defaults: {
+      workspaceRoot: null,
+      backupDir: null,
+      envPath: ".env.local",
+      cloud: false,
+      apply: false,
+      json: false,
+    },
+    flags: {
+      "--workspace-root": { type: "value", key: "workspaceRoot" },
+      "--backup-dir": { type: "value", key: "backupDir" },
+      "--env": { type: "value", key: "envPath" },
+      "--cloud": { type: "boolean", key: "cloud" },
+      "--apply": { type: "boolean", key: "apply" },
+      "--json": { type: "boolean", key: "json" },
+    },
+    allowPositionals: true,
+  });
+
+  if (help) {
+    printHelp();
+    process.exit(0);
   }
 
-  if (!options.command) {
+  const command = positionals[0] ?? null;
+  if (!["backup", "verify", "restore"].includes(command)) {
     throw new Error("Missing command: backup, verify, or restore.");
   }
   if (!options.workspaceRoot) {
@@ -58,11 +91,11 @@ function parseArgs(argv) {
   if (!options.backupDir) {
     throw new Error("Missing --backup-dir.");
   }
-  if (options.command === "restore" && !options.apply) {
+  if (command === "restore" && !options.apply) {
     throw new Error("restore requires --apply.");
   }
 
-  return options;
+  return { ...options, command };
 }
 
 function printHelp() {
@@ -143,13 +176,13 @@ async function backup(options) {
     const idList = Array.from(ids);
     const { data: writings, error: writingsError } = await supabase
       .from("writings")
-      .select("*")
+      .select(WRITINGS_COLUMNS)
       .in("id", idList);
     if (writingsError) throw new Error(writingsError.message);
 
     const { data: margins, error: marginsError } = await supabase
       .from("margins")
-      .select("*")
+      .select(MARGINS_COLUMNS)
       .in("writing_id", idList);
     if (marginsError) throw new Error(marginsError.message);
 
