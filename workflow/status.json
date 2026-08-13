@@ -3405,6 +3405,16 @@
       "commit": "e69ca1c",
       "date": "2026-08-06",
       "notes": "Approved 8.3/10 (PASS) en una sola ronda. Dos defectos independientes, dos commits. Semantico: desktopAuthService.getSession() ya no trata un fallo de red como ausencia de sesion — clasifica el error y devuelve anonymous solo ante AuthSessionMissingError o AuthApiError 401/403 (unica resolucion que justifica redirect a login), unverified con la identidad persistida en el store nativo ante fallo de transporte o 5xx, y UNAVAILABLE retryable cuando no hay identidad local recuperable. Estructural: el account page acota el redirect a una sola navegacion con ref guard, modela un estado de error visible con Retry y reintento por evento online, y renderiza los datos locales con aviso cuando la sesion es unverified. El contrato AuthService documenta el estado nuevo en el tipo, en invariants y en el summary de la capability. El requisito de Archived writings offline se cumple por consecuencia: como unverified trae user poblado, document-service-factory.listWritings y desk-catalog-source conservan cloudAccountId sin red y el catalogo SQLite sigue filtrando por cuenta. Performance Contract required aceptado con sustitucion de evidencia por precedente ODE-408/ODE-410 (el harness canonico no puede ejercitar un camino desktop-only): tests que afirman getUser una sola vez, fallback sin segunda request y navegacion acotada a una aunque el efecto re-corra, mas captura manual en DMG de release con Wi-Fi apagado y consola limpia. Dos P2 no bloqueantes quedan como follow-up: desktop-app-shell.tsx conserva el mismo useEffect([router]) con router.replace sin guarda (ahora solo alcanzable via UNAVAILABLE), y el listener de online del account page esta gateado por loadError, de modo que el estado unverified no re-verifica al volver la red. El ciclo incluyo una reasignacion completa de trazabilidad: el trabajo se habia etiquetado ODE-415 por leer la numeracion del workspace espejo z9ne, con rama renombrada, commits reescritos y PR #370 reemplazado por #371."
+    },
+    {
+      "what": "feat(corrections): manual full-document Fireworks analysis [ODE-415]",
+      "phase": "Fase 8 — Biblioteca, Preview y Calidad de Producto (post-close improvement)",
+      "issue": "ODE-415",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-415/replace-automatic-ai-corrections-with-manual-full-document-analysis",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/372",
+      "commit": "2aa8a83",
+      "date": "2026-08-13",
+      "notes": "Approved 10.0/10 after one rejected review round. Replaces automatic AI correction requests during typing with an explicit full-document review, token-bounded Qwen 3.7 Plus packages, cache engine revision, document-level lifecycle, safe writing-switch cancellation, and friendly recoverable states. Preserves canonical admission, token-boundary matching, Accept/Reject/Learn word, bulk correction, persistence, and web/desktop AIService parity. Evidence: typecheck PASS, lint PASS with 6 pre-existing warnings, Vitest 190 files/1323 tests PASS, Playwright orthography harness 3/3 PASS, performance gate required_failures=0, real Fireworks structured-output validation PASS, Supabase staging engine_revision text nullable verified, Vercel/traceability green, and owner outcome acceptance recorded in Linear."
     }
   ]
 }
