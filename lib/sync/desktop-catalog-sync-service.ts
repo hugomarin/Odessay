@@ -302,7 +302,7 @@ async function processMutation(
     updated_at: updatedAt,
     deleted_at: payloadValue(payload, "deletedAt", "deleted_at"),
   }
-  if (record?.cloudPresent || ctx.cloudConfirmed.has(mutation.documentId)) {
+  if (record?.cloudAccountId != null || ctx.cloudConfirmed.has(mutation.documentId)) {
     const { error, count } = await supabase
       .from("writings")
       .update(row, { count: "exact" })
@@ -313,7 +313,8 @@ async function processMutation(
       ctx.cloudConfirmed.add(mutation.documentId)
       return
     }
-    // 0 rows affected: the doc is absent in the cloud despite cloudPresent —
+    // 0 rows affected: the catalog's ownership binding is stale and the cloud
+    // row is absent despite cloudAccountId —
     // fall through to a verified INSERT instead of faking success.
   }
   await insertVerified(supabase, row, record, ctx)
