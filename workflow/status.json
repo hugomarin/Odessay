@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-08-06",
+  "last_updated": "2026-08-13",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3415,6 +3415,16 @@
       "commit": "2aa8a83",
       "date": "2026-08-13",
       "notes": "Approved 10.0/10 after one rejected review round. Replaces automatic AI correction requests during typing with an explicit full-document review, token-bounded Qwen 3.7 Plus packages, cache engine revision, document-level lifecycle, safe writing-switch cancellation, and friendly recoverable states. Preserves canonical admission, token-boundary matching, Accept/Reject/Learn word, bulk correction, persistence, and web/desktop AIService parity. Evidence: typecheck PASS, lint PASS with 6 pre-existing warnings, Vitest 190 files/1323 tests PASS, Playwright orthography harness 3/3 PASS, performance gate required_failures=0, real Fireworks structured-output validation PASS, Supabase staging engine_revision text nullable verified, Vercel/traceability green, and owner outcome acceptance recorded in Linear."
+    },
+    {
+      "what": "fix(desktop): reuse binding root identity by path [ODE-387]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-387",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-387/catalog-apply-reconcile-must-resolve-binding-roots-by-root-path-mirror",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/373",
+      "commit": "5edcafe",
+      "date": "2026-08-13",
+      "notes": "SHIP completed with PR open for manual merge. catalog_apply_reconcile now resolves binding_roots by UNIQUE root_path before inserting and writes document_bindings with the resolved existing id, matching catalog_dual_write and preserving one physical-directory identity across reconciler/workspace writers. Regression proves two proposed root ids for the same path keep one row and the original manifest-root id. Evidence: Rust 49 passed/0 failed/1 ignored, typecheck PASS, lint PASS with 6 pre-existing editor-shell warnings, Vitest 190 files/1324 tests PASS, delivery gate PASS. Performance, Presentation and Network contracts not required."
     }
   ]
 }
