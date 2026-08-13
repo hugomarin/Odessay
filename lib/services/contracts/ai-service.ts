@@ -118,6 +118,7 @@ export type AiUsage = {
   model: string
   promptTokens: number | null
   completionTokens: number | null
+  totalTokens: number | null
   latencyMs: number | null
 }
 
@@ -127,6 +128,7 @@ export type PublicationReviewResult = {
   corrections: MechanicalCorrection[]
   uncertain: MechanicalUncertainNote[]
   usage: AiUsage | null
+  engineRevision?: string | null
 }
 
 export type PersistedCorrectionBlock = {
@@ -136,6 +138,8 @@ export type PersistedCorrectionBlock = {
   blockHash: string
   suggestions: PersistedCorrectionSuggestion[]
   model: string
+  /** Correction engine revision. Obsolete revisions must not be admitted as current results. */
+  engineRevision: string | null
   createdAt: string
   latencyMs: number | null
   promptTokens: number | null

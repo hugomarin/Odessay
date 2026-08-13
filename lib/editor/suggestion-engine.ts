@@ -194,6 +194,7 @@ export const invalidateBlockSuggestions = (
   suggestions: PublicationSuggestion[],
   block: { id: string; text: string },
   staleSince = Date.now(),
+  markResolvableStale = true,
 ): StaleInvalidationResult => {
   const keptIds: string[] = [];
   const droppedIds: string[] = [];
@@ -215,7 +216,7 @@ export const invalidateBlockSuggestions = (
       )
     ) {
       keptIds.push(suggestion.id);
-      return [markSuggestionStale(suggestion, staleSince)];
+      return [markResolvableStale ? markSuggestionStale(suggestion, staleSince) : suggestion];
     }
 
     droppedIds.push(suggestion.id);

@@ -108,7 +108,7 @@ Cuándo reutilizarlos:
 
 Caso adicional dentro de esta familia:
 
-- `orthography-regression-harness.e2e.ts` cubre correcciones automáticas, invalidación tras edición manual, remap persistido de `blockId`/`blockHash`, y reload/hydration sobre el harness `/perf/orthography-harness`
+- `orthography-regression-harness.e2e.ts` cubre inactividad AI durante escritura, análisis manual explícito y accesible, invalidación tras edición manual, remap persistido de `blockId`/`blockHash`, y reload/hydration sobre el harness `/perf/orthography-harness`
 - clasificarlo como `usable as-is` para regresiones de editor/corrections que necesiten mocks deterministas de review/persist sin auth ni modelo live
 
 Nota:

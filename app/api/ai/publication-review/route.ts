@@ -4,12 +4,17 @@ export const maxDuration = 60;
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  BLOCK_CORRECTIONS_MAX_TOKENS,
-  CORRECTION_BLOCK_BATCH_SIZE,
+  CORRECTION_ENGINE_REVISION,
+  CORRECTION_PACKAGE_MAX_BLOCKS,
+  CORRECTION_PACKAGE_MAX_CHARS,
+  CORRECTION_PACKAGE_MAX_INPUT_TOKENS,
+  CORRECTION_PACKAGE_OUTPUT_TOKENS,
 } from "@/lib/ai/corrections-config";
 import {
   buildMechanicalCorrectionsPrompt,
+  buildModelReadyCorrectionBlocks,
   normalizeCanonicalCorrections,
+  restoreRealCorrectionBlockIds,
   type CanonicalCorrectionsResponse,
   type CorrectionBlock,
 } from "@/lib/ai/corrections";
@@ -43,7 +48,7 @@ const requestSchema = z.object({
     id: z.string().trim().min(1),
     text: z.string().trim().min(1),
     hash: z.string().trim().min(1),
-  })).min(1).max(CORRECTION_BLOCK_BATCH_SIZE).optional(),
+  })).min(1).optional(),
   correctionMemory: z.object({
     entries: z.array(memoryEntrySchema).default([]),
   }).optional(),
@@ -62,12 +67,50 @@ const requestSchema = z.object({
       message: "Either correctionBlock or correctionBlocks is required.",
       path: ["correctionBlocks"],
     });
+    return;
+  }
+
+  const blocks = value.correctionBlocks ?? (value.correctionBlock ? [value.correctionBlock] : []);
+  const charsPerToken = 3.8;
+  const promptOverheadChars = 1_600;
+  const blockOverheadChars = 32;
+
+  if (blocks.length > CORRECTION_PACKAGE_MAX_BLOCKS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Package exceeds maximum block count (${CORRECTION_PACKAGE_MAX_BLOCKS}).`,
+      path: ["correctionBlocks"],
+    });
+  }
+
+  const bodyChars = blocks.reduce(
+    (sum, block) => sum + block.text.length + block.id.length + blockOverheadChars,
+    0,
+  );
+
+  if (bodyChars > CORRECTION_PACKAGE_MAX_CHARS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Package exceeds maximum character count (${CORRECTION_PACKAGE_MAX_CHARS}).`,
+      path: ["correctionBlocks"],
+    });
+  }
+
+  const estimatedInputTokens = Math.ceil((promptOverheadChars + bodyChars) / charsPerToken);
+
+  if (estimatedInputTokens > CORRECTION_PACKAGE_MAX_INPUT_TOKENS) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Package exceeds estimated input token budget (${CORRECTION_PACKAGE_MAX_INPUT_TOKENS}).`,
+      path: ["correctionBlocks"],
+    });
   }
 });
 
 type CorrectionsUsage = {
   promptTokens: number | null;
   completionTokens: number | null;
+  totalTokens: number | null;
 };
 
 type CorrectionRouteErrorDetails = {
@@ -197,26 +240,25 @@ const mechanicalCorrectionsResponseFormat = {
   },
 } as const;
 
-const getCorrectionsMaxTokens = (blockCount: number) => BLOCK_CORRECTIONS_MAX_TOKENS * Math.max(1, blockCount);
+const getCorrectionsMaxTokens = () => CORRECTION_PACKAGE_OUTPUT_TOKENS;
 
 async function callCorrectionsModel({
   config,
   promptText,
-  blockCount,
   strictJson,
   structuredOutput = true,
 }: {
   config: ReturnType<typeof getAIProviderConfig>;
   promptText: string;
-  blockCount: number;
   strictJson: boolean;
   structuredOutput?: boolean;
 }): Promise<{ text: string; usage: CorrectionsUsage }> {
   const requestBody = {
     model: config.model,
-    max_tokens: getCorrectionsMaxTokens(blockCount),
+    max_tokens: getCorrectionsMaxTokens(),
     temperature: strictJson ? 0 : 0.1,
     top_p: config.topP,
+    reasoning_effort: "none",
     ...(structuredOutput ? { response_format: mechanicalCorrectionsResponseFormat } : {}),
     messages: [
       {
@@ -283,7 +325,7 @@ async function callCorrectionsModel({
       console.info(
         `[corrections] structured output provider failure status=${response.status}; retrying without response_format`,
       );
-      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
     }
 
     if (response.status === 400 || response.status === 422) {
@@ -320,6 +362,7 @@ async function callCorrectionsModel({
     usage?: {
       prompt_tokens?: number;
       completion_tokens?: number;
+      total_tokens?: number;
     };
   };
 
@@ -339,7 +382,7 @@ async function callCorrectionsModel({
   if (!text) {
     if (structuredOutput) {
       console.info("[corrections] model returned empty content with structured output; retrying without response_format");
-      return callCorrectionsModel({ config, promptText, blockCount, strictJson: true, structuredOutput: false });
+      return callCorrectionsModel({ config, promptText, strictJson: true, structuredOutput: false });
     }
     throw new CorrectionRouteError({
       status: 502,
@@ -355,6 +398,7 @@ async function callCorrectionsModel({
     usage: {
       promptTokens: payload.usage?.prompt_tokens ?? null,
       completionTokens: payload.usage?.completion_tokens ?? null,
+      totalTokens: payload.usage?.total_tokens ?? null,
     },
   };
 }
@@ -379,14 +423,27 @@ const normalizeCorrectionModelText = ({
   fallbackLanguage,
   learnedWords,
   correctionMemory,
+  idMap,
 }: {
   text: string;
   blocks: CorrectionBlock[];
   fallbackLanguage: ReturnType<typeof detectCorrectionLanguage>;
   learnedWords: string[];
   correctionMemory: z.infer<typeof requestSchema>["correctionMemory"];
+  idMap?: Map<string, string>;
 }) => {
   const parsedJson = parseModelJson(text);
+
+  if (idMap && typeof parsedJson === "object" && parsedJson !== null) {
+    const parsed = parsedJson as { corrections?: unknown[]; uncertain?: unknown[] };
+    if (Array.isArray(parsed.corrections)) {
+      parsed.corrections = restoreRealCorrectionBlockIds(parsed.corrections as { blockId: string }[], idMap);
+    }
+    if (Array.isArray(parsed.uncertain)) {
+      parsed.uncertain = restoreRealCorrectionBlockIds(parsed.uncertain as { blockId: string }[], idMap);
+    }
+  }
+
   const canonical = normalizeCanonicalCorrections(parsedJson, blocks, fallbackLanguage, learnedWords);
 
   return applyMemory(canonical, correctionMemory);
@@ -396,10 +453,11 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const t0 = Date.now();
   const config = getAIProviderConfig();
   const blocks = getCorrectionBlocksFromRequest(requestBody);
+  const { modelBlocks, idMap } = buildModelReadyCorrectionBlocks(blocks);
   const sourceText = blocks.map((block) => block.text).join("\n\n");
   const fallbackLanguage = detectCorrectionLanguage(sourceText);
   const learnedWords = getLearnedWordsFromRequest(requestBody);
-  const promptText = buildMechanicalCorrectionsPrompt(blocks, learnedWords);
+  const promptText = buildMechanicalCorrectionsPrompt(modelBlocks, learnedWords);
 
   console.info(
     `[corrections] start provider=${config.baseUrl} model=${config.model} blocks=${blocks.length} promptChars=${promptText.length}`,
@@ -408,7 +466,6 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
   const firstResponse = await callCorrectionsModel({
     config,
     promptText,
-    blockCount: blocks.length,
     strictJson: false,
   });
   const t1 = Date.now();
@@ -421,6 +478,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
       fallbackLanguage,
       learnedWords,
       correctionMemory: requestBody.correctionMemory,
+      idMap,
     });
     const t2 = Date.now();
     console.info(`[corrections] first parse ok totalLatencyMs=${t2 - t0}`);
@@ -438,7 +496,6 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
     const retryResponse = await callCorrectionsModel({
       config,
       promptText,
-      blockCount: blocks.length,
       strictJson: true,
     });
     const retryJsonText = extractJsonPayload(retryResponse.text);
@@ -450,6 +507,7 @@ async function requestCorrections(requestBody: z.infer<typeof requestSchema>) {
         fallbackLanguage,
         learnedWords,
         correctionMemory: requestBody.correctionMemory,
+        idMap,
       });
       const t2 = Date.now();
       console.info(`[corrections] retry parse ok totalLatencyMs=${t2 - t0}`);
@@ -492,7 +550,8 @@ const createJsonResponsePayload = ({
     sourceHash: requestBody.sourceHash,
     sourceMarkdown: requestBody.markdown,
     model,
-    contractVersion: "mechanical-corrections-v1" as const,
+    engineRevision: CORRECTION_ENGINE_REVISION,
+    contractVersion: "mechanical-corrections-v2" as const,
     canonicalReview: adapted.canonical,
     language: adapted.canonical.language,
     corrections: adapted.canonical.corrections,
@@ -503,6 +562,7 @@ const createJsonResponsePayload = ({
     fallbackUsed: false,
     promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage?.completionTokens ?? null,
+    totalTokens: usage?.totalTokens ?? null,
   };
 };
 
@@ -526,6 +586,7 @@ const logRequestMetrics = ({
     latencyMs,
     promptTokens: usage?.promptTokens ?? null,
     completionTokens: usage?.completionTokens ?? null,
+    totalTokens: usage?.totalTokens ?? null,
   });
 };
 

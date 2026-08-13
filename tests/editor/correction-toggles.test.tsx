@@ -6,16 +6,15 @@ import React from "react"
 import { renderToString } from "react-dom/server"
 import { CorrectionsPanel } from "@/components/editor/panels/corrections-panel"
 
-describe("CorrectionsPanel toggles", () => {
-  it("renders with correctionsEnabled and showCorrections toggles", () => {
-    const onCorrectionsEnabledChange = vi.fn()
+describe("CorrectionsPanel analysis trigger", () => {
+  it("renders with analyze button and showCorrections toggle", () => {
+    const onAnalyze = vi.fn()
     const onShowCorrectionsChange = vi.fn()
 
     const html = renderToString(
       React.createElement(CorrectionsPanel, {
         suggestions: [],
         markdown: "",
-        correctionsEnabled: true,
         showCorrections: true,
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
@@ -25,23 +24,23 @@ describe("CorrectionsPanel toggles", () => {
         learnedWords: [],
         learnedWordsLoading: false,
         onRemoveLearnedWord: () => {},
-        onCorrectionsEnabledChange,
+        onAnalyze,
         onShowCorrectionsChange,
         onClose: () => {},
       }),
     )
 
-    expect(html).toContain("Active corrections")
+    expect(html).toContain("Analyze writing and spelling")
     expect(html).toContain("Show corrections")
   })
 
-  it("renders with toggles disabled when props are false", () => {
+  it("renders the cancellable analysis action with busy semantics while running", () => {
     const html = renderToString(
       React.createElement(CorrectionsPanel, {
         suggestions: [],
         markdown: "",
-        correctionsEnabled: false,
         showCorrections: false,
+        analysisStatus: { runState: "running", progress: { completedBlocks: 1, totalBlocks: 3 } },
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
         onLearnWord: () => {},
@@ -50,14 +49,68 @@ describe("CorrectionsPanel toggles", () => {
         learnedWords: [],
         learnedWordsLoading: false,
         onRemoveLearnedWord: () => {},
-        onCorrectionsEnabledChange: () => {},
+        onAnalyze: () => {},
         onShowCorrectionsChange: () => {},
         onClose: () => {},
       }),
     )
 
-    expect(html).toContain("Active corrections")
+    expect(html).toContain('aria-busy="true"')
+    expect(html).toContain("Cancel")
     expect(html).toContain("Show corrections")
+  })
+
+  it("exposes a recoverable partial state with an explicit retry action", () => {
+    const html = renderToString(
+      React.createElement(CorrectionsPanel, {
+        suggestions: [],
+        markdown: "",
+        showCorrections: true,
+        analysisStatus: { runState: "partial", progress: { completedBlocks: 4, totalBlocks: 6 } },
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onLearnWord: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        learnedWords: [],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
+        onAnalyze: () => {},
+        onRetryFailed: () => {},
+        onShowCorrectionsChange: () => {},
+        onClose: () => {},
+      }),
+    )
+
+    expect(html).toContain("Retry failed sections")
+    expect(html).toContain("Some sections couldn’t be analyzed")
+    expect(html).toContain('role="status"')
+  })
+
+  it("explains a total failure with a friendly try-again action", () => {
+    const html = renderToString(
+      React.createElement(CorrectionsPanel, {
+        suggestions: [],
+        markdown: "",
+        showCorrections: true,
+        analysisStatus: { runState: "failed", progress: { completedBlocks: 0, totalBlocks: 6 } },
+        onAcceptSuggestion: () => {},
+        onRejectSuggestion: () => {},
+        onLearnWord: () => {},
+        onAcceptAll: () => {},
+        onRejectAll: () => {},
+        learnedWords: [],
+        learnedWordsLoading: false,
+        onRemoveLearnedWord: () => {},
+        onAnalyze: () => {},
+        onRetryFailed: () => {},
+        onShowCorrectionsChange: () => {},
+        onClose: () => {},
+      }),
+    )
+
+    expect(html).toContain("Try again")
+    expect(html).toContain("We couldn’t analyze this document")
   })
 
   it("shows the learn word action for spelling suggestions and lists learned words", () => {
@@ -76,7 +129,6 @@ describe("CorrectionsPanel toggles", () => {
           },
         ],
         markdown: "Odessay",
-        correctionsEnabled: true,
         showCorrections: true,
         onAcceptSuggestion: () => {},
         onRejectSuggestion: () => {},
@@ -93,7 +145,7 @@ describe("CorrectionsPanel toggles", () => {
         ],
         learnedWordsLoading: false,
         onRemoveLearnedWord: () => {},
-        onCorrectionsEnabledChange: () => {},
+        onAnalyze: () => {},
         onShowCorrectionsChange: () => {},
         onClose: () => {},
       }),

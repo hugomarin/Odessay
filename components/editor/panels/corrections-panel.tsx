@@ -1,17 +1,23 @@
 "use client";
 
 import { useMemo } from "react";
-import { CircleCheck, CirclePlus, CircleX, X } from "lucide-react";
+import { CircleCheck, CirclePlus, CircleX, Loader2, RefreshCw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PublicationSuggestion } from "@/lib/local-db/schema";
 import type { LearnedWordEntry } from "@/lib/services/contracts/ai-service";
+import type { CorrectionAnalysisRunState, CorrectionAnalysisProgress } from "@/hooks/useManualCorrections";
 import { getVisibleCorrectionSuggestions, isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine";
+
+type CorrectionAnalysisStatus = {
+  runState: CorrectionAnalysisRunState;
+  progress: CorrectionAnalysisProgress;
+};
 
 type CorrectionsPanelProps = {
   suggestions: PublicationSuggestion[];
   markdown: string;
-  correctionsEnabled: boolean;
   showCorrections: boolean;
+  analysisStatus?: CorrectionAnalysisStatus;
   onAcceptSuggestion: (suggestion: PublicationSuggestion, suggestionIds?: string[]) => void;
   onRejectSuggestion: (suggestionId: string) => void;
   onLearnWord: (suggestion: PublicationSuggestion, suggestionIds?: string[]) => void;
@@ -20,7 +26,9 @@ type CorrectionsPanelProps = {
   learnedWords: LearnedWordEntry[];
   learnedWordsLoading: boolean;
   onRemoveLearnedWord: (id: string) => void;
-  onCorrectionsEnabledChange: (enabled: boolean) => void;
+  onAnalyze: () => void;
+  onRetryFailed?: () => void;
+  onCancel?: () => void;
   onShowCorrectionsChange: (show: boolean) => void;
   onClose: () => void;
 };
@@ -28,8 +36,8 @@ type CorrectionsPanelProps = {
 export function CorrectionsPanel({
   suggestions,
   markdown,
-  correctionsEnabled,
   showCorrections,
+  analysisStatus,
   onAcceptSuggestion,
   onRejectSuggestion,
   onLearnWord,
@@ -38,7 +46,9 @@ export function CorrectionsPanel({
   learnedWords,
   learnedWordsLoading,
   onRemoveLearnedWord,
-  onCorrectionsEnabledChange,
+  onAnalyze,
+  onRetryFailed,
+  onCancel,
   onShowCorrectionsChange,
   onClose,
 }: CorrectionsPanelProps) {
@@ -64,6 +74,29 @@ export function CorrectionsPanel({
 
   const actionableSuggestions = visibleSuggestions.filter((suggestion) => suggestion.status === "pending");
   const hasPending = visibleSuggestions.length > 0;
+  const runState = analysisStatus?.runState ?? "idle";
+  const progress = analysisStatus?.progress ?? { completedBlocks: 0, totalBlocks: 0 };
+  const isRunning = runState === "running";
+  const isPartialOrFailed = runState === "partial" || runState === "failed";
+  const canRetry = isPartialOrFailed && Boolean(onRetryFailed);
+
+  const analysisButtonLabel = (() => {
+    switch (runState) {
+      case "running":
+        return "Analyzing...";
+      case "completed":
+        return "Analyze again";
+      case "partial":
+        return "Retry failed sections";
+      case "failed":
+        return "Try again";
+      case "cancelled":
+        return "Analyze writing and spelling";
+      case "idle":
+      default:
+        return "Analyze writing and spelling";
+    }
+  })();
 
   return (
     <aside
@@ -94,34 +127,66 @@ export function CorrectionsPanel({
       <div className="space-y-3 border-b-[0.5px] border-border px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <label
-              htmlFor="corrections-enabled-switch"
-              className="block text-[12px] font-medium text-ink"
-            >
-              Active corrections
-            </label>
-            <p className="text-[11px] text-ink-4">Analyzes new blocks automatically.</p>
+            <p className="text-[12px] font-medium text-ink">
+              Analyze writing and spelling
+            </p>
+            <p className="text-[11px] text-ink-4">
+              Review this document for spelling, grammar, and punctuation.
+            </p>
           </div>
           <button
-            id="corrections-enabled-switch"
+            id="corrections-analyze-button"
             type="button"
-            role="switch"
-            aria-checked={correctionsEnabled}
-            aria-label="Enable automatic corrections"
-            onClick={() => onCorrectionsEnabledChange(!correctionsEnabled)}
+            onClick={isRunning ? onCancel : isPartialOrFailed ? onRetryFailed : onAnalyze}
+            aria-busy={isRunning}
+            aria-describedby="corrections-analysis-status"
             className={cn(
-              "relative h-[18px] w-8 shrink-0 rounded-[9px] border-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
-              correctionsEnabled ? "bg-ink" : "bg-border",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[6px] border-[0.5px] border-border px-2.5 text-[11px] font-medium transition-colors",
+              isRunning
+                ? "text-ink-3 hover:bg-bg hover:text-ink"
+                : "text-ink-3 hover:bg-bg hover:text-ink",
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "pointer-events-none absolute left-[2px] top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-transform",
-                correctionsEnabled ? "translate-x-[14px]" : "translate-x-0",
-              )}
-            />
+            {isRunning ? (
+              <X className="h-3 w-3" strokeWidth={1.7} />
+            ) : canRetry ? (
+              <RefreshCw className="h-3 w-3" strokeWidth={1.7} />
+            ) : null}
+            <span>{isRunning ? "Cancel" : analysisButtonLabel}</span>
           </button>
+        </div>
+
+        <div id="corrections-analysis-status" role="status" aria-live="polite">
+          {isRunning && progress.totalBlocks > 0 ? (
+            <div className="flex items-center gap-2 text-[11px] text-ink-3">
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={1.7} />
+              <span>
+                Checking {progress.completedBlocks} of {progress.totalBlocks} sections…
+              </span>
+            </div>
+          ) : null}
+
+          {runState === "completed" ? (
+            <p className="text-[11px] text-ink-4">Review complete.</p>
+          ) : null}
+
+          {runState === "cancelled" ? (
+            <p className="text-[11px] text-ink-4">
+              Review stopped. You can start again whenever you’re ready.
+            </p>
+          ) : null}
+
+          {runState === "partial" ? (
+            <p className="text-[11px] text-ink-4">
+              Some sections couldn’t be analyzed. Your existing results are safe.
+            </p>
+          ) : null}
+
+          {runState === "failed" ? (
+            <p className="text-[11px] text-ink-4">
+              We couldn’t analyze this document. Check your connection and try again.
+            </p>
+          ) : null}
         </div>
 
         <div className="flex items-center justify-between gap-3">

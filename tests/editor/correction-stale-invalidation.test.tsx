@@ -54,6 +54,24 @@ describe("stale correction invalidation", () => {
     expect(invalidation.suggestions).toEqual([])
   })
 
+  it("keeps still-resolvable suggestions actionable when automatic analysis is disabled", () => {
+    const kept = createSuggestion()
+    const invalidation = invalidateBlockSuggestions(
+      [kept],
+      {
+        id: "block-1",
+        text: "Esta prueva sigue siendo segura después de editar otro texto del bloque.",
+      },
+      Date.now(),
+      false,
+    )
+
+    expect(invalidation.keptIds).toEqual([kept.id])
+    expect(invalidation.droppedIds).toEqual([])
+    expect(invalidation.suggestions[0]?.status).toBe("pending")
+    expect(isSuggestionAcceptDisabled(invalidation.suggestions[0]!)).toBe(false)
+  })
+
   it("drops punctuation suggestions when the edited block already contains the replacement", () => {
     const redundant = createSuggestion({
       id: "punctuation-1",

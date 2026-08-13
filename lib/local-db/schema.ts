@@ -2,7 +2,7 @@ import type { ArtifactType } from "@/lib/writings/artifact-type";
 import type { WritingStatus } from "@/lib/writings/status";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
-export const LOCAL_DB_VERSION = 15;
+export const LOCAL_DB_VERSION = 16;
 
 export const LOCAL_DB_STORES = {
   writings: "writings",
@@ -256,6 +256,8 @@ export type LocalCorrectionBlock = {
   blockHash: string;
   suggestions: PublicationSuggestion[];
   model: string;
+  /** Correction engine revision. Missing/obsolete values mark the cache row stale. */
+  engineRevision: string | null;
   createdAt: string;
   latencyMs: number | null;
   promptTokens: number | null;

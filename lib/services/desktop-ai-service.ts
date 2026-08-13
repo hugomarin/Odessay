@@ -61,6 +61,8 @@ type PublicationReviewPayload = {
   uncertain?: PublicationReviewResult["uncertain"]
   promptTokens?: number | null
   completionTokens?: number | null
+  totalTokens?: number | null
+  engineRevision?: string | null
 }
 
 type LearnedWordsPayload = {
@@ -149,8 +151,10 @@ export const desktopAIService: AIService = {
           model: "desktop-proxy",
           promptTokens: parsed.data.promptTokens ?? null,
           completionTokens: parsed.data.completionTokens ?? null,
+          totalTokens: parsed.data.totalTokens ?? null,
           latencyMs: null,
         },
+        engineRevision: parsed.data.engineRevision ?? null,
       })
     } catch (error) {
       return unavailable(error instanceof Error ? error.message : "Could not review this text right now.")
@@ -215,6 +219,7 @@ export const desktopAIService: AIService = {
                 block_hash: input.block.blockHash,
                 suggestions: input.block.suggestions,
                 model: input.block.model,
+                engine_revision: input.block.engineRevision,
                 created_at: input.block.createdAt,
                 latency_ms: input.block.latencyMs,
                 prompt_tokens: input.block.promptTokens,

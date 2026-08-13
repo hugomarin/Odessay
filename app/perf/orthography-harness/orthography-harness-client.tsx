@@ -15,6 +15,7 @@ type OrthographyHarnessWindow = Window & typeof globalThis & {
   __ODE_ORTHOGRAPHY_HARNESS__?: {
     readWriting: () => ReturnType<typeof localDB.writings.get>
     readCorrectionBlocks: () => ReturnType<typeof localDB.correctionBlocks.getByWriting>
+    clearCorrectionBlocks: () => Promise<void>
   }
 }
 
@@ -81,6 +82,10 @@ export function OrthographyHarnessClient() {
     harnessWindow.__ODE_ORTHOGRAPHY_HARNESS__ = {
       readWriting: () => localDB.writings.get(ORTHOGRAPHY_REGRESSION_WRITING_ID),
       readCorrectionBlocks: () => localDB.correctionBlocks.getByWriting(ORTHOGRAPHY_REGRESSION_WRITING_ID),
+      clearCorrectionBlocks: async () => {
+        const blocks = await localDB.correctionBlocks.getByWriting(ORTHOGRAPHY_REGRESSION_WRITING_ID)
+        await localDB.correctionBlocks.deleteMany(blocks.map((block) => block.id))
+      },
     }
 
     return () => {

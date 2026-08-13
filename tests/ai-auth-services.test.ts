@@ -84,6 +84,7 @@ describe("webAIService", () => {
               ],
               promptTokens: 120,
               completionTokens: 20,
+              totalTokens: 140,
             },
             error: null,
           }),
@@ -135,6 +136,7 @@ describe("webAIService", () => {
         model: "web-route",
         promptTokens: 120,
         completionTokens: 20,
+        totalTokens: 140,
       },
     })
   })
