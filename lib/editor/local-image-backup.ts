@@ -9,7 +9,8 @@ export async function backUpLocalImage(input: {
   documentPath: string
   source: string
   alt: string
-  replaceSource: (onlineUrl: string) => boolean
+  replaceSource: (onlineUrl: string) => (() => boolean) | null
+  persistDocument: () => Promise<boolean>
 }): Promise<ServiceResponse<{ onlineUrl: string }>> {
   const local = await input.service.readLocalImageAsset({
     documentPath: input.documentPath,
@@ -37,13 +38,27 @@ export async function backUpLocalImage(input: {
   })
   if (uploaded.error) return uploaded
 
-  if (!input.replaceSource(uploaded.data.url)) {
+  const rollback = input.replaceSource(uploaded.data.url)
+  if (!rollback) {
     return {
       data: null,
       error: {
         code: "CONFLICT",
         message: "The image changed before the upload completed. Its local path was preserved.",
         retryable: false,
+      },
+    }
+  }
+
+  if (!(await input.persistDocument())) {
+    rollback()
+    return {
+      data: null,
+      error: {
+        code: "STORAGE_ERROR",
+        message: "The image was uploaded, but the document could not be saved. Its local path was restored.",
+        retryable: true,
+        details: { orphanedAssetId: uploaded.data.assetId },
       },
     }
   }

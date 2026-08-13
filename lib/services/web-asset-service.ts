@@ -10,6 +10,10 @@ type UploadApiResult = {
 }
 
 export class WebAssetService implements AssetService {
+  async resolveImageAssetUrl(source: string): Promise<ServiceResponse<string>> {
+    return ok(source)
+  }
+
   async readLocalImageAsset(): Promise<ServiceResponse<LocalImageAsset>> {
     return err({
       code: "UNSUPPORTED",

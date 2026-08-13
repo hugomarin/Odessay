@@ -216,3 +216,22 @@ Antes de cerrar un issue que toque ProseMirror/TipTap:
 - `lib/editor/footnote-extension.ts`
 - `lib/editor/find-replace.ts`
 - `lib/editor/publication-suggestion-extension.ts`
+## Imágenes locales y respaldo online en desktop
+
+El nodo `image` conserva siempre en `src` la referencia canónica escrita en el
+Markdown. En desktop, una ruta relativa, absoluta o `file://` se resuelve contra
+el `.md` materializado y se presenta mediante un object URL temporal; ese URL de
+presentación nunca se serializa.
+
+El respaldo online es una transición explícita y de un solo owner:
+
+1. leer y validar los bytes locales;
+2. crear el asset cloud;
+3. reemplazar temporalmente el `src` por la referencia durable
+   `{NEXT_PUBLIC_APP_URL}/api/writing-assets/{assetId}`;
+4. esperar el guardado atómico del `.md`;
+5. confirmar éxito solo cuando el archivo local quedó persistido.
+
+Si el nodo cambió o el guardado falla, el editor restaura la ruta local y muestra
+un error recuperable. Los signed URLs de Storage son efímeros y se resuelven al
+renderizar; nunca se guardan como contenido canónico.

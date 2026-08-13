@@ -48,7 +48,7 @@ export const EMPTY_EDITOR_JSON: JSONContent = {
 type CreateEditorExtensionsOptions = {
   onTableOfContentsUpdate?: (items: TableOfContentData) => void
   tableOfContentsScrollParent?: () => HTMLElement | Window
-  resolveLocalImage?: (source: string) => Promise<ResolvedLocalImage>
+  resolveImage?: (source: string) => Promise<ResolvedLocalImage>
   onRequestLocalImageBackup?: (request: LocalImageBackupRequest) => void
 }
 
@@ -84,7 +84,7 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
     LocalImageExtension.extend({ addKeyboardShortcuts: () => ({}) }).configure({
       allowBase64: false,
       inline: false,
-      resolveLocalImage: options.resolveLocalImage,
+      resolveImage: options.resolveImage,
       onRequestBackup: options.onRequestLocalImageBackup,
     }),
     Link.configure({

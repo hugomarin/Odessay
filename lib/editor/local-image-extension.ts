@@ -9,11 +9,11 @@ export type ResolvedLocalImage = {
 export type LocalImageBackupRequest = {
   source: string
   alt: string
-  replaceSource: (onlineUrl: string) => boolean
+  replaceSource: (onlineUrl: string) => (() => boolean) | null
 }
 
 export type LocalImageExtensionOptions = ImageOptions & {
-  resolveLocalImage?: (source: string) => Promise<ResolvedLocalImage>
+  resolveImage?: (source: string) => Promise<ResolvedLocalImage>
   onRequestBackup?: (request: LocalImageBackupRequest) => void
 }
 
@@ -62,7 +62,7 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
       resize: parent?.resize ?? false,
       allowBase64: false,
       inline: false,
-      resolveLocalImage: undefined,
+      resolveImage: undefined,
       onRequestBackup: undefined,
     }
   },
@@ -94,15 +94,15 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
 
       const replaceSource = (expectedSource: string, onlineUrl: string) => {
         const position = getPos()
-        if (typeof position !== "number") return false
+        if (typeof position !== "number") return null
         const liveNode = editor.state.doc.nodeAt(position)
         if (!liveNode || liveNode.type.name !== currentNode.type.name || liveNode.attrs.src !== expectedSource) {
-          return false
+          return null
         }
         editor.view.dispatch(
           editor.state.tr.setNodeMarkup(position, undefined, { ...liveNode.attrs, src: onlineUrl }),
         )
-        return true
+        return () => replaceSource(onlineUrl, expectedSource) !== null
       }
 
       const render = async () => {
@@ -113,12 +113,12 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
         revokeRenderUrl = undefined
         const revision = ++resolutionRevision
 
-        const resolver = this.options.resolveLocalImage
+        const resolver = this.options.resolveImage
         const local = isLocalImageSource(source) && typeof resolver === "function"
         wrapper.dataset.localImage = String(local)
         backup.hidden = !local
 
-        if (!local) {
+        if (typeof resolver !== "function") {
           image.src = source
           wrapper.dataset.localImageState = "ready"
           return

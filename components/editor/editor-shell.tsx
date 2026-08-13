@@ -135,7 +135,7 @@ import {
   type EditorSpellcheckPreference,
 } from "@/lib/editor/spellcheck"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
-import type { LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
+import { isLocalImageSource, type LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
 import { backUpLocalImage } from "@/lib/editor/local-image-backup"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
@@ -628,10 +628,15 @@ export function EditorShell({
     const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
     return editorViewport ?? window
   }, [])
-  const resolveLocalImage = useCallback(async (source: string) => {
+  const resolveImage = useCallback(async (source: string) => {
+    const service = getAssetService()
+    if (!isLocalImageSource(source)) {
+      const resolved = await service.resolveImageAssetUrl?.(source)
+      return { renderUrl: resolved?.data ?? source }
+    }
     const documentPath = currentCanonicalPathRef.current
     if (!documentPath) throw new Error("Save this document before loading local images")
-    const result = await getAssetService().readLocalImageAsset({ documentPath, source })
+    const result = await service.readLocalImageAsset({ documentPath, source })
     if (result.error) throw new Error(result.error.message)
     const objectUrl = URL.createObjectURL(
       new Blob([result.data.bytes.buffer as ArrayBuffer], { type: result.data.mimeType }),
@@ -649,10 +654,10 @@ export function EditorShell({
           setTableOfContentsItems([...items])
         },
         tableOfContentsScrollParent: getTableOfContentsScrollParent,
-        resolveLocalImage: isDesktopRuntime() ? resolveLocalImage : undefined,
+        resolveImage: isDesktopRuntime() ? resolveImage : undefined,
         onRequestLocalImageBackup: isDesktopRuntime() ? requestLocalImageBackup : undefined,
       }),
-    [getTableOfContentsScrollParent, requestLocalImageBackup, resolveLocalImage],
+    [getTableOfContentsScrollParent, requestLocalImageBackup, resolveImage],
   )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -1093,8 +1098,10 @@ export function EditorShell({
             typeof navigator === "undefined" ? true : navigator.onLine,
           ),
         )
+        return true
       } catch {
         setSyncStatus(typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving")
+        return false
       }
     },
     [createDesktopDraftFn, routeWritingId, router],
@@ -3753,12 +3760,12 @@ export function EditorShell({
         source: request.source,
         alt: request.alt,
         replaceSource: request.replaceSource,
+        persistDocument: async () => editor ? (await persistEditorSnapshot(editor)) === true : false,
       })
       if (result.error) {
         setLocalImageBackupError(result.error.message)
         return
       }
-      if (editor) void persistEditorSnapshot(editor)
       setLocalImageBackup(null)
     } catch {
       setLocalImageBackupError("Unable to back up this image. Its local path was preserved.")

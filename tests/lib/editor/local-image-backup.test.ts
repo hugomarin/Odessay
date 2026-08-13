@@ -32,7 +32,7 @@ function service(overrides: Partial<AssetService> = {}): AssetService {
 describe("backUpLocalImage", () => {
   it("replaces the local source only after upload succeeds", async () => {
     const assetService = service()
-    const replaceSource = vi.fn(() => true)
+    const replaceSource = vi.fn(() => vi.fn(() => true))
 
     const result = await backUpLocalImage({
       service: assetService,
@@ -41,6 +41,7 @@ describe("backUpLocalImage", () => {
       source: "image.png",
       alt: "Diagram",
       replaceSource,
+      persistDocument: vi.fn(async () => true),
     })
 
     expect(result.error).toBeNull()
@@ -51,7 +52,7 @@ describe("backUpLocalImage", () => {
   })
 
   it("preserves the local source when upload fails", async () => {
-    const replaceSource = vi.fn(() => true)
+    const replaceSource = vi.fn(() => vi.fn(() => true))
     const assetService = service({
       uploadImageAsset: vi.fn(async () => ({
         data: null,
@@ -66,10 +67,30 @@ describe("backUpLocalImage", () => {
       source: "image.png",
       alt: "",
       replaceSource,
+      persistDocument: vi.fn(async () => true),
     })
 
     expect(result.error?.message).toBe("offline")
     expect(replaceSource).not.toHaveBeenCalled()
+  })
+
+  it("restores the local source when canonical document persistence fails", async () => {
+    const rollback = vi.fn(() => true)
+    const replaceSource = vi.fn(() => rollback)
+
+    const result = await backUpLocalImage({
+      service: service(),
+      writingId: "writing-1",
+      documentPath: "/docs/essay.md",
+      source: "image.png",
+      alt: "",
+      replaceSource,
+      persistDocument: vi.fn(async () => false),
+    })
+
+    expect(result.error?.code).toBe("STORAGE_ERROR")
+    expect(result.error?.details).toEqual({ orphanedAssetId: "asset-1" })
+    expect(rollback).toHaveBeenCalledOnce()
   })
 
   it("rejects oversized images before upload", async () => {
@@ -94,7 +115,8 @@ describe("backUpLocalImage", () => {
       documentPath: "/docs/essay.md",
       source: "image.png",
       alt: "",
-      replaceSource: () => true,
+      replaceSource: () => vi.fn(() => true),
+      persistDocument: vi.fn(async () => true),
     })
 
     expect(result.error?.code).toBe("INVALID_INPUT")

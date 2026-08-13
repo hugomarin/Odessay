@@ -9,7 +9,18 @@ import { tauriReadLocalImageAsset, tauriResolveAssetPath } from "@/lib/services/
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { desktopCatalogSyncService } from "@/lib/sync/desktop-catalog-sync-service"
 
-const TEN_YEARS_SECONDS = 315_360_000
+const WRITING_ASSET_PATH = /^\/api\/writing-assets\/[0-9a-f-]+$/i
+
+function getWebRuntimeOrigin(): string | null {
+  const configured = process.env.NEXT_PUBLIC_APP_URL
+  if (!configured) return null
+  try {
+    const url = new URL(configured)
+    return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null
+  } catch {
+    return null
+  }
+}
 
 // ODE-404: writing_assets.writing_id has an FK to writings. A desktop-first
 // document may not have its cloud row yet (mutation still queued), so the
@@ -25,6 +36,32 @@ function err<T>(code: ServiceError["code"], message: string, retryable = false):
 }
 
 export class DesktopAssetService implements AssetService {
+  async resolveImageAssetUrl(source: string): Promise<ServiceResponse<string>> {
+    const origin = getWebRuntimeOrigin()
+    if (!origin) return ok(source)
+
+    let url: URL
+    try {
+      url = new URL(source, origin)
+    } catch {
+      return ok(source)
+    }
+    if (url.origin !== origin || !WRITING_ASSET_PATH.test(url.pathname)) return ok(source)
+
+    const supabase = createDesktopClient()
+    const { data, error } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    if (error || !token) return err("UNAUTHORIZED", "Not authenticated")
+
+    try {
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!response.ok) return err("NOT_FOUND", "Asset not found")
+      return ok(response.url)
+    } catch {
+      return err("UNAVAILABLE", "Unable to resolve online image", true)
+    }
+  }
+
   async readLocalImageAsset(input: {
     documentPath: string
     source: string
@@ -120,18 +157,13 @@ export class DesktopAssetService implements AssetService {
       return err("DB_ERROR", dbError.message)
     }
 
-    const { data: signed, error: signError } = await supabase.storage
-      .from("writing-assets")
-      .createSignedUrl(storagePath, TEN_YEARS_SECONDS)
-
-    if (signError || !signed) {
-      return err("STORAGE_ERROR", "Failed to create asset URL", true)
-    }
+    const origin = getWebRuntimeOrigin()
+    if (!origin) return err("UNAVAILABLE", "NEXT_PUBLIC_APP_URL is not configured")
 
     return ok({
       assetId,
       writingId: input.writingId,
-      url: signed.signedUrl,
+      url: `${origin}/api/writing-assets/${assetId}`,
       alt: input.alt ?? null,
       mimeType: input.contentType,
       sizeBytes: input.sizeBytes,

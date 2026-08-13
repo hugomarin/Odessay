@@ -37,6 +37,7 @@ export interface AssetService {
     source: string
   }): Promise<ServiceResponse<LocalImageAsset>>
   uploadImageAsset(input: UploadImageAssetInput): Promise<ServiceResponse<WritingAsset>>
+  resolveImageAssetUrl?(source: string): Promise<ServiceResponse<string>>
 }
 
 export const ASSET_SERVICE_CONTRACT = {
@@ -73,6 +74,14 @@ export const ASSET_SERVICE_CONTRACT = {
       input: ["writingId", "fileName", "contentType", "sizeBytes", "bytes", "optional alt"],
       output: ["WritingAsset"],
       errorCodes: ["UNAUTHORIZED", "FORBIDDEN", "INVALID_INPUT", "STORAGE_ERROR", "DB_ERROR"],
+    },
+    {
+      name: "resolveImageAssetUrl",
+      kind: "query",
+      summary: "Resolve a durable writing-asset reference to a runtime render URL.",
+      input: ["source"],
+      output: ["renderUrl"],
+      errorCodes: ["UNAUTHORIZED", "NOT_FOUND", "UNAVAILABLE"],
     },
   ],
   hotspots: [

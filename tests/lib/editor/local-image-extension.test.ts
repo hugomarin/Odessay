@@ -25,15 +25,15 @@ describe("local image extension", () => {
     const element = document.createElement("div")
     document.body.append(element)
     const revoke = vi.fn()
-    const resolveLocalImage = vi.fn(async () => ({ renderUrl: "blob:local-photo", revoke }))
+    const resolveImage = vi.fn(async () => ({ renderUrl: "blob:local-photo", revoke }))
     const editor = new Editor({
       element,
-      extensions: createEditorExtensions({ resolveLocalImage }),
+      extensions: createEditorExtensions({ resolveImage }),
       content: "![Photo](/Users/hugo/photo.png)",
     })
 
     await vi.waitFor(() => expect(element.querySelector("img")?.getAttribute("src")).toBe("blob:local-photo"))
-    expect(resolveLocalImage).toHaveBeenCalledWith("/Users/hugo/photo.png")
+    expect(resolveImage).toHaveBeenCalledWith("/Users/hugo/photo.png")
     expect(getEditorMarkdown(editor)).toContain("/Users/hugo/photo.png")
 
     editor.destroy()
@@ -47,7 +47,7 @@ describe("local image extension", () => {
     const editor = new Editor({
       element,
       extensions: createEditorExtensions({
-        resolveLocalImage: async () => ({ renderUrl: "blob:local-photo" }),
+        resolveImage: async () => ({ renderUrl: "blob:local-photo" }),
         onRequestLocalImageBackup: (next) => { request = next },
       }),
       content: "![Photo](images/photo.png)",
@@ -59,7 +59,7 @@ describe("local image extension", () => {
     expect(request).not.toBeNull()
     expect(getEditorMarkdown(editor)).toContain("images/photo.png")
 
-    expect(request!.replaceSource("https://cdn.example.com/photo.png")).toBe(true)
+    expect(request!.replaceSource("https://cdn.example.com/photo.png")).toBeTypeOf("function")
     expect(getEditorMarkdown(editor)).toContain("https://cdn.example.com/photo.png")
     expect(getEditorMarkdown(editor)).not.toContain("images/photo.png")
     editor.destroy()
