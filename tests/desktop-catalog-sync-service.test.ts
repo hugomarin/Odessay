@@ -46,8 +46,14 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
 }))
 
 function catalogRecord(overrides: Record<string, unknown> = {}) {
+  const cloudPresent = Boolean(overrides.cloudPresent)
+  const cloudAccountId = Object.hasOwn(overrides, "cloudAccountId")
+    ? overrides.cloudAccountId
+    : cloudPresent
+      ? "user-1"
+      : null
   return {
-    id: "doc-1", localPresent: true, cloudPresent: false, cloudAccountId: null,
+    id: "doc-1", localPresent: true, cloudPresent, cloudAccountId,
     syncStatus: "pending", title: "Doc", slug: null, status: "draft",
     artifactType: "general", visibility: "private", version: 2,
     deletedAt: null, createdAt: 100, modifiedAt: 200, binding: null,
@@ -221,6 +227,23 @@ describe("desktopCatalogSyncService", () => {
     expect(mocks.updateStatus).toHaveBeenCalledWith(
       "/config/desktop-index.sqlite3", "m1", "synced", 0, null, null,
     )
+  })
+
+  it("updates an archived cloud-owned writing without a speculative INSERT", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({
+      cloudPresent: false,
+      cloudAccountId: "user-1",
+      deletedAt: "2026-08-05T00:00:00.000Z",
+    }))
+    mocks.listPending.mockResolvedValue([mutationRow()])
+    mocks.update.mockResolvedValue({ error: null, count: 1 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.update).toHaveBeenCalledTimes(1)
+    expect(mocks.insert).not.toHaveBeenCalled()
   })
 
   it("marks the mutation failed when neither UPDATE nor INSERT verifies a row", async () => {

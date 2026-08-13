@@ -17,6 +17,7 @@ export type DocumentState =
   | "synced"
   | "pending"
   | "sync-failed"
+  | "archived"
   | "conflict"
   | "ambiguous"
   | "stale"
@@ -90,7 +91,7 @@ export function deriveDocumentStateForLocalWriting(writing: DocumentStateSource)
 
 type CatalogStateSource = Pick<
   DocumentCatalogRecord,
-  "localPresent" | "cloudPresent" | "syncStatus"
+  "localPresent" | "cloudPresent" | "cloudAccountId" | "deletedAt" | "syncStatus"
 >
 
 /**
@@ -123,8 +124,12 @@ export function deriveDocumentStateFromCatalogRecord(
     return "sync-failed"
   }
 
+  if (record.deletedAt !== null && record.cloudAccountId !== null) {
+    return "archived"
+  }
+
   return deriveDocumentStateFromSignals({
-    hasCloudRecord: record.cloudPresent,
+    hasCloudRecord: record.cloudAccountId !== null,
     hasLocalFile: record.localPresent,
     isPending: record.syncStatus === "pending",
   })

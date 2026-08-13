@@ -102,7 +102,7 @@ function synthesizeWritingFromRecord(record: DocumentCatalogRecord): LocalWritin
     visibility: record.visibility ?? "private",
     version: record.version ?? 1,
     sync_status: CATALOG_TO_LOCAL_SYNC[record.syncStatus] ?? "synced",
-    lifecycle: record.cloudPresent ? "server-confirmed" : "local-only",
+    lifecycle: record.cloudAccountId !== null ? "server-confirmed" : "local-only",
     created_at: toIso(record.createdAt),
     updated_at: toIso(record.modifiedAt),
     local_updated_at: record.modifiedAt ?? Date.now(),

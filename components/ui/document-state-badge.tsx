@@ -75,6 +75,13 @@ export const DOCUMENT_STATE_BADGE_COPY: Record<
     icon: AlertCircle,
     className: "bg-[hsl(0,72%,96%)] text-destructive",
   },
+  archived: {
+    label: "Cloud archived",
+    tooltip:
+      "This document has an archived cloud record and is no longer active in the cloud.",
+    icon: History,
+    className: "bg-[hsl(210,10%,92%)] text-[hsl(210,10%,40%)]",
+  },
   conflict: {
     label: "Conflict",
     tooltip:

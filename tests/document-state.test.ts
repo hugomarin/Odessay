@@ -103,25 +103,57 @@ describe("document state derivation", () => {
 
 const makeRecord = (
   partial: Partial<DocumentCatalogRecord> = {},
-): Pick<DocumentCatalogRecord, "localPresent" | "cloudPresent" | "syncStatus"> => ({
+): Pick<DocumentCatalogRecord, "localPresent" | "cloudPresent" | "cloudAccountId" | "deletedAt" | "syncStatus"> => ({
   localPresent: partial.localPresent ?? true,
   cloudPresent: partial.cloudPresent ?? false,
+  cloudAccountId: partial.cloudAccountId ?? null,
+  deletedAt: partial.deletedAt ?? null,
   syncStatus: partial.syncStatus ?? "local-only",
 })
 
 describe("catalog record state derivation (shared by Desk and Workspace)", () => {
   it("derives identity states from presence signals", () => {
-    expect(deriveDocumentStateFromCatalogRecord(makeRecord({ localPresent: true, cloudPresent: false }))).toBe(
+    expect(deriveDocumentStateFromCatalogRecord(makeRecord({ localPresent: true, cloudAccountId: null }))).toBe(
       "local-only",
     )
     expect(
       deriveDocumentStateFromCatalogRecord(
-        makeRecord({ localPresent: true, cloudPresent: true, syncStatus: "synced" }),
+        makeRecord({ localPresent: true, cloudAccountId: "account-1", syncStatus: "synced" }),
       ),
     ).toBe("synced")
     expect(
-      deriveDocumentStateFromCatalogRecord(makeRecord({ localPresent: false, cloudPresent: true })),
+      deriveDocumentStateFromCatalogRecord(makeRecord({ localPresent: false, cloudAccountId: "account-1" })),
     ).toBe("cloud-only")
+  })
+
+  it.each([
+    { cloudPresent: false, deletedAt: "2026-08-05T00:00:00.000Z", expected: "archived" },
+    { cloudPresent: true, deletedAt: "2026-08-05T00:00:00.000Z", expected: "archived" },
+    { cloudPresent: false, deletedAt: null, expected: "synced" },
+    { cloudPresent: true, deletedAt: null, expected: "synced" },
+  ])(
+    "derives cloud ownership from cloudAccountId when cloudPresent=$cloudPresent and deletedAt=$deletedAt",
+    ({ cloudPresent, deletedAt, expected }) => {
+      expect(
+        deriveDocumentStateFromCatalogRecord(
+          makeRecord({
+            localPresent: true,
+            cloudPresent,
+            cloudAccountId: "account-1",
+            deletedAt,
+            syncStatus: "synced",
+          }),
+        ),
+      ).toBe(expected)
+    },
+  )
+
+  it("keeps a genuinely local document local-only even when stale liveness says cloud-present", () => {
+    expect(
+      deriveDocumentStateFromCatalogRecord(
+        makeRecord({ localPresent: true, cloudPresent: true, cloudAccountId: null, deletedAt: null }),
+      ),
+    ).toBe("local-only")
   })
 
   it("surfaces sync queue states", () => {
@@ -131,7 +163,7 @@ describe("catalog record state derivation (shared by Desk and Workspace)", () =>
   })
 
   it("prioritizes operational recovery states over identity/sync", () => {
-    const synced = makeRecord({ localPresent: true, cloudPresent: true, syncStatus: "synced" })
+    const synced = makeRecord({ localPresent: true, cloudAccountId: "account-1", syncStatus: "synced" })
     expect(deriveDocumentStateFromCatalogRecord(synced, { rebuilding: true })).toBe("rebuilding")
     expect(deriveDocumentStateFromCatalogRecord(synced, { ambiguous: true })).toBe("ambiguous")
     expect(deriveDocumentStateFromCatalogRecord(synced, { stale: true })).toBe("stale")

@@ -363,6 +363,7 @@ describe("Desk consumes the DocumentCatalog", () => {
         title: "Catalog Synced Doc",
         localPresent: true,
         cloudPresent: true,
+        cloudAccountId: "account-1",
         syncStatus: "synced",
       }),
     ]
@@ -527,6 +528,7 @@ describe("Workspace consumes the DocumentCatalog", () => {
       title: "Shared Doc",
       localPresent: true,
       cloudPresent: true,
+      cloudAccountId: "account-1",
       syncStatus: "synced",
       excerpt: "The same cached excerpt in both catalog views.",
       binding: {
