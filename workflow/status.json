@@ -3475,6 +3475,26 @@
       "commit": "d9b06c6",
       "date": "2026-08-13",
       "notes": "Aprobado 9.3/10 en la primera ronda y mergeado por wf-review. Cierra en TypeScript la misma confusion que ODE-408 corrigio en la capa nativa: la propiedad cloud se deriva de cloudAccountId y cloudPresent queda reservado para vigencia. Un documento sincronizado y luego archivado deja de presentarse como Local only. Agrega el estado canonico archived con copy y tooltip en el badge unico, mapea lifecycle desde propiedad en desk-catalog-source y document-service-factory, y enruta la mutacion de un writing archivado cloud-owned por un unico UPDATE verificado, conservando el INSERT verificado solo cuando la fila cloud realmente falta. Preserva la paridad ODE-373 con una sola derivacion compartida y no altera el comportamiento web. Evidencia: typecheck PASS, lint PASS con 6 warnings preexistentes, Vitest 191 archivos/1346 tests PASS, delivery gate PASS, CI traceability y Vercel preview en verde, y waterfall required cubierto por regresion determinista de 1 UPDATE y 0 INSERTs. Findings no bloqueantes: P2 el failure mode de fila purgada no se autocorrige por hidratacion como asume el brief (preexistente, requiere deteccion de purga); P3 archived precede a pending en la derivacion."
+    },
+    {
+      "what": "fix(desktop): migrate legacy Workspace root scope [ODE-420]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-420",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-420/hotfix-legacy-workspace-scope-for-new-root-files",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/380",
+      "commit": "935f52a68c05ed5b214eab11181a408875ae470f",
+      "date": "2026-08-13",
+      "notes": "Aprobado 10/10 tras cerrar el gate de DMG y mergeado por squash como e79aa2dee8a03af5679aae2098a325f293ed828b. Migra el snapshot legacy de seleccion completa a scope abierto del BindingRoot cuando aparece Markdown nuevo en root, preserva selecciones parciales y usa el mismo scope en UUID preflight y manifest sync. CI traceability y Vercel PASS; regresiones Rust, suite TypeScript y DMG real verificados."
+    },
+    {
+      "what": "feat(desktop): render and back up local images [ODE-421]",
+      "phase": "Fase 9 — Workspace: Filesystem y Nube",
+      "issue": "ODE-421",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-421/render-local-markdown-images-and-convert-them-to-online-assets",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/381",
+      "commit": "ff2961e9714cb8e99f1180eddc624ecba47ce4fb",
+      "date": "2026-08-13",
+      "notes": "Aprobado 10/10 despues de corregir persistencia durable y URL cloud estable; mergeado por squash como ce03ae68bb6d0ada1cea94c1f48ff6d515aa4970. Las imagenes Markdown relativas y absolutas renderizan desde el filesystem conservando su src; el respaldo cloud es explicito, reemplaza la referencia solo tras upload y guardado canonico exitosos, y revierte ante falla. CI traceability y Vercel PASS; 194 archivos/1357 tests Vitest, 51 Rust y DMG real verificados."
     }
   ]
 }
