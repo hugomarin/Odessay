@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+@keyframes odBarIn{from{opacity:0;transform:translateX(-50%) translateY(14px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes odPanelIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</helmet>
+
+<div style="{{shellStyle}}">
+
+  <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 16px">
+    <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57;display:block"></span>
+    <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E;display:block"></span>
+    <span style="width:12px;height:12px;border-radius:50%;background:#28C840;display:block"></span>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;gap:10px;padding:0 10px 10px 0">
+
+    <nav style="box-sizing:border-box;width:244px;flex-shrink:0;display:flex;flex-direction:column;padding:0 6px">
+      <p style="margin:0 0 14px;padding:0 10px;font:500 20px/1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em">Settings</p>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{sections}}" as="s" hint-placeholder-count="4">
+          <button onClick="{{s.select}}" style="{{s.style}}" style-hover="background:#E9E7E3;color:#1E1915">
+            <span style="width:34px;min-width:34px;display:flex;align-items:center;justify-content:center;color:{{s.iconColor}}"><lucide-icon name="{{s.icon}}" size="17"></lucide-icon></span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left">{{s.label}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div style="flex:1"></div>
+      <div style="padding-top:12px;border-top:1px solid #E4E1DC">
+        <a href="Artifact Studio Desk.dc.html" style="{{navIdle}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="width:34px;min-width:34px;display:flex;align-items:center;justify-content:center;color:#8E837B"><lucide-icon name="arrow-left" size="17"></lucide-icon></span>
+          <span style="flex:1;text-align:left">Volver al Desk</span>
+        </a>
+        <button style="{{navIdle}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="width:34px;min-width:34px;display:flex;align-items:center;justify-content:center;color:#8E837B"><lucide-icon name="log-out" size="17"></lucide-icon></span>
+          <span style="flex:1;text-align:left">Sign out</span>
+        </button>
+      </div>
+    </nav>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+
+      <div style="flex-shrink:0;padding:12px 16px 16px">
+        <h1 style="margin:0 0 6px;font:500 32px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">{{pageTitle}}</h1>
+        <p style="margin:0;max-width:56ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{pageSub}}</p>
+      </div>
+
+      <div style="position:relative;flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+      <div class="od-scroll" data-od-menu style="flex:1;min-height:0;overflow-y:auto">
+        <div style="max-width:760px;padding:24px 16px 80px">
+
+          <sc-if value="{{isAccount}}" hint-placeholder-val="{{true}}">
+            <p style="{{groupLabel}}">Profile</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px">
+              <label style="display:flex;flex-direction:column;gap:7px">
+                <span style="font:500 13px/1 'DM Sans',sans-serif;color:#3F3731">Display name</span>
+                <input value="Hugo Marin" style="{{inputStyle}}" style-focus="border-color:#B5ADA5" />
+              </label>
+              <label style="display:flex;flex-direction:column;gap:7px">
+                <span style="font:500 13px/1 'DM Sans',sans-serif;color:#3F3731">Username</span>
+                <input value="hugomarin" style="{{inputStyle}}" style-focus="border-color:#B5ADA5" />
+              </label>
+            </div>
+            <p style="margin:0 0 34px;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">Tu URL pública se actualiza al guardar un username nuevo.</p>
+
+            <p style="{{groupLabel}}">Sign in</p>
+            <div style="border:1px solid #EDEBE8;border-radius:10px;overflow:hidden;margin-bottom:38px">
+              <div style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid #F0EEEB">
+                <span style="width:78px;flex-shrink:0;font:500 13px/1 'DM Sans',sans-serif;color:#3F3731">Email</span>
+                <span style="flex:1;min-width:0;font:400 14px/1 'DM Sans',sans-serif;color:#1E1915">hmarinr@pm.me</span>
+                <button style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Change</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;padding:15px 16px">
+                <span style="width:78px;flex-shrink:0;font:500 13px/1 'DM Sans',sans-serif;color:#3F3731">Password</span>
+                <span style="flex:1;min-width:0;font:400 14px/1 'DM Sans',sans-serif;color:#8E837B">••••••••</span>
+                <button style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Change</button>
+              </div>
+            </div>
+
+            <p style="{{dangerLabel}}">Danger zone</p>
+            <div style="display:flex;align-items:center;gap:20px;padding:16px;border:1px solid #F0E2D8;border-radius:10px;background:#FDF8F4">
+              <span style="flex:1;min-width:0">
+                <span style="display:block;font:500 14px/1.3 'DM Sans',sans-serif;color:#1E1915;margin-bottom:3px">Delete account</span>
+                <span style="display:block;font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Borra la cuenta y todo lo que vive en la nube. Los archivos locales no se tocan.</span>
+              </span>
+              <button style="{{dangerBtn}}" style-hover="background:#96532C;color:#FBFAF9">Delete account</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{isTypes}}" hint-placeholder-val="{{false}}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{types}}" as="t" hint-placeholder-count="6">
+                <div style="{{t.cardStyle}}">
+                  <div style="display:flex;align-items:center;gap:14px;padding:12px 14px">
+                    <span style="{{t.chipStyle}}"><lucide-icon name="{{t.icon}}" size="17"></lucide-icon></span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <span style="font:500 14px/1.3 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.name}}</span>
+                      <span style="font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.sub}}</span>
+                    </span>
+                    <button onClick="{{t.edit}}" style="{{t.editBtn}}" style-hover="background:#F2F1EF;color:#1E1915">{{t.editLabel}}</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <button onClick="{{addType}}" style="{{addBtn}}" style-hover="border-color:#B5ADA5;color:#1E1915">
+              <lucide-icon name="plus" size="16"></lucide-icon>Nuevo tipo de artifact
+            </button>
+            <p style="margin:14px 0 0;font:400 12px/1.6 'DM Sans',sans-serif;color:#B5ADA5;max-width:52ch">El tipo se guarda en el frontmatter del markdown, así que viaja con el archivo aunque lo abras fuera de la app.</p>
+          </sc-if>
+
+          <sc-if value="{{isStatus}}" hint-placeholder-val="{{false}}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{statuses}}" as="t" hint-placeholder-count="7">
+                <div style="{{t.cardStyle}}">
+                  <div style="display:flex;align-items:center;gap:14px;padding:12px 14px">
+                    <span style="{{t.chipStyle}}"><lucide-icon name="{{t.icon}}" size="17"></lucide-icon></span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                      <span style="display:flex;align-items:center;gap:10px">
+                        <span style="font:500 14px/1.3 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.name}}</span>
+                        <span style="{{t.reqStyle}}">Required</span>
+                      </span>
+                      <span style="font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.sub}}</span>
+                    </span>
+                    <button onClick="{{t.edit}}" style="{{t.editBtn}}" style-hover="background:#F2F1EF;color:#1E1915">{{t.editLabel}}</button>
+                    <button onClick="{{t.toggle}}" style="{{t.trackStyle}}" title="Mostrar en menús"><span style="{{t.knobStyle}}"></span></button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <button onClick="{{addStatus}}" style="{{addBtn}}" style-hover="border-color:#B5ADA5;color:#1E1915">
+              <lucide-icon name="plus" size="16"></lucide-icon>Nuevo estado
+            </button>
+          </sc-if>
+
+          <sc-if value="{{isArchive}}" hint-placeholder-val="{{false}}">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+              <span style="flex:1;min-width:180px;display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border:1px solid #E4E1DC;border-radius:9px">
+                <span style="display:flex;color:#B5ADA5;flex-shrink:0"><lucide-icon name="search" size="15"></lucide-icon></span>
+                <input value="{{query}}" onChange="{{onQuery}}" placeholder="Buscar en el archivo…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:400 14px/1 'DM Sans',sans-serif;color:#1E1915" />
+              </span>
+              <sc-for list="{{scopeChips}}" as="c" hint-placeholder-count="3">
+                <button onClick="{{c.select}}" style="{{c.style}}" style-hover="background:#F2F1EF;color:#1E1915">{{c.label}}</button>
+              </sc-for>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;height:44px;padding:0 8px 0 14px;border-radius:10px;background:#FAF7F3;margin-bottom:4px">
+              <button onClick="{{toggleAll}}" style="{{allBoxStyle}}" title="Seleccionar todo">
+                <span style="{{allCheckStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+                <span style="{{allDashStyle}}"></span>
+              </button>
+              <span style="flex:1;min-width:0;font:500 13px/1 'DM Sans',sans-serif;color:#1E1915">{{archiveCount}}</span>
+              <button onClick="{{selectPage}}" style="{{ghostSmall}}" style-hover="background:#EFEBE5;color:#1E1915">Seleccionar los {{visibleCount}} visibles</button>
+            </div>
+
+            <div>
+              <sc-for list="{{archived}}" as="r" hint-placeholder-count="8">
+                <div style="{{r.rowStyle}}" style-hover="background:#FCFBFA">
+                  <button onClick="{{r.toggle}}" style="{{r.boxStyle}}">
+                    <span style="{{r.checkStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+                  </button>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                    <span style="font:500 14px/1.3 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.title}}</span>
+                    <span style="font:400 12px/1.4 'DM Sans',sans-serif;color:#B5ADA5">{{r.meta}}</span>
+                  </span>
+                  <span style="{{r.pillStyle}}">{{r.where}}</span>
+                  <button style="{{iconBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Más"><lucide-icon name="ellipsis" size="17"></lucide-icon></button>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{archiveEmpty}}" hint-placeholder-val="{{false}}">
+              <div style="padding:60px 0;text-align:center">
+                <p style="margin:0 0 4px;font:500 16px/1.3 'DM Sans',sans-serif;color:#1E1915">Nada acá</p>
+                <p style="margin:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Ningún artifact archivado coincide con ese filtro.</p>
+              </div>
+            </sc-if>
+          </sc-if>
+
+        </div>
+      </div>
+
+      <sc-if value="{{modalOpen}}" hint-placeholder-val="{{false}}">
+        <div style="position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:30px;background:rgba(35,24,15,.26)">
+          <div onClick="{{closeModal}}" style="position:absolute;inset:0"></div>
+          <div style="position:relative;box-sizing:border-box;width:520px;max-width:100%;max-height:100%;display:flex;flex-direction:column;background:#FFFFFF;border-radius:18px;box-shadow:0 30px 90px rgba(35,24,15,.28);overflow:hidden;animation:odPanelIn 220ms cubic-bezier(.4,0,.15,1)">
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:14px;padding:22px 22px 18px">
+              <span style="{{modalChip}}"><lucide-icon name="{{modalIcon}}" size="20"></lucide-icon></span>
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+                <span style="font:500 20px/1.2 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em">{{modalTitle}}</span>
+                <span style="font:400 12px/1.4 'DM Sans',sans-serif;color:#B5ADA5">{{modalKind}}</span>
+              </span>
+              <button onClick="{{closeModal}}" style="{{iconBtn}}" style-hover="background:#F2F1EF;color:#1E1915"><lucide-icon name="x" size="17"></lucide-icon></button>
+            </div>
+
+            <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;padding:0 22px 4px">
+              <p style="{{fieldLabel}}">Nombre</p>
+              <input value="{{modalName}}" onChange="{{onModalName}}" style="{{inputStyle}}" style-focus="border-color:#B5ADA5" />
+
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                <p style="{{fieldLabel}}">Descripción</p>
+                <span style="font:400 11px/1 'DM Sans',sans-serif;color:#B5ADA5">Cuándo usarlo</span>
+              </div>
+              <textarea value="{{modalDesc}}" onChange="{{onModalDesc}}" placeholder="Un artifact que…" style="box-sizing:border-box;width:100%;height:92px;padding:11px 13px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF;font:400 14px/1.55 'DM Sans',sans-serif;color:#1E1915;resize:none;outline:none;transition:border-color 150ms ease" style-focus="border-color:#B5ADA5"></textarea>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:9px">
+                <button onClick="{{toggleRec}}" style="{{recBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+                  <lucide-icon name="{{recIcon}}" size="14"></lucide-icon>{{recLabel}}
+                </button>
+                <button onClick="{{improve}}" style="{{improveStyle}}" title="Necesita un nombre o algo escrito">
+                  <span style="display:flex;margin-right:7px;color:{{improveIconColor}}"><lucide-icon name="sparkles" size="14"></lucide-icon></span>Mejorar con AI
+                </button>
+                <span style="flex:1"></span>
+                <span style="font:400 11px/1 'DM Sans',sans-serif;color:#CFC9C1">{{descHint}}</span>
+              </div>
+
+              <p style="{{fieldLabel}}">Icono</p>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{modalIcons}}" as="o" hint-placeholder-count="12">
+                  <button onClick="{{o.select}}" style="{{o.style}}" style-hover="border-color:#B5ADA5"><lucide-icon name="{{o.name}}" size="17"></lucide-icon></button>
+                </sc-for>
+              </div>
+
+              <p style="{{fieldLabel}}">Color</p>
+              <div style="display:flex;gap:10px;padding-bottom:6px">
+                <sc-for list="{{modalColors}}" as="c" hint-placeholder-count="6">
+                  <button onClick="{{c.select}}" style="{{c.style}}" title="{{c.name}}"></button>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="flex-shrink:0;display:flex;align-items:center;gap:10px;padding:16px 22px;border-top:1px solid #EDEBE8">
+              <sc-if value="{{modalCanDelete}}" hint-placeholder-val="{{true}}">
+                <button onClick="{{removeItem}}" style="{{linkDanger}}" style-hover="color:#96532C">Eliminar</button>
+              </sc-if>
+              <sc-if value="{{modalLocked}}" hint-placeholder-val="{{false}}">
+                <span style="max-width:30ch;font:400 12px/1.4 'DM Sans',sans-serif;color:#B5ADA5">{{lockedNote}}</span>
+              </sc-if>
+              <span style="flex:1"></span>
+              <button onClick="{{closeModal}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Cancelar</button>
+              <button onClick="{{closeModal}}" style="{{primarySmall}}" style-hover="opacity:.9">Guardar</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{hasSelection}}" hint-placeholder-val="{{false}}">
+        <div style="position:absolute;left:50%;bottom:26px;z-index:40;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 22px;border-radius:14px;background:#1E1915;box-shadow:0 26px 70px rgba(35,24,15,.30),0 2px 6px rgba(35,24,15,.20);animation:odBarIn 200ms cubic-bezier(.4,0,.15,1);white-space:nowrap">
+          <span style="font:500 14px/1 'DM Sans',sans-serif;color:#FBFAF9">{{selectionLabel}}</span>
+          <button onClick="{{clearSelection}}" style="{{selLink}}" style-hover="color:#FBFAF9">Deselect</button>
+          <span style="width:1px;height:26px;margin:0 4px;background:rgba(251,250,249,.14)"></span>
+          <button onClick="{{restore}}" style="{{selChip}}" style-hover="background:rgba(251,250,249,.16)"><lucide-icon name="undo-2" size="15"></lucide-icon>Restore</button>
+          <button style="{{selChip}}" style-hover="background:rgba(251,250,249,.16)"><lucide-icon name="download" size="15"></lucide-icon>Download</button>
+          <button onClick="{{destroy}}" style="{{selDanger}}" style-hover="background:rgba(150,83,44,.42)"><lucide-icon name="trash-2" size="15"></lucide-icon>Delete forever</button>
+        </div>
+      </sc-if>
+    </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;section&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Account&quot;,&quot;Artifact types&quot;,&quot;Status&quot;,&quot;Archived writings&quot;],&quot;default&quot;:&quot;Artifact types&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;}}">
+const COLORS = [
+  ["Ink", "#1E1915", "#E7E5E1"], ["Terracota", "#96532C", "#FAEBDC"], ["Ámbar", "#C07B2A", "#FBF0DE"],
+  ["Verde", "#2E7D4F", "#E4F0E7"], ["Índigo", "#5B5BD6", "#E7E7FA"], ["Piedra", "#8E837B", "#EFEDEA"]
+];
+const TYPE_ICONS = ["file-text", "bot", "wrench", "message-square", "layout-template", "sticky-note", "book-open", "compass", "flask-conical", "quote", "list-checks", "mic"];
+const STATUS_ICONS = ["circle-dot", "circle-dashed", "circle", "eye", "circle-check", "archive", "circle-x", "flame"];
+
+const ARCHIVE = [
+  { id: 1, title: "Los escritores de Closet", ws: "Narratif", when: "4 ago 2026", where: "Cloud" },
+  { id: 2, title: "bitacora-de-construccion", ws: "ode408", when: "4 ago 2026", where: "Cloud" },
+  { id: 3, title: "20-Introducing tool use", ws: "Tutoria", when: "4 ago 2026", where: "Local" },
+  { id: 4, title: "21-Project overview", ws: "Tutoria", when: "4 ago 2026", where: "Cloud" },
+  { id: 5, title: "22-Tool functions", ws: "Tutoria", when: "2 ago 2026", where: "Cloud" },
+  { id: 6, title: "23-Tool schemas", ws: "Tutoria", when: "2 ago 2026", where: "Local" },
+  { id: 7, title: "24-Handling message blocks", ws: "Tutoria", when: "28 jul 2026", where: "Cloud" },
+  { id: 8, title: "Prompt maestro v2", ws: "ode408", when: "12 jul 2026", where: "Cloud" }
+];
+
+class Component extends DCLogic {
+  state = {
+    section: "types", modal: null, rec: false, query: "", scope: "Todos", selected: {},
+    types: [
+      { id: "t1", name: "General", desc: "Cualquier escrito que no encaja en otra cosa. El default.", icon: "file-text", color: "#1E1915", builtin: true, count: 24 },
+      { id: "t2", name: "Agent", desc: "Instrucciones para un agente: rol, límites y criterio de salida.", icon: "bot", color: "#5B5BD6", builtin: true, count: 6 },
+      { id: "t3", name: "Skill", desc: "Un procedimiento reusable que Claude puede seguir paso a paso.", icon: "wrench", color: "#96532C", builtin: true, count: 11 },
+      { id: "t4", name: "Prompt", desc: "Un prompt que vas a reutilizar y versionar.", icon: "message-square", color: "#C07B2A", builtin: true, count: 9 },
+      { id: "t5", name: "Note", desc: "Notas sueltas, apuntes y material crudo.", icon: "sticky-note", color: "#8E837B", builtin: true, count: 18 },
+      { id: "t6", name: "Transcripción", desc: "", icon: "mic", color: "#2E7D4F", builtin: false, count: 3 }
+    ],
+    statuses: [
+      { id: "s1", name: "New", desc: "Existe pero nadie lo trabajó todavía.", icon: "circle-dot", color: "#8E837B", on: true },
+      { id: "s2", name: "Exploring", desc: "Estoy probando ideas: puede cambiar de forma por completo.", icon: "circle-dashed", color: "#5B5BD6", on: true },
+      { id: "s3", name: "Draft", desc: "Tiene forma y se puede leer entero.", icon: "circle-dashed", color: "#C07B2A", on: true, required: true },
+      { id: "s4", name: "In review", desc: "Esperando ojos ajenos antes de cerrarlo.", icon: "eye", color: "#96532C", on: true },
+      { id: "s5", name: "Done", desc: "Terminado. Se toca solo si cambia el contexto.", icon: "circle-check", color: "#2E7D4F", on: true },
+      { id: "s6", name: "Archived", desc: "Fuera de circulación, pero se conserva.", icon: "archive", color: "#8E837B", on: true },
+      { id: "s7", name: "Canceled", desc: "", icon: "circle-x", color: "#8E837B", on: false }
+    ]
+  };
+
+  componentDidMount() { this._sync(); }
+  componentDidUpdate(prev) { if (prev.section !== this.props.section) this._sync(); }
+  _sync() {
+    const map = { Account: "account", "Artifact types": "types", Status: "status", "Archived writings": "archive" };
+    const want = map[this.props.section ?? "Artifact types"];
+    if (want && want !== this.state.section) this.setState({ section: want, modal: null });
+  }
+
+  tint(hex) { const c = COLORS.find((x) => x[1] === hex); return c ? c[2] : "#EFEDEA"; }
+  patch(key, id, next) { this.setState({ [key]: this.state[key].map((r) => (r.id === id ? { ...r, ...next } : r)) }); }
+
+  editorRows(key) {
+    const s = this.state;
+    return s[key].map((r) => {
+      const locked = key === "types" ? !!r.builtin : !!r.required;
+      return {
+        id: r.id, name: r.name, icon: r.icon,
+        sub: r.desc || (key === "types" ? "Sin descripción · " + (r.count || 0) + " artifacts" : "Sin descripción"),
+        chipStyle: "width:38px;height:38px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:" +
+          this.tint(r.color) + ";color:" + r.color,
+        cardStyle: "border:1px solid #EDEBE8;border-radius:12px;background:#FFFFFF;transition:border-color 150ms ease",
+        editLabel: "Editar",
+        editBtn: "display:inline-flex;align-items:center;height:32px;padding:0 12px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;color:#3F3731;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+        edit: () => this.setState({ modal: { key, id: r.id }, rec: false }),
+        reqStyle: "flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5;" + (locked && key === "statuses" ? "" : "display:none"),
+        on: r.on,
+        toggle: () => (locked ? null : this.patch(key, r.id, { on: !r.on })),
+        trackStyle: "width:40px;height:23px;flex-shrink:0;padding:0;border:0;border-radius:12px;display:flex;align-items:center;transition:background-color 200ms ease;background:" +
+          (r.on ? (locked ? "#B5ADA5" : "#1E1915") : "#D6D1CA") + ";cursor:" + (locked ? "not-allowed" : "pointer"),
+        knobStyle: "width:17px;height:17px;border-radius:50%;background:#FFFFFF;display:block;transition:transform 200ms cubic-bezier(.4,0,.15,1);transform:translateX(" + (r.on ? 20 : 3) + "px)"
+      };
+    });
+  }
+
+  modalVals() {
+    const s = this.state, m = s.modal;
+    if (!m) return { modalOpen: false };
+    const item = s[m.key].find((x) => x.id === m.id);
+    if (!item) return { modalOpen: false };
+    const isType = m.key === "types";
+    const locked = isType ? !!item.builtin : !!item.required;
+    const icons = isType ? TYPE_ICONS : STATUS_ICONS;
+    return {
+      modalOpen: true,
+      modalTitle: item.name || (isType ? "Nuevo tipo" : "Nuevo estado"),
+      modalKind: isType ? "Tipo de artifact" : "Estado de escritura",
+      modalIcon: item.icon,
+      modalChip: "width:44px;height:44px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:12px;background:" +
+        this.tint(item.color) + ";color:" + item.color,
+      modalName: item.name,
+      onModalName: (e) => this.patch(m.key, m.id, { name: e.target.value }),
+      modalDesc: item.desc || "",
+      onModalDesc: (e) => this.patch(m.key, m.id, { desc: e.target.value }),
+      descHint: (item.desc || "").length + "/180",
+      toggleRec: () => this.setState({ rec: !s.rec }),
+      recIcon: s.rec ? "square" : "mic",
+      recLabel: s.rec ? "Grabando… tocá para parar" : "Dictar",
+      recBtnStyle: "display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border:1px solid " + (s.rec ? "#E3BFA4" : "#E4E1DC") +
+        ";border-radius:8px;background:" + (s.rec ? "#FDF8F4" : "#FFFFFF") + ";color:" + (s.rec ? "#96532C" : "#3F3731") +
+        ";font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease,color 150ms ease",
+      canImprove: !!(item.desc || "").trim() || !!item.name.trim(),
+      improveStyle: "display:inline-flex;align-items:center;height:32px;padding:0 12px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;font:500 12px/1 'DM Sans',sans-serif;transition:background-color 150ms ease,color 150ms ease;" +
+        ((item.desc || "").trim() || item.name.trim()
+          ? "color:#3F3731;cursor:pointer"
+          : "color:#CFC9C1;border-color:#EDEBE8;cursor:not-allowed"),
+      improveIconColor: (item.desc || "").trim() || item.name.trim() ? "#96532C" : "#CFC9C1",
+      improve: () => {
+        const base = (item.desc || "").trim(), name = item.name.trim();
+        if (!base && !name) return;
+        const tail = isType ? "Define el propósito del archivo, no su estado." : "Es un estado de trabajo, no una categoría.";
+        const lead = base
+          ? base.charAt(0).toUpperCase() + base.slice(1).replace(/[.\s]+$/, "") + "."
+          : (isType ? "Agrupa los artifacts de tipo " + name + "." : "Marca el momento del proceso llamado " + name + ".");
+        const polished = lead + " " + tail;
+        this.patch(m.key, m.id, { desc: polished.slice(0, 180) });
+      },
+      modalIcons: icons.map((name) => ({
+        name, select: () => this.patch(m.key, m.id, { icon: name }),
+        style: "width:38px;height:38px;display:inline-flex;align-items:center;justify-content:center;border:1px solid " +
+          (name === item.icon ? "#1E1915" : "#E4E1DC") + ";border-radius:9px;background:" + (name === item.icon ? "#F2F1EF" : "#FFFFFF") +
+          ";color:" + (name === item.icon ? "#1E1915" : "#8E837B") + ";cursor:pointer;transition:border-color 150ms ease,background-color 150ms ease"
+      })),
+      modalColors: COLORS.map(([name, hex]) => ({
+        name, select: () => this.patch(m.key, m.id, { color: hex }),
+        style: "width:30px;height:30px;border-radius:50%;border:0;background:" + hex + ";cursor:pointer;box-shadow:0 0 0 " +
+          (hex === item.color ? "3px #FFFFFF,0 0 0 5px #1E1915" : "0 transparent") + ";transition:box-shadow 150ms ease"
+      })),
+      modalCanDelete: !locked, modalLocked: locked,
+      lockedNote: isType ? "Tipo base: podés cambiar icono, color y descripción, no eliminarlo." : "Draft es el estado por defecto de todo artifact nuevo.",
+      removeItem: () => this.setState({ modal: null, [m.key]: s[m.key].filter((x) => x.id !== m.id) }),
+      closeModal: () => this.setState({ modal: null, rec: false })
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const q = s.query.trim().toLowerCase();
+    const rows = ARCHIVE.filter((r) => (s.scope === "Todos" || r.where === s.scope) && (!q || r.title.toLowerCase().includes(q) || r.ws.toLowerCase().includes(q)));
+    const selCount = Object.values(s.selected).filter(Boolean).length;
+    const allOn = rows.length > 0 && rows.every((r) => s.selected[r.id]);
+    const someOn = selCount > 0 && !allOn;
+
+    const SECTIONS = [
+      ["account", "Account", "user-round"], ["types", "Artifact types", "shapes"],
+      ["status", "Status", "circle-dashed"], ["archive", "Archived writings", "archive"]
+    ];
+    const navRow = (on) => "display:flex;align-items:center;gap:2px;box-sizing:border-box;width:100%;height:38px;padding:0 6px 0 0;border:0;border-radius:9px;font:" +
+      (on ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#3F3731") + ";background:" + (on ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-decoration:none;transition:background-color 180ms ease";
+
+    const titles = {
+      account: ["Account", "Tu perfil y cómo entrás. Los artifacts viven en tus carpetas, no acá."],
+      types: ["Artifact types", "Cada tipo tiene icono y color propios y aparece en el selector del editor y en los filtros del Desk."],
+      status: ["Writing statuses", "Elegí qué estados aparecen en menús y filtros, y cómo se ven."],
+      archive: ["Archived writings", "Descargá, restaurá o borrá definitivamente lo que archivaste."]
+    };
+
+    return {
+      shellStyle: "display:flex;flex-direction:column;background:#F3F2F0;overflow:hidden;width:100%;height:100vh",
+      navIdle: navRow(false),
+      sections: SECTIONS.map(([id, label, icon]) => ({
+        label, icon, style: navRow(s.section === id), iconColor: s.section === id ? "#3F3731" : "#8E837B",
+        select: () => this.setState({ section: id, modal: null })
+      })),
+      pageTitle: titles[s.section][0],
+      pageSub: titles[s.section][1],
+      isAccount: s.section === "account", isTypes: s.section === "types",
+      isStatus: s.section === "status", isArchive: s.section === "archive",
+
+      groupLabel: "margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid #EDEBE8;font:500 15px/1 'DM Sans',sans-serif;color:#1E1915",
+      dangerLabel: "margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid #F0E2D8;font:500 12px/1 'DM Sans',sans-serif;color:#96532C;letter-spacing:.06em;text-transform:uppercase",
+      fieldLabel: "margin:18px 0 8px;font:500 12px/1 'DM Sans',sans-serif;color:#3F3731;letter-spacing:.04em;text-transform:uppercase",
+      inputStyle: "box-sizing:border-box;width:100%;height:42px;padding:0 13px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF;font:400 14px/1 'DM Sans',sans-serif;color:#1E1915;outline:none;transition:border-color 150ms ease",
+      ghostBtn: "display:inline-flex;align-items:center;height:34px;padding:0 14px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;color:#3F3731;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      ghostSmall: "display:inline-flex;align-items:center;height:32px;padding:0 12px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;color:#3F3731;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      primarySmall: "display:inline-flex;align-items:center;height:36px;padding:0 15px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease",
+      linkDanger: "padding:0 4px;border:0;background:transparent;color:#B5ADA5;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:color 150ms ease",
+      dangerBtn: "flex-shrink:0;display:inline-flex;align-items:center;height:38px;padding:0 16px;border:1px solid #E3BFA4;border-radius:9px;background:#FFFFFF;color:#96532C;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      addBtn: "display:inline-flex;align-items:center;gap:8px;height:42px;margin-top:12px;padding:0 16px;border:1px dashed #D6D1CA;border-radius:10px;background:transparent;color:#6B5F57;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:border-color 150ms ease,color 150ms ease",
+      iconBtn: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+
+      types: this.editorRows("types"),
+      statuses: this.editorRows("statuses"),
+      ...this.modalVals(),
+      addType: () => {
+        const id = "t" + Date.now();
+        this.setState({ types: s.types.concat([{ id, name: "", desc: "", icon: "book-open", color: "#5B5BD6", builtin: false, count: 0 }]), modal: { key: "types", id }, rec: false });
+      },
+      addStatus: () => {
+        const id = "s" + Date.now();
+        this.setState({ statuses: s.statuses.concat([{ id, name: "", desc: "", icon: "circle", color: "#8E837B", on: true }]), modal: { key: "statuses", id }, rec: false });
+      },
+
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      scopeChips: ["Todos", "Cloud", "Local"].map((label) => ({
+        label, select: () => this.setState({ scope: label }),
+        style: "display:inline-flex;align-items:center;height:38px;padding:0 14px;border:1px solid " + (s.scope === label ? "#B5ADA5" : "#E4E1DC") +
+          ";border-radius:9px;background:" + (s.scope === label ? "#F2F1EF" : "#FFFFFF") + ";color:" + (s.scope === label ? "#1E1915" : "#3F3731") +
+          ";font:" + (s.scope === label ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease"
+      })),
+      archiveCount: rows.length + " archivados" + (s.scope === "Todos" ? "" : " · " + s.scope),
+      visibleCount: rows.length,
+      selectPage: () => this.setState({ selected: rows.reduce((a, r) => ((a[r.id] = true), a), {}) }),
+      toggleAll: () => this.setState({ selected: allOn ? {} : rows.reduce((a, r) => ((a[r.id] = true), a), {}) }),
+      allBoxStyle: "position:relative;width:20px;height:20px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+        (selCount ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (selCount ? "#1E1915" : "#FFFFFF") + ";cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+      allCheckStyle: "display:flex;color:#FFFFFF;" + (allOn ? "opacity:1" : "opacity:0"),
+      allDashStyle: "position:absolute;width:9px;height:1.5px;border-radius:1px;background:#FFFFFF;" + (someOn ? "opacity:1" : "opacity:0"),
+      archiveEmpty: rows.length === 0,
+      archived: rows.map((r) => {
+        const on = !!s.selected[r.id];
+        return {
+          title: r.title, meta: "Archivado " + r.when + " · " + r.ws,
+          rowStyle: "display:flex;align-items:center;gap:14px;padding:13px 8px 13px 14px;border-bottom:1px solid #F0EEEB;transition:background-color 150ms ease",
+          toggle: () => this.setState({ selected: { ...s.selected, [r.id]: !on } }),
+          boxStyle: "width:20px;height:20px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+            (on ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (on ? "#1E1915" : "#FFFFFF") + ";cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+          checkStyle: "display:flex;color:#FFFFFF;" + (on ? "opacity:1" : "opacity:0"),
+          where: r.where === "Cloud" ? "Cloud archived" : "Local file",
+          pillStyle: "flex-shrink:0;display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:12px;font:400 12px/1 'DM Sans',sans-serif;background:" +
+            (r.where === "Cloud" ? "#EFEDEA;color:#6B5F57" : "#FBF0DE;color:#96532C")
+        };
+      }),
+
+      hasSelection: selCount > 0 && s.section === "archive",
+      selectionLabel: selCount + " selected",
+      clearSelection: () => this.setState({ selected: {} }),
+      restore: () => this.setState({ selected: {} }),
+      destroy: () => this.setState({ selected: {} }),
+      selLink: "padding:0 2px;border:0;background:transparent;color:rgba(251,250,249,.55);font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:color 150ms ease",
+      selChip: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(251,250,249,.10);color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      selDanger: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(150,83,44,.30);color:#E8A87C;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px;height:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+@keyframes odMenuIn{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes odFadeIn{from{opacity:0;transform:translate(-50%,-100%) translateY(5px)}to{opacity:1;transform:translate(-50%,-100%)}}
+</style>
+</helmet>
+
+<!-- LAYER 0 — la ventana: un solo fondo continuo. Sidebar, tabs y status bar viven aquí. -->
+<div style="{{shellStyle}}">
+
+  <!-- ── TOP BAR (capa 0) ── -->
+  <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px">
+    <div style="box-sizing:border-box;width:76px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#28C840;display:block"></span>
+    </div>
+    <button onClick="{{toggleSidebar}}" title="Toggle sidebar" style="{{sidebarToggleStyle}}" style-hover="background:#E9E7E3;color:#1E1915">
+      <lucide-icon name="panel-left" size="18"></lucide-icon>
+    </button>
+
+    <div style="flex:1;min-width:0;display:flex;align-items:center;gap:0;overflow:hidden">
+      <sc-for list="{{docs}}" as="doc" hint-placeholder-count="4">
+        <div onClick="{{doc.select}}" style="{{doc.tabStyle}}" style-hover="background:{{doc.hoverBg}}">
+          <span style="{{doc.iconStyle}}">
+            <lucide-icon name="{{doc.icon}}" size="15"></lucide-icon>
+          </span>
+          <span style="{{doc.titleStyle}}">{{doc.title}}</span>
+        </div>
+      </sc-for>
+      <button title="New tab" style="width:32px;height:32px;margin-left:10px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#E9E7E3;color:#1E1915">
+        <lucide-icon name="plus" size="17"></lucide-icon>
+      </button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:2px;flex-shrink:0">
+      <button title="Focus mode" style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#3F3731;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#E9E7E3;color:#1E1915">
+        <lucide-icon name="scan" size="18"></lucide-icon>
+      </button>
+      <button title="Compartir" style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#3F3731;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#E9E7E3;color:#1E1915">
+        <lucide-icon name="shapes" size="18"></lucide-icon>
+      </button>
+      <button onClick="{{togglePanel}}" title="Propiedades del artifact" style="{{panelToggleStyle}}" style-hover="background:#E9E7E3;color:#1E1915">
+        <lucide-icon name="align-left" size="18"></lucide-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── BODY ── -->
+  <div style="flex:1;min-height:0;display:flex;gap:10px;padding:0 10px 10px 0">
+
+    <!-- SIDEBAR (capa 0 — mismo fondo, sin borde) -->
+    <div style="{{railColStyle}}">
+    <nav style="{{sidebarStyle}}">
+      <div style="display:flex;flex-direction:column;gap:2px;padding:2px 0 0">
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="New Artifact">
+          <span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">New Artifact</span>
+        </button>
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Search">
+          <span style="{{railIconWrap}}"><lucide-icon name="search" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Search</span>
+        </button>
+      </div>
+
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:26px 0 8px;display:flex;flex-direction:column;gap:2px">
+        <button style="{{studioNavStyle}}" style-hover="background:#E4E1DC" title="Studio">
+          <span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Studio</span>
+        </button>
+        <a href="Artifact Studio Desk.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Desk">
+          <span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Desk</span>
+        </a>
+        <button onClick="{{goWorkspace}}" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Workspace">
+          <span style="{{railIconWrap}}"><lucide-icon name="folder-tree" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Workspace</span>
+        </button>
+
+        <div style="{{workspaceListStyle}}">
+          <sc-for list="{{workspaces}}" as="ws" hint-placeholder-count="5">
+            <button onClick="{{ws.select}}" style="{{ws.style}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{ws.iconStyle}}"><lucide-icon name="folder" size="15"></lucide-icon></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ws.name}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+    </nav>
+
+    <div style="{{accountRowStyle}}">
+        <span style="width:36px;height:36px;margin:0 2px;flex-shrink:0;border-radius:50%;background:#1E1915;color:#FBFAF9;display:flex;align-items:center;justify-content:center;font:600 12px/1 'DM Sans',sans-serif">HM</span>
+        <span style="{{userMetaStyle}}">
+          <span style="display:block;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915;white-space:nowrap">Hugo Marin</span>
+          <span style="display:block;font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap">@hugomarin</span>
+        </span>
+        <a href="Artifact Studio Settings.dc.html" style="{{userGearStyle}}" title="Settings"><lucide-icon name="settings" size="15"></lucide-icon></a>
+      </div>
+    </div>
+
+    <!-- NAVEGADOR IZQUIERDO — TOC / Workspace (capa 0, sin caja propia) -->
+    <aside style="{{leftPanelStyle}}">
+      <div style="display:flex;align-items:center;gap:4px;height:46px;flex-shrink:0">
+        <button onClick="{{openToc}}" style="{{tocTabStyle}}">
+          <lucide-icon name="list-tree" size="16"></lucide-icon>TOC
+        </button>
+        <button onClick="{{openWorkspacePanel}}" style="{{wsTabStyle}}">
+          <lucide-icon name="folder-tree" size="16"></lucide-icon>Workspace
+        </button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;height:40px;flex-shrink:0;border-top:1px solid #E4E1DC;border-bottom:1px solid #E4E1DC;padding:0 2px 0 4px">
+        <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">{{leftPanelTitle}}</span>
+        <span style="flex:1"></span>
+        <span style="height:19px;min-width:19px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:#E7E5E1;font:500 11px/1 'DM Sans',sans-serif;color:#6B5F57">{{leftPanelCount}}</span>
+        <button onClick="{{closeLeftPanel}}" style="{{ghostBtnSm}}" style-hover="background:#E9E7E3;color:#1E1915" title="Close">
+          <lucide-icon name="x" size="15"></lucide-icon>
+        </button>
+      </div>
+
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:8px 2px 12px 0">
+        <sc-if value="{{isTocPanel}}" hint-placeholder-val="{{true}}">
+          <sc-for list="{{tocItems}}" as="t" hint-placeholder-count="8">
+            <button onClick="{{t.select}}" style="{{t.style}}" style-hover="background:#EDEBE8">
+              <span style="{{t.accentStyle}}"></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{t.label}}</span>
+            </button>
+          </sc-for>
+        </sc-if>
+
+        <sc-if value="{{isWorkspacePanel}}" hint-placeholder-val="{{false}}">
+          <div style="display:flex;align-items:center;gap:6px;min-height:32px;padding:0 8px;margin-bottom:4px;font:500 12px/1 'DM Sans',sans-serif;color:#1E1915">
+            <span style="display:flex;color:#3F3731"><lucide-icon name="house" size="14"></lucide-icon></span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{workspaceRootName}}</span>
+          </div>
+          <sc-for list="{{treeItems}}" as="n" hint-placeholder-count="10">
+            <div style="display:flex;align-items:stretch">
+              <sc-for list="{{n.guides}}" as="g" hint-placeholder-count="1">
+                <span style="width:16px;flex-shrink:0;border-left:1px solid #E4E1DC;margin-left:5px"></span>
+              </sc-for>
+              <button onClick="{{n.select}}" style="{{n.style}}" style-hover="background:#EDEBE8;color:#1E1915">
+                <span style="{{n.accentStyle}}"></span>
+                <span style="{{n.chevronStyle}}"><lucide-icon name="chevron-right" size="13"></lucide-icon></span>
+                <span style="display:flex;flex-shrink:0"><lucide-icon name="{{n.icon}}" size="14"></lucide-icon></span>
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{n.name}}</span>
+              </button>
+            </div>
+          </sc-for>
+        </sc-if>
+      </div>
+    </aside>
+
+    <!-- LAYER 1 — la hoja del artifact, la única superficie elevada -->
+    <div style="{{centerColStyle}}">
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+  
+        <div style="position:relative;z-index:10;height:56px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:0 20px 0 28px;border-bottom:1px solid #EDEBE8;background:#FFFFFF">
+          <div style="flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0">
+            <span style="{{headerNavStyle}}">
+              <button onClick="{{openToc}}" style="{{ghostBtnSm}}" style-hover="background:#F2F1EF;color:#1E1915" title="Table of contents"><lucide-icon name="list-tree" size="16"></lucide-icon></button>
+              <button onClick="{{openWorkspacePanel}}" style="{{ghostBtnSm}}" style-hover="background:#F2F1EF;color:#1E1915" title="Workspace"><lucide-icon name="folder-tree" size="16"></lucide-icon></button>
+            </span>
+            <span style="{{crumbLeadStyle}}">
+              <span style="font:400 14px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">Workspace</span>
+              <span style="color:#B5ADA5;display:flex"><lucide-icon name="chevron-right" size="13"></lucide-icon></span>
+              <span style="font:400 14px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">{{activeWorkspace}}</span>
+              <span style="color:#B5ADA5;display:flex"><lucide-icon name="chevron-right" size="13"></lucide-icon></span>
+            </span>
+            <span onDoubleClick="{{startEditTitle}}" style="flex:0 1 auto;min-width:48px;display:block;font:400 14px/1.4 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text">{{activeTitle}}</span>
+            <button onClick="{{startEditTitle}}" style="{{titleEditBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Renombrar artifact"><lucide-icon name="pencil" size="14"></lucide-icon></button>
+            <span style="flex:1 1 auto"></span>
+          </div>
+  
+          <div data-od-menu style="display:flex;align-items:center;gap:1px;flex-shrink:0">
+            <button style="{{fmtBtn}}" style-hover="background:#F2F1EF" title="Bold"><lucide-icon name="bold" size="16" stroke="2"></lucide-icon></button>
+            <button style="{{fmtBtn}}" style-hover="background:#F2F1EF" title="Italic"><lucide-icon name="italic" size="16" stroke="2"></lucide-icon></button>
+            <button style="{{fmtBtn}}" style-hover="background:#F2F1EF" title="Strikethrough"><lucide-icon name="strikethrough" size="16" stroke="2"></lucide-icon></button>
+            <button style="{{fmtBtn}}" style-hover="background:#F2F1EF" title="Inline code"><lucide-icon name="code-xml" size="16" stroke="1.75"></lucide-icon></button>
+            <span style="width:1px;height:18px;background:#EDEBE8;margin:0 8px"></span>
+  
+            <div style="position:relative">
+              <button onClick="{{openListMenu}}" style="{{listTriggerStyle}}" style-hover="background:#F2F1EF">List<lucide-icon name="chevron-down" size="14"></lucide-icon></button>
+              <sc-if value="{{listMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{fmtMenuStyle}}">
+                  <sc-for list="{{listItems}}" as="m" hint-placeholder-count="2">
+                    <button onClick="{{m.select}}" style="{{m.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{m.glyphStyle}}"><lucide-icon name="{{m.icon}}" size="16"></lucide-icon></span>
+                      <span style="flex:1;text-align:left">{{m.label}}</span>
+                      <span style="{{shortcutStyle}}">{{m.shortcut}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+  
+            <div style="position:relative">
+              <button onClick="{{openTextMenu}}" style="{{textTriggerStyle}}" style-hover="background:#F2F1EF">{{blockLabel}}<lucide-icon name="chevron-down" size="14"></lucide-icon></button>
+              <sc-if value="{{textMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{fmtMenuStyle}}">
+                  <sc-for list="{{textItems}}" as="m" hint-placeholder-count="6">
+                    <button onClick="{{m.select}}" style="{{m.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{m.glyphStyle}}">{{m.glyph}}</span>
+                      <span style="flex:1;text-align:left">{{m.label}}</span>
+                      <span style="{{shortcutStyle}}">{{m.shortcut}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+  
+            <div style="position:relative">
+              <button onClick="{{openInsertMenu}}" style="{{insertTriggerStyle}}" style-hover="background:#F2F1EF">Insert<lucide-icon name="chevron-down" size="14"></lucide-icon></button>
+              <sc-if value="{{insertMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{fmtMenuStyle}}">
+                  <sc-for list="{{insertItems}}" as="m" hint-placeholder-count="3">
+                    <button onClick="{{m.select}}" style="{{m.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{m.glyphStyle}}"><lucide-icon name="{{m.icon}}" size="16"></lucide-icon></span>
+                      <span style="flex:1;text-align:left">{{m.label}}</span>
+                      <span style="{{shortcutStyle}}">{{m.shortcut}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+  
+          </div>
+        </div>
+  
+        <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;position:relative">
+          <div style="{{ghostRailStyle}}">
+            <button onClick="{{openToc}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Table of contents"><lucide-icon name="list-tree" size="18"></lucide-icon></button>
+            <button onClick="{{openWorkspacePanel}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Workspace"><lucide-icon name="folder-tree" size="18"></lucide-icon></button>
+          </div>
+  
+          <div style="max-width:720px;margin:0 auto;padding:48px 24px 140px;position:relative">
+            <h1 style="margin:0 0 28px;font:500 32px/1.2 Lora,Georgia,serif;color:#1E1915;letter-spacing:-.02em;text-wrap:pretty">{{activeTitle}}</h1>
+  
+            <div onMouseUp="{{onProseMouseUp}}" style="font:400 17px/1.9 'DM Sans',sans-serif;color:#2F2A25">
+              <sc-for list="{{blocks}}" as="b" hint-placeholder-count="5">
+                <div style="margin:0">
+                  <sc-if value="{{b.isHeading}}" hint-placeholder-val="{{false}}">
+                    <h2 style="margin:40px 0 8px;font:600 17px/1.5 'DM Sans',sans-serif;color:#1E1915">{{b.text}}</h2>
+                  </sc-if>
+                  <sc-if value="{{b.isPara}}" hint-placeholder-val="{{true}}">
+                    <p style="margin:0 0 24px;text-wrap:pretty">{{b.text}}</p>
+                  </sc-if>
+                  <sc-if value="{{b.isMark}}" hint-placeholder-val="{{false}}">
+                    <p style="margin:0 0 24px;text-wrap:pretty">{{b.before}}<mark style="background:#F5E3C8;border-radius:2px;color:inherit">{{b.marked}}</mark>{{b.after}}</p>
+                  </sc-if>
+                  <sc-if value="{{b.isTable}}" hint-placeholder-val="{{false}}">
+                    <div style="margin:28px 0 32px;overflow-x:auto">
+                      <table style="border-collapse:collapse;width:100%">
+                        <thead>
+                          <tr>
+                            <sc-for list="{{b.head}}" as="h" hint-placeholder-count="4">
+                              <th style="font:600 11px/1.4 'DM Sans',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8E837B;border-bottom:1px solid #DEDAD4;padding:0 14px 10px 0;text-align:left;vertical-align:bottom">{{h.label}}</th>
+                            </sc-for>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <sc-for list="{{b.rows}}" as="r" hint-placeholder-count="3">
+                            <tr>
+                              <sc-for list="{{r.cells}}" as="c" hint-placeholder-count="4">
+                                <td style="font:400 15px/1.55 'DM Sans',sans-serif;color:#2F2A25;border-bottom:1px solid #F0EEEB;padding:12px 14px 12px 0;vertical-align:top">{{c.label}}</td>
+                              </sc-for>
+                            </tr>
+                          </sc-for>
+                        </tbody>
+                      </table>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{b.isCode}}" hint-placeholder-val="{{false}}">
+                    <pre style="background:#F7F6F4;border:1px solid #EDEBE8;border-radius:8px;color:#2F2A25;padding:14px 16px;margin:24px 0;overflow-x:auto"><code style="font-family:'Roboto Mono',ui-monospace,Menlo,monospace;font-size:13px;line-height:1.7;background:transparent;border:0;padding:0">{{b.text}}</code></pre>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+  
+            <sc-if value="{{ai.visible}}" hint-placeholder-val="{{false}}">
+              <div data-od-menu style="{{ai.style}}">
+                <sc-if value="{{ai.isTyping}}" hint-placeholder-val="{{true}}">
+                  <div style="min-height:74px;padding:2px 2px 6px;font:400 15px/1.5 'DM Sans',sans-serif;color:#B5ADA5">Write your AI instruction…</div>
+                </sc-if>
+  
+                <sc-if value="{{ai.isRecording}}" hint-placeholder-val="{{false}}">
+                  <div style="height:52px;margin-bottom:12px;border-radius:8px;background:#FAF9F7;display:flex;align-items:center;justify-content:center;gap:3px;overflow:hidden">
+                    <sc-for list="{{ai.bars}}" as="b" hint-placeholder-count="18">
+                      <span style="{{b.style}}"></span>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <div style="flex:1;min-width:0">
+                      <p style="margin:0 0 2px;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8E837B">Voice note</p>
+                      <p style="margin:0;font:400 18px/1.2 'DM Sans',sans-serif;color:#1E1915;font-variant-numeric:tabular-nums">{{ai.elapsed}}</p>
+                    </div>
+                    <button onClick="{{ai.cancel}}" style="{{ghostBtnSm}}" style-hover="background:#F2F1EF;color:#1E1915" title="Descartar"><lucide-icon name="x" size="16"></lucide-icon></button>
+                    <button onClick="{{ai.togglePause}}" style="{{ai.pauseStyle}}" style-hover="background:#F2F1EF" title="Pausar"><lucide-icon name="{{ai.pauseIcon}}" size="16"></lucide-icon></button>
+                    <button onClick="{{ai.stop}}" style="{{ai.stopStyle}}" title="Detener"><span style="width:13px;height:13px;border-radius:2px;background:#FFFFFF;display:block"></span></button>
+                  </div>
+                </sc-if>
+  
+                <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px">
+                  <sc-for list="{{ai.chips}}" as="c" hint-placeholder-count="6">
+                    <button onClick="{{c.select}}" style="{{c.style}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">{{c.label}}</button>
+                  </sc-for>
+                </div>
+  
+                <div style="display:flex;align-items:center;justify-content:flex-end;gap:9px">
+                  <button onClick="{{ai.cancel}}" style="height:32px;padding:0 10px;border:0;background:transparent;border-radius:7px;font:400 14px/1 'DM Sans',sans-serif;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#F2F1EF">Cancel</button>
+                  <sc-if value="{{ai.isTyping}}" hint-placeholder-val="{{true}}">
+                    <button onClick="{{ai.record}}" style="{{ai.micStyle}}" style-hover="background:#F2F1EF" title="Dictar"><lucide-icon name="mic" size="16"></lucide-icon></button>
+                  </sc-if>
+                  <button style="{{ai.saveStyle}}">Save</button>
+                </div>
+              </div>
+            </sc-if>
+  
+            <sc-if value="{{selection.visible}}" hint-placeholder-val="{{false}}">
+              <div style="{{selection.style}}">
+                <button onClick="{{annotateHighlight}}" style="{{selBtn}}" style-hover="background:rgba(255,255,255,.13)">Highlight</button>
+                <span style="width:1px;height:20px;background:rgba(255,255,255,.2);flex-shrink:0"></span>
+                <button onClick="{{annotateAi}}" style="{{selBtn}}" style-hover="background:rgba(255,255,255,.13)">AI Note</button>
+                <span style="width:1px;height:20px;background:rgba(255,255,255,.2);flex-shrink:0"></span>
+                <button onClick="{{annotateNote}}" style="{{selBtn}}" style-hover="background:rgba(255,255,255,.13)">Note</button>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <div style="{{statusBarStyle}}">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="display:flex;color:#8E837B"><lucide-icon name="cloud-upload" size="16"></lucide-icon></span>
+        <span style="font:400 13px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">Saved</span>
+      </div>
+      <div style="justify-self:center;display:inline-flex;align-items:center;gap:2px;background:#E7E5E1;border-radius:8px;padding:3px">
+        <button onClick="{{setRich}}" style="{{richStyle}}">Rich</button>
+        <button onClick="{{setMarkdown}}" style="{{markdownStyle}}">Markdown</button>
+      </div>
+      <div style="justify-self:end;max-width:100%;display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="flex:0 1 auto;min-width:0;font:400 12px/1 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{metricsLabel}}</span>
+        <button onClick="{{openShortcuts}}" title="Keyboard shortcuts" style="{{statusIconBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <lucide-icon name="keyboard" size="15"></lucide-icon>
+        </button>
+        <button onClick="{{openNotes}}" title="Notas" style="{{statusIconBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <lucide-icon name="align-left" size="15"></lucide-icon>
+        </button>
+      </div>
+    </div>
+    </div>
+
+    <!-- PROPERTIES (capa 0 — sin caja propia) -->
+    <aside class="od-scroll" style="{{panelStyle}}">
+      <div style="display:flex;align-items:center;gap:2px;padding:2px 0 16px">
+        <sc-for list="{{panelTabs}}" as="t" hint-placeholder-count="3">
+          <button onClick="{{t.select}}" style="{{t.style}}">{{t.label}}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{isPropsTab}}" hint-placeholder-val="{{true}}">
+        <div style="display:flex;flex-direction:column;gap:20px;padding-bottom:24px">
+          <section>
+            <p style="{{sectionLabel}}">Status</p>
+            <div style="position:relative">
+              <button onClick="{{toggleStatusMenu}}" style="{{statusTriggerStyle}}" style-hover="background:#FFFFFF">
+                <span style="{{statusDotStyle}}"></span>
+                <span style="flex:1;text-align:left">{{status}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{statusMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div data-od-menu style="{{menuStyle}}">
+                  <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{o.dotStyle}}"></span>
+                      <span>{{o.label}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </section>
+
+          <section>
+            <p style="{{sectionLabel}}">Artifact Type</p>
+            <div style="position:relative">
+              <button onClick="{{toggleTypeMenu}}" style="{{typeTriggerStyle}}" style-hover="background:#FFFFFF">
+                <span style="display:flex;color:#6B5F57"><lucide-icon name="{{artifactTypeIcon}}" size="15"></lucide-icon></span>
+                <span style="flex:1;text-align:left">{{artifactType}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{typeMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div data-od-menu style="{{menuStyle}}">
+                  <sc-for list="{{typeOptions}}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{o.iconStyle}}"><lucide-icon name="{{o.icon}}" size="15"></lucide-icon></span>
+                      <span style="flex:1;text-align:left">{{o.label}}</span>
+                      <span style="{{o.checkStyle}}"></span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </section>
+
+          <section>
+            <p style="{{sectionLabel}}">Workspace</p>
+            <div style="position:relative">
+              <button onClick="{{toggleWsMenu}}" style="{{wsTriggerStyle}}" style-hover="background:#FFFFFF">
+                <span style="display:flex;color:#6B5F57"><lucide-icon name="folder" size="15"></lucide-icon></span>
+                <span style="flex:1;text-align:left">{{activeWorkspace}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{wsMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div data-od-menu style="{{menuStyle}}">
+                  <sc-for list="{{wsOptions}}" as="o" hint-placeholder-count="5">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </section>
+
+          <section>
+            <p style="{{sectionLabel}}">Collections</p>
+            <div style="border:1px solid #E4E1DC;border-radius:8px;overflow:hidden">
+              <div style="padding:14px 12px;font:400 12px/1.5 'DM Sans',sans-serif;color:#8E837B">Sin colecciones asignadas.</div>
+              <button style="display:flex;align-items:center;gap:8px;width:100%;height:36px;padding:0 12px;border:0;border-top:1px solid #E4E1DC;background:transparent;color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#E9E7E3">
+                <span style="display:flex;color:#6B5F57"><lucide-icon name="tags" size="14"></lucide-icon></span>
+                Add to collections
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <p style="{{sectionLabel}}">Info</p>
+            <div style="border:1px solid #E4E1DC;border-radius:8px;overflow:hidden">
+              <sc-for list="{{infoRows}}" as="row" hint-placeholder-count="5">
+                <div style="{{row.style}}">
+                  <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B">{{row.label}}</span>
+                  <span style="font:500 12px/1 'DM Sans',sans-serif;color:#2F2A25">{{row.value}}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isShareTab}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;flex-direction:column;gap:20px;padding-bottom:24px">
+          <section>
+            <p style="{{sectionLabel}}">Web publishing</p>
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:12px">
+              <p style="margin:0 0 12px;font:400 12px/1.55 'DM Sans',sans-serif;color:#8E837B">El artifact vive local. Publicarlo lo hace visible en web.</p>
+              <button style="{{primaryBtn}}" style-hover="opacity:.9">
+                <lucide-icon name="radio-tower" size="14"></lucide-icon>Publish on web
+              </button>
+            </div>
+          </section>
+          <section>
+            <p style="{{sectionLabel}}">Preview link</p>
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:12px">
+              <p style="margin:0 0 12px;font:400 12px/1.55 'DM Sans',sans-serif;color:#8E837B">Comparte con cualquiera, sin cuenta.</p>
+              <button style="{{secondaryBtn}}" style-hover="background:#E9E7E3">
+                <lucide-icon name="link" size="14"></lucide-icon>Generate link
+              </button>
+            </div>
+          </section>
+          <section>
+            <p style="{{sectionLabel}}">Export</p>
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:12px">
+              <button style="{{secondaryBtn}}" style-hover="background:#E9E7E3">
+                <lucide-icon name="download" size="14"></lucide-icon>Markdown, PDF, DOCX
+              </button>
+            </div>
+          </section>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isGrammarTab}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:24px">
+          <div style="display:flex;flex-direction:column;gap:14px;padding-bottom:14px;border-bottom:1px solid #E4E1DC;margin-bottom:4px">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div>
+                <p style="margin:0 0 2px;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915">Revisar escritura y ortografía</p>
+                <p style="margin:0;font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Ortografía, gramática y puntuación de este artifact.</p>
+              </div>
+              <button onClick="{{runSpellcheck}}" style="{{analyzeBtn}}" style-hover="opacity:.9">
+                <lucide-icon name="spell-check" size="15"></lucide-icon>Revisar ahora
+              </button>
+            </div>
+            <sc-for list="{{correctionToggles}}" as="c" hint-placeholder-count="2">
+              <div style="display:flex;align-items:flex-start;gap:12px">
+                <div style="flex:1;min-width:0">
+                  <p style="margin:0 0 2px;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915">{{c.label}}</p>
+                  <p style="margin:0;font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">{{c.hint}}</p>
+                </div>
+                <button onClick="{{c.toggle}}" style="{{c.trackStyle}}" title="{{c.label}}">
+                  <span style="{{c.knobStyle}}"></span>
+                </button>
+              </div>
+            </sc-for>
+          </div>
+
+          <p style="margin:0 0 2px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">{{grammarSummary}}</p>
+          <sc-for list="{{grammarIssues}}" as="g" hint-placeholder-count="3">
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+                <span style="{{g.dotStyle}}"></span>
+                <span style="font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">{{g.kind}}</span>
+              </div>
+              <p style="margin:0 0 8px;font:400 13px/1.5 'DM Sans',sans-serif;color:#2F2A25">
+                <span style="text-decoration:underline wavy #C4553D;text-underline-offset:3px">{{g.wrong}}</span>
+                <span style="color:#B5ADA5;margin:0 6px">→</span>
+                <span style="font-weight:500">{{g.right}}</span>
+              </p>
+              <p style="margin:0 0 10px;font:400 12px/1.5 'DM Sans',sans-serif;color:#8E837B">{{g.note}}</p>
+              <div style="display:flex;align-items:center;gap:6px">
+                <button onClick="{{g.apply}}" style="{{grammarApplyBtn}}" style-hover="opacity:.9">Aplicar</button>
+                <button onClick="{{g.dismiss}}" style="{{grammarSkipBtn}}" style-hover="background:#E9E7E3">Ignorar</button>
+                <button onClick="{{g.learn}}" style="{{grammarLearnBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Agregar a palabras aprendidas">
+                  <lucide-icon name="book-plus" size="13"></lucide-icon>Aprender
+                </button>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{grammarClean}}" hint-placeholder-val="{{false}}">
+            <p style="margin:2px 0 0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">Sin correcciones pendientes.</p>
+          </sc-if>
+
+          <section style="border-top:1px solid #E4E1DC;padding-top:14px;margin-top:6px">
+            <p style="margin:0 0 2px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Palabras aprendidas</p>
+            <p style="margin:0 0 10px;font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B">Se guardan en todos tus artifacts.</p>
+            <sc-if value="{{hasLearned}}" hint-placeholder-val="{{true}}">
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{learnedWords}}" as="w" hint-placeholder-count="3">
+                  <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 10px;border:1px solid #E4E1DC;border-radius:13px;font:400 12px/1 'DM Sans',sans-serif;color:#3F3731">
+                    {{w.word}}
+                    <button onClick="{{w.forget}}" style="{{w.forgetStyle}}" style-hover="background:#E9E7E3;color:#1E1915" title="Olvidar"><lucide-icon name="x" size="12"></lucide-icon></button>
+                  </span>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{noLearned}}" hint-placeholder-val="{{false}}">
+              <p style="margin:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">Todavía no hay palabras aprendidas.</p>
+            </sc-if>
+          </section>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{isNotesTab}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;flex-direction:column;gap:8px;padding-bottom:24px">
+          <sc-for list="{{notes}}" as="n" hint-placeholder-count="2">
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px">
+                <span style="{{n.dotStyle}}"></span>
+                <span style="font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">{{n.kind}}</span>
+              </div>
+              <p style="margin:0 0 7px;font:400 12px/1.55 'DM Sans',sans-serif;color:#8E837B;border-left:2px solid #E4E1DC;padding-left:9px">{{n.quote}}</p>
+              <p style="margin:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#2F2A25">{{n.body}}</p>
+            </div>
+          </sc-for>
+          <p style="margin:4px 0 0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">Selecciona texto en el artifact para anotar.</p>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+
+  <!-- ── STATUS BAR (capa 0) ── -->
+  <sc-if value="{{isEditingTitle}}" hint-placeholder-val="{{false}}">
+    <div onClick="{{cancelEditTitle}}" style="position:absolute;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:40px;background:rgba(243,242,240,.55);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%)">
+      <div onClick="{{stopPropagation}}" style="width:100%;max-width:472px;padding:26px;border-radius:16px;background:rgba(255,255,255,.86);border:1px solid rgba(255,255,255,.9);box-shadow:0 26px 70px rgba(35,24,15,.2);animation:odMenuIn 200ms ease">
+        <p style="margin:0 0 4px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8E837B">Artifact name</p>
+        <p style="margin:0 0 16px;font:400 13px/1.5 'DM Sans',sans-serif;color:#6B5F57">El nombre se usa en la pestaña, el breadcrumb y el título del documento.</p>
+        <input value="{{titleDraft}}" onChange="{{onTitleChange}}" onKeyDown="{{onTitleKeyDown}}" ref="{{titleRef}}" placeholder="Nombre del artifact" style="width:100%;box-sizing:border-box;height:44px;padding:0 13px;border:1px solid #E4E1DC;border-radius:10px;background:#FFFFFF;font:400 16px/1 'DM Sans',sans-serif;color:#1E1915;outline:none" />
+        <div style="display:flex;align-items:center;justify-content:flex-end;gap:9px;margin-top:20px">
+          <button onClick="{{cancelEditTitle}}" style="height:36px;padding:0 14px;border:0;background:transparent;border-radius:8px;font:400 14px/1 'DM Sans',sans-serif;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#F2F1EF">Cancel</button>
+          <button onClick="{{commitTitle}}" style="{{titleSaveStyle}}" style-hover="opacity:.9">Save</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{shortcutsOpen}}" hint-placeholder-val="{{false}}">
+    <div onClick="{{closeShortcuts}}" style="position:absolute;inset:0;z-index:60;background:rgba(35,24,15,.28);display:flex;align-items:center;justify-content:center;padding:40px">
+      <div onClick="{{stopPropagation}}" class="od-scroll" style="position:relative;width:100%;max-width:1010px;max-height:100%;overflow-y:auto;background:#FFFFFF;border-radius:16px;box-shadow:0 30px 80px rgba(35,24,15,.3);padding:38px 40px 40px;animation:odMenuIn 200ms ease">
+        <button onClick="{{closeShortcuts}}" style="position:absolute;top:22px;right:24px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E4E1DC;border-radius:50%;background:#FFFFFF;color:#8E837B;cursor:pointer;transition:background-color 150ms ease" style-hover="background:#F2F1EF;color:#1E1915">
+          <lucide-icon name="x" size="16"></lucide-icon>
+        </button>
+        <h2 style="margin:0 0 12px;font:500 34px/1.15 Lora,Georgia,serif;color:#1E1915;letter-spacing:-.02em">Keyboard shortcuts</h2>
+        <p style="margin:0 0 30px;max-width:62ch;font:400 16px/1.6 'DM Sans',sans-serif;color:#3F3731;text-wrap:pretty">La app de escritorio expone los atajos nativos del menú donde existen. El editor mantiene el mismo mapa de formato en todos los runtimes y solo lo adapta donde el navegador o el sistema interceptarían el comando primero.</p>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start">
+          <sc-for list="{{shortcutGroups}}" as="g" hint-placeholder-count="3">
+            <section style="background:#FAF9F7;border-radius:12px;padding:16px 14px">
+              <p style="margin:0 0 12px;padding:0 4px;font:400 12px/1 'DM Sans',sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#8E837B">{{g.title}}</p>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{g.items}}" as="k" hint-placeholder-count="6">
+                  <div style="background:#FFFFFF;border-radius:9px;padding:11px 12px;display:flex;align-items:flex-start;gap:10px">
+                    <div style="flex:1;min-width:0">
+                      <p style="margin:0 0 3px;font:400 15px/1.3 'DM Sans',sans-serif;color:#1E1915;text-wrap:pretty">{{k.label}}</p>
+                      <p style="margin:0;font:400 11px/1 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#B5ADA5">{{k.scope}}</p>
+                    </div>
+                    <kbd style="flex-shrink:0;min-width:36px;padding:5px 8px;border:1px solid #EDEBE8;border-radius:7px;background:#FAF9F7;font:400 12px/1.2 'Roboto Mono',ui-monospace,monospace;color:#3F3731;text-align:center">{{k.keys}}</kbd>
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;viewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;\&quot;full\&quot; | \&quot;compact\&quot;&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const TYPE_ICONS = {
+  General: "circle", Agent: "bot", Skill: "wrench",
+  Prompt: "message-square", Template: "layout-template", Status: "file-text"
+};
+
+class Component extends DCLogic {
+  state = {
+    activeDoc: 3, sidebarMini: true, panelOpen: true, panelTab: "props",
+    titles: {}, editingTitle: false, titleDraft: "",
+    status: "Draft", artifactType: "Agent", workspace: "Tutorial", mode: "rich",
+    statusMenu: false, typeMenu: false, wsMenu: false, sel: null, narrow: false,
+    leftPanel: null, tocIndex: 0, selectedNode: "03-API-CODE",
+    fmtMenu: null, blockType: "H1",
+    aiMode: null, aiSeconds: 0, aiPaused: false, aiChip: null,
+    shortcutsOpen: false, activeCorrections: true, showCorrections: true, learned: ["Odessay", "Narratif", "tokens"],
+    grammar: [
+      { kind: "Ortografía", wrong: "Artifical Analysis", right: "Artificial Analysis", note: "Nombre propio mal escrito." },
+      { kind: "Gramática", wrong: "los datos que viene de", right: "los datos que vienen de", note: "Concordancia de número entre sujeto y verbo." },
+      { kind: "Estilo", wrong: "en lugar de percepciones subjetivas", right: "en lugar de percepciones", note: "\"Percepción\" ya implica subjetividad." }
+    ],
+    expanded: { Claude: true, "02-MCP": false, "03-API-CODE": true },
+    notes: [
+      { kind: "highlight", quote: "comparar modelos con datos reales en lugar de percepciones", body: "El argumento central de la lección." },
+      { kind: "ai", quote: "Si un valor no está disponible, se marca como N/D.", body: "Sugerencia: aclarar qué pasa cuando N/D cae sobre el criterio dominante." }
+    ]
+  };
+
+  componentDidMount() {
+    this._onDown = (e) => {
+      const t = e.target;
+      if (t && t.closest && t.closest("[data-od-menu]")) return;
+      if (this.state.statusMenu || this.state.typeMenu || this.state.wsMenu || this.state.fmtMenu)
+        this.setState({ statusMenu: false, typeMenu: false, wsMenu: false, fmtMenu: null });
+    };
+    document.addEventListener("mousedown", this._onDown, true);
+
+    // Ancho reducido: el doc manda — sidebar a rail y panel cerrado.
+    this._onResize = () => {
+      const compact = (this.props.viewport ?? "full") === "compact";
+      const w = compact ? 1180 : window.innerWidth;
+      const narrow = w < 1180;
+      if (narrow === this.state.narrow) return;
+      this.setState(narrow
+        ? { narrow: true, sidebarMini: true, panelOpen: false, leftPanel: null }
+        : { narrow: false });
+    };
+    this._onResize();
+    window.addEventListener("resize", this._onResize);
+  }
+  componentDidUpdate(prev) { if (prev.viewport !== this.props.viewport) this._onResize(); }
+  componentWillUnmount() {
+    document.removeEventListener("mousedown", this._onDown, true);
+    window.removeEventListener("resize", this._onResize);
+    clearInterval(this._tick);
+  }
+
+  docs() {
+    return this.baseDocs().map((d, i) => ({ ...d, title: this.state.titles[i] ?? d.title }));
+  }
+
+  baseDocs() {
+    return [
+      { title: "Antes de comparar modelos", ws: "Tutorial", icon: "circle-dashed" },
+      { title: "Cómo leer el mercado", ws: "Tutorial", icon: "circle-dashed" },
+      { title: "Qué es este prompt y cómo usarlo", ws: "Skill", icon: "circle-dashed" },
+      { title: "6. Construir la matriz de comparación", ws: "Tutorial", icon: "x" }
+    ];
+  }
+
+  bodies() {
+    const t = (s) => ({ isPara: true, text: s });
+    const h = (s) => ({ isHeading: true, text: s });
+    return [
+      [t("Antes de comparar cualquier modelo hay que fijar el criterio. Sin criterio, la comparación es una colección de números sin dueño."), h("El criterio dominante"), t("De todas las dimensiones que importan, una manda. Elegirla es la decisión; la tabla solo la documenta.")],
+      [t("El mercado de modelos se mueve más rápido de lo que cualquier documento puede seguir. Lo que sí se puede documentar es cómo leerlo."), h("Tres señales"), t("Precio por millón de tokens, latencia de primer token y ventana de contexto. El resto es narrativa de lanzamiento.")],
+      [t("Este prompt no genera la decisión. Genera la tabla sobre la que se decide."), h("Qué le pides"), t("Le entregas el brief con dimensiones ponderadas y la lista de candidatos. Devuelve valores objetivos, no recomendaciones.")],
+      [
+        t("En este punto ya tenemos dos inputs: el brief del ejercicio 3, con las dimensiones ponderadas y el criterio dominante, y la tabla de candidatos del ejercicio 5, con los modelos que sobrevivieron el primer filtro visual en Artificial Analysis."),
+        t("El siguiente paso es simple: tomar esos candidatos y anotar sus valores objetivos en una tabla. No para decidir todavía, sino para tener los datos frente a los ojos antes de interpretar."),
+        { isMark: true, before: "La tabla sirve para tres cosas: ", marked: "comparar modelos con datos reales en lugar de percepciones", after: ", justificar por qué ciertos modelos entran o quedan descartados, y tener un registro que se puede compartir con el equipo o los stakeholders." },
+        h("La tabla de comparación"),
+        t("Por cada modelo candidato se anotan los valores de las métricas que el brief identificó como prioritarias. Los datos vienen de Artificial Analysis. Si un valor no está disponible, se marca como N/D."),
+        { isTable: true,
+          head: [{ label: "Modelo" }, { label: "Índice" }, { label: "Precio / 1M" }, { label: "Latencia" }],
+          rows: [
+            { cells: [{ label: "Claude Sonnet" }, { label: "64" }, { label: "$3.00" }, { label: "0.9 s" }] },
+            { cells: [{ label: "GPT clase 4" }, { label: "61" }, { label: "$2.50" }, { label: "1.2 s" }] },
+            { cells: [{ label: "Llama abierta" }, { label: "48" }, { label: "$0.35" }, { label: "N/D" }] }
+          ] },
+        t("La URL del modelo en Artificial Analysis vale la pena incluirla: sirve como referencia para verificar los datos y, más adelante, como punto de entrada si se quiere automatizar la recolección con un LLM o un proceso programático."),
+        h("Cómo leerla"),
+        t("La tabla no ordena por sí sola. El criterio dominante del brief decide qué columna manda cuando dos modelos empatan en el resto."),
+        { isCode: true, text: "uv run compare_models.py --brief brief.json" },
+        t("Con la matriz completa, el ejercicio siguiente es interpretarla: descartar por criterio dominante, luego por costo, y dejar máximo dos finalistas.")
+      ]
+    ];
+  }
+
+  tree() {
+    const f = (name, children) => ({ name, type: "folder", children });
+    const d = (name) => ({ name, type: "doc" });
+    return [
+      f("Claude", [
+        f("02-MCP", [d("01-What is MCP"), d("02-Connecting servers")]),
+        f("03-API-CODE", [
+          d("19-Structure with XML tags"), d("18-Being specific"), d("17-Being clear and direct"),
+          d("16-Prompt engineering"), d("15-Code based grading"), d("14-Model based grading"),
+          d("13-Running the eval"), d("12-Generating test datasets"), d("11-A typical eval workflow"),
+          d("10-Prompt evaluation"), d("02-Accessing the API"), d("03-Getting an API key"),
+          d("04-Making a request"), d("05-Multi-Turn conversations"), d("06-System prompts"),
+          d("09-Structured data"), d("08-Response streaming")
+        ])
+      ])
+    ];
+  }
+
+  flatten(nodes, depth, out) {
+    for (const n of nodes) {
+      out.push({ node: n, depth });
+      if (n.type === "folder" && this.state.expanded[n.name] && n.children)
+        this.flatten(n.children, depth + 1, out);
+    }
+    return out;
+  }
+
+  // El badge cuenta documentos del workspace — total estable, no filas visibles.
+  countDocs(nodes) {
+    return nodes.reduce((t, n) => t + (n.type === "doc" ? 1 : this.countDocs(n.children || [])), 0);
+  }
+
+  statusColor(s) {
+    return ({ New: "#8E837B", Exploring: "#5B5BD6", Draft: "#C07B2A", "In review": "#96532C", Done: "#2E7D4F", Archived: "#B5ADA5" })[s] || "#8E837B";
+  }
+  trigger(open) {
+    return "display:flex;align-items:center;gap:9px;width:100%;height:36px;padding:0 11px;border:1px solid " + (open ? "#B5ADA5" : "#E4E1DC") + ";border-radius:8px;background:" + (open ? "#FFFFFF" : "transparent") + ";color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease";
+  }
+  menuItem(sel) {
+    return "display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border:0;background:transparent;border-radius:6px;color:" + (sel ? "#1E1915" : "#2F2A25") + ";font:" + (sel ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:background-color 140ms ease";
+  }
+
+  renderVals() {
+    const s = this.state, mini = s.sidebarMini || s.narrow;
+    const compact = (this.props.viewport ?? "full") === "compact";
+    const docs = this.docs();
+    const wsNames = ["Tutorial", "OS", "Skill", "Narratif", "Odessay"];
+    const set = (k, v) => this.setState({ [k]: v, statusMenu: false, typeMenu: false, wsMenu: false });
+    const hasSel = !!s.sel;
+    const blocks = this.bodies()[s.activeDoc];
+    const toc = [{ label: docs[s.activeDoc].title, level: 0 }].concat(
+      blocks.filter((b) => b.isHeading).map((b) => ({ label: b.text, level: 1 })));
+    const panelTab = (on) => "display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 9px;border:0;border-radius:7px;font:" +
+      (on ? "500" : "400") + " 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease;" +
+      (on ? "background:#E7E5E1;color:#1E1915" : "background:transparent;color:#6B5F57");
+    // El rail colapsado mide exactamente 40px de contenido: el icono queda cuadrado y
+    // centrado sin mover nada, y la etiqueta solo se recorta — sin animar anchos internos.
+    const railRow = (active) => "display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-width:40px;height:40px;min-height:40px;max-height:40px;flex-shrink:0;padding:0;border:0;border-radius:9px;font:" +
+      (active ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (active ? "#1E1915" : "#3F3731") + ";background:" + (active ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-align:left;overflow:hidden;transition:background-color 180ms ease";
+    const fmtTrigger = (on) => "height:30px;padding:0 9px;display:inline-flex;align-items:center;gap:5px;border:0;border-radius:6px;font:" +
+      (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:#2F2A25;cursor:pointer;transition:background-color 150ms ease;background:" + (on ? "#EDEBE8" : "transparent");
+    const fmtItem = (on) => "display:flex;align-items:center;gap:12px;width:100%;height:34px;padding:0 10px;border:0;border-radius:7px;background:" +
+      (on ? "#F2F1EF" : "transparent") + ";color:#1E1915;font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 140ms ease";
+    const fmtGlyph = (on) => "width:24px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;font:500 13px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#8E837B");
+    const seg = (on) => "height:24px;padding:0 13px;border:0;border-radius:6px;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 180ms ease,color 180ms ease;" +
+      (on ? "background:#FFFFFF;color:#1E1915;box-shadow:0 1px 2px rgba(35,24,15,.1)" : "background:transparent;color:#8E837B");
+
+    return {
+      shellStyle: "position:relative;display:flex;flex-direction:column;background:#F3F2F0;overflow:hidden;" + (compact
+        ? "width:1180px;height:760px;max-width:100%;margin:0 auto;border-radius:12px;box-shadow:0 24px 60px rgba(35,24,15,.18)"
+        : "width:100%;height:100vh"),
+
+      railColStyle: "box-sizing:border-box;width:" + (mini ? 52 : 232) + "px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;overflow:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1)",
+      sidebarStyle: "box-sizing:border-box;flex:1;min-height:0;display:flex;flex-direction:column;padding:0 6px;overflow:hidden",
+      accountRowStyle: "box-sizing:border-box;display:flex;align-items:center;gap:10px;height:46px;flex-shrink:0;border-radius:9px;overflow:hidden;cursor:pointer;padding-left:6px",
+      centerColStyle: "flex:1;min-width:0;display:flex;flex-direction:column;gap:6px",
+      sidebarToggleStyle: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#3F3731;cursor:pointer;transition:background-color 150ms ease",
+      statusBarStyle: "height:46px;flex-shrink:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 14px",
+      railBtn: railRow(false) + ";text-decoration:none",
+      studioNavStyle: railRow(true),
+      railIconWrap: "box-sizing:border-box;width:40px;min-width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center",
+      navLabelStyle: "flex-shrink:0;overflow:hidden;white-space:nowrap;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      workspaceListStyle: "display:flex;flex-direction:column;gap:1px;padding:2px 0 0 50px;overflow:hidden;transition:opacity 200ms ease,max-height 300ms cubic-bezier(.4,0,.15,1);" + (mini ? "max-height:0;opacity:0" : "max-height:240px;opacity:1"),
+      userRowStyle: "display:flex;align-items:center;gap:10px;border-radius:9px;padding:2px;overflow:hidden;cursor:pointer",
+      userMetaStyle: "flex-shrink:0;min-width:0;overflow:hidden;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      userGearStyle: "flex-shrink:0;display:flex;color:#8E837B;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      toggleSidebar: () => this.setState((st) => ({ sidebarMini: !(st.sidebarMini || st.narrow), narrow: false })),
+      goWorkspace: () => this.setState({ leftPanel: s.leftPanel === "workspace" ? null : "workspace" }),
+
+      workspaces: wsNames.map((name) => ({
+        name, select: () => set("workspace", name),
+        style: "display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;border:0;background:transparent;border-radius:8px;font:" + (name === s.workspace ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (name === s.workspace ? "#1E1915" : "#8E837B") + ";cursor:pointer;text-align:left;transition:background-color 180ms ease,color 180ms ease",
+        iconStyle: "display:flex;flex-shrink:0;color:" + (name === "ode408" ? "#6B5F57" : "#B5ADA5") + (name === s.workspace ? "#96532C" : "#CFC9C1")
+      })),
+
+      docs: docs.map((d, i) => {
+        const on = i === s.activeDoc;
+        return {
+          title: d.title, icon: on ? "x" : "circle-dashed",
+          select: () => this.setState({ activeDoc: i, workspace: d.ws, sel: null, tocIndex: 0 }),
+          hoverBg: on ? "#FFFFFF" : "#E9E7E3",
+          tabStyle: "display:flex;align-items:center;gap:9px;width:200px;min-width:96px;height:34px;padding:0 12px;flex-shrink:1;border-radius:8px;cursor:pointer;user-select:none;overflow:hidden;transition:background-color 150ms ease;" +
+            (on ? "background:#FFFFFF;box-shadow:0 1px 2px rgba(35,24,15,.06)" : "background:transparent"),
+          iconStyle: "display:flex;flex-shrink:0;color:" + (on ? "#1E1915" : "#B5ADA5"),
+          titleStyle: "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:" + (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#8E837B")
+        };
+      }),
+      activeTitle: docs[s.activeDoc].title,
+      isEditingTitle: s.editingTitle,
+      titleDraft: s.titleDraft,
+      cancelEditTitle: () => this.setState({ editingTitle: false }),
+      titleSaveStyle: "height:36px;padding:0 20px;border:0;border-radius:8px;background:" + (s.titleDraft.trim() ? "#1E1915" : "#A8A29B") +
+        ";color:#FFFFFF;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 180ms ease,opacity 150ms ease",
+      titleRef: (el) => { if (el && s.editingTitle && document.activeElement !== el) { el.focus(); el.select(); } },
+      titleEditBtn: "width:24px;height:24px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#B5ADA5;cursor:pointer;transition:background-color 150ms ease",
+      startEditTitle: () => this.setState({ editingTitle: true, titleDraft: docs[s.activeDoc].title }),
+      onTitleChange: (e) => this.setState({ titleDraft: e.target.value }),
+      commitTitle: () => {
+        const next = s.titleDraft.trim();
+        this.setState({ editingTitle: false, titles: next ? { ...s.titles, [s.activeDoc]: next } : s.titles });
+      },
+      onTitleKeyDown: (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          const next = e.currentTarget.value.trim();
+          this.setState({ editingTitle: false, titles: next ? { ...s.titles, [s.activeDoc]: next } : s.titles });
+        } else if (e.key === "Escape") this.setState({ editingTitle: false });
+      },
+      activeWorkspace: s.workspace,
+      blocks,
+
+      blockLabel: s.blockType,
+      listMenuOpen: s.fmtMenu === "list",
+      textMenuOpen: s.fmtMenu === "text",
+      insertMenuOpen: s.fmtMenu === "insert",
+      openListMenu: () => this.setState({ fmtMenu: s.fmtMenu === "list" ? null : "list" }),
+      openTextMenu: () => this.setState({ fmtMenu: s.fmtMenu === "text" ? null : "text" }),
+      openInsertMenu: () => this.setState({ fmtMenu: s.fmtMenu === "insert" ? null : "insert" }),
+      listTriggerStyle: fmtTrigger(s.fmtMenu === "list"),
+      textTriggerStyle: fmtTrigger(s.fmtMenu === "text"),
+      insertTriggerStyle: fmtTrigger(s.fmtMenu === "insert"),
+      fmtMenuStyle: "position:absolute;right:-4px;top:calc(100% + 8px);z-index:40;min-width:214px;background:#FFFFFF;border:1px solid #EDEBE8;border-radius:10px;box-shadow:0 10px 34px rgba(35,24,15,.12);padding:6px;animation:odMenuIn 150ms ease",
+      shortcutStyle: "flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5;letter-spacing:.04em",
+      listItems: [["list", "• List", "⌘L"], ["list-ordered", "# List", "⌘⇧L"]].map(([icon, label, shortcut]) => ({
+        icon, label, shortcut, select: () => this.setState({ fmtMenu: null }),
+        glyphStyle: fmtGlyph(false), style: fmtItem(false)
+      })),
+      textItems: [["Aa", "Normal", "⌘0"], ["H1", "Heading 1", "⌘1"], ["H2", "Heading 2", "⌘2"], ["H3", "Heading 3", "⌘3"], ["›", "Blockquote", "⌘⇧B"], ["</>", "Code", "⌘⇧E"]].map(([glyph, label, shortcut]) => {
+        const on = glyph === s.blockType || (glyph === "Aa" && s.blockType === "Normal");
+        return { glyph, label, shortcut, select: () => this.setState({ blockType: glyph === "Aa" ? "Normal" : glyph, fmtMenu: null }),
+          glyphStyle: fmtGlyph(on), style: fmtItem(on) };
+      }),
+      insertItems: [["image", "Image", "⌘⇧I"], ["table", "Table", "⌘T"], ["link", "Link", "⌘⇧K"]].map(([icon, label, shortcut]) => ({
+        icon, label, shortcut, select: () => this.setState({ fmtMenu: null }),
+        glyphStyle: fmtGlyph(false), style: fmtItem(false)
+      })),
+      openCorrections: () => this.setState({ panelOpen: true, panelTab: "grammar" }),
+      correctionsBtnStyle: "width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;cursor:pointer;transition:background-color 150ms ease;" +
+        (s.panelOpen && s.panelTab === "grammar" ? "background:#EDEBE8;color:#1E1915" : "background:transparent;color:#2F2A25"),
+
+      fmtBtn: "width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#2F2A25;cursor:pointer;transition:background-color 150ms ease",
+      fmtMenu: "height:30px;padding:0 9px;display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;border-radius:6px;color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      leftPanelStyle: "flex-shrink:0;display:flex;flex-direction:column;background:transparent;overflow:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1),opacity 240ms ease,padding 300ms ease;" +
+        (s.leftPanel ? "width:276px;opacity:1;padding:0 14px 6px 6px" : "width:0;opacity:0;padding:0;pointer-events:none"),
+      isTocPanel: s.leftPanel === "toc",
+      isWorkspacePanel: s.leftPanel === "workspace",
+      leftPanelTitle: s.leftPanel === "workspace" ? "Workspace" : "Contents",
+      leftPanelCount: s.leftPanel === "workspace" ? String(this.countDocs(this.tree())) : String(toc.length),
+      workspaceRootName: s.workspace,
+      // En ancho reducido el rail flotante desaparece: los accesos suben al header de la hoja.
+      headerNavStyle: "flex-shrink:0;align-items:center;gap:2px;margin-right:4px;" + (s.narrow && !s.leftPanel ? "display:flex" : "display:none"),
+      openToc: () => this.setState({ leftPanel: s.leftPanel === "toc" ? null : "toc" }),
+      openWorkspacePanel: () => this.setState({ leftPanel: s.leftPanel === "workspace" ? null : "workspace" }),
+      closeLeftPanel: () => this.setState({ leftPanel: null }),
+      tocTabStyle: panelTab(s.leftPanel === "toc"),
+      wsTabStyle: panelTab(s.leftPanel === "workspace"),
+      ghostBtnSm: "width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+
+      // Sangría del componente real: level<=1 → 8px, level 2 → 24px, level 3+ → 40px.
+      tocItems: toc.map((t, i) => {
+        const on = i === s.tocIndex;
+        const pad = t.level <= 1 ? 8 : t.level === 2 ? 24 : 40;
+        return {
+          label: t.label,
+          select: () => this.setState({ tocIndex: i }),
+          style: "position:relative;display:flex;align-items:center;width:100%;min-height:28px;padding:4px 8px 4px " + pad + "px;border:0;border-radius:6px;background:" + (on ? "#E7E5E1" : "transparent") +
+            ";font:" + (t.level <= 1 ? "500" : "400") + " 12px/1.35 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#6B5F57") + ";cursor:pointer;text-align:left;transition:background-color 160ms ease",
+          accentStyle: on ? "position:absolute;left:0;top:4px;bottom:4px;width:2px;background:#96532C" : "display:none"
+        };
+      }),
+
+      treeItems: this.flatten(this.tree(), 0, []).map(({ node, depth }) => {
+        const isFolder = node.type === "folder";
+        const open = !!s.expanded[node.name];
+        const on = !isFolder && s.selectedNode === node.name;
+        return {
+          name: node.name,
+          icon: isFolder ? (open ? "folder-open" : "folder") : "file-text",
+          guides: Array.from({ length: depth }, (_, i) => ({ i })),
+          chevronStyle: "width:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:transform 300ms cubic-bezier(.4,0,.15,1);" +
+            (isFolder ? "" : "visibility:hidden;") + (open ? "transform:rotate(90deg)" : ""),
+          accentStyle: on ? "position:absolute;left:0;top:4px;bottom:4px;width:2px;background:#96532C" : "display:none",
+          select: () => this.setState(isFolder
+            ? { expanded: { ...s.expanded, [node.name]: !open } }
+            : { selectedNode: node.name }),
+          style: "position:relative;flex:1;min-width:0;display:flex;align-items:center;gap:6px;min-height:28px;padding:4px 8px;border:0;border-radius:6px;background:" + (on ? "#E7E5E1" : "transparent") +
+            ";font:" + (on ? "500" : "400") + " 12px/1.35 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#6B5F57") + ";cursor:pointer;text-align:left;transition:background-color 160ms ease"
+        };
+      }),
+
+      crumbLeadStyle: "flex-shrink:0;align-items:center;gap:8px;" + (s.narrow ? "display:none" : "display:flex"),
+      ghostRailStyle: "position:absolute;left:12px;top:30px;flex-direction:column;gap:10px;z-index:2;" + (s.narrow || s.leftPanel ? "display:none" : "display:flex"),
+      ghostBtn: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:8px;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      sectionLabel: "margin:0 0 8px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B",
+      menuStyle: "position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:8px;box-shadow:0 8px 28px rgba(35,24,15,.1);padding:5px;animation:odMenuIn 150ms ease",
+      primaryBtn: "display:flex;align-items:center;justify-content:center;gap:7px;width:100%;height:34px;border:0;border-radius:7px;background:#1E1915;color:#FBFAF9;font:500 12px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:opacity 150ms ease",
+      secondaryBtn: "display:flex;align-items:center;justify-content:center;gap:7px;width:100%;height:34px;border:1px solid #E4E1DC;border-radius:7px;background:transparent;color:#2F2A25;font:500 12px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:background-color 150ms ease",
+      selBtn: "height:34px;padding:0 15px;border:0;background:transparent;border-radius:7px;color:#FBFAF9;font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 140ms ease",
+
+      panelToggleStyle: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:7px;cursor:pointer;transition:background-color 150ms ease;" + (s.panelOpen ? "background:#E7E5E1;color:#1E1915" : "background:transparent;color:#3F3731"),
+      togglePanel: () => this.setState({ panelOpen: !s.panelOpen }),
+      panelStyle: "flex-shrink:0;overflow-y:auto;overflow-x:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1),opacity 240ms ease,padding 300ms ease;" + (s.panelOpen ? "width:276px;opacity:1;padding:0 4px 0 18px" : "width:0;opacity:0;padding:0;pointer-events:none"),
+      panelTabs: [["props", "Propiedades"], ["grammar", "Grammar"], ["notes", "Notas"], ["share", "Compartir"]].map(([id, label]) => ({
+        label, select: () => this.setState({ panelTab: id }),
+        style: "height:28px;padding:0 9px;border:0;border-radius:7px;font:" + (s.panelTab === id ? "500" : "400") + " 12px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:background-color 150ms ease,color 150ms ease;" +
+          (s.panelTab === id ? "background:#E7E5E1;color:#1E1915" : "background:transparent;color:#8E837B")
+      })),
+      isPropsTab: s.panelTab === "props", isShareTab: s.panelTab === "share",
+      isNotesTab: s.panelTab === "notes", isGrammarTab: s.panelTab === "grammar",
+
+      correctionToggles: [
+        ["showCorrections", "Mostrar correcciones", "Muestra las marcas dentro del documento."]
+      ].map(([key, label, hint]) => {
+        const on = s[key];
+        return { label, hint,
+          toggle: () => this.setState({ [key]: !on }),
+          trackStyle: "width:40px;height:23px;flex-shrink:0;padding:0;border:0;border-radius:12px;cursor:pointer;display:flex;align-items:center;transition:background-color 200ms ease;background:" + (on ? "#1E1915" : "#D6D1CA"),
+          knobStyle: "width:17px;height:17px;border-radius:50%;background:#FFFFFF;display:block;transition:transform 200ms cubic-bezier(.4,0,.15,1);transform:translateX(" + (on ? 20 : 3) + "px)" };
+      }),
+      learnedWords: s.learned.map((word) => ({
+        word, forget: () => this.setState({ learned: s.learned.filter((w) => w !== word) }),
+        forgetStyle: "width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:50%;color:#B5ADA5;cursor:pointer;transition:background-color 150ms ease"
+      })),
+      hasLearned: s.learned.length > 0,
+      noLearned: s.learned.length === 0,
+      grammarSummary: s.grammar.length === 1 ? "1 pendiente" : s.grammar.length + " pendientes",
+      grammarClean: s.grammar.length === 0,
+      grammarApplyBtn: "height:28px;padding:0 12px;border:0;border-radius:6px;background:#1E1915;color:#FBFAF9;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease",
+      grammarLearnBtn: "height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 10px;border:1px solid #E4E1DC;border-radius:6px;background:transparent;color:#6B5F57;font:400 12px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      grammarSkipBtn: "height:28px;padding:0 12px;border:1px solid #E4E1DC;border-radius:6px;background:transparent;color:#6B5F57;font:400 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      analyzeBtn: "width:100%;box-sizing:border-box;height:34px;display:inline-flex;align-items:center;justify-content:center;gap:7px;border:0;border-radius:8px;background:#1E1915;color:#FBFAF9;font:500 13px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:opacity 150ms ease",
+      runSpellcheck: () => this.setState({ grammar: this.state.grammar }),
+      grammarIssues: s.grammar.map((g, i) => ({
+        kind: g.kind, wrong: g.wrong, right: g.right, note: g.note,
+        dotStyle: "width:7px;height:7px;border-radius:50%;flex-shrink:0;background:" +
+          (g.kind === "Ortografía" ? "#C4553D" : g.kind === "Gramática" ? "#C07B2A" : "#5B5BD6"),
+        apply: () => this.setState({ grammar: s.grammar.filter((_, j) => j !== i) }),
+        learn: () => this.setState({
+          grammar: s.grammar.filter((_, j) => j !== i),
+          learned: s.learned.indexOf(g.wrong) === -1 ? [...s.learned, g.wrong] : s.learned
+        }),
+        dismiss: () => this.setState({ grammar: s.grammar.filter((_, j) => j !== i) })
+      })),
+
+      status: s.status, statusMenuOpen: s.statusMenu,
+      toggleStatusMenu: () => this.setState({ statusMenu: !s.statusMenu, typeMenu: false, wsMenu: false }),
+      statusTriggerStyle: this.trigger(s.statusMenu),
+      statusDotStyle: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(s.status),
+      statusOptions: ["New", "Exploring", "Draft", "In review", "Done", "Archived"].map((label) => ({
+        label, select: () => set("status", label), style: this.menuItem(label === s.status),
+        dotStyle: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(label)
+      })),
+
+      artifactType: s.artifactType, typeMenuOpen: s.typeMenu,
+      toggleTypeMenu: () => this.setState({ typeMenu: !s.typeMenu, statusMenu: false, wsMenu: false }),
+      typeTriggerStyle: this.trigger(s.typeMenu),
+      artifactTypeIcon: TYPE_ICONS[s.artifactType] || "circle",
+      typeOptions: Object.keys(TYPE_ICONS).map((label) => {
+        const on = label === s.artifactType;
+        return {
+          label, icon: TYPE_ICONS[label], select: () => set("artifactType", label),
+          style: this.menuItem(on),
+          iconStyle: "width:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:" + (on ? "#1E1915" : "#6B5F57"),
+          checkStyle: on ? "width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#1E1915" : "width:6px;flex-shrink:0"
+        };
+      }),
+
+      wsMenuOpen: s.wsMenu,
+      toggleWsMenu: () => this.setState({ wsMenu: !s.wsMenu, statusMenu: false, typeMenu: false }),
+      wsTriggerStyle: this.trigger(s.wsMenu),
+      wsOptions: wsNames.map((label) => ({ label, select: () => set("workspace", label), style: this.menuItem(label === s.workspace) })),
+
+      infoRows: [["Words", "696"], ["Characters", "4,326"], ["Sentences", "34"], ["Reading time", "4 min"], ["Pages", "2.8"]].map(([label, value], i, a) => ({
+        label, value,
+        style: "display:flex;align-items:center;justify-content:space-between;padding:9px 12px;" + (i < a.length - 1 ? "border-bottom:1px solid #EDEBE8" : "")
+      })),
+
+      notes: s.notes.map((n) => ({
+        kind: n.kind === "ai" ? "Nota IA" : n.kind === "highlight" ? "Resaltado" : "Nota",
+        quote: n.quote, body: n.body,
+        dotStyle: "width:7px;height:7px;border-radius:50%;flex-shrink:0;background:" + (n.kind === "ai" ? "#5B5BD6" : n.kind === "highlight" ? "#C07B2A" : "#8E837B")
+      })),
+      openNotes: () => this.setState({ panelOpen: true, panelTab: "notes" }),
+      statusIconBtn: "width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      shortcutsOpen: s.shortcutsOpen,
+      openShortcuts: () => this.setState({ shortcutsOpen: true }),
+      closeShortcuts: () => this.setState({ shortcutsOpen: false }),
+      stopPropagation: (e) => e.stopPropagation(),
+      shortcutGroups: [
+        { title: "Navigate", items: [
+          ["Go to Desk", "⌘⌥1", "Web + Desktop"], ["Go to Workspace", "⌘⌥2", "Web + Desktop"],
+          ["Go to Studio", "⌘⌥3", "Web + Desktop"], ["Search", "⌘K", "Web + Desktop"],
+          ["Next tab", "⌘⇧]", "Desktop"], ["Previous tab", "⌘⇧[", "Desktop"],
+          ["Close tab", "⌘W", "Desktop"], ["Toggle sidebar", "⌘/", "Web + Desktop"]
+        ] },
+        { title: "Format", items: [
+          ["Bold", "⌘B", "Web + Desktop"], ["Italic", "⌘I", "Web + Desktop"],
+          ["Strikethrough", "⌘⇧X", "Web + Desktop"], ["Highlight", "⌘⇧H", "Web + Desktop"],
+          ["Inline code", "⌘E", "Web + Desktop"], ["Code block", "⌘⇧E", "Web + Desktop"],
+          ["Link", "⌘⇧K", "Web + Desktop"], ["Clear formatting", "⌘⇧\\", "Desktop"]
+        ] },
+        { title: "Structure", items: [
+          ["Paragraph", "⌘0", "Desktop"], ["Heading 1", "⌘1", "Desktop"],
+          ["Heading 2", "⌘2", "Desktop"], ["Heading 3", "⌘3", "Desktop"],
+          ["Bulleted list", "⌘L", "Desktop"], ["Numbered list", "⌘⇧L", "Desktop"],
+          ["Blockquote", "⌘⇧B", "Web + Desktop"], ["Insert table", "⌘T", "Desktop"]
+        ] }
+      ].map((g) => ({ title: g.title, items: g.items.map(([label, keys, scope]) => ({ label, keys, scope })) })),
+
+      metricsLabel: hasSel
+        ? s.sel.words + " / 696 words · " + s.sel.chars + " / 4,326 chars · 34 sentences · 4 min · 2.8 pg"
+        : "696 words · 4,326 chars · 34 sentences · 4 min · 2.8 pg",
+      richStyle: seg(s.mode === "rich"), markdownStyle: seg(s.mode === "markdown"),
+      setRich: () => this.setState({ mode: "rich" }), setMarkdown: () => this.setState({ mode: "markdown" }),
+
+      selection: {
+        visible: hasSel && !s.aiMode,
+        style: hasSel && !s.aiMode
+          ? "position:absolute;z-index:20;left:" + s.sel.x + "px;top:" + s.sel.y + "px;transform:translate(-50%,-100%);display:flex;align-items:center;height:34px;padding:0 4px;border-radius:8px;background:#221D18;box-shadow:0 8px 24px rgba(35,24,15,.24);animation:odFadeIn 150ms ease"
+          : "display:none"
+      },
+      onProseMouseUp: (e) => {
+        const sel = window.getSelection();
+        const text = sel ? String(sel).trim() : "";
+        if (s.aiMode) return;
+        if (!text) { if (hasSel) this.setState({ sel: null }); return; }
+        const host = e.currentTarget.parentElement;
+        const r = sel.getRangeAt(0).getBoundingClientRect();
+        const hb = host.getBoundingClientRect();
+        this.setState({ sel: {
+          x: Math.round(r.left + r.width / 2 - hb.left),
+          y: Math.round(r.top - hb.top - 8),
+          words: text.split(/\s+/).filter(Boolean).length,
+          chars: text.length, text
+        }});
+      },
+      ai: {
+        visible: !!s.aiMode,
+        isTyping: s.aiMode === "typing",
+        isRecording: s.aiMode === "recording",
+        style: s.aiMode && s.sel
+          ? "position:absolute;z-index:25;left:" + s.sel.x + "px;top:" + (s.sel.y + 20) + "px;transform:translateX(-50%);width:322px;padding:14px;border-radius:12px;background:#FFFFFF;border:1px solid #EDEBE8;box-shadow:0 14px 40px rgba(35,24,15,.14);animation:odMenuIn 160ms ease"
+          : "display:none",
+        elapsed: "00:" + String(s.aiSeconds % 60).padStart(2, "0"),
+        bars: Array.from({ length: 22 }, (_, i) => ({
+          style: "width:4px;border-radius:2px;background:#B4713A;flex-shrink:0;transition:height 180ms ease;height:" +
+            (s.aiPaused ? 4 : Math.round(5 + 13 * Math.abs(Math.sin((i + 1) * 1.7 + s.aiSeconds * 1.3)))) + "px"
+        })),
+        chips: ["eliminar", "modificar", "expandir", "valida esto", "simplifica", "mantén tono"].map((label) => {
+          const on = s.aiChip === label;
+          return { label, select: () => this.setState({ aiChip: on ? null : label }),
+            style: "height:32px;padding:0 13px;border:1px solid " + (on ? "#B5ADA5" : "#E8E6E4") + ";border-radius:8px;background:" +
+              (on ? "#F2F1EF" : "transparent") + ";color:" + (on ? "#1E1915" : "#3F3731") + ";font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease" };
+        }),
+        micStyle: "width:36px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E8E6E4;border-radius:8px;background:transparent;color:#3F3731;cursor:pointer;transition:background-color 150ms ease",
+        pauseStyle: "width:36px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E8E6E4;border-radius:8px;background:transparent;color:#3F3731;cursor:pointer;transition:background-color 150ms ease",
+        pauseIcon: s.aiPaused ? "play" : "pause",
+        stopStyle: "width:36px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:#E8453C;cursor:pointer;transition:opacity 150ms ease",
+        saveStyle: "height:32px;padding:0 18px;border:0;border-radius:8px;background:" + (s.aiChip ? "#1E1915" : "#A8A29B") + ";color:#FFFFFF;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 180ms ease",
+        record: () => this.startRecording(),
+        togglePause: () => this.setState({ aiPaused: !s.aiPaused }),
+        stop: () => this.setState({ aiMode: "typing", aiPaused: false }),
+        cancel: () => this.closeAi()
+      },
+
+      annotateHighlight: () => this.addNote("highlight"),
+      annotateAi: () => this.setState({ aiMode: "typing", aiChip: null }),
+      annotateNote: () => this.addNote("personal")
+    };
+  }
+
+  startRecording() {
+    this.setState({ aiMode: "recording", aiSeconds: 0, aiPaused: false });
+    clearInterval(this._tick);
+    this._tick = setInterval(() => {
+      if (this.state.aiMode !== "recording") return clearInterval(this._tick);
+      if (!this.state.aiPaused) this.setState({ aiSeconds: this.state.aiSeconds + 1 });
+    }, 1000);
+  }
+
+  closeAi() {
+    clearInterval(this._tick);
+    this.setState({ aiMode: null, aiPaused: false, aiSeconds: 0, aiChip: null, sel: null });
+  }
+
+  addNote(kind) {
+    const sel = this.state.sel;
+    if (!sel) return;
+    const quote = sel.text.length > 90 ? sel.text.slice(0, 90) + "…" : sel.text;
+    const body = kind === "ai" ? "Nota generada por IA sobre este fragmento." : kind === "highlight" ? "Fragmento resaltado." : "Nota personal.";
+    window.getSelection().removeAllRanges();
+    this.setState({ sel: null, panelOpen: true, panelTab: "notes", notes: [{ kind, quote, body }, ...this.state.notes] });
+  }
+}
+
+</script>
+</body>
+</html>

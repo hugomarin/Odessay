@@ -7,6 +7,10 @@ description: Sistema de diseño visual de Odessay. Usa este skill siempre que va
 
 Este skill define la lógica visual completa de Odessay. Todo lo que se construya visualmente parte de aquí. No se toman decisiones de diseño fuera de este documento — si algo no está definido, se pregunta antes de inventar.
 
+**Límite con la capa de marketing.** Desde Fase 10 el producto tiene dos sistemas visuales que no se mezclan. Este skill gobierna la **capa de producto**: `app/(app)`, `app/(auth)`, `app/(reading)` y las superficies públicas de lectura de un documento. La **capa de marketing** —`app/(marketing)`, la home pública y cualquier superficie dirigida a alguien que todavía no es usuario— la gobierna `.agents/skills/skill-design-landing/SKILL.md`, con sus propios tokens bajo `[data-layer="marketing"]`. Comparten la marca, la familia de grises cálidos y Roboto Mono; nada más. Mezclarlas es el modo de fallo número uno del rediseño.
+
+**Autoridad visual del rediseño.** Para cualquier vista de Fase 10, el prototipo `.dc.html` correspondiente en `docs/design/reference/` es la autoridad visual y este skill es la autoridad de implementación: el prototipo dice cuánto mide, el skill dice cómo se expresa (token en vez de hex, 0.5px en vez de 1px). Protocolo completo en `docs/design/migration-plan.md` §4.
+
 Los archivos HTML en `/workflow/reference/` son prototipos interactivos que documentan el comportamiento validado. Sus screenshots están listados con descripción completa en `CLAUDE.md`. Los prototipos pueden tener diferencias menores respecto al diseño final — este documento, `vistas.md` y `tipografia.md` (en esta misma carpeta) son la especificación oficial.
 
 **Antes de implementar cualquier vista, leer `.agents/skills/skill-design/vistas.md`** — contiene valores exactos de padding, tamaños, colores y comportamiento por vista, más checklists de validación.

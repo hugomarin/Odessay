@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+</style>
+</helmet>
+
+<div style="{{shellStyle}}">
+
+  <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px">
+    <div style="box-sizing:border-box;width:76px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#28C840;display:block"></span>
+    </div>
+    <span style="width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:7px;color:#6B5F57"><lucide-icon name="panel-left" size="18"></lucide-icon></span>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;gap:10px;padding:0 10px 10px 0">
+
+    <div style="box-sizing:border-box;width:244px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+    <nav style="box-sizing:border-box;flex:1;min-height:0;display:flex;flex-direction:column;padding:0 6px;overflow:hidden">
+      <div style="display:flex;flex-direction:column;gap:2px;padding:2px 0 0">
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span>New Artifact
+        </button>
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="{{railIconWrap}}"><lucide-icon name="search" size="19"></lucide-icon></span>Search
+        </button>
+      </div>
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:26px 0 8px;display:flex;flex-direction:column;gap:2px">
+        <a href="Artifact Studio Studio.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span>Studio
+        </a>
+        <a href="Artifact Studio Desk.dc.html" style="{{deskNavStyle}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span>Desk
+        </a>
+        <a href="Artifact Studio Workspace.dc.html" style="{{wsNavStyle}}" style-hover="background:#E9E7E3;color:#1E1915">
+          <span style="{{railIconWrap}}"><lucide-icon name="folder-tree" size="19"></lucide-icon></span>Workspace
+        </a>
+        <sc-if value="{{hasSeedWorkspace}}" hint-placeholder-val="{{true}}">
+          <div style="display:flex;flex-direction:column;gap:1px;padding:4px 0 0 22px">
+            <button style="display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;border:0;background:transparent;border-radius:8px;font:400 13px/1 'DM Sans',sans-serif;color:#8E837B;cursor:pointer;text-align:left" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="width:5px;height:5px;border-radius:50%;flex-shrink:0;background:#CFC9C1"></span>Artifact Studio
+            </button>
+          </div>
+        </sc-if>
+      </div>
+    </nav>
+
+    <div style="box-sizing:border-box;display:flex;align-items:center;gap:10px;height:46px;flex-shrink:0;border-radius:9px;padding-left:6px;overflow:hidden;cursor:pointer">
+        <span style="width:36px;height:36px;margin:0 2px;flex-shrink:0;border-radius:50%;background:#1E1915;color:#FBFAF9;display:flex;align-items:center;justify-content:center;font:600 12px/1 'DM Sans',sans-serif">HM</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915">Hugo Marin</span>
+          <span style="display:block;font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B">@hugomarin</span>
+        </span>
+        <span style="flex-shrink:0;display:flex;color:#8E837B"><lucide-icon name="settings" size="15"></lucide-icon></span>
+      </div>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+      <div style="flex-shrink:0;display:flex;align-items:flex-end;gap:20px;padding:12px 16px 16px">
+        <div style="flex:1;min-width:0">
+          <h1 style="margin:0;font:500 32px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">{{viewTitle}}</h1>
+        </div>
+        <button style="{{primaryBtn}}" style-hover="opacity:.9"><lucide-icon name="plus" size="15"></lucide-icon>{{primaryLabel}}</button>
+      </div>
+  
+      <div style="position:relative;flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+  
+  
+        <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto">
+  
+          <sc-if value="{{isFirstRun}}" hint-placeholder-val="{{true}}">
+            <div style="max-width:680px;padding:64px 16px 40px">
+              <h2 style="margin:0 0 10px;font:500 24px/1.25 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em">Empezá por acá</h2>
+              <p style="margin:0 0 28px;max-width:56ch;font:400 15px/1.65 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Dejamos dos artifacts escritos para vos. Son markdown normal: editalos, borralos o movelos a otro workspace cuando ya no los necesites.</p>
+              <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:30px">
+                <sc-for list="{{seeds}}" as="d" hint-placeholder-count="2">
+                  <a href="Artifact Studio Studio.dc.html" style="{{seedRow}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+                    <span style="{{seedIcon}}"><lucide-icon name="{{d.icon}}" size="20"></lucide-icon></span>
+                    <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                      <span style="font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915">{{d.title}}</span>
+                      <span style="font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">{{d.desc}}</span>
+                    </span>
+                    <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="chevron-right" size="18"></lucide-icon></span>
+                  </a>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding-top:22px;border-top:1px solid #EDEBE8">
+                <span style="display:flex;color:#B5ADA5"><lucide-icon name="sparkles" size="15"></lucide-icon></span>
+                <p style="margin:0;font:400 13px/1.6 'DM Sans',sans-serif;color:#8E837B">O escribí el primero: <strong style="font-weight:500;color:#3F3731">⌘N</strong> crea un artifact en blanco.</p>
+              </div>
+            </div>
+          </sc-if>
+  
+          <sc-if value="{{isTrulyEmpty}}" hint-placeholder-val="{{false}}">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;min-height:440px;padding:40px 16px;text-align:center">
+              <span style="width:52px;height:52px;display:flex;align-items:center;justify-content:center;border-radius:13px;border:1px dashed #D6D1CA;color:#B5ADA5"><lucide-icon name="file-plus" size="22"></lucide-icon></span>
+              <h2 style="margin:0;font:500 20px/1.3 'DM Sans',sans-serif;color:#1E1915">No hay artifacts todavía</h2>
+              <p style="margin:0;max-width:40ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Este workspace está conectado y vacío. Lo que escribas acá se guarda como markdown en la carpeta.</p>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
+                <button style="{{primaryBtn}}" style-hover="opacity:.9"><lucide-icon name="plus" size="15"></lucide-icon>New Artifact</button>
+                <button style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Restaurar documentos de inicio</button>
+              </div>
+            </div>
+          </sc-if>
+  
+          <sc-if value="{{isNoWorkspace}}" hint-placeholder-val="{{false}}">
+            <div style="max-width:620px;padding:64px 16px 40px">
+              <h2 style="margin:0 0 10px;font:500 24px/1.25 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em">Todavía no conectaste una carpeta</h2>
+              <p style="margin:0 0 28px;max-width:54ch;font:400 15px/1.65 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Un workspace es una carpeta tuya que Artifact Studio mira. Nada se mueve ni se copia: los archivos siguen donde están.</p>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <a href="Artifact Studio Add Workspace.dc.html" style="{{seedRow}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+                  <span style="{{seedIcon}}"><lucide-icon name="folder" size="20"></lucide-icon></span>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                    <span style="font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915">Use an existing folder</span>
+                    <span style="font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Connect a folder you already work from.</span>
+                  </span>
+                  <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="chevron-right" size="18"></lucide-icon></span>
+                </a>
+                <a href="Artifact Studio Add Workspace.dc.html" style="{{seedRow}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+                  <span style="{{seedIcon}}"><lucide-icon name="plus" size="20"></lucide-icon></span>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                    <span style="font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915">Create from scratch</span>
+                    <span style="font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Create a new folder and start clean.</span>
+                  </span>
+                  <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="chevron-right" size="18"></lucide-icon></span>
+                </a>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-top:30px;padding-top:22px;border-top:1px solid #EDEBE8">
+                <span style="display:flex;margin-top:2px;color:#B5ADA5"><lucide-icon name="info" size="15"></lucide-icon></span>
+                <p style="margin:0;max-width:52ch;font:400 13px/1.6 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Mientras tanto, los dos documentos de inicio viven en <strong style="font-weight:500;color:#3F3731">Artifact Studio</strong>, un workspace local que no toca tus carpetas.</p>
+              </div>
+            </div>
+          </sc-if>
+  
+        </div>
+      </div>
+
+      <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 14px">
+        <span style="display:flex;color:#8E837B"><lucide-icon name="cloud-upload" size="16"></lucide-icon></span>
+        <span style="font:400 13px/1 'DM Sans',sans-serif;color:#6B5F57">{{syncLine}}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Desk · primera vez&quot;,&quot;Desk · vacío&quot;,&quot;Workspace · sin carpetas&quot;],&quot;default&quot;:&quot;Desk · primera vez&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Estado&quot;}}">
+const SEEDS = [
+  { icon: "book-open", title: "Cómo funciona Artifact Studio", desc: "Qué es un artifact, cómo se sincroniza con tu carpeta y por qué el editor no te pide guardar." },
+  { icon: "command", title: "Atajos de teclado", desc: "Los doce que importan: crear, buscar, mover entre workspaces y cambiar el estado de un artifact." }
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    const view = this.props.view ?? "Desk · primera vez";
+    const first = view === "Desk · primera vez";
+    const empty = view === "Desk · vacío";
+    const noWs = view === "Workspace · sin carpetas";
+
+    const railRow = (active) => "display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;height:40px;flex-shrink:0;padding:0;border:0;border-radius:9px;font:" +
+      (active ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (active ? "#1E1915" : "#3F3731") + ";background:" + (active ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-align:left;overflow:hidden;text-decoration:none;transition:background-color 180ms ease";
+
+    return {
+      shellStyle: "display:flex;flex-direction:column;background:#F3F2F0;overflow:hidden;width:100%;height:100vh",
+      railBtn: railRow(false),
+      deskNavStyle: railRow(!noWs),
+      wsNavStyle: railRow(noWs),
+      railIconWrap: "box-sizing:border-box;width:40px;min-width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center",
+      hasSeedWorkspace: !noWs,
+
+      viewTitle: noWs ? "Workspace" : "Desk",
+      primaryLabel: noWs ? "New Workspace" : "New Artifact",
+      primaryBtn: "display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 17px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:opacity 150ms ease",
+      ghostBtn: "display:inline-flex;align-items:center;height:40px;padding:0 15px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF;color:#3F3731;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+
+      isFirstRun: first, isTrulyEmpty: empty, isNoWorkspace: noWs,
+      seeds: SEEDS,
+      seedRow: "display:flex;align-items:center;gap:16px;width:100%;box-sizing:border-box;padding:16px;border:1px solid #EDEBE8;border-radius:12px;background:#FAF9F8;cursor:pointer;text-decoration:none;transition:background-color 150ms ease,border-color 150ms ease",
+      seedIcon: "width:44px;height:44px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E4E1DC;border-radius:11px;background:#FFFFFF;color:#3F3731",
+
+      syncLine: noWs ? "Sin carpetas conectadas" : first ? "2 artifacts de inicio" : "Todo sincronizado"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px;height:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+@keyframes odMenuIn{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes odFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes odBarIn{from{opacity:0;transform:translateX(-50%) translateY(14px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes odDialogIn{from{opacity:0;transform:translateY(-10px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+</style>
+</helmet>
+
+<!-- LAYER 0 — la ventana -->
+<div style="{{shellStyle}}">
+
+  <!-- ── TOP BAR (capa 0) — mismo chrome que Studio ── -->
+  <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px">
+    <div style="box-sizing:border-box;width:76px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#28C840;display:block"></span>
+    </div>
+    <button onClick="{{toggleSidebar}}" title="Toggle sidebar" style="{{iconBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+      <lucide-icon name="panel-left" size="18"></lucide-icon>
+    </button>
+
+    <div style="flex:1;min-width:0"></div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;gap:10px;padding:0 10px 10px 0">
+
+    <!-- SIDEBAR (capa 0) -->
+    <div style="{{railColStyle}}">
+    <nav style="{{sidebarStyle}}">
+      <div style="display:flex;flex-direction:column;gap:2px;padding:2px 0 0">
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="New Artifact">
+          <span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">New Artifact</span>
+        </button>
+        <button onClick="{{openSearch}}" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Search">
+          <span style="{{railIconWrap}}"><lucide-icon name="search" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Search</span>
+        </button>
+      </div>
+
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:26px 0 8px;display:flex;flex-direction:column;gap:2px">
+        <a href="Artifact Studio Studio.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Studio">
+          <span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Studio</span>
+        </a>
+        <button style="{{deskNavStyle}}" style-hover="background:#E4E1DC" title="Desk">
+          <span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Desk</span>
+        </button>
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Workspace">
+          <span style="{{railIconWrap}}"><lucide-icon name="folder-tree" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Workspace</span>
+        </button>
+
+        <div style="{{workspaceListStyle}}">
+          <sc-for list="{{workspaces}}" as="ws" hint-placeholder-count="5">
+            <button onClick="{{ws.select}}" style="{{ws.style}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{ws.iconStyle}}"><lucide-icon name="folder" size="15"></lucide-icon></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ws.name}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      </nav>
+
+    <div style="{{accountRowStyle}}">
+        <span style="width:36px;height:36px;margin:0 2px;flex-shrink:0;border-radius:50%;background:#1E1915;color:#FBFAF9;display:flex;align-items:center;justify-content:center;font:600 12px/1 'DM Sans',sans-serif">HM</span>
+        <span style="{{userMetaStyle}}">
+          <span style="display:block;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915;white-space:nowrap">Hugo Marin</span>
+          <span style="display:block;font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap">@hugomarin</span>
+        </span>
+        <a href="Artifact Studio Settings.dc.html" style="{{userGearStyle}}" title="Settings"><lucide-icon name="settings" size="15"></lucide-icon></a>
+        <span style="{{userGearStyle}}"><lucide-icon name="chevron-right" size="15"></lucide-icon></span>
+      </div>
+    </div>
+
+    <!-- LAYER 1 — la hoja del Desk -->
+    <div style="{{centerColStyle}}">
+      <div style="flex-shrink:0;display:flex;align-items:flex-end;gap:20px;padding:12px 16px 16px">
+        <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:16px">
+          <h1 style="margin:0;font:500 32px/1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Desk</h1>
+          <p style="margin:0;font:400 14px/1.5 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Writing activity, shared drafts, and collection context.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;flex-shrink:0">
+          <button style="{{primaryBtn}}" style-hover="opacity:.9">
+            <lucide-icon name="plus" size="15"></lucide-icon>New Artifact
+          </button>
+        </div>
+      </div>
+
+      <div data-od-menu style="flex-shrink:0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 16px 12px">
+        <div style="display:inline-flex;align-items:center;gap:2px;background:#F2F1EF;border-radius:10px;padding:4px;flex-shrink:0">
+          <sc-for list="{{scopeTabs}}" as="t" hint-placeholder-count="2">
+            <button onClick="{{t.select}}" style="{{t.style}}">
+              {{t.label}}<span style="{{t.countStyle}}">{{t.count}}</span>
+            </button>
+          </sc-for>
+        </div>
+
+        <span style="flex:1;min-width:160px;display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF">
+          <span style="display:flex;color:#B5ADA5;flex-shrink:0"><lucide-icon name="search" size="15"></lucide-icon></span>
+          <input value="{{query}}" onChange="{{onQuery}}" placeholder="Filter by name…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:400 14px/1 'DM Sans',sans-serif;color:#1E1915" />
+        </span>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div style="position:relative">
+            <button onClick="{{toggleFilterMenu}}" style="{{filterBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+              <lucide-icon name="filter" size="15"></lucide-icon>{{filterLabel}}<lucide-icon name="chevron-down" size="14"></lucide-icon>
+            </button>
+            <sc-if value="{{filterMenuOpen}}" hint-placeholder-val="{{false}}">
+              <div style="{{filterPanelStyle}}">
+                <div class="od-scroll" style="max-height:384px;overflow-y:auto;padding:5px">
+                  <sc-for list="{{filterSections}}" as="sec" hint-placeholder-count="3">
+                    <div>
+                      <p style="{{sec.labelStyle}}">{{sec.label}}</p>
+                      <sc-for list="{{sec.options}}" as="o" hint-placeholder-count="6">
+                        <button onClick="{{o.toggle}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                          <span style="{{o.boxStyle}}"><span style="{{o.checkStyle}}"><lucide-icon name="check" size="11" stroke="3"></lucide-icon></span></span>
+                          <span style="{{o.markStyle}}"><lucide-icon name="{{o.icon}}" size="14"></lucide-icon></span>
+                          <span style="flex:1;text-align:left">{{o.label}}</span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-top:1px solid #EDEBE8">
+                  <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B">{{filterCountLabel}}</span>
+                  <button onClick="{{clearFilters}}" style="{{filterClearBtn}}" style-hover="color:#1E1915">Clear all</button>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+          <div style="position:relative">
+            <button onClick="{{toggleGroupMenu}}" style="{{groupBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+              <lucide-icon name="group" size="15"></lucide-icon>{{groupLabel}}<lucide-icon name="chevron-down" size="14"></lucide-icon>
+            </button>
+            <sc-if value="{{groupMenuOpen}}" hint-placeholder-val="{{false}}">
+              <div style="{{menuStyle}}">
+                <sc-for list="{{groupOptions}}" as="o" hint-placeholder-count="4">
+                  <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="position:relative">
+            <button onClick="{{toggleSortMenu}}" style="{{sortBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+              <lucide-icon name="arrow-up-down" size="15"></lucide-icon>Sort: {{sortLabel}}<lucide-icon name="chevron-down" size="14"></lucide-icon>
+            </button>
+            <sc-if value="{{sortMenuOpen}}" hint-placeholder-val="{{false}}">
+              <div style="{{menuStyle}}">
+                <sc-for list="{{sortOptions}}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+    <div style="position:relative;flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+
+  
+        <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto">
+
+          <div data-od-menu>
+            <sc-for list="{{groups}}" as="g" hint-placeholder-count="1">
+              <div>
+                <sc-if value="{{g.hasHeader}}" hint-placeholder-val="{{false}}">
+                  <div style="display:flex;align-items:center;gap:10px;padding:16px 16px 8px">
+                    <span style="font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#8E837B">{{g.label}}</span>
+                    <span style="height:18px;min-width:18px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#F2F1EF;font:500 11px/1 'DM Sans',sans-serif;color:#6B5F57">{{g.count}}</span>
+                    <span style="flex:1;height:1px;background:#F0EEEB"></span>
+                  </div>
+                </sc-if>
+
+                <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="4">
+                  <div style="{{r.rowStyle}}" style-hover="background:#FCFBFA">
+                    <button onClick="{{r.toggle}}" style="{{r.checkStyle}}" title="Select">
+                      <span style="{{r.checkIconStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+                    </button>
+
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+                        <h3 style="margin:0;font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.title}}</h3>
+                        <span style="{{r.badgeStyle}}"><lucide-icon name="{{r.badgeIcon}}" size="12"></lucide-icon></span>
+                        <button style="{{rowIconBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Editar"><lucide-icon name="pencil" size="14"></lucide-icon></button>
+                        <button onClick="{{r.preview}}" style="{{rowIconBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Preview"><lucide-icon name="eye" size="14"></lucide-icon></button>
+                      </div>
+                      <div style="display:flex;align-items:baseline;gap:8px;min-width:0;max-width:88ch">
+                        <span style="flex-shrink:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5;white-space:nowrap">{{r.when}}</span>
+                        <span style="flex-shrink:0;width:3px;height:3px;border-radius:50%;background:#D6D1CA;transform:translateY(-3px)"></span>
+                        <p style="margin:0;flex:1;min-width:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#6B5F57;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.excerpt}}</p>
+                      </div>
+                    </div>
+
+                    <div style="{{r.controlsStyle}}">
+                      <div style="position:relative;width:160px">
+                        <button onClick="{{r.openStatus}}" style="{{r.statusTrigger}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                          <span style="{{r.statusDot}}"></span>
+                          <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.status}}</span>
+                          <lucide-icon name="chevron-down" size="14"></lucide-icon>
+                        </button>
+                        <sc-if value="{{r.statusOpen}}" hint-placeholder-val="{{false}}">
+                          <div style="{{menuStyle}}">
+                            <sc-for list="{{r.statusOptions}}" as="o" hint-placeholder-count="6">
+                              <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                                <span style="{{o.dotStyle}}"></span>{{o.label}}
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+
+                      <div style="position:relative;width:160px">
+                        <button onClick="{{r.openType}}" style="{{r.typeTrigger}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                          <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="{{r.typeIcon}}" size="14"></lucide-icon></span>
+                          <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.type}}</span>
+                          <lucide-icon name="chevron-down" size="14"></lucide-icon>
+                        </button>
+                        <sc-if value="{{r.typeOpen}}" hint-placeholder-val="{{false}}">
+                          <div style="{{menuStyle}}">
+                            <sc-for list="{{r.typeOptions}}" as="o" hint-placeholder-count="6">
+                              <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                                <span style="{{o.iconStyle}}"><lucide-icon name="{{o.icon}}" size="14"></lucide-icon></span>{{o.label}}
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+
+                      <div style="position:relative;width:160px">
+                        <button onClick="{{r.openWs}}" style="{{r.wsTrigger}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                          <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="folder" size="14"></lucide-icon></span>
+                          <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.workspace}}</span>
+                          <lucide-icon name="chevron-down" size="14"></lucide-icon>
+                        </button>
+                        <sc-if value="{{r.wsOpen}}" hint-placeholder-val="{{false}}">
+                          <div style="{{menuStyle}}">
+                            <sc-for list="{{r.wsOptions}}" as="o" hint-placeholder-count="5">
+                              <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+
+                      <div style="position:relative">
+                        <button onClick="{{r.openMore}}" style="{{r.moreStyle}}" style-hover="background:#F2F1EF;color:#1E1915" title="Más">
+                          <lucide-icon name="ellipsis" size="17"></lucide-icon>
+                        </button>
+                        <sc-if value="{{r.moreOpen}}" hint-placeholder-val="{{false}}">
+                          <div style="{{moreMenuStyle}}">
+                            <sc-for list="{{r.moreOptions}}" as="o" hint-placeholder-count="5">
+                              <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                                <span style="{{o.iconStyle}}"><lucide-icon name="{{o.icon}}" size="14"></lucide-icon></span>{{o.label}}
+                              </button>
+                            </sc-for>
+                          </div>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+            <div style="padding:80px 16px;text-align:center">
+              <p style="margin:0 0 6px;font:500 20px/1.3 Lora,Georgia,serif;color:#1E1915">Nada con ese nombre</p>
+              <p style="margin:0;font:400 14px/1.5 'DM Sans',sans-serif;color:#8E837B">Ajusta el filtro o crea un artifact nuevo.</p>
+            </div>
+          </sc-if>
+
+          <div style="height:40px"></div>
+        </div>
+
+        <sc-if value="{{hasSelection}}" hint-placeholder-val="{{false}}">
+          <div data-od-menu style="position:absolute;left:50%;bottom:26px;z-index:40;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 22px;border-radius:14px;background:#1E1915;box-shadow:0 26px 70px rgba(35,24,15,.30),0 2px 6px rgba(35,24,15,.20);animation:odBarIn 200ms cubic-bezier(.4,0,.15,1);white-space:nowrap">
+            <span style="font:500 14px/1 'DM Sans',sans-serif;color:#FBFAF9">{{selectionLabel}}</span>
+            <button onClick="{{selectAll}}" style="{{selLinkBtn}}" style-hover="color:#FBFAF9">Select all</button>
+            <button onClick="{{clearSelection}}" style="{{selLinkBtn}}" style-hover="color:#FBFAF9">Deselect</button>
+
+            <span style="width:1px;height:26px;margin:0 4px;background:rgba(251,250,249,.14)"></span>
+
+            <div style="position:relative">
+              <button onClick="{{openSelStatus}}" style="{{selChipStyle}}" style-hover="background:rgba(251,250,249,.16)">
+                <span style="{{selStatusDot}}"></span>Status<lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{selStatusOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{selMenuStyle}}">
+                  <sc-for list="{{selStatusOptions}}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{o.dotStyle}}"></span>{{o.label}}
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="position:relative">
+              <button onClick="{{openSelType}}" style="{{selChipStyle}}" style-hover="background:rgba(251,250,249,.16)">
+                <lucide-icon name="file-text" size="15"></lucide-icon>Artifacts<lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{selTypeOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{selMenuStyle}}">
+                  <sc-for list="{{selTypeOptions}}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{o.iconStyle}}"><lucide-icon name="{{o.icon}}" size="14"></lucide-icon></span>{{o.label}}
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+
+            <div style="position:relative">
+              <button onClick="{{openSelWs}}" style="{{selChipStyle}}" style-hover="background:rgba(251,250,249,.16)">
+                <lucide-icon name="folder-plus" size="15"></lucide-icon>Collections<lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{selWsOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{selMenuStyle}}">
+                  <sc-for list="{{selWsOptions}}" as="o" hint-placeholder-count="5">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+
+            <button onClick="{{clearSelection}}" style="{{selDangerBtn}}" style-hover="background:rgba(150,83,44,.42)">
+              <lucide-icon name="trash-2" size="15"></lucide-icon>Delete
+            </button>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="{{statusBarStyle}}">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="display:flex;color:#8E837B"><lucide-icon name="cloud-upload" size="16"></lucide-icon></span>
+        <span style="font:400 13px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">{{syncLabel}}</span>
+      </div>
+      <div style="justify-self:center"></div>
+      <div style="justify-self:end;display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{countsLabel}}</span>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- ── PREVIEW OVERLAY (shell de dos capas) ── -->
+  <sc-if value="{{previewOpen}}" hint-placeholder-val="{{false}}">
+    <div onClick="{{closePreview}}" style="position:absolute;inset:0;z-index:70;background:rgba(35,24,15,.22);backdrop-filter:blur(14px) saturate(115%);-webkit-backdrop-filter:blur(14px) saturate(115%);display:flex;align-items:center;justify-content:center;padding:28px;animation:odFadeIn 140ms ease">
+      <div onClick="{{stop}}" style="box-sizing:border-box;width:min(1160px,100%);height:min(840px,100%);display:flex;flex-direction:column;background:#F3F2F0;border-radius:14px;box-shadow:0 2px 6px rgba(35,24,15,.08),0 32px 80px rgba(35,24,15,.26);overflow:hidden;padding:0 8px 8px;animation:odDialogIn 190ms cubic-bezier(.4,0,.15,1)">
+
+        <!-- capa 0 — chrome -->
+        <div style="height:48px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 6px 0 8px">
+          <button onClick="{{prevPreview}}" title="Anterior" style="{{previewNavBtn}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="arrow-left" size="17"></lucide-icon></button>
+          <button onClick="{{nextPreview}}" title="Siguiente" style="{{previewNavBtn}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="arrow-right" size="17"></lucide-icon></button>
+          <span style="font:400 13px/1 'DM Sans',sans-serif;color:#3F3731;white-space:nowrap">{{previewCounter}}</span>
+          <span style="font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#8E837B">Preview</span>
+          <span style="flex:1"></span>
+          <a href="Artifact Studio Studio.dc.html" style="{{previewOpenBtn}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+            <lucide-icon name="square-arrow-out-up-right" size="15"></lucide-icon>Open full writing
+          </a>
+          <button style="{{previewNavBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Más"><lucide-icon name="ellipsis" size="17"></lucide-icon></button>
+          <button onClick="{{closePreview}}" style="{{previewNavBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Cerrar"><lucide-icon name="x" size="18"></lucide-icon></button>
+        </div>
+
+        <!-- capa 1 — hojas -->
+        <div style="flex:1;min-height:0;display:flex;gap:8px">
+
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+            <div style="flex-shrink:0;padding:26px 40px 22px;border-bottom:1px solid #EDEBE8">
+              <p style="margin:0 0 10px;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#8E837B">Title</p>
+              <h2 style="margin:0;font:500 28px/1.25 Lora,Georgia,serif;color:#1E1915;letter-spacing:-.015em;text-wrap:pretty">{{previewTitle}}</h2>
+              <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+                <span style="{{previewBadgeStyle}}"><lucide-icon name="{{previewBadgeIcon}}" size="12"></lucide-icon></span>
+                <span style="font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5">{{previewMeta}}</span>
+                <span style="font:400 11px/1.4 'Roboto Mono',monospace;color:#B5ADA5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{previewPath}}</span>
+              </div>
+            </div>
+            <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;padding:30px 40px 60px">
+              <sc-for list="{{previewBlocks}}" as="b" hint-placeholder-count="4">
+                <p style="{{b.style}}">{{b.text}}</p>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="od-scroll" style="width:308px;flex-shrink:0;display:flex;flex-direction:column;gap:22px;background:transparent;overflow-y:auto;padding:18px 10px 24px 14px">
+            <p style="margin:0;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#8E837B">Properties</p>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <p style="margin:0;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.11em;text-transform:uppercase;color:#B5ADA5">Status</p>
+              <button style="{{previewFieldStyle}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                <span style="{{previewStatusDot}}"></span>
+                <span style="flex:1;text-align:left">{{previewStatus}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <p style="margin:0;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.11em;text-transform:uppercase;color:#B5ADA5">Artifact type</p>
+              <button style="{{previewFieldStyle}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="{{previewTypeIcon}}" size="14"></lucide-icon></span>
+                <span style="flex:1;text-align:left">{{previewType}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <p style="margin:0;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.11em;text-transform:uppercase;color:#B5ADA5">Workspace</p>
+              <button style="{{previewFieldStyle}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="folder" size="14"></lucide-icon></span>
+                <span style="flex:1;text-align:left">{{previewWs}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <p style="margin:0;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.11em;text-transform:uppercase;color:#B5ADA5">Collections</p>
+              <div style="border:1px solid #E4E1DC;border-radius:10px;background:transparent;padding:12px 13px;display:flex;flex-direction:column;gap:8px">
+                <button style="{{previewLinkBtn}}" style-hover="color:#1E1915">
+                  <lucide-icon name="tags" size="15"></lucide-icon>Add to collections
+                </button>
+                <p style="margin:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">No collections assigned yet.</p>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <p style="margin:0;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.11em;text-transform:uppercase;color:#B5ADA5">Sharing</p>
+              <div style="border:1px solid #E4E1DC;border-radius:10px;background:transparent;padding:14px 13px;display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <p style="margin:0;font:500 13px/1 'DM Sans',sans-serif;color:#1E1915">Web publishing</p>
+                  <p style="margin:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Publishing and link sharing continue on web.</p>
+                  <button style="{{previewDarkBtn}}" style-hover="opacity:.9">
+                    <lucide-icon name="square-arrow-out-up-right" size="14"></lucide-icon>Publish on web
+                  </button>
+                </div>
+                <div style="height:1px;background:#E4E1DC"></div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <p style="margin:0;font:500 13px/1 'DM Sans',sans-serif;color:#1E1915">Preview link</p>
+                  <p style="margin:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Share with anyone — no Artifact Studio account needed.</p>
+                  <button style="{{previewDarkBtn}}" style-hover="opacity:.9">Generate link</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ── SEARCH OVERLAY ── -->
+  <sc-if value="{{searchOpen}}" hint-placeholder-val="{{false}}">
+    <div onClick="{{closeSearch}}" style="position:absolute;inset:0;z-index:60;background:rgba(35,24,15,.22);backdrop-filter:blur(14px) saturate(115%);-webkit-backdrop-filter:blur(14px) saturate(115%);display:flex;justify-content:center;align-items:flex-start;padding:min(9vh,110px) 24px 24px;animation:odFadeIn 140ms ease">
+      <div onClick="{{stop}}" style="box-sizing:border-box;width:min(660px,100%);max-height:min(620px,80vh);display:flex;flex-direction:column;background:#FFFFFF;border-radius:16px;box-shadow:0 2px 6px rgba(35,24,15,.08),0 28px 70px rgba(35,24,15,.22);overflow:hidden;animation:odDialogIn 180ms cubic-bezier(.4,0,.15,1)">
+
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:16px;height:66px;padding:0 20px 0 22px;border-bottom:1px solid #EDEBE8">
+          <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="search" size="21"></lucide-icon></span>
+          <input ref="{{searchRef}}" value="{{searchQuery}}" onChange="{{onSearchQuery}}" placeholder="Search writings…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:400 19px/1.2 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em" />
+          <button onClick="{{closeSearch}}" title="Cerrar" style="{{searchCloseBtn}}" style-hover="background:#F2F1EF;color:#1E1915">
+            <lucide-icon name="x" size="19"></lucide-icon>
+          </button>
+        </div>
+
+        <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;padding:10px 0 14px">
+          <sc-for list="{{searchGroups}}" as="g" hint-placeholder-count="2">
+            <div>
+              <p style="margin:0;padding:14px 22px 6px;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#8E837B">{{g.label}}</p>
+              <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="4">
+                <button onClick="{{closeSearch}}" style="{{searchRowStyle}}" style-hover="background:#F7F6F4">
+                  <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="{{r.icon}}" size="18"></lucide-icon></span>
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 15px/1.3 'DM Sans',sans-serif;color:#1E1915">{{r.title}}</span>
+                  <span style="flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5">{{r.ws}}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-for>
+          <sc-if value="{{searchEmpty}}" hint-placeholder-val="{{false}}">
+            <div style="padding:56px 22px;text-align:center">
+              <p style="margin:0 0 6px;font:500 18px/1.3 Lora,Georgia,serif;color:#1E1915">Sin resultados</p>
+              <p style="margin:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Prueba con otro término o revisa el workspace.</p>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;viewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;\&quot;full\&quot; | \&quot;compact\&quot;&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;comfortable&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;comfortable&quot;,&quot;tsType&quot;:&quot;\&quot;comfortable\&quot; | \&quot;compact\&quot;&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const TYPE_ICONS = {
+  General: "file-text", Agent: "bot", Skill: "wrench",
+  Prompt: "message-square", Template: "layout-template", Note: "sticky-note"
+};
+const WS = ["Tutoria", "ode408", "OS", "Skill", "Narratif"];
+const RAIL_MINI = 52, RAIL_FULL = 244;
+const STATUSES = ["New", "Exploring", "Draft", "In review", "Done", "Archived"];
+const PREVIEW_BODY = {
+  1: [
+    ["h", "Lección 5 — Evaluación de prompts"],
+    ["p", "En la lección anterior repetimos una frase hasta el cansancio: cualquier técnica que apliquemos solo se sabe si sirve al medirla. Y cada vez que mejoramos el prompt del plan de comida, al hacerlo claro y directo, al agregar guías, al pedirle que razonara paso a paso, dijimos lo mismo: esto debería subir la nota. Siempre en condicional. Nunca vimos la nota."],
+    ["p", "Esta lección la vuelve real."],
+    ["p", "También cerramos con una idea que ahora hay que desarrollar: que después de escribir un prompt casi siempre eliges uno de tres caminos, y que el tercero, pasarlo por una evaluación que lo califique, es el único que te da confianza de verdad. Ya sabes cuál es el camino correcto."],
+    ["h", "1. Qué es evaluar, en realidad"],
+    ["p", "Empecemos por desactivar el malentendido más común. Cuando algo sale mal, el reflejo es culpar a la IA. Pero lo que tienes enfrente nunca es «el modelo» a secas: es un conjunto formado por tu prompt, el modelo que lo ejecuta y la información que le diste."]
+  ],
+  5: [
+    ["h", "Implementing a client"],
+    ["p", "Now that we have our MCP server working, the next step is wiring a client that speaks to it — the piece that turns a protocol into an actual product surface."],
+    ["p", "Empezamos por el handshake, seguimos con el listado de herramientas y cerramos con el manejo de errores del transporte."]
+  ],
+  8: [
+    ["h", "Transcripción — llamada del 24 de julio"],
+    ["p", "Alcance: acordamos cerrar el rediseño del Desk antes de tocar Studio. Hugo revisa la lista de artifacts y define qué columnas quedan visibles en modo compacto."],
+    ["p", "Riesgos: la sincronización offline sigue sin estado visible por artifact; hay que mostrarlo en la fila y no solo en la barra inferior."],
+    ["p", "Siguientes pasos: preview modal, búsqueda global y el primitivo de checkbox actualizado en el UI Kit."]
+  ]
+};
+
+class Component extends DCLogic {
+  state = {
+    sidebarMini: false, scope: "mine", query: "", sort: "Newest first", group: "None",
+    menu: null, groupMenu: false, sortMenu: false, selected: {}, narrow: false, view: "list",
+    searchOpen: false, searchQuery: "", previewId: null, filterMenu: false, filters: { status: [], type: [], ws: [] },
+    items: [
+      { id: 1, title: "Leccion 5 - Evaluacion de prompts", sync: "synced", status: "Draft", type: "General", ws: "Tutoria", words: 20, created: "5 ago", when: "5 ago", order: 1,
+        excerpt: "Lección 5 — Evaluación de prompts En la lección anterior repetimos una frase hasta el cansancio: cualquier técnica que a",
+        path: "file:///Users/hugomarin/Documents/Tutoria/Leccion 5 - Evaluacion de prompts.md" },
+      { id: 2, title: "Omega", sync: "synced", status: "Draft", type: "General", ws: "ode408", words: 1, created: "5 ago", when: "5 ago", order: 2,
+        excerpt: "Omega", path: "file:///Users/hugomarin/Documents/ode408/Omega.md" },
+      { id: 3, title: "Beta", sync: "offline", status: "Draft", type: "General", ws: "ode408", words: 6, created: "4 ago", when: "4 ago", order: 3,
+        excerpt: "Cambio offline 3 1 de \\/Documents/ode408/Beta.md", path: "file:///Users/hugomarin/Documents/ode408/Beta.md" },
+      { id: 4, title: "Beta", sync: "synced", status: "Draft", type: "General", ws: "ode408", words: 6, created: "4 ago", when: "4 ago", order: 4,
+        excerpt: "Cambio offline 3 1 de \\/Documents/ode408/Beta.md", path: "file:///Users/hugomarin/Documents/ode408/Beta.md" },
+      { id: 5, title: "05-Implementing a client", sync: "synced", status: "In review", type: "Skill", ws: "ode408", words: 22, created: "22 jul", when: "22 jul", order: 5,
+        excerpt: "Implementing a client** Now that we have our MCP server working, the next step is wiring a client that speaks to it",
+        path: "file:///Users/hugomarin/Documents/ode408/05-Implementing a client.md" },
+      { id: 6, title: "Mapa-razonamiento-y-desarrollo-Leccion2", sync: "synced", status: "Done", type: "General", ws: "Tutoria", words: 20, created: "2 jul", when: "2 jul", order: 6,
+        excerpt: "Lección 2 — Mapa de razonamiento y desarrollo Este mapa ordena las decisiones antes de escribir una sola línea",
+        path: "file:///Users/hugomarin/Documents/Tutoria/Mapa-razonamiento-y-desarrollo-Leccion2.md" },
+      { id: 7, title: "Alpha", sync: "offline", status: "Exploring", type: "Prompt", ws: "OS", words: 14, created: "1 jul", when: "1 jul", order: 7,
+        excerpt: "Primer borrador del prompt maestro para el ejercicio de comparación", path: "file:///Users/hugomarin/Documents/OS/Alpha.md" },
+      { id: 8, title: "transcript-llamada-2026-07-24", sync: "synced", status: "New", type: "Note", ws: "Narratif", words: 812, created: "24 jul", when: "24 jul", order: 8,
+        excerpt: "Transcripción de la llamada con el equipo: alcance, riesgos y siguientes pasos", path: "file:///Users/hugomarin/Documents/Narratif/transcript-llamada-2026-07-24.md" }
+    ],
+    shared: [
+      { id: 101, title: "Brief de comparación de modelos", sync: "synced", status: "In review", type: "Template", ws: "Tutoria", words: 340, created: "3 ago", when: "3 ago", order: 1,
+        excerpt: "Compartido por @paula — dimensiones ponderadas y criterio dominante para la matriz",
+        path: "file:///Users/hugomarin/Shared/brief-comparacion.md" },
+      { id: 102, title: "Guía de tono Narratif", sync: "synced", status: "Done", type: "Skill", ws: "Narratif", words: 1120, created: "28 jul", when: "28 jul", order: 2,
+        excerpt: "Compartido por @dani — reglas de voz, ejemplos y antiejemplos", path: "file:///Users/hugomarin/Shared/tono-narratif.md" },
+      { id: 103, title: "Checklist de publicación", sync: "offline", status: "Draft", type: "General", ws: "OS", words: 210, created: "26 jul", when: "26 jul", order: 3,
+        excerpt: "Compartido por @paula — qué revisar antes de publicar en web", path: "file:///Users/hugomarin/Shared/checklist-publicacion.md" }
+    ]
+  };
+
+  componentDidMount() {
+    this._onDown = (e) => {
+      const t = e.target;
+      if (t && t.closest && t.closest("[data-od-menu]")) return;
+      if (this.state.menu || this.state.groupMenu || this.state.sortMenu || this.state.filterMenu)
+        this.setState({ menu: null, groupMenu: false, sortMenu: false, filterMenu: false });
+    };
+    document.addEventListener("mousedown", this._onDown, true);
+    this._searchInput = null;
+    this._onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); this.openSearch(); }
+      else if (e.key === "Escape" && this.state.previewId != null) this.setState({ previewId: null });
+      else if (e.key === "Escape" && this.state.searchOpen) this.setState({ searchOpen: false });
+      else if (this.state.previewId != null && (e.key === "ArrowLeft" || e.key === "ArrowRight")) this.stepPreview(e.key === "ArrowRight" ? 1 : -1);
+    };
+    document.addEventListener("keydown", this._onKey);
+    this._onResize = () => {
+      const compact = (this.props.viewport ?? "full") === "compact";
+      const w = compact ? 1180 : window.innerWidth;
+      const narrow = w < 1240;
+      if (narrow === this.state.narrow) return;
+      this.setState(narrow ? { narrow: true, sidebarMini: true } : { narrow: false });
+    };
+    this._onResize();
+    window.addEventListener("resize", this._onResize);
+  }
+  componentDidUpdate(prev) { if (prev.viewport !== this.props.viewport) this._onResize(); }
+  componentWillUnmount() {
+    document.removeEventListener("mousedown", this._onDown, true);
+    document.removeEventListener("keydown", this._onKey);
+    window.removeEventListener("resize", this._onResize);
+  }
+
+  statusColor(s) {
+    return ({ New: "#8E837B", Exploring: "#5B5BD6", Draft: "#C07B2A", "In review": "#96532C", Done: "#2E7D4F", Archived: "#B5ADA5" })[s] || "#8E837B";
+  }
+  menuItem(sel) {
+    return "display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 10px;border:0;background:transparent;border-radius:6px;color:" +
+      (sel ? "#1E1915" : "#2F2A25") + ";font:" + (sel ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:background-color 140ms ease";
+  }
+  openSearch = () => {
+    this.setState({ searchOpen: true, searchQuery: "", menu: null, groupMenu: false, sortMenu: false });
+    setTimeout(() => this._searchInput && this._searchInput.focus(), 30);
+  };
+  patchSelected(key, value) {
+    const list = this.state.scope === "mine" ? "items" : "shared";
+    const sel = this.state.selected;
+    this.setState({ menu: null, [list]: this.state[list].map((r) => (sel[r.id] ? { ...r, [key]: value } : r)) });
+  }
+  stepPreview(dir) {
+    const s = this.state;
+    const list = s.scope === "mine" ? s.items : s.shared;
+    const i = list.findIndex((r) => r.id === s.previewId);
+    if (i < 0) return;
+    const next = (i + dir + list.length) % list.length;
+    this.setState({ previewId: list[next].id });
+  }
+  patch(id, key, value) {
+    const list = this.state.scope === "mine" ? "items" : "shared";
+    this.setState({ menu: null, [list]: this.state[list].map((r) => (r.id === id ? { ...r, [key]: value } : r)) });
+  }
+
+  renderVals() {
+    const s = this.state, mini = s.sidebarMini || s.narrow;
+    // Una sola fuente para el ancho del rail: el status bar y la hoja no pueden desalinearse.
+    const railWidth = mini ? RAIL_MINI : RAIL_FULL;
+    const compact = (this.props.viewport ?? "full") === "compact";
+    const dense = (this.props.density ?? "comfortable") === "compact";
+    const source = s.scope === "mine" ? s.items : s.shared;
+    const q = s.query.trim().toLowerCase();
+    const f = s.filters;
+    let rows = source.filter((r) => (!q || r.title.toLowerCase().includes(q) || r.ws.toLowerCase().includes(q)) &&
+      (!f.status.length || f.status.includes(r.status)) &&
+      (!f.type.length || f.type.includes(r.type)) &&
+      (!f.ws.length || f.ws.includes(r.ws)));
+    if (s.sort === "Oldest first") rows = rows.slice().sort((a, b) => b.order - a.order);
+    else if (s.sort === "Name A–Z") rows = rows.slice().sort((a, b) => a.title.localeCompare(b.title));
+    else rows = rows.slice().sort((a, b) => a.order - b.order);
+
+    const selCount = Object.values(s.selected).filter(Boolean).length;
+    const railRow = (active) => "display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-width:40px;height:40px;min-height:40px;flex-shrink:0;padding:0;border:0;border-radius:9px;font:" +
+      (active ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (active ? "#1E1915" : "#3F3731") + ";background:" + (active ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-align:left;overflow:hidden;transition:background-color 180ms ease";
+    const trigger = (open) => "display:flex;align-items:center;gap:8px;width:100%;height:38px;padding:0 11px;border:1px solid " + (open ? "#B5ADA5" : "#E4E1DC") +
+      ";border-radius:8px;background:" + (open ? "#FCFBFA" : "#FFFFFF") + ";color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease";
+    const toolBtn = (on) => "display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;border:1px solid " + (on ? "#B5ADA5" : "#E4E1DC") +
+      ";border-radius:9px;background:" + (on ? "#F2F1EF" : "#FFFFFF") + ";color:#3F3731;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 150ms ease,border-color 150ms ease";
+    const scopeTab = (on) => "display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border:0;border-radius:8px;font:" +
+      (on ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 180ms ease,color 180ms ease;" +
+      (on ? "background:#FFFFFF;color:#1E1915;box-shadow:0 1px 2px rgba(35,24,15,.09)" : "background:transparent;color:#8E837B");
+    const badge = (sync) => sync === "offline"
+      ? "width:22px;height:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#FAEBDC;color:#96532C"
+      : "width:22px;height:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#E4F0E7;color:#2E7D4F";
+
+    const mkRow = (r) => {
+      const on = !!s.selected[r.id];
+      const open = (kind) => s.menu === r.id + ":" + kind;
+      return {
+        title: r.title, excerpt: r.excerpt, path: r.path, when: r.when,
+        status: r.status, type: r.type, workspace: r.ws, typeIcon: TYPE_ICONS[r.type] || "file-text",
+        badgeIcon: r.sync === "offline" ? "cloud-off" : "circle-check", badgeStyle: badge(r.sync),
+        rowStyle: "display:flex;align-items:flex-start;gap:16px;padding:" + (dense ? "10px" : "14px") + " 26px " + (dense ? "10px" : "14px") + " 26px;border-bottom:1px solid #F0EEEB;transition:background-color 150ms ease",
+        toggle: () => this.setState({ selected: { ...s.selected, [r.id]: !on } }),
+        checkStyle: "width:20px;height:20px;margin-top:1px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+          (on ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (on ? "#1E1915" : "#FFFFFF") + ";cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+        checkIconStyle: "display:flex;color:#FFFFFF;" + (on ? "opacity:1" : "opacity:0"),
+        controlsStyle: "flex-shrink:0;align-items:center;gap:10px;padding-top:2px;" + (s.narrow ? "display:none" : "display:flex"),
+        statusOpen: open("status"), typeOpen: open("type"), wsOpen: open("ws"), moreOpen: open("more"),
+        openStatus: () => this.setState({ menu: open("status") ? null : r.id + ":status" }),
+        openType: () => this.setState({ menu: open("type") ? null : r.id + ":type" }),
+        openWs: () => this.setState({ menu: open("ws") ? null : r.id + ":ws" }),
+        openMore: () => this.setState({ menu: open("more") ? null : r.id + ":more" }),
+        statusTrigger: trigger(open("status")), typeTrigger: trigger(open("type")), wsTrigger: trigger(open("ws")),
+        statusDot: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(r.status),
+        preview: () => this.setState({ previewId: r.id, menu: null }),
+        moreStyle: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:" +
+          (open("more") ? "#F2F1EF" : "transparent") + ";color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+        statusOptions: STATUSES.map((label) => ({
+          label, select: () => this.patch(r.id, "status", label), style: this.menuItem(label === r.status),
+          dotStyle: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(label)
+        })),
+        typeOptions: Object.keys(TYPE_ICONS).map((label) => ({
+          label, icon: TYPE_ICONS[label], select: () => this.patch(r.id, "type", label), style: this.menuItem(label === r.type),
+          iconStyle: "display:flex;flex-shrink:0;color:" + (label === r.type ? "#1E1915" : "#6B5F57")
+        })),
+        wsOptions: WS.map((label) => ({ label, select: () => this.patch(r.id, "ws", label), style: this.menuItem(label === r.ws) })),
+        moreOptions: [["Open in Studio", "lamp-desk"], ["Duplicate", "copy"], ["Add to collection", "tags"], ["Reveal in Finder", "folder-open"], ["Archive", "archive"]].map(([label, icon]) => ({
+          label, icon, select: () => this.setState({ menu: null }), style: this.menuItem(false),
+          iconStyle: "display:flex;flex-shrink:0;color:#6B5F57"
+        }))
+      };
+    };
+
+    let groups;
+    if (s.group === "None") groups = [{ hasHeader: false, label: "", count: "", rows: rows.map(mkRow) }];
+    else {
+      const key = s.group === "Workspace" ? "ws" : s.group === "Status" ? "status" : "type";
+      const order = [];
+      const bag = {};
+      rows.forEach((r) => { const k = r[key]; if (!bag[k]) { bag[k] = []; order.push(k); } bag[k].push(r); });
+      groups = order.map((k) => ({ hasHeader: true, label: k, count: String(bag[k].length), rows: bag[k].map(mkRow) }));
+    }
+
+    return {
+      shellStyle: "position:relative;display:flex;flex-direction:column;background:#F3F2F0;overflow:hidden;" + (compact
+        ? "width:1180px;height:760px;max-width:100%;margin:0 auto;border-radius:12px;box-shadow:0 24px 60px rgba(35,24,15,.18)"
+        : "width:100%;height:100vh"),
+      railColStyle: "box-sizing:border-box;width:" + railWidth + "px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;overflow:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1)",
+      sidebarStyle: "box-sizing:border-box;flex:1;min-height:0;display:flex;flex-direction:column;padding:0 6px;overflow:hidden",
+      accountRowStyle: "box-sizing:border-box;display:flex;align-items:center;gap:10px;height:46px;flex-shrink:0;border-radius:9px;overflow:hidden;cursor:pointer;padding-left:6px",
+      centerColStyle: "flex:1;min-width:0;display:flex;flex-direction:column;gap:6px",
+      iconBtn: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease",
+      toggleSidebar: () => this.setState((st) => ({ sidebarMini: !(st.sidebarMini || st.narrow), narrow: false })),
+      railBtn: railRow(false) + ";text-decoration:none",
+      deskNavStyle: railRow(true),
+      railIconWrap: "box-sizing:border-box;width:40px;min-width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center",
+      navLabelStyle: "flex-shrink:0;overflow:hidden;white-space:nowrap;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      workspaceListStyle: "display:flex;flex-direction:column;gap:1px;padding:2px 0 0 50px;overflow:hidden;transition:opacity 200ms ease,max-height 300ms cubic-bezier(.4,0,.15,1);" +
+        (mini ? "max-height:0;opacity:0" : "max-height:240px;opacity:1"),
+      workspaces: WS.map((name) => ({
+        name, select: () => this.setState({ query: "", menu: null }),
+        style: "display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;border:0;background:transparent;border-radius:8px;font:400 13px/1 'DM Sans',sans-serif;color:#8E837B;cursor:pointer;text-align:left;transition:background-color 180ms ease,color 180ms ease",
+        iconStyle: "display:flex;flex-shrink:0;color:" + (name === "ode408" ? "#6B5F57" : "#B5ADA5")
+      })),
+
+      openTabs: ["Leccion 5 - Evaluacion de prompts", "Omega", "6. Construir la matriz de comparación"].map((title) => ({
+        title,
+        tabStyle: "display:flex;align-items:center;gap:9px;width:200px;min-width:96px;height:34px;padding:0 12px;flex-shrink:1;border-radius:8px;background:transparent;cursor:pointer;user-select:none;overflow:hidden;text-decoration:none;transition:background-color 150ms ease",
+        iconStyle: "display:flex;flex-shrink:0;color:#B5ADA5",
+        titleStyle: "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 13px/1 'DM Sans',sans-serif;color:#8E837B"
+      })),
+
+      statusBarStyle: "height:46px;flex-shrink:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 14px",
+      syncLabel: s.items.some((r) => r.sync === "offline") ? "1 artifact sin sincronizar" : "Todo sincronizado",
+      countsLabel: s.items.length + " artifacts · " + s.shared.length + " compartidos",
+      viewModes: [["list", "List"], ["grid", "Grid"]].map(([id, label]) => {
+        const on = (s.view || "list") === id;
+        return { label, select: () => this.setState({ view: id }),
+          style: "height:24px;padding:0 13px;border:0;border-radius:6px;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 180ms ease,color 180ms ease;" +
+            (on ? "background:#FFFFFF;color:#1E1915;box-shadow:0 1px 2px rgba(35,24,15,.1)" : "background:transparent;color:#8E837B") };
+      }),
+      userMetaStyle: "flex:1;min-width:0;overflow:hidden;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      userGearStyle: "flex-shrink:0;display:flex;color:#8E837B;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+
+      ...(() => {
+        const list = s.scope === "mine" ? s.items : s.shared;
+        const idx = list.findIndex((r) => r.id === s.previewId);
+        const p = idx >= 0 ? list[idx] : null;
+        const blocks = p ? (PREVIEW_BODY[p.id] || [["p", p.excerpt]]) : [];
+        return {
+          previewOpen: !!p,
+          previewTitle: p ? p.title : "",
+          previewStatus: p ? p.status : "",
+          previewType: p ? p.type : "",
+          previewWs: p ? p.ws : "",
+          previewPath: p ? p.path : "",
+          previewTypeIcon: p ? (TYPE_ICONS[p.type] || "file-text") : "file-text",
+          previewBadgeIcon: p && p.sync === "offline" ? "cloud-off" : "circle-check",
+          previewBadgeStyle: badge(p ? p.sync : "synced"),
+          previewMeta: p ? p.words + " words · " + p.created : "",
+          previewCounter: p ? (idx + 1) + " of " + (s.scope === "mine" ? 142 : list.length) : "",
+          previewStatusDot: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(p ? p.status : "Draft"),
+          previewBlocks: blocks.map(([kind, text]) => ({
+            text,
+            style: kind === "h"
+              ? "margin:26px 0 10px;font:500 19px/1.35 Lora,Georgia,serif;color:#1E1915;letter-spacing:-.01em;text-wrap:pretty"
+              : "margin:0 0 16px;font:400 16px/1.75 'DM Sans',sans-serif;color:#3F3731;max-width:68ch;text-wrap:pretty"
+          })),
+          closePreview: () => this.setState({ previewId: null }),
+          prevPreview: () => this.stepPreview(-1),
+          nextPreview: () => this.stepPreview(1)
+        };
+      })(),
+      previewNavBtn: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:7px;background:transparent;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease",
+      previewOpenBtn: "display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 13px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;color:#2F2A25;font:500 13px/1 'DM Sans',sans-serif;text-decoration:none;cursor:pointer;white-space:nowrap;transition:background-color 150ms ease,border-color 150ms ease",
+      previewFieldStyle: "display:flex;align-items:center;gap:9px;width:100%;height:38px;padding:0 11px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+      previewLinkBtn: "display:inline-flex;align-items:center;gap:9px;padding:0;border:0;background:transparent;color:#3F3731;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:color 150ms ease",
+      previewDarkBtn: "display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;height:36px;margin-top:4px;border:0;border-radius:8px;background:#1E1915;color:#FBFAF9;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease",
+      openSearch: this.openSearch,
+      searchOpen: s.searchOpen,
+      searchQuery: s.searchQuery,
+      searchRef: (el) => { this._searchInput = el; },
+      onSearchQuery: (e) => this.setState({ searchQuery: e.target.value }),
+      closeSearch: () => this.setState({ searchOpen: false }),
+      stop: (e) => e.stopPropagation(),
+      searchCloseBtn: "width:34px;height:34px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      searchRowStyle: "display:flex;align-items:center;gap:16px;width:100%;height:48px;padding:0 22px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 140ms ease",
+      searchGroups: (() => {
+        const sq = s.searchQuery.trim().toLowerCase();
+        const hits = s.items.filter((r) => !sq || r.title.toLowerCase().includes(sq) || r.excerpt.toLowerCase().includes(sq));
+        const mk = (r) => ({ title: r.title, ws: r.ws, icon: TYPE_ICONS[r.type] || "file-text" });
+        const yesterday = hits.filter((r) => r.order <= 2).map(mk);
+        const earlier = hits.filter((r) => r.order > 2).map(mk);
+        const out = [];
+        if (yesterday.length) out.push({ label: "Yesterday", rows: yesterday });
+        if (earlier.length) out.push({ label: "Earlier this week", rows: earlier });
+        return out;
+      })(),
+      searchEmpty: (() => {
+        const sq = s.searchQuery.trim().toLowerCase();
+        return !!sq && !s.items.some((r) => r.title.toLowerCase().includes(sq) || r.excerpt.toLowerCase().includes(sq));
+      })(),
+
+      scopeTabs: [["mine", "My artifacts", String(s.items.length + 134)], ["shared", "Shared with me", String(s.shared.length)]].map(([id, label, count]) => ({
+        label, count, select: () => this.setState({ scope: id, selected: {}, menu: null }),
+        style: scopeTab(s.scope === id),
+        countStyle: "height:20px;min-width:20px;padding:0 6px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;font:500 11px/1 'DM Sans',sans-serif;" +
+          (s.scope === id ? "background:#EDEBE8;color:#3F3731" : "background:#E7E5E1;color:#8E837B")
+      })),
+
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value, menu: null }),
+      toolBtn: toolBtn(false),
+      ...(() => {
+        const total = f.status.length + f.type.length + f.ws.length;
+        const toggleFacet = (facet, value) => () => {
+          const cur = this.state.filters[facet];
+          const next = cur.includes(value) ? cur.filter((v) => v !== value) : cur.concat(value);
+          this.setState({ filters: { ...this.state.filters, [facet]: next } });
+        };
+        const mkOpt = (facet, label, icon, dotColor) => {
+          const on = f[facet].includes(label);
+          return {
+            label, icon: icon || "circle", toggle: toggleFacet(facet, label),
+            style: "display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 9px;border:0;background:transparent;border-radius:7px;color:" +
+              (on ? "#1E1915" : "#2F2A25") + ";font:" + (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:background-color 140ms ease",
+            boxStyle: "width:17px;height:17px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+              (on ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (on ? "#1E1915" : "#FFFFFF") + ";transition:background-color 140ms ease,border-color 140ms ease",
+            checkStyle: "display:flex;color:#FFFFFF;" + (on ? "opacity:1" : "opacity:0"),
+            markStyle: dotColor
+              ? "box-sizing:border-box;width:9px;height:9px;flex-shrink:0;display:inline-flex;border-radius:50%;border:1.5px dashed " + dotColor + ";overflow:hidden;color:transparent"
+              : "display:flex;flex-shrink:0;color:" + (on ? "#1E1915" : "#6B5F57")
+          };
+        };
+        return {
+          filterMenuOpen: s.filterMenu,
+          toggleFilterMenu: () => this.setState({ filterMenu: !s.filterMenu, groupMenu: false, sortMenu: false, menu: null }),
+          filterBtnStyle: toolBtn(s.filterMenu || total > 0),
+          filterLabel: total ? "Filter · " + total : "Filter",
+          filterCountLabel: rows.length + (rows.length === 1 ? " artifact" : " artifacts"),
+          clearFilters: () => this.setState({ filters: { status: [], type: [], ws: [] } }),
+          filterClearBtn: "padding:0;border:0;background:transparent;color:#8E837B;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:color 150ms ease",
+          filterPanelStyle: "position:absolute;left:0;top:calc(100% + 6px);z-index:30;width:246px;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 34px rgba(35,24,15,.12);animation:odMenuIn 150ms ease",
+          filterSections: [
+            { label: "Status", options: STATUSES.map((l) => mkOpt("status", l, null, this.statusColor(l))) },
+            { label: "Artifact type", options: Object.keys(TYPE_ICONS).map((l) => mkOpt("type", l, TYPE_ICONS[l], null)) },
+            { label: "Workspace", options: WS.map((l) => mkOpt("ws", l, "folder", null)) }
+          ].map((sec) => ({ ...sec, labelStyle: "margin:0;padding:12px 9px 5px;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.11em;text-transform:uppercase;color:#B5ADA5" }))
+        };
+      })(),
+      groupLabel: s.group === "None" ? "Group by" : "Group: " + s.group,
+      groupBtnStyle: toolBtn(s.groupMenu || s.group !== "None"),
+      groupMenuOpen: s.groupMenu,
+      toggleGroupMenu: () => this.setState({ groupMenu: !s.groupMenu, sortMenu: false, menu: null }),
+      groupOptions: ["None", "Workspace", "Status", "Type"].map((label) => ({
+        label, select: () => this.setState({ group: label, groupMenu: false }), style: this.menuItem(label === s.group)
+      })),
+      sortLabel: s.sort,
+      sortBtnStyle: toolBtn(s.sortMenu),
+      sortMenuOpen: s.sortMenu,
+      toggleSortMenu: () => this.setState({ sortMenu: !s.sortMenu, groupMenu: false, menu: null }),
+      sortOptions: ["Newest first", "Oldest first", "Name A–Z"].map((label) => ({
+        label, select: () => this.setState({ sort: label, sortMenu: false }), style: this.menuItem(label === s.sort)
+      })),
+      menuStyle: "position:absolute;left:0;min-width:100%;top:calc(100% + 6px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 30px rgba(35,24,15,.12);padding:5px;animation:odMenuIn 150ms ease;white-space:nowrap",
+      moreMenuStyle: "position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:196px;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 30px rgba(35,24,15,.12);padding:5px;animation:odMenuIn 150ms ease",
+
+      hasSelection: selCount > 0,
+      selectionLabel: selCount + " selected",
+      clearSelection: () => this.setState({ selected: {}, menu: null }),
+      selectAll: () => { const all = {}; rows.forEach((r) => { all[r.id] = true; }); this.setState({ selected: all, menu: null }); },
+      selLinkBtn: "padding:0 2px;border:0;background:transparent;color:rgba(251,250,249,.55);font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:color 150ms ease",
+      selChipStyle: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(251,250,249,.10);color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      selDangerBtn: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(150,83,44,.30);color:#E8A87C;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      selMenuStyle: "position:absolute;left:0;min-width:180px;bottom:calc(100% + 10px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 34px rgba(35,24,15,.22);padding:5px;animation:odMenuIn 150ms ease",
+      selStatusDot: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed rgba(251,250,249,.7)",
+      selStatusOpen: s.menu === "sel:status",
+      selTypeOpen: s.menu === "sel:type",
+      selWsOpen: s.menu === "sel:ws",
+      openSelStatus: () => this.setState({ menu: s.menu === "sel:status" ? null : "sel:status" }),
+      openSelType: () => this.setState({ menu: s.menu === "sel:type" ? null : "sel:type" }),
+      openSelWs: () => this.setState({ menu: s.menu === "sel:ws" ? null : "sel:ws" }),
+      selStatusOptions: STATUSES.map((label) => ({
+        label, select: () => this.patchSelected("status", label), style: this.menuItem(false),
+        dotStyle: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(label)
+      })),
+      selTypeOptions: Object.keys(TYPE_ICONS).map((label) => ({
+        label, icon: TYPE_ICONS[label], select: () => this.patchSelected("type", label), style: this.menuItem(false),
+        iconStyle: "display:flex;flex-shrink:0;color:#6B5F57"
+      })),
+      selWsOptions: WS.map((label) => ({ label, select: () => this.patchSelected("ws", label), style: this.menuItem(false) })),
+
+      groups, isEmpty: rows.length === 0,
+      rowIconBtn: "width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#B5ADA5;cursor:pointer;transition:background-color 150ms ease",
+      primaryBtn: "display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 17px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:opacity 150ms ease",
+      secondaryBtn: "display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF;color:#2F2A25;font:400 14px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:background-color 150ms ease"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -514,6 +514,101 @@
       "path": "workflow/context/features/odessay-versions.md",
       "type": "feature",
       "description": "Versions de documento: snapshots deliberados (no historial de tecleo) anclados al ciclo de edicion AI externa sobre anotaciones tipo ai. Trigger automatico via watcher desktop (sugiere, no crea en silencio) + trigger manual. Comparacion entre versiones vía AI: reporte de cobertura por anotacion + resumen narrativo. Runtime scope desktop-first v1."
+    },
+    {
+      "path": "docs/design/migration-plan.md",
+      "type": "design-reference",
+      "description": "Plan de migración del rediseño Artifact Studio (Fase 10): dos capas visuales, fases por vista, gates, riesgos y §4 protocolo de fidelidad prototipo→repo, normativo para todo issue de vista."
+    },
+    {
+      "path": "docs/design/system-app.md",
+      "type": "design-reference",
+      "description": "Capa de producto tal como los prototipos la construyeron: color, tipo, geometría, shell de dos capas, navegación, motion y scrollbars. Registra los cinco deltas contra skill-design y su estado (abiertos hasta ODE-425). Complementa la skill; no la reemplaza."
+    },
+    {
+      "path": "docs/design/layout.md",
+      "type": "design-reference",
+      "description": "Escala de espaciado, ownership de regiones de ventana, grids internos por vista, posicionamiento de overlays y breakpoints del rediseño."
+    },
+    {
+      "path": "docs/design/overlays.md",
+      "type": "design-reference",
+      "description": "Inventario cerrado de los cinco patrones de overlay (flow, form, display, full, dropdown) con su geometría, comportamiento compartido y la lista completa de overlays por vista."
+    },
+    {
+      "path": "docs/design/icons.md",
+      "type": "design-reference",
+      "description": "El listado de iconos por rol: la única lista de la que un implementador puede elegir en el rediseño."
+    },
+    {
+      "path": "docs/design/brand.md",
+      "type": "design-reference",
+      "description": "Marca Artifact Studio: geometría exacta del mark, paletas por contexto, tamaños, wordmark en Geist y especificación del app icon y el favicon."
+    },
+    {
+      "path": "docs/design/globals-additions.css",
+      "type": "design-reference",
+      "description": "CSS listo para pegar del rediseño: tokens de color, tamaño y sombra de la capa de producto, bloque scoped [data-layer=marketing] y keyframes. Fuente de los tokens — se fusiona en app/globals.css en ODE-425 (producto) y ODE-440 (marketing), nunca se anexa entero."
+    },
+    {
+      "path": "docs/design/reference/",
+      "type": "design-reference",
+      "description": "Prototipos .dc.html aprobados del rediseño Artifact Studio y sus dependencias de render. AUTORIDAD VISUAL de Fase 10: se leen valores de ellos, nunca se copian sus nodos. Ver docs/design/reference/README.md."
+    },
+    {
+      "path": "docs/design/reference/README.md",
+      "type": "design-reference",
+      "description": "Cómo usar los prototipos .dc.html: regla de fidelidad, cómo abrirlos, qué spec respalda cada uno y sus diferencias conocidas respecto a lo que debe enviarse."
+    },
+    {
+      "path": "docs/design/views/desk.md",
+      "type": "design-reference",
+      "description": "Vista Desk del rediseño: header, barra de filtros, fila de artifact, barra de selección, overlay de preview y estados. Subordinado al prototipo Desk."
+    },
+    {
+      "path": "docs/design/views/studio.md",
+      "type": "design-reference",
+      "description": "Vista Studio (editor) del rediseño: shell, tabs, hoja, paneles, barra AI, sugerencias, status bar y focus mode. Subordinado al prototipo Studio."
+    },
+    {
+      "path": "docs/design/views/workspace.md",
+      "type": "design-reference",
+      "description": "Vistas Workspace índice y detalle con columna de árbol. Subordinado a los prototipos Workspace y Workspace Folder B."
+    },
+    {
+      "path": "docs/design/views/add-workspace.md",
+      "type": "design-reference",
+      "description": "Flujo de alta de workspace y pantalla de inclusión. Subordinado al prototipo Add Workspace. La regla Ignore no se implementa por decisión del dueño."
+    },
+    {
+      "path": "docs/design/views/settings.md",
+      "type": "design-reference",
+      "description": "Vista Settings del rediseño: cuenta, tipos de artifact, estados, archivo y modal editor. Subordinado al prototipo Settings."
+    },
+    {
+      "path": "docs/design/views/settings-workflows.md",
+      "type": "design-reference",
+      "description": "Settings › Workflows: requisitos y patrón obligatorio. Único documento de vista SIN prototipo — necesita design pass (ODE-426) antes de implementarse."
+    },
+    {
+      "path": "docs/design/views/auth-splash.md",
+      "type": "design-reference",
+      "description": "Splash de arranque desktop y pantallas de auth del rediseño. Subordinado al prototipo Auth."
+    },
+    {
+      "path": "docs/design/views/empty-states.md",
+      "type": "design-reference",
+      "description": "Los tres estados vacíos y de primera ejecución. Subordinado al prototipo Empty States."
+    },
+    {
+      "path": ".agents/skills/skill-design-landing/SKILL.md",
+      "type": "design-reference",
+      "description": "Skill de la capa de marketing: tokens scoped, separación respecto a la capa de producto y reglas que no puede violar la landing."
+    },
+    {
+      "path": ".agents/skills/skill-design-landing/design.md",
+      "type": "design-reference",
+      "description": "Spec de la landing sección por sección: tesis, once secciones, mapa del problema, encuadre de capturas, reglas de copy y responsive."
     }
   ],
   "structure": {

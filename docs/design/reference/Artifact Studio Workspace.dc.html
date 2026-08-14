@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px;height:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+@keyframes odMenuIn{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes odFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes odDialogIn{from{opacity:0;transform:translateY(-10px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+</style>
+</helmet>
+
+<div style="{{shellStyle}}">
+
+  <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px">
+    <div style="box-sizing:border-box;width:76px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#28C840;display:block"></span>
+    </div>
+    <button onClick="{{toggleSidebar}}" title="Toggle sidebar" style="{{iconBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+      <lucide-icon name="panel-left" size="18"></lucide-icon>
+    </button>
+    <div style="flex:1;min-width:0"></div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;gap:10px;padding:0 10px 10px 0">
+
+    <div style="{{railColStyle}}">
+    <nav style="{{sidebarStyle}}">
+      <div style="display:flex;flex-direction:column;gap:2px;padding:2px 0 0">
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="New Artifact">
+          <span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">New Artifact</span>
+        </button>
+        <button onClick="{{openSearch}}" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Search">
+          <span style="{{railIconWrap}}"><lucide-icon name="search" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Search</span>
+        </button>
+      </div>
+
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:26px 0 8px;display:flex;flex-direction:column;gap:2px">
+        <a href="Artifact Studio Studio.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Studio">
+          <span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Studio</span>
+        </a>
+        <a href="Artifact Studio Desk.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Desk">
+          <span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Desk</span>
+        </a>
+        <button style="{{activeNavStyle}}" style-hover="background:#E4E1DC" title="Workspace">
+          <span style="{{railIconWrap}}"><lucide-icon name="folder-tree" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Workspace</span>
+        </button>
+
+        <div style="{{workspaceListStyle}}">
+          <sc-for list="{{railWorkspaces}}" as="ws" hint-placeholder-count="5">
+            <button onClick="{{ws.select}}" style="{{ws.style}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{ws.iconStyle}}"><lucide-icon name="folder" size="15"></lucide-icon></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ws.name}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      </nav>
+
+    <div style="{{accountRowStyle}}">
+        <span style="width:36px;height:36px;margin:0 2px;flex-shrink:0;border-radius:50%;background:#1E1915;color:#FBFAF9;display:flex;align-items:center;justify-content:center;font:600 12px/1 'DM Sans',sans-serif">HM</span>
+        <span style="{{userMetaStyle}}">
+          <span style="display:block;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915;white-space:nowrap">Hugo Marin</span>
+          <span style="display:block;font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap">@hugomarin</span>
+        </span>
+        <a href="Artifact Studio Settings.dc.html" style="{{userGearStyle}}" title="Settings"><lucide-icon name="settings" size="15"></lucide-icon></a>
+        <span style="{{userGearStyle}}"><lucide-icon name="chevron-right" size="15"></lucide-icon></span>
+      </div>
+    </div>
+
+    <div style="{{centerColStyle}}">
+      <div style="flex-shrink:0;display:flex;align-items:flex-end;gap:20px;padding:12px 16px 16px">
+        <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:16px">
+          <h1 style="margin:0;font:500 32px/1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Workspace</h1>
+          <p style="margin:0;font:400 14px/1.5 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Carpetas sincronizadas, quién escribe en cada una y qué se movió último.</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;flex-shrink:0">
+          <a href="Artifact Studio Add Workspace.dc.html" style="{{primaryBtn}}" style-hover="opacity:.9">
+            <lucide-icon name="folder-plus" size="15"></lucide-icon>New workspace
+          </a>
+        </div>
+      </div>
+
+      <div data-od-menu style="flex-shrink:0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 16px 12px">
+        <span style="flex:1;min-width:160px;display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF">
+          <span style="display:flex;color:#B5ADA5;flex-shrink:0"><lucide-icon name="search" size="15"></lucide-icon></span>
+          <input value="{{query}}" onChange="{{onQuery}}" placeholder="Filter by name…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:400 14px/1 'DM Sans',sans-serif;color:#1E1915" />
+        </span>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div style="position:relative">
+            <button onClick="{{toggleSortMenu}}" style="{{sortBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+              <lucide-icon name="arrow-up-down" size="15"></lucide-icon>Sort: {{sortLabel}}<lucide-icon name="chevron-down" size="14"></lucide-icon>
+            </button>
+            <sc-if value="{{sortMenuOpen}}" hint-placeholder-val="{{false}}">
+              <div style="{{menuStyle}}">
+                <sc-for list="{{sortOptions}}" as="o" hint-placeholder-count="3">
+                  <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+
+  
+
+        <div class="od-scroll" data-od-menu style="flex:1;min-height:0;overflow-y:auto;padding:24px 16px 40px">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(304px,1fr));gap:18px;align-items:start">
+            <sc-for list="{{cards}}" as="c" hint-placeholder-count="5">
+              <article onClick="{{c.open}}" style="{{c.cardStyle}}" style-hover="box-shadow:0 2px 4px rgba(35,24,15,.06),0 12px 28px rgba(35,24,15,.07)">
+                <div style="display:flex;align-items:flex-start;gap:12px">
+                  <span style="{{c.iconWrap}}"><lucide-icon name="folder" size="17"></lucide-icon></span>
+                  <div style="flex:1;min-width:0">
+                    <h2 style="margin:0 0 3px;font:500 19px/1.25 Lora,Georgia,serif;color:#1E1915;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{c.name}}</h2>
+                    <p style="margin:0;font:400 12px/1.4 'DM Sans',sans-serif;color:#8E837B">{{c.meta}}</p>
+                  </div>
+                  <div style="position:relative;flex-shrink:0">
+                    <button onClick="{{c.openMore}}" style="{{c.moreStyle}}" style-hover="background:#F2F1EF;color:#1E1915" title="Más">
+                      <lucide-icon name="ellipsis" size="17"></lucide-icon>
+                    </button>
+                    <sc-if value="{{c.moreOpen}}" hint-placeholder-val="{{false}}">
+                      <div style="{{moreMenuStyle}}">
+                        <sc-for list="{{c.moreOptions}}" as="o" hint-placeholder-count="4">
+                          <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                            <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="{{o.icon}}" size="14"></lucide-icon></span>{{o.label}}
+                          </button>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:1px;margin-top:16px">
+                  <sc-for list="{{c.recent}}" as="r" hint-placeholder-count="3">
+                    <div style="{{r.rowStyle}}" style-hover="background:#FAF9F7">
+                      <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="{{r.icon}}" size="14"></lucide-icon></span>
+                      <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 13px/1.4 'DM Sans',sans-serif;color:#3F3731">{{r.title}}</span>
+                      <span style="flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5">{{r.when}}</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{c.hasMore}}" hint-placeholder-val="{{false}}">
+                    <p style="margin:6px 0 0;padding:0 8px;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5">{{c.moreLabel}}</p>
+                  </sc-if>
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:13px;border-top:1px solid #F0EEEB">
+                  <span style="{{c.syncStyle}}">
+                    <lucide-icon name="{{c.syncIcon}}" size="13"></lucide-icon>{{c.syncLabel}}
+                  </span>
+                  <span style="font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5;white-space:nowrap">{{c.updated}}</span>
+                </div>
+              </article>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+            <div style="padding:80px 16px;text-align:center">
+              <p style="margin:0 0 6px;font:500 20px/1.3 Lora,Georgia,serif;color:#1E1915">Nada con ese nombre</p>
+              <p style="margin:0;font:400 14px/1.5 'DM Sans',sans-serif;color:#8E837B">Ajusta el filtro o crea un workspace nuevo.</p>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="{{statusBarStyle}}">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="display:flex;color:#8E837B"><lucide-icon name="cloud-upload" size="16"></lucide-icon></span>
+        <span style="font:400 13px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">{{syncSummary}}</span>
+      </div>
+      <div style="justify-self:center"></div>
+      <div style="justify-self:end;display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{countsLabel}}</span>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <sc-if value="{{searchOpen}}" hint-placeholder-val="{{false}}">
+    <div onClick="{{closeSearch}}" style="position:absolute;inset:0;z-index:60;background:rgba(35,24,15,.22);backdrop-filter:blur(14px) saturate(115%);-webkit-backdrop-filter:blur(14px) saturate(115%);display:flex;justify-content:center;align-items:flex-start;padding:min(9vh,110px) 24px 24px;animation:odFadeIn 140ms ease">
+      <div onClick="{{stop}}" style="box-sizing:border-box;width:min(660px,100%);max-height:min(620px,80vh);display:flex;flex-direction:column;background:#FFFFFF;border-radius:16px;box-shadow:0 2px 6px rgba(35,24,15,.08),0 28px 70px rgba(35,24,15,.22);overflow:hidden;animation:odDialogIn 180ms cubic-bezier(.4,0,.15,1)">
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:16px;height:66px;padding:0 20px 0 22px;border-bottom:1px solid #EDEBE8">
+          <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="search" size="21"></lucide-icon></span>
+          <input ref="{{searchRef}}" value="{{searchQuery}}" onChange="{{onSearchQuery}}" placeholder="Search writings…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:400 19px/1.2 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em" />
+          <button onClick="{{closeSearch}}" title="Cerrar" style="{{searchCloseBtn}}" style-hover="background:#F2F1EF;color:#1E1915">
+            <lucide-icon name="x" size="19"></lucide-icon>
+          </button>
+        </div>
+        <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;padding:10px 0 14px">
+          <sc-for list="{{searchGroups}}" as="g" hint-placeholder-count="2">
+            <div>
+              <p style="margin:0;padding:14px 22px 6px;font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.13em;text-transform:uppercase;color:#8E837B">{{g.label}}</p>
+              <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="4">
+                <button onClick="{{closeSearch}}" style="{{searchRowStyle}}" style-hover="background:#F7F6F4">
+                  <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="{{r.icon}}" size="18"></lucide-icon></span>
+                  <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 15px/1.3 'DM Sans',sans-serif;color:#1E1915">{{r.title}}</span>
+                  <span style="flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5">{{r.ws}}</span>
+                </button>
+              </sc-for>
+            </div>
+          </sc-for>
+          <sc-if value="{{searchEmpty}}" hint-placeholder-val="{{false}}">
+            <div style="padding:56px 22px;text-align:center">
+              <p style="margin:0 0 6px;font:500 18px/1.3 Lora,Georgia,serif;color:#1E1915">Sin resultados</p>
+              <p style="margin:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Prueba con otro término o revisa el workspace.</p>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;viewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;\&quot;full\&quot; | \&quot;compact\&quot;&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const RAIL_MINI = 52, RAIL_FULL = 244;
+const TYPE_ICONS = { General: "file-text", Agent: "bot", Skill: "wrench", Prompt: "message-square", Template: "layout-template", Note: "sticky-note" };
+
+const SPACES = [
+  { name: "Tutoria", count: 24, offline: 0, updated: "5 ago", path: "~/Documents/Tutoria",
+    recent: [
+      { title: "Leccion 5 - Evaluacion de prompts", type: "General", when: "5 ago" },
+      { title: "Mapa-razonamiento-y-desarrollo-Leccion2", type: "General", when: "2 jul" },
+      { title: "Brief de comparación de modelos", type: "Template", when: "3 ago" }
+    ] },
+  { name: "ode408", count: 61, offline: 1, updated: "4 ago", path: "~/Documents/ode408",
+    recent: [
+      { title: "Beta", type: "General", when: "4 ago" },
+      { title: "Omega", type: "General", when: "5 ago" },
+      { title: "05-Implementing a client", type: "Skill", when: "22 jul" }
+    ] },
+  { name: "OS", count: 18, offline: 1, updated: "1 jul", path: "~/Documents/OS",
+    recent: [
+      { title: "Alpha", type: "Prompt", when: "1 jul" },
+      { title: "Checklist de publicación", type: "General", when: "26 jul" }
+    ] },
+  { name: "Skill", count: 12, offline: 0, updated: "18 jul", path: "~/Documents/Skill",
+    recent: [
+      { title: "Guía de tono Narratif", type: "Skill", when: "28 jul" },
+      { title: "Agente de revisión", type: "Agent", when: "18 jul" }
+    ] },
+  { name: "Narratif", count: 27, offline: 0, updated: "24 jul", path: "~/Documents/Narratif",
+    recent: [
+      { title: "transcript-llamada-2026-07-24", type: "Note", when: "24 jul" },
+      { title: "Guía de tono Narratif", type: "Skill", when: "28 jul" },
+      { title: "Voz y antiejemplos", type: "Template", when: "12 jul" }
+    ] }
+];
+
+class Component extends DCLogic {
+  state = { sidebarMini: false, narrow: false, query: "", sort: "Recientes", sortMenu: false, menu: null, searchOpen: false, searchQuery: "" };
+
+  openSearch = () => {
+    this.setState({ searchOpen: true, searchQuery: "", menu: null, sortMenu: false });
+    setTimeout(() => this._searchInput && this._searchInput.focus(), 30);
+  };
+
+  componentDidMount() {
+    this._onDown = (e) => {
+      const t = e.target;
+      if (t && t.closest && t.closest("[data-od-menu]")) return;
+      if (this.state.menu || this.state.sortMenu) this.setState({ menu: null, sortMenu: false });
+    };
+    document.addEventListener("mousedown", this._onDown, true);
+    this._onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); this.openSearch(); }
+      else if (e.key === "Escape" && this.state.searchOpen) this.setState({ searchOpen: false });
+    };
+    document.addEventListener("keydown", this._onKey);
+    this._onResize = () => {
+      const compact = (this.props.viewport ?? "full") === "compact";
+      const w = compact ? 1180 : window.innerWidth;
+      const narrow = w < 1240;
+      if (narrow === this.state.narrow) return;
+      this.setState(narrow ? { narrow: true, sidebarMini: true } : { narrow: false });
+    };
+    this._onResize();
+    window.addEventListener("resize", this._onResize);
+  }
+  componentDidUpdate(prev) { if (prev.viewport !== this.props.viewport) this._onResize(); }
+  componentWillUnmount() {
+    document.removeEventListener("mousedown", this._onDown, true);
+    document.removeEventListener("keydown", this._onKey);
+    window.removeEventListener("resize", this._onResize);
+  }
+
+  menuItem(sel) {
+    return "display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 10px;border:0;background:transparent;border-radius:6px;color:" +
+      (sel ? "#1E1915" : "#2F2A25") + ";font:" + (sel ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:background-color 140ms ease";
+  }
+
+  renderVals() {
+    const s = this.state, mini = s.sidebarMini || s.narrow;
+    const railWidth = mini ? RAIL_MINI : RAIL_FULL;
+    const compact = (this.props.viewport ?? "full") === "compact";
+    const q = s.query.trim().toLowerCase();
+
+    let list = SPACES.filter((w) => !q || w.name.toLowerCase().includes(q));
+    if (s.sort === "Nombre A–Z") list = list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    else if (s.sort === "Más artifacts") list = list.slice().sort((a, b) => b.count - a.count);
+
+    const railRow = (active) => "display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-width:40px;height:40px;min-height:40px;flex-shrink:0;padding:0;border:0;border-radius:9px;font:" +
+      (active ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (active ? "#1E1915" : "#3F3731") + ";background:" + (active ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-align:left;overflow:hidden;transition:background-color 180ms ease";
+    const toolBtn = (on) => "display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;border:1px solid " + (on ? "#B5ADA5" : "#E4E1DC") +
+      ";border-radius:9px;background:" + (on ? "#F2F1EF" : "#FFFFFF") + ";color:#3F3731;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 150ms ease,border-color 150ms ease";
+
+    const totalArtifacts = SPACES.reduce((n, w) => n + w.count, 0);
+    const totalOffline = SPACES.reduce((n, w) => n + w.offline, 0);
+
+    return {
+      shellStyle: "position:relative;display:flex;flex-direction:column;background:#F3F2F0;overflow:hidden;" + (compact
+        ? "width:1180px;height:760px;max-width:100%;margin:0 auto;border-radius:12px;box-shadow:0 24px 60px rgba(35,24,15,.18)"
+        : "width:100%;height:100vh"),
+      railColStyle: "box-sizing:border-box;width:" + railWidth + "px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;overflow:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1)",
+      sidebarStyle: "box-sizing:border-box;flex:1;min-height:0;display:flex;flex-direction:column;padding:0 6px;overflow:hidden",
+      accountRowStyle: "box-sizing:border-box;display:flex;align-items:center;gap:10px;height:46px;flex-shrink:0;border-radius:9px;overflow:hidden;cursor:pointer;padding-left:6px",
+      centerColStyle: "flex:1;min-width:0;display:flex;flex-direction:column;gap:6px",
+      iconBtn: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease",
+      toggleSidebar: () => this.setState((st) => ({ sidebarMini: !(st.sidebarMini || st.narrow), narrow: false })),
+      railBtn: railRow(false) + ";text-decoration:none",
+      activeNavStyle: railRow(true),
+      railIconWrap: "box-sizing:border-box;width:40px;min-width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center",
+      navLabelStyle: "flex-shrink:0;overflow:hidden;white-space:nowrap;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      workspaceListStyle: "display:flex;flex-direction:column;gap:1px;padding:2px 0 0 50px;overflow:hidden;transition:opacity 200ms ease,max-height 300ms cubic-bezier(.4,0,.15,1);" +
+        (mini ? "max-height:0;opacity:0" : "max-height:240px;opacity:1"),
+      railWorkspaces: SPACES.map((w) => ({
+        name: w.name, select: () => this.setState({ query: w.name }),
+        style: "display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;border:0;background:transparent;border-radius:8px;font:400 13px/1 'DM Sans',sans-serif;color:#8E837B;cursor:pointer;text-align:left;transition:background-color 180ms ease,color 180ms ease",
+        iconStyle: "display:flex;flex-shrink:0;color:" + (name === "ode408" ? "#6B5F57" : "#B5ADA5")
+      })),
+      userMetaStyle: "flex:1;min-width:0;overflow:hidden;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      userGearStyle: "flex-shrink:0;display:flex;color:#8E837B;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      statusBarStyle: "height:46px;flex-shrink:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 14px",
+      syncSummary: !totalOffline ? "Todo sincronizado" : totalOffline === 1 ? "1 artifact sin sincronizar" : totalOffline + " artifacts sin sincronizar",
+      countsLabel: SPACES.length + " workspaces · " + totalArtifacts + " artifacts",
+
+      primaryBtn: "display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 17px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;text-decoration:none;transition:opacity 150ms ease",
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value, menu: null }),
+      sortLabel: s.sort,
+      sortBtnStyle: toolBtn(s.sortMenu),
+      sortMenuOpen: s.sortMenu,
+      toggleSortMenu: () => this.setState({ sortMenu: !s.sortMenu, menu: null }),
+      sortOptions: ["Recientes", "Nombre A–Z", "Más artifacts"].map((label) => ({
+        label, select: () => this.setState({ sort: label, sortMenu: false }), style: this.menuItem(label === s.sort)
+      })),
+      menuStyle: "position:absolute;right:0;min-width:100%;top:calc(100% + 6px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 30px rgba(35,24,15,.12);padding:5px;animation:odMenuIn 150ms ease;white-space:nowrap",
+      moreMenuStyle: "position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:196px;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 30px rgba(35,24,15,.12);padding:5px;animation:odMenuIn 150ms ease",
+
+      openSearch: this.openSearch,
+      searchOpen: s.searchOpen,
+      searchQuery: s.searchQuery,
+      searchRef: (el) => { this._searchInput = el; },
+      onSearchQuery: (e) => this.setState({ searchQuery: e.target.value }),
+      closeSearch: () => this.setState({ searchOpen: false }),
+      stop: (e) => e.stopPropagation(),
+      searchCloseBtn: "width:34px;height:34px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      searchRowStyle: "display:flex;align-items:center;gap:16px;width:100%;height:48px;padding:0 22px;border:0;background:transparent;cursor:pointer;text-align:left;transition:background-color 140ms ease",
+      ...(() => {
+        const sq = s.searchQuery.trim().toLowerCase();
+        const all = [];
+        SPACES.forEach((w) => w.recent.forEach((r) => all.push({ title: r.title, ws: w.name, icon: TYPE_ICONS[r.type] || "file-text", when: r.when })));
+        const hits = all.filter((r) => !sq || r.title.toLowerCase().includes(sq) || r.ws.toLowerCase().includes(sq));
+        const spaceHits = SPACES.filter((w) => sq && w.name.toLowerCase().includes(sq))
+          .map((w) => ({ title: w.name, ws: w.count + " artifacts", icon: "folder" }));
+        const out = [];
+        if (spaceHits.length) out.push({ label: "Workspaces", rows: spaceHits });
+        if (hits.length) out.push({ label: sq ? "Artifacts" : "Recientes", rows: hits });
+        return { searchGroups: out, searchEmpty: !!sq && !hits.length && !spaceHits.length };
+      })(),
+
+      isEmpty: list.length === 0,
+      cards: list.map((w) => ({
+        name: w.name,
+        meta: w.count + " artifacts · " + w.path,
+        open: (e) => { if (e && e.target && e.target.closest && e.target.closest("button")) return; window.location.href = "Artifact Studio Workspace Folder B.dc.html"; },
+        updated: "Movido " + w.updated,
+        cardStyle: "box-sizing:border-box;display:flex;flex-direction:column;padding:20px;border:1px solid #EDEBE8;border-radius:12px;background:#FFFFFF;box-shadow:0 1px 2px rgba(35,24,15,.04);cursor:pointer;transition:box-shadow 200ms ease",
+        iconWrap: "width:36px;height:36px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;background:#F2F1EF;color:#6B5F57",
+        recent: w.recent.slice(0, 3).map((r) => ({
+          title: r.title, when: r.when, icon: TYPE_ICONS[r.type] || "file-text",
+          rowStyle: "display:flex;align-items:center;gap:10px;height:32px;padding:0 8px;border-radius:7px;transition:background-color 140ms ease"
+        })),
+        hasMore: w.count > w.recent.length,
+        moreLabel: (w.count - w.recent.length) + " más en este workspace",
+        syncIcon: w.offline ? "cloud-off" : "circle-check",
+        syncLabel: w.offline ? w.offline + " sin sincronizar" : "Sincronizado",
+        syncStyle: "display:inline-flex;align-items:center;gap:7px;height:22px;padding:0 9px 0 8px;border-radius:11px;font:500 11px/1 'DM Sans',sans-serif;white-space:nowrap;" +
+          (w.offline ? "background:#FAEBDC;color:#96532C" : "background:#E4F0E7;color:#2E7D4F"),
+        moreOpen: s.menu === w.name,
+        openMore: (e) => { e.stopPropagation(); this.setState({ menu: s.menu === w.name ? null : w.name }); },
+        moreStyle: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:" +
+          (s.menu === w.name ? "#F2F1EF" : "transparent") + ";color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+        moreOptions: [["Abrir en Desk", "layout-grid"], ["Renombrar", "pencil"], ["Reveal in Finder", "folder-open"], ["Dejar de sincronizar", "cloud-off"]].map(([label, icon]) => ({
+          label, icon, select: () => this.setState({ menu: null }), style: this.menuItem(false)
+        }))
+      }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>

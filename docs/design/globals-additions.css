@@ -1,0 +1,344 @@
+/* ============================================================================
+   Artifact Studio — CSS additions for app/globals.css
+   Written against hugomarin/Odessay@main (app/globals.css, Tailwind v4).
+
+   Three blocks, applied in this order:
+     1. app-layer token deltas   → merge into the existing :root
+     2. app-layer @theme entries → merge into the existing @theme
+     3. marketing layer          → NEW scoped block, append after @theme
+
+   Do NOT replace the existing file. Do NOT touch the `body` rule or the
+   .odessay-rich-content / .prose-odessay contract.
+   ============================================================================ */
+
+
+/* ---------------------------------------------------------------------------
+   1 · APP LAYER — token deltas (deltas 1 & 3 in design-system-app.md)
+
+   The prototypes use five neutral steps below --ink-4 and two hairline borders
+   inside the sheet. Today those are hardcoded hex in components. Add them here
+   and replace the literals.
+   --------------------------------------------------------------------------- */
+:root {
+  --ink-5: 25 6% 64%;            /* #B5ADA5 — placeholders, disabled glyphs   */
+  --ink-6: 25 6% 76%;            /* #CFC9C1 — dashed borders, empty tiles     */
+  --line-soft: 38 8% 93%;        /* #EDEBE8 — hairline inside the sheet       */
+  --line-softer: 34 8% 95%;      /* #F0EEEB — hairline between form rows      */
+  --surface-selected: 30 30% 97%;/* #FAF7F3 — warm selected / summary rows    */
+  --surface-row-hover: 34 12% 98%;/* #FCFBFA — table row hover                */
+  --success: 145 45% 33%;        /* #2E7D4F — done, restored, confirmations   */
+  --success-tint: 138 30% 92%;   /* #E4F0E7 — success tile background         */
+}
+
+
+/* ---------------------------------------------------------------------------
+   2 · APP LAYER — @theme entries
+
+   Merge these lines into the existing @theme block so Tailwind emits the
+   utilities (bg-line-soft, text-ink-5, …).
+   --------------------------------------------------------------------------- */
+@theme {
+  --color-ink-5: hsl(var(--ink-5));
+  --color-ink-6: hsl(var(--ink-6));
+  --color-line-soft: hsl(var(--line-soft));
+  --color-line-softer: hsl(var(--line-softer));
+  --color-surface-selected: hsl(var(--surface-selected));
+  --color-surface-row-hover: hsl(var(--surface-row-hover));
+  --color-success: hsl(var(--success));
+  --color-success-tint: hsl(var(--success-tint));
+
+  /* Marketing display face — the variable is only defined inside the
+     (marketing) route group, so app routes never resolve it. */
+  --font-display: var(--font-newsreader), Georgia, serif;
+
+  /* Shell geometry the prototypes fixed (design-system-app.md §3).
+     Values, not utilities: read them in components instead of retyping. */
+  --size-rail-collapsed: 52px;
+  --size-rail-expanded: 232px;
+  --size-settings-nav: 244px;
+  --size-panel-right: 276px;
+  --size-panel-left: 236px;
+  --size-topbar: 48px;
+  --size-statusbar: 46px;
+  --size-titlebar: 44px;
+  --size-sheet-editor: 720px;
+  --size-sheet-reading: 660px;
+
+  --radius-modal: 18px;
+  --radius-bar: 14px;
+
+  --shadow-selection-bar: 0 18px 44px rgba(35, 24, 15, 0.34);
+  --shadow-modal: 0 30px 90px rgba(35, 24, 15, 0.28), 0 2px 6px rgba(35, 24, 15, 0.10);
+  --shadow-auth-card: 0 1px 2px rgba(35, 24, 15, 0.05), 0 24px 60px rgba(35, 24, 15, 0.12);
+  --shadow-splash-mark: 0 12px 34px rgba(35, 24, 15, 0.22);
+}
+
+
+/* ---------------------------------------------------------------------------
+   3 · MARKETING LAYER — scoped tokens
+
+   MANDATORY: scoped to [data-layer="marketing"], never :root. Overwriting the
+   global --bg breaks every app view. The wrapper lives in
+   app/(marketing)/layout.tsx and also sets background + color, because `body`
+   carries @apply bg-bg text-ink.
+   --------------------------------------------------------------------------- */
+[data-layer="marketing"] {
+  --mkt-canvas: #f5f3ef;
+  --mkt-panel-warm: #efe7db;
+  --mkt-panel-dark: #1e1915;
+  --mkt-ink: #1e1915;
+  --mkt-body: #5c534c;
+  --mkt-muted: #8e837b;
+  --mkt-rule: #dfd9cf;
+  --mkt-gold: #a87531;
+  --mkt-gold-light: #c79b58;
+  --mkt-on-dark: #f5f3ef;
+  --mkt-on-dark-dim: rgba(245, 243, 239, 0.6);
+  --mkt-chip-face: #ffffff;
+  --mkt-chip-border: #e0d9ce;
+  --mkt-diagram-route: #c6bcae;
+  --mkt-radius: 4px;
+
+  background: var(--mkt-canvas);
+  color: var(--mkt-ink);
+}
+
+/* Marketing colors exposed as Tailwind utilities. Keep this block INSIDE the
+   file's single @theme in the real merge — split here only for readability. */
+@theme {
+  --color-mkt-canvas: #f5f3ef;
+  --color-mkt-panel-warm: #efe7db;
+  --color-mkt-panel-dark: #1e1915;
+  --color-mkt-ink: #1e1915;
+  --color-mkt-body: #5c534c;
+  --color-mkt-muted: #8e837b;
+  --color-mkt-rule: #dfd9cf;
+  --color-mkt-gold: #a87531;
+  --color-mkt-gold-light: #c79b58;
+}
+
+/* Links: the app underlines in terracotta; the landing does not underline and
+   goes gold on hover. Without this rule, editor-authored links inherit the
+   app treatment inside marketing pages. */
+[data-layer="marketing"] a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 150ms ease;
+}
+
+[data-layer="marketing"] a:hover {
+  color: var(--mkt-gold);
+}
+
+[data-layer="marketing"] ::selection {
+  background: #ebd9b4;
+  color: var(--mkt-ink);
+}
+
+/* Display face + optical defaults for the marketing layer only. */
+[data-layer="marketing"] h1,
+[data-layer="marketing"] h2,
+[data-layer="marketing"] blockquote {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-weight: 200;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+[data-layer="marketing"] h1 {
+  font-size: clamp(52px, 7vw, 104px);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  max-width: 24ch;
+  margin: 0;
+}
+
+[data-layer="marketing"] h2 {
+  font-size: clamp(34px, 3.6vw, 52px);
+  line-height: 1.16;
+  max-width: 26ch;
+  margin: 0;
+}
+
+[data-layer="marketing"] p {
+  color: var(--mkt-body);
+  text-wrap: pretty;
+  margin: 0;
+}
+
+/* The one gold italic per headline. */
+[data-layer="marketing"] .mkt-accent {
+  font-style: italic;
+  color: var(--mkt-gold);
+}
+
+[data-layer="marketing"] .mkt-panel-dark .mkt-accent {
+  color: var(--mkt-gold-light);
+}
+
+/* Overline / eyebrow — Roboto Mono is already an @font-face in this file. */
+[data-layer="marketing"] .mkt-overline {
+  font: 400 12px/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mkt-gold);
+  margin: 0;
+}
+
+[data-layer="marketing"] .mkt-panel-dark .mkt-overline {
+  color: var(--mkt-gold-light);
+}
+
+/* Section rhythm and the 240px overline column. */
+[data-layer="marketing"] .mkt-section {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 130px 48px 0;
+}
+
+[data-layer="marketing"] .mkt-section-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 64px;
+  align-items: start;
+}
+
+[data-layer="marketing"] .mkt-panel-dark,
+[data-layer="marketing"] .mkt-panel-warm {
+  border-radius: var(--mkt-radius);
+  box-shadow: none;
+}
+
+[data-layer="marketing"] .mkt-panel-dark {
+  background: var(--mkt-panel-dark);
+  color: var(--mkt-on-dark);
+}
+
+[data-layer="marketing"] .mkt-panel-dark p {
+  color: var(--mkt-on-dark-dim);
+}
+
+[data-layer="marketing"] .mkt-panel-warm {
+  background: var(--mkt-panel-warm);
+}
+
+/* A screenshot bleeds to one edge instead of sitting centered with a margin. */
+[data-layer="marketing"] .mkt-shot-bleed {
+  display: block;
+  overflow: hidden;
+  border-radius: 3px 0 0 0;
+}
+
+[data-layer="marketing"] .mkt-shot-bleed > img {
+  display: block;
+  width: 118%;
+  max-width: none;
+  height: 300px;
+  object-fit: cover;
+  object-position: 0 0;
+}
+
+@media (max-width: 1024px) {
+  [data-layer="marketing"] .mkt-section {
+    padding: 90px 24px 0;
+  }
+
+  [data-layer="marketing"] .mkt-section-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+@media (max-width: 720px) {
+  [data-layer="marketing"] .mkt-shot-bleed > img {
+    width: 100%;
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   4 · KEYFRAMES used by the prototypes
+
+   menuIn and fadeIn already exist in globals.css — do not duplicate them.
+   These three are new.
+   --------------------------------------------------------------------------- */
+@keyframes odModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes odStepIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes odMarkIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes odCrawl {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   5 · SCROLLBAR treatment (.od-scroll)
+
+   Every scroll region in the prototypes uses this. Currently duplicated in
+   each prototype's <style>; it belongs here once.
+   --------------------------------------------------------------------------- */
+.od-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #e3e0db transparent;
+}
+
+.od-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.od-scroll::-webkit-scrollbar-thumb {
+  background: #e3e0db;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background-clip: content-box;
+}
+
+.od-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+/* ============================================================================
+   NOT INCLUDED, ON PURPOSE
+
+   · No `body` override — the existing @apply bg-bg text-ink stays.
+   · No changes to .odessay-rich-content / .prose-odessay: the cross-mode text
+     contract is out of scope for a design migration.
+   · No ShadCN layer-2 edits: those belong in components/ui/*, per skill-design.
+   · No app-token value changes. Every delta above is additive; if a component
+     needs a *different* --ink or --border, that is an ADR, not a CSS patch.
+   ============================================================================ */
