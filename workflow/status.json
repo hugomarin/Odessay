@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-08-13",
+  "last_updated": "2026-08-14",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -83,10 +83,11 @@
     ]
   },
   "active_phase": {
-    "name": "Fase 9 — Workspace: Filesystem y Nube",
-    "linear_project": "https://linear.app/z9ne/project/fase-9-workspace-filesystem-y-nube-428a63f280c5",
+    "name": "Fase 10 — Artifact Studio: la superficie",
+    "linear_project": "https://linear.app/hugo-marin/project/fase-10-artifact-studio-la-superficie-1bb72e1d4b41",
     "roadmap_ref": "workflow/define/roadmap.md",
-    "notes": "Fase 9 redefinida por wf-define el 2026-07-09 desde workflow/context/features/odessay-desktop-document-catalog.md. Objetivo: una sola personalidad documental desktop — manifest v2 como ledger de binding, SQLite como catálogo/cola operacional, reconciliador global, Desk y Workspace como vistas y openDocument({id|path}) como única apertura. Secuencia: ODE-366 (reconciliación) → ODE-367 (M1 contratos + SQLite v2) → ODE-370 (M2 reconciliador) → ODE-375 (M3 apertura) → ODE-373 (M4 vistas) → ODE-376 (M5 migración IndexedDB) → ODE-371/ODE-374 (M6 cloud + retiro legacy) → ODE-372 (gate DoD/DMG/aceptación). ODE-368/369 son auditorías transversales. Fase 8 permanece In Progress en Linear como trabajo paralelo ya iniciado."
+    "definition_of_done": "workflow/define/dod-fase-10.md",
+    "notes": "Fase 10 definida por wf-define el 2026-08-14 desde el paquete de diseño Artifact Studio (handoff-artifact-studio-handsoff/ -> docs/design/). Alcance: presentación. No toca catálogo, binding, apertura ni sync de Fase 9. Secuencia: M0 normativa (ODE-423 docs, ODE-425 deltas) -> M1 primitivas (ODE-427 overlays, ODE-428 selection bar, ODE-424 marca) -> M2 ODE-429 auth/splash -> M3 ODE-430 Desk + ODE-434 preview -> M4 ODE-431 Workspace + ODE-435 add-workspace -> M5 ODE-432 Settings -> M6 ODE-433 Studio shell + ODE-436 AI bar -> M7 ODE-438 empty states, ODE-439 vocabulario, ODE-426/ODE-437 Workflows -> M8 marketing (ODE-440, ODE-441, ODE-442, ODE-443, ODE-444) -> M9 ODE-445 gate DoD. Decisiones del dueño: marketing al final; regla Ignore del add-workspace NO se implementa (solo checkbox + Only this); Workflows entra con design pass previo. Fase 9 sigue abierta en paralelo: ODE-372 es su gate DoD en DMG y no se absorbe en Fase 10."
   },
   "phase_plan": {
     "phase": "Fase 6 — Desktop Local-First Runtime",
@@ -3495,6 +3496,16 @@
       "commit": "ff2961e9714cb8e99f1180eddc624ecba47ce4fb",
       "date": "2026-08-13",
       "notes": "Aprobado 10/10 despues de corregir persistencia durable y URL cloud estable; mergeado por squash como ce03ae68bb6d0ada1cea94c1f48ff6d515aa4970. Las imagenes Markdown relativas y absolutas renderizan desde el filesystem conservando su src; el respaldo cloud es explicito, reemplaza la referencia solo tras upload y guardado canonico exitosos, y revierte ante falla. CI traceability y Vercel PASS; 194 archivos/1357 tests Vitest, 51 Rust y DMG real verificados."
+    },
+    {
+      "what": "docs(design): land the Artifact Studio design package as normative docs [ODE-423]",
+      "phase": "Fase 10 — Artifact Studio: la superficie",
+      "issue": "ODE-423",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-423/land-the-artifact-studio-design-package-into-the-repo-as-normative",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/384",
+      "commit": "a68b10b",
+      "date": "2026-08-14",
+      "notes": "Shipped via wf-ship; PR abierto para merge manual. Baja el paquete de diseno a docs/design/ (6 docs de producto + 8 specs de vista), .agents/skills/skill-design-landing/ y docs/design/globals-additions.css integro. Decision de fondo: los 12 prototipos .dc.html entran a docs/design/reference/ como AUTORIDAD VISUAL de la fase, revirtiendo la version original del brief que los dejaba fuera del repo; sin ellos cada issue de vista habria inferido los cientos de valores que la prosa no lista (Settings: 522 lineas de render con ~40 valores px y 38 colores contra 67 lineas de documento). Cada views/*.md abre con bloque Authority y precedencia explicita; settings-workflows declara que no tiene prototipo; migration-plan §4 promovido a protocolo de fidelidad normativo. Los cinco deltas quedan OPEN pendientes de ODE-425. skill-design gana el limite contra la capa de marketing. docs.json +19 entradas. Paquete original eliminado del arbol. typecheck PASS, lint PASS con 6 warnings preexistentes, Vitest 195 archivos/1365 tests PASS, delivery gate PASS. Sin cambios de codigo de producto."
     }
   ]
 }

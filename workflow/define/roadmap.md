@@ -565,6 +565,67 @@ Referencia: `workflow/define/dod-fase-9.md`, `workflow/context/features/odessay-
 
 ---
 
+## Fase 10 — Artifact Studio: la superficie
+
+Al terminar esta fase: el producto se ve, se nombra y se comporta como Artifact Studio. Dos capas visuales explícitas —producto y marketing— con tokens separados por scope, un shell de dos capas, un inventario cerrado de overlays, una marca regenerada y un solo vocabulario. La arquitectura documental cerrada en Fase 9 no se mueve: esta fase toca presentación.
+
+DoD formal: `workflow/define/dod-fase-10.md`.
+
+---
+
+**Hito**
+Artifact Studio tiene una identidad visual única y verificable en todas sus superficies, sin que el rediseño introduzca una sola fuente de datos, store o pipeline documental nuevo.
+
+**Al cierre de esta fase debe ser verdad que:**
+
+- ninguna vista rediseñada descubre documentos fuera del `DocumentCatalog` ni introduce estado durable nuevo;
+- las capas de producto y marketing están separadas por `[data-layer="marketing"]` y no se contaminan en ninguna dirección;
+- los cinco deltas del paquete de diseño están resueltos en `skill-design`, no solo en el código;
+- el shell de dos capas —layer 0 shell, layer 1 hoja— es observable en cada vista, con una sola superficie elevada;
+- existen exactamente cinco patrones de overlay y ninguna superficie inventa un sexto;
+- Desk, Studio, Workspace, Add workspace, Settings, Auth y los estados vacíos cumplen su spec y su checklist;
+- la UI dice **artifact**, en inglés, y la marca es una sola geometría en app icon, favicon y `src-tauri/icons/*`;
+- la landing existe en `app/(marketing)` y argumenta el problema antes que la solución;
+- ninguna ruta de app paga por la capa de marketing —ni una fuente, ni un token, ni un píxel.
+
+**Temas que entran en esta fase**
+
+- bajada del paquete de diseño a `docs/design/` y creación de `skill-design-landing`;
+- fusión de los deltas de tokens, tipografía y geometría en `skill-design` y `app/globals.css`;
+- primitivas compartidas: los cinco overlays y la barra de selección única;
+- refresco de marca: geometría del mark, wordmark en Geist, app icon y favicon regenerados;
+- rediseño vista por vista: Auth/Splash, Desk, preview de artifact, Workspace índice y detalle, Add workspace, Settings, Studio y los tres estados vacíos;
+- barrido de vocabulario a "artifact" en copy;
+- Settings › Workflows, precedido de un design pass que responda sus preguntas abiertas;
+- capa de marketing completa: tokens scoped, primitivas, once secciones, gráficos y cutover de la home.
+
+**Temas que no son objetivo de esta fase**
+
+- cambiar catálogo, binding, apertura, sync o cualquier contrato de Fase 9;
+- implementar la regla *Ignore* persistente del flujo add-workspace — se envía solo checkbox + "Only this";
+- reescribir `editor-shell.tsx`: Studio se interviene en presentación, en el lugar;
+- renombrar archivos y símbolos de "writing" a "artifact" — el copy cambia en esta fase, los nombres en un pase mecánico posterior;
+- convertir los prototipos `.dc.html` en código: entran al repo en `docs/design/reference/` como autoridad visual y se leen sus valores, pero no se copian sus nodos.
+
+**Secuencia de ejecución**
+
+1. **M0 — normativa:** bajar el handoff a `docs/design/` y fusionar los deltas en `skill-design` + `app/globals.css`. Sin este bloque, cada vista reinventa el sistema.
+2. **M1 — primitivas:** overlays, barra de selección compartida y marca.
+3. **M2 — entrada:** splash y pantallas de auth.
+4. **M3 — Desk:** header, filtros, filas, grupos, y el overlay de preview con su tarjeta de sharing.
+5. **M4 — Workspace:** índice, detalle con columna de árbol y flujo de add-workspace.
+6. **M5 — Settings:** cuenta, tipos, estados, archivo y su modal editor.
+7. **M6 — Studio:** shell, tabs, paneles, status bar; después barra AI, sugerencias y palabras aprendidas.
+8. **M7 — cierre de producto:** estados vacíos, barrido de vocabulario, design pass de Workflows y su implementación.
+9. **M8 — marketing:** tokens scoped y grupo de rutas, primitivas, secciones estáticas, gráficos y cutover de la home.
+10. **M9 — gate:** matriz de evidencia del DoD y aceptación explícita del dueño.
+
+Fase 10 corre en paralelo al cierre de Fase 9: `ODE-372` sigue siendo el gate DoD de esa fase y no se absorbe aquí.
+
+Referencia: `workflow/define/dod-fase-10.md`, `docs/design/migration-plan.md`, `docs/design/system-app.md`, `docs/design/layout.md`, `docs/design/overlays.md`, `docs/design/icons.md`, `docs/design/brand.md`, `docs/design/views/*.md`, `.agents/skills/skill-design/SKILL.md`, `.agents/skills/skill-design/vistas.md`, `.agents/skills/skill-design/tipografia.md`, `.agents/skills/skill-design-landing/SKILL.md`, `.agents/skills/skill-frontend/SKILL.md`, `.agents/skills/skill-product-manager/SKILL.md`, `workflow/agents.md`.
+
+---
+
 ## Horizonte Posterior — Iniciativas Diferidas
 
 Estas líneas no desaparecen del producto, pero salen del critical path mientras se construye la plataforma multi-runtime.
