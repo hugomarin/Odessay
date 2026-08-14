@@ -107,7 +107,13 @@ function main() {
 
   // 3. Build — beforeBuildCommand in tauri.conf.json handles the Next.js static export prep
   try {
-    execSync("npm run tauri:build", { stdio: "inherit", cwd: root })
+    // The flag cannot reach prepare-tauri-build.mjs through `tauri build`'s
+    // beforeBuildCommand, so it travels as an env var.
+    execSync("npm run tauri:build", {
+      stdio: "inherit",
+      cwd: root,
+      env: allowLocalhost ? { ...process.env, DESKTOP_ALLOW_LOCAL_RUNTIME: "1" } : process.env,
+    })
   } catch (err) {
     console.error("[desktop:release] tauri build failed — see output above.")
     process.exit(err.status || 1)

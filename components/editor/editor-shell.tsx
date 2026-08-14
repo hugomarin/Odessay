@@ -632,7 +632,12 @@ export function EditorShell({
     const service = getAssetService()
     if (!isLocalImageSource(source)) {
       const resolved = await service.resolveImageAssetUrl?.(source)
-      return { renderUrl: resolved?.data ?? source }
+      if (!resolved) return { renderUrl: source }
+      // Falling back to `source` on failure paints a broken image with no
+      // explanation: an authenticated /api/writing-assets URL carries no
+      // credentials as a plain <img> src. Surface the failure instead.
+      if (resolved.error) throw new Error(resolved.error.message)
+      return { renderUrl: resolved.data }
     }
     const documentPath = currentCanonicalPathRef.current
     if (!documentPath) throw new Error("Save this document before loading local images")

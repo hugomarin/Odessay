@@ -49,6 +49,45 @@ export function findLocalRuntimeHosts(contents, { isHtml = false } = {}) {
 
 export const RUNTIME_MANIFEST_FILENAME = "odessay-runtime.json"
 
+/** The hosted web runtime a distributable desktop artifact must talk to. */
+export const PRODUCTION_RUNTIME_HOST = "https://odessay.vercel.app"
+
+function normalizeHost(value) {
+  return typeof value === "string" ? value.trim().replace(/\/+$/, "") : ""
+}
+
+/**
+ * Decide which runtime host a desktop export is allowed to bake in, using the
+ * same precedence Next.js applies: a shell variable wins, otherwise `.env*`
+ * files supply the value.
+ *
+ * This exists because the two disagree in the one case that matters. Nobody
+ * exports `NEXT_PUBLIC_APP_URL` for a plain `npm run tauri:build`, so the
+ * release scripts saw an empty variable and let the build through — while the
+ * Next build silently read `http://localhost:3000` out of `.env.local` and
+ * inlined it into every client chunk. The artifact then reached a writer who
+ * got "…configured to reach the transcription service at http://localhost:3000"
+ * in the annotation bubble. Resolving both sources here, and handing the result
+ * to the build explicitly, removes the gap where a dev value can leak into an
+ * artifact unnoticed.
+ *
+ * @param {{ shellValue?: string, dotenvValue?: string, allowLocalhost?: boolean }} input
+ */
+export function resolveBuildRuntimeHost({ shellValue, dotenvValue, allowLocalhost = false } = {}) {
+  const shell = normalizeHost(shellValue)
+  const dotenv = normalizeHost(dotenvValue)
+  const appUrl = shell || dotenv
+  const source = shell ? "environment" : dotenv ? ".env file" : "unset"
+
+  if (!appUrl) {
+    return { ok: false, reason: "unset", appUrl: "", source }
+  }
+  if (isLocalRuntimeHost(appUrl)) {
+    return { ok: Boolean(allowLocalhost), reason: "local-host", appUrl, source }
+  }
+  return { ok: true, reason: "remote-host", appUrl, source }
+}
+
 /**
  * Evaluate the runtime host a desktop artifact will actually call.
  *
@@ -142,6 +181,23 @@ export function readRuntimeManifest(candidateDirs) {
     }
   }
   return { path: null, manifest: null }
+}
+
+/** Render a `resolveBuildRuntimeHost` verdict as a build-log block. */
+export function formatBuildRuntimeHostFailure(verdict) {
+  if (verdict.reason === "unset") {
+    return (
+      `NEXT_PUBLIC_APP_URL is not set, and no .env file supplies it.\n` +
+      `      A desktop artifact cannot reach /api/* without a hosted runtime host.\n${REBUILD_HINT}`
+    )
+  }
+
+  return (
+    `The runtime host resolves to ${verdict.appUrl} (from ${verdict.source}).\n` +
+    `      A desktop artifact built against a local host fails on every machine except this one.\n` +
+    `${REBUILD_HINT}\n` +
+    `      Local testing only: pass --allow-localhost.`
+  )
 }
 
 /** Render a verdict as a build-log block with the fix inline. */

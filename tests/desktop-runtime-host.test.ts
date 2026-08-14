@@ -12,8 +12,10 @@ import {
   collectFrontendAssets,
   evaluateEmbeddedRuntimeHost,
   findLocalRuntimeHosts,
+  formatBuildRuntimeHostFailure,
   formatEmbeddedHostFailure,
   readRuntimeManifest,
+  resolveBuildRuntimeHost,
   stripCspMeta,
 } from "@/scripts/lib/desktop-runtime-host.mjs"
 
@@ -214,5 +216,53 @@ describe("collectFrontendAssets", () => {
     const empty = makeBundle({ "readme.txt": "nothing here" })
 
     expect(collectFrontendAssets([empty, join(empty, "missing")])).toEqual({ baseDir: null, assets: [] })
+  })
+})
+
+/**
+ * The incident this closes: nobody exports NEXT_PUBLIC_APP_URL for a desktop
+ * build, so the gates read an empty variable and passed — while Next.js read
+ * `http://localhost:3000` out of `.env.local` and inlined it. The shipped app
+ * told a writer the transcription service lived on localhost.
+ */
+describe("resolveBuildRuntimeHost", () => {
+  it("rejects a build whose host comes only from a .env file pointing at localhost", () => {
+    const verdict = resolveBuildRuntimeHost({
+      shellValue: undefined,
+      dotenvValue: "http://localhost:3000",
+    })
+
+    expect(verdict).toMatchObject({ ok: false, reason: "local-host", appUrl: "http://localhost:3000" })
+    expect(verdict.source).toBe(".env file")
+    expect(formatBuildRuntimeHostFailure(verdict)).toContain("http://localhost:3000")
+    expect(formatBuildRuntimeHostFailure(verdict)).toContain("desktop:release:prod:signed")
+  })
+
+  it("rejects a build with no host at all rather than exporting a broken artifact", () => {
+    const verdict = resolveBuildRuntimeHost({ shellValue: "  ", dotenvValue: "" })
+
+    expect(verdict).toMatchObject({ ok: false, reason: "unset", appUrl: "", source: "unset" })
+    expect(formatBuildRuntimeHostFailure(verdict)).toContain("NEXT_PUBLIC_APP_URL is not set")
+  })
+
+  it("lets the shell value win over the .env file, matching Next.js precedence", () => {
+    const verdict = resolveBuildRuntimeHost({
+      shellValue: "https://odessay.vercel.app/",
+      dotenvValue: "http://localhost:3000",
+    })
+
+    expect(verdict).toEqual({
+      ok: true,
+      reason: "remote-host",
+      appUrl: "https://odessay.vercel.app",
+      source: "environment",
+    })
+  })
+
+  it("allows a local host only when the build explicitly opts in", () => {
+    const input = { shellValue: "http://127.0.0.1:3000", dotenvValue: undefined }
+
+    expect(resolveBuildRuntimeHost({ ...input, allowLocalhost: true }).ok).toBe(true)
+    expect(resolveBuildRuntimeHost(input).ok).toBe(false)
   })
 })

@@ -50,6 +50,11 @@ function ok(message) {
   console.log(`  ✓ ${message}`)
 }
 
+/** Context that is neither a pass nor a finding — never affects the exit code. */
+function info(message) {
+  console.log(`  · ${message}`)
+}
+
 function section(title) {
   console.log(`\n[validate:desktop] ${title}`)
 }
@@ -272,7 +277,10 @@ if (appUrl && findLocalRuntimeHosts(appUrl).length > 0) {
 } else if (appUrl) {
   ok(`NEXT_PUBLIC_APP_URL is remote: ${appUrl}`)
 } else {
-  warn("NEXT_PUBLIC_APP_URL not set — verify the default points to production")
+  // Not a finding on its own: the variable is usually unset in the validating
+  // shell, and what the artifact really calls is checked in 3e against the
+  // manifest the export wrote.
+  info("NEXT_PUBLIC_APP_URL not set in this shell — the embedded host check below is authoritative")
 }
 
 // 3e. The host actually embedded in the shipped frontend (ODE-409). The env var
