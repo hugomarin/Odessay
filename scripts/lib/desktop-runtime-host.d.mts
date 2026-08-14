@@ -17,8 +17,16 @@ export type EmbeddedHostVerdict = {
   carriers: string[]
 }
 
+export type BuildHostVerdict = {
+  ok: boolean
+  reason: "unset" | "local-host" | "remote-host"
+  appUrl: string
+  source: "environment" | ".env file" | "unset"
+}
+
 export declare const SCANNABLE_ASSET_EXTENSIONS: string[]
 export declare const RUNTIME_MANIFEST_FILENAME: string
+export declare const PRODUCTION_RUNTIME_HOST: string
 
 export declare function isLocalRuntimeHost(value: unknown): boolean
 
@@ -48,3 +56,11 @@ export declare function collectFrontendAssets(candidateDirs: Array<string | null
 }
 
 export declare function formatEmbeddedHostFailure(verdict: EmbeddedHostVerdict): string
+
+export declare function resolveBuildRuntimeHost(input?: {
+  shellValue?: string
+  dotenvValue?: string
+  allowLocalhost?: boolean
+}): BuildHostVerdict
+
+export declare function formatBuildRuntimeHostFailure(verdict: BuildHostVerdict): string

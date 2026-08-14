@@ -41,6 +41,17 @@ If `package.json` and `src-tauri/tauri.conf.json` have different `version` value
 
 Fix: update both files to the same version string before running `desktop:release` again.
 
+### Runtime host
+
+Every desktop build path — including a bare `npm run tauri:build` — runs `scripts/prepare-tauri-build.mjs` as `beforeBuildCommand`, and that script now resolves `NEXT_PUBLIC_APP_URL` the way Next.js does (shell variable first, then `.env.local` / `.env`) **before** exporting:
+
+- a remote host → exported, recorded in `dist/odessay-runtime.json`, and corroborated against the emitted chunks;
+- a local host or no host at all → the build aborts with `[tauri-build] INVALID RUNTIME HOST`.
+
+Use `npm run desktop:release:prod:signed` (or export `NEXT_PUBLIC_APP_URL=https://odessay.vercel.app` yourself). For a local-server build, pass `--allow-localhost` — `desktop:release` forwards it as `DESKTOP_ALLOW_LOCAL_RUNTIME=1`, since flags cannot cross `beforeBuildCommand`.
+
+The check exists because the shell variable and the value Next actually inlines can disagree: with `NEXT_PUBLIC_APP_URL` unset, the old gate saw an empty variable and passed while the build read `http://localhost:3000` from `.env.local` and baked it into every chunk. The resulting artifact told writers the transcription service lived on localhost.
+
 ---
 
 ## Distributing to known users

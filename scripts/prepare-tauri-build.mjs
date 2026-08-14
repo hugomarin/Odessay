@@ -17,11 +17,48 @@ import { execSync } from "node:child_process"
 import globPkg from "glob"
 import { renameSync, existsSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { RUNTIME_MANIFEST_FILENAME } from "./lib/desktop-runtime-host.mjs"
+import nextEnv from "@next/env" // CJS: no named exports over ESM
+import {
+  RUNTIME_MANIFEST_FILENAME,
+  collectFrontendAssets,
+  evaluateEmbeddedRuntimeHost,
+  formatBuildRuntimeHostFailure,
+  formatEmbeddedHostFailure,
+  resolveBuildRuntimeHost,
+} from "./lib/desktop-runtime-host.mjs"
 
 const { sync } = globPkg
 const root = process.cwd()
 const disabledSuffix = ".route-disabled"
+const allowLocalhost =
+  process.argv.includes("--allow-localhost") || process.env.DESKTOP_ALLOW_LOCAL_RUNTIME === "1"
+
+/**
+ * Resolve the runtime host *before* building, exactly as Next.js would, and
+ * refuse to export against a local one (ODE-409 follow-up). Every desktop build
+ * path funnels through this script — `beforeBuildCommand` in tauri.conf.json —
+ * so this is the only place that can guarantee no artifact is ever produced
+ * with a dev host inlined, including a bare `npm run tauri:build` that skips
+ * the release script's own gates.
+ */
+function resolveRuntimeHost() {
+  const shellValue = process.env.NEXT_PUBLIC_APP_URL
+  const silentLogger = { info: () => {}, error: () => {}, warn: () => {} }
+  nextEnv.loadEnvConfig(root, false, silentLogger)
+  const dotenvValue = process.env.NEXT_PUBLIC_APP_URL
+
+  const verdict = resolveBuildRuntimeHost({ shellValue, dotenvValue, allowLocalhost })
+  if (!verdict.ok) {
+    console.error(`[tauri-build] INVALID RUNTIME HOST\n  ${formatBuildRuntimeHostFailure(verdict)}`)
+    process.exit(1)
+  }
+  if (verdict.reason === "local-host") {
+    console.log(
+      `[tauri-build] WARNING: exporting against ${verdict.appUrl} (--allow-localhost). Do not distribute this build.`
+    )
+  }
+  return verdict.appUrl
+}
 
 // Directories inside app/ to temporarily exclude from static export.
 // They are moved outside app/ because Next.js scans all subdirectories.
@@ -88,6 +125,8 @@ function restoreDirs() {
   }
 }
 
+const appUrl = resolveRuntimeHost()
+
 let exitCode = 0
 try {
   disableRouteHandlers()
@@ -98,21 +137,38 @@ try {
   // client component evaluates to false in the packaged DMG. Modules that branch
   // at client runtime (e.g. lib/writings/writing-route.ts) must read the public
   // twin instead.
+  // The resolved host is passed explicitly so the build cannot fall back to a
+  // `.env.local` value the gates never saw.
   execSync("TAURI_BUILD=true NEXT_PUBLIC_TAURI_BUILD=true npm run build", {
     stdio: "inherit",
     cwd: root,
+    env: { ...process.env, NEXT_PUBLIC_APP_URL: appUrl },
   })
 
   // ODE-409: record the runtime host this export actually inlined. The release
   // and bundle gates read this instead of guessing from a raw localhost scan,
   // which dependencies poison with their own local defaults.
   const manifest = {
-    appUrl: (process.env.NEXT_PUBLIC_APP_URL ?? "").trim().replace(/\/+$/, ""),
+    appUrl,
     tauriBuild: true,
     generatedAt: new Date().toISOString(),
   }
   writeFileSync(join(root, "dist", RUNTIME_MANIFEST_FILENAME), JSON.stringify(manifest, null, 2) + "\n", "utf8")
-  console.log(`[tauri-build] Runtime host recorded: ${manifest.appUrl || "(unset)"}`)
+  console.log(`[tauri-build] Runtime host recorded: ${appUrl}`)
+
+  // Corroborate the manifest against the export that was just written, so a
+  // stale `dist/` or a chunk carrying a different host fails here rather than
+  // on a writer's machine.
+  const { assets } = collectFrontendAssets([join(root, "dist")])
+  const embedded = evaluateEmbeddedRuntimeHost({ manifest, assets, allowLocalhost })
+  if (!embedded.ok) {
+    console.error(`[tauri-build] INVALID EMBEDDED RUNTIME HOST\n  ${formatEmbeddedHostFailure(embedded)}`)
+    exitCode = 1
+  } else {
+    console.log(
+      `[tauri-build] ✓ Export embeds ${embedded.appUrl} (found in ${embedded.carriers.length} of ${embedded.scanned} asset(s))`
+    )
+  }
 } catch (err) {
   exitCode = err.status || 1
 } finally {
