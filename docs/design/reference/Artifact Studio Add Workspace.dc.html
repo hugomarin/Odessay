@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+@keyframes odModalIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes odStepIn{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:translateX(0)}}
+</style>
+</helmet>
+
+<div style="{{stageStyle}}">
+  <sc-if value="{{closed}}" hint-placeholder-val="{{false}}">
+    <button onClick="{{open}}" style="{{launchBtn}}" style-hover="opacity:.9">
+      <lucide-icon name="plus" size="16"></lucide-icon>New Workspace
+    </button>
+  </sc-if>
+  <sc-if value="{{isOpen}}" hint-placeholder-val="{{true}}">
+  <div onClick="{{close}}" style="position:absolute;inset:0"></div>
+  <div style="{{modalStyle}}">
+    <button onClick="{{close}}" style="{{closeBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Cerrar">
+      <lucide-icon name="x" size="17"></lucide-icon>
+    </button>
+
+    <sc-if value="{{isPick}}" hint-placeholder-val="{{true}}">
+      <div style="padding:36px 36px 32px;animation:odStepIn 220ms cubic-bezier(.4,0,.15,1)">
+        <h1 style="margin:0 0 8px;font:500 32px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Add a workspace</h1>
+        <p style="margin:0 0 26px;max-width:44ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Work with a folder you already use, or create a fresh workspace for a new writing context.</p>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <button onClick="{{goExisting}}" style="{{optionRow}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+            <span style="{{optionIcon}}"><lucide-icon name="folder" size="20"></lucide-icon></span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+              <span style="font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915">Use an existing folder</span>
+              <span style="font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Connect a folder you already work from.</span>
+            </span>
+            <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="chevron-right" size="18"></lucide-icon></span>
+          </button>
+          <button onClick="{{goScratch}}" style="{{optionRow}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+            <span style="{{optionIcon}}"><lucide-icon name="plus" size="20"></lucide-icon></span>
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+              <span style="font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915">Create from scratch</span>
+              <span style="font:400 13px/1.5 'DM Sans',sans-serif;color:#8E837B">Create a new folder and start clean.</span>
+            </span>
+            <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="chevron-right" size="18"></lucide-icon></span>
+          </button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isExisting}}" hint-placeholder-val="{{false}}">
+      <div style="padding:20px 36px 32px;animation:odStepIn 220ms cubic-bezier(.4,0,.15,1)">
+        <button onClick="{{goBack}}" style="{{backBtn}}" style-hover="background:#F2F1EF;color:#1E1915"><lucide-icon name="chevron-left" size="18"></lucide-icon></button>
+        <h1 style="margin:14px 0 8px;font:500 32px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Use an existing folder</h1>
+        <p style="margin:0 0 26px;max-width:46ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Artifact Studio watches the markdown inside it. Nothing is moved or copied — the folder stays exactly where it is.</p>
+        <p style="margin:0 0 9px;font:500 12px/1 'DM Sans',sans-serif;color:#3F3731;letter-spacing:.04em;text-transform:uppercase">Choose folder</p>
+        <button onClick="{{pickFolder}}" style="{{optionRow}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+          <span style="{{optionIcon}}"><lucide-icon name="folder-search" size="20"></lucide-icon></span>
+          <span style="flex:1;min-width:0;text-align:left;font:400 14px/1.4 'Roboto Mono',monospace;color:#8E837B;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{pickerLabel}}</span>
+          <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="chevron-right" size="18"></lucide-icon></span>
+        </button>
+        <p style="margin:14px 0 0;font:400 12px/1.6 'DM Sans',sans-serif;color:#B5ADA5">Recientes: <a href="#" onClick="{{pickFolder}}">~/Documents/Tutoria</a></p>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isScratch}}" hint-placeholder-val="{{false}}">
+      <div style="padding:20px 36px 32px;animation:odStepIn 220ms cubic-bezier(.4,0,.15,1)">
+        <button onClick="{{goBack}}" style="{{backBtn}}" style-hover="background:#F2F1EF;color:#1E1915"><lucide-icon name="chevron-left" size="18"></lucide-icon></button>
+        <h1 style="margin:14px 0 8px;font:500 32px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Create from scratch</h1>
+        <p style="margin:0 0 26px;max-width:46ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Se crea una carpeta nueva con ese nombre. Empieza vacía y con la estructura que le vayas dando.</p>
+        <p style="margin:0 0 9px;font:500 12px/1 'DM Sans',sans-serif;color:#3F3731;letter-spacing:.04em;text-transform:uppercase">Nombre del workspace</p>
+        <input value="{{name}}" onChange="{{onName}}" placeholder="ode408" style="box-sizing:border-box;width:100%;height:46px;padding:0 14px;border:1px solid #E4E1DC;border-radius:10px;background:#FFFFFF;font:400 15px/1 'DM Sans',sans-serif;color:#1E1915;outline:none" style-focus="border-color:#B5ADA5" />
+        <p style="margin:20px 0 9px;font:500 12px/1 'DM Sans',sans-serif;color:#3F3731;letter-spacing:.04em;text-transform:uppercase">Ubicación</p>
+        <div style="display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid #EDEBE8;border-radius:10px;background:#FAF9F8">
+          <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="folder" size="17"></lucide-icon></span>
+          <span style="flex:1;min-width:0;font:400 13px/1.4 'Roboto Mono',monospace;color:#6B5F57;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{newPath}}</span>
+          <button onClick="{{changeParent}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Cambiar</button>
+        </div>
+      </div>
+      <div style="{{footerStyle}}">
+        <button onClick="{{goBack}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Back</button>
+        <button onClick="{{confirm}}" style="{{primaryBtnState}}" style-hover="opacity:.9">Create workspace</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isInclude}}" hint-placeholder-val="{{false}}">
+      <div style="flex-shrink:0;padding:16px 36px 2px;animation:odStepIn 220ms cubic-bezier(.4,0,.15,1)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <button onClick="{{goBack}}" style="{{backBtn}}" style-hover="background:#F2F1EF;color:#1E1915"><lucide-icon name="chevron-left" size="18"></lucide-icon></button>
+          <span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;font:400 12px/1 'Roboto Mono',monospace;color:#8E837B;overflow:hidden">
+            <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="folder-open" size="14"></lucide-icon></span>
+            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{path}}</span>
+          </span>
+        </div>
+        <h1 style="margin:0 0 6px;font:500 26px/1.15 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Choose what to include</h1>
+        <p style="margin:0 0 14px;max-width:52ch;font:400 13px/1.5 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{foundLine}}</p>
+        <div style="display:flex;align-items:center;gap:10px;height:38px;padding:0 12px;border:1px solid #EDEBE8;border-radius:10px;background:#FFFFFF;margin-bottom:8px" style-focus="border-color:#B5ADA5">
+          <span style="display:flex;flex-shrink:0;color:#B5ADA5"><lucide-icon name="search" size="15"></lucide-icon></span>
+          <input value="{{query}}" onChange="{{onQuery}}" placeholder="Buscar carpeta o archivo…" style="flex:1;min-width:0;border:0;padding:0;background:transparent;font:400 13px/1 'DM Sans',sans-serif;color:#1E1915;outline:none" />
+          <sc-if value="{{hasQuery}}" hint-placeholder-val="{{false}}">
+            <button onClick="{{clearQuery}}" style="width:22px;height:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:6px;background:transparent;color:#B5ADA5;cursor:pointer" style-hover="background:#F2F1EF;color:#3F3731"><lucide-icon name="x" size="13"></lucide-icon></button>
+          </sc-if>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 6px 0 14px;border-radius:10px;background:#FAF7F3;margin-bottom:4px">
+          <span style="flex:1;min-width:0;font:500 13px/1 'DM Sans',sans-serif;color:#1E1915">{{selectedLine}}</span>
+          <sc-if value="{{hasIgnored}}" hint-placeholder-val="{{false}}">
+            <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#8E837B"><lucide-icon name="ban" size="12"></lucide-icon>{{ignoredLine}}</span>
+            <button onClick="{{clearIgnored}}" style="{{ghostBtn}}" style-hover="background:#EFEBE5;color:#1E1915">Restaurar</button>
+          </sc-if>
+          <button onClick="{{toggleAll}}" style="{{ghostBtn}}" style-hover="background:#EFEBE5;color:#1E1915">{{toggleAllLabel}}</button>
+        </div>
+      </div>
+      <div class="od-scroll" style="flex:1 1 auto;min-height:150px;overflow-y:auto;padding:0 30px 10px 30px">
+        <sc-for list="{{nodes}}" as="n" hint-placeholder-count="7">
+          <div style="{{n.rowStyle}}" style-hover="background:#F7F6F4">
+            <button onClick="{{n.twist}}" style="{{n.twistyStyle}}" style-hover="color:#1E1915"><lucide-icon name="chevron-down" size="13"></lucide-icon></button>
+            <button onClick="{{n.toggle}}" style="{{n.boxStyle}}" title="Incluir">
+              <span style="{{n.checkStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+              <span style="{{n.dashStyle}}"></span>
+            </button>
+            <span style="display:flex;flex-shrink:0;color:{{n.iconColor}}"><lucide-icon name="{{n.icon}}" size="16"></lucide-icon></span>
+            <span style="{{n.labelStyle}}">{{n.name}}<span style="{{n.metaStyle}}">{{n.meta}}</span></span>
+            <button onClick="{{n.isolate}}" style="{{n.isolateStyle}}" style-hover="opacity:1;background:#FFFFFF;border-color:#D6D1CA;color:#1E1915" title="Seleccionar solo esto">
+              <lucide-icon name="crosshair" size="12"></lucide-icon>Solo esto
+            </button>
+            <button onClick="{{n.ignore}}" style="{{n.ignoreStyle}}" style-hover="opacity:1;background:#FFFFFF;border-color:#D6D1CA;color:#1E1915">
+              <lucide-icon name="{{n.ignoreIcon}}" size="12"></lucide-icon>{{n.ignoreLabel}}
+            </button>
+          </div>
+        </sc-for>
+        <sc-if value="{{noResults}}" hint-placeholder-val="{{false}}">
+          <p style="margin:24px 0;text-align:center;font:400 13px/1.6 'DM Sans',sans-serif;color:#B5ADA5">Nada coincide con “{{query}}”.</p>
+        </sc-if>
+      </div>
+      <div style="{{footerStyle}}">
+        <button onClick="{{goBack}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Back</button>
+        <button onClick="{{confirm}}" style="{{addBtnStyle}}" style-hover="opacity:.9">{{addLabel}}</button>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+      <div style="padding:44px 36px 36px;text-align:center;animation:odStepIn 220ms cubic-bezier(.4,0,.15,1)">
+        <span style="width:52px;height:52px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#E4F0E7;color:#2E7D4F"><lucide-icon name="check" size="24" stroke="2.5"></lucide-icon></span>
+        <h1 style="margin:0 0 8px;font:500 26px/1.2 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">{{doneTitle}}</h1>
+        <p style="margin:0 0 26px;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57">{{doneLine}}</p>
+        <div style="display:flex;justify-content:center;gap:10px">
+          <button onClick="{{reset}}" style="{{ghostBtn}}" style-hover="background:#F2F1EF;color:#1E1915">Add another</button>
+          <a href="Artifact Studio Workspace Folder B.dc.html" style="{{primaryLink}}" style-hover="opacity:.9">Open workspace</a>
+        </div>
+      </div>
+    </sc-if>
+
+  </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:860},&quot;startStep&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;1 · Origen&quot;,&quot;2 · Carpeta existente&quot;,&quot;2 · Desde cero&quot;,&quot;3 · Qué incluir&quot;],&quot;default&quot;:&quot;1 · Origen&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Flujo&quot;},&quot;scrim&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Flujo&quot;}}">
+const STRUCT = [
+  { name: "Claude", children: [
+    { name: "01-Skills", files: ["01-intro.md", "02-anatomy.md", "03-frontmatter.md"] },
+    { name: "02-MCP", files: ["04-server-basics.md", "05-implementing-a-client.md", "06-transports.md"] },
+    { name: "03-API-CODE", files: ["api-overview.md", "streaming.md"] }
+  ] },
+  { name: "Harness", files: ["00_README.md", "DOCTRINA.md", "ENCUADRE.md"] },
+  { name: "Transcripts", files: ["llamada-2026-07-24.md", "llamada-2026-08-01.md"] }
+];
+
+function flatten(items, parentId, depth, out) {
+  items.forEach((it) => {
+    const id = parentId ? parentId + "/" + it.name : it.name;
+    out.push({ id, name: it.name, depth, type: "folder", parent: parentId });
+    if (it.children) flatten(it.children, id, depth + 1, out);
+    (it.files || []).forEach((f) => out.push({ id: id + "/" + f, name: f, depth: depth + 1, type: "file", parent: id }));
+  });
+  return out;
+}
+const ALL = flatten(STRUCT, "", 0, []);
+const FILES = ALL.filter((n) => n.type === "file");
+
+class Component extends DCLogic {
+  state = {
+    open: true, step: "pick", name: "", path: "", off: {}, on: {}, ignored: {}, mode: "except", query: "", parent: "~/Documents",
+    expanded: { Claude: true, Harness: true }
+  };
+
+  componentDidMount() {
+    this._sync();
+    this._onKey = (e) => { if (e.key === "Escape" && this.state.open) window.location.href = "Artifact Studio Workspace.dc.html"; };
+    document.addEventListener("keydown", this._onKey);
+  }
+  componentWillUnmount() { document.removeEventListener("keydown", this._onKey); }
+  componentDidUpdate(prev) { if (prev.startStep !== this.props.startStep) this._sync(); }
+  _sync() {
+    const map = { "1 · Origen": "pick", "2 · Carpeta existente": "existing", "2 · Desde cero": "scratch", "3 · Qué incluir": "include" };
+    const want = map[this.props.startStep ?? "1 · Origen"];
+    if (want && want !== this.state.step) this.setState({ step: want, path: want === "include" ? "/Users/hugomarin/Documents/Tutoria" : this.state.path });
+  }
+
+  filesUnder(id) { return FILES.filter((f) => f.id.indexOf(id + "/") === 0); }
+  isIgnored(id) {
+    return Object.keys(this.state.ignored).some((k) => id === k || id.indexOf(k + "/") === 0);
+  }
+  liveFiles() { return FILES.filter((f) => !this.isIgnored(f.id)); }
+  included(id) {
+    if (this.isIgnored(id)) return false;
+    return this.state.mode === "only" ? !!this.state.on[id] : !this.state.off[id];
+  }
+  folderState(id) {
+    const kids = this.filesUnder(id).filter((f) => !this.isIgnored(f.id));
+    if (!kids.length) return "none";
+    const on = kids.filter((f) => this.included(f.id)).length;
+    return on === 0 ? "none" : on === kids.length ? "all" : "some";
+  }
+
+  renderVals() {
+    const s = this.state;
+    const live = this.liveFiles();
+    const selected = live.filter((f) => this.included(f.id)).length;
+    const allOn = selected === live.length && live.length > 0;
+    const ignoredCount = FILES.length - live.length;
+    const q = s.query.trim().toLowerCase();
+    const onlyMode = false;
+    const rowAction = "flex-shrink:0;display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px 0 8px;border:1px solid #E9E6E1;border-radius:7px;background:#FBFAF9;color:#8E837B;font:500 11.5px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;opacity:.55;transition:opacity 150ms ease,background-color 150ms ease,border-color 150ms ease,color 150ms ease";
+
+    const box = (st) => "position:relative;width:20px;height:20px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+      (st === "none" ? "#D6D1CA" : "#1E1915") + ";border-radius:5px;background:" + (st === "none" ? "#FFFFFF" : "#1E1915") +
+      ";cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease";
+
+    const setAll = (ids, want) => {
+      if (onlyMode) {
+        const on = { ...s.on };
+        ids.forEach((f) => { if (want) on[f.id] = true; else delete on[f.id]; });
+        this.setState({ on });
+      } else {
+        const off = { ...s.off };
+        ids.forEach((f) => { if (want) delete off[f.id]; else off[f.id] = true; });
+        this.setState({ off });
+      }
+    };
+
+    const matches = (n) => {
+      if (!q) return true;
+      if (n.name.toLowerCase().indexOf(q) >= 0) return true;
+      if (n.type === "folder" && ALL.some((x) => x.id.indexOf(n.id + "/") === 0 && x.name.toLowerCase().indexOf(q) >= 0)) return true;
+      let p = n.parent;
+      while (p) {
+        const par = ALL.find((x) => x.id === p);
+        if (par && par.name.toLowerCase().indexOf(q) >= 0) return true;
+        p = par && par.parent;
+      }
+      return false;
+    };
+
+    const visible = ALL.filter((n) => {
+      if (!matches(n)) return false;
+      if (q) return true;
+      let p = n.parent;
+      while (p) { if (!s.expanded[p]) return false; p = (ALL.find((x) => x.id === p) || {}).parent; }
+      return true;
+    });
+
+    const nodes = visible.map((n) => {
+      const isFolder = n.type === "folder";
+      const ign = this.isIgnored(n.id);
+      const st = ign ? "none" : isFolder ? this.folderState(n.id) : (this.included(n.id) ? "all" : "none");
+      const kids = this.filesUnder(n.id).filter((f) => !this.isIgnored(f.id));
+      const open = q ? true : !!s.expanded[n.id];
+      return {
+        isolate: () => {
+          const keep = {};
+          (isFolder ? this.filesUnder(n.id) : [n]).forEach((f) => { keep[f.id] = true; });
+          const off = {};
+          FILES.forEach((f) => { if (!keep[f.id]) off[f.id] = true; });
+          this.setState({ off, ignored: {} });
+        },
+        isolateStyle: rowAction + (ign ? ";opacity:.25;pointer-events:none" : ""),
+        ignore: () => {
+          const ignored = { ...s.ignored };
+          if (ignored[n.id]) delete ignored[n.id];
+          else {
+            Object.keys(ignored).forEach((k) => { if (k.indexOf(n.id + "/") === 0) delete ignored[k]; });
+            ignored[n.id] = true;
+          }
+          this.setState({ ignored });
+        },
+        ignoreLabel: ign ? "Restaurar" : "Ignorar",
+        ignoreIcon: ign ? "rotate-ccw" : "ban",
+        ignoreStyle: rowAction + (ign ? ";opacity:1;color:#96532C;border-color:#E0CFC2" : ""),
+        name: n.name,
+        icon: isFolder ? (open ? "folder-open" : "folder") : "file-text",
+        iconColor: st === "none" ? "#CFC9C1" : "#8E837B",
+        meta: isFolder ? String(kids.length) : "",
+        metaStyle: "margin-left:8px;font:400 11px/1 'Roboto Mono',monospace;color:#C3BCB3;" + (isFolder && kids.length ? "" : "display:none"),
+        labelStyle: "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font:" +
+          (isFolder ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (st === "none" ? "#B5ADA5" : isFolder ? "#1E1915" : "#3F3731") +
+          (ign ? ";text-decoration:line-through;text-decoration-color:#CFC9C1" : ""),
+        rowStyle: "display:flex;align-items:center;gap:9px;box-sizing:border-box;width:100%;height:38px;padding:0 8px 0 " + (6 + n.depth * 18) +
+          "px;border-radius:8px;transition:background-color 150ms ease",
+        twist: isFolder ? () => this.setState({ expanded: { ...s.expanded, [n.id]: !open } }) : () => {},
+        twistyStyle: "width:16px;height:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#B5ADA5;transform:rotate(" +
+          (open ? "0deg" : "-90deg") + ");transition:transform 180ms ease,color 150ms ease;" + (isFolder ? "opacity:1;cursor:pointer" : "opacity:0;pointer-events:none"),
+        boxStyle: box(st) + (ign ? ";opacity:.4;pointer-events:none" : ""),
+        toggle: () => (isFolder ? setAll(kids, st !== "all") : setAll([n], !this.included(n.id))),
+        checkStyle: "display:flex;color:#FFFFFF;" + (st === "all" ? "opacity:1" : "opacity:0"),
+        dashStyle: "position:absolute;width:9px;height:1.5px;border-radius:1px;background:#FFFFFF;" + (st === "some" ? "opacity:1" : "opacity:0")
+      };
+    });
+
+    return {
+      stageStyle: "position:relative;display:flex;align-items:center;justify-content:center;width:100%;min-height:100vh;padding:40px 20px;box-sizing:border-box;transition:background-color 200ms ease;background:" +
+        (s.open && (this.props.scrim ?? true) ? "rgba(35,24,15,.26)" : "#F3F2F0"),
+      modalStyle: "position:relative;box-sizing:border-box;width:640px;max-width:100%;max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:#FFFFFF;border-radius:18px;box-shadow:0 30px 90px rgba(35,24,15,.28),0 2px 6px rgba(35,24,15,.10);overflow:hidden;animation:odModalIn 260ms cubic-bezier(.4,0,.15,1)",
+
+      isOpen: s.open, closed: !s.open,
+      open: () => this.setState({ open: true, step: "pick", name: "", path: "", off: {}, from: null }),
+      close: () => { window.location.href = "Artifact Studio Workspace.dc.html"; },
+      launchBtn: "display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 20px;border:0;border-radius:10px;background:#1E1915;color:#FBFAF9;font:500 15px/1 'DM Sans',sans-serif;cursor:pointer;box-shadow:0 1px 2px rgba(35,24,15,.10);transition:opacity 150ms ease",
+      closeBtn: "position:absolute;top:18px;right:18px;z-index:2;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      isPick: s.step === "pick", isExisting: s.step === "existing", isScratch: s.step === "scratch",
+      isInclude: s.step === "include", isDone: s.step === "done",
+
+      optionRow: "display:flex;align-items:center;gap:16px;width:100%;box-sizing:border-box;padding:16px;border:1px solid #EDEBE8;border-radius:12px;background:#FAF9F8;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+      optionIcon: "width:44px;height:44px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #E4E1DC;border-radius:11px;background:#FFFFFF;color:#3F3731",
+      backBtn: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      ghostBtn: "display:inline-flex;align-items:center;height:36px;padding:0 14px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF;color:#3F3731;font:500 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      primaryBtn: "display:inline-flex;align-items:center;height:40px;padding:0 18px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:opacity 150ms ease",
+      primaryLink: "display:inline-flex;align-items:center;height:40px;padding:0 18px;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;text-decoration:none;transition:opacity 150ms ease",
+      footerStyle: "flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 30px;border-top:1px solid #EDEBE8;background:#FFFFFF",
+
+      goExisting: () => this.setState({ step: "existing" }),
+      goScratch: () => this.setState({ step: "scratch" }),
+      goBack: () => this.setState({ step: s.step === "include" ? "existing" : "pick" }),
+      reset: () => this.setState({ step: "pick", name: "", path: "", off: {}, from: null }),
+      pickFolder: () => this.setState({ step: "include", path: "/Users/hugomarin/Documents/Tutoria" }),
+      pickerLabel: s.path || "Select a folder…",
+      name: s.name,
+      onName: (e) => this.setState({ name: e.target.value }),
+      newPath: s.parent + "/" + (s.name.trim() || "nuevo-workspace"),
+      changeParent: () => this.setState({ parent: s.parent === "~/Documents" ? "~/Documents/Odessay" : "~/Documents" }),
+
+      path: s.path || "/Users/hugomarin/Documents/Tutoria",
+      foundLine: FILES.length + " markdown encontrados. Destildá lo que no quieras seguir, o usá “Solo esto” para quedarte con una carpeta.",
+      selectedLine: selected === 0 ? "Nada seleccionado todavía" : "Siguiendo " + selected + " de " + live.length,
+      toggleAllLabel: allOn ? "Ninguno" : "Todos",
+      toggleAll: () => (allOn
+        ? this.setState(onlyMode ? { on: {} } : { off: live.reduce((a, f) => ((a[f.id] = true), a), {}) })
+        : this.setState(onlyMode ? { on: live.reduce((a, f) => ((a[f.id] = true), a), {}) } : { off: {} })),
+      hasIgnored: ignoredCount > 0,
+      ignoredLine: ignoredCount + " ignorados",
+      clearIgnored: () => this.setState({ ignored: {} }),
+      query: s.query,
+      hasQuery: !!s.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      clearQuery: () => this.setState({ query: "" }),
+      noResults: visible.length === 0,
+      nodes,
+
+      confirm: () => {
+        if (s.step === "scratch" && !s.name.trim()) return;
+        if (s.step === "include" && selected === 0) return;
+        this.setState({ step: "done", from: s.step });
+      },
+      primaryBtnState: s.step === "scratch" && !s.name.trim()
+        ? "display:inline-flex;align-items:center;height:40px;padding:0 18px;border:0;border-radius:9px;background:#E4E1DC;color:#B5ADA5;font:500 14px/1 'DM Sans',sans-serif;cursor:not-allowed"
+        : "display:inline-flex;align-items:center;height:40px;padding:0 18px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease",
+      addLabel: selected === 0 ? "Add workspace" : "Add workspace · " + selected,
+      addBtnStyle: (selected === 0
+        ? "display:inline-flex;align-items:center;height:40px;padding:0 18px;border:0;border-radius:9px;background:#E4E1DC;color:#B5ADA5;font:500 14px/1 'DM Sans',sans-serif;cursor:not-allowed"
+        : "display:inline-flex;align-items:center;height:40px;padding:0 18px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease"),
+      doneTitle: s.from === "scratch" ? s.name.trim() : (s.path || "/Users/hugomarin/Documents/Tutoria").split("/").pop(),
+      doneLine: s.from === "scratch" ? "Carpeta creada en " + s.parent + ". Empieza vacía." : selected + " archivos en seguimiento."
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=DM+Sans:opsz,wght@9..40,400..600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+</style>
+</helmet>
+
+<div style="max-width:1080px;margin:0 auto;padding:56px 40px 80px">
+
+  <p style="margin:0 0 10px;font:500 12px/1 'DM Sans',sans-serif;color:#96532C;letter-spacing:.08em;text-transform:uppercase">Marca · dirección elegida</p>
+  <h1 style="margin:0 0 10px;font:500 34px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.025em">Abanico lateral</h1>
+  <p style="margin:0 0 40px;max-width:66ch;font:400 14px/1.65 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">El pivote vive en la esquina, así que ningún corte cae sobre un eje: todo es diagonal y el triángulo se lee como papel abierto. Ahora las divisiones son <strong style="font-weight:600;color:#1E1915">exactamente iguales</strong> —los tres planos tienen la misma área— y la rampa salta de a dos escalones para que el contraste sobreviva al tamaño chico.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:40px">
+    <sc-for list="{{variants}}" as="v" hint-placeholder-count="8">
+      <div style="{{v.cardStyle}}">
+        <div style="display:flex;align-items:center;justify-content:center;height:120px">
+          <svg width="98" height="98" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 0;border-top:1px solid #F0EEEB;border-bottom:1px solid #F0EEEB">
+          <svg width="28" height="28" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+          <svg width="16" height="16" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+        </div>
+        <p style="margin:12px 0 3px;font:500 12px/1.2 'DM Sans',sans-serif;color:#1E1915">{{v.name}}</p>
+        <p style="margin:0;font:400 11px/1.45 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">{{v.note}}</p>
+      </div>
+    </sc-for>
+  </div>
+
+  <p style="{{eyebrow}}">En contexto</p>
+  <div style="display:grid;grid-template-columns:250px 1fr;gap:16px;margin-bottom:18px">
+
+    <div style="padding:14px;border:1px solid #EDEBE8;border-radius:14px;background:#F3F2F0">
+      <div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 10px;border-radius:9px;background:#E7E5E1">
+        <svg width="22" height="22" viewBox="0 0 64 64" style="display:block;flex-shrink:0">
+          <sc-for list="{{heroLayers}}" as="l" hint-placeholder-count="3">
+            <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+          </sc-for>
+        </svg>
+        <span style="font:500 15px/1 Geist,'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.01em">Artifact Studio</span>
+      </div>
+      <p style="margin:12px 2px 0;font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Rail, 22 px</p>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:26px;padding:22px 26px;border:1px solid #EDEBE8;border-radius:14px;background:#FFFFFF">
+      <span style="{{appIcon}}">
+        <svg width="46" height="46" viewBox="0 0 64 64" style="display:block">
+          <sc-for list="{{darkLayers}}" as="l" hint-placeholder-count="3">
+            <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+          </sc-for>
+        </svg>
+      </span>
+      <span style="{{appIconLight}}">
+        <svg width="46" height="46" viewBox="0 0 64 64" style="display:block">
+          <sc-for list="{{heroLayers}}" as="l" hint-placeholder-count="3">
+            <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+          </sc-for>
+        </svg>
+      </span>
+      <span style="display:flex;align-items:center;gap:9px;flex-shrink:0;height:30px;padding:0 12px 0 8px;border:1px solid #E4E1DC;border-radius:8px;background:#FAF9F8">
+        <svg width="15" height="15" viewBox="0 0 64 64" style="display:block;flex-shrink:0">
+          <sc-for list="{{heroLayers}}" as="l" hint-placeholder-count="3">
+            <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+          </sc-for>
+        </svg>
+        <span style="font:400 12px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">Artifact Studio</span>
+      </span>
+      <span style="flex:1"></span>
+      <span style="max-width:24ch;font:400 11px/1.5 'DM Sans',sans-serif;color:#B5ADA5">Icono de app en las dos polaridades, y pestaña del navegador a 15 px.</span>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:26px;flex-wrap:wrap;padding:26px 30px;border-radius:16px;background:#1E1915">
+    <svg width="42" height="42" viewBox="0 0 64 64" style="display:block;flex-shrink:0">
+      <sc-for list="{{darkLayers}}" as="l" hint-placeholder-count="3">
+        <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+      </sc-for>
+    </svg>
+    <span style="font:500 26px/1 Geist,'DM Sans',sans-serif;color:#FBFAF9;letter-spacing:-.02em">Artifact Studio</span>
+    <span style="flex:1"></span>
+    <span style="max-width:34ch;font:400 12px/1.55 'DM Sans',sans-serif;color:rgba(251,250,249,.55)">Sobre oscuro la rampa se invierte entera: el plano que pesaba más pasa a pesar menos, y la lectura de apertura se conserva.</span>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1080,&quot;height&quot;:900}}">
+const A = [32, 14], L = [10, 50], R = [54, 50];
+const P = (...p) => "M" + p.map((q) => q[0] + " " + q[1]).join(" L") + " Z";
+const cen = (p) => [p.reduce((a, q) => a + q[0], 0) / p.length, p.reduce((a, q) => a + q[1], 0) / p.length];
+const shrink = (p, f) => { const c = cen(p); return p.map((q) => [c[0] + (q[0] - c[0]) * f, c[1] + (q[1] - c[1]) * f]); };
+const lerp = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+
+// abanico con pivote en una esquina; los cortes dividen el lado opuesto en n partes iguales
+function lateral(n, mirror) {
+  const pivot = mirror ? R : L, far = mirror ? L : R, out = [];
+  for (let i = 0; i < n; i++) out.push([pivot, lerp(A, far, i / n), lerp(A, far, (i + 1) / n)]);
+  return out;
+}
+
+class Component extends DCLogic {
+  ramp(dark) { return dark ? ["#FBFAF9", "#CFC9C1", "#8E837B", "#6B5F57"] : ["#1E1915", "#3F3731", "#6B5F57", "#B5ADA5"]; }
+
+  blades(tones, o) {
+    o = o || {};
+    return lateral(tones.length, o.mirror).map((b, i) => {
+      const pts = o.f ? shrink(b, o.f) : b;
+      return { d: P(...pts), fill: tones[i], stroke: o.r ? tones[i] : "none", w: o.r || 0 };
+    });
+  }
+
+  renderVals() {
+    const t = this.ramp(false), d = this.ramp(true);
+    const mk = (name, note, layers, pick) => ({
+      name, note,
+      layers: layers.map((l) => ({ d: l.d, fill: l.fill || "none", stroke: l.stroke || "none", w: l.w || 0 })),
+      cardStyle: "padding:12px 14px 16px;border:1px solid " + (pick ? "#1E1915" : "#EDEBE8") + ";border-radius:14px;background:#FFFFFF" +
+        (pick ? ";box-shadow:0 2px 6px rgba(35,24,15,.06),0 16px 34px rgba(35,24,15,.07)" : "")
+    });
+
+    const hero = this.blades([t[0], t[2], t[3]], { f: 0.95, r: 3.5 });
+
+    return {
+      variants: [
+        mk("01 · Tres, plano", "Divisiones iguales y salto de dos escalones. La base del sistema.", this.blades([t[0], t[2], t[3]])),
+        mk("02 · Radio suave", "Mismos planos, esquinas blandas. Menos filo, más objeto.", hero, true),
+        mk("03 · Hojas", "Separadas y redondeadas. Se abre de verdad, pero pierde masa.", this.blades([t[0], t[2], t[3]], { f: 0.85, r: 4.5 })),
+        mk("04 · Dos", "Un solo corte. La más legible de todas a 16 px.", this.blades([t[0], t[3]], { f: 0.95, r: 3.5 })),
+        mk("05 · Cuatro", "Rampa completa en cuatro pasos. Rica de cerca, apretada de lejos.", this.blades([t[0], t[1], t[2], t[3]], { f: 0.96, r: 3 })),
+        mk("06 · Invertido", "De claro a oscuro. La luz entra por arriba en vez de por abajo.", this.blades([t[3], t[2], t[0]], { f: 0.95, r: 3.5 })),
+        mk("07 · Espejo", "Pivote en la esquina derecha. Se abre hacia el otro lado.", this.blades([t[0], t[2], t[3]], { f: 0.95, r: 3.5, mirror: true })),
+        mk("08 · Alternado", "Extremos en tinta, centro claro. Más gráfico, menos apertura.", this.blades([t[0], t[3], t[1]], { f: 0.95, r: 3.5 }))
+      ],
+      heroLayers: hero,
+      darkLayers: this.blades([d[0], d[2], d[3]], { f: 0.95, r: 3.5 }),
+      appIcon: "width:74px;height:74px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:18px;background:#1E1915",
+      appIconLight: "width:74px;height:74px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:18px;background:#F3F2F0;border:1px solid #E4E1DC",
+      eyebrow: "margin:0 0 14px;font:500 12px/1 'DM Sans',sans-serif;color:#96532C;letter-spacing:.08em;text-transform:uppercase"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

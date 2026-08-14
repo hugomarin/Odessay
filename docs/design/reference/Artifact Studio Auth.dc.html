@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+@keyframes odFadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes odMarkIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+@keyframes odCrawl{0%{transform:translateX(-100%)}100%{transform:translateX(240%)}}
+</style>
+</helmet>
+
+<div style="{{stageStyle}}">
+
+  <sc-if value="{{isSplash}}" hint-placeholder-val="{{true}}">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:26px;animation:odMarkIn 420ms cubic-bezier(.4,0,.15,1)">
+      <span style="width:64px;height:64px;display:flex;align-items:center;justify-content:center;border-radius:18px;background:#1E1915;box-shadow:0 12px 34px rgba(35,24,15,.22)">
+        <svg width="34" height="34" viewBox="0 0 64 64" style="display:block"><path d="M10.86 49 L31.76 14.8 L38.72 26.2 Z" fill="#6B5F57" stroke="#6B5F57" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path><path d="M11.1 49.4 L38.97 26.6 L45.93 38 Z" fill="#8E837B" stroke="#8E837B" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path><path d="M11.34 49.8 L46.18 38.4 L53.14 49.8 Z" fill="#FBFAF9" stroke="#FBFAF9" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path></svg>
+      </span>
+      <div style="text-align:center">
+        <p style="margin:0;font:500 30px/1.1 Geist,'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Artifact Studio</p>
+      </div>
+      <div style="width:140px;height:2px;border-radius:2px;background:#E4E1DC;overflow:hidden">
+        <span style="display:block;width:40%;height:100%;border-radius:2px;background:#8E837B;animation:odCrawl 1200ms cubic-bezier(.4,0,.2,1) infinite"></span>
+      </div>
+      <p style="margin:0;font:400 12px/1 'Roboto Mono',monospace;color:#CFC9C1">{{splashLine}}</p>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isAuth}}" hint-placeholder-val="{{false}}">
+    <div style="{{cardStyle}}">
+      <span style="width:44px;height:44px;margin-bottom:22px;display:flex;align-items:center;justify-content:center;border-radius:13px;background:#1E1915">
+        <svg width="24" height="24" viewBox="0 0 64 64" style="display:block"><path d="M10.86 49 L31.76 14.8 L38.72 26.2 Z" fill="#6B5F57" stroke="#6B5F57" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path><path d="M11.1 49.4 L38.97 26.6 L45.93 38 Z" fill="#8E837B" stroke="#8E837B" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path><path d="M11.34 49.8 L46.18 38.4 L53.14 49.8 Z" fill="#FBFAF9" stroke="#FBFAF9" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"></path></svg>
+      </span>
+      <h1 style="margin:0 0 8px;font:500 30px/1.15 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">{{title}}</h1>
+      <p style="margin:0 0 28px;max-width:42ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{subtitle}}</p>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-if value="{{isSignUp}}" hint-placeholder-val="{{false}}">
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="{{labelStyle}}">Nombre</span>
+            <input value="{{name}}" onChange="{{onName}}" placeholder="Hugo Marin" style="{{inputStyle}}" style-focus="border-color:#B5ADA5" />
+          </label>
+        </sc-if>
+        <label style="display:flex;flex-direction:column;gap:7px">
+          <span style="{{labelStyle}}">Email</span>
+          <input value="{{email}}" onChange="{{onEmail}}" placeholder="vos@dominio.com" style="{{inputStyle}}" style-focus="border-color:#B5ADA5" />
+        </label>
+        <label style="display:flex;flex-direction:column;gap:7px">
+          <span style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+            <span style="{{labelStyle}}">Contraseña</span>
+            <sc-if value="{{isSignIn}}" hint-placeholder-val="{{true}}">
+              <a href="#" style="font:400 12px/1 'DM Sans',sans-serif">La olvidé</a>
+            </sc-if>
+          </span>
+          <span style="position:relative;display:block">
+            <input value="{{pass}}" onChange="{{onPass}}" type="{{passType}}" placeholder="••••••••" style="{{passInputStyle}}" style-focus="border-color:#B5ADA5" />
+            <button onClick="{{toggleReveal}}" style="{{revealStyle}}" style-hover="background:#F2F1EF;color:#1E1915" title="Ver contraseña">
+              <lucide-icon name="{{revealIcon}}" size="16"></lucide-icon>
+            </button>
+          </span>
+          <sc-if value="{{isSignUp}}" hint-placeholder-val="{{false}}">
+            <span style="font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">{{passHint}}</span>
+          </sc-if>
+        </label>
+
+        <button onClick="{{submit}}" style="{{primaryStyle}}" style-hover="opacity:.9">{{cta}}</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin:22px 0">
+        <span style="flex:1;height:1px;background:#EDEBE8"></span>
+        <span style="font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5">o</span>
+        <span style="flex:1;height:1px;background:#EDEBE8"></span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button style="{{ghostStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+          <lucide-icon name="mail" size="16"></lucide-icon>Mandame un link de acceso
+        </button>
+        <a href="Artifact Studio Empty States.dc.html" style="{{localStyle}}" style-hover="background:#F2F1EF;border-color:#D6D1CA">
+          <span style="width:36px;height:36px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:#FFFFFF;border:1px solid #E4E1DC;color:#3F3731"><lucide-icon name="hard-drive" size="17"></lucide-icon></span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+            <span style="font:500 14px/1.3 'DM Sans',sans-serif;color:#1E1915">Seguir sin cuenta</span>
+            <span style="font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B">Todo queda en tu Mac. Podés crear la cuenta después sin perder nada.</span>
+          </span>
+        </a>
+      </div>
+
+      <p style="margin:26px 0 0;font:400 13px/1.6 'DM Sans',sans-serif;color:#8E837B">
+        {{switchPrompt}} <button onClick="{{switchMode}}" style="{{switchBtn}}" style-hover="color:#7C4423">{{switchLabel}}</button>
+      </p>
+      <sc-if value="{{isSignUp}}" hint-placeholder-val="{{false}}">
+        <p style="margin:14px 0 0;max-width:44ch;font:400 12px/1.6 'DM Sans',sans-serif;color:#B5ADA5;text-wrap:pretty">Al crear la cuenta aceptás los <a href="#">términos</a> y la <a href="#">política de privacidad</a>. La cuenta sincroniza metadatos y respaldos; tus archivos siguen siendo tuyos.</p>
+      </sc-if>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Splash&quot;,&quot;Sign in&quot;,&quot;Sign up&quot;],&quot;default&quot;:&quot;Sign in&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;autoAdvance&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Vista&quot;}}">
+class Component extends DCLogic {
+  state = { mode: "signin", email: "", pass: "", name: "", reveal: false, splash: true };
+
+  componentDidMount() { this._sync(); }
+  componentDidUpdate(prev) { if (prev.view !== this.props.view) this._sync(); }
+  _sync() {
+    const v = this.props.view ?? "Splash";
+    const next = { splash: v === "Splash", mode: v === "Sign up" ? "signup" : "signin" };
+    if (next.splash !== this.state.splash || next.mode !== this.state.mode) this.setState(next);
+    if (next.splash && (this.props.autoAdvance ?? false)) {
+      clearTimeout(this._t);
+      this._t = setTimeout(() => this.setState({ splash: false }), 1800);
+    }
+  }
+  componentWillUnmount() { clearTimeout(this._t); }
+
+  renderVals() {
+    const s = this.state, up = s.mode === "signup";
+    const ready = up ? s.name.trim() && s.email.trim() && s.pass.length >= 8 : s.email.trim() && s.pass.length > 0;
+    const input = "box-sizing:border-box;width:100%;height:46px;padding:0 14px;border:1px solid #E4E1DC;border-radius:10px;background:#FFFFFF;font:400 15px/1 'DM Sans',sans-serif;color:#1E1915;outline:none;transition:border-color 150ms ease";
+
+    return {
+      stageStyle: "display:flex;align-items:center;justify-content:center;width:100%;min-height:100vh;padding:40px 20px;box-sizing:border-box;background:#F3F2F0",
+      isSplash: s.splash, isAuth: !s.splash, isSignIn: !up, isSignUp: up,
+      splashLine: (this.props.autoAdvance ?? false) ? "abriendo tu escritorio…" : "v0.4 · local-first",
+
+      cardStyle: "box-sizing:border-box;width:440px;max-width:100%;display:flex;flex-direction:column;padding:36px;background:#FFFFFF;border-radius:18px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 24px 60px rgba(35,24,15,.10);animation:odFadeUp 280ms cubic-bezier(.4,0,.15,1)",
+      title: up ? "Creá tu cuenta" : "Volvé a tu escritorio",
+      subtitle: up
+        ? "La cuenta guarda tus preferencias y te deja sincronizar entre máquinas. Los artifacts viven en tus carpetas."
+        : "Entrá para recuperar tus workspaces, estados y tipos en esta máquina.",
+
+      labelStyle: "font:500 13px/1 'DM Sans',sans-serif;color:#3F3731",
+      inputStyle: input,
+      passInputStyle: input + ";padding-right:46px",
+      name: s.name, onName: (e) => this.setState({ name: e.target.value }),
+      email: s.email, onEmail: (e) => this.setState({ email: e.target.value }),
+      pass: s.pass, onPass: (e) => this.setState({ pass: e.target.value }),
+      passType: s.reveal ? "text" : "password",
+      revealIcon: s.reveal ? "eye-off" : "eye",
+      toggleReveal: () => this.setState({ reveal: !s.reveal }),
+      revealStyle: "position:absolute;top:50%;right:6px;transform:translateY(-50%);width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#B5ADA5;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      passHint: s.pass.length === 0 ? "Mínimo 8 caracteres." : s.pass.length < 8 ? "Faltan " + (8 - s.pass.length) + " caracteres." : "Lista.",
+
+      cta: up ? "Crear cuenta" : "Entrar",
+      submit: () => { if (ready) window.location.href = "Artifact Studio Desk.dc.html"; },
+      primaryStyle: "display:inline-flex;align-items:center;justify-content:center;height:46px;margin-top:6px;border:0;border-radius:10px;font:500 15px/1 'DM Sans',sans-serif;transition:opacity 150ms ease;" +
+        (ready ? "background:#1E1915;color:#FBFAF9;cursor:pointer" : "background:#E4E1DC;color:#B5ADA5;cursor:not-allowed"),
+      ghostStyle: "display:inline-flex;align-items:center;justify-content:center;gap:9px;height:44px;border:1px solid #E4E1DC;border-radius:10px;background:#FFFFFF;color:#3F3731;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      localStyle: "display:flex;align-items:center;gap:14px;padding:13px 14px;border:1px solid #EDEBE8;border-radius:12px;background:#FAF9F8;text-decoration:none;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+
+      switchPrompt: up ? "¿Ya tenés cuenta?" : "¿Primera vez acá?",
+      switchLabel: up ? "Entrar" : "Crear una cuenta",
+      switchMode: () => this.setState({ mode: up ? "signin" : "signup", pass: "" }),
+      switchBtn: "padding:0;border:0;background:transparent;color:#96532C;font:500 13px/1.6 'DM Sans',sans-serif;text-decoration:underline;text-underline-offset:2px;cursor:pointer;transition:color 150ms ease"
+    };
+  }
+}
+
+</script>
+</body>
+</html>

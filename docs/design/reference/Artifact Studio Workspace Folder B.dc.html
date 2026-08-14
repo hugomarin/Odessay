@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300..700;1,9..40,400&family=Lora:ital,wght@0,400;0,500;0,600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+.od-scroll{scrollbar-width:thin;scrollbar-color:#E3E0DB transparent}
+.od-scroll::-webkit-scrollbar{width:10px;height:10px}
+.od-scroll::-webkit-scrollbar-thumb{background:#E3E0DB;border-radius:10px;border:3px solid transparent;background-clip:content-box}
+.od-scroll::-webkit-scrollbar-track{background:transparent}
+@keyframes odMenuIn{from{opacity:0;transform:translateY(6px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes odBarIn{from{opacity:0;transform:translateX(-50%) translateY(14px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</helmet>
+
+<div style="{{shellStyle}}">
+
+  <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px">
+    <div style="box-sizing:border-box;width:76px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E;display:block"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#28C840;display:block"></span>
+    </div>
+    <button onClick="{{toggleSidebar}}" title="Toggle sidebar" style="{{iconBtn}}" style-hover="background:#E9E7E3;color:#1E1915">
+      <lucide-icon name="panel-left" size="18"></lucide-icon>
+    </button>
+    <div style="flex:1;min-width:0"></div>
+  </div>
+
+  <div style="flex:1;min-height:0;display:flex;gap:10px;padding:0 10px 10px 0">
+
+    <div style="{{railColStyle}}">
+    <nav style="{{sidebarStyle}}">
+      <div style="display:flex;flex-direction:column;gap:2px;padding:2px 0 0">
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="New Artifact">
+          <span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">New Artifact</span>
+        </button>
+        <button style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Search">
+          <span style="{{railIconWrap}}"><lucide-icon name="search" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Search</span>
+        </button>
+      </div>
+
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:26px 0 8px;display:flex;flex-direction:column;gap:2px">
+        <a href="Artifact Studio Studio.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Studio">
+          <span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Studio</span>
+        </a>
+        <a href="Artifact Studio Desk.dc.html" style="{{railBtn}}" style-hover="background:#E9E7E3;color:#1E1915" title="Desk">
+          <span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Desk</span>
+        </a>
+        <a href="Artifact Studio Workspace.dc.html" style="{{activeNavStyle}}" style-hover="background:#E4E1DC" title="Workspace">
+          <span style="{{railIconWrap}}"><lucide-icon name="folder-tree" size="19"></lucide-icon></span>
+          <span style="{{navLabelStyle}}">Workspace</span>
+        </a>
+
+        <div style="{{workspaceListStyle}}">
+          <sc-for list="{{railWorkspaces}}" as="ws" hint-placeholder-count="5">
+            <button style="{{ws.style}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{ws.iconStyle}}"><lucide-icon name="folder" size="15"></lucide-icon></span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ws.name}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      </nav>
+
+    <div style="{{accountRowStyle}}">
+        <span style="width:36px;height:36px;margin:0 2px;flex-shrink:0;border-radius:50%;background:#1E1915;color:#FBFAF9;display:flex;align-items:center;justify-content:center;font:600 12px/1 'DM Sans',sans-serif">HM</span>
+        <span style="{{userMetaStyle}}">
+          <span style="display:block;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915;white-space:nowrap">Hugo Marin</span>
+          <span style="display:block;font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap">@hugomarin</span>
+        </span>
+        <a href="Artifact Studio Settings.dc.html" style="{{userGearStyle}}" title="Settings"><lucide-icon name="settings" size="15"></lucide-icon></a>
+        <span style="{{userGearStyle}}"><lucide-icon name="chevron-right" size="15"></lucide-icon></span>
+      </div>
+    </div>
+
+    <!-- PANEL DE CARPETAS — capa 0, como el rail -->
+    <div style="{{treePanelStyle}}">
+      <a href="Artifact Studio Workspace.dc.html" style="{{treeBackStyle}}" style-hover="background:#E9E7E3;color:#1E1915">
+        <lucide-icon name="arrow-left" size="14"></lucide-icon>Todos los workspaces
+      </a>
+      <div style="display:flex;align-items:center;gap:8px;height:36px;flex-shrink:0;padding:0 8px">
+        <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="folder-tree" size="16"></lucide-icon></span>
+        <span style="flex:1;min-width:0;font:500 13px/1 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ode408</span>
+        <button style="{{treeActionStyle}}" style-hover="background:#E9E7E3;color:#1E1915" title="Nueva carpeta"><lucide-icon name="folder-plus" size="15"></lucide-icon></button>
+      </div>
+      <div class="od-scroll" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:1px;padding:4px 0 8px">
+        <sc-for list="{{tree}}" as="n" hint-placeholder-count="6">
+          <div style="{{n.style}}" style-hover="background:#E9E7E3">
+            <button onClick="{{n.twist}}" style="{{n.twistyStyle}}" style-hover="color:#1E1915" title="Expandir">
+              <lucide-icon name="chevron-down" size="13"></lucide-icon>
+            </button>
+            <button onClick="{{n.select}}" style="{{n.labelStyle}}">
+              <span style="display:flex;flex-shrink:0;color:{{n.iconColor}}"><lucide-icon name="{{n.icon}}" size="15"></lucide-icon></span>
+              <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left">{{n.label}}</span>
+              <span style="{{n.countStyle}}">{{n.count}}</span>
+            </button>
+          </div>
+        </sc-for>
+      </div>
+      <div style="flex-shrink:0;padding:8px;border-top:1px solid #E4E1DC">
+        <p style="margin:0;font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">{{treeFooter}}</p>
+      </div>
+    </div>
+
+    <div style="{{centerColStyle}}">
+      <div style="flex-shrink:0;padding:12px 16px 14px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:9px">
+          <a href="Artifact Studio Workspace.dc.html" style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B;text-decoration:none">Workspace</a>
+          <sc-for list="{{crumbs}}" as="c" hint-placeholder-count="2">
+            <span style="display:flex;align-items:center;gap:6px">
+              <span style="display:flex;color:#CFC9C1"><lucide-icon name="chevron-right" size="13"></lucide-icon></span>
+              <button onClick="{{c.select}}" style="{{c.style}}">{{c.label}}</button>
+            </span>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:20px">
+          <div style="flex:1;min-width:0;display:flex;align-items:baseline;gap:16px">
+            <h1 style="margin:0;font:500 32px/1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">{{folderTitle}}</h1>
+            <p style="margin:0;font:400 12px/1.5 'Roboto Mono',monospace;color:#B5ADA5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{folderPath}}</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;flex-shrink:0">
+            <button style="{{primaryBtn}}" style-hover="opacity:.9">
+              <lucide-icon name="plus" size="15"></lucide-icon>New Artifact
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div data-od-menu style="flex-shrink:0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 16px 12px">
+        <span style="flex:1;min-width:160px;display:flex;align-items:center;gap:9px;height:38px;padding:0 12px;border:1px solid #E4E1DC;border-radius:9px;background:#FFFFFF">
+          <span style="display:flex;color:#B5ADA5;flex-shrink:0"><lucide-icon name="search" size="15"></lucide-icon></span>
+          <input value="{{query}}" onChange="{{onQuery}}" placeholder="Filter by name…" style="flex:1;min-width:0;border:0;outline:none;background:transparent;font:400 14px/1 'DM Sans',sans-serif;color:#1E1915" />
+        </span>
+        <button onClick="{{toggleDeep}}" style="{{deepBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+          <span style="{{deepBoxStyle}}"><span style="{{deepCheckStyle}}"><lucide-icon name="check" size="11" stroke="3"></lucide-icon></span></span>
+          Incluir subcarpetas
+        </button>
+        <div style="position:relative;flex-shrink:0">
+          <button onClick="{{toggleSortMenu}}" style="{{sortBtnStyle}}" style-hover="background:#F2F1EF;color:#1E1915">
+            <lucide-icon name="arrow-up-down" size="15"></lucide-icon>Sort: {{sortLabel}}<lucide-icon name="chevron-down" size="14"></lucide-icon>
+          </button>
+          <sc-if value="{{sortMenuOpen}}" hint-placeholder-val="{{false}}">
+            <div style="{{menuStyle}}">
+              <sc-for list="{{sortOptions}}" as="o" hint-placeholder-count="2">
+                <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="position:relative;flex:1;min-width:0;display:flex;flex-direction:column;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);overflow:hidden">
+
+  
+
+        <div class="od-scroll" data-od-menu style="flex:1;min-height:0;overflow-y:auto">
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+            <div style="{{r.rowStyle}}" style-hover="background:#FCFBFA">
+              <button onClick="{{r.toggle}}" style="{{r.checkStyle}}" title="Select">
+                <span style="{{r.checkIconStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+              </button>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+                  <h3 style="margin:0;font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.title}}</h3>
+                  <span style="{{r.badgeStyle}}"><lucide-icon name="{{r.badgeIcon}}" size="12"></lucide-icon></span>
+                  <sc-if value="{{r.showFolder}}" hint-placeholder-val="{{false}}">
+                    <span style="{{r.folderChip}}"><lucide-icon name="folder" size="11"></lucide-icon>{{r.folderLabel}}</span>
+                  </sc-if>
+                  <button style="{{rowIconBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Editar"><lucide-icon name="pencil" size="14"></lucide-icon></button>
+                  <button style="{{rowIconBtn}}" style-hover="background:#F2F1EF;color:#1E1915" title="Preview"><lucide-icon name="eye" size="14"></lucide-icon></button>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:8px;min-width:0;max-width:88ch">
+                  <span style="flex-shrink:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5;white-space:nowrap">{{r.when}}</span>
+                  <span style="flex-shrink:0;width:3px;height:3px;border-radius:50%;background:#D6D1CA;transform:translateY(-3px)"></span>
+                  <p style="margin:0;flex:1;min-width:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#6B5F57;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.excerpt}}</p>
+                </div>
+              </div>
+              <div style="{{r.controlsStyle}}">
+                <div style="position:relative;width:160px">
+                  <button onClick="{{r.openStatus}}" style="{{r.statusTrigger}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                    <span style="{{r.statusDot}}"></span>
+                    <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.status}}</span>
+                    <lucide-icon name="chevron-down" size="14"></lucide-icon>
+                  </button>
+                  <sc-if value="{{r.statusOpen}}" hint-placeholder-val="{{false}}">
+                    <div style="{{menuStyle}}">
+                      <sc-for list="{{r.statusOptions}}" as="o" hint-placeholder-count="6">
+                        <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                          <span style="{{o.dotStyle}}"></span>{{o.label}}
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="position:relative;width:160px">
+                  <button onClick="{{r.openType}}" style="{{r.typeTrigger}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                    <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="{{r.typeIcon}}" size="14"></lucide-icon></span>
+                    <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.type}}</span>
+                    <lucide-icon name="chevron-down" size="14"></lucide-icon>
+                  </button>
+                  <sc-if value="{{r.typeOpen}}" hint-placeholder-val="{{false}}">
+                    <div style="{{menuStyle}}">
+                      <sc-for list="{{r.typeOptions}}" as="o" hint-placeholder-count="6">
+                        <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                          <span style="{{o.iconStyle}}"><lucide-icon name="{{o.icon}}" size="14"></lucide-icon></span>{{o.label}}
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="position:relative;width:170px">
+                  <button onClick="{{r.openFolder}}" style="{{r.folderTrigger}}" style-hover="background:#FCFBFA;border-color:#D6D1CA">
+                    <span style="display:flex;flex-shrink:0;color:#6B5F57"><lucide-icon name="folder" size="14"></lucide-icon></span>
+                    <span style="flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.folderLabel}}</span>
+                    <lucide-icon name="chevron-down" size="14"></lucide-icon>
+                  </button>
+                  <sc-if value="{{r.folderOpen}}" hint-placeholder-val="{{false}}">
+                    <div style="{{menuStyle}}">
+                      <sc-for list="{{r.folderOptions}}" as="o" hint-placeholder-count="5">
+                        <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <button style="{{rowMoreStyle}}" style-hover="background:#F2F1EF;color:#1E1915" title="Más">
+                  <lucide-icon name="ellipsis" size="17"></lucide-icon>
+                </button>
+              </div>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{isEmpty}}" hint-placeholder-val="{{false}}">
+            <div style="padding:80px 16px;text-align:center">
+              <p style="margin:0 0 6px;font:500 20px/1.3 Lora,Georgia,serif;color:#1E1915">Esta carpeta está vacía</p>
+              <p style="margin:0;font:400 14px/1.5 'DM Sans',sans-serif;color:#8E837B">Crea un artifact aquí o activa "Incluir subcarpetas".</p>
+            </div>
+          </sc-if>
+          <div style="height:40px"></div>
+        </div>
+
+        <sc-if value="{{hasSelection}}" hint-placeholder-val="{{false}}">
+          <div data-od-menu style="position:absolute;left:50%;bottom:26px;z-index:40;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 22px;border-radius:14px;background:#1E1915;box-shadow:0 26px 70px rgba(35,24,15,.30),0 2px 6px rgba(35,24,15,.20);animation:odBarIn 200ms cubic-bezier(.4,0,.15,1);white-space:nowrap">
+            <span style="font:500 14px/1 'DM Sans',sans-serif;color:#FBFAF9">{{selectionLabel}}</span>
+            <button onClick="{{clearSelection}}" style="{{selLinkBtn}}" style-hover="color:#FBFAF9">Deselect</button>
+            <span style="width:1px;height:26px;margin:0 4px;background:rgba(251,250,249,.14)"></span>
+            <div style="position:relative">
+              <button onClick="{{openSelFolder}}" style="{{selChipStyle}}" style-hover="background:rgba(251,250,249,.16)">
+                <lucide-icon name="folder-input" size="15"></lucide-icon>Mover a<lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{selFolderOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{selMenuStyle}}">
+                  <sc-for list="{{selFolderOptions}}" as="o" hint-placeholder-count="5">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">{{o.label}}</button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+            <button onClick="{{clearSelection}}" style="{{selDangerBtn}}" style-hover="background:rgba(150,83,44,.42)">
+              <lucide-icon name="trash-2" size="15"></lucide-icon>Delete
+            </button>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="{{statusBarStyle}}">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="display:flex;color:#8E837B"><lucide-icon name="cloud-upload" size="16"></lucide-icon></span>
+        <span style="font:400 13px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">{{syncSummary}}</span>
+      </div>
+      <div style="justify-self:center"></div>
+      <div style="justify-self:end;display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{countsLabel}}</span>
+      </div>
+    </div>
+    </div>
+
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;viewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;compact&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;\&quot;full\&quot; | \&quot;compact\&quot;&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const RAIL_MINI = 52, RAIL_FULL = 244;
+const TYPE_ICONS = { General: "file-text", Agent: "bot", Skill: "wrench", Prompt: "message-square", Template: "layout-template", Note: "sticky-note" };
+const STATUSES = ["New", "Exploring", "Draft", "In review", "Done", "Archived"];
+const WS = ["Tutoria", "ode408", "OS", "Skill", "Narratif"];
+const FOLDERS = ["", "agents", "skills", "skills/mcp", "prompts", "transcripts"];
+
+const ITEMS = [
+  { id: 1, folder: "", title: "Omega", type: "General", status: "Draft", sync: "synced", when: "5 ago", excerpt: "Omega" },
+  { id: 2, folder: "", title: "Beta", type: "General", status: "Draft", sync: "offline", when: "4 ago", excerpt: "Cambio offline 3 1 de /Documents/ode408/Beta.md" },
+  { id: 3, folder: "", title: "README", type: "Note", status: "Done", sync: "synced", when: "12 jul", excerpt: "Convenciones de nombres y estructura de este workspace" },
+  { id: 4, folder: "agents", title: "Agente de revisión", type: "Agent", status: "In review", sync: "synced", when: "18 jul", excerpt: "Revisa tono y consistencia contra la guía de Narratif" },
+  { id: 5, folder: "agents", title: "Agente de comparación", type: "Agent", status: "Exploring", sync: "synced", when: "9 jul", excerpt: "Arma la matriz ponderada a partir de dos respuestas" },
+  { id: 6, folder: "skills", title: "05-Implementing a client", type: "Skill", status: "In review", sync: "synced", when: "22 jul", excerpt: "Now that we have our MCP server working, the next step is wiring a client" },
+  { id: 7, folder: "skills", title: "04-Server basics", type: "Skill", status: "Done", sync: "synced", when: "20 jul", excerpt: "Transporte, handshake y el ciclo de vida mínimo de un server" },
+  { id: 8, folder: "skills/mcp", title: "transport-notes", type: "Note", status: "Draft", sync: "synced", when: "21 jul", excerpt: "stdio vs SSE: cuándo conviene cada uno y qué se rompe al cambiar" },
+  { id: 9, folder: "skills/mcp", title: "client-handshake", type: "Skill", status: "New", sync: "offline", when: "21 jul", excerpt: "Secuencia de initialize, capabilities y el primer tools/list" },
+  { id: 10, folder: "prompts", title: "Alpha", type: "Prompt", status: "Exploring", sync: "synced", when: "1 jul", excerpt: "Primer borrador del prompt maestro para el ejercicio de comparación" },
+  { id: 11, folder: "prompts", title: "Prompt maestro v3", type: "Prompt", status: "Draft", sync: "synced", when: "28 jun", excerpt: "Versión con guías explícitas y criterio de evaluación al final" },
+  { id: 12, folder: "transcripts", title: "transcript-llamada-2026-07-24", type: "Note", status: "New", sync: "synced", when: "24 jul", excerpt: "Transcripción de la llamada con el equipo: alcance, riesgos y siguientes pasos" }
+];
+
+class Component extends DCLogic {
+  state = {
+    sidebarMini: false, narrow: false, query: "", sort: "Recientes", sortMenu: false, menu: null,
+    folder: "", deep: false, expanded: { skills: true }, selected: {}, items: ITEMS
+  };
+
+  componentDidMount() {
+    this._onDown = (e) => {
+      const t = e.target;
+      if (t && t.closest && t.closest("[data-od-menu]")) return;
+      if (this.state.menu || this.state.sortMenu) this.setState({ menu: null, sortMenu: false });
+    };
+    document.addEventListener("mousedown", this._onDown, true);
+    this._onResize = () => {
+      const compact = (this.props.viewport ?? "full") === "compact";
+      const w = compact ? 1180 : window.innerWidth;
+      const narrow = w < 1240;
+      if (narrow === this.state.narrow) return;
+      this.setState(narrow ? { narrow: true, sidebarMini: true } : { narrow: false });
+    };
+    this._onResize();
+    window.addEventListener("resize", this._onResize);
+  }
+  componentDidUpdate(prev) { if (prev.viewport !== this.props.viewport) this._onResize(); }
+  componentWillUnmount() {
+    document.removeEventListener("mousedown", this._onDown, true);
+    window.removeEventListener("resize", this._onResize);
+  }
+
+  statusColor(s) {
+    return ({ New: "#8E837B", Exploring: "#5B5BD6", Draft: "#C07B2A", "In review": "#96532C", Done: "#2E7D4F", Archived: "#B5ADA5" })[s] || "#8E837B";
+  }
+  menuItem(sel) {
+    return "display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 10px;border:0;background:transparent;border-radius:6px;color:" +
+      (sel ? "#1E1915" : "#2F2A25") + ";font:" + (sel ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:background-color 140ms ease";
+  }
+  patch(id, key, value) {
+    this.setState({ menu: null, items: this.state.items.map((r) => (r.id === id ? { ...r, [key]: value } : r)) });
+  }
+  patchSelected(key, value) {
+    const sel = this.state.selected;
+    this.setState({ menu: null, items: this.state.items.map((r) => (sel[r.id] ? { ...r, [key]: value } : r)) });
+  }
+
+  renderVals() {
+    const s = this.state, mini = s.sidebarMini || s.narrow;
+    const railWidth = mini ? RAIL_MINI : RAIL_FULL;
+    const compact = (this.props.viewport ?? "full") === "compact";
+    const q = s.query.trim().toLowerCase();
+
+    const inScope = (r) => s.deep
+      ? (s.folder === "" || r.folder === s.folder || r.folder.indexOf(s.folder + "/") === 0)
+      : r.folder === s.folder;
+
+    let rows = s.items.filter((r) => inScope(r) && (!q || r.title.toLowerCase().includes(q) || r.excerpt.toLowerCase().includes(q)));
+    if (s.sort === "Nombre A–Z") rows = rows.slice().sort((a, b) => a.title.localeCompare(b.title));
+
+    const countIn = (f, deep) => s.items.filter((r) => deep
+      ? (f === "" || r.folder === f || r.folder.indexOf(f + "/") === 0)
+      : r.folder === f).length;
+
+    const railRow = (active) => "display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-width:40px;height:40px;min-height:40px;flex-shrink:0;padding:0;border:0;border-radius:9px;font:" +
+      (active ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (active ? "#1E1915" : "#3F3731") + ";background:" + (active ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-align:left;overflow:hidden;transition:background-color 180ms ease;text-decoration:none";
+    const toolBtn = (on) => "display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px;border:1px solid " + (on ? "#B5ADA5" : "#E4E1DC") +
+      ";border-radius:9px;background:" + (on ? "#F2F1EF" : "#FFFFFF") + ";color:#3F3731;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 150ms ease,border-color 150ms ease";
+    const trigger = (open) => "display:flex;align-items:center;gap:8px;width:100%;height:38px;padding:0 11px;border:1px solid " + (open ? "#B5ADA5" : "#E4E1DC") +
+      ";border-radius:8px;background:" + (open ? "#FCFBFA" : "#FFFFFF") + ";color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease";
+    const badge = (sync) => sync === "offline"
+      ? "width:22px;height:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#FAEBDC;color:#96532C"
+      : "width:22px;height:22px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:#E4F0E7;color:#2E7D4F";
+
+    // Árbol: raíz + carpetas de primer nivel, con hijas visibles si la madre está expandida.
+    const visible = FOLDERS.filter((f) => {
+      if (f === "") return true;
+      const parts = f.split("/");
+      return parts.length === 1 || !!s.expanded[parts.slice(0, -1).join("/")];
+    });
+    const hasKids = (f) => FOLDERS.some((o) => o !== f && o.indexOf(f + "/") === 0);
+
+    const tree = visible.map((f) => {
+      const on = s.folder === f;
+      const parts = f === "" ? [] : f.split("/");
+      const depth = parts.length;
+      const kids = f !== "" && hasKids(f);
+      const open = !!s.expanded[f];
+      return {
+        label: f === "" ? "Raíz del workspace" : parts[parts.length - 1],
+        count: String(countIn(f, false)),
+        icon: f === "" ? "house" : on || open ? "folder-open" : "folder",
+        iconColor: on ? "#1E1915" : "#8E837B",
+        select: () => this.setState({ folder: f, selected: {}, menu: null }),
+        twist: kids ? () => this.setState({ expanded: { ...s.expanded, [f]: !open } }) : () => {},
+        style: "display:flex;align-items:center;gap:6px;box-sizing:border-box;width:100%;height:34px;flex-shrink:0;padding:0 8px 0 " + (6 + depth * 14) + "px;border-radius:8px;background:" +
+          (on ? "#E7E5E1" : "transparent") + ";transition:background-color 160ms ease",
+        labelStyle: "display:flex;align-items:center;gap:8px;flex:1;min-width:0;height:100%;padding:0;border:0;background:transparent;font:" +
+          (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#3F3731") + ";cursor:pointer",
+        twistyStyle: "width:16px;height:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#B5ADA5;transition:transform 180ms ease,color 150ms ease;transform:rotate(" +
+          (open ? "0deg" : "-90deg") + ");" + (kids ? "opacity:1;cursor:pointer" : "opacity:0;pointer-events:none"),
+        countStyle: "flex-shrink:0;font:400 11px/1 'DM Sans',sans-serif;color:" + (on ? "#6B5F57" : "#B5ADA5")
+      };
+    });
+
+    const parts = s.folder === "" ? [] : s.folder.split("/");
+    const crumbs = [{ label: "ode408", path: "" }].concat(parts.map((p, i) => ({ label: p, path: parts.slice(0, i + 1).join("/") })))
+      .map((c, i, arr) => ({
+        label: c.label, select: () => this.setState({ folder: c.path, selected: {}, menu: null }),
+        style: "padding:0;border:0;background:transparent;cursor:pointer;font:" + (i === arr.length - 1 ? "500" : "400") +
+          " 12px/1 'DM Sans',sans-serif;color:" + (i === arr.length - 1 ? "#3F3731" : "#8E837B")
+      }));
+
+    const selCount = Object.values(s.selected).filter(Boolean).length;
+    const offline = s.items.filter((r) => r.sync === "offline").length;
+
+    return {
+      shellStyle: "position:relative;display:flex;flex-direction:column;background:#F3F2F0;overflow:hidden;" + (compact
+        ? "width:1180px;height:760px;max-width:100%;margin:0 auto;border-radius:12px;box-shadow:0 24px 60px rgba(35,24,15,.18)"
+        : "width:100%;height:100vh"),
+      railColStyle: "box-sizing:border-box;width:" + railWidth + "px;flex-shrink:0;display:flex;flex-direction:column;gap:6px;overflow:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1)",
+      sidebarStyle: "box-sizing:border-box;flex:1;min-height:0;display:flex;flex-direction:column;padding:0 6px;overflow:hidden",
+      accountRowStyle: "box-sizing:border-box;display:flex;align-items:center;gap:10px;height:46px;flex-shrink:0;border-radius:9px;overflow:hidden;cursor:pointer;padding-left:6px",
+      centerColStyle: "flex:1;min-width:0;display:flex;flex-direction:column;gap:6px",
+      treePanelStyle: "box-sizing:border-box;width:236px;flex-shrink:0;display:" + (s.narrow ? "none" : "flex") +
+        ";flex-direction:column;background:transparent;border-right:1px solid #E4E1DC;padding:0 10px 0 0",
+      treeBackStyle: "display:flex;align-items:center;gap:7px;box-sizing:border-box;height:32px;flex-shrink:0;margin-top:4px;padding:0 8px;border-radius:8px;background:transparent;color:#6B5F57;font:400 12px/1 'DM Sans',sans-serif;text-decoration:none;cursor:pointer;transition:background-color 150ms ease,color 150ms ease",
+      treeActionStyle: "width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      treeFooter: countIn("", true) + " artifacts · " + (FOLDERS.length - 1) + " carpetas",
+      tree,
+      iconBtn: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#6B5F57;cursor:pointer;transition:background-color 150ms ease",
+      toggleSidebar: () => this.setState((st) => ({ sidebarMini: !(st.sidebarMini || st.narrow), narrow: false })),
+      railBtn: railRow(false),
+      activeNavStyle: railRow(true),
+      railIconWrap: "box-sizing:border-box;width:40px;min-width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center",
+      navLabelStyle: "flex-shrink:0;overflow:hidden;white-space:nowrap;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      workspaceListStyle: "display:flex;flex-direction:column;gap:1px;padding:2px 0 0 50px;overflow:hidden;transition:opacity 200ms ease,max-height 300ms cubic-bezier(.4,0,.15,1);" +
+        (mini ? "max-height:0;opacity:0" : "max-height:240px;opacity:1"),
+      railWorkspaces: WS.map((name) => ({
+        name,
+        style: "display:flex;align-items:center;gap:8px;height:32px;padding:0 10px 0 0;border:0;background:" + (name === "ode408" ? "#E7E5E1" : "transparent") +
+          ";border-radius:8px;font:" + (name === "ode408" ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (name === "ode408" ? "#1E1915" : "#8E837B") +
+          ";cursor:pointer;text-align:left;transition:background-color 180ms ease,color 180ms ease",
+        iconStyle: "display:flex;flex-shrink:0;color:" + (name === "ode408" ? "#6B5F57" : "#B5ADA5") + (name === "ode408" ? "#8E837B" : "#CFC9C1")
+      })),
+      userMetaStyle: "flex:1;min-width:0;overflow:hidden;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      userGearStyle: "flex-shrink:0;display:flex;color:#8E837B;transition:opacity 200ms ease;" + (mini ? "opacity:0" : "opacity:1"),
+      statusBarStyle: "height:46px;flex-shrink:0;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;padding:0 14px",
+      syncSummary: !offline ? "Todo sincronizado" : offline === 1 ? "1 artifact sin sincronizar" : offline + " artifacts sin sincronizar",
+      countsLabel: countIn("", true) + " artifacts · " + (FOLDERS.length - 1) + " carpetas",
+
+      crumbs,
+      folderTitle: s.folder === "" ? "ode408" : parts[parts.length - 1],
+      folderPath: "~/Documents/ode408" + (s.folder ? "/" + s.folder : ""),
+      primaryBtn: "display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 17px;border:0;border-radius:9px;background:#1E1915;color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;white-space:nowrap;cursor:pointer;transition:opacity 150ms ease",
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value, menu: null }),
+      toggleDeep: () => this.setState({ deep: !s.deep, selected: {} }),
+      deepBtnStyle: toolBtn(s.deep) + ";gap:9px",
+      deepBoxStyle: "width:17px;height:17px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+        (s.deep ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (s.deep ? "#1E1915" : "#FFFFFF") + ";transition:background-color 140ms ease,border-color 140ms ease",
+      deepCheckStyle: "display:flex;color:#FFFFFF;" + (s.deep ? "opacity:1" : "opacity:0"),
+      sortLabel: s.sort,
+      sortBtnStyle: toolBtn(s.sortMenu),
+      sortMenuOpen: s.sortMenu,
+      toggleSortMenu: () => this.setState({ sortMenu: !s.sortMenu, menu: null }),
+      sortOptions: ["Recientes", "Nombre A–Z"].map((label) => ({
+        label, select: () => this.setState({ sort: label, sortMenu: false }), style: this.menuItem(label === s.sort)
+      })),
+      menuStyle: "position:absolute;left:0;min-width:100%;top:calc(100% + 6px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 30px rgba(35,24,15,.12);padding:5px;animation:odMenuIn 150ms ease;white-space:nowrap",
+      rowIconBtn: "width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#B5ADA5;cursor:pointer;transition:background-color 150ms ease",
+      rowMoreStyle: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:8px;background:transparent;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+
+      isEmpty: rows.length === 0,
+      rows: rows.map((r) => {
+        const on = !!s.selected[r.id];
+        const open = (kind) => s.menu === r.id + ":" + kind;
+        return {
+          title: r.title, excerpt: r.excerpt, when: r.when, status: r.status, type: r.type,
+          typeIcon: TYPE_ICONS[r.type] || "file-text",
+          folderLabel: r.folder === "" ? "Raíz" : r.folder,
+          showFolder: s.deep && r.folder !== s.folder,
+          folderChip: "display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:10px;background:#F2F1EF;color:#6B5F57;font:400 11px/1 'DM Sans',sans-serif;white-space:nowrap",
+          badgeIcon: r.sync === "offline" ? "cloud-off" : "circle-check", badgeStyle: badge(r.sync),
+          rowStyle: "display:flex;align-items:flex-start;gap:16px;padding:13px 16px;border-bottom:1px solid #F0EEEB;transition:background-color 150ms ease",
+          toggle: () => this.setState({ selected: { ...s.selected, [r.id]: !on } }),
+          checkStyle: "width:20px;height:20px;margin-top:1px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+            (on ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (on ? "#1E1915" : "#FFFFFF") + ";cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease",
+          checkIconStyle: "display:flex;color:#FFFFFF;" + (on ? "opacity:1" : "opacity:0"),
+          controlsStyle: "flex-shrink:0;align-items:center;gap:10px;padding-top:2px;" + (s.narrow ? "display:none" : "display:flex"),
+          statusOpen: open("status"), typeOpen: open("type"), folderOpen: open("folder"),
+          openStatus: () => this.setState({ menu: open("status") ? null : r.id + ":status" }),
+          openType: () => this.setState({ menu: open("type") ? null : r.id + ":type" }),
+          openFolder: () => this.setState({ menu: open("folder") ? null : r.id + ":folder" }),
+          statusTrigger: trigger(open("status")), typeTrigger: trigger(open("type")), folderTrigger: trigger(open("folder")),
+          statusDot: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(r.status),
+          statusOptions: STATUSES.map((label) => ({
+            label, select: () => this.patch(r.id, "status", label), style: this.menuItem(label === r.status),
+            dotStyle: "width:9px;height:9px;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(label)
+          })),
+          typeOptions: Object.keys(TYPE_ICONS).map((label) => ({
+            label, icon: TYPE_ICONS[label], select: () => this.patch(r.id, "type", label), style: this.menuItem(label === r.type),
+            iconStyle: "display:flex;flex-shrink:0;color:" + (label === r.type ? "#1E1915" : "#6B5F57")
+          })),
+          folderOptions: FOLDERS.map((f) => ({
+            label: f === "" ? "Raíz" : f, select: () => this.patch(r.id, "folder", f), style: this.menuItem(f === r.folder)
+          }))
+        };
+      }),
+
+      hasSelection: selCount > 0,
+      selectionLabel: selCount + " selected",
+      clearSelection: () => this.setState({ selected: {}, menu: null }),
+      selLinkBtn: "padding:0 2px;border:0;background:transparent;color:rgba(251,250,249,.55);font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:color 150ms ease",
+      selChipStyle: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(251,250,249,.10);color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      selDangerBtn: "display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(150,83,44,.30);color:#E8A87C;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      selMenuStyle: "position:absolute;left:0;min-width:180px;bottom:calc(100% + 10px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:9px;box-shadow:0 10px 34px rgba(35,24,15,.22);padding:5px;animation:odMenuIn 150ms ease",
+      selFolderOpen: s.menu === "sel:folder",
+      openSelFolder: () => this.setState({ menu: s.menu === "sel:folder" ? null : "sel:folder" }),
+      selFolderOptions: FOLDERS.map((f) => ({
+        label: f === "" ? "Raíz" : f, select: () => this.patchSelected("folder", f), style: this.menuItem(false)
+      }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2064%2064'%3E%3Cpath%20d%3D'M10.86%2049%20L31.76%2014.8%20L38.72%2026.2%20Z'%20fill%3D'%23B5ADA5'%20stroke%3D'%23B5ADA5'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.1%2049.4%20L38.97%2026.6%20L45.93%2038%20Z'%20fill%3D'%236B5F57'%20stroke%3D'%236B5F57'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3Cpath%20d%3D'M11.34%2049.8%20L46.18%2038.4%20L53.14%2049.8%20Z'%20fill%3D'%231E1915'%20stroke%3D'%231E1915'%20stroke-width%3D'3.5'%20stroke-linejoin%3D'round'%20stroke-linecap%3D'round'%2F%3E%3C%2Fsvg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,200..500;1,6..72,200..400&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="lucide-icon.js"></script>
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+</style>
+</helmet>
+
+<div style="min-height:100vh;padding:56px 48px 96px;box-sizing:border-box">
+<div style="max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:64px">
+
+  <header style="display:flex;flex-direction:column;gap:14px;padding-bottom:32px;border-bottom:1px solid #E4E1DC">
+    <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8E837B">Odessay</span>
+    <h1 style="margin:0;font:400 44px/1.1 'Lora',serif;color:#1E1915;letter-spacing:-.01em">UI Kit</h1>
+    <p style="margin:0;max-width:58ch;font:400 15px/1.65 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Extraído de <strong style="font-weight:500;color:#1E1915">Odessay Studio</strong>, que es la referencia. Cada valor de acá está tomado del archivo, no reinventado. Si algo no coincide con Studio, manda Studio y se corrige acá.</p>
+  </header>
+
+  <!-- 1 · COLOR -->
+  <section style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">1 · Color</h2>
+      <p style="margin:0;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57">Grises cálidos. La capa 0 vive entre <code style="font:400 13px/1 ui-monospace,monospace;color:#96532C">bg</code> y <code style="font:400 13px/1 ui-monospace,monospace;color:#96532C">line</code>; la hoja es el único blanco puro.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <span style="margin:0 0 0;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Superficie</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px">
+        <sc-for list="{{surfaceSwatches}}" as="s" hint-placeholder-count="8">
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <span style="{{s.chipStyle}}"></span>
+            <span style="display:block;font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">{{s.name}}</span>
+            <span style="display:block;font:400 11px/1 ui-monospace,monospace;color:#8E837B">{{s.hex}}</span>
+            <span style="display:block;font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">{{s.use}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Texto e intención</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px">
+        <sc-for list="{{inkSwatches}}" as="s" hint-placeholder-count="8">
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <span style="{{s.chipStyle}}"></span>
+            <span style="display:block;font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">{{s.name}}</span>
+            <span style="display:block;font:400 11px/1 ui-monospace,monospace;color:#8E837B">{{s.hex}}</span>
+            <span style="display:block;font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">{{s.use}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · TIPOGRAFÍA -->
+  <section style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">2 · Tipografía</h2>
+      <p style="margin:0;max-width:70ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Lora <strong style="font-weight:600;color:#1E1915">solo</strong> en el contenido del artifact — cabeceras de vista y de modal van en DM Sans 32/500. DM Sans en todo el chrome — 14 para navegación, 13 para controles, 12 para filas, 11 para overlines.</p>
+    </div>
+    <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:6px 24px">
+      <sc-for list="{{typeScale}}" as="t" hint-placeholder-count="8">
+        <div style="display:flex;align-items:baseline;gap:28px;padding:16px 0;border-bottom:1px solid #F2F1EF">
+          <span style="flex:0 0 150px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">{{t.spec}}</span>
+          <span style="{{t.sampleStyle}}">{{t.sample}}</span>
+          <span style="flex:1"></span>
+          <span style="flex:0 0 auto;font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">{{t.role}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 3 · GEOMETRÍA -->
+  <section style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">3 · Geometría</h2>
+      <p style="margin:0;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57">Los anchos fijos de Studio. Esta tabla es la que faltaba cuando el rail salió 232 en un archivo y 244 en otro.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start">
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Radio</span>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{radii}}" as="r" hint-placeholder-count="7">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="{{r.chipStyle}}"></span>
+              <span style="font:400 12px/1 ui-monospace,monospace;color:#1E1915">{{r.value}}</span>
+              <span style="flex:1"></span>
+              <span style="font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;text-align:right">{{r.use}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Altura</span>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <sc-for list="{{heights}}" as="h" hint-placeholder-count="9">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="{{h.chipStyle}}"></span>
+              <span style="font:400 12px/1 ui-monospace,monospace;color:#1E1915">{{h.value}}</span>
+              <span style="flex:1"></span>
+              <span style="font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;text-align:right">{{h.use}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Ancho fijo</span>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{widths}}" as="w" hint-placeholder-count="6">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font:500 12px/1.5 'DM Sans',sans-serif;color:#1E1915;flex:0 0 auto">{{w.name}}</span>
+              <span style="flex:1;border-bottom:1px dotted #D6D1CA"></span>
+              <span style="font:400 12px/1 ui-monospace,monospace;color:#96532C">{{w.value}}</span>
+            </div>
+          </sc-for>
+          <span style="margin-top:2px;font:400 11px/1.55 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">El sidebar mide 52 colapsado y 232 abierto, con 6px de padding lateral: el contenido del rail es siempre una caja de 40. El icono queda cuadrado y la etiqueta solo se recorta — nunca se animan anchos internos.</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.35fr 1fr;gap:20px;align-items:start">
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Elevación</span>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+          <sc-for list="{{shadows}}" as="e" hint-placeholder-count="4">
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <span style="{{e.chipStyle}}"></span>
+              <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">{{e.name}}</span>
+              <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">{{e.use}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Movimiento</span>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{motion}}" as="m" hint-placeholder-count="4">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span style="font:500 12px/1.5 'DM Sans',sans-serif;color:#1E1915;flex:0 0 auto">{{m.name}}</span>
+              <span style="flex:1;border-bottom:1px dotted #D6D1CA"></span>
+              <span style="font:400 11px/1 ui-monospace,monospace;color:#96532C">{{m.value}}</span>
+            </div>
+          </sc-for>
+          <span style="margin-top:2px;font:400 11px/1.55 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Los anchos de layout usan <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">cubic-bezier(.4,0,.15,1)</code>; las etiquetas se desvanecen en 200ms mientras el ancho corre en 300ms, así el texto nunca se estira.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · PRIMITIVOS -->
+  <section style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">4 · Primitivos</h2>
+      <p style="margin:0;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57">Los mismos strings que corren en Studio. Cada pantalla nueva instancia estos; si falta uno, se agrega acá primero.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Rail row</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">40 de alto, radio 9, icono en caja de 40. Activo = <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#E7E5E1</code> + peso 500.</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-start">
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;background:#F3F2F0;border-radius:9px;padding:6px">
+            <button style="{{railIdle}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span><span>New Artifact</span>
+            </button>
+            <button style="{{railActive}}">
+              <span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span><span>Studio</span>
+            </button>
+            <button style="{{railIdle}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span><span>Desk</span>
+            </button>
+          </div>
+          <div style="width:52px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;background:#F3F2F0;border-radius:9px;padding:6px 6px;box-sizing:border-box">
+            <button style="{{railMini}}"><span style="{{railIconWrap}}"><lucide-icon name="plus" size="19"></lucide-icon></span></button>
+            <button style="{{railMiniActive}}"><span style="{{railIconWrap}}"><lucide-icon name="lamp-desk" size="19"></lucide-icon></span></button>
+            <button style="{{railMini}}"><span style="{{railIconWrap}}"><lucide-icon name="layout-grid" size="19"></lucide-icon></span></button>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Workspace row</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">32 de alto, sangría 22, punto de 5px en accent cuando está activo.</span>
+        </div>
+        <div style="background:#F3F2F0;border-radius:9px;padding:6px;display:flex;flex-direction:column;gap:1px">
+          <sc-for list="{{workspaces}}" as="w" hint-placeholder-count="3">
+            <button onClick="{{w.select}}" style="{{w.style}}" style-hover="background:#E9E7E3;color:#1E1915">
+              <span style="{{w.dotStyle}}"></span><span>{{w.name}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Panel tab</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Píldora de 28, radio 7. Un solo tamaño en los dos paneles; el activo se llena con <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">active</code>; sin subrayados.</span>
+        </div>
+        <div style="display:flex;gap:2px;background:#F3F2F0;border-radius:9px;padding:4px">
+          <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+            <button onClick="{{t.select}}" style="{{t.style}}" style-hover="color:#1E1915">{{t.label}}</button>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Document tab</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">34 de alto, 200 de ancho, radio 8. El activo sube a blanco con sombra mínima.</span>
+        </div>
+        <div style="display:flex;gap:2px;background:#F3F2F0;border-radius:9px;padding:5px">
+          <sc-for list="{{docTabs}}" as="d" hint-placeholder-count="2">
+            <div onClick="{{d.select}}" style="{{d.tabStyle}}">
+              <span style="{{d.iconStyle}}"><lucide-icon name="{{d.icon}}" size="14"></lucide-icon></span>
+              <span style="{{d.titleStyle}}">{{d.title}}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Segmented</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">24 de alto en la status bar. El activo sube a blanco puro.</span>
+        </div>
+        <div style="display:inline-flex;align-self:flex-start;gap:2px;background:#E9E7E3;border-radius:8px;padding:3px">
+          <sc-for list="{{segments}}" as="s" hint-placeholder-count="2">
+            <button onClick="{{s.select}}" style="{{s.style}}">{{s.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Trigger &amp; menú</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Trigger de 30 (radio 6) que se rellena al abrir. Menú: radio 10, borde <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">line-soft</code>, filas de 34 con glifo de 24.</span>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center;background:#F3F2F0;border-radius:9px;padding:5px">
+          <button onClick="{{openTextMenu}}" style="{{textTriggerStyle}}" style-hover="background:#EDEBE8">
+            <span>{{blockLabel}}</span><lucide-icon name="chevron-down" size="14"></lucide-icon>
+          </button>
+          <button style="{{fmtBtn}}" style-hover="background:#EDEBE8"><lucide-icon name="bold" size="16"></lucide-icon></button>
+          <button style="{{fmtBtn}}" style-hover="background:#EDEBE8"><lucide-icon name="italic" size="16"></lucide-icon></button>
+          <button style="{{fmtBtn}}" style-hover="background:#EDEBE8"><lucide-icon name="link" size="16"></lucide-icon></button>
+        </div>
+        <div style="width:214px;background:#FFFFFF;border:1px solid #EDEBE8;border-radius:10px;box-shadow:0 10px 34px rgba(35,24,15,.12);padding:6px">
+          <sc-for list="{{textItems}}" as="m" hint-placeholder-count="4">
+            <button onClick="{{m.select}}" style="{{m.style}}" style-hover="background:#F2F1EF">
+              <span style="{{m.glyphStyle}}">{{m.glyph}}</span>
+              <span>{{m.label}}</span>
+              <span style="flex:1"></span>
+              <span style="{{shortcutStyle}}">{{m.shortcut}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Select field</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Status, Artifact Type y Workspace. Trigger de 36 a ancho completo con borde <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">line</code>; al abrir el borde pasa a <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">ink-6</code> y el fondo a blanco. Overline arriba, nunca label al costado.</span>
+        </div>
+        <div style="display:flex;gap:14px;align-items:flex-start;background:#F3F2F0;border-radius:9px;padding:12px">
+          <div style="flex:1;min-width:0">
+            <p style="{{sectionLabel}}">Status</p>
+            <div style="position:relative">
+              <button onClick="{{toggleStatusMenu}}" style="{{statusTriggerStyle}}" style-hover="background:#FFFFFF">
+                <span style="{{statusDotStyle}}"></span>
+                <span style="flex:1;text-align:left">{{status}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{statusMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{menuStyle}}">
+                  <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{o.dotStyle}}"></span><span>{{o.label}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <p style="{{sectionLabel}}">Artifact Type</p>
+            <div style="position:relative">
+              <button onClick="{{toggleTypeMenu}}" style="{{typeTriggerStyle}}" style-hover="background:#FFFFFF">
+                <span style="display:flex;color:#6B5F57"><lucide-icon name="{{artifactTypeIcon}}" size="15"></lucide-icon></span>
+                <span style="flex:1;text-align:left">{{artifactType}}</span>
+                <lucide-icon name="chevron-down" size="14"></lucide-icon>
+              </button>
+              <sc-if value="{{typeMenuOpen}}" hint-placeholder-val="{{false}}">
+                <div style="{{menuStyle}}">
+                  <sc-for list="{{typeOptions}}" as="o" hint-placeholder-count="6">
+                    <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                      <span style="{{o.iconStyle}}"><lucide-icon name="{{o.icon}}" size="15"></lucide-icon></span><span>{{o.label}}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Menú abierto</span>
+          <div style="width:212px;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:8px;box-shadow:0 8px 28px rgba(35,24,15,.1);padding:5px">
+            <sc-for list="{{statusOptions}}" as="o" hint-placeholder-count="6">
+              <button onClick="{{o.select}}" style="{{o.style}}" style-hover="background:#F2F1EF">
+                <span style="{{o.dotStyle}}"></span><span>{{o.label}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Colores de status</span>
+          <div style="display:flex;flex-wrap:wrap;gap:8px 16px">
+            <sc-for list="{{statusColors}}" as="c" hint-placeholder-count="6">
+              <span style="display:inline-flex;align-items:center;gap:7px">
+                <span style="{{c.dotStyle}}"></span>
+                <span style="font:400 12px/1 'DM Sans',sans-serif;color:#3F3731">{{c.label}}</span>
+                <span style="font:400 11px/1 ui-monospace,monospace;color:#B5ADA5">{{c.hex}}</span>
+              </span>
+            </sc-for>
+          </div>
+          <span style="font:400 11px/1.55 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">El punto es un aro de 9px con borde punteado de 1.5px — nunca relleno. Es la única señal de estado; no se agrega texto en color.</span>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Panel section &amp; list row</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Cabecera de 40 entre dos reglas, con badge de conteo. Filas de 28, sangría 8/24/40, barra de accent de 2px a la izquierda del activo.</span>
+        </div>
+        <div style="background:#F3F2F0;border-radius:9px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:8px;height:40px;border-top:1px solid #E4E1DC;border-bottom:1px solid #E4E1DC;padding:0 8px 0 10px">
+            <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Contents</span>
+            <span style="flex:1"></span>
+            <span style="height:19px;min-width:19px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:#E7E5E1;font:500 11px/1 'DM Sans',sans-serif;color:#6B5F57">5</span>
+            <button style="{{ghostBtnSm}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="x" size="15"></lucide-icon></button>
+          </div>
+          <div style="padding:8px;display:flex;flex-direction:column;gap:1px">
+            <sc-for list="{{tocItems}}" as="t" hint-placeholder-count="5">
+              <button onClick="{{t.select}}" style="{{t.style}}" style-hover="background:#EDEBE8">
+                <span style="{{t.accentStyle}}"></span><span>{{t.label}}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Multi-select list</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Casilla cuadrada de 20, radio 5, borde de 1.5 — vacía es <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">sheet</code> con borde <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#D6D1CA</code>; marcada se llena de <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">ink</code>. Alineada al tope de la fila, nunca centrada, para que aguante etiquetas de varias líneas.</span>
+        </div>
+        <div style="border:1px solid #E4E1DC;border-radius:8px;overflow:hidden">
+          <sc-for list="{{selectRows}}" as="r" hint-placeholder-count="4">
+            <div style="{{r.rowStyle}}" style-hover="background:#FCFBFA">
+              <button onClick="{{r.toggle}}" style="{{r.checkStyle}}">
+                <span style="{{r.checkIconStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+              </button>
+              <span style="{{r.labelStyle}}">{{r.label}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:center;padding:6px 0 2px">
+          <div style="display:flex;align-items:center;gap:10px;height:56px;padding:0 14px 0 22px;border-radius:14px;background:#1E1915;box-shadow:0 26px 70px rgba(35,24,15,.30),0 2px 6px rgba(35,24,15,.20);white-space:nowrap">
+            <span style="font:500 14px/1 'DM Sans',sans-serif;color:#FBFAF9">{{selectionLabel}}</span>
+            <button onClick="{{clearSelection}}" style="padding:0 2px;border:0;background:transparent;color:rgba(251,250,249,.55);font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:color 150ms ease" style-hover="color:#FBFAF9">Deselect</button>
+            <span style="width:1px;height:26px;margin:0 4px;background:rgba(251,250,249,.14)"></span>
+            <button style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(251,250,249,.10);color:#FBFAF9;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease" style-hover="background:rgba(251,250,249,.16)">
+              <lucide-icon name="folder-input" size="15"></lucide-icon>Mover a<lucide-icon name="chevron-down" size="14"></lucide-icon>
+            </button>
+            <button style="display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 13px;border:0;border-radius:9px;background:rgba(150,83,44,.30);color:#E8A87C;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease" style-hover="background:rgba(150,83,44,.42)">
+              <lucide-icon name="trash-2" size="15"></lucide-icon>Delete
+            </button>
+          </div>
+        </div>
+        <span style="font:400 11px/1.55 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">La barra de selección <strong style="font-weight:600;color:#1E1915">flota sobre la hoja</strong>, centrada a 26 del borde inferior: 56 de alto, radio 14, fondo <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">ink</code>, sombra larga y entrada de 200ms desde abajo. Nunca empuja la lista ni se ancla al flujo. Contiene el conteo, un <em>Deselect</em> de bajo peso y las acciones sobre lo seleccionado — la destructiva en terracota traslúcida, al final y separada.</span>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">List row</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Dos líneas, nunca tres. Título en DM Sans 15/500 — el serif se queda en el contenido del artifact, no en listas. Fecha antes del extracto, separadas por un punto de 3px, para que la meta no gane una línea propia.</span>
+        </div>
+        <div style="border:1px solid #E4E1DC;border-radius:8px;overflow:hidden">
+          <sc-for list="{{listRows}}" as="r" hint-placeholder-count="3">
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:14px 14px;border-bottom:1px solid #F0EEEB" style-hover="background:#FCFBFA">
+              <button onClick="{{r.toggle}}" style="{{r.checkStyle}}">
+                <span style="{{r.checkIconStyle}}"><lucide-icon name="check" size="12" stroke="3"></lucide-icon></span>
+              </button>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+                  <h3 style="margin:0;font:500 15px/1.3 'DM Sans',sans-serif;color:#1E1915;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.title}}</h3>
+                  <span style="{{r.badgeStyle}}"><lucide-icon name="{{r.badgeIcon}}" size="12"></lucide-icon></span>
+                </div>
+                <div style="display:flex;align-items:baseline;gap:8px;min-width:0">
+                  <span style="flex-shrink:0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5;white-space:nowrap">{{r.when}}</span>
+                  <span style="flex-shrink:0;width:3px;height:3px;border-radius:50%;background:#D6D1CA;transform:translateY(-3px)"></span>
+                  <p style="margin:0;flex:1;min-width:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#6B5F57;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{r.excerpt}}</p>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Correction card</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">La caja base del panel: borde <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">line</code>, radio 8, padding 11/12 — sin sombra, porque vive en capa 0. Kicker de 10px con punto, error en subrayado ondulado, dos acciones de 28.</span>
+        </div>
+        <div style="background:#F3F2F0;border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;flex-direction:column;gap:14px;padding-bottom:12px;border-bottom:1px solid #E4E1DC">
+            <sc-for list="{{correctionToggles}}" as="c" hint-placeholder-count="2">
+              <div style="display:flex;align-items:flex-start;gap:12px">
+                <div style="flex:1;min-width:0">
+                  <p style="margin:0 0 2px;font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915">{{c.label}}</p>
+                  <p style="margin:0;font:400 12px/1.45 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">{{c.hint}}</p>
+                </div>
+                <button onClick="{{c.toggle}}" style="{{c.trackStyle}}"><span style="{{c.knobStyle}}"></span></button>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+            <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B">2 correcciones pendientes</span>
+            <button style="{{ghostBtnSm}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="refresh-cw" size="14"></lucide-icon></button>
+          </div>
+          <sc-for list="{{grammarIssues}}" as="g" hint-placeholder-count="2">
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+                <span style="{{g.dotStyle}}"></span>
+                <span style="font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">{{g.kind}}</span>
+              </div>
+              <p style="margin:0 0 8px;font:400 13px/1.5 'DM Sans',sans-serif;color:#2F2A25">
+                <span style="text-decoration:underline wavy #C4553D;text-underline-offset:3px">{{g.wrong}}</span>
+                <span style="color:#B5ADA5;margin:0 6px">→</span>
+                <span style="font-weight:500">{{g.right}}</span>
+              </p>
+              <p style="margin:0 0 10px;font:400 12px/1.5 'DM Sans',sans-serif;color:#8E837B">{{g.note}}</p>
+              <div style="display:flex;align-items:center;gap:6px">
+                <button style="{{grammarApplyBtn}}" style-hover="opacity:.9">Aplicar</button>
+                <button style="{{grammarSkipBtn}}" style-hover="background:#E9E7E3">Ignorar</button>
+              </div>
+            </div>
+          </sc-for>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{learnedWords}}" as="w" hint-placeholder-count="3">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 6px 0 10px;border:1px solid #E4E1DC;border-radius:13px;font:400 12px/1 'DM Sans',sans-serif;color:#3F3731">
+                {{w.word}}
+                <button style="{{ghostBtnXs}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="x" size="12"></lucide-icon></button>
+              </span>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Note card</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Misma caja que la corrección. La cita va en 12px <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">ink-5</code> con barra de 2px a la izquierda; el cuerpo en 13px <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">ink-2</code>. El punto de 7px distingue el origen.</span>
+        </div>
+        <div style="background:#F3F2F0;border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{notes}}" as="n" hint-placeholder-count="3">
+            <div style="border:1px solid #E4E1DC;border-radius:8px;padding:11px 12px">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px">
+                <span style="{{n.dotStyle}}"></span>
+                <span style="font:600 10px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">{{n.kind}}</span>
+              </div>
+              <p style="margin:0 0 7px;font:400 12px/1.55 'DM Sans',sans-serif;color:#8E837B;border-left:2px solid #E4E1DC;padding-left:9px">{{n.quote}}</p>
+              <p style="margin:0;font:400 13px/1.5 'DM Sans',sans-serif;color:#2F2A25">{{n.body}}</p>
+            </div>
+          </sc-for>
+          <p style="margin:2px 0 0;font:400 12px/1.5 'DM Sans',sans-serif;color:#B5ADA5">El estado vacío siempre dice qué hacer, no que está vacío.</p>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Botones</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">La acción primaria es <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">ink</code>, no accent — el accent queda para links, puntos y barras de selección.</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+          <button style="{{primaryBtn}}" style-hover="opacity:.88"><lucide-icon name="plus" size="15"></lucide-icon><span>New Artifact</span></button>
+          <button style="{{titleSaveStyle}}" style-hover="background:#332C25">Save</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#F3F2F0;border-radius:9px;padding:6px">
+          <button style="{{chromeBtn}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="panel-left" size="18"></lucide-icon></button>
+          <button style="{{chromeBtn}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="scan" size="18"></lucide-icon></button>
+          <button style="{{ghostBtn}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="settings" size="17"></lucide-icon></button>
+          <button style="{{ghostBtnSm}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="x" size="15"></lucide-icon></button>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B;text-align:right">32 · 32 · 32 · 26</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#F3F2F0;border-radius:9px;padding:6px 6px 6px 4px">
+          <span style="width:36px;height:36px;flex-shrink:0;border-radius:50%;background:#1E1915;color:#FBFAF9;display:flex;align-items:center;justify-content:center;font:600 12px/1 'DM Sans',sans-serif">HM</span>
+          <span style="display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 13px/1.35 'DM Sans',sans-serif;color:#1E1915">Hugo Marin</span>
+            <span style="font:400 11px/1.4 'DM Sans',sans-serif;color:#8E837B">@hugomarin</span>
+          </span>
+          <span style="flex:1"></span>
+          <span style="display:flex;color:#8E837B"><lucide-icon name="settings" size="15"></lucide-icon></span>
+        </div>
+      </div>
+
+      <div style="background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Overlay &amp; modal</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">Un solo scrim para todo lo modal — search, preview, renombrar, confirmaciones: <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">rgba(35,24,15,.22)</code> + <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">blur(14px) saturate(115%)</code>, entrada <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">odFadeIn 140ms</code> / <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">odDialogIn 180ms</code>. Diálogo: 472 máx, radio 16, centrado. Command palette: alineado arriba. Modal de shell: dos capas, radio 14.</span>
+        </div>
+        <div style="position:relative;border-radius:9px;overflow:hidden;background:#EDEBE8;padding:24px 18px">
+          <div style="position:absolute;inset:0;background:rgba(35,24,15,.22);backdrop-filter:blur(14px) saturate(115%)"></div>
+          <div style="position:relative;padding:22px;border-radius:16px;background:#FFFFFF;box-shadow:0 26px 70px rgba(35,24,15,.18);display:flex;flex-direction:column;gap:14px">
+            <p style="margin:0;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8E837B">Artifact name</p>
+            <input value="{{draftName}}" onChange="{{setDraftName}}" style="height:40px;box-sizing:border-box;padding:0 12px;border:1px solid #E4E1DC;border-radius:8px;background:#FFFFFF;font:400 15px/1 'DM Sans',sans-serif;color:#1E1915;outline:none" style-focus="border-color:#96532C">
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+              <button style="{{btnGhost}}" style-hover="background:#EDEBE8;color:#1E1915">Cancel</button>
+              <button style="{{titleSaveStyle}}" style-hover="background:#332C25">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 5 · SHELL -->
+  <section style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">5 · El shell de dos capas</h2>
+      <p style="margin:0;max-width:66ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">El aporte real del reference SVG, tal como quedó en Studio. <strong style="font-weight:500;color:#1E1915">Capa 0</strong> es un fondo continuo: topbar, sidebar, paneles y status bar comparten <code style="font:400 13px/1 ui-monospace,monospace;color:#96532C">#F3F2F0</code> y ninguno tiene fondo propio. <strong style="font-weight:500;color:#1E1915">Capa 1</strong> es la hoja: blanca, radio 10, sombra <code style="font:400 13px/1 ui-monospace,monospace;color:#96532C">sheet</code>. El sidebar empuja la hoja; no flota sobre ella.</p>
+    </div>
+
+    <div style="background:#F3F2F0;border:1px solid #E4E1DC;border-radius:12px;overflow:hidden;height:440px;display:flex;flex-direction:column">
+      <div style="height:46px;flex-shrink:0;display:flex;align-items:center;gap:14px;padding:0 14px 0 16px">
+        <div style="display:flex;gap:8px">
+          <span style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></span>
+          <span style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></span>
+          <span style="width:12px;height:12px;border-radius:50%;background:#28C840"></span>
+        </div>
+        <button onClick="{{toggleShell}}" style="{{chromeBtn}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="panel-left" size="18"></lucide-icon></button>
+        <span style="font:400 12px/1 'DM Sans',sans-serif;color:#8E837B">topbar · 46 · capa 0</span>
+      </div>
+      <div style="flex:1;min-height:0;display:flex;padding-right:18px">
+        <div style="{{shellRailStyle}}">
+          <span style="font:400 10px/1.4 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap">{{shellRailLabel}}</span>
+        </div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+          <div style="flex:1;min-height:0;background:#FFFFFF;border-radius:10px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);display:flex;align-items:center;justify-content:center">
+            <span style="font:400 13px/1 'DM Sans',sans-serif;color:#B5ADA5">capa 1 · la hoja · única superficie elevada</span>
+          </div>
+          <div style="height:46px;flex-shrink:0;display:flex;align-items:center;padding:0 14px">
+            <span style="font:400 11px/1 'DM Sans',sans-serif;color:#8E837B">status bar · 46 · hermana de la hoja, no del shell</span>
+          </div>
+        </div>
+        <div style="width:276px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0 0 0 14px;box-sizing:border-box">
+          <span style="font:400 10px/1.5 'DM Sans',sans-serif;color:#8E837B;text-align:center">panel · 276 · capa 0</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Status bar</span>
+        <span style="max-width:70ch;font:400 12px/1.6 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Grilla de tres columnas — <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">minmax(0,1fr) auto minmax(0,1fr)</code> — para que el segmented quede centrado en la ventana pase lo que pase a los lados. Izquierda: estado de guardado. Centro: modo de edición. Derecha: métricas y accesos de 26.</span>
+      </div>
+      <div style="background:#F3F2F0;border:1px solid #E4E1DC;border-radius:9px;padding:0 18px 0 20px;height:46px;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="display:flex;color:#8E837B"><lucide-icon name="cloud-upload" size="16"></lucide-icon></span>
+          <span style="font:400 13px/1 'DM Sans',sans-serif;color:#6B5F57;white-space:nowrap">Saved</span>
+        </div>
+        <div style="justify-self:center;display:inline-flex;align-items:center;gap:2px;background:#E7E5E1;border-radius:8px;padding:3px">
+          <sc-for list="{{modes}}" as="m" hint-placeholder-count="2">
+            <button onClick="{{m.select}}" style="{{m.style}}">{{m.label}}</button>
+          </sc-for>
+        </div>
+        <div style="justify-self:end;max-width:100%;display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="flex:0 1 auto;min-width:0;font:400 12px/1 'DM Sans',sans-serif;color:#8E837B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">696 words · 4,326 chars · 34 sentences · 4 min · 2.8 pg</span>
+          <button style="{{ghostBtnSm}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="keyboard" size="15"></lucide-icon></button>
+          <button style="{{ghostBtnSm}}" style-hover="background:#E9E7E3;color:#1E1915"><lucide-icon name="align-left" size="15"></lucide-icon></button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+      <sc-for list="{{rules}}" as="r" hint-placeholder-count="3">
+        <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #1E1915">
+          <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">{{r.title}}</span>
+          <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{r.body}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 6 · WORKTREE -->
+  <section style="display:flex;flex-direction:column;gap:22px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">6 · Worktree</h2>
+      <p style="margin:0;max-width:66ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Lo que salió de Workspace Folder. Cuando el contenido tiene jerarquía, el shell gana una <strong style="font-weight:600;color:#1E1915">tercera columna en capa 0</strong> — 236px, fondo transparente, regla de 1px a la derecha — entre el rail y la hoja. La columna navega; la hoja gestiona. Nunca al revés.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:296px 1fr;gap:20px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:inline-flex;align-self:flex-start;gap:2px;padding:3px;border-radius:8px;background:#E7E5E1">
+        <sc-for list="{{treeModes}}" as="m" hint-placeholder-count="2">
+          <button onClick="{{m.select}}" style="{{m.style}}">{{m.label}}</button>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-direction:column;background:#F3F2F0;border-radius:10px;border:1px solid #E4E1DC;padding:8px 10px 10px">
+        <a href="Artifact Studio Workspace Folder B.dc.html" style="display:flex;align-items:center;gap:7px;height:32px;padding:0 8px;border-radius:8px;color:#6B5F57;font:400 12px/1 'DM Sans',sans-serif;text-decoration:none" style-hover="background:#E9E7E3;color:#1E1915">
+          <lucide-icon name="arrow-left" size="14"></lucide-icon>Todos los workspaces
+        </a>
+        <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 8px">
+          <span style="display:flex;flex-shrink:0;color:#8E837B"><lucide-icon name="folder-tree" size="16"></lucide-icon></span>
+          <span style="flex:1;min-width:0;font:500 13px/1 'DM Sans',sans-serif;color:#1E1915">ode408</span>
+          <span style="width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;color:#8E837B"><lucide-icon name="folder-plus" size="15"></lucide-icon></span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1px;padding:4px 0 0">
+          <sc-for list="{{treeDemo}}" as="n" hint-placeholder-count="5">
+            <div style="{{n.style}}" style-hover="background:#E9E7E3">
+              <button onClick="{{n.twist}}" style="{{n.twistyStyle}}" style-hover="color:#1E1915">
+                <lucide-icon name="chevron-down" size="13"></lucide-icon>
+              </button>
+              <button onClick="{{n.select}}" style="{{n.labelStyle}}">
+                <span style="display:flex;flex-shrink:0;color:{{n.iconColor}}"><lucide-icon name="{{n.icon}}" size="15"></lucide-icon></span>
+                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left">{{n.label}}</span>
+                <span style="{{n.countStyle}}">{{n.count}}</span>
+              </button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px">
+        <sc-for list="{{treeRules}}" as="r" hint-placeholder-count="4">
+          <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #1E1915">
+            <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">{{r.title}}</span>
+            <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{r.body}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · LAYOUTS -->
+  <section style="display:flex;flex-direction:column;gap:26px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">7 · Layouts</h2>
+      <p style="margin:0;max-width:66ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">La sección 5 define las dos capas; esta define <strong style="font-weight:500;color:#1E1915">de quién es cada región</strong>. El error recurrente es tratar la topbar y la status bar como hermanos del shell: quedan de extremo a extremo y cruzan por debajo de los paneles. En Studio la ventana tiene <strong style="font-weight:500;color:#1E1915">tres franjas horizontales</strong> y solo la del medio se divide en columnas. Todo lo que acompaña a la hoja — header, toolbar, footer — vive <strong style="font-weight:500;color:#1E1915">dentro de la columna central</strong>, nunca en el shell.</p>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Regiones</span>
+      <div style="border:1px solid #E4E1DC;border-radius:10px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:150px 92px 1fr;gap:0;background:#F3F2F0;border-bottom:1px solid #E4E1DC">
+          <span style="padding:11px 16px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8E837B">Región</span>
+          <span style="padding:11px 0;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8E837B">Padre</span>
+          <span style="padding:11px 16px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8E837B">Regla</span>
+        </div>
+        <sc-for list="{{regions}}" as="r" hint-placeholder-count="8">
+          <div style="{{r.rowStyle}}">
+            <span style="padding:12px 16px;font:500 13px/1.4 'DM Sans',sans-serif;color:#1E1915">{{r.name}}</span>
+            <span style="padding:12px 0;font:400 12px/1.4 ui-monospace,monospace;color:#96532C">{{r.parent}}</span>
+            <span style="padding:12px 16px;font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{r.rule}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:24px">
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:9px">
+          <span style="font:600 12px/1 'DM Sans',sans-serif;color:#1E1915">L1 · Hoja sola</span>
+          <span style="font:400 11px/1 'DM Sans',sans-serif;color:#8E837B">Desk · Settings · Add Workspace</span>
+        </div>
+        <div style="height:268px;box-sizing:border-box;display:flex;flex-direction:column;background:#F3F2F0;border:1px solid #E4E1DC;border-radius:10px;overflow:hidden">
+          <div style="height:30px;flex-shrink:0;display:flex;align-items:center;gap:9px;padding:0 9px">
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <span style="width:7px;height:7px;border-radius:50%;background:#FF5F57;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#FEBC2E;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#28C840;display:block"></span>
+            </div>
+            <div style="flex:1;height:20px;border:1px dashed #CFC9C1;border-radius:5px"></div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;gap:7px;padding:0 9px 9px 0">
+            <div style="width:44px;flex-shrink:0;display:flex;flex-direction:column;gap:7px">
+              <div style="flex:1;min-height:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">rail</div>
+              <div style="height:34px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 8px/1.3 'DM Sans',sans-serif;color:#B5ADA5;text-align:center">cuenta</div>
+            </div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+              <div style="height:38px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">header + toolbar · capa 0</div>
+              <div style="flex:1;min-height:0;background:#FFFFFF;border-radius:8px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);display:flex;align-items:center;justify-content:center;font:400 10px/1 'DM Sans',sans-serif;color:#B5ADA5">hoja · capa 1</div>
+              <div style="height:26px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">status bar</div>
+            </div>
+          </div>
+        </div>
+        <p style="margin:0;font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Dos columnas. La status bar arranca y termina con la hoja, no con la ventana. La fila de cuenta es su propia zona al pie del rail, alineada con la franja del footer.</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:9px">
+          <span style="font:600 12px/1 'DM Sans',sans-serif;color:#1E1915">L2 · Worktree + hoja</span>
+          <span style="font:400 11px/1 'DM Sans',sans-serif;color:#8E837B">Workspace · Workspace Folder</span>
+        </div>
+        <div style="height:268px;box-sizing:border-box;display:flex;flex-direction:column;background:#F3F2F0;border:1px solid #E4E1DC;border-radius:10px;overflow:hidden">
+          <div style="height:30px;flex-shrink:0;display:flex;align-items:center;gap:9px;padding:0 9px">
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <span style="width:7px;height:7px;border-radius:50%;background:#FF5F57;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#FEBC2E;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#28C840;display:block"></span>
+            </div>
+            <div style="flex:1;height:20px;border:1px dashed #CFC9C1;border-radius:5px"></div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;gap:7px;padding:0 9px 9px 0">
+            <div style="width:44px;flex-shrink:0;display:flex;flex-direction:column;gap:7px">
+              <div style="flex:1;min-height:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">rail</div>
+              <div style="height:34px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 8px/1.3 'DM Sans',sans-serif;color:#B5ADA5;text-align:center">cuenta</div>
+            </div>
+            <div style="width:74px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1.4 'DM Sans',sans-serif;color:#B5ADA5;text-align:center">worktree<br />236</div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+              <div style="height:38px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">header + toolbar</div>
+              <div style="flex:1;min-height:0;background:#FFFFFF;border-radius:8px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);display:flex;align-items:center;justify-content:center;font:400 10px/1 'DM Sans',sans-serif;color:#B5ADA5">hoja · lista</div>
+              <div style="height:26px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">status bar</div>
+            </div>
+          </div>
+        </div>
+        <p style="margin:0;font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">El worktree corre de arriba abajo: no lo corta la franja del footer. Los fondos desparejos entre columnas son intencionales — capa 0 es continua, así que no se ven.</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:9px">
+          <span style="font:600 12px/1 'DM Sans',sans-serif;color:#1E1915">L3 · Con inspector</span>
+          <span style="font:400 11px/1 'DM Sans',sans-serif;color:#8E837B">Solo Studio</span>
+        </div>
+        <div style="height:268px;box-sizing:border-box;display:flex;flex-direction:column;background:#F3F2F0;border:1px solid #E4E1DC;border-radius:10px;overflow:hidden">
+          <div style="height:30px;flex-shrink:0;display:flex;align-items:center;gap:9px;padding:0 9px">
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <span style="width:7px;height:7px;border-radius:50%;background:#FF5F57;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#FEBC2E;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#28C840;display:block"></span>
+            </div>
+            <div style="flex:1;height:20px;border:1px dashed #CFC9C1;border-radius:5px"></div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;gap:7px;padding:0 9px 9px 0">
+            <div style="width:36px;flex-shrink:0;display:flex;flex-direction:column;gap:7px">
+              <div style="flex:1;min-height:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 8px/1 'DM Sans',sans-serif;color:#B5ADA5">rail</div>
+              <div style="height:34px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px"></div>
+            </div>
+            <div style="width:62px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 8px/1.4 'DM Sans',sans-serif;color:#B5ADA5;text-align:center">worktree</div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+              <div style="height:38px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">header + toolbar</div>
+              <div style="flex:1;min-height:0;background:#FFFFFF;border-radius:8px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);display:flex;align-items:center;justify-content:center;font:400 10px/1 'DM Sans',sans-serif;color:#B5ADA5">hoja</div>
+              <div style="height:26px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">status bar</div>
+            </div>
+            <div style="width:76px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 8px/1.4 'DM Sans',sans-serif;color:#B5ADA5;text-align:center">inspector<br />276</div>
+          </div>
+        </div>
+        <p style="margin:0;font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">El inspector es capa 0 y también corre de arriba abajo. Reservado al editor: aparece cuando hay un artifact abierto del cual hablar. Una lista no lo necesita — ahí las propiedades viven en la fila.</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:baseline;gap:9px">
+          <span style="font:600 12px/1 'DM Sans',sans-serif;color:#1E1915">L4 · Rail colapsado</span>
+          <span style="font:400 11px/1 'DM Sans',sans-serif;color:#8E837B">&lt; 1240px · o toggle manual</span>
+        </div>
+        <div style="height:268px;box-sizing:border-box;display:flex;flex-direction:column;background:#F3F2F0;border:1px solid #E4E1DC;border-radius:10px;overflow:hidden">
+          <div style="height:30px;flex-shrink:0;display:flex;align-items:center;gap:9px;padding:0 9px">
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              <span style="width:7px;height:7px;border-radius:50%;background:#FF5F57;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#FEBC2E;display:block"></span>
+              <span style="width:7px;height:7px;border-radius:50%;background:#28C840;display:block"></span>
+            </div>
+            <div style="flex:1;height:20px;border:1px dashed #CFC9C1;border-radius:5px"></div>
+          </div>
+          <div style="flex:1;min-height:0;display:flex;gap:7px;padding:0 9px 9px 0">
+            <div style="width:22px;flex-shrink:0;display:flex;flex-direction:column;gap:7px">
+              <div style="flex:1;min-height:0;border:1px dashed #CFC9C1;border-radius:6px"></div>
+              <div style="height:34px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:6px"></div>
+            </div>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:7px">
+              <div style="height:38px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">header + toolbar</div>
+              <div style="flex:1;min-height:0;background:#FFFFFF;border-radius:8px;box-shadow:0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05);display:flex;align-items:center;justify-content:center;font:400 10px/1 'DM Sans',sans-serif;color:#B5ADA5">hoja · fila compacta</div>
+              <div style="height:26px;flex-shrink:0;border:1px dashed #CFC9C1;border-radius:7px;display:flex;align-items:center;justify-content:center;font:400 9px/1 'DM Sans',sans-serif;color:#B5ADA5">status bar</div>
+            </div>
+          </div>
+        </div>
+        <p style="margin:0;font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Colapsar es 52 → 244 sobre la <em>misma</em> columna, no otro componente. Bajo 1240 el worktree y el inspector se retiran; el header y la status bar no cambian de padre, solo de ancho.</p>
+      </div>
+
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Reglas de anidamiento</span>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+        <sc-for list="{{layoutRules}}" as="r" hint-placeholder-count="6">
+          <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #1E1915">
+            <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">{{r.title}}</span>
+            <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{r.body}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <span style="font:600 13px/1 'DM Sans',sans-serif;color:#1E1915">Estado de aplicación</span>
+        <span style="max-width:70ch;font:400 12px/1.6 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">Aplicado en <a href="Artifact Studio Desk.dc.html">Desk</a>, <a href="Artifact Studio Studio.dc.html">Studio</a>, <a href="Artifact Studio Workspace.dc.html">Workspace</a>, <a href="Artifact Studio Workspace Folder A.dc.html">Folder A</a>, <a href="Artifact Studio Workspace Folder B.dc.html">Folder B</a>, <a href="Artifact Studio Settings.dc.html">Settings</a> y <a href="Artifact Studio Empty States.dc.html">Empty States</a>.</span>
+      </div>
+      <div style="border:1px solid #E4E1DC;border-radius:10px;overflow:hidden">
+        <sc-for list="{{deviations}}" as="d" hint-placeholder-count="7">
+          <div style="{{d.rowStyle}}">
+            <span style="{{d.iconStyle}}"><lucide-icon name="{{d.iconName}}" size="12"></lucide-icon></span>
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+              <span style="font:500 13px/1.4 'DM Sans',sans-serif;color:#1E1915">{{d.title}}</span>
+              <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">{{d.body}}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 · CAPA MARKETING -->
+  <section style="display:flex;flex-direction:column;gap:26px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <h2 style="margin:0;font:400 26px/1.2 'Lora',serif;color:#1E1915">8 · Capa marketing · Landing</h2>
+      <p style="margin:0;max-width:70ch;font:400 14px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">El landing <strong style="font-weight:500;color:#1E1915">no</strong> usa el sistema de las secciones 1–7. La app es una herramienta: gris cálido, DM Sans, densidad alta. El landing es editorial: crema, serif liviana a gran tamaño, dorado como único color y mucho aire. Se comparten el logo y la familia de grises cálidos; nada más. Nunca mezclar — un botón de app en el landing se ve barato, y una tipografía de landing en la app se vuelve ilegible a 13px.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #1E1915">
+        <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">App · secciones 1–7</span>
+        <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Fondo <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#F3F2F0</code>, hoja blanca, DM Sans 13/14, radios 8–10, terracota <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#96532C</code> para acción. Lora solo dentro del artifact.</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #A87531">
+        <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">Landing · esta sección</span>
+        <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Fondo <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#F5F3EF</code>, paneles <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#1E1915</code>, Newsreader 200 en display, dorado <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">#A87531</code> puntual, radio 4, sin sombras.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Paleta del landing</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px">
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#F5F3EF;border:1px solid #E4E1DC"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">canvas</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#F5F3EF</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">fondo de página</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#EFE7DB"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">panel claro</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#EFE7DB</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">bloque alterno · máx. 1 por vista</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#1E1915"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">panel oscuro</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#1E1915</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">screenshots, cita, CTA final</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#A87531"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">dorado</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#A87531</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">itálicas, flechas, overlines sobre claro</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#C79B58"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">dorado claro</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#C79B58</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">el mismo rol, sobre panel oscuro</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#5C534C"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">cuerpo</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#5C534C</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">párrafos sobre crema</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <span style="height:56px;border-radius:4px;background:#DFD9CF"></span>
+          <span style="font:500 12px/1.4 'DM Sans',sans-serif;color:#1E1915">regla</span>
+          <span style="font:400 11px/1 ui-monospace,monospace;color:#8E837B">#DFD9CF</span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">1px entre pasos y notas</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Tipografía del landing</span>
+      <div style="display:flex;flex-direction:column;background:#F5F3EF;border-radius:4px;padding:6px 26px">
+        <div style="display:flex;align-items:baseline;gap:28px;padding:18px 0;border-bottom:1px solid #DFD9CF">
+          <span style="flex:0 0 190px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">Newsreader 200 · 104/1.04 · -.03em</span>
+          <span style="font:200 44px/1.05 Newsreader,Lora,serif;color:#1E1915;letter-spacing:-.03em">Hero display</span>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">h1 · clamp(52,7vw,104)</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:28px;padding:18px 0;border-bottom:1px solid #DFD9CF">
+          <span style="flex:0 0 190px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">Newsreader 200 · 52/1.16 · -.02em</span>
+          <span style="font:200 34px/1.16 Newsreader,Lora,serif;color:#1E1915;letter-spacing:-.02em">Título de sección</span>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">h2 · clamp(34,3.6vw,52)</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:28px;padding:18px 0;border-bottom:1px solid #DFD9CF">
+          <span style="flex:0 0 190px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">Newsreader 300 · 30/1.25</span>
+          <span style="font:300 26px/1.25 Newsreader,Lora,serif;color:#1E1915;letter-spacing:-.015em">Título de panel</span>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">panel · paso · tarjeta</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:28px;padding:18px 0;border-bottom:1px solid #DFD9CF">
+          <span style="flex:0 0 190px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">Newsreader italic · dorado</span>
+          <span style="font:200 34px/1.16 Newsreader,Lora,serif;font-style:italic;color:#A87531;letter-spacing:-.02em">la palabra que importa</span>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">una sola por titular</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:28px;padding:18px 0;border-bottom:1px solid #DFD9CF">
+          <span style="flex:0 0 190px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">DM Sans 400 · 17/1.65</span>
+          <span style="font:400 17px/1.65 'DM Sans',sans-serif;color:#5C534C">Cuerpo del landing, hasta 46ch por columna.</span>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">bajada · 16 en paneles</span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:28px;padding:18px 0">
+          <span style="flex:0 0 190px;font:400 11px/1.5 ui-monospace,monospace;color:#8E837B">Roboto Mono 400 · 12 · .14em</span>
+          <span style="font:400 12px/1 'Roboto Mono',monospace;color:#A87531;letter-spacing:.14em;text-transform:uppercase">Overline / eyebrow</span>
+          <span style="flex:1"></span>
+          <span style="font:400 11px/1.5 'DM Sans',sans-serif;color:#8E837B">rótulo de sección y de panel</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:14px;padding:26px;border-radius:4px;background:#F5F3EF">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B">Acción</span>
+        <p style="margin:0;font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">El landing no tiene botones rellenos: la acción es un link con flecha dorada. Un solo tamaño (18/1.35, <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">nowrap</code>) y el hover pasa el texto a dorado.</p>
+        <span style="display:inline-flex;align-items:center;gap:12px;font:400 18px/1.35 'DM Sans',sans-serif;color:#1E1915;white-space:nowrap"><span style="display:flex;color:#A87531"><lucide-icon name="arrow-right" size="20"></lucide-icon></span>Descargar para Mac</span>
+        <span style="display:inline-flex;align-items:center;gap:12px;font:400 18px/1.35 'DM Sans',sans-serif;color:#A87531;white-space:nowrap"><span style="display:flex;color:#A87531"><lucide-icon name="arrow-right" size="20"></lucide-icon></span>Probar en el navegador · hover</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;padding:26px;border-radius:4px;background:#1E1915">
+        <span style="font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#C79B58">Sobre oscuro</span>
+        <p style="margin:0;font:400 12px/1.6 'DM Sans',sans-serif;color:rgba(245,243,239,.6);text-wrap:pretty">Mismo componente, dorado claro. El cuerpo baja a 60% de opacidad del crema — nunca un gris nuevo.</p>
+        <span style="display:inline-flex;align-items:center;gap:12px;font:400 18px/1.35 'DM Sans',sans-serif;color:#F5F3EF;white-space:nowrap"><span style="display:flex;color:#C79B58"><lucide-icon name="arrow-right" size="20"></lucide-icon></span>Abrir la app</span>
+        <span style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border-radius:16px;background:#FFFFFF;border:1px solid #E0D9CE;color:#3F3731;font:400 12px/1 'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0"><lucide-icon name="file-code" size="14"></lucide-icon>chip · mapa</span>
+          <span style="display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 16px;border-radius:21px;background:#C79B58;color:#1E1915;font:500 14px/1 'DM Sans',sans-serif;white-space:nowrap;flex-shrink:0"><lucide-icon name="file-code" size="15"></lucide-icon>nodo activo</span>
+        </span>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
+      <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #1E1915">
+        <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">Grilla</span>
+        <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Ancho máximo 1320 con 48 de padding. Las secciones de contenido usan <code style="font:400 11px/1 ui-monospace,monospace;color:#96532C">240px 1fr</code>: overline a la izquierda, todo lo demás a la derecha. El ritmo vertical es 130px entre secciones, 110 cuando dos van juntas.</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #1E1915">
+        <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">Superficies</span>
+        <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Radio 4 y cero sombras: los bloques se separan por color, no por elevación. Las capturas sangran hacia el borde del panel (118% de ancho) en vez de quedar centradas con margen.</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;padding:18px 0 0;border-top:2px solid #A87531">
+        <span style="font:600 12px/1.3 'DM Sans',sans-serif;color:#1E1915">Dosis de dorado</span>
+        <span style="font:400 12px/1.6 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Máximo tres apariciones por pantalla: el overline, una itálica en el titular y la flecha de la acción. Nunca como fondo de un bloque grande ni en cuerpo de texto.</span>
+      </div>
+    </div>
+  </section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1180,&quot;height&quot;:900}}">
+class Component extends DCLogic {
+  state = { tab: "Properties", doc: 0, seg: "Editor", block: "H2", menu: true, ws: "Odessay", toc: 0, draft: "Reference Odyssey", shellOpen: true,
+    status: "Draft", artifactType: "Agent", statusMenu: false, typeMenu: false,
+    activeCorrections: true, showCorrections: true, mode: "rich", picked: { 0: true, 2: true }, treeSel: "skills", treeOpen: { "": true, skills: true }, treeMode: "folders" };
+
+  TYPE_ICONS = { General: "circle", Agent: "bot", Skill: "wrench", Prompt: "message-square", Template: "layout-template", Status: "file-text" };
+  STATUSES = ["New", "Exploring", "Draft", "In review", "Done", "Archived"];
+
+  statusColor(s) {
+    return ({ New: "#8E837B", Exploring: "#5B5BD6", Draft: "#C07B2A", "In review": "#96532C", Done: "#2E7D4F", Archived: "#B5ADA5" })[s] || "#8E837B";
+  }
+  trigger(open) {
+    return "display:flex;align-items:center;gap:9px;width:100%;box-sizing:border-box;height:36px;padding:0 11px;border:1px solid " + (open ? "#B5ADA5" : "#E4E1DC") + ";border-radius:8px;background:" + (open ? "#FFFFFF" : "transparent") + ";color:#2F2A25;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease";
+  }
+  menuItem(sel) {
+    return "display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 10px;border:0;background:transparent;border-radius:6px;color:" + (sel ? "#1E1915" : "#2F2A25") + ";font:" + (sel ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;cursor:pointer;text-align:left;transition:background-color 140ms ease";
+  }
+
+  renderVals() {
+    const s = this.state;
+    const picked = Object.values(s.picked).filter(Boolean).length;
+    const SELECT_ROWS = [
+      "Extraer UI kit de Odessay: tokens (color, tipo, radio, sombra, espaciado)",
+      "Formalizar primitivos: rail button, tab, trigger, panel section, card, row",
+      "Documentar el shell de 2 capas como layout canónico",
+      "Refactorizar Studio y Desk sobre el kit"
+    ];
+    const LIST_ROWS = [
+      { title: "Leccion 5 - Evaluacion de prompts", when: "5 ago", sync: "synced", excerpt: "Lección 5 — Evaluación de prompts. En la lección anterior repetimos una frase hasta el cansancio." },
+      { title: "Omega", when: "5 ago", sync: "synced", excerpt: "Primer borrador del prompt maestro para el ejercicio de comparación." },
+      { title: "Beta", when: "4 ago", sync: "offline", excerpt: "Cambio offline pendiente de sincronizar." }
+    ];
+    const check = (on) => "width:20px;height:20px;margin-top:1px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid " +
+      (on ? "#1E1915" : "#D6D1CA") + ";border-radius:5px;background:" + (on ? "#1E1915" : "#FFFFFF") + ";cursor:pointer;transition:background-color 150ms ease,border-color 150ms ease";
+    const chip = (hex, border) => "display:block;height:54px;border-radius:8px;background:" + hex + (border ? ";border:1px solid #E4E1DC" : "");
+
+    const surface = [
+      ["bg", "#F3F2F0", "Fondo continuo · capa 0", true],
+      ["sheet", "#FFFFFF", "La hoja del artifact", true],
+      ["raise", "#FBFAF9", "Texto sobre superficie oscura", true],
+      ["hover", "#E9E7E3", "Hover del chrome", false],
+      ["active", "#E7E5E1", "Item seleccionado", false],
+      ["line", "#E4E1DC", "Regla sobre capa 0", false],
+      ["line-soft", "#EDEBE8", "Regla y borde sobre la hoja", false],
+      ["wash", "#F2F1EF", "Hover dentro de la hoja", true]
+    ];
+    const ink = [
+      ["ink", "#1E1915", "Texto principal, acción primaria", false],
+      ["ink-2", "#2F2A25", "Controles de formato", false],
+      ["ink-3", "#3F3731", "Iconos del chrome", false],
+      ["ink-4", "#6B5F57", "Texto secundario", false],
+      ["ink-5", "#8E837B", "Metadata, overlines, inactivos", false],
+      ["ink-6", "#B5ADA5", "Atajos, separadores, placeholder", false],
+      ["accent", "#96532C", "Links, punto activo, barra de selección", false],
+      ["select", "#CFE1F5", "::selection", false]
+    ];
+    const mk = (rows) => rows.map(([name, hex, use, b]) => ({ name, hex, use, chipStyle: chip(hex, b) }));
+
+    const typeScale = [
+      ["Lora 44/1.1 400", "Título editorial", "Display", "font:400 34px/1.1 'Lora',serif;color:#1E1915"],
+      ["Lora 26/1.2 400", "Sección", "Título de sección", "font:400 26px/1.2 'Lora',serif;color:#1E1915"],
+      ["Lora 17/1.7 400", "Cuerpo del artifact", "Contenido de la hoja", "font:400 17px/1.7 'Lora',serif;color:#1E1915"],
+      ["DM Sans 32/1.1 500 · -.02em", "Título de vista", "Cabecera de vista y de modal", "font:500 32px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em"],
+      ["DM Sans 14/1 400·500", "Item de rail", "Navegación y menús", "font:400 14px/1 'DM Sans',sans-serif;color:#1E1915"],
+      ["DM Sans 13/1 400·500", "Control", "Tabs, triggers, filas de menú", "font:400 13px/1 'DM Sans',sans-serif;color:#1E1915"],
+      ["DM Sans 12/1.35 400·500", "Fila de panel", "TOC, árbol, badges", "font:400 12px/1.35 'DM Sans',sans-serif;color:#6B5F57"],
+      ["DM Sans 11/1 600 · .07em", "OVERLINE", "Labels de grupo", "font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B"],
+      ["DM Sans 12/1 400 · .04em", "⌘⇧K", "Atajos", "font:400 12px/1 'DM Sans',sans-serif;letter-spacing:.04em;color:#B5ADA5"]
+    ].map(([spec, sample, role, sampleStyle]) => ({ spec, sample, role, sampleStyle }));
+
+    const TREE = [
+      ["", "Raíz del workspace", "3", 0, false],
+      ["agents", "agents", "2", 1, false],
+      ["skills", "skills", "2", 1, true],
+      ["skills/mcp", "mcp", "2", 2, false],
+      ["prompts", "prompts", "2", 1, false]
+    ];
+    const LEAVES = [
+      ["", "README", "file-text", 1], ["agents", "Agente de revisión", "bot", 2],
+      ["skills", "04-Server basics", "wrench", 2], ["skills/mcp", "transport-notes", "sticky-note", 3],
+      ["prompts", "Prompt maestro v3", "message-square", 2]
+    ];
+    const artifacts = s.treeMode === "artifacts";
+    const withLeaves = [];
+    TREE.forEach(([id, label, count, depth, kids]) => {
+      const leaves = artifacts ? LEAVES.filter(([p]) => p === id) : [];
+      withLeaves.push([id, label, count, depth, kids || leaves.length > 0, ""]);
+      leaves.forEach(([, l, icon, d]) => withLeaves.push([id + "/·" + l, l, "", d, false, icon]));
+    });
+    const parentOf = (id) => id.split("/").slice(0, -1).join("/");
+    const treeDemo = withLeaves.filter(([id, , , depth, , leaf]) => (leaf ? !!s.treeOpen[parentOf(id)] : depth < 2 || !!s.treeOpen[parentOf(id)])).map(([id, label, count, depth, kids, leaf]) => {
+      const on = s.treeSel === id, open = !!s.treeOpen[id];
+      return {
+        label, count, icon: leaf ? leaf : id === "" ? "house" : on || open ? "folder-open" : "folder",
+        iconColor: on ? "#1E1915" : "#8E837B",
+        select: () => this.setState({ treeSel: id }),
+        twist: () => this.setState({ treeOpen: { ...s.treeOpen, [id]: !open } }),
+        style: "display:flex;align-items:center;gap:6px;box-sizing:border-box;width:100%;height:34px;flex-shrink:0;padding:0 8px 0 " + (6 + depth * 14) +
+          "px;border-radius:8px;background:" + (on ? "#E7E5E1" : "transparent") + ";transition:background-color 160ms ease",
+        labelStyle: "display:flex;align-items:center;gap:8px;flex:1;min-width:0;height:100%;padding:0;border:0;background:transparent;font:" +
+          (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#3F3731") + ";cursor:pointer",
+        twistyStyle: "width:16px;height:16px;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;border:0;background:transparent;color:#B5ADA5;transform:rotate(" +
+          (open ? "0deg" : "-90deg") + ");transition:transform 180ms ease,color 150ms ease;" + (kids ? "opacity:1;cursor:pointer" : "opacity:0;pointer-events:none"),
+        countStyle: "flex-shrink:0;font:400 11px/1 'DM Sans',sans-serif;color:" + (on ? "#6B5F57" : "#B5ADA5")
+      };
+    });
+    const treeRules = [
+      ["Un componente, dos modos", "Workspace lo usa solo con carpetas: el árbol navega y la hoja lista lo que hay dentro. Studio lo usa con artifacts como hojas, porque ahí abrir es entrar al documento. Misma fila, misma sangría, mismo twisty — cambia qué cuelga de la carpeta."],
+      ["La hoja no reemplaza al árbol", "En modo carpetas la fila muestra conteo a la derecha; en modo artifacts la hoja muestra su icono de tipo y ningún conteo. Si una fila tuviera las dos cosas, el árbol empieza a competir con la hoja."],
+      ["Crear carpeta vive en el árbol", "El folder-plus de 26 va en la cabecera del worktree, junto al nombre del workspace. Crear estructura es navegación; crear artifact es gestión y vive en la hoja."],
+      ["Dos clics, dos intenciones", "El chevron expande; el nombre navega. Una fila que hace las dos cosas obliga a colapsar para poder entrar. Twisty de 16 con opacity 0 y pointer-events none cuando la carpeta no tiene hijas — la sangría no se mueve."],
+      ["Sangría 14 por nivel", "Fila de 34, padding-left 6 + 14·profundidad. Sin líneas guía: el árbol es de dos o tres niveles, no de diez."],
+      ["El regreso vive en la navegación", "El link de volver va arriba del árbol, en capa 0 — nunca como botón dentro de la hoja. La hoja no navega."],
+      ["El puente es explícito", "\"Incluir subcarpetas\" en la barra de la hoja es lo único que cruza las dos capas, y aparece como chip de carpeta en cada fila fuera de la actual."]
+    ].map(([title, body]) => ({ title, body }));
+
+    const REGIONS = [
+      ["Controles de ventana", "shell", "Zona propia a la izquierda de la topbar. No es contenido de la barra: nada se alinea con los semáforos."],
+      ["Topbar · 46", "shell", "Franja 1. Arranca después de los semáforos y llega al borde derecho. Capa 0, sin fondo propio."],
+      ["Rail · 52 / 244", "franja 2", "Columna 1. El nav lleva 6px de inset a cada lado: el pill del item activo respira contra el borde del rail y contra el worktree, en vez de pegarse. El icono se centra en la tira de 52 sin margen propio — el inset del nav ya lo posiciona, y la fila de cuenta repite esos 6px para caer en el mismo eje."],
+      ["Fila de cuenta", "rail", "Zona al pie del rail, separada del scroll de navegación y alineada con la franja del status bar. El avatar queda flush al borde izquierdo."],
+      ["Carpetas del workspace", "rail", "Hijas del item Workspace: icono de carpeta (no punto de color), sangría de 50 para que el icono de la hija caiga sobre el eje del label del padre (56), y colapso a max-height 0 cuando el rail se contrae."],
+      ["Worktree · 236", "franja 2", "Columna 2, opcional. De arriba abajo: no la corta el footer. Regla de 1px a la derecha."],
+      ["Columna central", "franja 2", "Columna 3, siempre presente. Contiene tres bandas propias: header + toolbar, hoja, status bar."],
+      ["Hoja", "columna central", "Única superficie de capa 1. Solo el contenido scrolleable — el header y la toolbar quedan afuera, sobre capa 0."],
+      ["Status bar · 46", "columna central", "Empieza donde empieza la hoja y termina donde termina. Nunca hermano del shell."],
+      ["Inspector · 276", "franja 2", "Columna 4, opcional. De arriba abajo, capa 0. Recibe lo que no cabe en la fila."]
+    ].map(([name, parent, rule], i, a) => ({ name, parent, rule, rowStyle: "display:grid;grid-template-columns:150px 92px 1fr;align-items:start;background:" + (i % 2 ? "#FBFAF9" : "#FFFFFF") + (i < a.length - 1 ? ";border-bottom:1px solid #EDEBE8" : "") }));
+
+    const layoutRules = [
+      ["Tres franjas, una se divide", "Topbar, contenido y — donde exista — nada más. Solo la franja del medio se parte en columnas. Cualquier elemento de ancho completo abajo del contenido cruza por debajo de los paneles y rompe el modelo."],
+      ["El acompañamiento sigue a la hoja", "Header, breadcrumb, toolbar de filtros y status bar son hermanos de la hoja dentro de la columna central. Comparten su ancho exacto, así que se realinean solos cuando el rail colapsa o el inspector aparece."],
+      ["Los paneles llegan al piso", "Rail, worktree e inspector ocupan el alto completo de la franja 2. La columna central es la única que reserva una banda inferior; el desnivel no se ve porque capa 0 es continua."],
+      ["Padding fuera, no adentro", "La separación entre columnas se resuelve con gap en la franja 2, no con margin por columna. Un panel que se oculta no deja su margen atrás."],
+      ["Colapsar no cambia el padre", "52 → 244 sobre la misma columna. Nada se remonta ni se mueve de contenedor al colapsar: solo cambian anchos y la opacidad de los labels."],
+      ["Capa 0 no tiene bordes de caja", "Los recuadros punteados de estos diagramas son didácticos. En la pantalla real las regiones de capa 0 no tienen fondo ni borde propios — solo el worktree lleva su regla de 1px."]
+    ].map(([title, body]) => ({ title, body }));
+
+    const deviations = [
+      [1, "Status bar dentro de la columna central", "Era el último hijo del shell con padding-left = railWidth + 4 y cruzaba por debajo del worktree. Ahora es hermana de la hoja: empieza y termina con ella en las siete pantallas."],
+      [1, "Header y toolbar en capa 0", "Breadcrumb, título, primario y barra de filtros salieron de la tarjeta blanca en las siete pantallas. La hoja quedó con la lista y nada más. El carrusel de recientes del Desk se eliminó, así que su toolbar también subió a capa 0."],
+      [1, "Rail full-bleed", "El nav perdió su padding lateral; el pill activo abarca el ancho completo. Los iconos siguen centrados en la tira de 52 con margin-left 6 en el wrapper, así que nada se movió de lugar."],
+      [1, "Fila de cuenta como zona propia", "Salió del nav a una zona de 46 al pie de la columna del rail, alineada con la franja del status bar."],
+      [1, "Zona de controles de ventana", "Los semáforos viven en un bloque de 76 con box-sizing propio: el toggle de sidebar arranca siempre en el mismo límite."],
+      [1, "Gutter unificado en 16", "Header de capa 0 y contenido de la hoja compartían dos gutters distintos (16 y 34). Quedó uno solo, así que el título y las filas caen sobre la misma línea."],
+      [1, "Inspector (L3): solo Studio", "La cuarta columna existe únicamente en el editor, donde el objeto de trabajo es un artifact abierto. Las vistas de lista — Desk, Workspace, Folder A y B — no lo llevan: editan status, type y carpeta desde los dropdowns de la fila, y la barra de selección cubre los cambios en lote."]
+    ].map(([done, title, body], i, a) => ({
+      title, body, done: !!done,
+      iconName: done ? "check" : "triangle-alert",
+      iconStyle: "width:22px;height:22px;flex-shrink:0;margin-top:1px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:" +
+        (done ? "#E4F0E7;color:#2E7D4F" : "#FAEBDC;color:#96532C"),
+      rowStyle: "display:flex;gap:12px;align-items:flex-start;padding:14px 16px;background:" + (i % 2 ? "#FBFAF9" : "#FFFFFF") + (i < a.length - 1 ? ";border-bottom:1px solid #EDEBE8" : "")
+    }));
+
+    const radii = [
+      ["6px", "Trigger, fmt btn, menú chico"], ["7px", "Botón de topbar, primario"],
+      ["8px", "Tab, chip, input, segmented"], ["9px", "Rail row, user row"],
+      ["10px", "La hoja, menú flotante, badge"], ["12px", "Shell en modo compacto"], ["16px", "Modal de vidrio"]
+    ].map(([value, use]) => ({ value, use, chipStyle: "display:block;width:26px;height:26px;flex-shrink:0;background:#E7E5E1;border-radius:" + value }));
+
+    const heights = [
+      ["24px", "Segmented"], ["26px", "Ghost btn chico"], ["28px", "Panel tab, fila de TOC y árbol, acción de card"],
+      ["30px", "Trigger y fmt btn"], ["32px", "Botón de chrome, workspace row"],
+      ["34px", "Document tab, fila de menú"], ["36px", "Avatar, botón de modal"],
+      ["40px", "Rail row, cabecera de panel, input"], ["46px", "Topbar y status bar"], ["56px", "Cabecera de la hoja"]
+    ].map(([value, use]) => ({ value, use, chipStyle: "display:block;width:26px;flex-shrink:0;background:#E7E5E1;border-radius:3px;height:" + Math.round(parseInt(value) * 0.42) + "px" }));
+
+    const widths = [
+      ["Sidebar mini", "52px"], ["Sidebar abierto", "232px"], ["Caja de icono del rail", "40px"],
+      ["Panel lateral", "276px"], ["Worktree (árbol de carpetas)", "236px"], ["Document tab", "200px"], ["Menú flotante", "214px"], ["Modal", "472px"]
+    ].map(([name, value]) => ({ name, value }));
+
+    const shadows = [
+      ["sheet", "0 1px 2px rgba(35,24,15,.05),0 10px 30px rgba(35,24,15,.05)", "La hoja. Única elevación en reposo.", "#FFFFFF", "10px"],
+      ["tab", "0 1px 2px rgba(35,24,15,.06)", "Tab activo y segmented.", "#FFFFFF", "8px"],
+      ["menu", "0 10px 34px rgba(35,24,15,.12)", "Dropdowns, con borde line-soft.", "#FFFFFF", "10px"],
+      ["modal", "0 26px 70px rgba(35,24,15,.18)", "Modal de vidrio y shell compacto.", "#FFFFFF", "16px"]
+    ].map(([name, sh, use, bg, r]) => ({ name, use, chipStyle: "display:block;height:56px;border-radius:" + r + ";background:" + bg + ";box-shadow:" + sh }));
+
+    const motion = [
+      ["fast", "140ms ease"], ["base", "150ms ease"], ["row", "180ms ease"],
+      ["fade", "200ms ease"], ["layout", "300ms cubic-bezier(.4,0,.15,1)"]
+    ].map(([name, value]) => ({ name, value }));
+
+    // ── primitivos, tal cual Studio ──
+    const railRow = (a) => "display:flex;align-items:center;gap:10px;box-sizing:border-box;width:100%;min-width:40px;height:40px;min-height:40px;max-height:40px;flex-shrink:0;padding:0;border:0;border-radius:9px;font:" +
+      (a ? "500" : "400") + " 14px/1 'DM Sans',sans-serif;color:" + (a ? "#1E1915" : "#3F3731") + ";background:" + (a ? "#E7E5E1" : "transparent") +
+      ";cursor:pointer;text-align:left;overflow:hidden;transition:background-color 180ms ease";
+    const panelTab = (on) => "display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 9px;border:0;border-radius:7px;font:" +
+      (on ? "500" : "400") + " 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease,color 150ms ease;" +
+      (on ? "background:#E7E5E1;color:#1E1915" : "background:transparent;color:#6B5F57");
+    const seg = (on) => "height:24px;padding:0 13px;border:0;border-radius:6px;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;white-space:nowrap;transition:background-color 180ms ease,color 180ms ease;" +
+      (on ? "background:#FFFFFF;color:#1E1915;box-shadow:0 1px 2px rgba(35,24,15,.1)" : "background:transparent;color:#8E837B");
+    const fmtTrigger = (on) => "height:30px;padding:0 9px;display:inline-flex;align-items:center;gap:5px;border:0;border-radius:6px;font:" +
+      (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:#2F2A25;cursor:pointer;transition:background-color 150ms ease;background:" + (on ? "#EDEBE8" : "transparent");
+    const fmtItem = (on) => "display:flex;align-items:center;gap:12px;width:100%;height:34px;padding:0 10px;border:0;border-radius:7px;background:" +
+      (on ? "#F2F1EF" : "transparent") + ";color:#1E1915;font:400 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 140ms ease";
+    const fmtGlyph = (on) => "width:24px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-start;font:500 13px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#8E837B");
+
+    const tabs = ["Properties", "Grammar", "Notes", "Share"].map(label => ({ label, style: panelTab(s.tab === label), select: () => this.setState({ tab: label }) }));
+    const segments = ["Editor", "Preview"].map(label => ({ label, style: seg(s.seg === label), select: () => this.setState({ seg: label }) }));
+    const treeModes = [["folders", "Solo carpetas"], ["artifacts", "Carpetas + artifacts"]].map(([id, label]) => ({
+      label, select: () => this.setState({ treeMode: id }), style: seg(s.treeMode === id)
+    }));
+
+    const docTabs = ["Reference Odyssey", "Field Notes vol. 2"].map((title, i) => {
+      const on = i === s.doc;
+      return {
+        title, icon: on ? "x" : "circle-dashed", select: () => this.setState({ doc: i }),
+        tabStyle: "display:flex;align-items:center;gap:9px;width:200px;min-width:96px;height:34px;padding:0 12px;flex-shrink:1;border-radius:8px;cursor:pointer;user-select:none;overflow:hidden;transition:background-color 150ms ease;" +
+          (on ? "background:#FFFFFF;box-shadow:0 1px 2px rgba(35,24,15,.06)" : "background:transparent"),
+        iconStyle: "display:flex;flex-shrink:0;color:" + (on ? "#1E1915" : "#B5ADA5"),
+        titleStyle: "flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:" + (on ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#8E837B")
+      };
+    });
+
+    const workspaces = ["Tutorial", "Narratif", "Odessay"].map(name => ({
+      name, select: () => this.setState({ ws: name }),
+      style: "display:flex;align-items:center;gap:9px;height:32px;padding:0 10px;margin-left:22px;border:0;background:transparent;border-radius:8px;font:" + (name === s.ws ? "500" : "400") + " 13px/1 'DM Sans',sans-serif;color:" + (name === s.ws ? "#1E1915" : "#8E837B") + ";cursor:pointer;text-align:left;transition:background-color 180ms ease,color 180ms ease",
+      dotStyle: "width:5px;height:5px;border-radius:50%;flex-shrink:0;background:" + (name === s.ws ? "#96532C" : "#CFC9C1")
+    }));
+
+    const tocRows = [["Reference Odyssey", 0], ["El shell de dos capas", 1], ["Superficie y elevación", 2], ["Ritmo del rail", 2], ["Notas de campo", 1]];
+    const tocItems = tocRows.map(([label, level], i) => {
+      const on = i === s.toc;
+      const pad = level <= 1 ? 8 : level === 2 ? 24 : 40;
+      return {
+        label, select: () => this.setState({ toc: i }),
+        style: "position:relative;display:flex;align-items:center;width:100%;min-height:28px;padding:4px 8px 4px " + pad + "px;border:0;border-radius:6px;background:" + (on ? "#E7E5E1" : "transparent") +
+          ";font:" + (level <= 1 ? "500" : "400") + " 12px/1.35 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#6B5F57") + ";cursor:pointer;text-align:left;transition:background-color 160ms ease",
+        accentStyle: on ? "position:absolute;left:0;top:4px;bottom:4px;width:2px;background:#96532C" : "display:none"
+      };
+    });
+
+    const textItems = [["Aa", "Normal", "⌘0"], ["H1", "Heading 1", "⌘1"], ["H2", "Heading 2", "⌘2"], ["›", "Blockquote", "⌘⇧B"]].map(([glyph, label, shortcut]) => {
+      const on = glyph === s.block;
+      return { glyph, label, shortcut, select: () => this.setState({ block: glyph }), glyphStyle: fmtGlyph(on), style: fmtItem(on) };
+    });
+
+    const rules = [
+      ["Un solo fondo", "Topbar, sidebar, paneles y status bar no tienen fondo propio: son bg. Si hay que separarlos se usa una regla de 1px en line — nunca una sombra ni otro tono."],
+      ["Una sola elevación", "La hoja es lo único elevado en reposo. Menús y modales suben mientras están abiertos y bajan al cerrarse; nada más lleva sombra."],
+      ["El sidebar empuja", "Colapsar cambia el ancho de la columna de 232 a 52, no la posición de la hoja en z. La status bar sigue ese ancho + 4 para arrancar donde arranca la hoja."],
+      ["Un solo scrim", "Todo lo modal comparte el mismo vidrio: rgba(35,24,15,.22) con blur(14px) saturate(115%). Nunca se oscurece más ni se cambia el blur por jerarquía — la jerarquía la da el z-index y el tamaño del panel, no el fondo."],
+      ["El modal también es shell", "Un modal que muestra contenido de un artifact repite las dos capas: chrome cálido con navegación y cierre, hojas blancas adentro. Solo los diálogos cortos (renombrar, confirmar) son una sola tarjeta."]
+    ].map(([title, body]) => ({ title, body }));
+
+    const open = s.shellOpen;
+    return {
+      surfaceSwatches: mk(surface), inkSwatches: mk(ink), typeScale, radii, heights, widths, shadows, motion,
+      railIdle: railRow(false), railActive: railRow(true),
+      railMini: railRow(false) + ";width:40px", railMiniActive: railRow(true) + ";width:40px",
+      railIconWrap: "box-sizing:border-box;width:40px;min-width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center",
+      tabs, segments, docTabs, workspaces, tocItems, textItems, rules, treeDemo, treeRules, treeModes,
+      regions: REGIONS, layoutRules, deviations,
+      blockLabel: s.block === "Aa" ? "Normal" : s.block,
+      textTriggerStyle: fmtTrigger(true),
+      openTextMenu: () => {},
+      shortcutStyle: "flex-shrink:0;font:400 12px/1 'DM Sans',sans-serif;color:#B5ADA5;letter-spacing:.04em",
+      fmtBtn: "width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#2F2A25;cursor:pointer;transition:background-color 150ms ease",
+      chromeBtn: "width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:7px;color:#3F3731;cursor:pointer;transition:background-color 150ms ease",
+      ghostBtn: "width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:8px;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      ghostBtnSm: "width:26px;height:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:6px;color:#8E837B;cursor:pointer;transition:background-color 150ms ease",
+      primaryBtn: "display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;padding:0 16px;border:0;border-radius:7px;background:#1E1915;color:#FBFAF9;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease",
+      titleSaveStyle: "height:36px;padding:0 20px;border:0;border-radius:8px;background:#1E1915;color:#FFFFFF;font:500 14px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 180ms ease",
+      btnGhost: "height:36px;padding:0 16px;border:0;border-radius:8px;background:transparent;cursor:pointer;font:500 14px/1 'DM Sans',sans-serif;color:#6B5F57;transition:background-color 150ms ease,color 150ms ease",
+      selectRows: SELECT_ROWS.map((label, i) => {
+        const on = !!s.picked[i];
+        return { label, toggle: () => this.setState({ picked: { ...s.picked, [i]: !on } }),
+          rowStyle: "display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-bottom:" + (i === SELECT_ROWS.length - 1 ? "0" : "1px solid #F0EEEB") + ";transition:background-color 150ms ease",
+          checkStyle: check(on), checkIconStyle: "display:flex;color:#FFFFFF;" + (on ? "opacity:1" : "opacity:0"),
+          labelStyle: "flex:1;min-width:0;font:400 13px/1.5 'DM Sans',sans-serif;color:" + (on ? "#1E1915" : "#2F2A25") + ";text-wrap:pretty" };
+      }),
+      selectionLabel: picked === 1 ? "1 artifact seleccionado" : picked + " artifacts seleccionados",
+      clearSelection: () => this.setState({ picked: {} }),
+      selGhostBtn: "height:30px;padding:0 12px;border:1px solid #E4E1DC;border-radius:7px;background:transparent;color:#3F3731;font:400 13px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      listRows: LIST_ROWS.map((r, i) => {
+        const on = !!s.picked[i];
+        return { ...r, toggle: () => this.setState({ picked: { ...s.picked, [i]: !on } }),
+          checkStyle: check(on), checkIconStyle: "display:flex;color:#FFFFFF;" + (on ? "opacity:1" : "opacity:0"),
+          badgeIcon: r.sync === "offline" ? "cloud-off" : "circle-check",
+          badgeStyle: "width:20px;height:20px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:" + (r.sync === "offline" ? "#B5ADA5" : "#2E7D4F") };
+      }),
+      correctionToggles: [
+        ["activeCorrections", "Active corrections", "Analiza los bloques nuevos automáticamente."],
+        ["showCorrections", "Show corrections", "Muestra las marcas dentro del documento."]
+      ].map(([key, label, hint]) => {
+        const on = s[key];
+        return { label, hint, toggle: () => this.setState({ [key]: !on }),
+          trackStyle: "width:40px;height:23px;flex-shrink:0;padding:0;border:0;border-radius:12px;cursor:pointer;display:flex;align-items:center;transition:background-color 200ms ease;background:" + (on ? "#1E1915" : "#D6D1CA"),
+          knobStyle: "width:17px;height:17px;border-radius:50%;background:#FFFFFF;display:block;transition:transform 200ms cubic-bezier(.4,0,.15,1);transform:translateX(" + (on ? 20 : 3) + "px)" };
+      }),
+      grammarIssues: [
+        { kind: "Ortografía", wrong: "Artifical Analysis", right: "Artificial Analysis", note: "Nombre propio mal escrito." },
+        { kind: "Gramática", wrong: "los datos que se recolecta", right: "los datos que se recolectan", note: "Concordancia de número." }
+      ].map(g => ({ ...g, dotStyle: "width:7px;height:7px;border-radius:50%;flex-shrink:0;background:" + (g.kind === "Ortografía" ? "#C4553D" : "#C07B2A") })),
+      grammarApplyBtn: "height:28px;padding:0 12px;border:0;border-radius:6px;background:#1E1915;color:#FBFAF9;font:500 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:opacity 150ms ease",
+      grammarSkipBtn: "height:28px;padding:0 12px;border:1px solid #E4E1DC;border-radius:6px;background:transparent;color:#6B5F57;font:400 12px/1 'DM Sans',sans-serif;cursor:pointer;transition:background-color 150ms ease",
+      learnedWords: ["Odessay", "Narratif", "tokens"].map(word => ({ word })),
+      ghostBtnXs: "width:18px;height:18px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;border-radius:50%;color:#B5ADA5;cursor:pointer;transition:background-color 150ms ease",
+      notes: [
+        { kind: "Highlight", quote: "comparar modelos con datos reales en lugar de percepciones", body: "El argumento central de la lección.", color: "#C07B2A" },
+        { kind: "AI Note", quote: "Si un valor no está disponible, se marca como N/D.", body: "Sugerencia: aclarar qué pasa cuando N/D cae sobre el criterio dominante.", color: "#5B5BD6" }
+      ].map(n => ({ ...n, dotStyle: "width:7px;height:7px;border-radius:50%;flex-shrink:0;background:" + n.color })),
+      modes: [["rich", "Rich"], ["markdown", "Markdown"]].map(([id, label]) => ({
+        label, select: () => this.setState({ mode: id }), style: seg(s.mode === id)
+      })),
+      sectionLabel: "margin:0 0 8px;font:600 11px/1 'DM Sans',sans-serif;letter-spacing:.07em;text-transform:uppercase;color:#8E837B",
+      menuStyle: "position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:30;background:#FFFFFF;border:1px solid #E4E1DC;border-radius:8px;box-shadow:0 8px 28px rgba(35,24,15,.1);padding:5px",
+      status: s.status, statusMenuOpen: s.statusMenu,
+      toggleStatusMenu: () => this.setState({ statusMenu: !s.statusMenu, typeMenu: false }),
+      statusTriggerStyle: this.trigger(s.statusMenu),
+      statusDotStyle: "width:9px;height:9px;box-sizing:border-box;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(s.status),
+      statusOptions: this.STATUSES.map(label => ({
+        label, select: () => this.setState({ status: label, statusMenu: false }), style: this.menuItem(label === s.status),
+        dotStyle: "width:9px;height:9px;box-sizing:border-box;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(label)
+      })),
+      statusColors: this.STATUSES.map(label => ({
+        label, hex: this.statusColor(label),
+        dotStyle: "width:9px;height:9px;box-sizing:border-box;border-radius:50%;flex-shrink:0;border:1.5px dashed " + this.statusColor(label)
+      })),
+      artifactType: s.artifactType, typeMenuOpen: s.typeMenu,
+      toggleTypeMenu: () => this.setState({ typeMenu: !s.typeMenu, statusMenu: false }),
+      typeTriggerStyle: this.trigger(s.typeMenu),
+      artifactTypeIcon: this.TYPE_ICONS[s.artifactType] || "circle",
+      typeOptions: Object.keys(this.TYPE_ICONS).map(label => ({
+        label, icon: this.TYPE_ICONS[label], select: () => this.setState({ artifactType: label, typeMenu: false }),
+        style: this.menuItem(label === s.artifactType),
+        iconStyle: "display:flex;flex-shrink:0;color:" + (label === s.artifactType ? "#1E1915" : "#8E837B")
+      })),
+      draftName: s.draft,
+      setDraftName: (e) => this.setState({ draft: e.target.value }),
+      toggleShell: () => this.setState(st => ({ shellOpen: !st.shellOpen })),
+      shellRailStyle: "box-sizing:border-box;width:" + (open ? 232 : 52) + "px;flex-shrink:0;display:flex;align-items:center;padding:0 6px 6px;overflow:hidden;transition:width 300ms cubic-bezier(.4,0,.15,1)",
+      shellRailLabel: open ? "sidebar · 232 · capa 0" : "52",
+      shellStatusStyle: "height:46px;flex-shrink:0;display:flex;align-items:center;padding-right:18px;transition:padding-left 300ms cubic-bezier(.4,0,.15,1);padding-left:" + ((open ? 232 : 52) + 4) + "px"
+    };
+  }
+}
+</script>
+</body>
+</html>

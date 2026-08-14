@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=DM+Sans:opsz,wght@9..40,400..600&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#F3F2F0;font-family:"DM Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#96532C;text-decoration:underline;text-underline-offset:2px}
+a:hover{color:#7C4423}
+::selection{background:#CFE1F5;color:#1E1915}
+</style>
+</helmet>
+
+<div style="max-width:1080px;margin:0 auto;padding:56px 40px 80px">
+
+  <p style="margin:0 0 10px;font:500 12px/1 'DM Sans',sans-serif;color:#96532C;letter-spacing:.08em;text-transform:uppercase">Marca · exploración</p>
+  <h1 style="margin:0 0 10px;font:500 34px/1.1 'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.025em">Abanico y Origami</h1>
+  <p style="margin:0 0 40px;max-width:66ch;font:400 14px/1.65 'DM Sans',sans-serif;color:#6B5F57;text-wrap:pretty">Arriba, el <strong style="font-weight:600;color:#1E1915">Abanico</strong> con más salto tonal y esquinas blandas — los planos dejan de ser vecinos y pasan a ser piezas. Abajo, el <strong style="font-weight:600;color:#1E1915">Pliegue</strong> llevado a diagonales: cortes que no siguen los ejes leen como papel doblado, no como torta partida. Toda la rampa sale del sistema: <code style="font:400 13px/1 'Roboto Mono',monospace;color:#96532C">#1E1915 · #3F3731 · #6B5F57 · #B5ADA5</code>.</p>
+
+  <p style="{{eyebrow}}">Abanico · contraste y radio</p>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:36px">
+    <sc-for list="{{fan}}" as="v" hint-placeholder-count="6">
+      <div style="{{v.cardStyle}}">
+        <div style="display:flex;align-items:center;justify-content:center;height:126px">
+          <svg width="104" height="104" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 0;border-top:1px solid #F0EEEB;border-bottom:1px solid #F0EEEB">
+          <svg width="28" height="28" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+          <svg width="16" height="16" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+        </div>
+        <p style="margin:12px 0 3px;font:500 12px/1.2 'DM Sans',sans-serif;color:#1E1915">{{v.name}}</p>
+        <p style="margin:0;font:400 11px/1.45 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">{{v.note}}</p>
+      </div>
+    </sc-for>
+  </div>
+
+  <p style="{{eyebrow}}">Pliegue · diagonales, origami</p>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:40px">
+    <sc-for list="{{fold}}" as="v" hint-placeholder-count="6">
+      <div style="{{v.cardStyle}}">
+        <div style="display:flex;align-items:center;justify-content:center;height:126px">
+          <svg width="104" height="104" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 0;border-top:1px solid #F0EEEB;border-bottom:1px solid #F0EEEB">
+          <svg width="28" height="28" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+          <svg width="16" height="16" viewBox="0 0 64 64" style="display:block">
+            <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+              <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+            </sc-for>
+          </svg>
+        </div>
+        <p style="margin:12px 0 3px;font:500 12px/1.2 'DM Sans',sans-serif;color:#1E1915">{{v.name}}</p>
+        <p style="margin:0;font:400 11px/1.45 'DM Sans',sans-serif;color:#8E837B;text-wrap:pretty">{{v.note}}</p>
+      </div>
+    </sc-for>
+  </div>
+
+  <p style="{{eyebrow}}">Lockup</p>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px">
+    <sc-for list="{{shortlist}}" as="v" hint-placeholder-count="3">
+      <div style="display:flex;align-items:center;gap:13px;padding:22px 24px;border:1px solid #EDEBE8;border-radius:14px;background:#FFFFFF">
+        <svg width="34" height="34" viewBox="0 0 64 64" style="display:block;flex-shrink:0">
+          <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+            <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+          </sc-for>
+        </svg>
+        <span style="font:500 21px/1 Geist,'DM Sans',sans-serif;color:#1E1915;letter-spacing:-.02em">Artifact Studio</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:40px;flex-wrap:wrap;padding:26px 30px;border-radius:16px;background:#1E1915">
+    <sc-for list="{{shortlistDark}}" as="v" hint-placeholder-count="3">
+      <span style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+        <svg width="40" height="40" viewBox="0 0 64 64" style="display:block;flex-shrink:0">
+          <sc-for list="{{v.layers}}" as="l" hint-placeholder-count="3">
+            <path d="{{l.d}}" fill="{{l.fill}}" stroke="{{l.stroke}}" stroke-width="{{l.w}}" stroke-linejoin="round" stroke-linecap="round"></path>
+          </sc-for>
+        </svg>
+        <span style="font:500 22px/1 Geist,'DM Sans',sans-serif;color:#FBFAF9;letter-spacing:-.02em;white-space:nowrap">Artifact Studio</span>
+      </span>
+    </sc-for>
+    <span style="flex:1"></span>
+    <span style="max-width:30ch;font:400 12px/1.55 'DM Sans',sans-serif;color:rgba(251,250,249,.55)">La rampa se invierte entera. Con más contraste el salto sobrevive mejor al fondo oscuro que con pasos vecinos.</span>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1080,&quot;height&quot;:1000}}">
+const A = [32, 14], L = [10, 50], R = [54, 50];
+const P = (...p) => "M" + p.map((q) => q[0] + " " + q[1]).join(" L") + " Z";
+const cen = (p) => [p.reduce((a, q) => a + q[0], 0) / p.length, p.reduce((a, q) => a + q[1], 0) / p.length];
+const shrink = (p, f) => { const c = cen(p); return p.map((q) => [c[0] + (q[0] - c[0]) * f, c[1] + (q[1] - c[1]) * f]); };
+// abanico de n cuñas desde el vértice
+const fan = (n) => { const out = []; for (let i = 0; i < n; i++) out.push([A, [10 + 44 * i / n, 50], [10 + 44 * (i + 1) / n, 50]]); return out; };
+
+class Component extends DCLogic {
+  build(dark) {
+    const t = dark ? ["#FBFAF9", "#CFC9C1", "#8E837B", "#6B5F57"] : ["#1E1915", "#3F3731", "#6B5F57", "#B5ADA5"];
+    const mk = (name, note, layers, pick) => ({
+      name, note,
+      layers: layers.map((l) => ({ d: l.d, fill: l.fill || "none", stroke: l.stroke || "none", w: l.w || 0 })),
+      cardStyle: "padding:12px 14px 16px;border:1px solid " + (pick ? "#1E1915" : "#EDEBE8") + ";border-radius:14px;background:#FFFFFF" +
+        (pick ? ";box-shadow:0 2px 6px rgba(35,24,15,.06),0 16px 34px rgba(35,24,15,.07)" : "")
+    });
+    // cuñas planas / redondeadas
+    const flat = (tones, n) => fan(n || 3).map((w, i) => ({ d: P(...w), fill: tones[i] }));
+    const round = (tones, f, r, n) => fan(n || 3).map((w, i) => ({ d: P(...shrink(w, f)), fill: tones[i], stroke: tones[i], w: r }));
+
+    const fanSet = [
+      mk("01 · Abanico", "El original: pasos vecinos de la rampa. Suave, casi un degradé.", flat([t[0], t[1], t[2]])),
+      mk("02 · Contraste", "Salta un escalón entre planos. Las tres piezas se separan de verdad.", flat([t[0], t[3], t[2]]), true),
+      mk("03 · Alternado", "Extremos en tinta, centro claro. Simétrico y más gráfico.", flat([t[0], t[3], t[0]])),
+      mk("04 · Radio suave", "Mismo abanico con esquinas blandas. Deja de ser porción de torta.", round([t[0], t[3], t[2]], 0.94, 3.5), true),
+      mk("05 · Hojas", "Cuñas separadas y redondeadas. El aire entre piezas hace el sistema.", round([t[0], t[3], t[2]], 0.86, 4.5)),
+      mk("06 · Cinco", "Más cortes, rampa completa. Rico a 104, ruido a 16.", flat([t[0], t[1], t[2], t[3], t[2]], 5))
+    ];
+
+    const foldSet = [
+      mk("07 · Diagonal", "Un solo corte que no sigue ningún eje. Dos planos, máxima claridad.", [
+        { d: P(A, [43, 32], L), fill: t[0] },
+        { d: P([43, 32], R, L), fill: t[3] }
+      ]),
+      mk("08 · Abanico lateral", "El vértice del abanico se muda a la esquina. Diagonales, no radios.", [
+        { d: P(A, [43, 32], L), fill: t[0] },
+        { d: P([43, 32], [48.8, 41.5], L), fill: t[2] },
+        { d: P([48.8, 41.5], R, L), fill: t[3] }
+      ], true),
+      mk("09 · Acordeón", "Tres bandas paralelas al borde izquierdo: el papel plegado en zigzag.", [
+        { d: P(A, [39.4, 26], [24.7, 50], L), fill: t[0] },
+        { d: P([39.4, 26], [46.7, 38], [39.3, 50], [24.7, 50]), fill: t[2] },
+        { d: P([46.7, 38], R, [39.3, 50]), fill: t[3] }
+      ], true),
+      mk("10 · Solapa", "La esquina derecha doblada hacia adentro. Un gesto, no una partición.", [
+        { d: P(A, R, L), fill: t[0] },
+        { d: P([43, 32], R, [36, 50]), fill: t[3] }
+      ]),
+      mk("11 · Vértice doblado", "La punta cae sobre el cuerpo. Lo más literalmente origami del set.", [
+        { d: P(A, R, L), fill: t[0] },
+        { d: P([21, 32], [43, 32], [32, 45]), fill: t[3] }
+      ]),
+      mk("12 · Doble doblez", "Dos solapas opuestas. Rico de cerca, se cierra a 16.", [
+        { d: P(A, R, L), fill: t[0] },
+        { d: P([21, 32], L, [28, 50]), fill: t[2] },
+        { d: P([43, 32], R, [36, 50]), fill: t[3] }
+      ])
+    ];
+
+    return { fan: fanSet, fold: foldSet, all: fanSet.concat(foldSet) };
+  }
+
+  renderVals() {
+    const light = this.build(false), dark = this.build(true);
+    const pick = (s) => [s.all[1], s.all[3], s.all[8]];
+    return {
+      fan: light.fan, fold: light.fold,
+      shortlist: pick(light), shortlistDark: pick(dark),
+      eyebrow: "margin:0 0 14px;font:500 12px/1 'DM Sans',sans-serif;color:#96532C;letter-spacing:.08em;text-transform:uppercase"
+    };
+  }
+}
+
+</script>
+</body>
+</html>
