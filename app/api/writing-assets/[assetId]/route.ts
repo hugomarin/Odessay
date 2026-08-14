@@ -1,5 +1,14 @@
+import { handleCorsPreflight, withCorsHeaders } from "@/lib/cors"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCurrentUserFromRequest } from "@/lib/supabase/request-auth"
+
+// The desktop app resolves image sources from `tauri://localhost`, so this
+// route needs the same CORS treatment as every other route it proxies. Without
+// it the preflight fails, the resolver falls back to this URL as a plain <img>
+// src — which carries no credentials — and the image renders broken.
+export function OPTIONS(request: Request) {
+  return handleCorsPreflight(request) ?? new Response(null, { status: 204 })
+}
 
 export async function GET(request: Request, context: { params: Promise<{ assetId: string }> }) {
   try {
@@ -15,9 +24,9 @@ export async function GET(request: Request, context: { params: Promise<{ assetId
       .single()
 
     if (assetError || !asset) {
-      return Response.json(
-        { data: null, error: { code: "NOT_FOUND", message: "Asset not found" } },
-        { status: 404 }
+      return withCorsHeaders(
+        Response.json({ data: null, error: { code: "NOT_FOUND", message: "Asset not found" } }, { status: 404 }),
+        request,
       )
     }
 
@@ -28,9 +37,9 @@ export async function GET(request: Request, context: { params: Promise<{ assetId
       .single()
 
     if (writingError || !writing) {
-      return Response.json(
-        { data: null, error: { code: "NOT_FOUND", message: "Writing not found" } },
-        { status: 404 }
+      return withCorsHeaders(
+        Response.json({ data: null, error: { code: "NOT_FOUND", message: "Writing not found" } }, { status: 404 }),
+        request,
       )
     }
 
@@ -47,9 +56,9 @@ export async function GET(request: Request, context: { params: Promise<{ assetId
     }
 
     if (!canAccess) {
-      return Response.json(
-        { data: null, error: { code: "FORBIDDEN", message: "Access denied" } },
-        { status: 403 }
+      return withCorsHeaders(
+        Response.json({ data: null, error: { code: "FORBIDDEN", message: "Access denied" } }, { status: 403 }),
+        request,
       )
     }
 
@@ -59,18 +68,23 @@ export async function GET(request: Request, context: { params: Promise<{ assetId
 
     if (signedError || !signedUrl) {
       console.error("[asset:resolve] signed url error", { assetId, error: signedError?.message })
-      return Response.json(
-        { data: null, error: { code: "STORAGE_ERROR", message: "Failed to resolve asset" } },
-        { status: 500 }
+      return withCorsHeaders(
+        Response.json({ data: null, error: { code: "STORAGE_ERROR", message: "Failed to resolve asset" } }, { status: 500 }),
+        request,
       )
     }
 
-    return Response.redirect(signedUrl.signedUrl, 302)
+    // Not Response.redirect(): its headers are immutable, so the CORS headers
+    // the desktop needs on the redirect itself could not be attached.
+    return withCorsHeaders(
+      new Response(null, { status: 302, headers: { Location: signedUrl.signedUrl } }),
+      request,
+    )
   } catch (error) {
     console.error("[asset:resolve] unexpected error", { error: error instanceof Error ? error.message : String(error) })
-    return Response.json(
-      { data: null, error: { code: "INTERNAL_ERROR", message: "Unexpected error" } },
-      { status: 500 }
+    return withCorsHeaders(
+      Response.json({ data: null, error: { code: "INTERNAL_ERROR", message: "Unexpected error" } }, { status: 500 }),
+      request,
     )
   }
 }

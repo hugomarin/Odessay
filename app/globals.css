@@ -763,6 +763,10 @@
     font-size: 12px;
   }
 
+  .odessay-local-image[data-local-image="false"][data-local-image-state="missing"]::after {
+    content: "Online image unavailable";
+  }
+
   .odessay-editor-content hr,
   .prose-odessay hr {
     border: none;
