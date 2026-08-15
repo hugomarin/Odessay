@@ -27,9 +27,13 @@
   --line-softer: 36 14% 93%;           /* #F0EEEB — hairline between form rows      */
   --surface-selected: 34.3 41.2% 96.7%;/* #FAF7F3 — warm selected / summary rows    */
   --surface-row-hover: 30 25% 98.4%;   /* #FCFBFA — table row hover                 */
+  --surface-menu-hover: 40 9.7% 94.7%; /* #F2F1EF — dropdown item hover             */
   --success: 145.1 46.2% 33.5%;        /* #2E7D4F — done, restored, confirmations   */
   --success-tint: 135 28.6% 91.8%;     /* #E4F0E7 — success tile background         */
   --cursor: 22 55% 38%;
+  /* Single scrim for every modal overlay — docs/design/overlays.md.
+     Read from the render of the Add Workspace and Settings prototypes. */
+  --od-scrim: rgba(35, 24, 15, 0.26);
   --od-annotation-ai: #5B5BD6;
   --od-annotation-highlight: #C07B2A;
   --od-annotation-highlight-badge: #E8A020;
@@ -73,6 +77,8 @@
   --color-line-softer: hsl(var(--line-softer));
   --color-surface-selected: hsl(var(--surface-selected));
   --color-surface-row-hover: hsl(var(--surface-row-hover));
+  --color-surface-menu-hover: hsl(var(--surface-menu-hover));
+  --color-scrim: var(--od-scrim);
   --color-success: hsl(var(--success));
   --color-success-tint: hsl(var(--success-tint));
   --color-border: hsl(var(--border));
@@ -138,6 +144,10 @@
   --shadow-splash-mark: 0 12px 34px rgba(35, 24, 15, 0.22);
   --animate-menu-in: menuIn 150ms ease;
   --animate-fade-in: fadeIn 180ms ease;
+  /* Overlay motion — docs/design/system-app.md §6. The keyframes live below;
+     these are the only durations any overlay primitive may use. */
+  --animate-modal-in: odModalIn 260ms var(--od-ease-layout);
+  --animate-step-in: odStepIn 220ms var(--od-ease-layout);
   --ease-layout: var(--od-ease-layout);
 }
 
