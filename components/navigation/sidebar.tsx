@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Layers3, LayoutGrid, PanelLeftDashed, PenLine, Plus, Search, Download, X } from "lucide-react"
+import { ArtifactLockup } from "@/components/brand/artifact-mark"
 import { SearchModal } from "@/components/navigation/search-modal"
 import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
@@ -274,7 +275,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               )}
               aria-label="Artifact Studio"
             >
-              <span className="font-sans text-[15px] font-bold tracking-tight text-foreground whitespace-nowrap">Artifact Studio</span>
+              <ArtifactLockup markSize={22} fontSize={15} />
             </Link>
 
             <ActionTooltip
