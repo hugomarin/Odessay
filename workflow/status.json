@@ -1,7 +1,7 @@
 {
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar 'built' durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: agregar entrada en 'built' con issue, linear_url, commit y fecha; commitear y pushear a main. Luego mover issue a Done en Linear y ajustar active_phase si la fase cambia.",
-  "last_updated": "2026-08-14",
+  "last_updated": "2026-08-15",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
@@ -3506,6 +3506,16 @@
       "commit": "a68b10b",
       "date": "2026-08-14",
       "notes": "Shipped via wf-ship y mergeado por squash como 1adc5ee1b36990df6ac07a8811cf6505850c26db tras CI traceability y Vercel en verde. Baja el paquete de diseno a docs/design/ (6 docs de producto + 8 specs de vista), .agents/skills/skill-design-landing/ y docs/design/globals-additions.css integro. Decision de fondo: los 12 prototipos .dc.html entran a docs/design/reference/ como AUTORIDAD VISUAL de la fase, revirtiendo la version original del brief que los dejaba fuera del repo; sin ellos cada issue de vista habria inferido los cientos de valores que la prosa no lista (Settings: 522 lineas de render con ~40 valores px y 38 colores contra 67 lineas de documento). Cada views/*.md abre con bloque Authority y precedencia explicita; settings-workflows declara que no tiene prototipo; migration-plan §4 promovido a protocolo de fidelidad normativo. Los cinco deltas quedan OPEN pendientes de ODE-425. skill-design gana el limite contra la capa de marketing. docs.json +19 entradas. Paquete original eliminado del arbol. typecheck PASS, lint PASS con 6 warnings preexistentes, Vitest 195 archivos/1365 tests PASS, delivery gate PASS. Sin cambios de codigo de producto."
+    },
+    {
+      "what": "feat(design): resolve the five design deltas into skill-design and globals.css [ODE-425]",
+      "phase": "Fase 10 — Artifact Studio: la superficie",
+      "issue": "ODE-425",
+      "linear_url": "https://linear.app/hugo-marin/issue/ODE-425/resolve-the-five-design-deltas-into-skill-design-and-globalscss",
+      "pr_url": "https://github.com/hugomarin/Odessay/pull/385",
+      "commit": "e1cf4c6",
+      "date": "2026-08-15",
+      "notes": "Shipped via wf-ship; PR abierto para merge manual. Cierra los cinco deltas del paquete de diseno: (1) 8 tokens de color + 10 de geometria + 2 radios + 4 sombras + .od-scroll + curvas de motion en globals.css; (2) DM Sans como fuente de toda la UI y Geist solo en el wordmark, con renombre en vistas.md; (3) cuerpo del editor a 17px/1.9, el valor del prototipo de Studio, aplicado en la unica regla agrupada que gobierna las cuatro superficies del contrato de presentacion; (4) bordes 0.5px a favor de la skill; (5) 'artifact' como termino de producto. Desviacion declarada: los HSL de globals-additions.css no renderizan el hex de su propio comentario, asi que se recalcularon desde el render del prototipo por el fidelity gate. Excluidos por scope: [data-layer=marketing] y --font-display (ODE-440). Queda abierto y registrado en system-app.md que --font-sans todavia resuelve a Geist. typecheck PASS; lint PASS con 6 warnings preexistentes; Vitest 195/196 archivos y 1401/1402 tests PASS (desk-activity falla por zona horaria tambien en el base commit); ops:delivery:gate PASS."
     }
   ]
 }

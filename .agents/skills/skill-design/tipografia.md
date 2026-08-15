@@ -12,10 +12,25 @@ description: >
 
 Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato para `.odessay-editor-content` + `.prose-odessay`.
 
+## Delta 3 — el cuerpo del editor es 17px / 1.9
+
+Resuelto en ODE-425. El paquete Artifact Studio y `globals.css` daban dos respuestas: 17/1.9 (prototipo) y 18/1.85 (repo). **Gana 17/1.9.** Razones, en orden de peso:
+
+1. **Es el valor del prototipo, que es la autoridad visual de la fase.** `docs/design/reference/Artifact Studio Studio.dc.html` declara el cuerpo de la hoja como `font: 400 17px/1.9 'DM Sans'`, afinado contra una hoja de 720px.
+2. **Unifica editor y lectura.** La tabla de este skill ya pedía 17px en el cuerpo de lectura. Mantener 18px en el editor obligaba a sostener dos tamaños de cuerpo para el mismo contenido según la superficie que lo renderiza.
+3. **La medida no depende del ancho de la hoja.** La columna está expresada en `ch` (68ch para prosa, 54ch para blockquote), así que sigue siendo de 68 caracteres tanto en la hoja de 860px vigente como en la de 720px que llega con el rediseño del shell. El cambio no queda a la espera de ese rediseño.
+4. **El ritmo vertical apenas se mueve.** La caja de línea pasa de 33.3px (18 × 1.85) a 32.3px (17 × 1.9): −3%. El interlineado relativo sube, así que la mancha de texto queda algo más aireada, no más apretada.
+
+**Se aplica en un solo lugar:** la regla agrupada `.odessay-editor-content, .prose-odessay` de `app/globals.css`. Esa regla es la que gobierna las cuatro superficies del contrato de presentación — `/write/[id]`, `/preview/[token]`, `/shared/[id]` y `/{username}/{slug}` — porque las cuatro llegan a ella por una de esas dos clases. Ninguna superficie declara su propio `font-size` de cuerpo; si alguna lo hiciera, rompería el contrato.
+
+**Excepción acoplada:** `.odessay-markdown-source` y `.odessay-markdown-semantic` (el par apilado del modo markdown) también pasan a 17/1.9. No son una segunda decisión: son un overlay transparente sobre su capa semántica y deben mantener métricas idénticas entre sí, y seguir al cuerpo para que alternar de modo no cambie el tamaño del texto.
+
+**Fuera de este cambio:** el override móvil (`max-width: 699px` → 16px/1.75) se mantiene como está.
+
 ## Principios del sistema
 
 1. Un solo contrato tipográfico compartido; excepciones solo de contexto (`caret-color`, `min-height`, `::selection`, `.hl`, mobile prose).
-2. Base en `18px` solo en contenedor; hijos tipográficos escalan en `em`.
+2. Base en `17px` solo en contenedor; hijos tipográficos escalan en `em`.
 3. Escala Major Third (1.25) sin valores ad hoc.
 4. Jerarquía por tokens de color (`--ink*`) antes que sobrecargar `font-weight`.
 5. `line-height` siempre unitless.
@@ -28,9 +43,9 @@ Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato
 
 | step | Elemento | Tamaño | px aprox |
 |---|---|---|---|
-| step-5 | h1 | 1.75em | ~31px |
-| step-4 | h2 | 1.5em | ~27px |
-| step-3 | h3 | 1.25em | ~22.5px |
+| step-5 | h1 | 1.75em | ~30px |
+| step-4 | h2 | 1.5em | ~25.5px |
+| step-3 | h3 | 1.25em | ~21px |
 
 ### Tabla de line-height (canónica)
 
@@ -62,9 +77,9 @@ Sistema tipográfico canónico compartido por editor y lectura. Un solo contrato
 .prose-odessay {
   color: hsl(var(--ink-2));
   font-family: var(--od-font-ui);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 400;
-  line-height: 1.85;
+  line-height: 1.9;
 }
 
 .odessay-editor-content h1,

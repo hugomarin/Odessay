@@ -16,6 +16,24 @@ Los archivos HTML en `/workflow/reference/` son prototipos interactivos que docu
 **Antes de implementar cualquier vista, leer `.agents/skills/skill-design/vistas.md`** — contiene valores exactos de padding, tamaños, colores y comportamiento por vista, más checklists de validación.
 **Si el issue toca presentación textual (write/preview/shared/public), leer también `.agents/skills/skill-design/tipografia.md`** — es el contrato tipográfico canónico cross-mode.
 
+---
+
+## Deltas resueltos (ODE-425) — respuesta única
+
+Los cinco deltas entre el paquete de diseño y este skill están **cerrados**. Ninguna vista los vuelve a decidir. Si una fuente contradice esta tabla, esta tabla gana.
+
+| # | Pregunta | Respuesta cerrada |
+|---|---|---|
+| 1 | ¿Cuál es el gris de hairline? | `hsl(var(--line-soft))` = `#EDEBE8` dentro de la hoja; `hsl(var(--line-softer))` = `#F0EEEB` entre filas de formulario. Nunca el hex literal. |
+| 2 | ¿Qué fuente usa la UI? | **DM Sans**, en toda la UI. **Geist queda reservado exclusivamente al wordmark.** Lora sigue siendo la fuente del contenido epistolar. |
+| 3 | ¿Cuánto mide el cuerpo del editor? | **17px / 1.9**, en `.odessay-editor-content` + `.prose-odessay`. Razón completa en `tipografia.md`. |
+| 4 | ¿1px o 0.5px en bordes? | **0.5px**, siempre. El 1px de los prototipos `.dc.html` es un límite del entorno de prototipado, no una decisión de diseño. |
+| 5 | ¿Writing o artifact? | **artifact** en toda UI nueva. Los nombres de archivo y símbolos migran en un pase mecánico posterior (ODE-439). |
+
+**Nota de implementación del delta 2.** El token `--od-font-ui` ya resuelve a DM Sans y es el que debe usarse. La utilidad `font-sans` de Tailwind todavía resuelve a Geist (`--font-sans: var(--font-geist-sans)` en `globals.css`): es un mapeo **legacy** pendiente de voltear en un pase dedicado, no una excepción a la regla. Ninguna vista nueva debe apoyarse en él para justificar Geist en UI.
+
+---
+
 **Módulos compartidos — reutilizar, nunca recrear:** Sidebar y Topbar son componentes globales. No se implementan de nuevo por vista. El editor abre con sidebar mini (52px) por defecto. El resto de vistas abren con sidebar expandido (292px).
 
 ---
@@ -92,6 +110,49 @@ En `globals.css` definir como CSS custom properties y como variables ShadCN simu
 }
 ```
 
+### Tokens del paquete Artifact Studio (delta 1 — cerrados)
+
+Los prototipos usan cinco pasos neutros por debajo de `--ink-4`, dos hairlines dentro de la hoja y un verde de éxito. Todos tienen token; **ningún componente vuelve a escribir estos hex**. Los valores HSL están calculados para renderizar el hex del prototipo de forma exacta.
+
+```css
+:root {
+  --ink-5:             30 9.8% 67.8%;    /* #B5ADA5 — placeholders, glifos disabled  */
+  --ink-6:             34.3 12.7% 78.4%; /* #CFC9C1 — bordes dashed, tiles vacíos    */
+  --line-soft:         36 12% 92%;       /* #EDEBE8 — hairline dentro de la hoja     */
+  --line-softer:       36 14% 93%;       /* #F0EEEB — hairline entre filas de form   */
+  --surface-selected:  34.3 41.2% 96.7%; /* #FAF7F3 — fila seleccionada / resumen    */
+  --surface-row-hover: 30 25% 98.4%;     /* #FCFBFA — hover de fila de tabla         */
+  --success:           145.1 46.2% 33.5%;/* #2E7D4F — done, restored, confirmaciones */
+  --success-tint:      135 28.6% 91.8%;  /* #E4F0E7 — fondo de tile de éxito         */
+}
+```
+
+Utilidades disponibles: `text-ink-5`, `text-ink-6`, `bg-line-soft`, `bg-line-softer`, `bg-surface-selected`, `bg-surface-row-hover`, `text-success`, `bg-success-tint`.
+
+**Geometría de shell — valores, no utilidades.** Se leen desde `@theme` en vez de reescribir el número:
+
+| Token | Valor | Qué es |
+|---|---|---|
+| `--size-rail-collapsed` | 52px | Rail colapsado |
+| `--size-rail-expanded` | 232px | Rail expandido |
+| `--size-settings-nav` | 244px | Nav de sección en Settings |
+| `--size-panel-left` | 236px | Panel izquierdo (TOC, árbol de workspace) |
+| `--size-panel-right` | 276px | Panel derecho (properties, notes) |
+| `--size-titlebar` | 44px | Titlebar de desktop |
+| `--size-topbar` | 48px | Topbar del editor |
+| `--size-statusbar` | 46px | Status bar |
+| `--size-sheet-editor` | 720px | Ancho de hoja del editor |
+| `--size-sheet-reading` | 660px | Ancho de lectura |
+
+**Sombras del paquete** — se suman a `shadow-float*`, no las reemplazan:
+
+| Token | Uso |
+|---|---|
+| `--shadow-selection-bar` | Barra de selección flotante |
+| `--shadow-modal` | Modales de flujo |
+| `--shadow-auth-card` | Card de auth |
+| `--shadow-splash-mark` | Marca del splash |
+
 En Tailwind, extender con los nombres semánticos de Odessay:
 
 ```ts
@@ -116,74 +177,59 @@ theme: {
 
 ### Fuentes
 
-**Lora** — todo lo epistolar: writings, lectura, títulos de cards, blockquotes. Serif con calidez literaria.
+**Lora** — todo lo epistolar: contenido del artifact, lectura, títulos de cards, blockquotes, títulos display de modales. Serif con calidez literaria.
 
-**Geist Sans** — todo lo funcional: navegación, labels, botones, badges, metadatos, inputs. Nunca en cuerpo de writing.
+**DM Sans** — todo lo funcional: navegación, filas, labels, botones, badges, metadatos, inputs, métricas. Es la fuente de **toda** la UI (delta 2). Token: `--od-font-ui`.
 
-Nunca mezclar Lora y Geist Sans en el mismo elemento.
+**Geist** — **solo el wordmark** (splash, nav de landing). No se usa en ninguna otra parte de la UI.
+
+**Roboto Mono** — rutas de filesystem, counts en árboles, labels de diagrama.
+
+Nunca mezclar Lora y DM Sans en el mismo elemento.
 
 ### Instalación
 
-```bash
-npm install geist
-```
+Las tres familias ya están cargadas en `app/layout.tsx`. DM Sans expone `--font-dm-sans` (consumida vía `--od-font-ui`), Lora expone `--font-lora`, Geist expone `--font-geist-sans` y **solo** alimenta el wordmark. Roboto Mono entra por `@font-face` en `globals.css`.
 
 ```tsx
-// app/layout.tsx
-import { GeistSans } from 'geist/font/sans'
-import { Lora } from 'next/font/google'
-
-const lora = Lora({
-  subsets: ['latin'],
-  variable: '--font-lora',
-  style: ['normal', 'italic'],
-  weight: ['400', '500'],
-  display: 'swap',
-})
-
-export default function RootLayout({ children }) {
-  return (
-    <html className={`${GeistSans.variable} ${lora.variable}`}>
-      <body className="font-sans">{children}</body>
-    </html>
-  )
-}
+// app/layout.tsx — estado vigente
+import { GeistSans } from 'geist/font/sans'      // wordmark únicamente
+import { DM_Sans, Lora } from 'next/font/google' // UI + contenido epistolar
 ```
 
-```ts
-// tailwind.config.ts
-fontFamily: {
-  sans:  ['var(--font-geist-sans)', 'system-ui', 'sans-serif'],
-  lora:  ['var(--font-lora)', 'Georgia', 'serif'],
-  serif: ['var(--font-lora)', 'Georgia', 'serif'], // alias
-}
+```css
+/* globals.css — los tokens que se usan en componentes */
+--od-font-ui:    var(--font-dm-sans), system-ui, sans-serif;  /* toda la UI */
+--od-font-meta:  var(--font-dm-sans), system-ui, sans-serif;  /* metadatos  */
+--od-font-prose: var(--font-lora), Georgia, serif;            /* contenido  */
 ```
 
 ### Escala tipográfica validada
 
-Escala proporcional 1.25x. Validada en prototipos HTML.
+Valores del paquete Artifact Studio, verificados contra los prototipos `.dc.html`.
 
 | Elemento | Tamaño | Weight | Fuente | Line-height |
 |---|---|---|---|---|
-| Logo "Odessay" | 17px | 400 | Lora | — |
-| Writing title (editor) | 36px | 500 | Lora | 1.18 |
-| H1 en writing | 30px | 500 | Lora | 1.2 |
-| H2 en writing | 24px | 500 | Lora | 1.25 |
-| H3 en writing | 20px | 500 | Lora | normal |
-| Body de writing | 18px | 400 | Geist Sans | 1.85 |
+| Wordmark "Artifact Studio" | 17px | 400 | Geist | — |
+| Título de vista (Desk, Workspace, Settings) | 32px | 500 | DM Sans | 1–1.1, `-0.02em` |
+| Subtítulo de vista | 14px | 400 | DM Sans | 1.5, ink-4 |
+| Título de sección en hoja | 20–24px | 500 | DM Sans | 1.25 |
+| Título de artifact (fila) | 15px | 500 | DM Sans | 1.3 |
+| Título de artifact (preview / editor) | 28–32px | 500 | Lora | 1.2–1.25, `-0.015em` |
+| Cuerpo del editor / lectura | **17px** | 400 | DM Sans | **1.9** |
+| H2 dentro del editor | 17px | 600 | DM Sans | 1.5 |
+| H1 en contenido | 30px | 500 | Lora | 1.2 |
+| H2 en contenido | 24px | 500 | Lora | 1.25 |
+| H3 en contenido | 20px | 500 | Lora | normal |
 | Blockquote | 22px | 400 italic | Lora | 1.7 |
-| Card título (correspondence) | 22px | 500 | Lora | 1.2 |
-| Card excerpt | 14px | 400 | Geist Sans | 1.65 |
-| Reading title | 30px | 500 | Lora | 1.2 |
-| Reading body | 17px | 400 | Geist Sans | 1.85 |
-| Nav items sidebar | 15px | 400/500 | Geist Sans | — |
-| Topbar título de vista | 15px | 400 | Lora | — |
-| Botones, labels | 13–14px | 500 | Geist Sans | — |
-| Badges, metadatos | 11–12px | 400 | Geist Sans | — |
-| Labels uppercase | 10–11px | 600 | Geist Sans | letter-spacing: 0.07em |
-| Status bar | 11px | 400 | Geist Sans | — |
+| Meta de fila, counts | 12px | 400 | DM Sans | — |
+| Nav items sidebar | 15px | 400/500 | DM Sans | — |
+| Controles, botones, labels | 13–14px | 500 | DM Sans | — |
+| Overline | 10–11px | 600 | DM Sans | `.09–.13em`, uppercase, ink-4 |
+| Status bar | 11px | 400 | DM Sans | — |
+| Path, count de árbol | 11–13px | 400 | Roboto Mono | — |
 
-**Regla:** Lora para lo epistolar (contenido que el usuario escribe y lee). Geist Sans para todo lo funcional (UI, labels, metadatos).
+**Regla:** Lora para lo epistolar (contenido que el usuario escribe y lee). DM Sans para todo lo funcional (UI, labels, metadatos). Roboto Mono solo para rutas y counts. Geist solo para el wordmark.
 
 ---
 
@@ -210,19 +256,48 @@ boxShadow: {
 
 ## Border radius
 
-```ts
-// tailwind.config.ts
-borderRadius: {
-  sm:   '6px',   // badges, botones pequeños
-  md:   '8px',   // nav items, inputs, sub-panels
-  lg:   '10px',  // cards principales, panels
-  xl:   '12px',  // modales, banners
-  pill: '13px',  // pills de estado
-  full: '50%',   // avatares
-}
+Escala cerrada: **6 · 7–8 · 9 · 10 · 13–14 · 18 · 50%**. No se inventan pasos intermedios.
+
+| Paso | Uso | Token |
+|---|---|---|
+| 6px | badges, botones pequeños | `rounded-sm` |
+| 7–8px | icon buttons | `rounded-md` |
+| 9px | inputs, nav items | `rounded-[9px]` — sin token todavía |
+| 10px | cards, panels | `rounded-lg` |
+| 12px | banners | `rounded-xl` |
+| 13px | pills de estado | `rounded-pill` |
+| 14px | barra de selección flotante | `rounded-bar` |
+| 18px | modales | `rounded-modal` |
+| 50% | avatares | `rounded-full` |
+
+**Bordes (delta 4):** siempre `0.5px solid` — nunca `1px`. Los prototipos `.dc.html` dibujan 1px porque su entorno no expresa medios píxeles; eso es un límite de la herramienta, no una decisión de diseño, y no se copia al repo.
+
+---
+
+## Espaciado
+
+Escala cerrada de **4px**: `4 · 8 · 12 · 14 · 16 · 20 · 24 · 32 · 40 · 48`. Todo padding, gap y margin de UI cae en un múltiplo de 4. Los valores fuera de la escala son un error de transcripción del prototipo, no una excepción.
+
+---
+
+## Scrollbars
+
+Toda región con scroll usa la clase `.od-scroll` — definida una sola vez en `globals.css`. Ningún componente redefine su propia scrollbar.
+
+```
+ancho:  10px
+thumb:  #E3E0DB, borde transparente de 3px, background-clip: content-box, radius 10px
+track:  transparent
+firefox: scrollbar-width: thin
 ```
 
-Bordes siempre `0.5px solid` — nunca `1px`.
+---
+
+## Vocabulario (delta 5)
+
+El término de producto es **artifact**. En toda UI nueva: "New artifact", "Search artifacts…", "3 artifacts". No "writing", no "document", no "post".
+
+El repo todavía nombra `writing` en archivos y símbolos (`writing-preview-modal.tsx`, `WritingContentFrame`, "Search writings…"). Eso es deuda declarada: **primero migra la copy visible, los nombres de archivo y símbolos van en un pase mecánico posterior** (ODE-439). Un componente nuevo no hereda el nombre viejo.
 
 ---
 
@@ -420,8 +495,19 @@ Solo estas variaciones se agregan en `className` en el punto de uso. No inventar
 | Chevron rotation | 280ms | ease-layout |
 | Labels fade (sidebar mini) | 250ms | ease |
 | Focus mode | 350ms | ease-layout |
-| Hover en nav/cards | 180ms | ease |
+| Hover en nav/cards | 140–180ms | ease |
 | Popup entrance | 150ms | ease |
+
+Curvas del paquete Artifact Studio, cerradas (delta 1 · `docs/design/system-app.md` §6). Sus keyframes viven en `globals.css`; ningún overlay los redefine:
+
+| Transición | Duración / easing | Keyframe |
+|---|---|---|
+| Rail collapse/expand, panels | 300ms `cubic-bezier(.4,0,.15,1)` | — |
+| Modal in | 260ms | `odModalIn` |
+| Step in | 220ms | `odStepIn` |
+| Splash mark in | 420ms | `odMarkIn` |
+| Crawl (barra de progreso indeterminada) | — | `odCrawl` |
+| Focus mode | 350ms | — |
 
 ```css
 /* Keyframes en globals.css */
@@ -455,7 +541,11 @@ Nunca dos botones del mismo color en el mismo modal.
 
 - Nunca `#ffffff` o `white` como fondo de página — siempre `bg-bg`
 - Nunca sombras de Tailwind por defecto — siempre `shadow-float*`
-- Nunca mezclar Lora y Geist en el mismo elemento
+- Nunca mezclar Lora y DM Sans en el mismo elemento
+- Nunca Geist fuera del wordmark
+- Nunca hardcodear un hex que ya tiene token (`#EDEBE8`, `#B5ADA5`, `#FAF7F3`, `#2E7D4F`, …)
+- Nunca una scrollbar propia — siempre `.od-scroll`
+- Nunca "writing" en UI nueva — el término es **artifact**
 - Nunca emojis en ninguna parte de la interfaz
 - Nunca `transition: all`
 - Siempre `strokeWidth={1.5}` en iconos Lucide
