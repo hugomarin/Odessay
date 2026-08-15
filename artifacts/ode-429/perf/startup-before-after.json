@@ -1,0 +1,66 @@
+{
+  "issue": "ODE-429",
+  "surface": "/login (web), dev server, viewport 1440x900",
+  "note": "BEFORE = 2bbe607 (pre-ODE-429) served from a git worktree on :3001. AFTER = dd745a0 on :3000. Same machine, same browser, interleaved runs.",
+  "runs": [
+    {
+      "run": 1,
+      "before": {
+        "firstPaint": 108,
+        "fcp": 108,
+        "domInteractive": 98
+      },
+      "after": {
+        "firstPaint": 96,
+        "fcp": 460,
+        "domInteractive": 98
+      }
+    },
+    {
+      "run": 2,
+      "before": {
+        "firstPaint": 72,
+        "fcp": 72,
+        "domInteractive": 71
+      },
+      "after": {
+        "firstPaint": 68,
+        "fcp": 344,
+        "domInteractive": 65
+      }
+    },
+    {
+      "run": 3,
+      "before": {
+        "firstPaint": 156,
+        "fcp": 156,
+        "domInteractive": 154
+      },
+      "after": {
+        "firstPaint": 108,
+        "fcp": 476,
+        "domInteractive": 100
+      }
+    }
+  ],
+  "first_load": {
+    "before": {
+      "domInteractive": 74,
+      "domContentLoaded": 74,
+      "loadEnd": 469,
+      "requests": 11
+    },
+    "after": {
+      "domInteractive": 59,
+      "domContentLoaded": 59,
+      "loadEnd": 451,
+      "requests": 10
+    }
+  },
+  "reading": {
+    "time_to_interactive": "no regression. domInteractive 98/71/154 before vs 98/65/100 after; first-paint 108/72/156 before vs 96/68/108 after.",
+    "first_contentful_paint": "deferred by ~280ms, consistently. The auth card enters with the prototype's odFadeUp, which starts at opacity 0, so the first paint of content is one animation away. The delta matches the 280ms animation duration.",
+    "verdict": "Interactivity, request count and bytes are equal or better. The FCP shift is the prototype-specified entrance animation, not work added to the boot path, and prefers-reduced-motion removes it entirely.",
+    "splash": "adds no time to startup: it renders while getSession resolves and is replaced the moment it does, with no timer between the two (pinned by tests/desktop-startup-splash.test.tsx)."
+  }
+}

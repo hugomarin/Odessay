@@ -1,0 +1,99 @@
+{
+  "issue": "ODE-429",
+  "method": "computed styles and DOM read from the running app, not eyeballed",
+  "splash": {
+    "tile": "64x64px",
+    "tileRadius": "18px",
+    "tileShadow": "rgba(35,24,15,0.22) 0px 12px 34px",
+    "mark": "34px, brand onDark palette",
+    "wordmarkFont": "GeistSans",
+    "wordmarkWeight": "500",
+    "wordmarkSize": "30px",
+    "wordmarkTracking": "-0.6px (= -0.02em x 30)",
+    "captionFont": "Roboto Mono",
+    "captionSize": "12px",
+    "track": "140x2px",
+    "thumbWidth": "56px (= 40% of 140)",
+    "thumbColor": "rgb(142,131,123) = #8E837B",
+    "animation": "odCrawl 1.2s infinite; group enters with odMarkIn 420ms",
+    "spec_source": "docs/design/views/auth-splash.md + prototype lines 30-41"
+  },
+  "authCard": {
+    "stageBackground": "rgb(243,242,240) = #F3F2F0",
+    "width": "440px",
+    "radius": "18px",
+    "padding": "36px",
+    "shadow": "rgba(35,24,15,0.05) 0 1px 2px, rgba(35,24,15,0.12) 0 24px 60px  [token --shadow-auth-card]",
+    "tile": "44x44px",
+    "tileRadius": "13px",
+    "h1": "30px / 500 / -0.6px (= -0.02em)",
+    "subtitleMaxWidth": "402.19px (= 42ch)",
+    "input": "46px",
+    "inputRadius": "10px",
+    "inputBorder": "rgb(228,225,220) = #E4E1DC",
+    "focusBorder": "#B5ADA5, no colour ring",
+    "primary": "46px, radius 10px, disabled #E4E1DC until the form is ready"
+  },
+  "behaviour": {
+    "signinTabOrder": [
+      "field:auth-email",
+      "link:Forgot?",
+      "field:auth-password",
+      "button:Sign in",
+      "link:local-only-entry",
+      "button:Create an account"
+    ],
+    "signupTabOrder": [
+      "field:auth-display-name",
+      "field:auth-username",
+      "field:auth-email",
+      "field:auth-password",
+      "button:Create account",
+      "link:local-only-entry",
+      "button:Sign in"
+    ],
+    "localOnlyOneTabFromPrimary": true,
+    "enterSubmits": "native form submit; primary is type=submit",
+    "passwordReveal": {
+      "type": "password -> text",
+      "ariaLabel": "Show password -> Hide password",
+      "ariaPressed": "false -> true",
+      "tabIndex": -1
+    },
+    "passwordHint": [
+      "Minimum 8 characters.",
+      "4 to go.",
+      "Ready."
+    ],
+    "modeSwitch": {
+      "from": "/signup",
+      "to": "/login",
+      "titleAfter": "Back to your desk",
+      "typedEmailSurvived": true,
+      "cardsOnScreen": 1,
+      "navigation": "none - history.replaceState"
+    },
+    "resetSuccess": {
+      "url": "/forgot-password",
+      "title": "Check your email",
+      "greenTile": true,
+      "cards": 1,
+      "newPage": false
+    }
+  },
+  "failureModes": {
+    "networkErrorOnCredentials": {
+      "errorText": "Email or password is incorrect.",
+      "colour": "rgb(150,83,44) = #96532C terracotta",
+      "role": "alert",
+      "emailPreserved": "writer@example.com",
+      "primaryReEnabled": true,
+      "toasts": 0,
+      "source": "real Supabase 400"
+    },
+    "failedGetSession": "not treated as signed out; splash shows an actionable error with retry (tests/desktop-startup-splash.test.tsx)",
+    "slowOrFailedBoot": "splash persists while resolving, error state on failure, never an endless bar",
+    "doubleSubmit": "guarded by an in-flight ref released in finally, so a failed request never leaves a dead button"
+  },
+  "console": "zero errors or warnings across /login, /signup, /forgot-password, /reset-password in a fresh browser session"
+}
