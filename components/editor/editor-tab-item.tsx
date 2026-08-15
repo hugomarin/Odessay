@@ -98,7 +98,7 @@ export function EditorTabItem({
           }
         }}
         data-tab-action="true"
-        className="pointer-events-auto absolute left-3 z-20 hidden h-[18px] w-[18px] items-center justify-center rounded-[5px] text-ink-3 transition-colors hover:bg-surface-menu-hover hover:text-ink group-hover:flex"
+        className="pointer-events-auto absolute left-3 z-20 flex h-[18px] w-[18px] items-center justify-center rounded-[5px] text-ink-3 opacity-0 transition-[opacity,background-color,color] duration-100 ease-out hover:bg-surface-menu-hover hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
         aria-label={`Close ${tab.title}`}
       >
         <X className="h-[14px] w-[14px]" strokeWidth={1.5} />
@@ -127,7 +127,7 @@ export function EditorTabItem({
           }
         }}
         data-tab-action="true"
-        className="pointer-events-auto relative z-10 hidden h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-ink-4 transition-colors hover:bg-surface-menu-hover hover:text-ink group-hover:flex"
+        className="pointer-events-auto relative z-10 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-ink-4 opacity-0 transition-[opacity,background-color,color] duration-100 ease-out hover:bg-surface-menu-hover hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
         aria-label={`Rename ${tab.title}`}
       >
         <Pencil className="h-[13px] w-[13px]" strokeWidth={1.5} />
