@@ -68,7 +68,12 @@ function parseArgs(argv) {
     }
 
     if (arg === "--scenario") {
-      if (value !== "editor" && value !== "notes-annotations" && value !== "annotation-bubble") {
+      if (
+        value !== "editor" &&
+        value !== "notes-annotations" &&
+        value !== "annotation-bubble" &&
+        value !== "editor-overlays"
+      ) {
         fail(`Invalid scenario "${value}".`);
       }
       options.scenario = value;
@@ -215,6 +220,49 @@ async function prepareHarness(page, targetUrl, timeoutMs, scenario) {
 }
 
 async function runMeasuredScenario(page, targetUrl, scenario) {
+  if (scenario === "editor-overlays") {
+    // ODE-427 — overlay primitives opened and closed while the editor holds text.
+    // Modal pattern: the shortcuts dialog. Dropdown pattern: the artifact type picker.
+    const editor = page.locator(".odessay-editor-content").first();
+
+    try {
+      const origin = new URL(targetUrl).origin;
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+      await page.evaluate(async () => {
+        await navigator.clipboard.writeText(" alpha beta");
+      });
+      await editor.click();
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+    } catch {
+      // Ignore clipboard restrictions in perf environments that do not expose it.
+    }
+
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      await page.keyboard.type(" writing while overlays open", { delay: 8 });
+
+      await page.getByRole("button", { name: "Keyboard shortcuts" }).click({ force: true });
+      await page.waitForTimeout(320);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+
+      await editor.click();
+      await page.keyboard.type(" and after they close", { delay: 8 });
+
+      await page.getByRole("button", { name: "Properties panel" }).click({ force: true });
+      await page.waitForTimeout(260);
+      const typeTrigger = page.getByTestId("editor-panel-properties").getByRole("button").first();
+      await typeTrigger.click({ force: true });
+      await page.waitForTimeout(260);
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Properties panel" }).click({ force: true });
+      await page.waitForTimeout(200);
+      await editor.click();
+    }
+
+    await page.waitForTimeout(600);
+    return;
+  }
+
   if (scenario === "notes-annotations") {
     const panel = page.getByTestId("editor-panel-notes");
     const aiCard = panel.locator("article").filter({ hasText: "“Annotation anchor 1”" });
