@@ -37,6 +37,8 @@ type PropertiesPanelProps = {
   artifactType: ArtifactType
   visibility: WritingVisibility
   metrics: TextMetrics
+  /** Canonical path of the document, when the runtime has one. */
+  canonicalPath?: string | null
   spellcheckPreference: EditorSpellcheckPreference
   spellcheckLanguage: string
   onStatusChange: (next: WritingStatus) => void
@@ -123,6 +125,7 @@ export function PropertiesPanel({
   artifactType,
   visibility,
   metrics,
+  canonicalPath = null,
   spellcheckPreference,
   spellcheckLanguage,
   onExportMarkdown,
@@ -333,7 +336,7 @@ export function PropertiesPanel({
       id="editor-panel-properties"
       data-section="editor-panel-properties"
       data-testid="editor-panel-properties"
-      className="EditorPanelProperties fixed right-0 top-[46px] bottom-8 z-40 w-[312px] min-w-[312px] max-w-[312px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
+      className="EditorPanelProperties od-scroll h-full w-full overflow-y-auto overflow-x-hidden bg-transparent"
     >
       <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Properties</p>
@@ -513,6 +516,20 @@ export function PropertiesPanel({
             </p>
           </div>
         </section>
+
+        {canonicalPath ? (
+          <section className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Path</p>
+            <p
+              data-testid="editor-properties-path"
+              title={canonicalPath}
+              className="truncate rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-2 font-mono text-[11px] text-ink-3"
+              dir="rtl"
+            >
+              {canonicalPath}
+            </p>
+          </section>
+        ) : null}
 
         <section className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Info</p>

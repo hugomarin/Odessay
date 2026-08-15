@@ -56,9 +56,9 @@ export function WritingEditorContent({
       id="editor-writing-area"
       data-section="editor-writing-area"
       data-testid="editor-writing-area"
-      className="EditorWritingArea min-h-0 flex-1 overflow-y-auto"
+      className="EditorWritingArea od-scroll min-h-0 flex-1 overflow-y-auto"
     >
-      <div className="odessay-content-frame">
+      <div className="odessay-editor-sheet-frame relative">
         {topSlot ? <div className="odessay-sticky-slot">{topSlot}</div> : null}
         {mode === "markdown" ? (
           <div className="odessay-markdown-shell relative min-h-[55vh] w-full">

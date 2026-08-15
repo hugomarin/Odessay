@@ -21,6 +21,8 @@ type Props = {
   onModeChange: (mode: EditorNavigationMode) => void;
 };
 
+// Indent read from the Studio prototype: level<=1 -> 8px, level 2 -> 24px,
+// level 3+ -> 40px.
 const indent = (level: number) =>
   level <= 1 ? "pl-2" : level === 2 ? "pl-6" : "pl-10";
 
@@ -47,14 +49,14 @@ export function TableOfContentsPanel({
         label="TOC"
         onClick={() => onModeChange(mode === "toc" ? null : "toc")}
       >
-        <ListTree className="h-3.5 w-3.5" strokeWidth={1.5} />
+        <ListTree className="h-4 w-4" strokeWidth={1.5} />
       </NavigationModeButton>
       <NavigationModeButton
         active={mode === "workspace"}
         label="Workspace"
         onClick={() => onModeChange(mode === "workspace" ? null : "workspace")}
       >
-        <FolderTree className="h-3.5 w-3.5" strokeWidth={1.5} />
+        <FolderTree className="h-4 w-4" strokeWidth={1.5} />
       </NavigationModeButton>
     </>
   );
@@ -84,10 +86,10 @@ export function TableOfContentsPanel({
                       onClick={() => onNavigate(item)}
                       aria-current={active ? "location" : undefined}
                       className={cn(
-                        "relative flex min-h-7 w-full items-center rounded-[6px] pr-2 text-left text-[11px] leading-snug text-ink-3 hover:bg-muted hover:text-ink",
+                        "relative flex min-h-7 w-full items-center rounded-[6px] py-1 pr-2 text-left text-[12px] leading-[1.35] text-ink-3 hover:bg-line-soft hover:text-ink",
                         indent(item.level),
                         active &&
-                          "bg-muted text-ink before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:bg-cursor",
+                          "bg-muted-hover text-ink before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:bg-cursor",
                       )}
                     >
                       <span

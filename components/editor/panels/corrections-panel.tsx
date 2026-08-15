@@ -103,7 +103,7 @@ export function CorrectionsPanel({
       id="editor-panel-corrections"
       data-section="editor-panel-corrections"
       data-testid="editor-panel-corrections"
-      className="fixed right-0 top-[56px] bottom-8 z-40 w-[312px] min-w-[312px] max-w-[312px] overflow-y-auto border-l-[0.5px] border-border bg-sb"
+      className="EditorPanelCorrections od-scroll h-full w-full overflow-y-auto overflow-x-hidden bg-transparent"
     >
       <div className="flex h-[46px] items-center justify-between border-b-[0.5px] border-border px-4">
         <div className="flex items-center gap-2">

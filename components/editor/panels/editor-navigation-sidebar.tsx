@@ -4,6 +4,13 @@ import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/**
+ * Left panel — 236px (`--size-panel-left`), transparent on layer 0, in flow so
+ * the sheet is never underneath it (docs/design/layout.md §2). Its two header
+ * rows follow the Studio prototype: a 46px tab row, then a 40px title row with
+ * the count badge and the close button.
+ */
+
 export type EditorNavigationMode = "toc" | "workspace" | null;
 
 type Props = {
@@ -24,43 +31,41 @@ export function EditorNavigationSidebar({
   onClose,
 }: Props) {
   return (
-    <div
-      className="absolute inset-y-0 left-0 z-20 flex font-sans"
+    <aside
       data-testid="editor-navigation-sidebar"
-    >
-      {mode ? (
-        <aside className="flex h-full w-64 flex-col overflow-hidden border-r-[0.5px] border-border bg-sb">
-          <div className="flex h-10 shrink-0 items-center gap-1 border-b-[0.5px] border-border px-3">
-            {controls}
-          </div>
-          <div className="flex h-9 shrink-0 items-center gap-2 border-b-[0.5px] border-border px-3">
-            <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-ink">
-              {title}
-            </span>
-            {typeof count === "number" ? (
-              <span className="rounded-full bg-muted px-1.5 text-[9px] text-ink-3">
-                {count}
-              </span>
-            ) : null}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label={`Close ${title}`}
-              className="flex h-6 w-6 items-center justify-center rounded-[6px] text-ink-4 hover:bg-muted hover:text-ink"
-            >
-              <X className="h-3 w-3" strokeWidth={1.5} />
-            </button>
-          </div>
-          {/* `overscroll-contain` keeps a wheel gesture over the tree from
-              chaining to the shell once the list hits its end. */}
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
-            {children}
-          </div>
-        </aside>
-      ) : (
-        <div className="flex h-11 items-center gap-1 px-3">{controls}</div>
+      data-open={mode ? "true" : "false"}
+      className={cn(
+        "EditorNavigationSidebar flex shrink-0 flex-col overflow-hidden bg-transparent font-sans transition-[width,opacity,padding] duration-[300ms] ease-layout",
+        mode
+          ? "w-[var(--size-panel-left)] pb-1.5 pl-1.5 pr-3.5 opacity-100"
+          : "pointer-events-none w-0 p-0 opacity-0",
       )}
-    </div>
+    >
+      <div className="flex h-[46px] shrink-0 items-center gap-1">{controls}</div>
+
+      <div className="flex h-10 shrink-0 items-center gap-2 border-y-[0.5px] border-border pl-1 pr-0.5">
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">{title}</span>
+        {typeof count === "number" ? (
+          <span className="inline-flex h-[19px] min-w-[19px] items-center justify-center rounded-[10px] bg-muted-hover px-[7px] text-[11px] font-medium text-ink-3">
+            {count}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={`Close ${title}`}
+          className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted-hover hover:text-ink"
+        >
+          <X className="h-[15px] w-[15px]" strokeWidth={1.5} />
+        </button>
+      </div>
+
+      {/* `overscroll-contain` keeps a wheel gesture over the tree from
+          chaining to the shell once the list hits its end. */}
+      <div className="od-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain py-2 pr-0.5">
+        {children}
+      </div>
+    </aside>
   );
 }
 
@@ -82,8 +87,8 @@ export function NavigationModeButton({
       aria-label={label}
       aria-pressed={active}
       className={cn(
-        "flex h-7 items-center gap-1.5 rounded-[6px] px-2 text-[10px] text-ink-3 transition-colors hover:bg-muted hover:text-ink",
-        active && "bg-muted text-ink",
+        "flex h-[30px] items-center gap-1.5 rounded-[7px] px-2.5 text-[12px] transition-colors",
+        active ? "bg-surface-selected text-ink" : "text-ink-3 hover:bg-muted-hover hover:text-ink",
       )}
     >
       {children}

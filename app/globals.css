@@ -164,6 +164,17 @@
     width: 100%;
   }
 
+  /* Studio sheet — the editor's own frame. 720px measure with `48 24 140`
+     padding, the 140 clearing the AI bar (docs/design/layout.md §2).
+     The reading surfaces keep `.odessay-content-frame`. */
+  .odessay-editor-sheet-frame {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: var(--size-sheet-editor);
+    padding: 48px 24px 140px;
+    width: 100%;
+  }
+
   .odessay-sticky-slot {
     position: relative;
     margin-bottom: 1.25rem;
