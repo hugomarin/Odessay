@@ -19,6 +19,16 @@
   --ink-2: 25 12% 22%;
   --ink-3: 25 10% 38%;
   --ink-4: 25 8% 52%;
+  /* Artifact Studio neutrals below --ink-4 and hairlines inside the sheet.
+     HSL computed to render the prototype hex exactly — see docs/design/system-app.md §1. */
+  --ink-5: 30 9.8% 67.8%;              /* #B5ADA5 — placeholders, disabled glyphs   */
+  --ink-6: 34.3 12.7% 78.4%;           /* #CFC9C1 — dashed borders, empty tiles     */
+  --line-soft: 36 12% 92%;             /* #EDEBE8 — hairline inside the sheet       */
+  --line-softer: 36 14% 93%;           /* #F0EEEB — hairline between form rows      */
+  --surface-selected: 34.3 41.2% 96.7%;/* #FAF7F3 — warm selected / summary rows    */
+  --surface-row-hover: 30 25% 98.4%;   /* #FCFBFA — table row hover                 */
+  --success: 145.1 46.2% 33.5%;        /* #2E7D4F — done, restored, confirmations   */
+  --success-tint: 135 28.6% 91.8%;     /* #E4F0E7 — success tile background         */
   --cursor: 22 55% 38%;
   --od-annotation-ai: #5B5BD6;
   --od-annotation-highlight: #C07B2A;
@@ -57,6 +67,14 @@
   --color-ink-2: hsl(var(--ink-2));
   --color-ink-3: hsl(var(--ink-3));
   --color-ink-4: hsl(var(--ink-4));
+  --color-ink-5: hsl(var(--ink-5));
+  --color-ink-6: hsl(var(--ink-6));
+  --color-line-soft: hsl(var(--line-soft));
+  --color-line-softer: hsl(var(--line-softer));
+  --color-surface-selected: hsl(var(--surface-selected));
+  --color-surface-row-hover: hsl(var(--surface-row-hover));
+  --color-success: hsl(var(--success));
+  --color-success-tint: hsl(var(--success-tint));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -85,7 +103,22 @@
   --radius-lg: 10px;
   --radius-xl: 12px;
   --radius-pill: 13px;
+  --radius-bar: 14px;
+  --radius-modal: 18px;
   --radius-full: 50%;
+
+  /* Shell geometry fixed by the Artifact Studio prototypes — docs/design/system-app.md §3.
+     Values, not utilities: read them in components instead of retyping the number. */
+  --size-rail-collapsed: 52px;
+  --size-rail-expanded: 232px;
+  --size-settings-nav: 244px;
+  --size-panel-left: 236px;
+  --size-panel-right: 276px;
+  --size-titlebar: 44px;
+  --size-topbar: 48px;
+  --size-statusbar: 46px;
+  --size-sheet-editor: 720px;
+  --size-sheet-reading: 660px;
   --shadow-float:
     0 2px 12px 0 hsla(25, 18%, 12%, 0.06),
     0 1px 3px 0 hsla(25, 18%, 12%, 0.04);
@@ -95,6 +128,14 @@
   --shadow-float-lg:
     0 8px 32px 0 hsla(25, 18%, 12%, 0.1),
     0 2px 8px 0 hsla(25, 18%, 12%, 0.06);
+  --shadow-selection-bar: 0 18px 44px rgba(35, 24, 15, 0.34);
+  --shadow-modal:
+    0 30px 90px rgba(35, 24, 15, 0.28),
+    0 2px 6px rgba(35, 24, 15, 0.1);
+  --shadow-auth-card:
+    0 1px 2px rgba(35, 24, 15, 0.05),
+    0 24px 60px rgba(35, 24, 15, 0.12);
+  --shadow-splash-mark: 0 12px 34px rgba(35, 24, 15, 0.22);
   --animate-menu-in: menuIn 150ms ease;
   --animate-fade-in: fadeIn 180ms ease;
   --ease-layout: var(--od-ease-layout);
@@ -199,13 +240,17 @@
     word-break: break-word;
   }
 
+  /* Editor/reading body — delta 3 resolved to 17/1.9 in ODE-425 (the Studio
+     prototype value). This grouped rule is the ONLY place the four surfaces of
+     the presentation contract get their body size: /write/[id], /preview/[token],
+     /shared/[id] and /{username}/{slug}. Reason in skill-design/tipografia.md. */
   .odessay-editor-content,
   .prose-odessay {
     color: hsl(var(--ink-2));
     font-family: var(--od-font-ui);
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 400;
-    line-height: 1.85;
+    line-height: 1.9;
   }
 
   .odessay-editor-content .odessay-frontmatter {
@@ -248,12 +293,15 @@
     white-space: pre-wrap;
   }
 
+  /* Markdown source mode is a stacked pair: a transparent textarea over the
+     semantic layer. The two must stay byte-identical in metrics to each other,
+     and they track the body size so toggling the mode does not resize the text. */
   .odessay-markdown-source {
     caret-color: hsl(190 100% 50%);
     color: transparent;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 18px;
-    line-height: 1.85;
+    font-size: 17px;
+    line-height: 1.9;
     -webkit-text-fill-color: transparent;
   }
 
@@ -265,8 +313,8 @@
   .odessay-markdown-semantic {
     color: hsl(var(--ink));
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-    font-size: 18px;
-    line-height: 1.85;
+    font-size: 17px;
+    line-height: 1.9;
     padding: 0;
   }
 
@@ -919,6 +967,72 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Motion vocabulary of the Artifact Studio prototypes — docs/design/system-app.md §6.
+   Declared once here so no overlay, modal or splash redefines them locally. */
+@keyframes odModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes odStepIn {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes odMarkIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes odCrawl {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/* Single scrollbar treatment for every scroll region — docs/design/system-app.md §7. */
+.od-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #e3e0db transparent;
+}
+
+.od-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.od-scroll::-webkit-scrollbar-thumb {
+  background: #e3e0db;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background-clip: content-box;
+}
+
+.od-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 
