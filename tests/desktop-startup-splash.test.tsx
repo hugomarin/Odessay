@@ -31,7 +31,7 @@ let root: Root | null = null
 async function mount() {
   root = createRoot(container)
   await act(async () => {
-    root?.render(<DesktopStartupRedirect />)
+    root?.render(<DesktopStartupRedirect eager />)
   })
 }
 
@@ -144,5 +144,52 @@ describe("desktop startup", () => {
     // No timer stands between the resolved session and the redirect.
     expect(routerStub.replace).toHaveBeenCalledWith("/login")
     timeoutSpy.mockRestore()
+  })
+})
+
+/**
+ * The DMG boots at `/`, whose prerendered HTML is the first thing painted. If
+ * the splash only appears from an effect, the marketing homepage is visible
+ * until React runs — which is exactly what shipped and had to be fixed.
+ */
+describe("desktop bundle first paint", () => {
+  it("paints the splash on the very first render when eager, without waiting for the effect", async () => {
+    vi.stubEnv("NEXT_PUBLIC_TAURI_BUILD", "true")
+    vi.resetModules()
+    // Never resolves: proves the splash is there before any effect settles.
+    getSessionMock.mockReturnValue(new Promise(() => {}))
+
+    const { DesktopStartupRedirect: Eager } = await import(
+      "@/components/navigation/desktop-startup-redirect"
+    )
+
+    root = createRoot(container)
+    act(() => {
+      root?.render(<Eager eager />)
+    })
+
+    expect(container.querySelector('[data-testid="app-splash"]')).not.toBeNull()
+    vi.unstubAllEnvs()
+  })
+
+  it("never paints on /login, which mounts it too and has its own screen to show", async () => {
+    vi.stubEnv("NEXT_PUBLIC_TAURI_BUILD", "true")
+    vi.resetModules()
+    getSessionMock.mockResolvedValue({ data: { session: null }, error: null })
+
+    const { DesktopStartupRedirect: NotEager } = await import(
+      "@/components/navigation/desktop-startup-redirect"
+    )
+
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(<NotEager />)
+    })
+
+    // Pure redirect: the session was still resolved, but nothing was painted
+    // over the login card at any point.
+    expect(getSessionMock).toHaveBeenCalled()
+    expect(container.innerHTML).toBe("")
+    vi.unstubAllEnvs()
   })
 })

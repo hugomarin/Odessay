@@ -17,6 +17,15 @@ const bootErrorMessage =
   "We could not finish opening Artifact Studio. Your local artifacts are untouched."
 
 /**
+ * Baked at compile time by `scripts/prepare-tauri-build.mjs`, so it holds the
+ * same value during the static export's prerender and in the browser. That is
+ * what lets the splash be part of the first painted HTML instead of appearing
+ * an effect later — evaluating `isTauriRuntime()` here would be false on the
+ * server and true on the client, which is a hydration mismatch.
+ */
+const isDesktopBundle = process.env.NEXT_PUBLIC_TAURI_BUILD === "true"
+
+/**
  * In the Tauri desktop build the app always starts at `/`. This resolves the
  * stored session and sends the user to /desk or /login, showing the splash
  * while it does.
@@ -24,9 +33,20 @@ const bootErrorMessage =
  * The splash has no minimum duration: it is on screen exactly as long as the
  * lookup takes. On web this renders nothing.
  */
-export function DesktopStartupRedirect() {
+export function DesktopStartupRedirect({
+  /**
+   * Set where the desktop build actually boots (`/`), so the splash is in the
+   * first paint and the marketing homepage is never visible behind it. Left off
+   * on `/login`, which mounts this too but already has its own screen to show.
+   */
+  eager = false
+}: {
+  eager?: boolean
+} = {}) {
   const router = useRouter()
-  const [phase, setPhase] = useState<Phase>({ status: "idle" })
+  const [phase, setPhase] = useState<Phase>(() =>
+    eager && isDesktopBundle ? { status: "resolving" } : { status: "idle" }
+  )
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -75,7 +95,10 @@ export function DesktopStartupRedirect() {
     setAttempt((current) => current + 1)
   }, [])
 
-  if (phase.status === "idle" || phase.status === "settled") {
+  // Only the boot route paints. On /login this component is a pure redirect:
+  // that screen already has something to show, and covering it with the splash
+  // would read as a second flash right after the first.
+  if (!eager || phase.status === "idle" || phase.status === "settled") {
     return null
   }
 
