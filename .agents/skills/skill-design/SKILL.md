@@ -30,7 +30,7 @@ Los cinco deltas entre el paquete de diseño y este skill están **cerrados**. N
 | 4 | ¿1px o 0.5px en bordes? | **0.5px**, siempre. El 1px de los prototipos `.dc.html` es un límite del entorno de prototipado, no una decisión de diseño. |
 | 5 | ¿Writing o artifact? | **artifact** en toda UI nueva. Los nombres de archivo y símbolos migran en un pase mecánico posterior (ODE-439). |
 
-**Nota de implementación del delta 2.** El token `--od-font-ui` ya resuelve a DM Sans y es el que debe usarse. La utilidad `font-sans` de Tailwind todavía resuelve a Geist (`--font-sans: var(--font-geist-sans)` en `globals.css`): es un mapeo **legacy** pendiente de voltear en un pase dedicado, no una excepción a la regla. Ninguna vista nueva debe apoyarse en él para justificar Geist en UI.
+**Nota de implementación del delta 2.** El token `--od-font-ui` es el que debe usarse. Desde ODE-446 la utilidad `font-sans` de Tailwind también resuelve a DM Sans (`--font-sans: var(--font-dm-sans)` en `globals.css`), así que ambos caminos coinciden y ya no queda mapeo legacy. `--font-geist-sans` sigue definido en `<html>` pero sin ningún consumidor: está reservado al wordmark. Ninguna vista puede apoyarse en `font-sans` para justificar Geist en UI.
 
 ---
 

@@ -1,7 +1,19 @@
 import Link from "next/link"
 import { DesktopStartupRedirect } from "@/components/navigation/desktop-startup-redirect"
 
+/**
+ * The desktop build boots at `/`, and the marketing homepage is not part of the
+ * desktop product. Gating on the compile-time flag keeps it out of the exported
+ * HTML entirely, so the first paint of the DMG is the splash — not the landing
+ * page followed by the splash.
+ */
+const isDesktopBundle = process.env.NEXT_PUBLIC_TAURI_BUILD === "true"
+
 export default function Home() {
+  if (isDesktopBundle) {
+    return <DesktopStartupRedirect eager />
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <DesktopStartupRedirect />

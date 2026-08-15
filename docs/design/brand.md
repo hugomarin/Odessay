@@ -47,6 +47,21 @@ Never Lora for the wordmark. Never all-caps. Never a tagline locked to the mark.
 
 Ink tile `#1E1915`, mark at 54 % of the canvas, optically centered (the mark's mass sits low-left, so it needs ~2 % up and ~1 % right of geometric center). macOS applies its own squircle: ship a square canvas with no rounding baked in. Existing files: `app/icon.png`, `public/icon.png`, `public/favicon.png`, `src-tauri/icons/*` — all need regeneration from the SVG above.
 
+## Implementation (ODE-424)
+
+The geometry above is mirrored once in `lib/brand/mark-geometry.ts`, which is the runtime source of truth: paths, stroke width, the three palettes, and the sub-20px rule. `components/brand/artifact-mark.tsx` renders it inline — `ArtifactMark`, `ArtifactMarkTile`, `ArtifactWordmark`, `ArtifactLockup` — and drops path A below 20px itself, so no caller can scale three blades past the threshold.
+
+Static assets are generated, never hand-edited:
+
+```bash
+node scripts/generate-brand-assets.mjs                       # public/brand/*.svg, icons, favicon
+npx tauri icon src-tauri/icons/icon-source-1024.png          # src-tauri/icons/*
+```
+
+`tests/brand-geometry.test.ts` pins the offsets, the three-value palettes and the threshold, and fails if the generated files drift from the runtime geometry.
+
+`public/brand/mark-app.svg` is also served from the legacy `public/odessay-logo.svg` path. The favicon is inlined as a data URI in `app/layout.tsx`; `public/favicon.png` is the raster fallback.
+
 ## Explorations kept for reference
 
 `docs/design/reference/Artifact Studio Logo Fan.dc.html` and `docs/design/reference/Artifact Studio Logo Lateral.dc.html` hold the variants that were considered (tighter fan, lateral stack). They are not approved marks; the geometry above is.
