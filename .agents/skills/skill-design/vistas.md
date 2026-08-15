@@ -11,6 +11,8 @@ Los prototipos HTML en `/workflow/reference/` son la referencia visual canónica
 
 El mapa completo de archivos de referencia y sus screenshots está en `CLAUDE.md` (sección: Prototipos visuales de referencia).
 
+> **Delta 2 aplicado (ODE-425).** Donde este documento decía "Geist Sans" como fuente de UI ahora dice **DM Sans**: son el mismo rol, renombrado a la fuente que el paquete y el código ya usan. Geist queda reservado al wordmark. Los tamaños y weights no cambiaron.
+
 ---
 
 ## Sidebar (todas las vistas)
@@ -115,9 +117,9 @@ Read:       bg var(--muted)      color var(--ink-4)
 columnas:  checkbox | Writing | Status | Type | Workspace | actions
 grupos:    Today / This week / Earlier — label uppercase 10px ink-4
 filas:     padding 24px vertical; checkbox alineado con la primera línea del título
-título:    Geist Sans 15px, font-weight 600 (decisión ODE-382; sustituye Lora en estas filas funcionales)
+título:    DM Sans 15px, font-weight 600 (decisión ODE-382; sustituye Lora en estas filas funcionales)
 jerarquía: título + estado + acciones forman un grupo adyacente; el título no ocupa el espacio restante
-excerpt:   Geist Sans 13px, ink-3, clamp 2 líneas
+excerpt:   DM Sans 13px, ink-3, clamp 2 líneas
 estado:    badge icon-only relleno, rounded-square; color semántico del DocumentState
 chips:     collection con icono Tag, borde 0.5px y fondo papel cálido
 meta:      fecha y collections forman un stack con gap 6px; el chip no agrega padding superior propio
@@ -167,7 +169,7 @@ AI strip:      fondo hsl(22,55%,95%), borde top 0.5px
 ```
 grid:    checkbox (32px) | preview (1fr) | AI pill | col dropdown
 excerpt: Lora 13px, 2 líneas clamp
-filename: Geist Sans 11px, ink-4
+filename: DM Sans 11px, ink-4
 meta:    fecha + palabras, 11px ink-4
 AI pill: bg hsl(22,55%,93%), color var(--cursor), border hsl(22,40%,82%)
 ```
@@ -177,10 +179,10 @@ AI pill: bg hsl(22,55%,93%), color var(--cursor), border hsl(22,40%,82%)
 ```
 border:         0.5px solid var(--border)
 border-radius:  10px
-header:         Geist Sans 13px, chevron, nombre, count badge
+header:         DM Sans 13px, chevron, nombre, count badge
 writing items:  padding 14px 16px 14px 40px
   título:       Lora 14px, font-weight 500
-  excerpt:      Geist Sans 12px, ink-3, 1 línea clamp
+  excerpt:      DM Sans 12px, ink-3, 1 línea clamp
   meta:         badge estado + fecha + palabras
 transición:     max-height 0→2000px, 350ms ease-layout
 ```
@@ -209,7 +211,7 @@ Reply prompt — acción fundacional
 ```
 avatares: 26px, border 2px solid var(--sb), margin-left -7px (apilados)
 stats:    writings count | words total | desde cuándo
-font:     Geist Sans 12-13px, ink-3/ink-4
+font:     DM Sans 12-13px, ink-3/ink-4
 ```
 
 ### Mini-document cards
@@ -223,13 +225,13 @@ sin borde izquierdo de color
 avatar:        44px, border 3px solid var(--bg)
 
 card top (padding 20px 24px 16px):
-  byline:  Geist Sans 13px 600 ink-2 + badge "you"/"New" + fecha 12px ink-4
+  byline:  DM Sans 13px 600 ink-2 + badge "you"/"New" + fecha 12px ink-4
   título:  Lora 22px, font-weight 500
-  excerpt: Geist Sans 14px, ink-2, 3 líneas clamp
+  excerpt: DM Sans 14px, ink-2, 3 líneas clamp
 
 card bottom (padding 12px 24px):
-  words:      Geist Sans 12px, ink-3
-  "Open":     Geist Sans 12px, ink-3 + icono ExternalLink
+  words:      DM Sans 12px, ink-3
+  "Open":     DM Sans 12px, ink-3 + icono ExternalLink
   background: transparente
 ```
 
@@ -255,7 +257,7 @@ botón:         "Write a response" — bg var(--cursor), color white
 ```
 background:    hsl(22,55%,92%)
 color:         var(--cursor)
-font:          Geist Sans 11px, font-weight 500
+font:          DM Sans 11px, font-weight 500
 border-radius: 13px
 ```
 
@@ -268,7 +270,7 @@ Sin sidebar. Pantalla completa, fondo `var(--bg)`.
 ### Chrome (46px)
 
 ```
-back link: Geist Sans 13px ink-4
+back link: DM Sans 13px ink-4
 nav:       Previous | N of N | Next
 tools:     Margins toggle | Write a response (btn terracota)
 ```
@@ -286,7 +288,7 @@ author block: avatar 38px + nombre 14px + fecha 12px
               border-bottom 0.5px antes del texto
 
 título:    Lora 30px, font-weight 500, letter-spacing -0.01em
-body:      Geist Sans 17-18px, line-height 1.85
+body:      DM Sans 17px, line-height 1.9   (delta 3 — valor único cross-mode)
 blockquote: border-left 2px ink-3, Lora italic 18px, padding-left 1.4em
 ```
 
@@ -317,7 +319,7 @@ active:        bg hsl(45,90%,74%)
 background:    var(--ink)
 border-radius: 10px
 botones:       "Mark" | separator | "Annotate"
-font:          Geist Sans 12px, font-weight 500, color var(--bg)
+font:          DM Sans 12px, font-weight 500, color var(--bg)
 animación:     opacity + translateY(4px→0), 150ms
 ```
 
@@ -340,7 +342,7 @@ entries: flex 1, scroll
 
 margin entry:
   passage:          Lora italic 12px, ink-4
-  note:             Geist Sans 13px, ink-2, textarea sin borde
+  note:             DM Sans 13px, ink-2, textarea sin borde
   borde izquierdo:  ámbar cuando has-note, var(--cursor) cuando focused
   hover:            background var(--muted)
 
@@ -382,7 +384,7 @@ Cada tab:
   height:        46px (full bar)
   padding:       0 10px 0 12px
   border-right:  0.5px solid var(--border)
-  font:          Geist Sans 13px, color var(--ink-4)
+  font:          DM Sans 13px, color var(--ink-4)
 
 Estado inactive:
   background:  transparent
@@ -457,14 +459,14 @@ Fila 1 — Buscar (siempre visible cuando el panel está abierto):
   [ campo de búsqueda (flex-1) ]  [ counter ]  [ < ]  [ > ]  [ "Replace" toggle ]
 
 Campo de búsqueda:
-  font:          Geist Sans 13px, color var(--ink)
+  font:          DM Sans 13px, color var(--ink)
   placeholder:   "Find…" — color var(--ink-4)
   background:    transparent
   border:        none, sin outline — el foco lo da la barra completa
   caret:         var(--cursor)
 
 Counter (inline, al final del campo):
-  Geist Sans 11px, color var(--ink-4)
+  DM Sans 11px, color var(--ink-4)
   formato:       "12" cuando sin selección activa, "3 of 12" cuando navegando
   Al hacer ×:    limpia el campo y cierra el panel
   ×:             icon X 12px, color var(--ink-4), hover var(--ink)
@@ -475,7 +477,7 @@ Flechas de navegación < >:
   disabled:      var(--ink-4), no-pointer
 
 Toggle "Replace":
-  Geist Sans 12px, color var(--ink-4)
+  DM Sans 12px, color var(--ink-4)
   activo:        color var(--ink), font-weight 500
   padding:       4px 6px, border-radius 6px
   hover:         background var(--muted)
@@ -495,10 +497,10 @@ Campo replace:
   placeholder:   "Replace with…"
 
 Botones:
-  "Replace":  Geist Sans 12px, color var(--ink-2), padding 4px 10px,
+  "Replace":  DM Sans 12px, color var(--ink-2), padding 4px 10px,
               border: 0.5px solid var(--border), border-radius 6px, hover bg var(--muted)
   "All":      mismo estilo que "Replace"
-  "Done":     Geist Sans 12px, font-weight 500, color var(--ink-4), sin borde
+  "Done":     DM Sans 12px, font-weight 500, color var(--ink-4), sin borde
               hover: color var(--ink)
 ```
 
@@ -545,21 +547,21 @@ Panel de preparación para publicación. Se abre desde el icono Sparkles en la t
 **Header (46px)**
 
 ```
-label:    "Polish" — Geist Sans 13px, font-weight 600, ink
+label:    "Polish" — DM Sans 13px, font-weight 600, ink
 close:    X — icon 14×14px, ink-4, hover ink
 ```
 
 **Sección de opciones**
 
 ```
-label de sección:  "REVISAR" — Geist Sans 10px, font-weight 500, ink-4, uppercase, letter-spacing 0.08em
+label de sección:  "REVISAR" — DM Sans 10px, font-weight 500, ink-4, uppercase, letter-spacing 0.08em
                    Mismo estilo que "STATUS", "VISIBILITY" en Properties panel
 
 4 opciones con toggle ShadCN Switch:
-  · Ortografía      — Geist Sans 13px, ink-2
-  · Redacción       — Geist Sans 13px, ink-2
-  · Frases largas   — Geist Sans 13px, ink-2
-  · Formato         — Geist Sans 13px, ink-2
+  · Ortografía      — DM Sans 13px, ink-2
+  · Redacción       — DM Sans 13px, ink-2
+  · Frases largas   — DM Sans 13px, ink-2
+  · Formato         — DM Sans 13px, ink-2
 
 Cada fila: flex justify-between, padding 8px 16px
 Switch: tamaño sm (ShadCN default), checked bg var(--ink)
@@ -575,7 +577,7 @@ height:        34px
 background:    var(--ink)
 color:         var(--bg)
 border-radius: 8px
-font:          Geist Sans 13px, font-weight 500
+font:          DM Sans 13px, font-weight 500
 label default: "Analyze"
 label loading: "Analyzing…" + spinner 12px inline-left
 ```
@@ -599,8 +601,8 @@ Debajo del botón: toast inline (no global):
   margin:        0 16px
   padding:       10px 12px
   icon:          AlertCircle 12px, color hsl(0,72%,51%)
-  texto:         Geist Sans 12px, ink-2 — "Could not analyze the text."
-  botón:         "Try again" — Geist Sans 12px, color var(--cursor), sin fondo
+  texto:         DM Sans 12px, ink-2 — "Could not analyze the text."
+  botón:         "Try again" — DM Sans 12px, color var(--cursor), sin fondo
 ```
 
 **Resultados — secciones expandibles**
@@ -610,29 +612,29 @@ Las tres secciones (Ortografía/Gramática, Redacción, Checklist) solo aparecen
 ```
 header de sección:
   padding:       12px 16px
-  font:          Geist Sans 12px, font-weight 600, ink-2
+  font:          DM Sans 12px, font-weight 600, ink-2
   chevron:       ink-4, rotación 90deg cuando open, 280ms cubic-bezier
-  count badge:   Geist Sans 11px, bg var(--muted), color ink-3, border-radius 10px, padding 1px 6px
+  count badge:   DM Sans 11px, bg var(--muted), color ink-3, border-radius 10px, padding 1px 6px
 
 Sección Ortografía/Gramática:
   Una sugerencia por fila:
     padding:       10px 16px
     texto original: Lora 13px, tachado, color ink-4
-    texto sugerido: Geist Sans 13px, color hsl(140,40%,32%) — mismo verde que badge Done
-    botones:       "Accept" (ink, font-weight 500) | "Ignore" (ink-4) — Geist Sans 12px
+    texto sugerido: DM Sans 13px, color hsl(140,40%,32%) — mismo verde que badge Done
+    botones:       "Accept" (ink, font-weight 500) | "Ignore" (ink-4) — DM Sans 12px
 
 Sección Redacción:
   Una sugerencia por bloque:
     padding:       10px 16px
     etiqueta:      pill con motivo — "Claridad" / "Fluidez" / "Redundancia"
-                   bg var(--muted), color ink-3, Geist Sans 10px uppercase
-    fragmento:     Geist Sans 12px, ink-3, 2 líneas clamp, Lora italic para la cita original
+                   bg var(--muted), color ink-3, DM Sans 10px uppercase
+    fragmento:     DM Sans 12px, ink-3, 2 líneas clamp, Lora italic para la cita original
     botones:       "View suggestion" → expande diff inline | "Ignore"
 
 Sección Checklist:
   Lista de ítems accionables:
     · Checkbox ShadCN (unchecked default, checked al resolver)
-    · Texto: Geist Sans 12px, ink-2
+    · Texto: DM Sans 12px, ink-2
     · Link "Ir" en terracota cuando hay ubicación específica
 ```
 
@@ -643,7 +645,7 @@ border-top:  0.5px solid var(--border)
 padding:     12px 16px
 flex row, gap 8px
 
-"Apply all"  — bg var(--ink), color var(--bg), border-radius 8px, height 30px, Geist Sans 12px 500
+"Apply all"  — bg var(--ink), color var(--bg), border-radius 8px, height 30px, DM Sans 12px 500
 "Re-analyze"    — border 0.5px solid var(--border), bg transparent, color ink-2, mismas dimensiones
 ```
 
@@ -653,7 +655,7 @@ flex row, gap 8px
 padding:     32px 16px
 text-align:  center
 icono:       CheckCircle2 20px, color hsl(140,40%,45%)
-texto:       "Looking good." — Geist Sans 13px, ink-2
+texto:       "Looking good." — DM Sans 13px, ink-2
 subtexto:    Lora italic 12px, ink-4 — "No issues found with the selected checks."
 ```
 
@@ -664,8 +666,8 @@ background:    hsl(22,55%,97%)
 border:        0.5px solid hsl(22,40%,85%)
 border-radius: 9px
 icono:         FileStack, color var(--cursor)
-título:        Geist Sans 12px, font-weight 600
-body:          Geist Sans 11px, ink-3
+título:        DM Sans 12px, font-weight 600
+body:          DM Sans 11px, ink-3
 botón:         "Invite to respond" — bg var(--cursor), color white
 ```
 
@@ -784,20 +786,20 @@ Nav lateral:
   overflow-y:  auto
 
   Section header:
-    font: Geist Sans 16px, font-weight 600, color var(--ink)
+    font: DM Sans 16px, font-weight 600, color var(--ink)
     margin-bottom: 24px
     border-bottom: 0.5px solid var(--border), padding-bottom 12px
 
   Field group:
     margin-bottom: 24px
-    label:  Geist Sans 12px, font-weight 500, color var(--ink-2), margin-bottom 6px
+    label:  DM Sans 12px, font-weight 500, color var(--ink-2), margin-bottom 6px
     input:  ShadCN Input, ancho completo del área
 
   Form states (por campo):
     inactive:   input sin borde de foco
     dirty:      botón "Save" activo (bg var(--ink), color var(--bg))
     submitting: botón "Saving…" deshabilitado + spinner 12px
-    success:    mensaje "Saved." Geist Sans 12px, color hsl(140,40%,32%), 3s → desaparece
+    success:    mensaje "Saved." DM Sans 12px, color hsl(140,40%,32%), 3s → desaparece
     error:      mensaje inline en destructive, accionable
 
   Botón Save por sección (no global):
@@ -829,7 +831,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Tabla: grupos Today / This week / Earlier
 - [ ] "All activity" activo por defecto (btn tinta oscura)
 - [ ] Dot indicador 6px visible en items nuevos
-- [ ] Filas Desk/Workspace: título Geist, badge rounded-square, chips con icono y controles alineados
+- [ ] Filas Desk/Workspace: título DM Sans, badge rounded-square, chips con icono y controles alineados
 - [ ] Responsive wide/medium/narrow sin overflow de página ni controles ocultos
 
 ### Collections
@@ -844,7 +846,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Mini-docs centrados, max-width 560px
 - [ ] Sin borde izquierdo de color en ningún card
 - [ ] Título en Lora 22px
-- [ ] Excerpt en Geist Sans 14px, ink-2, 3 líneas clamp
+- [ ] Excerpt en DM Sans 14px, ink-2, 3 líneas clamp
 - [ ] Card bottom sin background (transparente)
 - [ ] Connector line visible entre cards
 - [ ] Reply prompt con botón terracota "Write a response"
@@ -884,4 +886,4 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 - [ ] Resultados en 3 secciones expandibles con chevron y count badge
 - [ ] Sugerencia ortográfica: tachado ink-4 → sugerido verde hsl(140,40%,32%)
 - [ ] "Apply all" bg var(--ink) | "Re-analyze" border var(--border)
-- [ ] Estado vacío: CheckCircle2 verde + "Looking good." en Geist Sans + Lora italic subtexto
+- [ ] Estado vacío: CheckCircle2 verde + "Looking good." en DM Sans + Lora italic subtexto

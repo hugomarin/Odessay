@@ -6,15 +6,41 @@ Complements `.agents/skills/skill-design/SKILL.md`. Where a value here differs f
 
 **`.agents/skills/skill-design/SKILL.md` is the implementation authority.** This document does not replace it: it records what the prototypes added or changed relative to that skill, so each delta can be merged deliberately instead of by osmosis.
 
-**The five deltas below are OPEN — pending resolution in ODE-425.** None of them is a decision already applied to the code. Until that issue closes, no view issue may resolve a delta on its own: doing so is how the same contradiction gets answered five different ways.
+**The five deltas below are CLOSED — resolved in ODE-425.** Each one now has a single answer, written into `.agents/skills/skill-design/SKILL.md`. No view issue re-decides them; if a prototype or this document disagrees with the skill, the skill wins.
 
 | Delta | Subject | Status |
 | --- | --- | --- |
-| 1 | Neutrals, hairlines and the rest of the token set | **open** — resolve from `docs/design/globals-additions.css`, which is the real source (9 colour tokens, 10 size tokens, 4 shadow tokens), not from the prose below |
-| 2 | DM Sans as the UI font, Geist reserved for the wordmark | **open** — the skill's typography table is what changes, not the code |
-| 3 | Editor body 17/1.9 vs 18/1.85 | **open** — one value, decided against the Studio prototype at a 720px sheet |
-| 4 | 1px vs 0.5px borders | **open** — resolves in favour of the skill; the prototype's 1px is a tooling limit |
-| 5 | "artifact" as the product noun | **open** — copy first, file and symbol renames in a separate mechanical pass |
+| 1 | Neutrals, hairlines and the rest of the token set | **closed** — 8 colour, 10 size, 2 radius and 4 shadow tokens merged into `app/globals.css` from `globals-additions.css`; HSL recomputed so each token renders its prototype hex exactly |
+| 2 | DM Sans as the UI font, Geist reserved for the wordmark | **closed** — DM Sans is the UI font in the skill, `vistas.md` and the typography table; Geist is wordmark-only |
+| 3 | Editor body 17/1.9 vs 18/1.85 | **closed** — **17/1.9**, the Studio prototype value; reasoning in `skill-design/tipografia.md` |
+| 4 | 1px vs 0.5px borders | **closed** — **0.5px**, in favour of the skill; the prototype's 1px is a tooling limit and is not copied |
+| 5 | "artifact" as the product noun | **closed** — "artifact" in all new UI; file and symbol renames deferred to the mechanical pass (ODE-439) |
+
+### What ODE-425 did *not* take from `globals-additions.css`
+
+- The `[data-layer="marketing"]` block and its `@theme` colours — they belong to ODE-440.
+- `--font-display: var(--font-newsreader)` — it is the marketing display face and travels with the marketing layer, not the product layer.
+
+### Transcription drift found and corrected
+
+`globals-additions.css` writes each new colour as an HSL triplet with the prototype hex in a comment, but the two do not agree: `hsl(25 6% 64%)` renders `#A9A29E`, not the `#B5ADA5` its comment claims. Per the fidelity gate, the render wins, so ODE-425 recomputed every triplet from the hex the prototypes actually paint. Six of the eight moved:
+
+| Token | Hex in the prototypes | HSL in `globals-additions.css` | HSL shipped |
+| --- | --- | --- | --- |
+| `--ink-5` | `#B5ADA5` | `25 6% 64%` | `30 9.8% 67.8%` |
+| `--ink-6` | `#CFC9C1` | `25 6% 76%` | `34.3 12.7% 78.4%` |
+| `--line-soft` | `#EDEBE8` | `38 8% 93%` | `36 12% 92%` |
+| `--line-softer` | `#F0EEEB` | `34 8% 95%` | `36 14% 93%` |
+| `--surface-selected` | `#FAF7F3` | `30 30% 97%` | `34.3 41.2% 96.7%` |
+| `--surface-row-hover` | `#FCFBFA` | `34 12% 98%` | `30 25% 98.4%` |
+| `--success` | `#2E7D4F` | `145 45% 33%` | `145.1 46.2% 33.5%` |
+| `--success-tint` | `#E4F0E7` | `138 30% 92%` | `135 28.6% 91.8%` |
+
+### Still open after ODE-425
+
+- **`--font-sans` still resolves to Geist.** Delta 2 is closed as a *design* decision, but the brief's premise that "the code already uses DM Sans" holds only for `--od-font-ui`. The Tailwind `font-sans` utility — used in ~35 component files and on `<body>` — still maps to `--font-geist-sans`. Flipping it changes the chrome of every existing route, which requirement 8 of ODE-425 forbids, so it is left as declared legacy for a dedicated pass.
+- **Rail width.** The package fixes the expanded rail at 232px; `skill-design` still describes a 292px expanded sidebar. Not one of the five deltas — it resolves when the shell is redesigned (ODE-433).
+- **9px radius has no token.** The scale is declared closed in the skill, but the input/nav step is still written `rounded-[9px]`.
 
 **The prototypes in `docs/design/reference/` are the visual authority.** This document describes; the `.dc.html` files show. Where the two differ, the render wins.
 
@@ -43,7 +69,7 @@ Flat hex is used in the prototypes for legibility; in the repo these map to the 
 | Violet (AI) | `#5B5BD6` | `--od-annotation-ai` |
 | Green (success, done) | `#2E7D4F` | new |
 
-**Delta 1:** the prototypes use five neutral steps below `--ink-4` and two hairline borders inside the sheet. The repo has one border token. Proposal: add `--ink-5: 25 6% 64%`, `--line-soft: 38 8% 93%` and `--surface-selected: 30 30% 97%`, and stop hardcoding `#EDEBE8`.
+**Delta 1 — CLOSED (ODE-425).** All eight colour tokens now live in `app/globals.css` with `@theme` entries: `--ink-5`, `--ink-6`, `--line-soft`, `--line-softer`, `--surface-selected`, `--surface-row-hover`, `--success`, `--success-tint`. The prose above named three; the source was `globals-additions.css`, which named eight. No component hardcodes these hex any more.
 
 Type and status colors are user data, not tokens. The palette offered in Settings is: Ink `#1E1915`, Terracotta `#96532C`, Amber `#C07B2A`, Violet `#5B5BD6`, Green `#2E7D4F`, Grey `#8E837B`. Each is rendered as a 20 %-tinted chip background with the full color as foreground.
 
@@ -72,9 +98,9 @@ Type and status colors are user data, not tokens. The palette offered in Setting
 | Overline | DM Sans 600 · 10–11px · `.09–.13em` · uppercase · ink-4 |
 | Path, tree count | Roboto Mono 400 · 11–13px |
 
-**Delta 2:** `skill-design` names Geist Sans as the UI font. Every prototype and the shipped `app/layout.tsx` use DM Sans for UI, with Geist reserved for the wordmark. The prototypes are the newer decision — the skill's typography table should be updated, not the code.
+**Delta 2 — CLOSED (ODE-425).** DM Sans is the UI font. `skill-design/SKILL.md` and `vistas.md` were updated; Geist is wordmark-only. Caveat recorded above: the `font-sans` Tailwind utility still maps to Geist and awaits a dedicated pass.
 
-**Delta 3:** editor body is DM Sans 17/1.9 in the prototypes vs. 18/1.85 in `globals.css`. Pick one; the prototype value is tuned for the 720px sheet.
+**Delta 3 — CLOSED (ODE-425): 17/1.9.** The Studio prototype value wins. It also unifies editor and reading body, and the `ch`-based measure means it does not wait on the 720px sheet. Applied once, in the grouped `.odessay-editor-content, .prose-odessay` rule that governs all four presentation surfaces. Full reasoning in `.agents/skills/skill-design/tipografia.md`.
 
 ---
 
@@ -97,7 +123,9 @@ Type and status colors are user data, not tokens. The palette offered in Setting
 | Modal (auth card) | 440px, radius 18, padding 36 |
 | Radius scale | 6 badge · 7–8 icon button · 9 input/nav · 10 card/panel · 13–14 pill/bar · 18 modal · 50 % avatar |
 
-Borders are 1px in the prototypes. `skill-design` mandates 0.5px. **Delta 4:** keep 0.5px in the repo — it is a rendering decision the prototype environment cannot express.
+Borders are 1px in the prototypes. `skill-design` mandates 0.5px. **Delta 4 — CLOSED (ODE-425): 0.5px, in favour of the skill.** The prototype's 1px is a limit of its rendering environment, not a design decision, and is not copied into the repo.
+
+The radius scale above is declared closed in `skill-design`. `--radius-bar: 14px` and `--radius-modal: 18px` are now tokens; the 9px input/nav step is still written `rounded-[9px]`.
 
 ---
 
@@ -125,7 +153,7 @@ Rail order, top to bottom: New Artifact (`plus`), Search (`search`) · separator
 - Labels fade at `opacity 0 / width 0`; the icon never changes X position when collapsing.
 - User bar: 36px avatar circle (ink fill, initials DM Sans 600/12), name 13/500, handle 11/400 ink-4, gear → Settings.
 
-Vocabulary: **artifact**, not writing or document, everywhere in new UI. The repo still says "writing" in component names and copy (`writing-preview-modal`, "Search writings…"). **Delta 5:** rename copy first, file names in a separate mechanical pass.
+Vocabulary: **artifact**, not writing or document, everywhere in new UI. The repo still says "writing" in component names and copy (`writing-preview-modal`, "Search writings…"). **Delta 5 — CLOSED (ODE-425):** "artifact" is the product noun in all new UI, declared in `skill-design`. Copy migrates first; file and symbol renames go in the mechanical pass (ODE-439).
 
 ---
 
@@ -147,3 +175,5 @@ Never `transition: all`. Never linear easing on layout.
 ## 7. Scrollbars
 
 Every scroll region uses the `.od-scroll` treatment: 10px wide, thumb `#E3E0DB` with a 3px transparent border and `background-clip: content-box`, transparent track, `scrollbar-width: thin`.
+
+Shipped in `app/globals.css` by ODE-425, including the `height: 10px` for horizontal regions that the prototypes declare and `globals-additions.css` omits. No component defines its own scrollbar.
