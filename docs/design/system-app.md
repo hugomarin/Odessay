@@ -11,7 +11,7 @@ Complements `.agents/skills/skill-design/SKILL.md`. Where a value here differs f
 | Delta | Subject | Status |
 | --- | --- | --- |
 | 1 | Neutrals, hairlines and the rest of the token set | **closed** — 8 colour, 10 size, 2 radius and 4 shadow tokens merged into `app/globals.css` from `globals-additions.css`; HSL recomputed so each token renders its prototype hex exactly |
-| 2 | DM Sans as the UI font, Geist reserved for the wordmark | **closed** — DM Sans is the UI font in the skill, `vistas.md` and the typography table; Geist is wordmark-only |
+| 2 | DM Sans as the UI font, Geist reserved for the wordmark | **closed** — DM Sans is the UI font in the skill, `vistas.md` and the typography table; Geist is wordmark-only. Implemented in code by ODE-446: `--font-sans` resolves to DM Sans, so the `font-sans` utility and `--od-font-ui` now agree |
 | 3 | Editor body 17/1.9 vs 18/1.85 | **closed** — **17/1.9**, the Studio prototype value; reasoning in `skill-design/tipografia.md` |
 | 4 | 1px vs 0.5px borders | **closed** — **0.5px**, in favour of the skill; the prototype's 1px is a tooling limit and is not copied |
 | 5 | "artifact" as the product noun | **closed** — "artifact" in all new UI; file and symbol renames deferred to the mechanical pass (ODE-439) |
@@ -38,7 +38,6 @@ Complements `.agents/skills/skill-design/SKILL.md`. Where a value here differs f
 
 ### Still open after ODE-425
 
-- **`--font-sans` still resolves to Geist.** Delta 2 is closed as a *design* decision, but the brief's premise that "the code already uses DM Sans" holds only for `--od-font-ui`. The Tailwind `font-sans` utility — used in ~35 component files and on `<body>` — still maps to `--font-geist-sans`. Flipping it changes the chrome of every existing route, which requirement 8 of ODE-425 forbids, so it is left as declared legacy for a dedicated pass.
 - **Rail width.** The package fixes the expanded rail at 232px; `skill-design` still describes a 292px expanded sidebar. Not one of the five deltas — it resolves when the shell is redesigned (ODE-433).
 - **9px radius has no token.** The scale is declared closed in the skill, but the input/nav step is still written `rounded-[9px]`.
 
@@ -98,7 +97,7 @@ Type and status colors are user data, not tokens. The palette offered in Setting
 | Overline | DM Sans 600 · 10–11px · `.09–.13em` · uppercase · ink-4 |
 | Path, tree count | Roboto Mono 400 · 11–13px |
 
-**Delta 2 — CLOSED (ODE-425).** DM Sans is the UI font. `skill-design/SKILL.md` and `vistas.md` were updated; Geist is wordmark-only. Caveat recorded above: the `font-sans` Tailwind utility still maps to Geist and awaits a dedicated pass.
+**Delta 2 — CLOSED (ODE-425), implemented (ODE-446).** DM Sans is the UI font. `skill-design/SKILL.md` and `vistas.md` were updated by ODE-425; ODE-446 closed the code side by pointing `--font-sans` at `--font-dm-sans`, so the Tailwind `font-sans` utility and `--od-font-ui` now resolve to the same family. `--font-geist-sans` is still defined on `<html>` but has no consumer: it is reserved for the wordmark. DM Sans loads 300/400/500/600 — 600 is required by the overline and editor h2 rows above.
 
 **Delta 3 — CLOSED (ODE-425): 17/1.9.** The Studio prototype value wins. It also unifies editor and reading body, and the `ch`-based measure means it does not wait on the 720px sheet. Applied once, in the grouped `.odessay-editor-content, .prose-odessay` rule that governs all four presentation surfaces. Full reasoning in `.agents/skills/skill-design/tipografia.md`.
 

@@ -95,7 +95,7 @@
   --color-card-foreground: hsl(var(--card-foreground));
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
-  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
   --font-lora: var(--font-lora), Georgia, serif;
   --font-serif: var(--font-lora), Georgia, serif;
   --radius-sm: 6px;
@@ -1099,7 +1099,7 @@
   border-radius: 6px;
   background: hsl(var(--ink));
   color: hsl(var(--bg));
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--od-font-ui);
   font-size: 11px;
   line-height: 1.2;
   box-shadow: 0 6px 16px hsla(25, 18%, 12%, 0.18), 0 2px 4px hsla(25, 18%, 12%, 0.12);
