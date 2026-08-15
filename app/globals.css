@@ -38,6 +38,10 @@
   --od-annotation-highlight: #C07B2A;
   --od-annotation-highlight-badge: #E8A020;
   --od-annotation-muted: #999990;
+  /* The wavy underline colour that .pub-suggestion-pending already shipped,
+     promoted to a token so the panel dots can reuse it instead of repeating
+     the hex. Not a new colour — see docs/design/views/studio.md §Grammar. */
+  --od-suggestion-spelling: #c87341;
 
   /* ShadCN tokens mapped from Odessay */
   --background: var(--bg);
@@ -135,6 +139,8 @@
     0 8px 32px 0 hsla(25, 18%, 12%, 0.1),
     0 2px 8px 0 hsla(25, 18%, 12%, 0.06);
   --shadow-selection-bar: 0 18px 44px rgba(35, 24, 15, 0.34);
+  /* AI composer popover — read from the Studio prototype. */
+  --shadow-ai-composer: 0 14px 40px rgba(35, 24, 15, 0.14);
   --shadow-modal:
     0 30px 90px rgba(35, 24, 15, 0.28),
     0 2px 6px rgba(35, 24, 15, 0.1);
@@ -1105,8 +1111,8 @@
 
 .pub-suggestion-pending {
   text-underline-offset: 3px;
-  -webkit-text-decoration: underline wavy #c87341;
-  text-decoration: underline wavy #c87341;
+  -webkit-text-decoration: underline wavy var(--od-suggestion-spelling);
+  text-decoration: underline wavy var(--od-suggestion-spelling);
   text-decoration-thickness: 1px;
 }
 
@@ -1126,7 +1132,9 @@
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  transform: translateX(-50%);
+  /* --pub-bubble-dx is written by the extension so the bubble never leaves the
+     sheet horizontally; the flip below handles the vertical edge. */
+  transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px)));
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -1159,14 +1167,39 @@
   border-top-color: hsl(var(--ink));
 }
 
+/* Flipped below the span when the sheet's top edge would clip it. */
+.pub-suggestion-bubble-below {
+  bottom: auto;
+  top: calc(100% + 6px);
+  animation-name: pub-suggestion-bubble-in-below;
+}
+
+.pub-suggestion-bubble-below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: hsl(var(--ink));
+}
+
 @keyframes pub-suggestion-bubble-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(2px);
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(2px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(0);
+  }
+}
+
+@keyframes pub-suggestion-bubble-in-below {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(0);
   }
 }
 
