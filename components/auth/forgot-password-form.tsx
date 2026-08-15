@@ -1,118 +1,133 @@
 "use client"
 
+import { MailCheck } from "lucide-react"
 import Link from "next/link"
-import { type FormEvent, useState, useTransition } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { type FormEvent, useRef, useState, useTransition } from "react"
+import { AuthCard, AuthField } from "@/components/auth/auth-card"
 import {
   getConfiguredResetPasswordRedirectUrl,
   getResetPasswordRedirectUrl,
   normalizeEmail,
   validateForgotPasswordValues,
-  type AuthFieldErrors,
+  type AuthFieldErrors
 } from "@/lib/auth/validation"
 import { isTauriRuntime } from "@/lib/runtime/detect"
 import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { createClient } from "@/lib/supabase/client"
 
-const successMessage =
-  "If an Artifact Studio account exists for that email, Supabase will send a recovery link."
-const sendErrorMessage =
-  "We could not send a recovery link right now. Please wait a moment and try again."
+const sendErrorMessage = "We could not send a recovery link right now. Please wait a moment and try again."
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState("")
   const [errors, setErrors] = useState<AuthFieldErrors>({})
-  const [status, setStatus] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const inFlight = useRef(false)
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
+    if (inFlight.current) {
+      return
+    }
+
     const nextErrors = validateForgotPasswordValues({ email })
     setErrors(nextErrors)
-    setStatus(null)
 
     if (Object.keys(nextErrors).length > 0) {
       return
     }
 
+    inFlight.current = true
+
     startTransition(async () => {
-      const desktop = isTauriRuntime()
-      const supabase = desktop ? createDesktopClient() : createClient()
-      const redirectTo = desktop ? getConfiguredResetPasswordRedirectUrl() : getResetPasswordRedirectUrl(window.location.origin)
+      try {
+        const desktop = isTauriRuntime()
+        const supabase = desktop ? createDesktopClient() : createClient()
+        const redirectTo = desktop
+          ? getConfiguredResetPasswordRedirectUrl()
+          : getResetPasswordRedirectUrl(window.location.origin)
 
-      const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
-        redirectTo,
-      })
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizeEmail(email), {
+          redirectTo
+        })
 
-      if (error) {
-        setErrors({ form: sendErrorMessage })
-        return
+        if (error) {
+          setErrors({ form: sendErrorMessage })
+          return
+        }
+
+        setErrors({})
+        setSent(true)
+      } finally {
+        inFlight.current = false
       }
-
-      setErrors({})
-      setStatus(successMessage)
     })
   }
 
-  return (
-    <section id="forgot-password" data-page="forgot-password" className="space-y-8">
-      <div className="space-y-2">
-        <h1 className="font-lora text-[2rem] font-medium leading-[1.18] tracking-[-0.01em] text-ink">
-          Reset your password
-        </h1>
-        <p className="max-w-sm text-sm leading-6 text-ink-3">
-          Enter your email and we&apos;ll send a recovery link if the account exists.
+  // Success is a state of this card, not a new page.
+  if (sent) {
+    return (
+      <AuthCard
+        subtitle={`If an Artifact Studio account exists for ${normalizeEmail(email)}, a recovery link is on its way. The link opens a page where you can set a new password.`}
+        tile={
+          <span className="od-auth-success-tile">
+            <MailCheck size={24} />
+          </span>
+        }
+        title="Check your email"
+      >
+        <p className="od-auth-switch">
+          Wrong address?{" "}
+          <button className="od-auth-switch-button" onClick={() => setSent(false)} type="button">
+            Use a different one
+          </button>
         </p>
-      </div>
+      </AuthCard>
+    )
+  }
 
+  return (
+    <AuthCard
+      subtitle="Enter your email and we'll send a recovery link if the account exists. Your local artifacts are not affected either way."
+      title="Reset your password"
+    >
       <form
-        id="forgot-password-form"
-        data-section="forgot-password-form"
+        className="od-auth-fields"
         data-testid="forgot-password-form"
-        className="ForgotPasswordForm space-y-5"
+        noValidate
         onSubmit={handleSubmit}
       >
-        <div className="space-y-2">
-          <label className="text-[13px] font-medium text-ink-2" htmlFor="forgot-password-email">
-            Email
-          </label>
-          <Input
-            id="forgot-password-email"
-            autoCapitalize="none"
-            autoComplete="email"
-            name="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            aria-invalid={Boolean(errors.email)}
-          />
-          {errors.email ? <p className="text-[13px] text-destructive">{errors.email}</p> : null}
-        </div>
-
-        {status ? (
-          <p className="rounded-[8px] border-[0.5px] border-border bg-muted px-3 py-2 text-[13px] text-ink-3">
-            {status}
-          </p>
-        ) : null}
+        <AuthField
+          autoCapitalize="none"
+          autoComplete="email"
+          error={errors.email}
+          id="forgot-password-email"
+          label="Email"
+          name="email"
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="you@domain.com"
+          type="email"
+          value={email}
+        />
 
         {errors.form ? (
-          <p className="rounded-[8px] border-[0.5px] border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive">
+          <p className="od-auth-error" role="alert">
             {errors.form}
           </p>
         ) : null}
 
-        <Button className="h-11 w-full text-[14px]" disabled={isPending} type="submit">
-          {isPending ? "Sending link..." : "Send recovery link"}
-        </Button>
-
-        <p className="text-[13px] text-ink-4">
-          Remembered it?{" "}
-          <Link className="font-medium text-ink-2 transition-colors hover:text-ink" href="/login">
-            Log in
-          </Link>
-        </p>
+        <button className="od-auth-primary" disabled={isPending} type="submit">
+          {isPending ? "Sending link…" : "Send recovery link"}
+        </button>
       </form>
-    </section>
+
+      <p className="od-auth-switch">
+        Remembered it?{" "}
+        <Link className="od-auth-switch-button" href="/login">
+          Sign in
+        </Link>
+      </p>
+    </AuthCard>
   )
 }
