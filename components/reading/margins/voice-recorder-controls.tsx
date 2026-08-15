@@ -3,7 +3,8 @@
 import { ArrowUp, LoaderCircle, Pause, Play, Square, X } from "lucide-react"
 import type { VoiceRecorderState } from "@/hooks/useVoiceRecorder"
 
-const WAVEFORM_BAR_COUNT = 20
+/** 22 bars, per the Studio prototype's recording state (ODE-436). */
+const WAVEFORM_BAR_COUNT = 22
 
 export function formatVoiceRecorderDuration(duration: number) {
   const safeDuration = Math.max(0, duration)
@@ -67,7 +68,7 @@ export function VoiceRecorderControls({
             <span
               key={`${index}-${bar}`}
               aria-hidden="true"
-              className="w-[3px] shrink-0 rounded-full bg-cursor/80 transition-[height,opacity] duration-150"
+              className="w-1 shrink-0 rounded-sm bg-cursor/80 transition-[height,opacity] duration-150"
               style={{
                 height,
                 opacity: state === "requesting" ? 0.35 : 1,
@@ -79,16 +80,22 @@ export function VoiceRecorderControls({
 
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col">
-          <span className="font-sans text-[11px] uppercase tracking-[0.07em] text-ink-4">
+          <span className="font-sans text-[10px] font-semibold uppercase leading-none tracking-[0.09em] text-ink-4">
             {state === "requesting" ? "Microphone" : "Voice note"}
           </span>
-          <span className="font-sans text-[13px] text-ink-2">
-            {state === "requesting"
-              ? "Allow microphone access…"
-              : state === "paused"
-                ? `Paused at ${formatVoiceRecorderDuration(duration)}`
-                : formatVoiceRecorderDuration(duration)}
+          {/* tabular-nums keeps the bar from shifting width while it counts. */}
+          <span
+            className={
+              state === "requesting"
+                ? "font-sans text-[13px] text-ink-2"
+                : "mt-0.5 font-sans text-[18px] leading-[1.2] tabular-nums text-ink"
+            }
+          >
+            {state === "requesting" ? "Allow microphone access…" : formatVoiceRecorderDuration(duration)}
           </span>
+          {/* The prototype keeps the timer identical while paused — width must not
+              change — so the paused state is announced here instead of inline. */}
+          {state === "paused" ? <span className="sr-only">Paused</span> : null}
         </div>
 
         <div className="flex items-center gap-2">
@@ -125,11 +132,19 @@ export function VoiceRecorderControls({
             type="button"
             onClick={onStop}
             disabled={!canStop}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-            style={canStop ? { background: "#ef4444", color: "#fff" } : { border: "0.5px solid var(--border)", color: "var(--ink)" }}
+            className={
+              canStop
+                ? "inline-flex h-8 w-9 items-center justify-center rounded-[8px] bg-destructive transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                : "inline-flex h-8 w-9 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+            }
             aria-label="Stop recording"
           >
-            <Square className="h-3.5 w-3.5 fill-current" strokeWidth={1.5} />
+            {/* 13px white square on the red button, per the prototype. */}
+            {canStop ? (
+              <span aria-hidden="true" className="block h-[13px] w-[13px] rounded-[2px] bg-white" />
+            ) : (
+              <Square className="h-3.5 w-3.5 fill-current" strokeWidth={1.5} />
+            )}
           </button>
 
           {hideSubmit ? (
