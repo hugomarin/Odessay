@@ -1120,6 +1120,24 @@
   opacity: 0.5;
 }
 
+/**
+ * Window drag strips. Pair with `data-tauri-drag-region`: the attribute tells
+ * Tauri the area moves the window, and this stops WebKit from starting a text
+ * selection on the same gesture. Inert on web, where the attribute does nothing.
+ * Children that need to be selectable opt back in with `.od-drag-select`.
+ */
+.od-drag-region {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.od-drag-select {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
 .pub-suggestion-bubble-anchor {
   position: relative;
   display: inline-block;

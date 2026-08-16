@@ -20,12 +20,16 @@
         "minHeight": 600,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
       "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:3000 https://odessay.vercel.app https://*.supabase.co wss://*.supabase.co; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: asset: https://asset.localhost https://*.supabase.co https:; media-src 'self' blob:;",
-      "capabilities": ["default"]
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "plugins": {
