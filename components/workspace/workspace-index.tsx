@@ -46,6 +46,8 @@ import { revealWorkspacePath } from "@/lib/workspace/reveal-path";
 import type { WorkspaceSummary } from "@/lib/workspace/types";
 import { buildWorkspaceHref } from "@/lib/workspace/workspace-route";
 import { cn } from "@/lib/utils";
+import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
+import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header";
 
 function formatUpdatedAt(timestamp: number | null) {
   if (!timestamp) return "Recently added";
@@ -240,46 +242,36 @@ export function WorkspaceIndex() {
 
   return (
     <div className="flex min-h-full flex-col bg-bg">
-      <div
-        data-tauri-drag-region
-        className="border-b-[0.5px] border-border px-10 py-7"
-      >
-        <div className="flex items-start justify-between gap-6">
-          <div data-tauri-drag-region>
-            <h1
-              data-tauri-drag-region
-              className="text-[32px] font-medium tracking-[-0.02em] text-ink"
-            >
-              Workspace
-            </h1>
-            <p data-tauri-drag-region className="mt-1 text-[14px] text-ink-4">
-              Synced folders, who writes in each one, and what moved last.
-            </p>
-          </div>
+      <ViewTitlebarSpacer />
+      <ViewHeader
+        sectionId="workspace-header"
+        testId="workspace-header"
+        title="Workspace"
+        subtitle="Synced folders, who writes in each one, and what moved last."
+        actions={
           <Button
             type="button"
             onClick={handleAddWorkspace}
             disabled={isSubmitting}
-            className="h-10 gap-2 rounded-[10px] bg-ink px-4 text-[13px] text-bg hover:bg-ink-2"
+            className={VIEW_HEADER_ACTION_CLASS}
           >
-            <Plus className="h-4 w-4" strokeWidth={1.5} />
+            <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
             Add workspace
           </Button>
-        </div>
+        }
+      />
 
-        <div className="mt-6">
-          <WorkspaceFilterBar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            sortBy={sortBy}
-            onSortChange={setSortBy}
-            view={layout}
-            onViewChange={handleLayoutChange}
-          />
-        </div>
-      </div>
+      <WorkspaceFilterBar
+        className="px-4 pb-3"
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        view={layout}
+        onViewChange={handleLayoutChange}
+      />
 
-      <div className="flex-1 px-10 py-8">
+      <div className="flex-1 px-4 pb-4">
         {errorMessage ? (
           <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
             {errorMessage}

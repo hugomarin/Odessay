@@ -6,6 +6,7 @@ import { DeskArtifactList } from "@/components/desk/desk-artifact-list"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DeskHeader } from "@/components/desk/desk-header"
+import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
@@ -815,9 +816,10 @@ export default function DeskPage() {
 
   return (
     <section id="desk" data-page="desk" className="Desk flex h-screen min-h-0 flex-col bg-bg">
+      <ViewTitlebarSpacer />
       {activeView === "mine" ? (
         <>
-          <DeskHeader onImport={() => setIsImportOpen(true)} />
+          <DeskHeader />
 
           <DeskFilterBar
                 leading={<DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />}

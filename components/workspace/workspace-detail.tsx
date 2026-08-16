@@ -91,6 +91,8 @@ import {
   getArtifactTypeLabel,
   type ArtifactType,
 } from "@/lib/writings/artifact-type";
+import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
+import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header";
 import { useWritingSelection } from "@/hooks/useWritingSelection";
 import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters";
 import {
@@ -858,6 +860,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   if (isLoading || !workspace) {
     return (
       <div className="flex min-h-full flex-col bg-bg">
+        <ViewTitlebarSpacer />
         <div className="border-b-[0.5px] border-border px-10 py-7">
           <div className="h-8 w-48 animate-pulse rounded-[10px] bg-muted" />
           <div className="mt-4 h-[38px] w-full max-w-md animate-pulse rounded-[9px] bg-muted" />
@@ -876,6 +879,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   if (workspace.status === "missing") {
     return (
       <div className="flex min-h-full flex-col bg-bg">
+        <ViewTitlebarSpacer />
         <div className="border-b-[0.5px] border-border px-10 py-7">
           <Link
             href="/workspace"
@@ -1022,6 +1026,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   return (
     <DocumentStateTooltipProvider>
       <div className="flex min-h-full flex-col bg-bg">
+        <ViewTitlebarSpacer />
         <div className="grid flex-1 grid-cols-[236px_1fr]">
           {/* Tree column */}
           <div className="flex min-h-0 flex-col border-r-[0.5px] border-line-soft bg-transparent">
@@ -1066,88 +1071,79 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
 
           {/* Sheet */}
           <div className="flex min-h-0 flex-col">
-            <div className="border-b-[0.5px] border-border px-10 py-7">
-              <div className="flex items-start justify-between gap-8">
-                <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Link
-                      href="/workspace"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+            <ViewHeader
+              sectionId="workspace-detail-header"
+              testId="workspace-detail-header"
+              title={workspace.name}
+              adornment={
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Manage ${workspace.name}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
                     >
-                      <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
-                      Workspace
-                    </Link>
-                    <span className="text-[13px] text-ink-4/50">/</span>
-                    <span className="truncate text-[13px] text-ink-4">
-                      {workspace.rootPath}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-3">
-                    <h1 className="text-[24px] font-medium tracking-[-0.03em] text-ink">
-                      {workspace.name}
-                    </h1>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label={`Manage ${workspace.name}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-                        >
-                          <MoreHorizontal
-                            className="h-4 w-4"
-                            strokeWidth={1.5}
-                          />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        align="end"
-                        className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md"
-                      >
-                        <DropdownMenuItem
-                          className="cursor-pointer rounded-[8px]"
-                          onSelect={() => {
-                            setHeaderAction({ type: "rename", workspace });
-                            setHeaderActionValue(workspace.name);
-                          }}
-                        >
-                          <Pencil className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                          Rename workspace
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="cursor-pointer rounded-[8px] text-destructive focus:text-destructive"
-                          onSelect={() =>
-                            setHeaderAction({ type: "remove", workspace })
-                          }
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                          Disconnect
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-
+                      <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md"
+                  >
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-[8px]"
+                      onSelect={() => {
+                        setHeaderAction({ type: "rename", workspace });
+                        setHeaderActionValue(workspace.name);
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" strokeWidth={1.5} />
+                      Rename workspace
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-[8px] text-destructive focus:text-destructive"
+                      onSelect={() => setHeaderAction({ type: "remove", workspace })}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.5} />
+                      Disconnect
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              }
+              subtitle={
+                <span className="flex min-w-0 items-center gap-2">
+                  <Link
+                    href="/workspace"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                  >
+                    <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                    Workspace
+                  </Link>
+                  <span className="text-[13px] text-ink-4/50">/</span>
+                  <span className="truncate text-[13px] text-ink-4">{workspace.rootPath}</span>
+                </span>
+              }
+              actions={
                 <button
                   type="button"
                   onClick={() => setIsCreateDialogOpen(true)}
-                  className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[9px] bg-ink px-[17px] text-[14px] font-medium text-bg transition-opacity hover:opacity-90"
+                  className={VIEW_HEADER_ACTION_CLASS}
                 >
-                  <Plus className="h-[15px] w-[15px]" strokeWidth={1.5} />
+                  <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
                   New file
                 </button>
-              </div>
+              }
+            />
 
-              <div className="mt-6">
-                <WorkspaceFilterBar
-                  searchQuery={searchQuery}
-                  onSearchChange={setSearchQuery}
-                  sortBy={sortBy}
-                  onSortChange={setSortBy}
-                />
-              </div>
-            </div>
+            <WorkspaceFilterBar
+              className="px-4 pb-3"
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+            />
 
-            <div className="flex-1 overflow-y-auto px-10 py-8">
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
               {errorMessage ? (
                 <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
                   {errorMessage}

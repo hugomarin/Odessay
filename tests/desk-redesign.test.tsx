@@ -117,12 +117,12 @@ const ROW_PROPS = {
 }
 
 describe("header", () => {
-  beforeEach(() => render(<DeskHeader onImport={() => {}} />))
+  beforeEach(() => render(<DeskHeader />))
 
-  it("sets the title at 32/500 with the prototype's tracking", () => {
+  it("sets the title at 40/500 with the prototype's tracking", () => {
     const heading = container.querySelector("h1")
     expect(heading?.textContent).toBe("Desk")
-    expect(heading?.className).toContain("text-[32px]")
+    expect(heading?.className).toContain("text-[40px]")
     expect(heading?.className).toContain("font-medium")
     expect(heading?.className).toContain("tracking-[-0.02em]")
   })

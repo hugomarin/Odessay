@@ -1,4 +1,5 @@
 import { SignOutButton } from "@/components/auth/sign-out-button"
+import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer"
 import { SettingsNav } from "@/components/settings/settings-nav"
 
 type SettingsLayoutProps = Readonly<{
@@ -10,8 +11,11 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
     <div
       id="settings-shell"
       data-page="settings-shell"
-      className="flex min-h-screen bg-bg"
+      className="flex min-h-screen flex-col bg-bg"
     >
+      {/* The chrome row stays free here too — the settings nav starts below it. */}
+      <ViewTitlebarSpacer />
+      <div className="flex min-h-0 flex-1">
       <aside
         id="settings-shell-nav"
         data-section="settings-shell-nav"
@@ -52,6 +56,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
           {children}
         </div>
       </main>
+      </div>
     </div>
   )
 }
