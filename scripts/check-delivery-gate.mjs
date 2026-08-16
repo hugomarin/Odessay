@@ -183,5 +183,7 @@ if (perfTracePath) {
 }
 
 console.log(
-  `[ops:delivery:gate] OK - ${issueIds.join(", ")} have branch, commit traceability, and status.json entry.`,
+  // El ledger lo verifica `ops:status:drift`, no este gate: acá solo se
+  // comprueba rama y trazabilidad de commits.
+  `[ops:delivery:gate] OK - ${issueIds.join(", ")} have branch and commit traceability.`,
 );

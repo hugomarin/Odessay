@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
 import { readFileSync, existsSync } from "node:fs";
+import {
+  STATUS_PATH,
+  allLedgerPaths,
+  parseJsonl,
+} from "./lib/workflow-ledger.mjs";
 
 let hasError = false;
 
@@ -32,27 +37,40 @@ function validateJsonlFile(filePath) {
   }
 
   const content = readFileSync(filePath, "utf8");
-  const lines = content.split("\n").filter((line) => line.trim() !== "");
 
-  for (let i = 0; i < lines.length; i++) {
-    try {
-      JSON.parse(lines[i]);
-    } catch (err) {
+  // Un merge=union mal resuelto deja marcadores de conflicto o líneas pegadas.
+  // Ambos rompen el parseo línea a línea, así que este chequeo es la red que
+  // atrapa una unión corrupta antes de que llegue a main.
+  if (/^<{7}|^={7}$|^>{7}/m.test(content)) {
+    console.error(
+      `[validate-workflow-json] CONFLICT MARKERS in ${filePath} — resolve the merge before committing.`,
+    );
+    hasError = true;
+    return;
+  }
+
+  try {
+    const entries = parseJsonl(content, filePath);
+    if (content !== "" && !content.endsWith("\n")) {
       console.error(
-        `[validate-workflow-json] INVALID JSONL in ${filePath} at line ${i + 1}: ${err.message}`,
+        `[validate-workflow-json] MISSING TRAILING NEWLINE in ${filePath} — the next append would join the last line.`,
       );
       hasError = true;
       return;
     }
+    console.log(
+      `[validate-workflow-json] OK: ${filePath} (${entries.length} entries)`,
+    );
+  } catch (err) {
+    console.error(`[validate-workflow-json] ${err.message}`);
+    hasError = true;
   }
-
-  console.log(
-    `[validate-workflow-json] OK: ${filePath} (${lines.length} lines)`,
-  );
 }
 
-validateJsonFile("workflow/status.json");
-validateJsonlFile("workflow/review-history.jsonl");
+validateJsonFile(STATUS_PATH);
+for (const ledgerPath of allLedgerPaths()) {
+  validateJsonlFile(ledgerPath);
+}
 
 if (hasError) {
   console.error(

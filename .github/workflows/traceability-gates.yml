@@ -43,6 +43,12 @@ jobs:
       - name: Check process docs sync
         run: npm run ops:process:sync
 
+      # Los ledgers se unen solos vía `merge=union` (.gitattributes). Esa unión
+      # es automática, así que CI tiene que verificar el resultado: JSONL
+      # parseable, sin marcadores de conflicto y con newline final.
+      - name: Validate workflow ledgers
+        run: npm run ops:workflow:validate
+
       - name: Check status drift
         run: npm run ops:status:drift:strict
 

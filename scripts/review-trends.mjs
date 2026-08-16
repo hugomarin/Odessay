@@ -9,21 +9,17 @@
  *   node scripts/review-trends.mjs --avg         ← promedio por semana
  */
 
-import { readFileSync, existsSync } from 'fs';
-import { resolve } from 'path';
-
-const HISTORY_PATH = resolve('workflow/review-history.jsonl');
+import { readReviewHistory } from './lib/workflow-ledger.mjs';
 
 function loadHistory() {
-  if (!existsSync(HISTORY_PATH)) {
+  // Incluye los archivos rotados: las tendencias comparan contra el pasado, así
+  // que rotar la ventana activa no debe amputar el histórico.
+  const history = readReviewHistory({ includeArchive: true });
+  if (history.length === 0) {
     console.error('No review history found. Run reviews first to generate workflow/review-history.jsonl');
     process.exit(1);
   }
-  const lines = readFileSync(HISTORY_PATH, 'utf-8').trim().split('\n').filter(Boolean);
-  return lines.map(l => {
-    try { return JSON.parse(l); }
-    catch { return null; }
-  }).filter(Boolean);
+  return history;
 }
 
 function formatDate(iso) {

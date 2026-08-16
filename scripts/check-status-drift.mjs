@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readBuilt, readStatus } from "./lib/workflow-ledger.mjs";
 
 function compareIssueId(a, b) {
   const aNum = Number.parseInt(a.replace("ODE-", ""), 10);
@@ -28,7 +28,8 @@ function commitExists(commit) {
 }
 
 const strict = process.argv.includes("--strict");
-const status = JSON.parse(readFileSync("workflow/status.json", "utf8"));
+const status = readStatus();
+const built = readBuilt();
 const ignoredIssues = new Set(
   Array.isArray(status.traceability_exceptions?.ignored_issue_ids)
     ? status.traceability_exceptions.ignored_issue_ids
@@ -42,7 +43,7 @@ const ignoredIssues = new Set(
         .filter((issue) => typeof issue === "string")
     : [],
 );
-const builtIssues = status.built
+const builtIssues = built
   .map((entry) => entry.issue)
   .filter((issue) => typeof issue === "string");
 const builtIssueSet = new Set(builtIssues);
@@ -74,7 +75,7 @@ const missingInStatus = [...gitIssueSet]
   .filter((issue) => !builtIssueSet.has(issue))
   .sort(compareIssueId);
 
-const missingCommitRefs = status.built
+const missingCommitRefs = built
   .filter((entry) => entry.commit)
   .filter((entry) => !commitExists(entry.commit))
   .map((entry) => ({
@@ -82,7 +83,7 @@ const missingCommitRefs = status.built
     commit: entry.commit,
   }));
 
-const builtDates = status.built
+const builtDates = built
   .map((entry) => entry.date)
   .filter((date) => typeof date === "string")
   .sort();
@@ -100,7 +101,7 @@ const hasProblems =
 
 if (!hasProblems) {
   console.log(
-    `[ops:status:drift] OK - ${builtIssueSet.size} issues in status.json aligned against ${ref}.`,
+    `[ops:status:drift] OK - ${builtIssueSet.size} issues in the built ledger aligned against ${ref}.`,
   );
   if (ignoredIssues.size > 0) {
     console.log(
@@ -114,12 +115,14 @@ if (!hasProblems) {
 
 if (duplicates.length > 0) {
   const formatted = [...new Set(duplicates)].sort(compareIssueId).join(", ");
-  console.error(`[ops:status:drift] Duplicated issues in built[]: ${formatted}`);
+  console.error(
+    `[ops:status:drift] Duplicated issues in the built ledger: ${formatted}`,
+  );
 }
 
 if (missingInStatus.length > 0) {
   console.error(
-    `[ops:status:drift] Missing issues in workflow/status.json: ${missingInStatus.join(", ")}`,
+    `[ops:status:drift] Missing issues in workflow/built.jsonl: ${missingInStatus.join(", ")}`,
   );
 }
 
