@@ -76,7 +76,7 @@ describe("delta 1 — Artifact Studio tokens", () => {
 
   const sizeTokens: Record<string, string> = {
     "size-rail-collapsed": "52px",
-    "size-rail-expanded": "232px",
+    "size-rail-expanded": "244px",
     "size-settings-nav": "244px",
     "size-panel-left": "236px",
     "size-panel-right": "276px",

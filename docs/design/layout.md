@@ -27,7 +27,7 @@ Never an odd value that is not on the scale. Never negative margins for layout.
 ├──────┬───────────┬────────────────────────────┬───────────────┤
 │ rail │ left      │  sheet (layer 1)           │ right panel   │
 │ 52   │ panel 236 │  radius 10, shadow-float   │ 276           │
-│ /232 │ (opt.)    │  ┌──────────────────────┐  │ (opt.)        │
+│ /244 │ (opt.)    │  ┌──────────────────────┐  │ (opt.)        │
 │      │           │  │ header               │  │               │
 │      │           │  │ toolbar              │  │               │
 │      │           │  │ content (scrolls)    │  │               │
@@ -48,7 +48,7 @@ Never an odd value that is not on the scale. Never negative margins for layout.
 | --- | --- | --- |
 | Titlebar | 44 | desktop only; traffic lights 12px, 8px gaps, 20px left inset |
 | Rail collapsed | 52 | 6px side padding → 40px item box |
-| Rail expanded | 232 | label fades `opacity 0 → 1`, icon X never moves |
+| Rail expanded | 244 | label fades `opacity 0 → 1`, icon X never moves |
 | Settings nav | 244 | its own scale, not the rail |
 | Left panel | 236 | transparent, 1px rule on the right |
 | Right panel | 276 | transparent, 1px rule on the left |

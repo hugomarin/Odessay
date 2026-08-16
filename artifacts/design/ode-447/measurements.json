@@ -1,0 +1,61 @@
+{
+  "geometry": {
+    "expanded": {
+      "railWidth": 244,
+      "railBackground": "rgba(0, 0, 0, 0)",
+      "railBorderRight": "0px",
+      "itemHeight": 40,
+      "itemRadius": "9px",
+      "iconSize": 19,
+      "workspaceFoldersOverflowY": "auto",
+      "workspaceFolderCount": 0,
+      "avatarSize": 36,
+      "clippedLabels": [],
+      "titleBarHasWordmark": false
+    },
+    "collapsed": {
+      "railWidth": 52,
+      "railBackground": "rgba(0, 0, 0, 0)",
+      "railBorderRight": "0px",
+      "itemHeight": 40,
+      "itemRadius": "9px",
+      "iconSize": 19,
+      "workspaceFoldersOverflowY": "auto",
+      "workspaceFolderCount": 0,
+      "avatarSize": 36,
+      "clippedLabels": [],
+      "titleBarHasWordmark": false
+    }
+  },
+  "iconTravel": {
+    "expanded": 16.5,
+    "collapsed": 16.5,
+    "travelPx": 0
+  },
+  "forcedCollapse": {
+    "atWide": 244,
+    "atNarrow": 52,
+    "toggleHiddenWhileForced": true,
+    "restored": 244
+  },
+  "timeToInteractive": {
+    "domInteractive": 80,
+    "domContentLoaded": 80,
+    "firstContentfulPaint": null,
+    "railUsableMs": 82
+  },
+  "prototypeWidths": {
+    "desk": {
+      "width": 244
+    },
+    "studio": {
+      "width": 52
+    },
+    "workspace": {
+      "width": 244
+    },
+    "settings": {
+      "width": 244
+    }
+  }
+}

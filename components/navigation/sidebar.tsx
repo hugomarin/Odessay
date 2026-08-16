@@ -3,11 +3,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Layers3, LayoutGrid, PanelLeftDashed, PenLine, Plus, Search, Download, X } from "lucide-react"
-import { ArtifactLockup } from "@/components/brand/artifact-mark"
+import {
+  Folder,
+  FolderTree,
+  LampDesk,
+  LayoutGrid,
+  PanelLeft,
+  Plus,
+  Search,
+  Download,
+  X,
+} from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
-import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
+import { useRailWorkspaces } from "@/hooks/useRailWorkspaces"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
@@ -65,7 +74,27 @@ function SquareLibraryIcon({ className }: { className?: string }) {
   )
 }
 
+/**
+ * Rail order, read from the prototypes: New Artifact, Search · Studio, Desk,
+ * Workspace with its folders · user bar.
+ *
+ * **Collections is kept beyond the spec's inventory.** The package does not list
+ * it, but `/collections` has no other entry point in the app, so removing it
+ * would delete a capability rather than reorder one. Recorded as a divergence in
+ * the ODE-447 PR, the same way ODE-430 kept Import in the Desk header.
+ *
+ * The shortcuts stay bound to their **destination**, not to the visual position:
+ * the order changes, `⌘⌥1` still opens Desk. Renumbering them would break three
+ * bindings to buy a coherence nobody reads off the rail.
+ */
 const NAV_ITEMS: NavItem[] = [
+  {
+    href: "/write",
+    label: "Studio",
+    icon: LampDesk,
+    section: "sidebar-nav-studio",
+    shortcut: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
+  },
   {
     href: "/desk",
     label: "Desk",
@@ -76,16 +105,9 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/workspace",
     label: "Workspace",
-    icon: Layers3,
+    icon: FolderTree,
     section: "sidebar-nav-workspace",
     shortcut: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
-  },
-  {
-    href: "/write",
-    label: "Studio",
-    icon: PenLine,
-    section: "sidebar-nav-studio",
-    shortcut: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
   },
   {
     href: "/collections",
@@ -95,12 +117,45 @@ const NAV_ITEMS: NavItem[] = [
   },
 ]
 
-const SIDEBAR_WIDTH_EXPANDED = 292
+/**
+ * Geometry from `docs/design/system-app.md` §3, already tokenised in
+ * `globals.css` as `--size-rail-collapsed` / `--size-rail-expanded`. The numbers
+ * live here too because the width is also written to a JS style and to
+ * `--app-shell-left-offset`; they must not drift from the tokens.
+ */
+const SIDEBAR_WIDTH_EXPANDED = 244
 const SIDEBAR_WIDTH_COLLAPSED = 52
-const SIDEBAR_ITEM_TRANSITION_CLASS =
-  "transition-[width,padding,gap,opacity,background-color,color] duration-[300ms] ease-layout"
+
+/**
+ * Below 900px the rail is forced collapsed (`docs/design/layout.md` §5). This is
+ * a presentation override, never a write to the store: the user's own choice
+ * survives the narrow window and comes back when the window does.
+ */
+const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
+
+/**
+ * The rail item, read from the prototypes' `railRow`: 40px tall at radius 9,
+ * `padding: 0`, `gap: 10`, 14px label.
+ *
+ * The icon does not live behind padding — it sits in a **fixed 40px column**
+ * (`railIconWrap`). That is the mechanism behind "the icon never changes X
+ * position when collapsing": at 52px the rail is 6px of padding either side of
+ * that column, and expanding only adds room for the label to its right.
+ */
+const SIDEBAR_ITEM_BASE_CLASS =
+  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[14px]"
+const SIDEBAR_ICON_WRAP_CLASS =
+  "flex h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center"
+const SIDEBAR_ITEM_TRANSITION_CLASS = "transition-colors duration-[180ms] ease-layout"
+/**
+ * The label clips horizontally to stay on one line, so its line box has to be
+ * tall enough to contain descenders. The prototypes write `font: 400 14px/1`,
+ * and a 14px line box over 14px text cuts the tail off a "g" — the row is 40px
+ * and centres its content, so nothing is gained by squeezing the line box.
+ */
 const SIDEBAR_LABEL_TRANSITION_CLASS =
-  "overflow-hidden whitespace-nowrap transition-[width,opacity] duration-[300ms] ease-layout"
+  "flex-shrink-0 overflow-hidden whitespace-nowrap leading-[1.45] transition-opacity duration-200 ease-out"
+const SIDEBAR_ICON_CLASS = "h-[19px] w-[19px] shrink-0"
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
 const isEditableTarget = (target: EventTarget | null) => {
@@ -123,7 +178,25 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     initializeUiShellStore({ sidebarMode: initialSidebarMode })
   }, [initialSidebarMode])
 
-  const isCollapsed = shellState.sidebarMode === "collapsed"
+  /**
+   * `docs/design/layout.md` §5: between 700 and 900px the rail is forced
+   * collapsed. Below 700 the shell hides itself entirely (`#app-sidebar-shell`),
+   * so this query only ever governs that band.
+   */
+  const [isWidthForcedCollapse, setIsWidthForcedCollapse] = useState(false)
+
+  useEffect(() => {
+    const query = window.matchMedia(RAIL_FORCED_COLLAPSE_QUERY)
+    const sync = () => setIsWidthForcedCollapse(query.matches)
+
+    sync()
+    query.addEventListener("change", sync)
+    return () => query.removeEventListener("change", sync)
+  }, [])
+
+  // The user's preference is never overwritten — only overridden while the
+  // window is narrow, so widening it restores what they chose.
+  const isCollapsed = shellState.sidebarMode === "collapsed" || isWidthForcedCollapse
   const isIconOnly = isCollapsed
 
   const sidebarWidth = useMemo(() => {
@@ -141,6 +214,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   // Workspace is a first-class DocumentCatalog view as of ODE-373 and belongs
   // in the normal navigation alongside Desk and Studio.
   const navItems = NAV_ITEMS
+  const workspaces = useRailWorkspaces()
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()
@@ -269,7 +343,13 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
           <nav
             id="sidebar"
             data-page="sidebar"
-            className="flex h-screen flex-col border-r-[0.5px] border-border bg-sb transition-[width] duration-[300ms] ease-layout"
+            /*
+             * Layer 0: the rail has no background and no border of its own —
+             * it sits on the shell (`docs/design/system-app.md` §4). The
+             * separation from the content comes from the view's own sheet
+             * (layer 1), not from a rule down the rail's edge.
+             */
+            className="flex h-screen flex-col bg-transparent transition-[width] duration-[300ms] ease-layout"
             style={{ width: sidebarWidth }}
           >
           <div
@@ -282,24 +362,26 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               // The toggle leaves this row on desktop, so it shrinks to the
               // 46px title bar and keeps its content clear of the lights.
               isDesktopTitlebar ? "h-[46px]" : "h-[70px]",
-              isIconOnly
-                ? "justify-center px-2"
-                : isDesktopTitlebar
-                  ? "justify-between gap-2 pl-[114px] pr-4"
-                  : "justify-between gap-2 px-4",
+              // The row carries no content of its own any more — the toggle is
+              // fixed to window coordinates and the wordmark is gone — so it is
+              // just the drag region over the lights' row.
+              isIconOnly ? "justify-center px-2" : "justify-between gap-2 px-4",
             )}
           >
-            <Link
-              href="/desk"
-              className={cn(
-                "overflow-hidden transition-[width,opacity] duration-[300ms] ease-layout",
-                isIconOnly ? "w-0 opacity-0" : "w-[150px] opacity-100",
-              )}
-              aria-label="Artifact Studio"
-            >
-              <ArtifactLockup markSize={22} fontSize={15} />
-            </Link>
+            {/*
+              No wordmark here. The prototypes put nothing in this row but the
+              rail toggle and empty space — the app's name belongs to the window
+              chrome and the marketing surfaces, not to a column the user reads
+              past a hundred times a day.
+            */}
 
+            {/*
+              While the window forces the rail collapsed there is no state to
+              toggle to, so the control leaves rather than sitting there doing
+              nothing. The stored preference is untouched and comes back with
+              the toggle when the window widens.
+            */}
+            {isWidthForcedCollapse ? null : (
             <ActionTooltip
               label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               side={isDesktopTitlebar ? "bottom" : "right"}
@@ -310,45 +392,47 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 className={cn(
                   "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-3 transition-[background-color,color,opacity] duration-[300ms] ease-layout hover:border-border hover:bg-muted hover:text-ink",
                   isDesktopTitlebar
-                    ? // Window coordinates: 20px inset + three 12px lights + two
-                      // 8px gaps ends at ~72px; 82 leaves a gap, and (46-32)/2
-                      // centres the button on the title bar row.
-                      "fixed left-[82px] top-[7px] z-50"
+                    ? /*
+                       * Window coordinates, read off the prototypes' 46px top
+                       * bar: 16px of leading padding, a 76px traffic-light
+                       * group, then a 14px gap → 106. The button is 32px, so
+                       * (46 - 32) / 2 = 7 centres it on the lights' row. The
+                       * lights themselves are placed to match by
+                       * `trafficLightPosition` in tauri.conf.json.
+                       */
+                      "fixed left-[106px] top-[7px] z-50"
                     : isIconOnly
                       ? "mx-auto"
                       : "",
                 )}
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <PanelLeftDashed className="h-[17px] w-[17px]" strokeWidth={1.5} />
+                <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.5} />
               </button>
             </ActionTooltip>
+            )}
           </div>
 
           <div
             id="sidebar-actions"
             data-section="sidebar-actions"
             data-testid="sidebar-actions"
-            className="SidebarActions px-2 pb-3 pt-6"
+            className="SidebarActions flex flex-col gap-0.5 px-[6px] pt-0.5"
           >
             <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
                 href="/write?new=1"
                 className={cn(
-                  `flex h-8 items-center rounded-[8px] text-[15px] font-medium ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
-                  isIconOnly
-                    ? "w-8 justify-start bg-ink pl-2 pr-0 text-bg hover:bg-ink-2"
-                    : "w-full justify-start gap-2 px-2 text-ink hover:bg-muted",
+                  SIDEBAR_ITEM_BASE_CLASS,
+                  SIDEBAR_ITEM_TRANSITION_CLASS,
+                  "text-ink-2 hover:bg-muted hover:text-ink",
                 )}
                 aria-label="New writing"
               >
-                <Plus className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
-                <span
-                  className={cn(
-                    SIDEBAR_LABEL_TRANSITION_CLASS,
-                    isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
-                  )}
-                >
+                <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                  <Plus className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                </span>
+                <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
                   New writing
                 </span>
               </Link>
@@ -359,18 +443,16 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 type="button"
                 onClick={() => setSearchOpen(true)}
                 className={cn(
-                  `mt-3 flex h-8 items-center rounded-[8px] text-[15px] text-ink-2 hover:bg-muted hover:text-ink ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
-                  isIconOnly ? "w-8 justify-start pl-2 pr-0" : "w-full justify-start gap-2 px-2",
+                  SIDEBAR_ITEM_BASE_CLASS,
+                  SIDEBAR_ITEM_TRANSITION_CLASS,
+                  "text-ink-2 hover:bg-muted hover:text-ink",
                 )}
                 aria-label="Search"
               >
-                <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
-                <span
-                  className={cn(
-                    SIDEBAR_LABEL_TRANSITION_CLASS,
-                    isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
-                  )}
-                >
+                <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                  <Search className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                </span>
+                <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
                   Search
                 </span>
               </button>
@@ -381,101 +463,88 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             id="sidebar-nav"
             data-section="sidebar-nav"
             data-testid="sidebar-nav"
-            className="SidebarNav flex-1 overflow-y-auto px-2 pb-2 pt-4"
-          >
-            <div className="space-y-2">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-                const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
+            /*
+              The views never scroll — the rail is a closed inventory. Only the
+              workspace folders below do, so a long list can never push the user
+              bar off the bottom of the window.
 
-                return (
-                  <ActionTooltip
-                    key={item.href}
-                    label={item.label}
-                    shortcut={shortcut}
-                    side="right"
-                  >
+              Padding from the prototypes' nav block: 26px above, 8px below.
+            */
+            className="SidebarNav flex min-h-0 flex-1 flex-col gap-0.5 px-[6px] pb-2 pt-[26px]"
+          >
+            {navItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+              const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
+
+              return (
+                <div key={item.href} className="flex flex-shrink-0 flex-col">
+                  <ActionTooltip label={item.label} shortcut={shortcut} side="right">
                     <Link
                       href={item.href}
                       id={item.section}
                       data-section={item.section}
                       data-testid={item.section}
                       className={cn(
-                        `flex h-10 items-center rounded-[8px] text-[15px] ${SIDEBAR_ITEM_TRANSITION_CLASS}`,
-                        isActive ? "bg-muted font-medium text-ink" : "text-ink-2 hover:bg-muted-hover hover:text-ink",
-                        isIconOnly ? "w-8 justify-start pl-2 pr-0" : "w-full justify-start gap-2 px-2",
+                        SIDEBAR_ITEM_BASE_CLASS,
+                        SIDEBAR_ITEM_TRANSITION_CLASS,
+                        // The prototypes make the active state the darker of the
+                        // two and the only one at weight 500; the repo had the
+                        // two surfaces the other way round.
+                        isActive
+                          ? "bg-muted-hover font-medium text-ink"
+                          : "font-normal text-ink-2 hover:bg-muted hover:text-ink",
                       )}
                       aria-label={item.label}
                     >
-                      <item.icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
+                      <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                        <item.icon className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                      </span>
                       <span
                         className={cn(
                           SIDEBAR_LABEL_TRANSITION_CLASS,
-                          isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
+                          isIconOnly ? "opacity-0" : "opacity-100",
                         )}
                       >
                         {item.label}
                       </span>
                     </Link>
                   </ActionTooltip>
-                )
-              })}
-            </div>
 
-            <SidebarRecentWritings collapsed={isIconOnly} />
-          </div>
-
-          {updateState?.kind === "available" && !isIconOnly && (
-            <div
-              data-section="sidebar-update-banner"
-              data-testid="sidebar-update-banner"
-              className="mx-2 mb-2 rounded-lg border border-border bg-muted px-3 py-2.5"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-ink">
-                    {formatUpdateLabel(updateState.update)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-ink-3">
-                    Restart to apply the update.
-                  </p>
+                  {/*
+                    The workspace folders hang under the Workspace item, indented
+                    to 50px so they line up past the icon column. This is the
+                    block the prototypes draw where the repo used to list
+                    "Recent" — the rail is an inventory of places, not of
+                    history. It collapses to `max-height: 0` with the rail.
+                  */}
+                  {item.href === "/workspace" ? (
+                    <div
+                      data-section="sidebar-workspace-folders"
+                      data-testid="sidebar-workspace-folders"
+                      className={cn(
+                        "od-scroll flex min-h-0 flex-col gap-px overflow-y-auto pl-[50px] pt-0.5",
+                        "transition-[max-height,opacity] duration-300 ease-layout",
+                        isIconOnly ? "max-h-0 opacity-0" : "max-h-[240px] opacity-100",
+                      )}
+                    >
+                      {workspaces.map((workspace) => (
+                        <Link
+                          key={workspace.slug}
+                          href={`/workspace/${workspace.slug}`}
+                          data-testid="sidebar-workspace-folder"
+                          title={workspace.name}
+                          className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-normal leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
+                        >
+                          <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={1.5} />
+                          <span className="truncate">{workspace.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDismissUpdate}
-                  className="shrink-0 text-ink-3 hover:text-ink"
-                  aria-label="Dismiss update"
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={handleInstallUpdate}
-                disabled={installing}
-                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-medium text-bg hover:bg-ink-2 disabled:opacity-50"
-              >
-                <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
-                {installing ? "Installing…" : "Install Update"}
-              </button>
-            </div>
-          )}
-
-          {updateState?.kind === "available" && isIconOnly && (
-            <div className="flex justify-center pb-2">
-              <ActionTooltip label={formatUpdateLabel(updateState.update)} side="right">
-                <button
-                  type="button"
-                  onClick={handleInstallUpdate}
-                  disabled={installing}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-bg hover:bg-ink-2 disabled:opacity-50"
-                  aria-label="Install update"
-                >
-                  <Download className="h-4 w-4" strokeWidth={1.5} />
-                </button>
-              </ActionTooltip>
-            </div>
-          )}
+              )
+            })}
+          </div>
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
           </nav>

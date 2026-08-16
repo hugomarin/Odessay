@@ -38,7 +38,7 @@ Complements `.agents/skills/skill-design/SKILL.md`. Where a value here differs f
 
 ### Still open after ODE-425
 
-- **Rail width.** The package fixes the expanded rail at 232px; `skill-design` still describes a 292px expanded sidebar. Not one of the five deltas — it resolves when the shell is redesigned (ODE-433).
+- **Rail width. RESOLVED (ODE-447): 244px.** Three of the four prototypes that draw the rail declare it as a named constant — `RAIL_FULL = 244` in `Artifact Studio Desk.dc.html`, `Workspace.dc.html` and `Workspace Folder B.dc.html`. Only `Studio.dc.html` carries an inline `mini ? 52 : 232`, in the view where the rail starts collapsed and is therefore least exercised. The prose originally read that 232 and rationalised the 244 as the Settings section nav; measured, the 244 is the rail itself. Per the fidelity gate the prototypes win, and where they disagree the design owner decides — they chose 244. `--size-rail-expanded`, `skill-design` and `layout.md` §2 were corrected to match. This line previously pointed the delta at ODE-433, which scoped itself to Studio and never took the rail; ODE-447 is the issue that owns it.
 - **9px radius has no token.** The scale is declared closed in the skill, but the input/nav step is still written `rounded-[9px]`.
 
 **The prototypes in `docs/design/reference/` are the visual authority.** This document describes; the `.dc.html` files show. Where the two differ, the render wins.
@@ -108,7 +108,7 @@ Type and status colors are user data, not tokens. The palette offered in Setting
 | Thing | Value |
 | --- | --- |
 | Sidebar rail, collapsed | 52px |
-| Sidebar rail, expanded | 232px (Settings section nav: 244px) |
+| Sidebar rail, expanded | 244px (Settings section nav: also 244px) |
 | Rail item | 40px box, 38–40px tall, radius 9 |
 | Titlebar (desktop) | 44px, traffic lights 12px at 8px gaps |
 | Editor topbar | 48px |

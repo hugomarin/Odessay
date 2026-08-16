@@ -54,7 +54,7 @@
   /* Shell geometry the prototypes fixed (design-system-app.md §3).
      Values, not utilities: read them in components instead of retyping. */
   --size-rail-collapsed: 52px;
-  --size-rail-expanded: 232px;
+  --size-rail-expanded: 244px;
   --size-settings-nav: 244px;
   --size-panel-right: 276px;
   --size-panel-left: 236px;

@@ -23,35 +23,59 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
       id="sidebar-bottom"
       data-section="sidebar-bottom"
       data-testid="sidebar-bottom"
-      className="SidebarBottom px-2 py-2"
+      /*
+        No horizontal padding here. The prototypes hang the account row directly
+        off the rail column with `padding-left: 6px` and nothing on the right —
+        nesting it inside another 6px and adding a right padding is what squeezed
+        the 36px avatar into a 26px content box and clipped it at 52px.
+      */
+      className="SidebarBottom pb-1.5"
     >
+      {/*
+        The prototypes' account row: 46px tall at radius 9, 10px gaps, 6px of
+        leading padding, and a **36px** avatar — the repo drew 28. Name 13/500,
+        handle 11/400, and both trailing glyphs at 15px. Like every other rail
+        row, the avatar's X position is the same collapsed and expanded.
+      */}
       <ActionTooltip label="Settings" shortcut={getEditorShortcutLabel("settings")} side="right">
         <Link
           href="/settings"
           className={cn(
-            "flex w-full items-center justify-between rounded-md border-[0.5px] border-transparent px-2 py-[6px] text-ink-2 transition-colors hover:border-border hover:bg-muted/70 hover:text-ink",
+            // 6px of leading padding + the avatar's own 2px puts its centre at
+            // 26px — the same X as every rail icon above it, in both states.
+            "flex h-[46px] w-full items-center gap-2.5 overflow-hidden rounded-[9px] pl-[6px]",
+            "text-ink-2 transition-colors duration-[180ms] hover:bg-muted hover:text-ink",
           )}
           aria-label="Settings"
         >
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[11px] font-semibold text-bg">
-              {initials || "OD"}
-            </span>
+          <span
+            data-testid="sidebar-user-avatar"
+            className="mx-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink text-[12px] font-semibold leading-none text-bg"
+          >
+            {initials || "OD"}
+          </span>
 
-            {!collapsed ? (
-              <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium text-ink">{displayName}</span>
-                <span className="block truncate text-[11px] text-ink-4">@{username}</span>
-              </span>
-            ) : null}
-          </div>
-
-          {!collapsed ? (
-            <span className="flex items-center gap-1 text-ink-4">
-              <Settings className="h-3.5 w-3.5" strokeWidth={1.5} />
-              <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+          <span
+            className={cn(
+              "min-w-0 flex-1 overflow-hidden transition-opacity duration-200 ease-out",
+              collapsed ? "opacity-0" : "opacity-100",
+            )}
+          >
+            <span className="block truncate text-[13px] font-medium leading-[1.35] text-ink">
+              {displayName}
             </span>
-          ) : null}
+            <span className="block truncate text-[11px] leading-[1.4] text-ink-4">@{username}</span>
+          </span>
+
+          <span
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 text-ink-4 transition-opacity duration-200 ease-out",
+              collapsed ? "opacity-0" : "opacity-100",
+            )}
+          >
+            <Settings className="h-[15px] w-[15px]" strokeWidth={1.5} />
+            <ChevronRight className="h-[15px] w-[15px]" strokeWidth={1.5} />
+          </span>
         </Link>
       </ActionTooltip>
     </div>
