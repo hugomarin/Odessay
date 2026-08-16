@@ -8,7 +8,7 @@ Instrucciones para el agente:
    - `workflow/docs.json`
    - `workflow/agents.md`
    - `workflow/decisions.json`
-   - `workflow/status.json`
+   - `workflow/status.json` y los ledgers `workflow/built.jsonl` / `workflow/review-history.jsonl`
    - `workflow/context/features/odessay-ai-writing-assist.md`
    - `workflow/context/features/odessay-prosemirror-tiptap.md`
    - skills: `skill-product-manager`, `skill-backend`, `skill-frontend`, `skill-code-review`, `skill-ux-testing`

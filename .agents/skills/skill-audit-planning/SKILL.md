@@ -45,7 +45,7 @@ El audit de planning debe revisar, como mínimo:
 
 1. `workflow/define/roadmap.md`
 2. `workflow/define/dod-[fase].md`
-3. `workflow/status.json`
+3. `workflow/status.json` (fase activa; para entregas usar `npm run ops:ledger -- built --phase "Fase N" --brief`)
 4. `.agents/skills/skill-product-manager/SKILL.md`
 5. Si la fase toca desktop, multi-runtime, shared core, save path, sync, parser/serializer o services:
    - `.agents/skills/skill-architecture/SKILL.md`
