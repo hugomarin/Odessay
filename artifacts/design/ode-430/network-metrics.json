@@ -1,0 +1,23 @@
+{
+  "capture": {
+    "startup_window_ms": 5000,
+    "first_started_at_utc": "2026-08-16T02:55:58.684Z",
+    "startup_cutoff_utc": "2026-08-16T02:56:03.684Z",
+    "total_har_entries": 38
+  },
+  "startup": {
+    "total_requests": 38,
+    "transfer_bytes": 3894,
+    "duplicate_identical_requests": 0,
+    "duplicate_groups": 0,
+    "writings_requests": 0,
+    "collections_requests": 0,
+    "writing_collections_requests": 0
+  },
+  "navigation": {
+    "listener_churn_requests": 0,
+    "listen_requests": 0,
+    "unlisten_requests": 0
+  },
+  "duplicate_groups": []
+}

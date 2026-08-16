@@ -1,13 +1,11 @@
 "use client"
 
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Plus, Upload } from "lucide-react"
-import { DeskActivityTable } from "@/components/desk/desk-activity-table"
+import { DeskArtifactList } from "@/components/desk/desk-artifact-list"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
-import { DeskHero } from "@/components/desk/desk-hero"
+import { DeskHeader } from "@/components/desk/desk-header"
 import { DeskViewToggle, type DeskViewMode } from "@/components/desk/desk-view-toggle"
 import { SharedWithMeList } from "@/components/desk/shared-with-me-list"
 import { WritingPreviewModal } from "@/components/desk/writing-preview-modal"
@@ -83,6 +81,26 @@ const EMPTY_SUMMARY: DeskActivitySummary = {
     received: 0,
   },
   total: 0,
+}
+
+/**
+ * "No artifacts at all" — a placeholder inside the sheet.
+ *
+ * The real first-run state is ODE-438's deliverable (`docs/design/views/
+ * empty-states.md`); ODE-430 only owns the fact that it lives inside this sheet
+ * rather than replacing the page.
+ */
+function DeskEmptyState() {
+  return (
+    <div data-testid="desk-empty" className="px-4 py-20 text-center">
+      <p className="mb-1.5 font-lora text-[20px] font-medium leading-[1.3] text-ink">
+        Nothing here yet
+      </p>
+      <p className="text-[14px] leading-[1.5] text-ink-4">
+        Create your first artifact to see it on the Desk.
+      </p>
+    </div>
+  )
 }
 
 export default function DeskPage() {
@@ -394,13 +412,19 @@ export default function DeskPage() {
 
     const load = async () => {
       setIsLoading(true)
-      // 0. Load desktop-local workspace metadata so rows can show assignments
-      await loadWorkspaceData()
-      // 1. Render local data immediately — don't wait for remote
-      await loadDeskActivity()
-      void loadRecipientPreviewsAsync()
-      if (!cancelled) {
-        setIsLoading(false)
+      try {
+        // 0. Load desktop-local workspace metadata so rows can show assignments
+        await loadWorkspaceData()
+        // 1. Render local data immediately — don't wait for remote
+        await loadDeskActivity()
+        void loadRecipientPreviewsAsync()
+      } finally {
+        // The loading state always has an exit. A rejected local read leaves the
+        // view showing what it has and an actionable surface, never skeletons
+        // that never resolve.
+        if (!cancelled) {
+          setIsLoading(false)
+        }
       }
       // 2. Hydrate from Supabase in background
       void hydrateRemoteIfNeeded().then(() => {
@@ -577,6 +601,24 @@ export default function DeskPage() {
   const previewRows = useMemo(() => {
     return filteredSummary.groups.flatMap((group) => group.rows)
   }, [filteredSummary])
+
+  /**
+   * The row shows a relative date and carries the absolute one in `title`. Both
+   * come from the catalog records already loaded for the view — no extra query.
+   */
+  const absoluteDatesByWritingId = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(undefined, { dateStyle: "long", timeStyle: "short" })
+    return Object.fromEntries(
+      rawWritings.map((writing) => {
+        const stamp = writing.updated_at ?? writing.created_at
+        const parsed = stamp ? new Date(stamp) : null
+        return [
+          writing.id,
+          parsed && !Number.isNaN(parsed.getTime()) ? formatter.format(parsed) : "",
+        ]
+      }),
+    )
+  }, [rawWritings])
 
   const previewIndex = useMemo(() => {
     if (!previewWritingId) {
@@ -772,43 +814,12 @@ export default function DeskPage() {
   )
 
   return (
-    <section id="desk" data-page="desk" className="Desk flex min-h-screen flex-col bg-bg">
-      <div
-        id="desk-topbar"
-        data-section="desk-topbar"
-        data-testid="desk-topbar"
-        data-tauri-drag-region
-        className="DeskTopbar od-drag-region flex h-[70px] items-center justify-between gap-4 border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-5 sm:px-9"
-      >
-        <div data-tauri-drag-region className="flex min-w-0 items-baseline gap-3">
-          <p data-tauri-drag-region className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Desk</p>
-          <p data-tauri-drag-region className="truncate text-[13px] text-ink-4">Writing activity, shared drafts, and collection context.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsImportOpen(true)}
-            className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
-          >
-            <Upload className="h-[14px] w-[14px]" strokeWidth={1.5} />
-            Import
-          </button>
-          <Link
-            href="/write?new=1"
-            className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
-          >
-            <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
-            New writing
-          </Link>
-        </div>
-      </div>
-
+    <section id="desk" data-page="desk" className="Desk flex h-screen min-h-0 flex-col bg-bg">
       {activeView === "mine" ? (
         <>
-          <DeskHero drafts={summary.heroDrafts} />
+          <DeskHeader onImport={() => setIsImportOpen(true)} />
 
-          <div className="px-5 py-[14px] sm:px-9">
-              <DeskFilterBar
+          <DeskFilterBar
                 leading={<DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />}
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
@@ -836,49 +847,28 @@ export default function DeskPage() {
                 hasActiveFilters={hasActiveFilters}
                 filteredCount={filteredSummary.total}
                 totalCount={summary.total}
+                onClearFilters={clearFilters}
               />
-          </div>
 
-          {hasSelection && (
-            <BulkActionBar
-              selectedCount={selectedCount}
-              visibleCount={visibleWritingIds.length}
-              allVisibleSelected={allVisibleSelected}
-              onSelectAll={() => selectAll(visibleWritingIds)}
-              onDeselectAll={deselectAll}
-              onDelete={() => setIsBulkDeleteOpen(true)}
-              onStatusChange={async (status) => {
-                await bulkChangeStatus(selectedIds, status)
-              }}
-              onArtifactTypeChange={async (artifactType) => {
-                await bulkChangeArtifactType(selectedIds, artifactType)
-              }}
-              collectionOptions={collectionOptions}
-              onAddToCollection={async (collectionId) => {
-                await bulkAddToCollection(selectedIds, collectionId, writingCollections)
-              }}
-              onCreateCollection={async (name) => {
-                const ownerId = getLocalDBScope()
-                await bulkCreateCollection(
-                  selectedIds,
-                  name,
-                  ownerId === "anonymous" ? null : ownerId,
-                  writingCollections,
-                )
-              }}
-            />
-          )}
-
-          {hasActiveFilters && filteredSummary.groups.length === 0 && !isLoading ? (
-            <DeskFilterEmptyState onClear={clearFilters} />
-          ) : (
-            <DeskActivityTable
+          {/*
+            Layer 1 — the sheet. It is the positioning context for the selection
+            bar, which the prototype anchors inside it rather than to the window.
+          */}
+          <div
+            data-testid="desk-sheet"
+            className="relative mx-4 mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float"
+          >
+            <DeskArtifactList
               groups={filteredSummary.groups}
               isLoading={isLoading}
-              collectionOptions={collectionOptions}
-              collectionIdsByWritingId={collectionIdsByWritingId}
-              onToggleCollection={toggleWritingCollection}
-              onCreateCollection={createWritingCollection}
+              emptyState={
+                hasActiveFilters ? <DeskFilterEmptyState onClear={clearFilters} /> : <DeskEmptyState />
+              }
+              selectedIds={selectedIds}
+              onToggleSelection={toggleSelection}
+              onActivate={(row) => {
+                if (row.destinationHref) router.push(row.destinationHref)
+              }}
               onStatusChange={changeWritingStatus}
               onArtifactTypeChange={changeWritingArtifactType}
               workspaceOptions={workspaceOptions}
@@ -895,11 +885,40 @@ export default function DeskPage() {
                 await loadDeskActivity()
                 void loadRecipientPreviewsAsync()
               }}
-              selectedIds={selectedIds}
-              onToggleSelection={toggleSelection}
-              showWorkspaceColumn={workspaceAvailable}
+              absoluteDates={absoluteDatesByWritingId}
             />
-          )}
+
+            {hasSelection && (
+              <BulkActionBar
+                placement="absolute"
+                selectedCount={selectedCount}
+                visibleCount={visibleWritingIds.length}
+                allVisibleSelected={allVisibleSelected}
+                onSelectAll={() => selectAll(visibleWritingIds)}
+                onDeselectAll={deselectAll}
+                onDelete={() => setIsBulkDeleteOpen(true)}
+                onStatusChange={async (status) => {
+                  await bulkChangeStatus(selectedIds, status)
+                }}
+                onArtifactTypeChange={async (artifactType) => {
+                  await bulkChangeArtifactType(selectedIds, artifactType)
+                }}
+                collectionOptions={collectionOptions}
+                onAddToCollection={async (collectionId) => {
+                  await bulkAddToCollection(selectedIds, collectionId, writingCollections)
+                }}
+                onCreateCollection={async (name) => {
+                  const ownerId = getLocalDBScope()
+                  await bulkCreateCollection(
+                    selectedIds,
+                    name,
+                    ownerId === "anonymous" ? null : ownerId,
+                    writingCollections,
+                  )
+                }}
+              />
+            )}
+          </div>
 
           <DeleteWritingDialog
             open={isBulkDeleteOpen}
@@ -966,11 +985,15 @@ export default function DeskPage() {
         </>
       ) : (
         <>
-          <div className="border-b-[0.5px] border-border px-5 py-[14px] sm:px-9">
+          <DeskHeader />
+          <div className="flex flex-shrink-0 flex-wrap items-center gap-[14px] px-4 pb-3">
             <DeskViewToggle activeView={activeView} counts={viewCounts} onViewChange={updateActiveView} />
           </div>
-          <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
-          
+          <div className="relative mx-4 mb-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float">
+            <div className="od-scroll min-h-0 flex-1 overflow-y-auto">
+              <SharedWithMeList items={sharedItems} isLoading={isSharedLoading} error={sharedError} />
+            </div>
+          </div>
         </>
       )}
       <ImportWritingDialog open={isImportOpen} onOpenChange={setIsImportOpen} />

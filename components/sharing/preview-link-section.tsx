@@ -23,6 +23,13 @@ export type PreviewLinkSectionProps = {
   onRevoke: () => void
   /** Extra wrapper classes; callers that need a leading divider pass it here. */
   className?: string
+  /**
+   * `compact` is the editor properties panel's density and stays the default so
+   * that surface is untouched. `card` is the Desk preview's sharing card, read
+   * from the prototype: 500/13 title, 12/1.5 description, and a 36px ink button
+   * at radius 8.
+   */
+  size?: "compact" | "card"
 }
 
 /**
@@ -41,12 +48,22 @@ export function PreviewLinkSection({
   onCopy,
   onRevoke,
   className,
+  size = "compact",
 }: PreviewLinkSectionProps) {
+  const card = size === "card"
+
   return (
-    <div className={cn("px-3 py-[11px]", className)}>
-      <div className="mb-2">
-        <p className="text-[12px] font-medium text-ink-2">Preview link</p>
-        <p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">
+    <div className={cn(card ? "flex flex-col gap-1.5" : "px-3 py-[11px]", className)}>
+      <div className={card ? "flex flex-col gap-1.5" : "mb-2"}>
+        <p className={cn("font-medium", card ? "text-[13px] text-ink" : "text-[12px] text-ink-2")}>
+          Preview link
+        </p>
+        <p
+          className={cn(
+            "text-pretty text-ink-4",
+            card ? "text-[12px] leading-[1.5]" : "mt-0.5 text-[11px] leading-[1.45]",
+          )}
+        >
           Share with anyone — no Artifact Studio account needed.
         </p>
       </div>
@@ -62,7 +79,12 @@ export function PreviewLinkSection({
           type="button"
           onClick={onGenerate}
           disabled={!hasRemoteWriting || isLoadingShareLink || isSavingShareLink}
-          className="flex h-8 w-full items-center justify-center rounded-[6px] border-[0.5px] border-ink bg-ink px-[10px] text-[11px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          className={cn(
+            "flex w-full items-center justify-center font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+            card
+              ? "mt-1 h-9 rounded-[8px] bg-ink text-[13px]"
+              : "h-8 rounded-[6px] border-[0.5px] border-ink bg-ink px-[10px] text-[11px]",
+          )}
         >
           Generate link
         </button>

@@ -37,6 +37,8 @@ import type { CollectionOption } from "@/lib/collections/collections"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
+import { DocumentStateIcon } from "@/components/ui/document-state-icon"
+import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge"
 import { TablePropertySelector } from "@/components/ui/table-property-selector"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
@@ -84,6 +86,10 @@ type WritingPreviewModalProps = {
 
 const PREFETCH_OFFSETS = [1, -1, 2, -2]
 
+/** Chrome-row button, read from the prototype: 32px, radius 7, no border. */
+const CHROME_BUTTON =
+  "inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[7px] text-ink-3 transition-colors hover:bg-surface-menu-hover hover:text-ink disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+
 
 
 const formatMetadataDate = (value: string | null | undefined) => {
@@ -111,6 +117,31 @@ const isEditableTarget = (target: EventTarget | null) => {
 
   const tag = target.tagName
   return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable
+}
+
+/**
+ * Whether the key belongs to the control the user is standing on rather than to
+ * the overlay.
+ *
+ * The overlay's shortcuts are window-level, so without this every button inside
+ * it loses `Enter`: the handler would run `preventDefault()` — killing the
+ * button's own activation — and navigate away instead. Requirement 6 means
+ * "`⏎` opens the artifact **when the focus is on the overlay**", not "`⏎` is
+ * hijacked everywhere inside it".
+ */
+const INTERACTIVE_SELECTOR =
+  "input, textarea, select, button, a[href], [role='button'], [role='menuitem'], [role='menuitemcheckbox'], [contenteditable='true']"
+
+const isInteractiveTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  if (target.isContentEditable) {
+    return true
+  }
+
+  return Boolean(target.closest(INTERACTIVE_SELECTOR))
 }
 
 export function WritingPreviewModal({
@@ -472,6 +503,20 @@ export function WritingPreviewModal({
         return
       }
 
+      // A key already consumed by a dropdown, a popover or the dialog itself is
+      // not the overlay's to act on a second time.
+      if (event.defaultPrevented) {
+        return
+      }
+
+      // Standing on a control means the key belongs to that control. Without
+      // this, Enter on "Generate link" would navigate to the full artifact and
+      // suppress the button's own activation, and the arrows would move to
+      // another artifact from under an open menu.
+      if (isInteractiveTarget(event.target)) {
+        return
+      }
+
       if (event.key === "ArrowLeft") {
         event.preventDefault()
         navigateBy(-1)
@@ -481,59 +526,69 @@ export function WritingPreviewModal({
         event.preventDefault()
         navigateBy(1)
       }
+
+      if (event.key === "Enter") {
+        event.preventDefault()
+        handleOpenFullWriting()
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [navigateBy, open])
+  }, [handleOpenFullWriting, navigateBy, open])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         hideClose
-        overlayClassName="bg-[rgba(255,255,255,0.62)] backdrop-blur-[18px] backdrop-saturate-[1.15]"
-        className="max-h-[88vh] max-w-[1040px] overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.72)] bg-[rgba(255,255,255,0.86)] p-0 shadow-[0_24px_80px_rgba(0,0,0,0.16),0_2px_12px_rgba(0,0,0,0.06)] backdrop-blur-[24px]"
+        data-testid="preview-overlay"
+        overlayClassName="bg-[rgba(35,24,15,0.22)] backdrop-blur-[14px] backdrop-saturate-[1.15]"
+        className="h-[min(840px,100%)] max-h-[calc(100vh-56px)] w-[min(1160px,100%)] max-w-[calc(100vw-56px)] overflow-hidden rounded-bar border-0 bg-bg p-0 px-2 pb-2 shadow-modal"
       >
-        <DialogTitle className="sr-only">{preview?.title ?? row?.title ?? "Writing preview"}</DialogTitle>
-        <DialogDescription className="sr-only">Read-only writing preview from Desk.</DialogDescription>
+        <DialogTitle className="sr-only">{preview?.title ?? row?.title ?? "Artifact preview"}</DialogTitle>
+        <DialogDescription className="sr-only">Read-only artifact preview from Desk.</DialogDescription>
 
-        <div className="flex h-[min(760px,88vh)] min-h-0 flex-col bg-bg/95">
-          <div className="flex h-[50px] shrink-0 items-center justify-between gap-3 border-b-[0.5px] border-border bg-sb/85 px-3">
-            <div className="flex items-center gap-1.5">
+        <DocumentStateTooltipProvider>
+        <div className="flex h-full min-h-0 flex-col">
+          {/* Layer 0 — the chrome row. */}
+          <div
+            data-testid="preview-chrome"
+            className="flex h-12 flex-shrink-0 items-center gap-2.5 pl-2 pr-1.5"
+          >
               <button
                 type="button"
                 onClick={() => navigateBy(-1)}
                 disabled={!canGoPrevious}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                aria-label="Previous writing"
+                className={CHROME_BUTTON}
+                aria-label="Previous artifact"
               >
-                <ArrowLeft className="h-4 w-4" strokeWidth={1.5} />
+                <ArrowLeft className="h-[17px] w-[17px]" strokeWidth={1.5} />
               </button>
               <button
                 type="button"
                 onClick={() => navigateBy(1)}
                 disabled={!canGoNext}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 transition-colors hover:bg-muted hover:text-ink disabled:pointer-events-none disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                aria-label="Next writing"
+                className={CHROME_BUTTON}
+                aria-label="Next artifact"
               >
-                <ArrowRight className="h-4 w-4" strokeWidth={1.5} />
+                <ArrowRight className="h-[17px] w-[17px]" strokeWidth={1.5} />
               </button>
               {currentIndex !== null ? (
-                <span className="pl-1.5 text-[12px] font-medium text-ink-3">
+                <span data-testid="preview-counter" className="whitespace-nowrap text-[13px] text-ink-2">
                   {currentIndex + 1} of {rows.length}
                 </span>
               ) : null}
-              <span className="pl-1.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-ink-4">Preview</span>
-            </div>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.13em] text-ink-4">Preview</span>
 
-            <div className="flex items-center gap-1">
+              <span className="flex-1" />
+
               {onOpenFullWriting ? (
                 <button
                   type="button"
                   onClick={handleOpenFullWriting}
-                  className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-border bg-bg px-[10px] text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  className="inline-flex h-[34px] items-center gap-2 whitespace-nowrap rounded-[8px] border-[0.5px] border-border bg-sb px-[13px] text-[13px] font-medium text-ink-2 transition-colors hover:border-ink-6 hover:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                 >
-                  <ExternalLink className="h-[13px] w-[13px]" strokeWidth={1.5} />
+                  <ExternalLink className="h-[15px] w-[15px]" strokeWidth={1.5} />
                   Open full writing
                 </button>
               ) : null}
@@ -541,12 +596,8 @@ export function WritingPreviewModal({
               {onDelete ? (
                 <Popover open={moreOpen} onOpenChange={setMoreOpen}>
                   <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-3 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
-                      aria-label="More options"
-                    >
-                      <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />
+                    <button type="button" className={CHROME_BUTTON} aria-label="More options">
+                      <MoreHorizontal className="h-[17px] w-[17px]" strokeWidth={1.5} />
                     </button>
                   </PopoverTrigger>
                   <PopoverContent align="end" className="w-[200px] p-[5px]">
@@ -566,29 +617,38 @@ export function WritingPreviewModal({
               <button
                 type="button"
                 onClick={() => onOpenChange(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                className={CHROME_BUTTON}
                 aria-label="Close preview"
               >
-                <X className="h-4 w-4" strokeWidth={1.5} />
+                <X className="h-[18px] w-[18px]" strokeWidth={1.5} />
               </button>
-            </div>
           </div>
 
           {actionFeedback ? (
             <div
+              role="status"
               className={cn(
-                "shrink-0 border-b-[0.5px] border-border px-4 py-1.5 text-[11px]",
-                actionFeedback.tone === "ok" ? "bg-sb/70 text-ink-3" : "bg-[hsl(0_60%_97%)] text-[hsl(0_72%_42%)]",
+                "mx-0 mb-2 flex-shrink-0 rounded-[8px] px-3 py-1.5 text-[12px]",
+                actionFeedback.tone === "ok" ? "bg-sb text-ink-3" : "bg-[hsl(0_60%_97%)] text-destructive",
               )}
             >
               {actionFeedback.message}
             </div>
           ) : null}
 
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_272px]">
-            <main className="min-h-0 overflow-y-auto bg-bg">
-              <div className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-8 py-7">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-4">Title</p>
+          {/* Layer 1 — the two sheets. */}
+          <div className="flex min-h-0 flex-1 gap-2">
+            <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float">
+              <div
+                data-testid="preview-sheet-header"
+                className="flex-shrink-0 border-b-[0.5px] border-line-soft px-10 pb-[22px] pt-[26px]"
+              >
+                <p className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.13em] text-ink-4">Title</p>
+                {/*
+                  The prototype draws a static Lora 500/28 heading. It stays an
+                  input so renaming from the preview survives the redesign — the
+                  painted type is the prototype's, the capability is the repo's.
+                */}
                 <input
                   value={titleDraft}
                   onFocus={() => {
@@ -610,47 +670,81 @@ export function WritingPreviewModal({
                       event.currentTarget.blur()
                     }
                   }}
-                  className="w-full bg-transparent text-[22px] font-medium leading-[1.25] text-ink outline-none placeholder:text-ink-4 focus-visible:ring-0"
-                  placeholder="Untitled writing"
-                  aria-label="Writing title"
+                  data-testid="preview-title"
+                  className="w-full bg-transparent font-lora text-[28px] font-medium leading-[1.25] tracking-[-0.015em] text-ink outline-none placeholder:text-ink-4 focus-visible:ring-0"
+                  placeholder="Untitled artifact"
+                  aria-label="Artifact title"
                 />
+                <div className="mt-3.5 flex flex-wrap items-center gap-2.5">
+                  {row ? <DocumentStateIcon state={row.documentState} className="h-[22px] w-[22px]" /> : null}
+                  <span className="text-[12px] text-ink-5">
+                    {preview ? `${preview.wordCount.toLocaleString()} words` : "—"}
+                    {preview?.createdAt ? ` · ${formatMetadataDate(preview.createdAt)}` : ""}
+                  </span>
+                  {row?.localPath ? (
+                    <span
+                      title={row.localPath}
+                      data-testid="preview-path"
+                      className="min-w-0 flex-1 truncate font-mono text-[11px] leading-[1.4] text-ink-5"
+                    >
+                      {row.localPath}
+                    </span>
+                  ) : null}
+                </div>
               </div>
 
               {isLoading && !preview ? (
-                <div className="space-y-3 p-8">
+                <div className="space-y-3 px-10 py-8">
                   <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
                   <div className="h-4 w-full animate-pulse rounded bg-muted" />
                   <div className="h-4 w-5/6 animate-pulse rounded bg-muted" />
                 </div>
               ) : preview ? (
-                <WritingContentFrame
-                  title={preview.title}
-                  bodyHtml={preview.bodyHtml}
-                  bodyId="desk-preview-body"
-                  bodyTestId="desk-preview-body"
-                  showTitle={false}
-                />
+                <div className="od-scroll min-h-0 flex-1 overflow-y-auto px-10 pb-[60px] pt-[30px]">
+                  <WritingContentFrame
+                    title={preview.title}
+                    bodyHtml={preview.bodyHtml}
+                    bodyId="desk-preview-body"
+                    bodyTestId="desk-preview-body"
+                    showTitle={false}
+                  />
+                </div>
               ) : (
-                <div className="p-8">
-                  <p className="font-lora text-[15px] italic text-ink-3">This writing is unavailable.</p>
+                /*
+                 * Failure mode 2 — the artifact went away while the overlay was
+                 * open. A recoverable state with a way out; never a draft.
+                 */
+                <div data-testid="preview-unavailable" className="px-10 py-10">
+                  <p className="mb-1.5 font-lora text-[20px] font-medium text-ink">This artifact is unavailable</p>
+                  <p className="mb-4 text-[14px] leading-[1.5] text-ink-4">
+                    It may have been deleted or moved while the preview was open.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onOpenChange(false)}
+                    className="inline-flex h-[34px] items-center rounded-[8px] border-[0.5px] border-border bg-sb px-[13px] text-[13px] font-medium text-ink-2 transition-colors hover:bg-surface-row-hover"
+                  >
+                    Close preview
+                  </button>
                 </div>
               )}
             </main>
 
-            <aside className="flex min-h-0 flex-col border-l-[0.5px] border-border bg-sb/90">
-              <div className="flex h-[50px] shrink-0 items-center border-b-[0.5px] border-border px-5">
-                <p className="text-[12px] font-semibold uppercase tracking-[0.07em] text-ink-4">Properties</p>
-              </div>
+            <aside
+              data-testid="preview-properties"
+              className="od-scroll flex w-[308px] flex-shrink-0 flex-col gap-[22px] overflow-y-auto bg-transparent pb-6 pl-3.5 pr-2.5 pt-[18px]"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-ink-4">Properties</p>
 
-              <div className="space-y-5 overflow-y-auto px-4 py-5">
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Status</p>
+              <div className="contents">
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Status</p>
                   {row ? (
                     <TablePropertySelector
                       ariaLabel={`Change status for ${row.title}`}
                       icon={<WritingStatusIcon status={row.stateTone} />}
                       label={row.stateLabel}
-                      variant="rail"
+                      variant="preview"
                       contentClassName="w-[248px]"
                     >
                         {enabledStatuses.map((status) => (
@@ -667,17 +761,17 @@ export function WritingPreviewModal({
                   ) : null}
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Artifact Type</p>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Artifact Type</p>
                   {row ? (
-                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<PreviewArtifactTypeIcon artifactType={row.artifactType ?? "general"} />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="rail" contentClassName="w-[248px]">
+                    <TablePropertySelector ariaLabel={`Change artifact type for ${row.title}`} icon={<PreviewArtifactTypeIcon artifactType={row.artifactType ?? "general"} />} label={getArtifactTypeLabel(row.artifactType ?? "general")} variant="preview" contentClassName="w-[248px]">
                       {ARTIFACT_TYPE_VALUES.map((artifactType) => <PreviewMenuItem key={artifactType} icon={<PreviewArtifactTypeIcon artifactType={artifactType} />} label={getArtifactTypeLabel(artifactType)} onSelect={() => void onArtifactTypeChange?.(row.id, artifactType)} />)}
                     </TablePropertySelector>
                   ) : null}
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Workspace</p>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Workspace</p>
                   {row ? (
                     <WorkspaceAssignmentDropdown
                       writingId={row.id}
@@ -686,7 +780,7 @@ export function WritingPreviewModal({
                       currentName={row.workspaceName}
                       options={workspaceOptions}
                       available={workspaceAvailable}
-                      variant="rail"
+                      variant="desk"
                       onAssign={(writingId, slug) => onAssignWorkspace?.(writingId, slug)}
                       onUnassign={(writingId) => onUnassignWorkspace?.(writingId)}
                       onCreateWorkspace={(writingId) => onCreateWorkspace?.(writingId)}
@@ -694,11 +788,11 @@ export function WritingPreviewModal({
                   ) : null}
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Collections</p>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Collections</p>
                   {row ? (
-                    <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
-                      <div className="px-3 py-[9px]">
+                    <div className="flex flex-col gap-2 rounded-[10px] border-[0.5px] border-border bg-transparent px-[13px] py-3">
+                      <div>
                         <CollectionAssignmentMenu
                           collections={collectionOptions}
                           selectedIds={selectedCollectionIds}
@@ -710,16 +804,16 @@ export function WritingPreviewModal({
                           trigger={
                             <button
                               type="button"
-                              className="flex h-8 w-full items-center gap-2 rounded-[8px] text-left text-[12px] font-medium text-ink-2 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                              className="inline-flex items-center gap-[9px] text-left text-[13px] font-medium text-ink-2 transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
                             >
-                              <Tag className="h-[13px] w-[13px] text-ink-3" strokeWidth={1.5} />
+                              <Tag className="h-[15px] w-[15px]" strokeWidth={1.5} />
                               Add to collections
                             </button>
                           }
                         />
                       </div>
 
-                      <div className="border-t-[0.5px] border-border px-3 py-[9px]">
+                      <div>
                         {selectedCollections.length > 0 ? (
                           <div className="flex flex-wrap gap-2">
                             {selectedCollections.map((collection) => (
@@ -732,20 +826,44 @@ export function WritingPreviewModal({
                             ))}
                           </div>
                         ) : (
-                          <p className="text-[12px] text-ink-4">No collections assigned yet.</p>
+                          <p className="text-[12px] leading-[1.5] text-ink-5">No collections assigned yet.</p>
                         )}
                       </div>
                     </div>
                   ) : null}
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Sharing</p>
-                  <div className="space-y-3 rounded-[8px] border-[0.5px] border-border bg-bg px-3 py-[11px]">
-                    <div><p className="text-[12px] font-medium text-ink-2">Web publishing</p><p className="mt-0.5 text-[11px] leading-[1.45] text-ink-4">Publishing and link sharing continue on web.</p></div>
-                    <button type="button" onClick={() => void handleOpenWebAction("publish")} disabled={!onOpenWebAction} className="inline-flex h-8 w-full items-center justify-center gap-[6px] rounded-[6px] border-[0.5px] border-ink bg-ink px-[10px] text-[11px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"><ExternalLink className="h-[11px] w-[11px]" strokeWidth={1.5} />Publish on web</button>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Sharing</p>
+                  {/*
+                    The sharing card: bordered, radius 10, its two blocks split by
+                    a 1px rule. Web publishing and the preview link are different
+                    mechanisms, and the card is what keeps them from reading as one.
+                  */}
+                  <div
+                    data-testid="preview-sharing-card"
+                    className="flex flex-col gap-3.5 rounded-[10px] border-[0.5px] border-border bg-transparent px-[13px] py-3.5"
+                  >
+                    <div className="flex flex-col gap-1.5">
+                      <p className="text-[13px] font-medium text-ink">Web publishing</p>
+                      <p className="text-pretty text-[12px] leading-[1.5] text-ink-4">
+                        Publishing and link sharing continue on web.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenWebAction("publish")}
+                        disabled={!onOpenWebAction}
+                        className="mt-1 inline-flex h-9 w-full items-center justify-center gap-2 rounded-[8px] bg-ink text-[13px] font-medium text-bg transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ExternalLink className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                        Publish on web
+                      </button>
+                    </div>
+
+                    <div aria-hidden data-testid="preview-sharing-rule" className="h-px w-full bg-border" />
+
                     <PreviewLinkSection
-                      className="border-t-[0.5px] border-border"
+                      size="card"
                       hasRemoteWriting={hasRemoteWriting}
                       isLoadingShareLink={isLoadingShareLink}
                       isSavingShareLink={isSavingShareLink}
@@ -759,16 +877,16 @@ export function WritingPreviewModal({
                   </div>
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Export</p>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Export</p>
                   <Popover open={exportOpen} onOpenChange={setExportOpen}><PopoverTrigger asChild><div><PropertiesDropdownTrigger open={exportOpen} icon={<Download className="h-[13px] w-[13px]" strokeWidth={1.5} />} label="Export as…" /></div></PopoverTrigger><PopoverContent align="start" className="w-[224px] p-[5px]">
                     {onExportMarkdown ? <PreviewMenuItem icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />} label={exportingFormat === "markdown" ? "Exporting Markdown…" : "Markdown (.md)"} disabled={exportingFormat !== null} onSelect={() => void handleExportMarkdown()} /> : null}
                     {onExportDocument ? <><PreviewMenuItem icon={<FileText className="h-[13px] w-[13px]" strokeWidth={1.5} />} label={exportingFormat === "pdf" ? "Exporting PDF…" : "PDF (.pdf)"} disabled={!hasRemoteWriting || exportingFormat !== null} onSelect={() => void handleExportDocument("pdf")} /><PreviewMenuItem icon={<FileType className="h-[13px] w-[13px]" strokeWidth={1.5} />} label={exportingFormat === "docx" ? "Exporting Word…" : "Word (.docx)"} disabled={!hasRemoteWriting || exportingFormat !== null} onSelect={() => void handleExportDocument("docx")} /></> : null}
                   </PopoverContent></Popover>
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Metadata</p>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Metadata</p>
                   <div className="overflow-hidden rounded-[8px] border-[0.5px] border-border bg-bg">
                     <MetadataRow label="Created" value={formatMetadataDate(preview?.createdAt)} />
                     <MetadataRow label="Last worked" value={formatMetadataDate(preview?.contentUpdatedAt)} />
@@ -783,14 +901,15 @@ export function WritingPreviewModal({
                   </div>
                 </section>
 
-                <section className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-4">Annotations</p>
+                <section className="flex flex-col gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.11em] text-ink-5">Annotations</p>
                   <AnnotationsPreview annotations={annotations} onSeeAll={handleOpenFullWriting} />
                 </section>
               </div>
             </aside>
           </div>
         </div>
+        </DocumentStateTooltipProvider>
       </DialogContent>
 
       <DeleteWritingDialog

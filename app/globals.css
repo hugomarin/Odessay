@@ -42,6 +42,10 @@
      promoted to a token so the panel dots can reuse it instead of repeating
      the hex. Not a new colour — see docs/design/views/studio.md §Grammar. */
   --od-suggestion-spelling: #c87341;
+  /* Label of the destructive chip inside the floating selection bar.
+     Read from the render of the Desk and Settings prototypes (#E8A87C); its
+     tinted background is --cursor (#96532C) at 30% / 42% on hover. */
+  --danger-chip-fg: 24.4 70.1% 69.8%;
 
   /* ShadCN tokens mapped from Odessay */
   --background: var(--bg);
@@ -83,6 +87,7 @@
   --color-surface-row-hover: hsl(var(--surface-row-hover));
   --color-surface-menu-hover: hsl(var(--surface-menu-hover));
   --color-scrim: var(--od-scrim);
+  --color-danger-chip-fg: hsl(var(--danger-chip-fg));
   --color-success: hsl(var(--success));
   --color-success-tint: hsl(var(--success-tint));
   --color-border: hsl(var(--border));
@@ -138,7 +143,12 @@
   --shadow-float-lg:
     0 8px 32px 0 hsla(25, 18%, 12%, 0.1),
     0 2px 8px 0 hsla(25, 18%, 12%, 0.06);
-  --shadow-selection-bar: 0 18px 44px rgba(35, 24, 15, 0.34);
+  /* Divergence recorded in the ODE-428 PR: docs/design/views/desk.md §Selection bar
+     writes `0 18px 44px rgba(35,24,15,.34)`, both prototypes render the two-layer
+     shadow below. Per docs/design/migration-plan.md §4 the prototype wins. */
+  --shadow-selection-bar:
+    0 26px 70px rgba(35, 24, 15, 0.3),
+    0 2px 6px rgba(35, 24, 15, 0.2);
   /* AI composer popover — read from the Studio prototype. */
   --shadow-ai-composer: 0 14px 40px rgba(35, 24, 15, 0.14);
   --shadow-modal:
@@ -154,6 +164,7 @@
      these are the only durations any overlay primitive may use. */
   --animate-modal-in: odModalIn 260ms var(--od-ease-layout);
   --animate-step-in: odStepIn 220ms var(--od-ease-layout);
+  --animate-bar-in: odBarIn 200ms var(--od-ease-layout);
   --ease-layout: var(--od-ease-layout);
 }
 
@@ -1017,6 +1028,20 @@
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+/* Entrance of the floating selection bar. It carries the centering translate
+   itself because the bar is centred with `left:50% / translateX(-50%)` and an
+   animation that dropped the X translate would slide it off-centre. */
+@keyframes odBarIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }
 

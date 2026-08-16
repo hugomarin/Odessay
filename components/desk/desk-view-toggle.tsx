@@ -10,14 +10,22 @@ type DeskViewToggleProps = {
   onViewChange: (nextView: DeskViewMode) => void
 }
 
+/**
+ * Scope tabs — "My artifacts" / "Shared with me", the first control in the
+ * Desk's toolbar row.
+ *
+ * Prototype values: a `--surface-menu-hover` track at radius 10 with 4px of
+ * padding and a 2px gap; tabs 32px tall at radius 8 with 14px of side padding;
+ * the active tab on the sheet colour with a 1px lift; counts in a 20px pill.
+ */
 const VIEW_TABS: Array<{ value: DeskViewMode; label: string }> = [
-  { value: "mine", label: "My writings" },
+  { value: "mine", label: "My artifacts" },
   { value: "shared", label: "Shared with me" },
 ]
 
 export function DeskViewToggle({ activeView, counts, onViewChange }: DeskViewToggleProps) {
   return (
-    <div className="inline-flex h-11 items-center gap-1 rounded-[12px] bg-muted/70 p-1">
+    <div className="inline-flex flex-shrink-0 items-center gap-0.5 rounded-[10px] bg-surface-menu-hover p-1">
       {VIEW_TABS.map((tab) => {
         const isActive = activeView === tab.value
         const count = counts?.[tab.value]
@@ -30,13 +38,18 @@ export function DeskViewToggle({ activeView, counts, onViewChange }: DeskViewTog
             data-testid={`desk-view-tab-${tab.value}`}
             onClick={() => onViewChange(tab.value)}
             className={cn(
-              "inline-flex h-9 items-center gap-2 rounded-[10px] px-4 text-[13px] font-medium transition-colors",
-              isActive ? "bg-bg text-ink" : "text-ink-3 hover:text-ink-2",
+              "inline-flex h-8 items-center gap-2 whitespace-nowrap rounded-[8px] px-[14px] text-[14px] transition-colors",
+              isActive ? "bg-sb font-medium text-ink shadow-float" : "font-normal text-ink-4",
             )}
           >
             {tab.label}
             {typeof count === "number" ? (
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[hsl(220,44%,93%)] px-1.5 text-[10px] font-bold text-[hsl(220,50%,40%)]">
+              <span
+                className={cn(
+                  "inline-flex h-5 min-w-5 items-center justify-center rounded-[10px] px-1.5 text-[11px] font-medium",
+                  isActive ? "bg-line-soft text-ink-2" : "bg-muted-hover text-ink-4",
+                )}
+              >
                 {count}
               </span>
             ) : null}

@@ -3,20 +3,15 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bot,
   Clipboard,
   Download,
   Eye,
-  File,
-  FileChartColumn,
-  LayoutTemplate,
-  MessageSquareText,
   MoreHorizontal,
   Pencil,
   Tag,
   Trash2,
-  Wrench,
 } from "lucide-react";
+import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,24 +94,7 @@ type DeskActivityTableProps = {
 const stopRowNavigation = (event: { stopPropagation: () => void }) =>
   event.stopPropagation();
 
-export function ArtifactTypeIcon({
-  artifactType,
-}: {
-  artifactType: ArtifactType;
-}) {
-  const Icon = {
-    agent: Bot,
-    skill: Wrench,
-    prompt: MessageSquareText,
-    template: LayoutTemplate,
-    status: FileChartColumn,
-    general: File,
-  }[artifactType];
-
-  return (
-    <Icon className="h-[13px] w-[13px] shrink-0 text-ink-3" strokeWidth={1.5} />
-  );
-}
+export { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon";
 
 export function DeskActivityTable({
   groups,
