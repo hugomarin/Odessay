@@ -530,7 +530,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       {workspaces.map((workspace) => (
                         <Link
                           key={workspace.slug}
-                          href={`/workspace/${workspace.slug}`}
+                          href={`/workspace?slug=${encodeURIComponent(workspace.slug)}`}
                           data-testid="sidebar-workspace-folder"
                           title={workspace.name}
                           className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-normal leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"

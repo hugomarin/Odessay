@@ -292,11 +292,26 @@ describe("workspace folders", () => {
       container.querySelectorAll<HTMLElement>('[data-testid="sidebar-workspace-folder"]'),
     )
     expect(folders.map((node) => node.textContent)).toEqual(["Narratif", "Odessay", "Schemaflow"])
-    expect(folders[0].getAttribute("href")).toBe("/workspace/narratif")
+    expect(folders.map((node) => node.getAttribute("href"))).toEqual([
+      "/workspace?slug=narratif",
+      "/workspace?slug=odessay",
+      "/workspace?slug=schemaflow",
+    ])
 
     // No Recent block survives anywhere in the rail.
     expect(container.querySelector('[data-testid="sidebar-recents-scroll"]')).toBeNull()
     expect(container.textContent).not.toContain("RECENT")
+  })
+
+  it("encodes each workspace slug for the desktop query entrypoint", () => {
+    railWorkspaces.mockReturnValue([{ slug: "client work/2026", name: "Client work" }])
+    renderRail("expanded")
+
+    expect(
+      container
+        .querySelector<HTMLElement>('[data-testid="sidebar-workspace-folder"]')
+        ?.getAttribute("href"),
+    ).toBe("/workspace?slug=client%20work%2F2026")
   })
 
   it("hangs the folders off the Workspace item, indented past the icon column", () => {
