@@ -46,6 +46,12 @@
      Read from the render of the Desk and Settings prototypes (#E8A87C); its
      tinted background is --cursor (#96532C) at 30% / 42% on hover. */
   --danger-chip-fg: 24.4 70.1% 69.8%;
+  /* Danger zone in Settings › Account — read from the render of
+     `Artifact Studio Settings.dc.html`. Three terracotta tints that only this
+     card uses; --cursor already carries the label and the button text. */
+  --danger-surface: 24 60% 97.1%;      /* #FDF8F4 — danger card background        */
+  --danger-border: 21.8 52.9% 90%;     /* #F0E2D8 — danger card + label rule      */
+  --danger-border-strong: 24.4 55.6% 76.3%; /* #E3BFA4 — danger button border     */
 
   /* ShadCN tokens mapped from Odessay */
   --background: var(--bg);
@@ -88,6 +94,9 @@
   --color-surface-menu-hover: hsl(var(--surface-menu-hover));
   --color-scrim: var(--od-scrim);
   --color-danger-chip-fg: hsl(var(--danger-chip-fg));
+  --color-danger-surface: hsl(var(--danger-surface));
+  --color-danger-border: hsl(var(--danger-border));
+  --color-danger-border-strong: hsl(var(--danger-border-strong));
   --color-success: hsl(var(--success));
   --color-success-tint: hsl(var(--success-tint));
   --color-border: hsl(var(--border));
@@ -158,6 +167,12 @@
     0 1px 2px rgba(35, 24, 15, 0.05),
     0 24px 60px rgba(35, 24, 15, 0.12);
   --shadow-splash-mark: 0 12px 34px rgba(35, 24, 15, 0.22);
+  /* The sheet card that holds a Settings section — read from the render of
+     `Artifact Studio Settings.dc.html`. Flatter than --shadow-float: the sheet
+     is a resting surface, not a floating one. */
+  --shadow-sheet:
+    0 1px 2px rgba(35, 24, 15, 0.05),
+    0 10px 30px rgba(35, 24, 15, 0.05);
   --animate-menu-in: menuIn 150ms ease;
   --animate-fade-in: fadeIn 180ms ease;
   /* Overlay motion — docs/design/system-app.md §6. The keyframes live below;

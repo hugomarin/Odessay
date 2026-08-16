@@ -1,16 +1,51 @@
 "use client"
 
-import { MoreHorizontal } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Ellipsis } from "lucide-react"
 
-export function ArchivedWritingActions({ disabled, onDownload, onRestore, onDelete }: { disabled: boolean; onDownload: () => void; onRestore: () => void; onDelete: () => void }) {
-  return <DropdownMenu>
-    <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" disabled={disabled} aria-label="Writing actions"><MoreHorizontal strokeWidth={1.5} /></Button></DropdownMenuTrigger>
-    <DropdownMenuContent align="end">
-      <DropdownMenuItem onSelect={onDownload}>Download</DropdownMenuItem>
-      <DropdownMenuItem onSelect={onRestore}>Restore</DropdownMenuItem>
-      <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={onDelete}>Delete permanently</DropdownMenuItem>
-    </DropdownMenuContent>
-  </DropdownMenu>
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+
+/**
+ * Archive row menu — `docs/design/overlays.md` §Settings pins the inventory to
+ * Restore · Download · divider · Delete forever, and destructive items to
+ * terracotta text rather than a red fill.
+ */
+export function ArchivedWritingActions({
+  disabled,
+  onDownload,
+  onRestore,
+  onDelete,
+}: {
+  disabled: boolean
+  onDownload: () => void
+  onRestore: () => void
+  onDelete: () => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="Artifact actions"
+          className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md text-ink-4 transition-colors hover:bg-surface-menu-hover hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Ellipsis className="h-[17px] w-[17px]" strokeWidth={1.5} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={onRestore}>Restore</DropdownMenuItem>
+        <DropdownMenuItem onSelect={onDownload}>Download</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-ink-2 focus:text-cursor" onSelect={onDelete}>
+          Delete forever
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
