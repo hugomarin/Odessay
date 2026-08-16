@@ -107,6 +107,7 @@ function TreeRow({
       <button
         type="button"
         role="treeitem"
+        data-folder-path={node.path}
         aria-expanded={expanded}
         aria-selected={isSelected}
         disabled={folderDisabled}
