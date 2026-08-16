@@ -36,6 +36,8 @@ Rendered widths of the prototypes' own rails, read from the running documents (`
 | Avatar | **36px** (the repo drew 28) |
 | Wordmark in the title bar row | **absent** |
 | **Labels clipped vertically** | **none** (`clippedLabels: []`) |
+| **Avatar clipped** | **no**, in either state (`avatarClipped: false`) |
+| Avatar centre vs nav icon centre | **26px = 26px** — one axis down the whole column |
 | Forced collapse below 900 | 244 → **52**, and back to **244** when the window widens |
 | Toggle while width-forced | absent (`toggleHiddenWhileForced: true`) |
 | Time to interactive | **74ms** to a usable rail (`domInteractive` 79ms), budget 1000ms |
@@ -68,6 +70,12 @@ The folders come from `getWorkspaceAssignmentService().listWorkspaces()` — the
 The line box is now `1.45`. The row is 40px and centres its content, so nothing is gained by squeezing it. This is a case where rule 3 of the translation protocol applies over rule 1: the tokens and `skill-design` govern *how* a value is expressed, and a line-height that eats descenders is a rendering artefact of the prototyping environment, not a design decision — the same reasoning that turns the prototype's 1px borders into 0.5px.
 
 `measurements.json → geometry.*.clippedLabels` now records every rail label whose glyphs overflow its line box. **The detector was verified against the defect before being trusted:** with `leading-none` restored it reports `["Studio","Desk","Workspace","Collections"]`, and with the fix it reports `[]`. A check that cannot fail is not evidence.
+
+## The avatar the collapsed rail was slicing
+
+The account row clips — it has to, so a long name truncates. Nested inside the rail's own 6px padding and given a further `pl-[6px] pr-2`, the 36px avatar had a 26px content box at a 52px rail: measured, it reached x=50 inside a row ending at 46, and four pixels of the circle were cut off.
+
+The prototypes hang the account row **off the rail column directly**, with `padding-left: 6px` and nothing on the right. Matched now: the avatar sits at x=8 with its right edge at 44, and its centre lands on 26px — the same axis as every icon above it, collapsed and expanded. `measurements.json` records `avatarClipped` and both centres so the alignment is a number, not an impression.
 
 ## Divergences from the spec, recorded
 

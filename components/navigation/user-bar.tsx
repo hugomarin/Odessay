@@ -23,7 +23,13 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
       id="sidebar-bottom"
       data-section="sidebar-bottom"
       data-testid="sidebar-bottom"
-      className="SidebarBottom px-[6px] pb-[6px]"
+      /*
+        No horizontal padding here. The prototypes hang the account row directly
+        off the rail column with `padding-left: 6px` and nothing on the right —
+        nesting it inside another 6px and adding a right padding is what squeezed
+        the 36px avatar into a 26px content box and clipped it at 52px.
+      */
+      className="SidebarBottom pb-1.5"
     >
       {/*
         The prototypes' account row: 46px tall at radius 9, 10px gaps, 6px of
@@ -35,7 +41,9 @@ export function UserBar({ collapsed, displayName, username }: UserBarProps) {
         <Link
           href="/settings"
           className={cn(
-            "flex h-[46px] w-full items-center gap-2.5 overflow-hidden rounded-[9px] pl-[6px] pr-2",
+            // 6px of leading padding + the avatar's own 2px puts its centre at
+            // 26px — the same X as every rail icon above it, in both states.
+            "flex h-[46px] w-full items-center gap-2.5 overflow-hidden rounded-[9px] pl-[6px]",
             "text-ink-2 transition-colors duration-[180ms] hover:bg-muted hover:text-ink",
           )}
           aria-label="Settings"

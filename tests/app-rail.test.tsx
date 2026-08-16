@@ -177,6 +177,39 @@ describe("geometry", () => {
     expect(label.className).toContain("leading-[1.45]")
   })
 
+  it("does not squeeze the account row so the avatar clips at 52px", async () => {
+    // The row clips by design so the name can truncate; a 36px avatar behind
+    // 6px + 8px of padding inside a 40px box loses a slice of its circle.
+    // The rail's own suite mocks UserBar, so this renders the real one.
+    // Measured for real in the evidence capture (`avatarClipped`).
+    const { UserBar } = await vi.importActual<typeof import("@/components/navigation/user-bar")>(
+      "@/components/navigation/user-bar",
+    )
+    const { TooltipProvider } = await vi.importActual<typeof import("@/components/ui/tooltip")>(
+      "@/components/ui/tooltip",
+    )
+
+    act(() =>
+      root.render(
+        <TooltipProvider>
+          <UserBar collapsed displayName="Hugo Marin" username="hugomarin" />
+        </TooltipProvider>,
+      ),
+    )
+
+    const link = container.querySelector<HTMLElement>('[data-testid="sidebar-bottom"] a')!
+    expect(link.className).toContain("pl-[6px]")
+    expect(link.className).not.toContain("pr-2")
+
+    const row = container.querySelector<HTMLElement>('[data-testid="sidebar-bottom"]')!
+    expect(row.className).not.toContain("px-[6px]")
+
+    // 6px of row padding + the avatar's 2px margin = a 36px circle inside 52px.
+    const avatar = container.querySelector<HTMLElement>('[data-testid="sidebar-user-avatar"]')!
+    expect(avatar.className).toContain("h-9")
+    expect(avatar.className).toContain("mx-0.5")
+  })
+
   it("uses the 300ms layout easing on the width", () => {
     renderRail("expanded")
     expect(rail().className).toContain("duration-[300ms]")

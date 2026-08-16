@@ -225,6 +225,27 @@ async function measureGeometry(browser, options) {
         workspaceFoldersOverflowY: folders ? getComputedStyle(folders).overflowY : null,
         workspaceFolderCount: document.querySelectorAll('[data-testid="sidebar-workspace-folder"]').length,
         avatarSize: avatar ? Math.round(avatar.getBoundingClientRect().width) : null,
+        // The account row clips (it has to, so the name truncates), which means
+        // a 36px avatar inside a squeezed content box loses a slice of its
+        // circle at 52px. Measured, not eyeballed.
+        avatarClipped: (() => {
+          if (!avatar) return null;
+          const link = avatar.closest("a");
+          if (!link) return null;
+          const a = avatar.getBoundingClientRect();
+          const l = link.getBoundingClientRect();
+          return a.right > l.right + 0.5 || a.left < l.left - 0.5;
+        })(),
+        // Every glyph in the column — icons and the avatar — shares one axis.
+        avatarCentreX: avatar
+          ? Math.round(avatar.getBoundingClientRect().x + avatar.getBoundingClientRect().width / 2)
+          : null,
+        navIconCentreX: (() => {
+          const icon = document.querySelector('[data-testid="sidebar-nav-desk"] svg');
+          if (!icon) return null;
+          const box = icon.getBoundingClientRect();
+          return Math.round(box.x + box.width / 2);
+        })(),
         // A label that clips horizontally must still fit its descenders: the
         // tail of a "g" overflowing a 14px line box is invisible in a class
         // list and obvious on screen.
