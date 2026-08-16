@@ -9,7 +9,7 @@ import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
-import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table"
+import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 
 /**
