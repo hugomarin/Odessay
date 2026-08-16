@@ -10,7 +10,7 @@
 
 :root {
   /* Odessay tokens */
-  --bg: 38 12% 98%;
+  --bg: 36 12% 92%;              /* #EDEBE8 — base surface, darker than the sheet for contrast */
   --sb: 0 0% 100%;
   --muted: 38 8% 93%;
   --muted-h: 38 8% 90%;

@@ -142,7 +142,7 @@ describe("geometry", () => {
       const item = navLink(section)
       expect(item.className).toContain("h-10")
       expect(item.className).toContain("rounded-[9px]")
-      expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[19px]")
+      expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[21px]")
     }
   })
 
@@ -395,8 +395,11 @@ describe("desktop title bar", () => {
     expect(toggle.className).toContain("fixed")
     // 16px of leading padding + a 76px traffic-light group + a 14px gap.
     expect(toggle.className).toContain("left-[106px]")
+    // macOS clamps `trafficLightPosition`, so the 12px lights land at ~20
+    // (centre 26) and the 32px toggle shares their row at top: 10.
+    expect(toggle.className).toContain("top-[10px]")
     expect(container.querySelector<HTMLElement>('[data-testid="sidebar-top"]')!.className).toContain(
-      "h-[46px]",
+      "h-[59px]",
     )
   })
 })

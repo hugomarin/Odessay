@@ -41,7 +41,7 @@ const VIEW_OPTIONS: { value: WorkspaceFilterBarView; label: string; icon: ReactN
 function toolButtonClass(active: boolean, open: boolean): string {
   return cn(
     "inline-flex h-[38px] flex-shrink-0 items-center gap-[7px] whitespace-nowrap rounded-[9px]",
-    "border-[0.5px] px-[13px] text-[13px] text-ink-2 transition-colors",
+    "border-[0.5px] px-[13px] text-[16px] text-ink-2 transition-colors",
     open || active
       ? "border-ink-5 bg-surface-menu-hover"
       : "border-border bg-sb hover:bg-surface-menu-hover",
@@ -98,7 +98,7 @@ export function WorkspaceFilterBar({
           placeholder="Filter by name…"
           aria-label="Filter by name"
           data-testid="workspace-filter-search"
-          className="min-w-0 flex-1 border-0 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-5"
+          className="min-w-0 flex-1 border-0 bg-transparent text-[16px] text-ink outline-none placeholder:text-ink-5"
         />
       </span>
 
