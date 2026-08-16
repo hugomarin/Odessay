@@ -23,6 +23,7 @@
     "ops:perf:gate": "node scripts/check-performance-gate.mjs",
     "ops:network:gate": "node scripts/check-network-budget.mjs",
     "ops:workflow:validate": "node scripts/validate-workflow-json.mjs",
+    "ops:ledger": "node scripts/workflow-ledger.mjs",
     "ops:delivery:gate": "node scripts/check-delivery-gate.mjs",
     "ops:documents:audit": "node scripts/document-cleanup/audit-desktop-documents.mjs",
     "ops:documents:cleanup": "node scripts/document-cleanup/apply-desktop-cleanup.mjs",

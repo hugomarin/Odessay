@@ -1,0 +1,9 @@
+# Ledgers append-only de workflow: cada entrega es una línea propia, así que dos
+# ramas paralelas que appendean no están en desacuerdo — quieren ambas líneas.
+# `merge=union` (driver interno de git) las conserva a las dos en vez de marcar
+# conflicto. Requiere que cada línea sea un JSON completo y que el archivo
+# termine en newline; `scripts/lib/workflow-ledger.mjs` lo garantiza al appendear
+# y `ops:workflow:validate` lo verifica antes de commitear.
+workflow/built.jsonl merge=union
+workflow/review-history.jsonl merge=union
+workflow/archive/*.jsonl merge=union
