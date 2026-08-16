@@ -2065,9 +2065,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     }}
                     showHeader={false}
                     tableClassName="min-w-[920px] table-fixed"
-                    rowCellClassName="py-6"
+                    rowCellClassName="py-4"
                     leadingColumnClassName="w-9"
-                    leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
+                    leadingCellClassName="w-9 pl-3 pr-0 pt-[17px] sm:pl-3"
                   />
                 </div>
               )}

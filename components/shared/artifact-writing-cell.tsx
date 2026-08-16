@@ -1,8 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { FolderOpen } from "lucide-react";
-
 import { DocumentStateIcon } from "@/components/ui/document-state-icon";
 import type { DocumentState } from "@/lib/writings/document-state";
 import { cn } from "@/lib/utils";
@@ -36,12 +34,21 @@ export function ArtifactWritingCell({
 }: ArtifactWritingCellProps) {
   const resolvedDescription = description?.trim() || null;
   const resolvedLocalPath = localPath?.trim() || null;
+  const locationLabel = resolvedLocalPath
+    ? `file://${resolvedLocalPath}`
+    : undefined;
 
   return (
     <div
       className={cn("ArtifactWritingCell min-w-0", className)}
       data-section="artifact-writing-cell"
+      title={locationLabel}
     >
+      {locationLabel ? (
+        <span className="sr-only" data-section="artifact-writing-location">
+          {locationLabel}
+        </span>
+      ) : null}
       <div className="flex min-w-0 items-center gap-2">
         <p className="min-w-0 shrink truncate font-sans text-[15px] font-semibold leading-[1.3] tracking-[-0.01em] text-ink">
           {title}
@@ -55,33 +62,24 @@ export function ArtifactWritingCell({
         ) : null}
       </div>
 
-      <p
-        className="line-clamp-2 min-h-[38px] pt-1.5 font-sans text-[13px] leading-[1.45] text-ink-3"
-        aria-hidden={resolvedDescription ? undefined : true}
-      >
-        {resolvedDescription}
-      </p>
-
-      {resolvedLocalPath ? (
-        <p
-          className="mt-1.5 flex min-w-0 items-center gap-1.5 font-sans text-[11px] leading-[1.35] text-ink-4"
-          title={`file://${resolvedLocalPath}`}
-          data-section="artifact-writing-location"
-        >
-          <FolderOpen className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-          <span className="truncate">file://{resolvedLocalPath}</span>
+      {dateLabel || resolvedDescription ? (
+        <p className="mt-1.5 flex min-w-0 items-center gap-2 overflow-hidden font-sans text-[13px] leading-[1.45] text-ink-3">
+          {dateLabel ? (
+            <span className="shrink-0 text-ink-4">{dateLabel}</span>
+          ) : null}
+          {dateLabel && resolvedDescription ? (
+            <span className="shrink-0 text-ink-4" aria-hidden="true">
+              ·
+            </span>
+          ) : null}
+          {resolvedDescription ? (
+            <span className="truncate">{resolvedDescription}</span>
+          ) : null}
         </p>
       ) : null}
 
-      {dateLabel || collections ? (
-        <div className="mt-2 flex min-w-0 flex-col items-start gap-1.5">
-          {dateLabel ? (
-            <p className="font-sans text-[11px] leading-[1.35] text-ink-4">
-              {dateLabel}
-            </p>
-          ) : null}
-          {collections}
-        </div>
+      {collections ? (
+        <div className="mt-1.5 flex min-w-0 items-start">{collections}</div>
       ) : null}
     </div>
   );
