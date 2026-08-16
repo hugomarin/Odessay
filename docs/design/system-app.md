@@ -38,7 +38,7 @@ Complements `.agents/skills/skill-design/SKILL.md`. Where a value here differs f
 
 ### Still open after ODE-425
 
-- **Rail width.** The package fixes the expanded rail at 232px; `skill-design` still describes a 292px expanded sidebar. Not one of the five deltas — it resolves when the shell is redesigned (ODE-433).
+- **Rail width. RESOLVED (ODE-447):** 232px, in favour of the package. `skill-design` now says 232 too, and `components/navigation/sidebar.tsx` reads the geometry instead of carrying its own 292. This line originally pointed at ODE-433, but that issue scoped itself to Studio and never took the rail; ODE-447 is the issue that owns it.
 - **9px radius has no token.** The scale is declared closed in the skill, but the input/nav step is still written `rounded-[9px]`.
 
 **The prototypes in `docs/design/reference/` are the visual authority.** This document describes; the `.dc.html` files show. Where the two differ, the render wins.

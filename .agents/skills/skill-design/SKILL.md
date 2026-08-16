@@ -34,7 +34,7 @@ Los cinco deltas entre el paquete de diseño y este skill están **cerrados**. N
 
 ---
 
-**Módulos compartidos — reutilizar, nunca recrear:** Sidebar y Topbar son componentes globales. No se implementan de nuevo por vista. El editor abre con sidebar mini (52px) por defecto. El resto de vistas abren con sidebar expandido (292px).
+**Módulos compartidos — reutilizar, nunca recrear:** Sidebar y Topbar son componentes globales. No se implementan de nuevo por vista. El editor abre con sidebar mini (52px) por defecto. El resto de vistas abren con sidebar expandido (232px).
 
 ---
 
@@ -305,7 +305,7 @@ El repo todavía nombra `writing` en archivos y símbolos (`writing-preview-moda
 
 ```
 app (flex, 100vh, overflow hidden)
-├── Sidebar (292px expandido / 52px mini)
+├── Sidebar (232px expandido / 52px mini)
 └── Main (flex-1, flex-col)
     ├── Topbar (46px fijo)
     ├── Content (flex-1, overflow-y auto)
@@ -314,7 +314,7 @@ app (flex, 100vh, overflow hidden)
 
 ### Sidebar
 
-**Expandido (292px):** Logo Lora 17px + toggle. Acciones (New writing, Search). Nav scroll. User bar bottom.
+**Expandido (232px):** Logo Lora 17px + toggle. Acciones (New writing, Search). Nav scroll. User bar bottom.
 
 **Mini (52px):** Solo iconos centrados. Labels con `opacity-0 w-0 overflow-hidden`. Sub-items ocultos. Transición `width 300ms ease-layout`.
 
@@ -328,10 +328,10 @@ Altura invariable: **46px** en todas las vistas. `border-bottom: 0.5px solid hsl
 
 ```ts
 const SIDEBAR = {
-  full: 292,  // px
+  full: 232,  // px — docs/design/system-app.md §3 [ODE-447]
   mini: 52,   // px
   rail: 52,   // icono rail siempre presente
-  content: 240, // área de texto en expandido
+  content: 180, // área de texto en expandido (232 - 6 padding x2 - 10 padding x2 - 19 icono - 9 gap)
 }
 ```
 
