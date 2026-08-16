@@ -165,6 +165,18 @@ describe("geometry", () => {
     expect(iconWrap.className).toContain("min-w-10")
   })
 
+  it("gives the clipped label a line box tall enough for descenders", () => {
+    // The prototypes write `font: 400 14px/1`, and a 14px line box over 14px
+    // text cuts the tail off the "g" in "New writing" — the label clips
+    // horizontally to stay on one line, so it must not clip vertically too.
+    // Measured for real in the evidence capture (`clippedLabels`); asserted
+    // here so the class cannot quietly go back.
+    renderRail("expanded")
+    const label = navLink("sidebar-nav-desk").querySelector("span:last-child")!
+    expect(label.className).not.toContain("leading-none")
+    expect(label.className).toContain("leading-[1.45]")
+  })
+
   it("uses the 300ms layout easing on the width", () => {
     renderRail("expanded")
     expect(rail().className).toContain("duration-[300ms]")

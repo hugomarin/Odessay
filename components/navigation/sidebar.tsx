@@ -143,12 +143,18 @@ const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
  * that column, and expanding only adds room for the label to its right.
  */
 const SIDEBAR_ITEM_BASE_CLASS =
-  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[14px] leading-none"
+  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[14px]"
 const SIDEBAR_ICON_WRAP_CLASS =
   "flex h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center"
 const SIDEBAR_ITEM_TRANSITION_CLASS = "transition-colors duration-[180ms] ease-layout"
+/**
+ * The label clips horizontally to stay on one line, so its line box has to be
+ * tall enough to contain descenders. The prototypes write `font: 400 14px/1`,
+ * and a 14px line box over 14px text cuts the tail off a "g" — the row is 40px
+ * and centres its content, so nothing is gained by squeezing the line box.
+ */
 const SIDEBAR_LABEL_TRANSITION_CLASS =
-  "flex-shrink-0 overflow-hidden whitespace-nowrap transition-opacity duration-200 ease-out"
+  "flex-shrink-0 overflow-hidden whitespace-nowrap leading-[1.45] transition-opacity duration-200 ease-out"
 const SIDEBAR_ICON_CLASS = "h-[19px] w-[19px] shrink-0"
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
@@ -523,7 +529,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                           href={`/workspace/${workspace.slug}`}
                           data-testid="sidebar-workspace-folder"
                           title={workspace.name}
-                          className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-normal leading-none text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
+                          className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-normal leading-[1.45] text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
                         >
                           <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={1.5} />
                           <span className="truncate">{workspace.name}</span>

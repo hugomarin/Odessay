@@ -225,6 +225,14 @@ async function measureGeometry(browser, options) {
         workspaceFoldersOverflowY: folders ? getComputedStyle(folders).overflowY : null,
         workspaceFolderCount: document.querySelectorAll('[data-testid="sidebar-workspace-folder"]').length,
         avatarSize: avatar ? Math.round(avatar.getBoundingClientRect().width) : null,
+        // A label that clips horizontally must still fit its descenders: the
+        // tail of a "g" overflowing a 14px line box is invisible in a class
+        // list and obvious on screen.
+        clippedLabels: Array.from(
+          document.querySelectorAll('[data-section^="sidebar-nav-"] span:last-child, [data-testid="sidebar-workspace-folder"] span'),
+        )
+          .filter((node) => node.scrollHeight > node.clientHeight + 0.5)
+          .map((node) => node.textContent),
         titleBarHasWordmark: top ? /Artifact Studio/.test(top.textContent || "") : null,
       };
     });

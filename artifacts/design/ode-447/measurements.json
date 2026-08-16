@@ -10,6 +10,7 @@
       "workspaceFoldersOverflowY": "auto",
       "workspaceFolderCount": 0,
       "avatarSize": 36,
+      "clippedLabels": [],
       "titleBarHasWordmark": false
     },
     "collapsed": {
@@ -22,6 +23,7 @@
       "workspaceFoldersOverflowY": "auto",
       "workspaceFolderCount": 0,
       "avatarSize": 36,
+      "clippedLabels": [],
       "titleBarHasWordmark": false
     }
   },
@@ -37,10 +39,10 @@
     "restored": 244
   },
   "timeToInteractive": {
-    "domInteractive": 79,
-    "domContentLoaded": 79,
+    "domInteractive": 80,
+    "domContentLoaded": 80,
     "firstContentfulPaint": null,
-    "railUsableMs": 74
+    "railUsableMs": 82
   },
   "prototypeWidths": {
     "desk": {

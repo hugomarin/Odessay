@@ -35,6 +35,7 @@ Rendered widths of the prototypes' own rails, read from the running documents (`
 | Workspace folder block | `overflow-y: auto`, hanging off the Workspace row at `padding-left: 50px` |
 | Avatar | **36px** (the repo drew 28) |
 | Wordmark in the title bar row | **absent** |
+| **Labels clipped vertically** | **none** (`clippedLabels: []`) |
 | Forced collapse below 900 | 244 → **52**, and back to **244** when the window widens |
 | Toggle while width-forced | absent (`toggleHiddenWhileForced: true`) |
 | Time to interactive | **74ms** to a usable rail (`domInteractive` 79ms), budget 1000ms |
@@ -59,6 +60,14 @@ The first version of this change moved the geometry and left the rail's *content
 `system-app.md` §5 names the icons in the same sentence that fixes the order — the first pass read that line as being about order alone. The folder block is `WS` in the prototypes' logic (`workspaceListStyle`, `folder` at 15px, rows of 32px at radius 8, indented 50px): **the rail is an inventory of places, not of history**, which is why Recent had no seat in it. `components/navigation/sidebar-recent-writings.tsx` is deleted rather than left orphaned; `useRecentWritings` survives because Search still uses it.
 
 The folders come from `getWorkspaceAssignmentService().listWorkspaces()` — the same service the Desk and the Workspace view already read, not a second source. On web that service reports `isAvailable: false`, so **the block is empty in these captures**: the folder list is a desktop surface, and the DMG is where it renders with real folders.
+
+## The descender the prototype's own value would have cut
+
+`railRow` writes `font: 400 14px/1`, and the label clips horizontally to stay on one line. Copied literally, that makes a 14px line box over 14px text with `overflow: hidden` — and the tail of the "g" in "New writing" disappears. The owner caught it on screen.
+
+The line box is now `1.45`. The row is 40px and centres its content, so nothing is gained by squeezing it. This is a case where rule 3 of the translation protocol applies over rule 1: the tokens and `skill-design` govern *how* a value is expressed, and a line-height that eats descenders is a rendering artefact of the prototyping environment, not a design decision — the same reasoning that turns the prototype's 1px borders into 0.5px.
+
+`measurements.json → geometry.*.clippedLabels` now records every rail label whose glyphs overflow its line box. **The detector was verified against the defect before being trusted:** with `leading-none` restored it reports `["Studio","Desk","Workspace","Collections"]`, and with the fix it reports `[]`. A check that cannot fail is not evidence.
 
 ## Divergences from the spec, recorded
 
