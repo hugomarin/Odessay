@@ -119,6 +119,31 @@ const isEditableTarget = (target: EventTarget | null) => {
   return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable
 }
 
+/**
+ * Whether the key belongs to the control the user is standing on rather than to
+ * the overlay.
+ *
+ * The overlay's shortcuts are window-level, so without this every button inside
+ * it loses `Enter`: the handler would run `preventDefault()` — killing the
+ * button's own activation — and navigate away instead. Requirement 6 means
+ * "`⏎` opens the artifact **when the focus is on the overlay**", not "`⏎` is
+ * hijacked everywhere inside it".
+ */
+const INTERACTIVE_SELECTOR =
+  "input, textarea, select, button, a[href], [role='button'], [role='menuitem'], [role='menuitemcheckbox'], [contenteditable='true']"
+
+const isInteractiveTarget = (target: EventTarget | null) => {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  if (target.isContentEditable) {
+    return true
+  }
+
+  return Boolean(target.closest(INTERACTIVE_SELECTOR))
+}
+
 export function WritingPreviewModal({
   open,
   rows,
@@ -475,6 +500,20 @@ export function WritingPreviewModal({
     const handleKeyDown = (event: KeyboardEvent) => {
       // Don't hijack arrow keys while editing the title or interacting with inputs.
       if (isEditableTarget(event.target)) {
+        return
+      }
+
+      // A key already consumed by a dropdown, a popover or the dialog itself is
+      // not the overlay's to act on a second time.
+      if (event.defaultPrevented) {
+        return
+      }
+
+      // Standing on a control means the key belongs to that control. Without
+      // this, Enter on "Generate link" would navigate to the full artifact and
+      // suppress the button's own activation, and the arrows would move to
+      // another artifact from under an open menu.
+      if (isInteractiveTarget(event.target)) {
         return
       }
 

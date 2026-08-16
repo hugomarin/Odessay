@@ -275,6 +275,46 @@ describe("keyboard", () => {
     press("Enter")
     expect(onOpenFullWriting).toHaveBeenCalledWith("writing-1")
   })
+
+  it("leaves Enter to the control the focus is standing on", () => {
+    // The shortcuts are window-level. Without a guard, Enter on any button in
+    // the overlay both navigates away and suppresses the button's own
+    // activation via preventDefault — every control in the overlay becomes
+    // unusable from the keyboard, and the key does something destructive
+    // instead. `press()` above dispatches on the window, which is why it never
+    // caught this: the event has to come from the control.
+    const onOpenFullWriting = vi.fn()
+    renderOverlay({ onOpenFullWriting })
+
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("Publish on web"),
+    )!
+    button.focus()
+
+    let defaultPrevented = false
+    act(() => {
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
+      button.dispatchEvent(event)
+      defaultPrevented = event.defaultPrevented
+    })
+
+    expect(onOpenFullWriting).not.toHaveBeenCalled()
+    expect(defaultPrevented).toBe(false)
+  })
+
+  it("leaves the arrows to a control too, so a menu can be walked without navigating", () => {
+    const onIndexChange = vi.fn()
+    renderOverlay({ onIndexChange })
+
+    const button = container.querySelector<HTMLButtonElement>('button[aria-label="Next artifact"]')!
+    button.focus()
+
+    act(() => {
+      button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }))
+    })
+
+    expect(onIndexChange).not.toHaveBeenCalled()
+  })
 })
 
 describe("failure modes", () => {
