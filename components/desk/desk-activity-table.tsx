@@ -236,6 +236,7 @@ export function DeskActivityTable({
         render: (row) => (
           <div onClick={stopRowNavigation}>
             <TablePropertySelector
+              variant="preview"
               ariaLabel={`Change status for ${row.title}`}
               icon={<WritingStatusIcon status={row.stateTone} />}
               label={row.stateLabel}

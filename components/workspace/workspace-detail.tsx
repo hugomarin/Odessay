@@ -638,6 +638,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <div onClick={(event) => event.stopPropagation()}>
               <TablePropertySelector
+                variant="preview"
                 readOnly={!hasDocument}
                 className="min-w-[128px]"
                 ariaLabel={`Change status for ${file.name}`}
@@ -1170,7 +1171,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     : "No files match your search or selected folder."}
                 </div>
               ) : (
-                <div className="overflow-hidden">
+                <div className="overflow-hidden rounded-[10px] bg-sb shadow-float">
                   <ArtifactTable
                     groups={fileGroups}
                     columns={fileColumns}
