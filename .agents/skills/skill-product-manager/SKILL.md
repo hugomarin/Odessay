@@ -481,7 +481,7 @@ El criterio operativo es simple: BUILD debe poder implementar sin tener que infe
 ### Commits
 El agente hace commits atómicos durante el desarrollo con mensajes en formato convencional.
 Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODE-42]`
-> **Excepción:** los commits de workflow en `main` durante REVIEW (`review_rejected`) **no** llevan `[ISSUE-ID]` en el subject, porque el issue aún no está en `built[]` y `check-status-drift` lo reportaría como falso positivo. El id puede ir en el body si se necesita trazabilidad adicional.
+> **Excepción:** los commits de workflow en `main` durante REVIEW (`review_rejected`) **no** llevan `[ISSUE-ID]` en el subject, porque el issue aún no está en el ledger `workflow/built.jsonl` y `check-status-drift` lo reportaría como falso positivo. El id puede ir en el body si se necesita trazabilidad adicional.
 Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
 
 ### Trazabilidad Linear ↔ GitHub
