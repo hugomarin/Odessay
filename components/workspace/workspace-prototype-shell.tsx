@@ -1886,9 +1886,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 <button
                   type="button"
                   onClick={() => setIsCreateDialogOpen(true)}
-                  className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+                  className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[9px] bg-ink px-[17px] text-[14px] font-medium text-bg transition-opacity hover:opacity-90"
                 >
-                  <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  <Plus className="h-[15px] w-[15px]" strokeWidth={1.5} />
                   New file
                 </button>
               </div>
