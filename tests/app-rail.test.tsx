@@ -345,7 +345,8 @@ describe("desktop title bar", () => {
 
     const toggle = container.querySelector<HTMLElement>('button[aria-label="Collapse sidebar"]')!
     expect(toggle.className).toContain("fixed")
-    expect(toggle.className).toContain("left-[82px]")
+    // 16px of leading padding + a 76px traffic-light group + a 14px gap.
+    expect(toggle.className).toContain("left-[106px]")
     expect(container.querySelector<HTMLElement>('[data-testid="sidebar-top"]')!.className).toContain(
       "h-[46px]",
     )

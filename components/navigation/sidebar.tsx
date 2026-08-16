@@ -362,11 +362,10 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               // The toggle leaves this row on desktop, so it shrinks to the
               // 46px title bar and keeps its content clear of the lights.
               isDesktopTitlebar ? "h-[46px]" : "h-[70px]",
-              isIconOnly
-                ? "justify-center px-2"
-                : isDesktopTitlebar
-                  ? "justify-between gap-2 pl-[114px] pr-4"
-                  : "justify-between gap-2 px-4",
+              // The row carries no content of its own any more — the toggle is
+              // fixed to window coordinates and the wordmark is gone — so it is
+              // just the drag region over the lights' row.
+              isIconOnly ? "justify-center px-2" : "justify-between gap-2 px-4",
             )}
           >
             {/*
@@ -393,10 +392,15 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 className={cn(
                   "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-3 transition-[background-color,color,opacity] duration-[300ms] ease-layout hover:border-border hover:bg-muted hover:text-ink",
                   isDesktopTitlebar
-                    ? // Window coordinates: 20px inset + three 12px lights + two
-                      // 8px gaps ends at ~72px; 82 leaves a gap, and (46-32)/2
-                      // centres the button on the title bar row.
-                      "fixed left-[82px] top-[7px] z-50"
+                    ? /*
+                       * Window coordinates, read off the prototypes' 46px top
+                       * bar: 16px of leading padding, a 76px traffic-light
+                       * group, then a 14px gap → 106. The button is 32px, so
+                       * (46 - 32) / 2 = 7 centres it on the lights' row. The
+                       * lights themselves are placed to match by
+                       * `trafficLightPosition` in tauri.conf.json.
+                       */
+                      "fixed left-[106px] top-[7px] z-50"
                     : isIconOnly
                       ? "mx-auto"
                       : "",
