@@ -588,7 +588,7 @@
     {
       "path": "docs/design/views/settings-workflows.md",
       "type": "design-reference",
-      "description": "Settings › Workflows: requisitos y patrón obligatorio. Único documento de vista SIN prototipo — necesita design pass (ODE-426) antes de implementarse."
+      "description": "Settings › Workflows: DESCARTADO en el design pass (ODE-426, 2026-08-16). Registro de la decisión y sus tres preguntas cerradas — el estado del artifact es un dato individual, no una posición en una secuencia. No hay nada que implementar."
     },
     {
       "path": "docs/design/views/auth-splash.md",
