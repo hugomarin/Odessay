@@ -1,166 +1,177 @@
-"use client"
+"use client";
 
-import { useMemo, useRef, useState } from "react"
-import { Check, ChevronRight, FileText, Folder } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { useEffect, useRef, useState } from "react";
+import { Check, ChevronRight, Crosshair, FileText, Folder } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
+  collectDescendantFilePaths,
   getNodeSelectionState,
   toggleWorkspaceNodeSelection,
-  type WorkspaceFolderSelectionState,
   type WorkspaceFolderTreeNode,
-} from "@/lib/workspace/folder-tree"
+} from "@/lib/workspace/folder-tree";
 
-type FolderTreePickerProps = {
-  tree: WorkspaceFolderTreeNode[]
-  selectedFiles: ReadonlySet<string>
-  onChange: (nextSelectedFiles: Set<string>) => void
-  autoExpandAll?: boolean
-}
+type Props = {
+  tree: WorkspaceFolderTreeNode[];
+  selectedFiles: ReadonlySet<string>;
+  onChange: (next: Set<string>) => void;
+  query?: string;
+  autoExpandAll?: boolean;
+};
 
-function FolderTreeCheckbox({
+function Checkbox({
   state,
-  onToggle,
+  label,
+  onChange,
 }: {
-  state: WorkspaceFolderSelectionState
-  onToggle: () => void
+  state: "checked" | "partial" | "unchecked";
+  label: string;
+  onChange: () => void;
 }) {
-  const ref = useRef<HTMLInputElement | null>(null)
-
-  if (ref.current) {
-    ref.current.indeterminate = state === "partial"
-  }
-
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === "partial";
+  }, [state]);
   return (
     <label className="inline-flex h-5 w-5 items-center justify-center">
+      <span className="sr-only">{label}</span>
       <input
         ref={ref}
         type="checkbox"
         checked={state === "checked"}
-        onChange={onToggle}
+        onChange={onChange}
         className="peer sr-only"
       />
-      <span className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] border border-border bg-sb text-ink transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ink">
-        {state === "checked" ? <Check className="h-3 w-3" strokeWidth={2.2} /> : state === "partial" ? <span className="h-[2px] w-2 rounded-full bg-ink" /> : null}
+      <span className="inline-flex h-4 w-4 items-center justify-center rounded-[4px] border-[0.5px] border-border bg-sb peer-focus-visible:outline">
+        {state === "checked" ? (
+          <Check className="h-3 w-3" strokeWidth={2} />
+        ) : state === "partial" ? (
+          <span className="h-[1.5px] w-[9px] bg-ink" />
+        ) : null}
       </span>
     </label>
-  )
+  );
 }
 
-function FolderTreeNodeRow({
+function matches(node: WorkspaceFolderTreeNode, query: string): boolean {
+  return (
+    !query ||
+    node.name.toLowerCase().includes(query) ||
+    node.children.some((child) => matches(child, query))
+  );
+}
+
+function Row({
   node,
   depth,
-  selectedFiles,
+  selected,
   onChange,
-  autoExpandAll,
+  query,
 }: {
-  node: WorkspaceFolderTreeNode
-  depth: number
-  selectedFiles: ReadonlySet<string>
-  onChange: (nextSelectedFiles: Set<string>) => void
-  autoExpandAll: boolean
+  node: WorkspaceFolderTreeNode;
+  depth: number;
+  selected: ReadonlySet<string>;
+  onChange: (next: Set<string>) => void;
+  query: string;
 }) {
-  const isFolder = node.kind === "folder"
-  const [isExpanded, setIsExpanded] = useState(autoExpandAll || depth < 1)
-  const selectionState = getNodeSelectionState(node, selectedFiles)
-
+  const [manuallyExpanded, setExpanded] = useState(depth < 1);
+  const expanded = query ? matches(node, query) : manuallyExpanded;
+  if (!matches(node, query)) return null;
+  const folder = node.kind === "folder";
   return (
-    <div>
+    <li>
       <div
-        className="flex items-center gap-2 rounded-[10px] px-2 py-1.5 transition-colors hover:bg-muted/40"
+        className="group grid h-[38px] grid-cols-[16px_20px_16px_1fr_auto_auto] items-center gap-2 rounded-[8px] pr-2 hover:bg-muted/50"
         style={{ paddingLeft: `${8 + depth * 18}px` }}
       >
-        {isFolder ? (
+        {folder ? (
           <button
             type="button"
-            onClick={() => setIsExpanded((currentState) => !currentState)}
-            className="inline-flex h-5 w-5 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
-            aria-label={isExpanded ? `Collapse ${node.name}` : `Expand ${node.name}`}
+            onClick={() => setExpanded((v) => !v)}
+            aria-label={
+              expanded ? `Collapse ${node.name}` : `Expand ${node.name}`
+            }
           >
             <ChevronRight
-              className={cn("h-4 w-4 transition-transform", isExpanded ? "rotate-90" : "")}
+              className={cn(
+                "h-4 w-4 transition-transform duration-[180ms]",
+                expanded && "rotate-90",
+              )}
               strokeWidth={1.5}
             />
           </button>
         ) : (
-          <span className="inline-flex h-5 w-5" />
+          <span />
         )}
-
-        <FolderTreeCheckbox
-          state={selectionState}
-          onToggle={() => onChange(toggleWorkspaceNodeSelection(node, selectedFiles))}
+        <Checkbox
+          state={getNodeSelectionState(node, selected)}
+          label={`Include ${node.name}`}
+          onChange={() =>
+            onChange(toggleWorkspaceNodeSelection(node, selected))
+          }
         />
-
-        <div className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border border-border bg-bg text-ink-3">
-          {isFolder ? <Folder className="h-4 w-4" strokeWidth={1.5} /> : <FileText className="h-4 w-4" strokeWidth={1.5} />}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[14px] text-ink">{node.name}</div>
-          <div className="text-[12px] text-ink-4">
-            {isFolder ? `${node.fileCount} markdown file${node.fileCount === 1 ? "" : "s"}` : "Markdown file"}
-          </div>
-        </div>
+        {folder ? (
+          <Folder className="h-4 w-4" strokeWidth={1.5} />
+        ) : (
+          <FileText className="h-4 w-4" strokeWidth={1.5} />
+        )}
+        <span className="truncate text-[13px]">{node.name}</span>
+        <span className="font-mono text-[11px] text-ink-4">
+          {folder ? node.fileCount : ""}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(new Set(collectDescendantFilePaths(node)))}
+          className="flex h-6 items-center gap-1 text-[11px] text-ink/55 opacity-0 hover:text-ink group-hover:opacity-100 focus:opacity-100"
+        >
+          <Crosshair className="h-3 w-3" strokeWidth={1.5} />
+          Only this
+        </button>
       </div>
-
-      {isFolder && isExpanded ? (
-        <div className="mt-1">
+      {folder && expanded ? (
+        <ul>
           {node.children.map((child) => (
-            <FolderTreeNodeRow
+            <Row
               key={child.path}
               node={child}
               depth={depth + 1}
-              selectedFiles={selectedFiles}
+              selected={selected}
               onChange={onChange}
-              autoExpandAll={autoExpandAll}
+              query={query}
             />
           ))}
-        </div>
+        </ul>
       ) : null}
-    </div>
-  )
+    </li>
+  );
 }
 
 export function FolderTreePicker({
   tree,
   selectedFiles,
   onChange,
-  autoExpandAll = false,
-}: FolderTreePickerProps) {
-  const selectedCount = selectedFiles.size
-  const totalCount = useMemo(
-    () => tree.reduce((total, node) => total + node.fileCount, 0),
-    [tree],
-  )
-
-  if (tree.length === 0) {
+  query = "",
+}: Props) {
+  if (!tree.length)
     return (
-      <div className="rounded-[18px] border border-dashed border-border bg-bg px-5 py-6 text-sm leading-7 text-ink-3">
+      <div className="rounded-[12px] border-[0.5px] border-dashed border-border px-5 py-6 text-sm text-ink-3">
         This folder does not contain any eligible `.md` or `.mdx` files yet.
       </div>
-    )
-  }
-
+    );
+  const normalized = query.trim().toLowerCase();
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-[16px] border border-border bg-bg px-4 py-3 text-sm text-ink-3">
-        <span>{totalCount} markdown files available</span>
-        <span>{selectedCount} selected</span>
-      </div>
-
-      <div className="max-h-[420px] overflow-auto rounded-[18px] border border-border bg-sb px-3 py-3">
-        <div className="space-y-1">
-          {tree.map((node) => (
-            <FolderTreeNodeRow
-              key={node.path}
-              node={node}
-              depth={0}
-              selectedFiles={selectedFiles}
-              onChange={onChange}
-              autoExpandAll={autoExpandAll}
-            />
-          ))}
-        </div>
-      </div>
+    <div role="tree" aria-label="Workspace files">
+      <ul>
+        {tree.map((node) => (
+          <Row
+            key={node.path}
+            node={node}
+            depth={0}
+            selected={selectedFiles}
+            onChange={onChange}
+            query={normalized}
+          />
+        ))}
+      </ul>
     </div>
-  )
+  );
 }

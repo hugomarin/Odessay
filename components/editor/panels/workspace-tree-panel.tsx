@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FileText, Folder, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { RefreshCw } from "lucide-react";
+import { WorkspaceTree } from "@/components/workspace/workspace-tree";
 import {
   loadContextualWorkspace,
   refreshContextualWorkspaceDocuments,
@@ -47,103 +47,6 @@ export function buildWorkspaceTree(
   return root;
 }
 
-function FolderNode({
-  folder,
-  activeId,
-  collapsedPaths,
-  onToggle,
-  onOpen,
-}: {
-  folder: WorkspaceTreeFolder;
-  activeId: string | null;
-  collapsedPaths: ReadonlySet<string>;
-  onToggle: (path: string) => void;
-  onOpen: (id: string) => Promise<void>;
-}) {
-  // Expansion lives in the panel, keyed by folder path: a rebuild of the tree
-  // (a reconciled add/move/remove) must not reopen the folders the author
-  // deliberately collapsed. Tracking the collapsed set rather than the expanded
-  // one keeps "expanded by default" true for folders that appear later.
-  const expanded = !collapsedPaths.has(folder.path);
-  return (
-    <li>
-      <button
-        type="button"
-        role="treeitem"
-        aria-expanded={expanded}
-        // Folders group documents; only a document can be the tree's selection.
-        aria-selected={false}
-        onClick={() => onToggle(folder.path)}
-        className="flex min-h-7 w-full items-center gap-1.5 rounded-[6px] px-2 text-left text-[11px] text-ink-3 hover:bg-muted hover:text-ink"
-      >
-        <ChevronRight
-          className={cn(
-            "h-3 w-3 transition-transform duration-300 ease-layout",
-            expanded && "rotate-90",
-          )}
-          strokeWidth={1.5}
-        />
-        <Folder className="h-3.5 w-3.5" strokeWidth={1.5} />
-        <span className="truncate">{folder.name}</span>
-      </button>
-      {expanded ? (
-        <ul className="ml-3 border-l-[0.5px] border-border pl-1">
-          {folder.folders.map((child) => (
-            <FolderNode
-              key={child.path}
-              folder={child}
-              activeId={activeId}
-              collapsedPaths={collapsedPaths}
-              onToggle={onToggle}
-              onOpen={onOpen}
-            />
-          ))}
-          {folder.documents.map((document) => (
-            <DocumentNode
-              key={document.relativePath}
-              document={document}
-              activeId={activeId}
-              onOpen={onOpen}
-            />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-function DocumentNode({
-  document,
-  activeId,
-  onOpen,
-}: {
-  document: ContextualWorkspaceDocument;
-  activeId: string | null;
-  onOpen: (id: string) => Promise<void>;
-}) {
-  const active = document.id === activeId;
-  return (
-    <li>
-      <button
-        type="button"
-        role="treeitem"
-        disabled={!document.openable || !document.id}
-        aria-selected={active}
-        aria-current={active ? "page" : undefined}
-        onClick={() => document.id && void onOpen(document.id)}
-        className={cn(
-          "relative flex min-h-7 w-full items-center gap-1.5 rounded-[6px] px-2 text-left text-[11px] text-ink-3 hover:bg-muted hover:text-ink disabled:cursor-not-allowed disabled:opacity-50",
-          active &&
-            "bg-muted text-ink before:absolute before:inset-y-1 before:left-0 before:w-0.5 before:bg-cursor",
-        )}
-      >
-        <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
-        <span className="truncate">{document.name.replace(/\.md$/i, "")}</span>
-      </button>
-    </li>
-  );
-}
-
 export function WorkspaceTreePanel({
   activeWritingId,
   onOpenDocument,
@@ -159,9 +62,6 @@ export function WorkspaceTreePanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
-  const [collapsedPaths, setCollapsedPaths] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
-  );
   const generation = useRef(0);
   const refreshTimer = useRef<number | null>(null);
   const pendingIds = useRef<Set<string>>(new Set());
@@ -283,19 +183,18 @@ export function WorkspaceTreePanel({
       });
   }, [activeWritingId, applyOutcome, onCountChange, retryToken]);
 
-  const handleToggleFolder = useCallback((path: string) => {
-    setCollapsedPaths((current) => {
-      const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
-
-  const tree = useMemo(
-    () => buildWorkspaceTree(workspace?.documents ?? []),
+  const treeItems = useMemo(
+    () =>
+      (workspace?.documents ?? []).map((document) => ({
+        id: document.id ?? "",
+        name: document.name,
+        relativePath: document.relativePath,
+        kind: "file" as const,
+        openable: document.openable,
+      })),
     [workspace],
   );
+
   const handleOpen = async (id: string) => {
     setOpenError(null);
     try {
@@ -308,6 +207,7 @@ export function WorkspaceTreePanel({
       );
     }
   };
+
   if (loading)
     return (
       <p className="px-2 py-4 text-[11px] text-ink-4">Cargando Workspace…</p>
@@ -353,58 +253,19 @@ export function WorkspaceTreePanel({
       </p>
     );
   return (
-    <div
-      role="tree"
-      aria-label={`${workspace.name} documents`}
-      onKeyDown={(event) => {
-        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-        const items = Array.from(
-          event.currentTarget.querySelectorAll<HTMLButtonElement>(
-            '[role="treeitem"]:not(:disabled)',
-          ),
-        );
-        const index = items.indexOf(
-          document.activeElement as HTMLButtonElement,
-        );
-        const next =
-          event.key === "ArrowDown"
-            ? Math.min(items.length - 1, index + 1)
-            : Math.max(0, index - 1);
-        if (items[next]) {
-          event.preventDefault();
-          items[next].focus();
-        }
-      }}
-    >
-      <div className="mb-1 flex min-h-8 items-center gap-1.5 px-2 text-[11px] font-medium text-ink">
-        <Folder className="h-3.5 w-3.5" strokeWidth={1.5} />
-        <span className="truncate">{workspace.name}</span>
-      </div>
+    <div>
       {openError ? (
         <p role="alert" className="mx-2 mb-2 text-[10px] text-destructive">
           {openError}
         </p>
       ) : null}
-      <ul>
-        {tree.folders.map((folder) => (
-          <FolderNode
-            key={folder.path}
-            folder={folder}
-            activeId={activeWritingId}
-            collapsedPaths={collapsedPaths}
-            onToggle={handleToggleFolder}
-            onOpen={handleOpen}
-          />
-        ))}
-        {tree.documents.map((document) => (
-          <DocumentNode
-            key={document.relativePath}
-            document={document}
-            activeId={activeWritingId}
-            onOpen={handleOpen}
-          />
-        ))}
-      </ul>
+      <WorkspaceTree
+        aria-label={`${workspace.name} documents`}
+        mode="studio"
+        items={treeItems}
+        activeId={activeWritingId}
+        onOpenFile={(id) => void handleOpen(id)}
+      />
     </div>
   );
 }
