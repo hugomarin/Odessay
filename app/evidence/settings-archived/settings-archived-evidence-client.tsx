@@ -3,7 +3,7 @@
 import { useMemo, useReducer, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { ArchivedWritingsList, type ArchivedWritingsService } from "@/components/settings/archived-writings-list"
-import { SettingsNav } from "@/components/settings/settings-nav"
+import { SettingsShell } from "@/components/settings/settings-shell"
 import type { WritingRecord, WritingSummary } from "@/lib/services/contracts/document-service"
 
 const archivedAt = "2026-07-29T12:00:00.000Z"
@@ -76,17 +76,9 @@ export function SettingsArchivedEvidenceClient() {
     },
   }), [])
 
-  return <main data-testid="settings-archived-evidence" className="min-h-screen bg-bg px-12 py-10 text-ink">
-    <div className="mx-auto grid max-w-[1120px] grid-cols-[190px_1fr] gap-14">
-      <aside>
-        <h1 className="mb-7 font-lora text-[24px]">Settings</h1>
-        <SettingsNav />
-      </aside>
-      <section className="pt-1">
-        <h2 className="font-lora text-[28px]">Archived writings</h2>
-        <p className="mb-7 mt-1 text-[13px] text-ink-4">Download, restore, or permanently delete soft-deleted writings.</p>
-        <ArchivedWritingsList service={service} />
-      </section>
-    </div>
+  return <main data-testid="settings-archived-evidence" className="flex h-screen min-h-0 flex-col bg-bg pt-2.5 text-ink">
+    <SettingsShell section="/settings/archived">
+      <ArchivedWritingsList service={service} />
+    </SettingsShell>
   </main>
 }

@@ -8,7 +8,15 @@ import type { DocumentService, WritingRecord, WritingSummary } from "@/lib/servi
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/settings/archived" }))
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings/archived",
+  useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
+}))
+// SettingsNav renders "Sign out", which reaches the auth service factory and,
+// through it, the Supabase env. The nav assertion below is about labels.
+vi.mock("@/lib/services/auth-service-factory", () => ({
+  getAuthService: () => ({ signOut: vi.fn().mockResolvedValue({ error: null }) }),
+}))
 
 type ArchiveService = Pick<DocumentService, "listWritings" | "restoreWriting" | "permanentlyDeleteWriting" | "downloadWriting">
 const archivedAt = "2026-07-29T12:00:00.000Z"
@@ -81,7 +89,7 @@ function button(name: string, scope: ParentNode = document) {
 
 async function chooseAction(writingId: string, name: string) {
   const target = document.querySelector(`[data-testid="archived-writing-${writingId}"]`)
-  await click(button("Writing actions", target ?? document))
+  await click(button("Artifact actions", target ?? document))
   await click(Array.from(document.querySelectorAll('[role="menuitem"]')).find((item) => item.textContent?.trim() === name) ?? null)
   await settle()
 }
@@ -104,7 +112,7 @@ afterEach(() => {
 describe("Archived writings settings", () => {
   it("shows only the final settings navigation", () => {
     act(() => root.render(<SettingsNav />))
-    expect(Array.from(container.querySelectorAll("a"), (link) => link.textContent)).toEqual(["Account", "Status", "Archived writings"])
+    expect(Array.from(container.querySelectorAll("a"), (link) => link.textContent)).toEqual(["Account", "Artifact types", "Status", "Archived artifacts"])
     expect(container.textContent).not.toContain("Privacy")
     expect(container.textContent).not.toContain("Billing")
   })
@@ -114,10 +122,10 @@ describe("Archived writings settings", () => {
     const pending = new Promise<Awaited<ReturnType<ArchiveService["listWritings"]>>>((resolve) => { resolveList = resolve })
     const list = vi.fn().mockReturnValue(pending)
     await act(async () => { root.render(<ArchivedWritingsList service={service({ listWritings: list })} />) })
-    expect(container.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("Loading archived writings")
+    expect(container.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("Loading archived artifacts")
     resolveList({ data: [], error: null })
     await settle()
-    expect(container.textContent).toContain("No archived writings")
+    expect(container.textContent).toContain("Nothing here")
     expect(list).toHaveBeenCalledWith({ includeDeleted: true, archivedOnly: true, limit: 26, offset: 0 })
   })
 
@@ -126,11 +134,11 @@ describe("Archived writings settings", () => {
       .mockResolvedValueOnce({ data: null, error: { code: "DB_ERROR", message: "offline", retryable: true } })
       .mockResolvedValueOnce({ data: [], error: null })
     await renderList(service({ listWritings: list }))
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Could not load archived writings. offline")
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Could not load archived artifacts. offline")
     await click(button("Retry", container))
     await settle()
     expect(list).toHaveBeenCalledTimes(2)
-    expect(container.textContent).toContain("No archived writings")
+    expect(container.textContent).toContain("Nothing here")
   })
 
   it("restores with the row version and keeps other rows actionable while pending", async () => {
@@ -140,8 +148,8 @@ describe("Archived writings settings", () => {
     await renderList(service({ listWritings: list, restoreWriting: restore }))
     await chooseAction("writing-1", "Restore")
     expect(restore).toHaveBeenCalledWith(expect.objectContaining({ writingId: "writing-1", version: 2 }))
-    expect((button("Writing actions", document.querySelector('[data-testid="archived-writing-writing-1"]')!) as HTMLButtonElement).disabled).toBe(true)
-    expect((button("Writing actions", document.querySelector('[data-testid="archived-writing-writing-2"]')!) as HTMLButtonElement).disabled).toBe(false)
+    expect((button("Artifact actions", document.querySelector('[data-testid="archived-writing-writing-1"]')!) as HTMLButtonElement).disabled).toBe(true)
+    expect((button("Artifact actions", document.querySelector('[data-testid="archived-writing-writing-2"]')!) as HTMLButtonElement).disabled).toBe(false)
     finishRestore({ data: record(row(1)), error: null })
     await settle()
     expect(list).toHaveBeenCalledTimes(2)
@@ -164,13 +172,13 @@ describe("Archived writings settings", () => {
     const remove = vi.fn().mockResolvedValue({ data: undefined, error: null })
     const list = vi.fn().mockResolvedValue({ data: [row(1)], error: null })
     await renderList(service({ listWritings: list, permanentlyDeleteWriting: remove }))
-    await chooseAction("writing-1", "Delete permanently")
+    await chooseAction("writing-1", "Delete forever")
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("cannot be undone")
     await click(button("Cancel"))
     expect(remove).not.toHaveBeenCalled()
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    await chooseAction("writing-1", "Delete permanently")
-    await click(button("Delete permanently"))
+    await chooseAction("writing-1", "Delete forever")
+    await click(button("Delete forever"))
     await settle()
     expect(remove).toHaveBeenCalledWith({ writingId: "writing-1" })
     expect(list).toHaveBeenCalledTimes(2)
@@ -185,11 +193,61 @@ describe("Archived writings settings", () => {
     await chooseAction("writing-1", "Restore")
     const first = document.querySelector('[data-testid="archived-writing-writing-1"]')!
     const second = document.querySelector('[data-testid="archived-writing-writing-2"]')!
-    expect(first.querySelector('[role="alert"]')?.textContent).toContain("Could not restore this writing.")
+    expect(first.querySelector('[role="alert"]')?.textContent).toContain("Could not restore this artifact.")
     expect(second.querySelector('[role="alert"]')).toBeNull()
     await click(button("Retry", first))
     await settle()
     expect(restore).toHaveBeenCalledTimes(2)
+  })
+
+  it("selects every visible row from the tri-state header and bulk-restores from the shared bar", async () => {
+    const restore = vi.fn().mockResolvedValue({ data: null, error: null })
+    const list = vi.fn().mockResolvedValue({ data: [row(1), row(2)], error: null })
+    await renderList(service({ listWritings: list, restoreWriting: restore }))
+
+    await click(button("Select all", container))
+    // The bar is the shared component, not a second implementation.
+    const bar = document.querySelector('[data-testid="selection-bar"]')
+    expect(bar?.textContent).toContain("2 selected")
+    expect(Array.from(bar!.querySelectorAll("button"), (b) => b.textContent?.trim())).toEqual(
+      expect.arrayContaining(["Deselect", "Restore", "Download", "Delete forever"]),
+    )
+
+    await click(document.querySelector('[data-testid="selection-bar-action-restore"]'))
+    await settle()
+    expect(restore).toHaveBeenCalledTimes(2)
+    expect(document.querySelector('[data-testid="selection-bar"]')).toBeNull()
+  })
+
+  it("keeps a failed row selected and reports the failure on that row", async () => {
+    const restore = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "UNAVAILABLE", message: "network", retryable: true } })
+    const list = vi.fn().mockResolvedValue({ data: [row(1), row(2)], error: null })
+    await renderList(service({ listWritings: list, restoreWriting: restore }))
+
+    await click(button("Select all", container))
+    await click(document.querySelector('[data-testid="selection-bar-action-restore"]'))
+    await settle()
+
+    expect(document.querySelector('[data-testid="selection-bar"]')?.textContent).toContain("1 selected")
+    const failed = document.querySelector('[data-testid="archived-writing-writing-2"]')
+    expect(failed?.querySelector('[role="alert"]')?.textContent).toContain("Could not restore this artifact.")
+  })
+
+  it("filters the rows by the search field and reports the visible count", async () => {
+    const list = vi.fn().mockResolvedValue({ data: [row(1), row(2)], error: null })
+    await renderList(service({ listWritings: list }))
+    const search = container.querySelector('input[aria-label="Search the archive"]') as HTMLInputElement
+
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!
+      setter.call(search, "writing 2")
+      search.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+
+    expect(container.querySelectorAll('[data-testid^="archived-writing-"]')).toHaveLength(1)
+    expect(container.textContent).toContain("1 archived")
   })
 
   it("paginates forward and backward with the catalog offsets", async () => {

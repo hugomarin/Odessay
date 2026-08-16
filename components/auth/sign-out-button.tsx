@@ -9,9 +9,14 @@ import { cn } from "@/lib/utils"
 type SignOutButtonProps = {
   variant?: "outline" | "ghost" | "default"
   className?: string
+  /**
+   * Leading glyph. The Settings nav renders "Sign out" as one of its own rows,
+   * which means it needs the same 34px icon column as the rows above it.
+   */
+  icon?: React.ReactNode
 }
 
-export function SignOutButton({ variant = "outline", className }: SignOutButtonProps) {
+export function SignOutButton({ variant = "outline", className, icon }: SignOutButtonProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [warning, setWarning] = useState<string | null>(null)
@@ -37,6 +42,7 @@ export function SignOutButton({ variant = "outline", className }: SignOutButtonP
         type="button"
         variant={variant}
       >
+        {icon}
         {isPending ? "Signing out..." : "Sign out"}
       </Button>
       {warning ? <p className="text-[12px] text-amber-600">{warning}</p> : null}

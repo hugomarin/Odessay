@@ -13,6 +13,17 @@ import {
   updateUsernameSchema,
 } from "@/lib/validation/account-schemas"
 
+/**
+ * Group label over a hairline — `docs/design/views/settings.md` §Account, with
+ * the values read from the render of `Artifact Studio Settings.dc.html`
+ * (15/500 over a `--line-soft` rule; the danger label is 12/500 uppercase at
+ * `.06em` over a `--danger-border` rule, in terracotta).
+ */
+const GROUP_LABEL_CLASS =
+  "mb-3.5 border-b-[0.5px] border-line-soft pb-2.5 text-[15px] font-medium leading-none text-ink"
+const DANGER_LABEL_CLASS =
+  "mb-3.5 border-b-[0.5px] border-danger-border pb-2.5 text-[12px] font-medium uppercase leading-none tracking-[0.06em] text-cursor"
+
 type AccountFormProps = {
   initialAccount: {
     id: string
@@ -85,7 +96,8 @@ function GhostButton({
       variant="ghost"
       onClick={onClick}
       className={cn(
-        "h-[28px] border-[0.5px] border-border px-3 text-[12px] text-ink-3 hover:bg-muted hover:text-ink-2",
+        // ghostBtn in the render: 34px tall, 14px of padding, 13/500.
+        "h-[34px] rounded-md border-[0.5px] border-border px-3.5 text-[13px] font-medium text-ink-2 hover:bg-surface-menu-hover hover:text-ink",
         className,
       )}
     >
@@ -106,15 +118,16 @@ function CredRow({
   children?: React.ReactNode
 }) {
   return (
-    <div className="border-b-[0.5px] border-border last:border-b-0">
-      <div className="flex items-center justify-between px-4 py-3.5">
-        <div className="flex items-center gap-4">
-          <span className="text-[13px] font-medium text-ink">{label}</span>
-          <span className="text-[14px] text-ink-3">{status}</span>
-        </div>
+    // 78px label column, from the render — it is what lines the two values up.
+    <div className="border-b-[0.5px] border-line-softer last:border-b-0">
+      <div className="flex items-center gap-3.5 px-4 py-[15px]">
+        <span className="w-[78px] flex-shrink-0 text-[13px] font-medium leading-none text-ink-2">
+          {label}
+        </span>
+        <span className="min-w-0 flex-1 text-[14px] leading-none text-ink">{status}</span>
         {action}
       </div>
-      {children && <div className="border-t-[0.5px] border-border bg-bg px-4 py-4">{children}</div>}
+      {children && <div className="border-t-[0.5px] border-line-softer bg-bg px-4 py-4">{children}</div>}
     </div>
   )
 }
@@ -160,7 +173,8 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
     if (!isUsernameDirty) {
       setUsernameState({
         tone: "muted",
-        message: "Your public URL will update after you save a new username.",
+        // The spec marks this sentence mandatory under the profile grid.
+        message: "Your public URL updates when you save a new username.",
       })
       return
     }
@@ -395,19 +409,13 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
   }
 
   return (
-    <div id="settings-account-page" data-page="settings-account-page" className="space-y-8">
-      <h1 className="font-lora text-[24px] font-normal text-ink">Account</h1>
-
+    // The `h1` now lives in the shell header, next to the section subtitle.
+    <div id="settings-account-page" data-page="settings-account-page">
       {/* Profile */}
       <section id="settings-profile" data-section="settings-profile" data-testid="settings-profile">
-        <div
-          className="mb-6 border-b-[0.5px] border-border pb-3 text-[16px] font-semibold text-ink"
-          style={{ marginBottom: "24px", paddingBottom: "12px" }}
-        >
-          Profile
-        </div>
+        <p className={GROUP_LABEL_CLASS}>Profile</p>
 
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           <form
             ref={displayNameFormRef}
             id="settings-display-name-form"
@@ -482,12 +490,15 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
       </section>
 
       {/* Sign in */}
-      <section id="settings-signin" data-section="settings-signin" data-testid="settings-signin">
-        <div className="mb-6 font-lora text-[18px] font-normal text-ink" style={{ marginBottom: "24px" }}>
-          Sign in
-        </div>
+      <section
+        id="settings-signin"
+        data-section="settings-signin"
+        data-testid="settings-signin"
+        className="mt-[34px]"
+      >
+        <p className={GROUP_LABEL_CLASS}>Sign in</p>
 
-        <div className="overflow-hidden rounded-[10px] border-[0.5px] border-border">
+        <div className="overflow-hidden rounded-lg border-[0.5px] border-line-soft">
           {/* Email row */}
           <CredRow
             label="Email"
@@ -667,23 +678,27 @@ export function AccountForm({ initialAccount }: AccountFormProps) {
         id="settings-danger-zone"
         data-section="settings-danger-zone"
         data-testid="settings-danger-zone"
-        style={{ marginTop: "56px" }}
+        className="mt-[38px]"
       >
-        <p className="mb-4 text-[12px] font-medium uppercase tracking-[0.07em] text-ink-4">
-          DANGER ZONE
-        </p>
+        <p className={DANGER_LABEL_CLASS}>Danger zone</p>
 
-        <div className="flex items-center justify-between border-t-[0.5px] border-border py-4">
-          <div>
-            <p className="text-[14px] font-medium text-ink-3">Delete account</p>
-            <p className="mt-0.5 text-[13px] text-ink-4">
-              Permanently delete your account and all associated writings.
-            </p>
-          </div>
+        <div className="flex items-center gap-5 rounded-lg border-[0.5px] border-danger-border bg-danger-surface p-4">
+          <span className="min-w-0 flex-1">
+            <span className="mb-[3px] block text-[14px] font-medium leading-tight text-ink">
+              Delete account
+            </span>
+            {/*
+              The second sentence is load-bearing for a local-first product and
+              the spec marks it mandatory: the cloud copy goes, the files stay.
+            */}
+            <span className="block text-[13px] leading-normal text-ink-4">
+              Deletes the account and everything in the cloud. Local files are untouched.
+            </span>
+          </span>
           <Button
             type="button"
             variant="ghost"
-            className="h-[28px] border-[0.5px] border-[hsl(0_72%_88%)] bg-transparent px-3 text-[12px] text-destructive hover:bg-[hsl(0_72%_97%)]"
+            className="h-[38px] flex-shrink-0 rounded-[9px] border-[0.5px] border-danger-border-strong bg-sb px-4 text-[13px] font-medium text-cursor hover:bg-cursor hover:text-bg"
             onClick={() => {
               // eslint-disable-next-line no-console
               console.log("Delete account requested — not implemented")
