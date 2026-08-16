@@ -1,4 +1,4 @@
-import { WorkspaceDetailPrototype } from "@/components/workspace/workspace-prototype-shell"
+import { WorkspaceDetail } from "@/components/workspace/workspace-detail"
 
 export default async function WorkspaceDetailPage({
   params,
@@ -7,7 +7,7 @@ export default async function WorkspaceDetailPage({
 }) {
   const { slug } = await params
 
-  return <WorkspaceDetailPrototype workspaceSlug={slug} />
+  return <WorkspaceDetail workspaceSlug={slug} />
 }
 
 export function generateStaticParams() {

@@ -155,7 +155,7 @@ export function DeskHarnessClient() {
 
   return (
     <section data-page="desk" className="Desk flex h-screen min-h-0 flex-col bg-bg">
-      <DeskHeader onImport={() => {}} />
+      <DeskHeader />
 
       <DeskFilterBar
         leading={

@@ -1535,6 +1535,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
           return (
             <div onClick={(event) => event.stopPropagation()}>
               <TablePropertySelector
+                variant="preview"
                 readOnly={!hasDocument}
                 className="min-w-[128px]"
                 ariaLabel={`Change status for ${file.name}`}
@@ -1886,9 +1887,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 <button
                   type="button"
                   onClick={() => setIsCreateDialogOpen(true)}
-                  className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+                  className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[9px] bg-ink px-[17px] text-[14px] font-medium text-bg transition-opacity hover:opacity-90"
                 >
-                  <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  <Plus className="h-[15px] w-[15px]" strokeWidth={1.5} />
                   New file
                 </button>
               </div>
@@ -2023,7 +2024,7 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     : "No files match your search."}
                 </div>
               ) : (
-                <div className="overflow-hidden">
+                <div className="overflow-hidden rounded-[10px] bg-sb shadow-float">
                   <ArtifactTable
                     groups={fileGroups}
                     columns={fileColumns}
@@ -2065,9 +2066,9 @@ function DesktopWorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                     }}
                     showHeader={false}
                     tableClassName="min-w-[920px] table-fixed"
-                    rowCellClassName="py-6"
+                    rowCellClassName="py-4"
                     leadingColumnClassName="w-9"
-                    leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
+                    leadingCellClassName="w-9 pl-3 pr-0 pt-[17px] sm:pl-3"
                   />
                 </div>
               )}

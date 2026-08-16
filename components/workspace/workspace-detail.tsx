@@ -1,0 +1,1451 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ChevronLeft,
+  Eye,
+  ExternalLink,
+  Folder,
+  FolderPlus,
+  FolderTree,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Tag,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { WorkspaceTree } from "@/components/workspace/workspace-tree";
+import { WorkspaceFilterBar } from "@/components/workspace/workspace-filter-bar";
+import { BulkActionBar } from "@/components/desk/bulk-action-bar";
+import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
+import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal";
+import { WritingPreviewModal } from "@/components/desk/writing-preview-modal";
+import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu";
+import { useUserSettingsContext } from "@/components/settings/user-settings-provider";
+import { DocumentStateTooltipProvider } from "@/components/ui/document-state-badge";
+import { ArtifactTable } from "@/components/shared/artifact-table";
+import { ArtifactRowSelection } from "@/components/shared/artifact-row-selection";
+import {
+  ArtifactWritingAction,
+  ArtifactWritingCell,
+} from "@/components/shared/artifact-writing-cell";
+import { CollectionChips } from "@/components/desk/collection-chips";
+import type { ArtifactTableColumn } from "@/components/shared/artifact-table-types";
+import { TablePropertySelector } from "@/components/ui/table-property-selector";
+import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon";
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { getDesktopWorkspaceService } from "@/lib/services/desktop/workspace-service";
+import { openWorkspaceFileInEditor } from "@/lib/workspace/open-workspace-file";
+import { subscribeToCatalog } from "@/lib/queries/document-catalog";
+import { loadWorkspaceDocumentJoin } from "@/lib/queries/workspace-catalog-source";
+import type { CollectionOption } from "@/lib/collections/collections";
+import { buildCollectionOptions } from "@/lib/collections/collections";
+import {
+  getLocalDBScope,
+  getWritingForEdit,
+  loadCollectionState,
+} from "@/lib/queries/desk-catalog-source";
+import {
+  bulkAddToCollection,
+  bulkChangeArtifactType,
+  bulkChangeStatus,
+  bulkCreateCollection,
+  bulkDelete,
+  changeWritingArtifactType,
+  changeWritingStatus,
+  createAndAssignCollection,
+  deleteWriting,
+  renameWriting,
+  toggleWritingCollection as toggleWritingCollectionMutation,
+} from "@/lib/queries/writing-mutations";
+import type { WorkspaceDocumentInfo } from "@/lib/queries/workspace-catalog-source";
+import type { DeskActivityRow } from "@/lib/queries/desk-activity";
+import type { LocalWritingCollection } from "@/lib/local-db/schema";
+import { buildWritingRouteHref } from "@/lib/writings/writing-route";
+import {
+  WRITING_STATUS_VALUES,
+  getWritingStatusLabel,
+  normalizeWritingStatus,
+  type WritingStatus,
+} from "@/lib/writings/status";
+import {
+  ARTIFACT_TYPE_VALUES,
+  getArtifactTypeLabel,
+  type ArtifactType,
+} from "@/lib/writings/artifact-type";
+import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
+import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header";
+import { useWritingSelection } from "@/hooks/useWritingSelection";
+import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters";
+import {
+  deriveDocumentStateFromSignals,
+  type DocumentState,
+} from "@/lib/writings/document-state";
+import type {
+  WorkspaceDetail as WorkspaceDetailType,
+  WorkspaceFile,
+} from "@/lib/workspace/types";
+
+function formatFileTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function deriveWorkspaceFileDocumentState(
+  file: WorkspaceFile,
+  documentJoin: Map<string, WorkspaceDocumentInfo>,
+): DocumentState {
+  const info = documentJoin.get(file.path);
+  if (info) return info.state;
+  return deriveDocumentStateFromSignals({
+    hasCloudRecord: false,
+    hasLocalFile: true,
+    isPending: false,
+  });
+}
+
+function workspaceMissingMessage(workspace: WorkspaceDetailType) {
+  return (
+    workspace.missingReason ?? "This local folder is unavailable or was moved."
+  );
+}
+
+function fileFolderPath(relativePath: string, fileName: string) {
+  if (relativePath === fileName) return "";
+  return relativePath.replace(`/${fileName}`, "");
+}
+
+function isInsideFolder(relativePath: string, folderPath: string) {
+  if (folderPath === "") return true;
+  return (
+    relativePath === folderPath || relativePath.startsWith(`${folderPath}/`)
+  );
+}
+
+function matchesFileQuery(file: WorkspaceFile, query: string) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return true;
+  return (
+    file.name.toLowerCase().includes(normalized) ||
+    file.relativePath.toLowerCase().includes(normalized)
+  );
+}
+
+type WorkspaceHeaderAction =
+  | { type: "rename"; workspace: WorkspaceDetailType }
+  | { type: "remove"; workspace: WorkspaceDetailType }
+  | null;
+
+export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
+  const router = useRouter();
+  const [workspace, setWorkspace] = useState<WorkspaceDetailType | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFolderPath, setSelectedFolderPath] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const [isCreatingFile, setIsCreatingFile] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [headerAction, setHeaderAction] = useState<WorkspaceHeaderAction>(null);
+  const [headerActionValue, setHeaderActionValue] = useState("");
+  const [documentJoin, setDocumentJoin] = useState<
+    Map<string, WorkspaceDocumentInfo>
+  >(new Map());
+  const [collectionOptions, setCollectionOptions] = useState<
+    CollectionOption[]
+  >([]);
+  const [collectionIdsByWritingId, setCollectionIdsByWritingId] = useState<
+    Record<string, string[]>
+  >({});
+  const hasLoadedWorkspaceRef = useRef(false);
+  const { settings } = useUserSettingsContext();
+  const {
+    selectedIds,
+    toggleSelection,
+    selectAll,
+    deselectAll,
+    hasSelection,
+    selectedCount,
+  } = useWritingSelection();
+  const [renameTarget, setRenameTarget] = useState<{
+    id: string;
+    title: string;
+    bodyText: string;
+  } | null>(null);
+  const [previewWritingId, setPreviewWritingId] = useState<string | null>(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
+  const { dateFilter, groupBy, sortBy, setSortBy } = useWorkspaceTableFilters();
+
+  const loadWorkspace = useCallback(async () => {
+    const isInitialLoad = !hasLoadedWorkspaceRef.current;
+    if (isInitialLoad) setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const service = await getDesktopWorkspaceService();
+      const nextWorkspace = await service.getWorkspace(workspaceSlug);
+      if (!nextWorkspace) {
+        setWorkspace(null);
+        setErrorMessage("Workspace not found");
+        return;
+      }
+      const [join, collectionState] = await Promise.all([
+        loadWorkspaceDocumentJoin(nextWorkspace.rootPath),
+        loadCollectionState(),
+      ]);
+      const idsByWritingId: Record<string, string[]> = {};
+      for (const assignment of collectionState.writingCollections) {
+        idsByWritingId[assignment.writing_id] = [
+          ...(idsByWritingId[assignment.writing_id] ?? []),
+          assignment.collection_id,
+        ];
+      }
+      setWorkspace(nextWorkspace);
+      setDocumentJoin(join);
+      setCollectionOptions(buildCollectionOptions(collectionState.collections));
+      setCollectionIdsByWritingId(idsByWritingId);
+      if (isInitialLoad) {
+        await service.markWorkspaceOpened(workspaceSlug);
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to load workspace",
+      );
+    } finally {
+      if (isInitialLoad) {
+        hasLoadedWorkspaceRef.current = true;
+        setIsLoading(false);
+      }
+    }
+  }, [workspaceSlug]);
+
+  useEffect(() => {
+    void loadWorkspace();
+  }, [loadWorkspace]);
+
+  useEffect(() => {
+    const handleFocus = () => void loadWorkspace();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [loadWorkspace]);
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToCatalog(() => {
+      if (timer) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void loadWorkspace();
+      }, 100);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [loadWorkspace]);
+
+  const visibleFiles = useMemo(() => {
+    const files =
+      workspace?.files.filter((file) => {
+        if (!isInsideFolder(file.relativePath, selectedFolderPath))
+          return false;
+        if (!matchesFileQuery(file, searchQuery)) return false;
+        if (dateFilter === "last-7")
+          return file.modifiedAt >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+        return true;
+      }) ?? [];
+    return files.sort((left, right) => {
+      if (sortBy === "name") return left.name.localeCompare(right.name);
+      return sortBy === "oldest"
+        ? left.modifiedAt - right.modifiedAt
+        : right.modifiedAt - left.modifiedAt;
+    });
+  }, [workspace, selectedFolderPath, searchQuery, dateFilter, sortBy]);
+
+  const fileGroups = useMemo(() => {
+    if (groupBy === "none") return [{ items: visibleFiles }];
+    const groups = new Map<string, WorkspaceFile[]>();
+    for (const file of visibleFiles) {
+      const label =
+        fileFolderPath(file.relativePath, file.name) || "Root folder";
+      groups.set(label, [...(groups.get(label) ?? []), file]);
+    }
+    return Array.from(groups.entries()).map(([label, items]) => ({
+      label,
+      items,
+    }));
+  }, [groupBy, visibleFiles]);
+
+  const getRowKey = useCallback(
+    (file: WorkspaceFile) => documentJoin.get(file.path)?.id ?? file.id,
+    [documentJoin],
+  );
+
+  const visibleWritingIds = useMemo(
+    () =>
+      visibleFiles
+        .map((file) => documentJoin.get(file.path)?.id)
+        .filter((id): id is string => Boolean(id)),
+    [visibleFiles, documentJoin],
+  );
+
+  const allVisibleSelected =
+    visibleWritingIds.length > 0 &&
+    visibleWritingIds.every((id) => selectedIds.has(id));
+
+  const writingCollections = useMemo<LocalWritingCollection[]>(
+    () =>
+      Object.entries(collectionIdsByWritingId).flatMap(([writingId, ids]) =>
+        ids.map((collectionId, index) => ({
+          id: `${writingId}-${collectionId}-${index}`,
+          writing_id: writingId,
+          collection_id: collectionId,
+          added_at: "",
+          local_updated_at: 0,
+        })),
+      ),
+    [collectionIdsByWritingId],
+  );
+
+  const previewRows = useMemo<DeskActivityRow[]>(
+    () =>
+      visibleFiles.map((file) => {
+        const document = documentJoin.get(file.path);
+        const writingId = document?.id ?? file.id;
+        const status = document?.status ?? "draft";
+        const artifactType = document?.artifactType ?? "general";
+        return {
+          id: writingId,
+          title: file.name.replace(/\.(md|mdx)$/i, ""),
+          excerpt: document?.excerpt ?? "",
+          localPath: file.path,
+          stateLabel: getWritingStatusLabel(status),
+          stateTone: normalizeWritingStatus(status),
+          documentState: deriveWorkspaceFileDocumentState(file, documentJoin),
+          artifactType,
+          recipientPreviews: [],
+          dateLabel: formatFileTimestamp(file.modifiedAt),
+          isNew: false,
+          destinationHref: buildWritingRouteHref("/write", {
+            id: writingId,
+            slug: null,
+          }),
+          workspaceSlug: workspace?.slug ?? null,
+          workspaceName: workspace?.name ?? null,
+        };
+      }),
+    [visibleFiles, documentJoin, workspace],
+  );
+
+  const previewIndex = useMemo(
+    () =>
+      previewWritingId === null
+        ? null
+        : previewRows.findIndex((row) => row.id === previewWritingId),
+    [previewRows, previewWritingId],
+  );
+
+  const openRenameWriting = useCallback(
+    async (file: WorkspaceFile) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      const writing = await getWritingForEdit(document.id);
+      if (!writing) return;
+      setRenameTarget({
+        id: writing.id,
+        title: writing.title?.trim() || "Untitled writing",
+        bodyText: writing.body_text,
+      });
+    },
+    [documentJoin],
+  );
+
+  const openWritingPreview = useCallback(
+    (file: WorkspaceFile) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      setPreviewWritingId(document.id);
+    },
+    [documentJoin],
+  );
+
+  const handleDeleteFile = useCallback(
+    async (file: WorkspaceFile) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      await deleteWriting(document.id);
+      await loadWorkspace();
+    },
+    [documentJoin, loadWorkspace],
+  );
+
+  const handleRenameConfirm = useCallback(
+    async (nextTitle: string) => {
+      if (!renameTarget) return;
+      await renameWriting(renameTarget.id, nextTitle);
+      await loadWorkspace();
+      setRenameTarget(null);
+    },
+    [renameTarget, loadWorkspace],
+  );
+
+  const handleStatusChange = useCallback(
+    async (file: WorkspaceFile, status: WritingStatus) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      await changeWritingStatus(document.id, status);
+      await loadWorkspace();
+    },
+    [documentJoin, loadWorkspace],
+  );
+
+  const handleArtifactTypeChange = useCallback(
+    async (file: WorkspaceFile, artifactType: ArtifactType) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      await changeWritingArtifactType(document.id, artifactType);
+      await loadWorkspace();
+    },
+    [documentJoin, loadWorkspace],
+  );
+
+  const handleCollectionToggle = useCallback(
+    async (file: WorkspaceFile, collectionId: string) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      await toggleWritingCollectionMutation(
+        document.id,
+        collectionId,
+        writingCollections,
+      );
+      await loadWorkspace();
+    },
+    [documentJoin, writingCollections, loadWorkspace],
+  );
+
+  const handleCreateCollection = useCallback(
+    async (file: WorkspaceFile, name: string) => {
+      const document = documentJoin.get(file.path);
+      if (!document) return;
+      const ownerId = getLocalDBScope();
+      await createAndAssignCollection(
+        document.id,
+        name,
+        ownerId === "anonymous" ? null : ownerId,
+        writingCollections,
+      );
+      await loadWorkspace();
+    },
+    [documentJoin, writingCollections, loadWorkspace],
+  );
+
+  const handleBulkDelete = useCallback(async () => {
+    await bulkDelete(selectedIds);
+    deselectAll();
+    await loadWorkspace();
+  }, [selectedIds, deselectAll, loadWorkspace]);
+
+  const handleBulkStatusChange = useCallback(
+    async (status: WritingStatus) => {
+      await bulkChangeStatus(selectedIds, status);
+      await loadWorkspace();
+    },
+    [selectedIds, loadWorkspace],
+  );
+
+  const handleBulkArtifactTypeChange = useCallback(
+    async (artifactType: ArtifactType) => {
+      await bulkChangeArtifactType(selectedIds, artifactType);
+      await loadWorkspace();
+    },
+    [selectedIds, loadWorkspace],
+  );
+
+  const handleBulkAddToCollection = useCallback(
+    async (collectionId: string) => {
+      await bulkAddToCollection(selectedIds, collectionId, writingCollections);
+      await loadWorkspace();
+    },
+    [selectedIds, writingCollections, loadWorkspace],
+  );
+
+  const handleBulkCreateCollection = useCallback(
+    async (name: string) => {
+      const ownerId = getLocalDBScope();
+      await bulkCreateCollection(
+        selectedIds,
+        name,
+        ownerId === "anonymous" ? null : ownerId,
+        writingCollections,
+      );
+      await loadWorkspace();
+    },
+    [selectedIds, writingCollections, loadWorkspace],
+  );
+
+  const openInEditor = useCallback(
+    async (file: WorkspaceFile) => {
+      setErrorMessage(null);
+      await openWorkspaceFileInEditor(file, router, setErrorMessage);
+    },
+    [router],
+  );
+
+  const enabledStatuses = useMemo(
+    () =>
+      WRITING_STATUS_VALUES.filter(
+        (status) => !settings.disabledStatuses.includes(status),
+      ),
+    [settings.disabledStatuses],
+  );
+
+  const fileColumns = useMemo<ArtifactTableColumn<WorkspaceFile>[]>(
+    () => [
+      {
+        id: "title",
+        label: "Writing",
+        className: "min-w-0 pl-2 pr-5",
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          const writingTitle = file.name.replace(/\.(md|mdx)$/i, "");
+          const hasDocument = Boolean(document);
+          return (
+            <ArtifactWritingCell
+              title={writingTitle}
+              documentState={deriveWorkspaceFileDocumentState(
+                file,
+                documentJoin,
+              )}
+              description={document?.excerpt ?? null}
+              localPath={file.path}
+              dateLabel={formatFileTimestamp(file.modifiedAt)}
+              actions={
+                <>
+                  <ArtifactWritingAction
+                    disabled={!hasDocument}
+                    label={
+                      hasDocument
+                        ? `Rename ${writingTitle}`
+                        : `Rename ${writingTitle} (not bound)`
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (!hasDocument) return;
+                      void openRenameWriting(file);
+                    }}
+                  >
+                    <Pencil className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                  <ArtifactWritingAction
+                    disabled={!hasDocument}
+                    label={
+                      hasDocument
+                        ? `Preview ${writingTitle}`
+                        : `Preview ${writingTitle} (not bound)`
+                    }
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (!hasDocument) return;
+                      openWritingPreview(file);
+                    }}
+                  >
+                    <Eye className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                  </ArtifactWritingAction>
+                  {hasDocument ? (
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <CollectionAssignmentMenu
+                        collections={collectionOptions}
+                        selectedIds={
+                          collectionIdsByWritingId[document!.id] ?? []
+                        }
+                        align="start"
+                        title="Collections"
+                        description="Choose labels for this writing."
+                        onToggleCollection={(collectionId) =>
+                          void handleCollectionToggle(file, collectionId)
+                        }
+                        onCreateCollection={(name) =>
+                          void handleCreateCollection(file, name)
+                        }
+                        trigger={
+                          <ArtifactWritingAction
+                            label={`Assign collections for ${writingTitle}`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <Tag
+                              className="h-[14px] w-[14px]"
+                              strokeWidth={1.5}
+                            />
+                          </ArtifactWritingAction>
+                        }
+                      />
+                    </div>
+                  ) : (
+                    <ArtifactWritingAction
+                      disabled
+                      label={`Assign collections for ${writingTitle} (not bound)`}
+                    >
+                      <Tag className="h-[14px] w-[14px]" strokeWidth={1.5} />
+                    </ArtifactWritingAction>
+                  )}
+                </>
+              }
+              collections={
+                <CollectionChips
+                  collectionIds={
+                    document
+                      ? (collectionIdsByWritingId[document.id] ?? [])
+                      : []
+                  }
+                  collectionOptions={collectionOptions}
+                />
+              }
+            />
+          );
+        },
+      },
+      {
+        id: "status",
+        label: "Status",
+        width: "w-[144px]",
+        className: "px-2",
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          const status = normalizeWritingStatus(document?.status ?? "draft");
+          const hasDocument = Boolean(document);
+          return (
+            <div onClick={(event) => event.stopPropagation()}>
+              <TablePropertySelector
+                variant="preview"
+                readOnly={!hasDocument}
+                className="min-w-[128px]"
+                ariaLabel={`Change status for ${file.name}`}
+                icon={<WritingStatusIcon status={status} />}
+                label={getWritingStatusLabel(status)}
+                contentClassName="w-[248px]"
+              >
+                {hasDocument &&
+                  enabledStatuses.map((status) => (
+                    <DropdownMenuItem
+                      key={status}
+                      className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleStatusChange(file, status);
+                      }}
+                    >
+                      <span className="flex items-center gap-2">
+                        <WritingStatusIcon status={status} />
+                        {getWritingStatusLabel(status)}
+                      </span>
+                      {normalizeWritingStatus(document?.status ?? "draft") ===
+                      status ? (
+                        <span
+                          className="h-2.5 w-2.5 rounded-full bg-ink"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+              </TablePropertySelector>
+            </div>
+          );
+        },
+      },
+      {
+        id: "artifact",
+        label: "Artifact",
+        width: "w-[156px]",
+        className: "px-2",
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          const artifactType = document?.artifactType ?? "general";
+          const hasDocument = Boolean(document);
+          return (
+            <div onClick={(event) => event.stopPropagation()}>
+              <TablePropertySelector
+                readOnly={!hasDocument}
+                className="min-w-[140px]"
+                ariaLabel={`Change artifact type for ${file.name}`}
+                icon={<ArtifactTypeIcon artifactType={artifactType} />}
+                label={getArtifactTypeLabel(artifactType)}
+                contentClassName="w-[248px]"
+              >
+                {hasDocument &&
+                  ARTIFACT_TYPE_VALUES.map((artifactType) => (
+                    <DropdownMenuItem
+                      key={artifactType}
+                      className="h-11 cursor-pointer items-center justify-between rounded-[10px] px-3 text-[14px]"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleArtifactTypeChange(file, artifactType);
+                      }}
+                    >
+                      <span className="flex items-center gap-3">
+                        <ArtifactTypeIcon artifactType={artifactType} />
+                        {getArtifactTypeLabel(artifactType)}
+                      </span>
+                      {(document?.artifactType ?? "general") ===
+                      artifactType ? (
+                        <span
+                          className="h-2.5 w-2.5 rounded-full bg-ink"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </DropdownMenuItem>
+                  ))}
+              </TablePropertySelector>
+            </div>
+          );
+        },
+      },
+      {
+        id: "actions",
+        label: "",
+        align: "end",
+        width: "w-[56px]",
+        className: "pl-2 pr-4",
+        render: (file) => {
+          const document = documentJoin.get(file.path);
+          return (
+            <div
+              className="flex items-center justify-end gap-2"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Actions for ${file.name}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-4 transition-colors hover:bg-muted hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+                  >
+                    <MoreHorizontal
+                      className="h-[14px] w-[14px]"
+                      strokeWidth={1.5}
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    className="cursor-pointer gap-2 text-[13px]"
+                    onClick={() => void openInEditor(file)}
+                  >
+                    <ExternalLink
+                      className="h-[12px] w-[12px]"
+                      strokeWidth={1.5}
+                    />
+                    Open in editor
+                  </DropdownMenuItem>
+                  {document ? (
+                    <DropdownMenuItem
+                      className="cursor-pointer gap-2 text-[13px] text-destructive focus:text-destructive"
+                      onClick={() => void handleDeleteFile(file)}
+                    >
+                      <Trash2 className="h-[12px] w-[12px]" strokeWidth={1.5} />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
+      },
+    ],
+    [
+      collectionIdsByWritingId,
+      collectionOptions,
+      documentJoin,
+      enabledStatuses,
+      handleArtifactTypeChange,
+      handleCollectionToggle,
+      handleCreateCollection,
+      handleDeleteFile,
+      handleStatusChange,
+      openInEditor,
+      openRenameWriting,
+      openWritingPreview,
+    ],
+  );
+
+  const handleCreateFile = async () => {
+    if (!workspace || !newFileName.trim()) return;
+    setIsCreatingFile(true);
+    setErrorMessage(null);
+    try {
+      const service = await getDesktopWorkspaceService();
+      const file = await service.createFile(workspace, newFileName);
+      setNewFileName("");
+      setIsCreateDialogOpen(false);
+      await loadWorkspace();
+      await openInEditor(file);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to create file",
+      );
+    } finally {
+      setIsCreatingFile(false);
+    }
+  };
+
+  const handleHeaderAction = async () => {
+    if (!headerAction || !workspace) return;
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const service = await getDesktopWorkspaceService();
+      if (headerAction.type === "rename") {
+        await service.renameWorkspace(workspace.slug, headerActionValue);
+        await loadWorkspace();
+      } else {
+        await service.removeWorkspace(workspace.slug);
+        router.push("/workspace");
+      }
+      setHeaderAction(null);
+      setHeaderActionValue("");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to update workspace",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const treeItems = useMemo(
+    () =>
+      (workspace?.files ?? []).map((file) => ({
+        id: file.id,
+        name: file.name,
+        relativePath: file.relativePath,
+        kind: "file" as const,
+        openable: true,
+      })),
+    [workspace],
+  );
+
+  const handleOpenFileFromTree = (fileId: string) => {
+    const file = workspace?.files.find((candidate) => candidate.id === fileId);
+    if (file) void openInEditor(file);
+  };
+
+  if (isLoading || !workspace) {
+    return (
+      <div className="flex min-h-full flex-col bg-bg">
+        <ViewTitlebarSpacer />
+        <div className="border-b-[0.5px] border-border px-10 py-7">
+          <div className="h-8 w-48 animate-pulse rounded-[10px] bg-muted" />
+          <div className="mt-4 h-[38px] w-full max-w-md animate-pulse rounded-[9px] bg-muted" />
+        </div>
+        <div className="grid flex-1 grid-cols-[236px_1fr]">
+          <div className="border-r-[0.5px] border-line-soft" />
+          <div className="p-10">
+            <div className="h-8 w-64 animate-pulse rounded-[10px] bg-muted" />
+            <div className="mt-6 h-[400px] animate-pulse rounded-[18px] bg-muted" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (workspace.status === "missing") {
+    return (
+      <div className="flex min-h-full flex-col bg-bg">
+        <ViewTitlebarSpacer />
+        <div className="border-b-[0.5px] border-border px-10 py-7">
+          <Link
+            href="/workspace"
+            className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+          >
+            <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+            All workspaces
+          </Link>
+        </div>
+        <div className="flex-1 px-10 py-10">
+          <div className="max-w-[760px] rounded-[24px] border-[0.5px] border-border bg-sb px-8 py-8">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[16px] border-[0.5px] border-border bg-bg text-ink-3">
+              <Folder className="h-7 w-7" strokeWidth={1.5} />
+            </div>
+            <h1 className="mt-6 font-lora text-[38px] leading-[1.08] tracking-[-0.03em] text-ink">
+              {workspace.name}
+            </h1>
+            <p className="mt-3 max-w-[58ch] text-[16px] leading-7 text-ink-3">
+              This workspace is still registered in Odessay, but its local
+              folder is unavailable right now.
+            </p>
+            <div className="mt-4 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
+              <div>{workspace.rootPath}</div>
+              <div className="mt-2">{workspaceMissingMessage(workspace)}</div>
+            </div>
+            <div className="mt-8 flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setHeaderAction({ type: "rename", workspace });
+                  setHeaderActionValue(workspace.name);
+                }}
+              >
+                <Pencil className="h-4 w-4" strokeWidth={1.5} />
+                Rename workspace
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setHeaderAction({ type: "remove", workspace })}
+              >
+                <Trash2 className="h-4 w-4" strokeWidth={1.5} />
+                Disconnect
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Dialog
+          open={headerAction !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setHeaderAction(null);
+              setHeaderActionValue("");
+            }
+          }}
+        >
+          <DialogContent hideClose className="max-w-[520px] rounded-[24px] p-0">
+            {headerAction?.type === "rename" ? (
+              <div className="p-8">
+                <DialogHeader className="space-y-3 text-left">
+                  <DialogTitle className="text-[32px] leading-[1.08] tracking-[-0.03em]">
+                    Rename workspace
+                  </DialogTitle>
+                  <DialogDescription className="text-[16px] leading-7 text-ink-3">
+                    Update the workspace label in Odessay. This does not rename
+                    the local folder.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="mt-8">
+                  <label className="mb-3 block text-[15px] font-medium text-ink">
+                    Workspace name
+                  </label>
+                  <Input
+                    value={headerActionValue}
+                    onChange={(event) =>
+                      setHeaderActionValue(event.target.value)
+                    }
+                    placeholder="Workspace name"
+                    className="h-12 rounded-[12px]"
+                  />
+                </div>
+                <DialogFooter className="mt-8 flex-row items-center justify-end gap-3 sm:space-x-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setHeaderAction(null);
+                      setHeaderActionValue("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={isSubmitting || !headerActionValue.trim()}
+                    onClick={() => void handleHeaderAction()}
+                  >
+                    {isSubmitting ? "Saving…" : "Save name"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : null}
+            {headerAction?.type === "remove" ? (
+              <div className="p-8">
+                <DialogHeader className="space-y-3 text-left">
+                  <DialogTitle className="text-[32px] leading-[1.08] tracking-[-0.03em]">
+                    Disconnect workspace
+                  </DialogTitle>
+                  <DialogDescription className="text-[16px] leading-7 text-ink-3">
+                    Disconnecting keeps all local files untouched. The folder
+                    will stop syncing with Odessay.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
+                  {workspace.name}
+                </div>
+                <DialogFooter className="mt-8 flex-row items-center justify-end gap-3 sm:space-x-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setHeaderAction(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={isSubmitting}
+                    onClick={() => void handleHeaderAction()}
+                  >
+                    {isSubmitting ? "Disconnecting…" : "Disconnect"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  return (
+    <DocumentStateTooltipProvider>
+      <div className="flex min-h-full flex-col bg-bg">
+        <ViewTitlebarSpacer />
+        <div className="grid flex-1 grid-cols-[236px_1fr]">
+          {/* Tree column */}
+          <div className="flex min-h-0 flex-col border-r-[0.5px] border-line-soft bg-transparent">
+            <div className="flex h-8 items-center border-b-[0.5px] border-line-soft px-3">
+              <Link
+                href="/workspace"
+                className="inline-flex items-center gap-1 text-[13px] text-ink-4 transition-colors hover:text-ink"
+              >
+                <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                All workspaces
+              </Link>
+            </div>
+            <div className="flex h-10 items-center justify-between px-3">
+              <div className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-ink">
+                <FolderTree
+                  className="h-4 w-4 shrink-0 text-ink-3"
+                  strokeWidth={1.5}
+                />
+                <span className="truncate">{workspace.name}</span>
+              </div>
+              <button
+                type="button"
+                aria-label="New file"
+                onClick={() => setIsCreateDialogOpen(true)}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+              >
+                <FolderPlus className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            </div>
+            <div className="od-scroll flex-1 overflow-y-auto px-2 py-1">
+              <WorkspaceTree
+                mode="detail"
+                items={treeItems}
+                selectedFolderPath={selectedFolderPath}
+                onSelectFolder={setSelectedFolderPath}
+                onOpenFile={handleOpenFileFromTree}
+                rootLabel={workspace.name}
+                totalCount={workspace.fileCount}
+              />
+            </div>
+          </div>
+
+          {/* Sheet */}
+          <div className="flex min-h-0 flex-col">
+            <ViewHeader
+              sectionId="workspace-detail-header"
+              testId="workspace-detail-header"
+              title={workspace.name}
+              adornment={
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Manage ${workspace.name}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                    >
+                      <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="w-[220px] rounded-[12px] border-[0.5px] border-border bg-sb p-1.5 shadow-float-md"
+                  >
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-[8px]"
+                      onSelect={() => {
+                        setHeaderAction({ type: "rename", workspace });
+                        setHeaderActionValue(workspace.name);
+                      }}
+                    >
+                      <Pencil className="mr-2 h-4 w-4" strokeWidth={1.5} />
+                      Rename workspace
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer rounded-[8px] text-destructive focus:text-destructive"
+                      onSelect={() => setHeaderAction({ type: "remove", workspace })}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.5} />
+                      Disconnect
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              }
+              subtitle={
+                <span className="flex min-w-0 items-center gap-2">
+                  <Link
+                    href="/workspace"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                  >
+                    <ChevronLeft className="h-4 w-4" strokeWidth={1.5} />
+                    Workspace
+                  </Link>
+                  <span className="text-[13px] text-ink-4/50">/</span>
+                  <span className="truncate text-[13px] text-ink-4">{workspace.rootPath}</span>
+                </span>
+              }
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  className={VIEW_HEADER_ACTION_CLASS}
+                >
+                  <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
+                  New file
+                </button>
+              }
+            />
+
+            <WorkspaceFilterBar
+              className="px-4 pb-3"
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+            />
+
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              {errorMessage ? (
+                <div className="mb-6 rounded-[14px] border-[0.5px] border-border bg-sb px-5 py-4 text-sm text-ink-3">
+                  {errorMessage}
+                </div>
+              ) : null}
+
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-[12px] font-medium uppercase tracking-[0.12em] text-ink-4">
+                  {selectedFolderPath === "" ? "All files" : selectedFolderPath}
+                </div>
+                <div className="text-[12px] text-ink-4">
+                  {visibleFiles.length}{" "}
+                  {visibleFiles.length === 1 ? "artifact" : "artifacts"}
+                </div>
+              </div>
+
+              {visibleFiles.length === 0 ? (
+                <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
+                  {workspace.fileCount === 0
+                    ? "This workspace does not have any .md or .mdx files yet. Create one to start working from this local folder."
+                    : "No files match your search or selected folder."}
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-[10px] bg-sb shadow-float">
+                  <ArtifactTable
+                    groups={fileGroups}
+                    columns={fileColumns}
+                    getRowId={getRowKey}
+                    getRowAriaLabel={(file) =>
+                      documentJoin.get(file.path)
+                        ? `Open ${file.name} in editor`
+                        : `${file.name} is read-only on Workspace`
+                    }
+                    onRowClick={(file) => void openInEditor(file)}
+                    isRowSelected={(file) =>
+                      selectedIds.has(
+                        documentJoin.get(file.path)?.id ?? file.id,
+                      )
+                    }
+                    renderLeading={(file) => {
+                      const document = documentJoin.get(file.path);
+                      const writingId = document?.id;
+                      if (!writingId) {
+                        return (
+                          <ArtifactRowSelection
+                            disabled
+                            label={`Select ${file.name} (not bound)`}
+                          />
+                        );
+                      }
+                      const isSelected = selectedIds.has(writingId);
+                      return (
+                        <ArtifactRowSelection
+                          selected={isSelected}
+                          onToggle={() => toggleSelection(writingId)}
+                          label={
+                            isSelected
+                              ? `Deselect ${file.name}`
+                              : `Select ${file.name}`
+                          }
+                        />
+                      );
+                    }}
+                    showHeader={false}
+                    tableClassName="min-w-[920px] table-fixed"
+                    rowCellClassName="py-4"
+                    leadingColumnClassName="w-9"
+                    leadingCellClassName="w-9 pl-3 pr-0 pt-[17px] sm:pl-3"
+                  />
+                </div>
+              )}
+
+              {hasSelection && (
+                <BulkActionBar
+                  selectedCount={selectedCount}
+                  visibleCount={visibleWritingIds.length}
+                  allVisibleSelected={allVisibleSelected}
+                  onSelectAll={() => selectAll(visibleWritingIds)}
+                  onDeselectAll={deselectAll}
+                  onDelete={() => setIsBulkDeleteOpen(true)}
+                  onStatusChange={handleBulkStatusChange}
+                  onArtifactTypeChange={handleBulkArtifactTypeChange}
+                  collectionOptions={collectionOptions}
+                  onAddToCollection={handleBulkAddToCollection}
+                  onCreateCollection={handleBulkCreateCollection}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        <RenameWritingModal
+          open={renameTarget !== null}
+          title={renameTarget?.title ?? "Untitled writing"}
+          bodyText={renameTarget?.bodyText ?? ""}
+          writingId={renameTarget?.id}
+          onOpenChange={(open) => {
+            if (!open) setRenameTarget(null);
+          }}
+          onConfirm={(nextTitle) => {
+            void handleRenameConfirm(nextTitle);
+            setRenameTarget(null);
+          }}
+        />
+
+        <DeleteWritingDialog
+          open={isBulkDeleteOpen}
+          onOpenChange={setIsBulkDeleteOpen}
+          count={selectedCount}
+          onConfirm={handleBulkDelete}
+        />
+
+        <WritingPreviewModal
+          open={previewWritingId !== null && previewIndex !== null}
+          rows={previewRows}
+          currentIndex={previewIndex ?? 0}
+          collectionOptions={collectionOptions}
+          collectionIdsByWritingId={collectionIdsByWritingId}
+          onOpenChange={(open) => {
+            if (!open) setPreviewWritingId(null);
+          }}
+          onIndexChange={(index) => {
+            const nextRow = previewRows[index];
+            if (nextRow) setPreviewWritingId(nextRow.id);
+          }}
+          onToggleCollection={async (writingId, collectionId) => {
+            await toggleWritingCollectionMutation(
+              writingId,
+              collectionId,
+              writingCollections,
+            );
+            await loadWorkspace();
+          }}
+          onCreateCollection={async (writingId, name) => {
+            const ownerId = getLocalDBScope();
+            await createAndAssignCollection(
+              writingId,
+              name,
+              ownerId === "anonymous" ? null : ownerId,
+              writingCollections,
+            );
+            await loadWorkspace();
+          }}
+          onStatusChange={async (writingId, status) => {
+            await changeWritingStatus(writingId, status);
+            await loadWorkspace();
+          }}
+          onArtifactTypeChange={async (writingId, artifactType) => {
+            await changeWritingArtifactType(writingId, artifactType);
+            await loadWorkspace();
+          }}
+          onTitleChange={async (writingId, title) => {
+            await renameWriting(writingId, title);
+            await loadWorkspace();
+          }}
+          onOpenFullWriting={(writingId) => {
+            router.push(
+              buildWritingRouteHref("/write", { id: writingId, slug: null }),
+            );
+          }}
+          onDelete={async (writingId) => {
+            await deleteWriting(writingId);
+            setPreviewWritingId(null);
+            await loadWorkspace();
+          }}
+        />
+
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogContent hideClose className="max-w-[560px] rounded-[24px] p-0">
+            <div className="p-10">
+              <DialogHeader className="space-y-3 text-left">
+                <DialogTitle className="text-[36px] leading-[1.08] tracking-[-0.03em]">
+                  New file
+                </DialogTitle>
+                <DialogDescription className="text-[16px] leading-7 text-ink-3">
+                  Create a markdown file directly inside this workspace.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="mt-8">
+                <label className="mb-3 block text-[15px] font-medium text-ink">
+                  File name
+                </label>
+                <Input
+                  value={newFileName}
+                  onChange={(event) => setNewFileName(event.target.value)}
+                  placeholder="brief.md"
+                  className="h-12 rounded-[12px]"
+                />
+              </div>
+
+              <DialogFooter className="mt-10 flex-row items-center justify-end gap-3 sm:space-x-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsCreateDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleCreateFile}
+                  disabled={isCreatingFile || !newFileName.trim()}
+                >
+                  {isCreatingFile ? "Creating…" : "Create file"}
+                </Button>
+              </DialogFooter>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={headerAction !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setHeaderAction(null);
+              setHeaderActionValue("");
+            }
+          }}
+        >
+          <DialogContent hideClose className="max-w-[520px] rounded-[24px] p-0">
+            {headerAction?.type === "rename" ? (
+              <div className="p-8">
+                <DialogHeader className="space-y-3 text-left">
+                  <DialogTitle className="text-[32px] leading-[1.08] tracking-[-0.03em]">
+                    Rename workspace
+                  </DialogTitle>
+                  <DialogDescription className="text-[16px] leading-7 text-ink-3">
+                    Update the workspace label in Odessay. This does not rename
+                    the local folder.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="mt-8">
+                  <label className="mb-3 block text-[15px] font-medium text-ink">
+                    Workspace name
+                  </label>
+                  <Input
+                    value={headerActionValue}
+                    onChange={(event) =>
+                      setHeaderActionValue(event.target.value)
+                    }
+                    placeholder="Workspace name"
+                    className="h-12 rounded-[12px]"
+                  />
+                </div>
+                <DialogFooter className="mt-8 flex-row items-center justify-end gap-3 sm:space-x-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setHeaderAction(null);
+                      setHeaderActionValue("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={isSubmitting || !headerActionValue.trim()}
+                    onClick={() => void handleHeaderAction()}
+                  >
+                    {isSubmitting ? "Saving…" : "Save name"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : null}
+            {headerAction?.type === "remove" ? (
+              <div className="p-8">
+                <DialogHeader className="space-y-3 text-left">
+                  <DialogTitle className="text-[32px] leading-[1.08] tracking-[-0.03em]">
+                    Disconnect workspace
+                  </DialogTitle>
+                  <DialogDescription className="text-[16px] leading-7 text-ink-3">
+                    Disconnecting keeps all local files untouched. The folder
+                    will stop syncing with Odessay.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="mt-6 rounded-[14px] border-[0.5px] border-border bg-bg px-4 py-3 text-sm text-ink-3">
+                  {workspace.name}
+                </div>
+                <DialogFooter className="mt-8 flex-row items-center justify-end gap-3 sm:space-x-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setHeaderAction(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={isSubmitting}
+                    onClick={() => void handleHeaderAction()}
+                  >
+                    {isSubmitting ? "Disconnecting…" : "Disconnect"}
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </DocumentStateTooltipProvider>
+  );
+}

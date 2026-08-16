@@ -142,7 +142,7 @@ describe("geometry", () => {
       const item = navLink(section)
       expect(item.className).toContain("h-10")
       expect(item.className).toContain("rounded-[9px]")
-      expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[19px]")
+      expect(item.querySelector("svg")?.getAttribute("class")).toContain("h-[21px]")
     }
   })
 
@@ -292,11 +292,26 @@ describe("workspace folders", () => {
       container.querySelectorAll<HTMLElement>('[data-testid="sidebar-workspace-folder"]'),
     )
     expect(folders.map((node) => node.textContent)).toEqual(["Narratif", "Odessay", "Schemaflow"])
-    expect(folders[0].getAttribute("href")).toBe("/workspace/narratif")
+    expect(folders.map((node) => node.getAttribute("href"))).toEqual([
+      "/workspace?slug=narratif",
+      "/workspace?slug=odessay",
+      "/workspace?slug=schemaflow",
+    ])
 
     // No Recent block survives anywhere in the rail.
     expect(container.querySelector('[data-testid="sidebar-recents-scroll"]')).toBeNull()
     expect(container.textContent).not.toContain("RECENT")
+  })
+
+  it("encodes each workspace slug for the desktop query entrypoint", () => {
+    railWorkspaces.mockReturnValue([{ slug: "client work/2026", name: "Client work" }])
+    renderRail("expanded")
+
+    expect(
+      container
+        .querySelector<HTMLElement>('[data-testid="sidebar-workspace-folder"]')
+        ?.getAttribute("href"),
+    ).toBe("/workspace?slug=client%20work%2F2026")
   })
 
   it("hangs the folders off the Workspace item, indented past the icon column", () => {
@@ -380,8 +395,11 @@ describe("desktop title bar", () => {
     expect(toggle.className).toContain("fixed")
     // 16px of leading padding + a 76px traffic-light group + a 14px gap.
     expect(toggle.className).toContain("left-[106px]")
+    // macOS clamps `trafficLightPosition`, so the 12px lights land at ~20
+    // (centre 26) and the 32px toggle shares their row at top: 10.
+    expect(toggle.className).toContain("top-[10px]")
     expect(container.querySelector<HTMLElement>('[data-testid="sidebar-top"]')!.className).toContain(
-      "h-[46px]",
+      "h-[59px]",
     )
   })
 })

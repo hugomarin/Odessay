@@ -48,6 +48,8 @@ import { copyTextWithFallback } from "@/lib/utils/clipboard"
 import { downloadBlob } from "@/lib/utils/download"
 import { getWorkspaceAssignmentService } from "@/lib/services/workspace-service"
 import { getDocumentService } from "@/lib/services/document-service-factory"
+import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer"
+import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import {
   buildWorkspaceNameLookup,
@@ -537,24 +539,25 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
   if (!initialExpandedCollectionId) {
     return (
       <section data-page="collections" className="flex min-h-screen flex-col bg-bg">
-        <header className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))]">
-          <div className="flex h-[70px] items-center justify-between gap-4 px-6 md:px-9">
-            <div className="flex min-w-0 items-baseline gap-3">
-              <p className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Collections</p>
-              <p className="truncate text-[13px] text-ink-4">Organize writings by theme, project, and context.</p>
-            </div>
+        <ViewTitlebarSpacer />
+        <ViewHeader
+          sectionId="collections-header"
+          testId="collections-header"
+          title="Collections"
+          subtitle="Organize writings by theme, project, and context."
+          actions={
             <button
               type="button"
               onClick={() => setCreateOpen(true)}
-              className="inline-flex h-8 items-center gap-2 rounded-md border-[0.5px] border-border bg-transparent px-[14px] text-[13px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              className={VIEW_HEADER_ACTION_CLASS}
             >
-              <Plus className="h-[14px] w-[14px]" strokeWidth={1.5} />
+              <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
               New collection
             </button>
-          </div>
-        </header>
+          }
+        />
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 md:px-9">
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
           <div className="mx-auto grid w-full max-w-[1040px] grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
             <Link
               href={buildCollectionHref(UNCATEGORIZED_COLLECTION_ID)}
@@ -620,20 +623,22 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
 
   return (
     <section data-page="collections-detail" className="flex min-h-screen flex-col bg-bg">
-      <header className="border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))]">
-        <div className="flex min-h-[70px] items-center justify-between gap-4 px-6 py-4 md:px-9">
-          <div className="min-w-0">
-            <p className="truncate text-[24px] font-medium tracking-[-0.03em] text-ink">{collectionName}</p>
-            <div className="pt-1 text-[13px] text-ink-4">
-              <Link href="/collections" className="transition-colors hover:text-ink-2">
-                Collections
-              </Link>
-              <span>{isUncategorizedView ? " · Writings without a category." : " · Curated category for related writings."}</span>
-            </div>
-          </div>
-
-          {activeCollection ? (
-            <div className="flex items-center gap-2">
+      <ViewTitlebarSpacer />
+      <ViewHeader
+        sectionId="collections-detail-header"
+        testId="collections-detail-header"
+        title={collectionName}
+        subtitle={
+          <>
+            <Link href="/collections" className="transition-colors hover:text-ink-2">
+              Collections
+            </Link>
+            <span>{isUncategorizedView ? " · Writings without a category." : " · Curated category for related writings."}</span>
+          </>
+        }
+        actions={
+          activeCollection ? (
+            <>
               <button
                 type="button"
                 onClick={() => setRenameOpen(true)}
@@ -659,12 +664,12 @@ export function CollectionsView({ initialExpandedCollectionId = null }: Collecti
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                 Delete
               </button>
-            </div>
-          ) : null}
-        </div>
-      </header>
+            </>
+          ) : null
+        }
+      />
 
-      <div className="flex-1 overflow-y-auto px-6 pb-10 pt-4 md:px-9">
+      <div className="flex-1 overflow-y-auto px-4 pb-10">
         <div className="w-full">
           {!isUncategorizedView && !activeCollection ? (
             <p className="font-lora text-[18px] italic text-ink-3">Collection not found.</p>

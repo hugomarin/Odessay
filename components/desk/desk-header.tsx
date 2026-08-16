@@ -1,49 +1,32 @@
 "use client"
 
 import Link from "next/link"
-import { Plus, Upload } from "lucide-react"
+import { Plus } from "lucide-react"
+
+import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header"
 
 /**
- * Desk header — `h1`, subtitle and the primary action.
+ * Desk header — the reference every other view's header now follows, so the
+ * geometry itself lives in `ViewHeader`.
  *
- * Values from the prototype: padding `12px 16px 16px`, the title and subtitle
- * baseline-aligned 16px apart, the primary action a 40px ink button at radius 9
- * with a 15px `plus`.
+ * **New Artifact is the only action here.** Import was kept as a divergence in
+ * ODE-430 and is now removed from the header, which carries a single primary
+ * action. `ImportWritingDialog` stays mounted in the Desk client, so giving it
+ * a trigger again is a one-line change.
  */
-export function DeskHeader({ onImport }: { onImport?: () => void }) {
+export function DeskHeader() {
   return (
-    <div
-      data-section="desk-header"
-      data-testid="desk-header"
-      className="flex flex-shrink-0 items-end gap-5 px-4 pb-4 pt-3"
-    >
-      <div className="flex min-w-0 flex-1 items-baseline gap-4">
-        <h1 className="text-[32px] font-medium leading-none tracking-[-0.02em] text-ink">Desk</h1>
-        <p className="text-pretty text-[14px] font-normal leading-[1.5] text-ink-4">
-          Writing activity, shared drafts, and collection context.
-        </p>
-      </div>
-      <div className="flex flex-shrink-0 items-center gap-[9px]">
-        {onImport ? (
-          <button
-            type="button"
-            onClick={onImport}
-            data-testid="desk-import-button"
-            className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[9px] border-[0.5px] border-border bg-sb px-[15px] text-[14px] text-ink-2 transition-colors hover:bg-surface-row-hover"
-          >
-            <Upload className="h-[15px] w-[15px]" strokeWidth={1.5} />
-            Import
-          </button>
-        ) : null}
-        <Link
-          href="/write?new=1"
-          data-testid="desk-new-artifact"
-          className="inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-[9px] bg-ink px-[17px] text-[14px] font-medium text-bg transition-opacity hover:opacity-90"
-        >
-          <Plus className="h-[15px] w-[15px]" strokeWidth={1.5} />
+    <ViewHeader
+      sectionId="desk-header"
+      testId="desk-header"
+      title="Desk"
+      subtitle="Writing activity, shared drafts, and collection context."
+      actions={
+        <Link href="/write?new=1" data-testid="desk-new-artifact" className={VIEW_HEADER_ACTION_CLASS}>
+          <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
           New Artifact
         </Link>
-      </div>
-    </div>
+      }
+    />
   )
 }

@@ -74,13 +74,13 @@ describe("ArtifactWritingCell", () => {
       "Escoger bien el modelo puede optimizar mucho más tu presupuesto.",
     );
     expect(container.textContent).toContain("Yesterday");
-    expect(container.textContent).toContain(
+    expect(cell?.getAttribute("title")).toBe(
       "file:///Users/hugo/Documents/Odessay/Post costos GPT 5.6.md",
     );
     expect(
       container.querySelector('[data-section="artifact-writing-location"]')
-        ?.getAttribute("title"),
-    ).toBe("file:///Users/hugo/Documents/Odessay/Post costos GPT 5.6.md");
+        ?.className,
+    ).toContain("sr-only");
     expect(
       container.querySelector('[data-testid="collections"]')?.textContent,
     ).toBe("Posts");

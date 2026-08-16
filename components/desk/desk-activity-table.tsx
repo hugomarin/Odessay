@@ -236,6 +236,7 @@ export function DeskActivityTable({
         render: (row) => (
           <div onClick={stopRowNavigation}>
             <TablePropertySelector
+              variant="preview"
               ariaLabel={`Change status for ${row.title}`}
               icon={<WritingStatusIcon status={row.stateTone} />}
               label={row.stateLabel}
@@ -505,9 +506,9 @@ export function DeskActivityTable({
             renderLeading={selectionEnabled ? renderSelection : undefined}
             showHeader={false}
             tableClassName="min-w-[920px]"
-            rowCellClassName="py-6"
+            rowCellClassName="py-4"
             leadingColumnClassName="w-9"
-            leadingCellClassName="w-9 pl-3 pr-0 pt-[25px] sm:pl-3"
+            leadingCellClassName="w-9 pl-3 pr-0 pt-[17px] sm:pl-3"
           />
         </div>
 

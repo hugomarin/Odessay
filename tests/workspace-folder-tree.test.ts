@@ -72,4 +72,17 @@ describe("workspace folder tree helpers", () => {
       "drafts/letter.md",
     ])
   })
+
+  it("derives the exact selection used by Only this", () => {
+    const tree = buildWorkspaceFolderTree(files)
+    const drafts = tree.find((node) => node.path === "drafts")
+    const onlyDrafts = new Set(collectDescendantFilePaths(drafts!))
+
+    expect([...onlyDrafts]).toEqual([
+      "drafts/notes/context.mdx",
+      "drafts/letter.md",
+    ])
+    expect(onlyDrafts.has("archive/old.md")).toBe(false)
+    expect(compressWorkspaceSelection(tree, onlyDrafts)).toEqual(["drafts"])
+  })
 })

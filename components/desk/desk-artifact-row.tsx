@@ -20,8 +20,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { DocumentStateIcon } from "@/components/ui/document-state-icon"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
-import { DeskStatusDot } from "@/components/desk/desk-status-dot"
 import { WorkspaceAssignmentDropdown } from "@/components/desk/workspace-assignment-dropdown"
 import type { DeskActivityRow } from "@/lib/queries/desk-activity"
 import type { WorkspaceAssignmentOption } from "@/lib/workspace/assignment"
@@ -199,11 +199,11 @@ export function DeskArtifactRow({
           <RowTrigger
             label={row.stateLabel}
             ariaLabel={`Change status for ${row.title}`}
-            leading={<DeskStatusDot status={row.stateTone} />}
+            leading={<WritingStatusIcon status={row.stateTone} className="h-[15px] w-[15px]" />}
             items={enabledStatuses.map((status) => ({
               key: status,
               label: getWritingStatusLabel(status),
-              leading: <DeskStatusDot status={status} />,
+              leading: <WritingStatusIcon status={status} className="h-[15px] w-[15px]" />,
               selected: row.stateTone === status,
               onSelect: () => void onStatusChange?.(row.id, status),
             }))}
@@ -330,19 +330,20 @@ function RowTrigger({
           <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.5} />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[200px] p-[5px]">
+      <PopoverContent align="start" className="w-[248px] rounded-[18px] p-2 shadow-float-md">
         {items.map((item) => (
           <button
             key={item.key}
             type="button"
             onClick={item.onSelect}
             className={cn(
-              "flex h-8 w-full items-center gap-2.5 rounded-[6px] px-2.5 text-left text-[13px] transition-colors hover:bg-surface-menu-hover",
+              "flex h-11 w-full items-center gap-2.5 rounded-[10px] px-3 text-left text-[14px] transition-colors hover:bg-surface-menu-hover",
               item.selected ? "font-medium text-ink" : "font-normal text-ink-2",
             )}
           >
             {item.leading ? <span className="flex flex-shrink-0 items-center text-ink-3">{item.leading}</span> : null}
-            {item.label}
+            <span className="flex-1 truncate">{item.label}</span>
+            {item.selected ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-ink" aria-hidden /> : null}
           </button>
         ))}
       </PopoverContent>
