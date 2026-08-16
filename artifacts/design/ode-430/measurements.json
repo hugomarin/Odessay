@@ -1,0 +1,251 @@
+{
+  "measurements": {
+    "populated-1440": {
+      "header": {
+        "width": 1440,
+        "height": 68
+      },
+      "headingFont": "500 32px/32px -0.64px",
+      "primaryAction": {
+        "width": 139.3,
+        "height": 40,
+        "borderTopLeftRadius": "9px",
+        "backgroundColor": "rgb(30, 25, 21)"
+      },
+      "filterBar": {
+        "width": 1440,
+        "height": 52
+      },
+      "filterTrigger": {
+        "width": 101.1,
+        "height": 38
+      },
+      "filterTriggerLabel": "Filter",
+      "searchField": {
+        "width": 601.4,
+        "height": 21
+      },
+      "sheet": {
+        "borderTopLeftRadius": "10px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(36, 30, 25, 0.06) 0px 2px 12px 0px, rgba(36, 30, 25, 0.04) 0px 1px 3px 0px"
+      },
+      "row": {
+        "height": 78
+      },
+      "rowBorder": "1px rgb(240, 238, 235)",
+      "rowControlsVisible": true,
+      "checkboxVisible": true
+    },
+    "filtered-1440": {
+      "header": {
+        "width": 1440,
+        "height": 68
+      },
+      "headingFont": "500 32px/32px -0.64px",
+      "primaryAction": {
+        "width": 139.3,
+        "height": 40,
+        "borderTopLeftRadius": "9px",
+        "backgroundColor": "rgb(30, 25, 21)"
+      },
+      "filterBar": {
+        "width": 1440,
+        "height": 52
+      },
+      "filterTrigger": {
+        "width": 118.8,
+        "height": 38
+      },
+      "filterTriggerLabel": "Filter · 6",
+      "searchField": {
+        "width": 583.7,
+        "height": 21
+      },
+      "sheet": {
+        "borderTopLeftRadius": "10px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(36, 30, 25, 0.06) 0px 2px 12px 0px, rgba(36, 30, 25, 0.04) 0px 1px 3px 0px"
+      },
+      "row": {
+        "height": 78
+      },
+      "rowBorder": "1px rgb(240, 238, 235)",
+      "rowControlsVisible": true,
+      "checkboxVisible": true
+    },
+    "populated-1100": {
+      "header": {
+        "width": 1100,
+        "height": 68
+      },
+      "headingFont": "500 32px/32px -0.64px",
+      "primaryAction": {
+        "width": 139.3,
+        "height": 40,
+        "borderTopLeftRadius": "9px",
+        "backgroundColor": "rgb(30, 25, 21)"
+      },
+      "filterBar": {
+        "width": 1100,
+        "height": 52
+      },
+      "filterTrigger": {
+        "width": 101.1,
+        "height": 38
+      },
+      "filterTriggerLabel": "Filter",
+      "searchField": {
+        "width": 261.4,
+        "height": 21
+      },
+      "sheet": {
+        "borderTopLeftRadius": "10px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(36, 30, 25, 0.06) 0px 2px 12px 0px, rgba(36, 30, 25, 0.04) 0px 1px 3px 0px"
+      },
+      "row": {
+        "height": 78
+      },
+      "rowBorder": "1px rgb(240, 238, 235)",
+      "rowControlsVisible": false,
+      "checkboxVisible": true
+    },
+    "filtered-1100": {
+      "header": {
+        "width": 1100,
+        "height": 68
+      },
+      "headingFont": "500 32px/32px -0.64px",
+      "primaryAction": {
+        "width": 139.3,
+        "height": 40,
+        "borderTopLeftRadius": "9px",
+        "backgroundColor": "rgb(30, 25, 21)"
+      },
+      "filterBar": {
+        "width": 1100,
+        "height": 52
+      },
+      "filterTrigger": {
+        "width": 118.8,
+        "height": 38
+      },
+      "filterTriggerLabel": "Filter · 6",
+      "searchField": {
+        "width": 243.7,
+        "height": 21
+      },
+      "sheet": {
+        "borderTopLeftRadius": "10px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(36, 30, 25, 0.06) 0px 2px 12px 0px, rgba(36, 30, 25, 0.04) 0px 1px 3px 0px"
+      },
+      "row": {
+        "height": 78
+      },
+      "rowBorder": "1px rgb(240, 238, 235)",
+      "rowControlsVisible": false,
+      "checkboxVisible": true
+    },
+    "populated-768": {
+      "header": {
+        "width": 768,
+        "height": 68
+      },
+      "headingFont": "500 32px/32px -0.64px",
+      "primaryAction": {
+        "width": 139.3,
+        "height": 40,
+        "borderTopLeftRadius": "9px",
+        "backgroundColor": "rgb(30, 25, 21)"
+      },
+      "filterBar": {
+        "width": 768,
+        "height": 104
+      },
+      "filterTrigger": {
+        "width": 101.1,
+        "height": 38
+      },
+      "filterTriggerLabel": "Filter",
+      "searchField": {
+        "width": 361.2,
+        "height": 21
+      },
+      "sheet": {
+        "borderTopLeftRadius": "10px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(36, 30, 25, 0.06) 0px 2px 12px 0px, rgba(36, 30, 25, 0.04) 0px 1px 3px 0px"
+      },
+      "row": {
+        "height": 78
+      },
+      "rowBorder": "1px rgb(240, 238, 235)",
+      "rowControlsVisible": false,
+      "checkboxVisible": true
+    },
+    "filtered-768": {
+      "header": {
+        "width": 768,
+        "height": 68
+      },
+      "headingFont": "500 32px/32px -0.64px",
+      "primaryAction": {
+        "width": 139.3,
+        "height": 40,
+        "borderTopLeftRadius": "9px",
+        "backgroundColor": "rgb(30, 25, 21)"
+      },
+      "filterBar": {
+        "width": 768,
+        "height": 104
+      },
+      "filterTrigger": {
+        "width": 118.8,
+        "height": 38
+      },
+      "filterTriggerLabel": "Filter · 6",
+      "searchField": {
+        "width": 361.2,
+        "height": 21
+      },
+      "sheet": {
+        "borderTopLeftRadius": "10px",
+        "backgroundColor": "rgb(255, 255, 255)",
+        "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(36, 30, 25, 0.06) 0px 2px 12px 0px, rgba(36, 30, 25, 0.04) 0px 1px 3px 0px"
+      },
+      "row": {
+        "height": 78
+      },
+      "rowBorder": "1px rgb(240, 238, 235)",
+      "rowControlsVisible": false,
+      "checkboxVisible": true
+    }
+  },
+  "filterBarHeight": {
+    "zeroFilters": 52,
+    "sixFilters": 52,
+    "constant": true
+  },
+  "keyboard": {
+    "reachedRowCheckbox": true,
+    "reachedRename": true,
+    "reachedPreview": true,
+    "order": [
+      "Filter by name",
+      "Select Leccion 5 - Evaluacion de prompts",
+      "Rename Leccion 5 - Evaluacion de prompts",
+      "Preview Leccion 5 - Evaluacion de prompts"
+    ]
+  },
+  "timeToInteractive": {
+    "domInteractive": 54,
+    "domContentLoaded": 54,
+    "firstContentfulPaint": null,
+    "rowsVisibleMs": 320,
+    "budgetMs": 1500,
+    "withinBudget": true
+  },
+  "harPath": "artifacts/design/ode-430/desk-cold-load.har"
+}

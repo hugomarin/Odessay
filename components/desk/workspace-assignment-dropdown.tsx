@@ -53,7 +53,12 @@ type WorkspaceAssignmentDropdownProps = {
   currentName: string | null
   options: WorkspaceAssignmentOption[]
   available: boolean
-  variant?: "table" | "rail" | "card"
+  /**
+   * `desk` is the redesigned Desk row's trigger, read from the prototype: 160px
+   * wide, 38px tall, radius 8, hairline border, 13/400. The other three are the
+   * pre-redesign chrome used by Collections, the preview rail and cards.
+   */
+  variant?: "table" | "rail" | "card" | "desk"
   title: string
   onAssign: (writingId: string, slug: string) => void | Promise<void>
   onUnassign: (writingId: string) => void | Promise<void>
@@ -91,7 +96,17 @@ export function WorkspaceAssignmentDropdown({
   const TriggerIcon = isAssigned ? Folder : Monitor
 
   const trigger =
-    variant === "card" ? (
+    variant === "desk" ? (
+      <button
+        type="button"
+        aria-label={`Manage workspace for ${title}`}
+        className="flex h-[38px] w-full items-center gap-2 rounded-[8px] border-[0.5px] border-border bg-sb px-[11px] text-[13px] text-ink-2 transition-colors hover:border-ink-6 hover:bg-surface-row-hover data-[state=open]:border-ink-5 data-[state=open]:bg-surface-row-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ink-3"
+      >
+        <TriggerIcon className="h-[14px] w-[14px] flex-shrink-0 text-ink-3" strokeWidth={1.5} />
+        <span className="flex-1 truncate text-left">{triggerLabel}</span>
+        <ChevronDown className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.5} />
+      </button>
+    ) : variant === "card" ? (
       <button
         type="button"
         aria-label={`Manage workspace for ${title}`}
