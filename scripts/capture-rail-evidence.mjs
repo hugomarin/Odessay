@@ -209,7 +209,9 @@ async function measureGeometry(browser, options) {
       const rail = document.querySelector("#sidebar");
       const item = document.querySelector('[data-testid="sidebar-nav-desk"]');
       const icon = item?.querySelector("svg");
-      const scroller = document.querySelector('[data-testid="sidebar-recents-scroll"]');
+      const folders = document.querySelector('[data-testid="sidebar-workspace-folders"]');
+      const avatar = document.querySelector('[data-testid="sidebar-user-avatar"]');
+      const top = document.querySelector('[data-testid="sidebar-top"]');
       const railStyle = rail ? getComputedStyle(rail) : null;
       const itemStyle = item ? getComputedStyle(item) : null;
 
@@ -220,7 +222,10 @@ async function measureGeometry(browser, options) {
         itemHeight: item ? Math.round(item.getBoundingClientRect().height) : null,
         itemRadius: itemStyle?.borderRadius ?? null,
         iconSize: icon ? Math.round(icon.getBoundingClientRect().width) : null,
-        recentsOverflowY: scroller ? getComputedStyle(scroller).overflowY : null,
+        workspaceFoldersOverflowY: folders ? getComputedStyle(folders).overflowY : null,
+        workspaceFolderCount: document.querySelectorAll('[data-testid="sidebar-workspace-folder"]').length,
+        avatarSize: avatar ? Math.round(avatar.getBoundingClientRect().width) : null,
+        titleBarHasWordmark: top ? /Artifact Studio/.test(top.textContent || "") : null,
       };
     });
 

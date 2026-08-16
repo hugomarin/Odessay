@@ -7,7 +7,10 @@
       "itemHeight": 40,
       "itemRadius": "9px",
       "iconSize": 19,
-      "recentsOverflowY": "auto"
+      "workspaceFoldersOverflowY": "auto",
+      "workspaceFolderCount": 0,
+      "avatarSize": 36,
+      "titleBarHasWordmark": false
     },
     "collapsed": {
       "railWidth": 52,
@@ -16,12 +19,15 @@
       "itemHeight": 40,
       "itemRadius": "9px",
       "iconSize": 19,
-      "recentsOverflowY": "auto"
+      "workspaceFoldersOverflowY": "auto",
+      "workspaceFolderCount": 0,
+      "avatarSize": 36,
+      "titleBarHasWordmark": false
     }
   },
   "iconTravel": {
-    "expanded": 16,
-    "collapsed": 16,
+    "expanded": 16.5,
+    "collapsed": 16.5,
     "travelPx": 0
   },
   "forcedCollapse": {
@@ -31,10 +37,10 @@
     "restored": 244
   },
   "timeToInteractive": {
-    "domInteractive": 73,
-    "domContentLoaded": 73,
+    "domInteractive": 79,
+    "domContentLoaded": 79,
     "firstContentfulPaint": null,
-    "railUsableMs": 76
+    "railUsableMs": 74
   },
   "prototypeWidths": {
     "desk": {

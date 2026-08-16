@@ -29,9 +29,9 @@ vi.mock("next/link", () => ({
   ),
 }))
 
-const recentWritings = vi.fn(() => [] as Array<{ writingId: string; slug: string | null; title: string; isOpen: boolean }>)
-vi.mock("@/hooks/useRecentWritings", () => ({
-  useRecentWritings: () => recentWritings(),
+const railWorkspaces = vi.fn(() => [] as Array<{ slug: string; name: string }>)
+vi.mock("@/hooks/useRailWorkspaces", () => ({
+  useRailWorkspaces: () => railWorkspaces(),
 }))
 
 vi.mock("@/components/navigation/search-modal", () => ({
@@ -99,7 +99,7 @@ beforeEach(() => {
   pathname = "/desk"
   isTauri = false
   viewportWidth = 1440
-  recentWritings.mockReturnValue([])
+  railWorkspaces.mockReturnValue([])
   fireMediaChange = installMatchMedia()
   container = document.createElement("div")
   document.body.append(container)
@@ -155,10 +155,14 @@ describe("geometry", () => {
     renderRail("collapsed")
     const collapsed = navLink("sidebar-nav-desk").className
 
-    expect(expanded).toContain("px-[10px]")
-    expect(collapsed).toContain("px-[10px]")
-    expect(expanded).toContain("w-full")
-    expect(collapsed).toContain("w-10")
+    // The icon sits in a fixed 40px column, so its X never depends on the state.
+    expect(expanded).toContain("p-0")
+    expect(collapsed).toContain("p-0")
+    expect(expanded).toBe(collapsed)
+
+    const iconWrap = navLink("sidebar-nav-desk").querySelector("span")!
+    expect(iconWrap.className).toContain("w-10")
+    expect(iconWrap.className).toContain("min-w-10")
   })
 
   it("uses the 300ms layout easing on the width", () => {
@@ -230,43 +234,95 @@ describe("forced collapse below 900px", () => {
   })
 })
 
-describe("recents", () => {
-  it("scrolls in its own block so a long list never pushes the user bar out", () => {
-    recentWritings.mockReturnValue(
-      Array.from({ length: 8 }, (_, index) => ({
-        writingId: `w-${index}`,
-        slug: null,
-        title: `Artifact ${index}`,
-        isOpen: false,
-      })),
-    )
+describe("workspace folders", () => {
+  it("lists the workspace folders under Workspace, where the repo used to list Recent", () => {
+    railWorkspaces.mockReturnValue([
+      { slug: "narratif", name: "Narratif" },
+      { slug: "odessay", name: "Odessay" },
+      { slug: "schemaflow", name: "Schemaflow" },
+    ])
     renderRail("expanded")
 
-    const scroller = container.querySelector<HTMLElement>('[data-testid="sidebar-recents-scroll"]')!
-    expect(scroller.className).toContain("overflow-y-auto")
-    expect(scroller.className).toContain("min-h-0")
+    const folders = Array.from(
+      container.querySelectorAll<HTMLElement>('[data-testid="sidebar-workspace-folder"]'),
+    )
+    expect(folders.map((node) => node.textContent)).toEqual(["Narratif", "Odessay", "Schemaflow"])
+    expect(folders[0].getAttribute("href")).toBe("/workspace/narratif")
 
-    // The views above it are not inside the scroller, and the user bar is not
-    // inside the nav at all.
-    expect(scroller.contains(navLink("sidebar-nav-desk"))).toBe(false)
-    const userBar = container.querySelector('[data-testid="user-bar"]')!
-    expect(container.querySelector("#sidebar-nav")!.contains(userBar)).toBe(false)
+    // No Recent block survives anywhere in the rail.
+    expect(container.querySelector('[data-testid="sidebar-recents-scroll"]')).toBeNull()
+    expect(container.textContent).not.toContain("RECENT")
   })
 
-  it("renders one list for one catalog change, not one per recent row", () => {
-    // Reactive fan-out: the rail subscribes once through useRecentWritings and
-    // paints the whole block from that single answer.
-    recentWritings.mockReturnValue(
-      Array.from({ length: 8 }, (_, index) => ({
-        writingId: `w-${index}`,
-        slug: null,
-        title: `Artifact ${index}`,
-        isOpen: false,
-      })),
-    )
+  it("hangs the folders off the Workspace item, indented past the icon column", () => {
+    railWorkspaces.mockReturnValue([{ slug: "narratif", name: "Narratif" }])
     renderRail("expanded")
 
-    expect(recentWritings).toHaveBeenCalledTimes(1)
+    const block = container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-folders"]')!
+    expect(block.className).toContain("pl-[50px]")
+    expect(block.className).toContain("overflow-y-auto")
+    // It is a sibling of the Workspace row, not of Desk or Studio.
+    const workspaceRow = navLink("sidebar-nav-workspace")
+    expect(workspaceRow.parentElement?.contains(block)).toBe(true)
+  })
+
+  it("collapses the folder block to nothing with the rail", () => {
+    railWorkspaces.mockReturnValue([{ slug: "narratif", name: "Narratif" }])
+    renderRail("collapsed")
+
+    const block = container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-folders"]')!
+    expect(block.className).toContain("max-h-0")
+    expect(block.className).toContain("opacity-0")
+  })
+
+  it("does not read the folders once per folder", () => {
+    // Reactive fan-out: one subscription paints the whole block, so the read
+    // count is a property of the render, never of the list's length.
+    const readsFor = (count: number) => {
+      railWorkspaces.mockClear()
+      railWorkspaces.mockReturnValue(
+        Array.from({ length: count }, (_, index) => ({ slug: `w-${index}`, name: `W ${index}` })),
+      )
+      renderRail("expanded")
+      return railWorkspaces.mock.calls.length
+    }
+
+    const withThree = readsFor(3)
+    const withTwelve = readsFor(12)
+
+    // Quadrupling the list must not move the read count at all, and in
+    // particular must never approach one read per row.
+    expect(withTwelve).toBeLessThanOrEqual(withThree)
+    expect(withTwelve).toBeLessThan(3)
+    expect(container.querySelectorAll('[data-testid="sidebar-workspace-folder"]').length).toBe(12)
+  })
+
+  it("renders no folders when the runtime has no workspaces, and never invents one", () => {
+    railWorkspaces.mockReturnValue([])
+    renderRail("expanded")
+
+    expect(container.querySelectorAll('[data-testid="sidebar-workspace-folder"]').length).toBe(0)
+    expect(container.querySelector('[data-testid="sidebar-nav-workspace"]')).not.toBeNull()
+  })
+})
+
+describe("iconography and chrome", () => {
+  it("carries no wordmark in the title bar row", () => {
+    renderRail("expanded")
+    const top = container.querySelector<HTMLElement>('[data-testid="sidebar-top"]')!
+    expect(top.textContent).not.toContain("Artifact Studio")
+    expect(container.querySelector('a[aria-label="Artifact Studio"]')).toBeNull()
+  })
+
+  it("gives each view the icon the package names for it", () => {
+    renderRail("expanded")
+    // lucide sets the icon name as a class, so the rendered svg says which one.
+    const iconClass = (section: string) =>
+      navLink(section).querySelector("svg")?.getAttribute("class") ?? ""
+
+    expect(iconClass("sidebar-nav-studio")).toContain("lucide-lamp-desk")
+    expect(iconClass("sidebar-nav-desk")).toContain("lucide-layout-grid")
+    expect(iconClass("sidebar-nav-workspace")).toContain("lucide-folder-tree")
   })
 })
 

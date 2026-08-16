@@ -3,11 +3,20 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Layers3, LayoutGrid, PanelLeftDashed, PenLine, Plus, Search, Download, X } from "lucide-react"
-import { ArtifactLockup } from "@/components/brand/artifact-mark"
+import {
+  Folder,
+  FolderTree,
+  LampDesk,
+  LayoutGrid,
+  PanelLeft,
+  Plus,
+  Search,
+  Download,
+  X,
+} from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
-import { SidebarRecentWritings } from "@/components/navigation/sidebar-recent-writings"
 import { UserBar } from "@/components/navigation/user-bar"
+import { useRailWorkspaces } from "@/hooks/useRailWorkspaces"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
@@ -66,8 +75,8 @@ function SquareLibraryIcon({ className }: { className?: string }) {
 }
 
 /**
- * Rail order, from `docs/design/system-app.md` §5: New Artifact, Search ·
- * separator · Studio, Desk, Workspace · scroll · recents · user bar.
+ * Rail order, read from the prototypes: New Artifact, Search · Studio, Desk,
+ * Workspace with its folders · user bar.
  *
  * **Collections is kept beyond the spec's inventory.** The package does not list
  * it, but `/collections` has no other entry point in the app, so removing it
@@ -82,7 +91,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/write",
     label: "Studio",
-    icon: PenLine,
+    icon: LampDesk,
     section: "sidebar-nav-studio",
     shortcut: { mac: "⌘⌥3", windows: "Ctrl+Alt+3" },
   },
@@ -96,7 +105,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/workspace",
     label: "Workspace",
-    icon: Layers3,
+    icon: FolderTree,
     section: "sidebar-nav-workspace",
     shortcut: { mac: "⌘⌥2", windows: "Ctrl+Alt+2" },
   },
@@ -125,15 +134,21 @@ const SIDEBAR_WIDTH_COLLAPSED = 52
 const RAIL_FORCED_COLLAPSE_QUERY = "(max-width: 899px)"
 
 /**
- * The rail item: a 40px box at radius 9. The horizontal padding is identical in
- * both states so the icon's X position never changes when the rail expands —
- * only the label's width and opacity animate.
+ * The rail item, read from the prototypes' `railRow`: 40px tall at radius 9,
+ * `padding: 0`, `gap: 10`, 14px label.
+ *
+ * The icon does not live behind padding — it sits in a **fixed 40px column**
+ * (`railIconWrap`). That is the mechanism behind "the icon never changes X
+ * position when collapsing": at 52px the rail is 6px of padding either side of
+ * that column, and expanding only adds room for the label to its right.
  */
-const SIDEBAR_ITEM_BASE_CLASS = "flex h-10 items-center gap-[9px] rounded-[9px] px-[10px]"
-const SIDEBAR_ITEM_TRANSITION_CLASS =
-  "transition-[width,opacity,background-color,color] duration-[300ms] ease-layout"
+const SIDEBAR_ITEM_BASE_CLASS =
+  "flex h-10 min-h-10 w-full items-center gap-2.5 rounded-[9px] p-0 text-left text-[14px] leading-none"
+const SIDEBAR_ICON_WRAP_CLASS =
+  "flex h-10 w-10 min-w-10 flex-shrink-0 items-center justify-center"
+const SIDEBAR_ITEM_TRANSITION_CLASS = "transition-colors duration-[180ms] ease-layout"
 const SIDEBAR_LABEL_TRANSITION_CLASS =
-  "overflow-hidden whitespace-nowrap transition-[width,opacity] duration-[300ms] ease-layout"
+  "flex-shrink-0 overflow-hidden whitespace-nowrap transition-opacity duration-200 ease-out"
 const SIDEBAR_ICON_CLASS = "h-[19px] w-[19px] shrink-0"
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect
 
@@ -193,6 +208,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   // Workspace is a first-class DocumentCatalog view as of ODE-373 and belongs
   // in the normal navigation alongside Desk and Studio.
   const navItems = NAV_ITEMS
+  const workspaces = useRailWorkspaces()
 
   const handleSidebarToggle = () => {
     toggleSidebarMode()
@@ -347,16 +363,12 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                   : "justify-between gap-2 px-4",
             )}
           >
-            <Link
-              href="/desk"
-              className={cn(
-                "overflow-hidden transition-[width,opacity] duration-[300ms] ease-layout",
-                isIconOnly ? "w-0 opacity-0" : "w-[150px] opacity-100",
-              )}
-              aria-label="Artifact Studio"
-            >
-              <ArtifactLockup markSize={22} fontSize={15} />
-            </Link>
+            {/*
+              No wordmark here. The prototypes put nothing in this row but the
+              rail toggle and empty space — the app's name belongs to the window
+              chrome and the marketing surfaces, not to a column the user reads
+              past a hundred times a day.
+            */}
 
             {/*
               While the window forces the rail collapsed there is no state to
@@ -385,7 +397,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 )}
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >
-                <PanelLeftDashed className="h-[17px] w-[17px]" strokeWidth={1.5} />
+                <PanelLeft className="h-[18px] w-[18px]" strokeWidth={1.5} />
               </button>
             </ActionTooltip>
             )}
@@ -395,7 +407,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             id="sidebar-actions"
             data-section="sidebar-actions"
             data-testid="sidebar-actions"
-            className="SidebarActions space-y-1 px-[6px] pb-3 pt-4"
+            className="SidebarActions flex flex-col gap-0.5 px-[6px] pt-0.5"
           >
             <ActionTooltip label="New writing" shortcut={getEditorShortcutLabel("newWriting")} side="right">
               <Link
@@ -403,21 +415,14 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 className={cn(
                   SIDEBAR_ITEM_BASE_CLASS,
                   SIDEBAR_ITEM_TRANSITION_CLASS,
-                  "text-[15px] font-medium",
-                  // The spec is silent on this fill, so the repo's own treatment
-                  // is preserved rather than reinvented: ink while collapsed,
-                  // plain while expanded.
-                  isIconOnly ? "w-10 bg-ink text-bg hover:bg-ink-2" : "w-full text-ink hover:bg-muted",
+                  "text-ink-2 hover:bg-muted hover:text-ink",
                 )}
                 aria-label="New writing"
               >
-                <Plus className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
-                <span
-                  className={cn(
-                    SIDEBAR_LABEL_TRANSITION_CLASS,
-                    isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
-                  )}
-                >
+                <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                  <Plus className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                </span>
+                <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
                   New writing
                 </span>
               </Link>
@@ -430,26 +435,19 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                 className={cn(
                   SIDEBAR_ITEM_BASE_CLASS,
                   SIDEBAR_ITEM_TRANSITION_CLASS,
-                  "text-[15px] text-ink-2 hover:bg-muted hover:text-ink",
-                  isIconOnly ? "w-10" : "w-full",
+                  "text-ink-2 hover:bg-muted hover:text-ink",
                 )}
                 aria-label="Search"
               >
-                <Search className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
-                <span
-                  className={cn(
-                    SIDEBAR_LABEL_TRANSITION_CLASS,
-                    isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
-                  )}
-                >
+                <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                  <Search className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                </span>
+                <span className={cn(SIDEBAR_LABEL_TRANSITION_CLASS, isIconOnly ? "opacity-0" : "opacity-100")}>
                   Search
                 </span>
               </button>
             </ActionTooltip>
           </div>
-
-          {/* The separator the spec puts between the actions and the views. */}
-          <div aria-hidden className="mx-[6px] mb-2 h-px bg-line-soft" />
 
           <div
             id="sidebar-nav"
@@ -457,23 +455,20 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             data-testid="sidebar-nav"
             /*
               The views never scroll — the rail is a closed inventory. Only the
-              recents block below does, so a long list can never push the user
+              workspace folders below do, so a long list can never push the user
               bar off the bottom of the window.
-            */
-            className="SidebarNav flex min-h-0 flex-1 flex-col px-[6px] pb-2"
-          >
-            <div className="flex-shrink-0 space-y-1">
-              {navItems.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-                const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
 
-                return (
-                  <ActionTooltip
-                    key={item.href}
-                    label={item.label}
-                    shortcut={shortcut}
-                    side="right"
-                  >
+              Padding from the prototypes' nav block: 26px above, 8px below.
+            */
+            className="SidebarNav flex min-h-0 flex-1 flex-col gap-0.5 px-[6px] pb-2 pt-[26px]"
+          >
+            {navItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
+              const shortcut = item.shortcut ? getShortcutForPlatform(item.shortcut) : null
+
+              return (
+                <div key={item.href} className="flex flex-shrink-0 flex-col">
+                  <ActionTooltip label={item.label} shortcut={shortcut} side="right">
                     <Link
                       href={item.href}
                       id={item.section}
@@ -482,92 +477,64 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                       className={cn(
                         SIDEBAR_ITEM_BASE_CLASS,
                         SIDEBAR_ITEM_TRANSITION_CLASS,
-                        "text-[15px]",
-                        // The spec makes the active state the darker of the two
-                        // (#E4E1DC active over #E9E7E3 hover); the repo had them
-                        // the other way round.
+                        // The prototypes make the active state the darker of the
+                        // two and the only one at weight 500; the repo had the
+                        // two surfaces the other way round.
                         isActive
                           ? "bg-muted-hover font-medium text-ink"
-                          : "text-ink-2 hover:bg-muted hover:text-ink",
-                        isIconOnly ? "w-10" : "w-full",
+                          : "font-normal text-ink-2 hover:bg-muted hover:text-ink",
                       )}
                       aria-label={item.label}
                     >
-                      <item.icon className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                      <span className={SIDEBAR_ICON_WRAP_CLASS}>
+                        <item.icon className={SIDEBAR_ICON_CLASS} strokeWidth={1.5} />
+                      </span>
                       <span
                         className={cn(
                           SIDEBAR_LABEL_TRANSITION_CLASS,
-                          isIconOnly ? "w-0 opacity-0" : "w-auto opacity-100",
+                          isIconOnly ? "opacity-0" : "opacity-100",
                         )}
                       >
                         {item.label}
                       </span>
                     </Link>
                   </ActionTooltip>
-                )
-              })}
-            </div>
 
-            <div
-              data-section="sidebar-recents-scroll"
-              data-testid="sidebar-recents-scroll"
-              className="od-scroll min-h-0 flex-1 overflow-y-auto"
-            >
-              <SidebarRecentWritings collapsed={isIconOnly} />
-            </div>
-          </div>
-
-          {updateState?.kind === "available" && !isIconOnly && (
-            <div
-              data-section="sidebar-update-banner"
-              data-testid="sidebar-update-banner"
-              className="mx-2 mb-2 rounded-lg border border-border bg-muted px-3 py-2.5"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-ink">
-                    {formatUpdateLabel(updateState.update)}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-ink-3">
-                    Restart to apply the update.
-                  </p>
+                  {/*
+                    The workspace folders hang under the Workspace item, indented
+                    to 50px so they line up past the icon column. This is the
+                    block the prototypes draw where the repo used to list
+                    "Recent" — the rail is an inventory of places, not of
+                    history. It collapses to `max-height: 0` with the rail.
+                  */}
+                  {item.href === "/workspace" ? (
+                    <div
+                      data-section="sidebar-workspace-folders"
+                      data-testid="sidebar-workspace-folders"
+                      className={cn(
+                        "od-scroll flex min-h-0 flex-col gap-px overflow-y-auto pl-[50px] pt-0.5",
+                        "transition-[max-height,opacity] duration-300 ease-layout",
+                        isIconOnly ? "max-h-0 opacity-0" : "max-h-[240px] opacity-100",
+                      )}
+                    >
+                      {workspaces.map((workspace) => (
+                        <Link
+                          key={workspace.slug}
+                          href={`/workspace/${workspace.slug}`}
+                          data-testid="sidebar-workspace-folder"
+                          title={workspace.name}
+                          className="flex h-8 flex-shrink-0 items-center gap-[9px] rounded-[8px] px-2.5 text-[13px] font-normal leading-none text-ink-4 transition-colors duration-[180ms] hover:bg-muted hover:text-ink"
+                        >
+                          <Folder className="h-[15px] w-[15px] flex-shrink-0" strokeWidth={1.5} />
+                          <span className="truncate">{workspace.name}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleDismissUpdate}
-                  className="shrink-0 text-ink-3 hover:text-ink"
-                  aria-label="Dismiss update"
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={handleInstallUpdate}
-                disabled={installing}
-                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-ink px-3 py-1.5 text-[13px] font-medium text-bg hover:bg-ink-2 disabled:opacity-50"
-              >
-                <Download className="h-3.5 w-3.5" strokeWidth={1.5} />
-                {installing ? "Installing…" : "Install Update"}
-              </button>
-            </div>
-          )}
-
-          {updateState?.kind === "available" && isIconOnly && (
-            <div className="flex justify-center pb-2">
-              <ActionTooltip label={formatUpdateLabel(updateState.update)} side="right">
-                <button
-                  type="button"
-                  onClick={handleInstallUpdate}
-                  disabled={installing}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-ink text-bg hover:bg-ink-2 disabled:opacity-50"
-                  aria-label="Install update"
-                >
-                  <Download className="h-4 w-4" strokeWidth={1.5} />
-                </button>
-              </ActionTooltip>
-            </div>
-          )}
+              )
+            })}
+          </div>
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
           </nav>

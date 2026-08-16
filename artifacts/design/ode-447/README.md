@@ -31,13 +31,34 @@ Rendered widths of the prototypes' own rails, read from the running documents (`
 | Layer 0 — no border of its own | `border-right-width: 0px` |
 | Item box | **40px**, radius **9px** |
 | Rail icons | **19px** |
-| **Icon X travel across the expansion** | **0px** — 16px in both states |
-| Recents block | `overflow-y: auto`, outside the views and outside the user bar |
+| **Icon X travel across the expansion** | **0px** — 16.5px in both states |
+| Workspace folder block | `overflow-y: auto`, hanging off the Workspace row at `padding-left: 50px` |
+| Avatar | **36px** (the repo drew 28) |
+| Wordmark in the title bar row | **absent** |
 | Forced collapse below 900 | 244 → **52**, and back to **244** when the window widens |
 | Toggle while width-forced | absent (`toggleHiddenWhileForced: true`) |
-| Time to interactive | **76ms** to a usable rail (`domInteractive` 73ms), budget 1000ms |
+| Time to interactive | **74ms** to a usable rail (`domInteractive` 79ms), budget 1000ms |
 
 The icon travel is the headline: the spec words it as "the icon never changes X position when collapsing", and it is measured from the rendered box, not asserted from a class list.
+
+## Second pass — what the first delivery got wrong
+
+The first version of this change moved the geometry and left the rail's *contents* as they were. The owner caught it against the prototype. Corrected here:
+
+| | First pass | Prototype | Now |
+| --- | --- | --- | --- |
+| Studio icon | `PenLine` | `lamp-desk` | `lamp-desk` |
+| Workspace icon | `Layers3` | `folder-tree` | `folder-tree` |
+| Title bar | `ArtifactLockup` + "Artifact Studio" | toggle and empty space, nothing else | no wordmark |
+| Under Workspace | a "RECENT" list of writings | the workspace folders | the workspace folders |
+| Avatar | 28px | 36px | 36px |
+| Item padding | `px-[10px]` on the row | `padding: 0` with a fixed 40px icon column | fixed 40px column |
+| Item type | 15px | `400 14px/1`, active `500` | 14px, active 500 |
+| Toggle glyph | `PanelLeftDashed` 17px | `panel-left` 18px | `panel-left` 18px |
+
+`system-app.md` §5 names the icons in the same sentence that fixes the order — the first pass read that line as being about order alone. The folder block is `WS` in the prototypes' logic (`workspaceListStyle`, `folder` at 15px, rows of 32px at radius 8, indented 50px): **the rail is an inventory of places, not of history**, which is why Recent had no seat in it. `components/navigation/sidebar-recent-writings.tsx` is deleted rather than left orphaned; `useRecentWritings` survives because Search still uses it.
+
+The folders come from `getWorkspaceAssignmentService().listWorkspaces()` — the same service the Desk and the Workspace view already read, not a second source. On web that service reports `isAvailable: false`, so **the block is empty in these captures**: the folder list is a desktop surface, and the DMG is where it renders with real folders.
 
 ## Divergences from the spec, recorded
 
