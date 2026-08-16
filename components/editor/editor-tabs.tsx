@@ -6,9 +6,11 @@ import { ActionTooltip } from "@/components/ui/action-tooltip";
 import { EditorTabItem } from "@/components/editor/editor-tab-item";
 import { getEditorShortcutLabel } from "@/lib/editor/shortcuts";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
+import type { WritingStatus } from "@/lib/writings/status";
 
 type EditorTabsProps = {
   tabs: LocalEditorSessionTab[];
+  tabStatuses?: Record<string, WritingStatus | null>;
   activeTabId: string | null;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
@@ -23,6 +25,7 @@ const AUTO_SCROLL_SPEED_PX = 8;
 
 export function EditorTabs({
   tabs,
+  tabStatuses,
   activeTabId,
   onSelectTab,
   onCloseTab,
@@ -243,17 +246,24 @@ export function EditorTabs({
   };
 
   return (
-    <div className="flex h-full min-w-0 flex-1 items-center overflow-hidden bg-transparent">
+    // The empty parts of the strip drag the desktop window: with an overlay
+    // title bar this row is all the window has left to grab. Inert on web.
+    <div
+      data-tauri-drag-region
+      className="od-drag-region flex h-full min-w-0 flex-1 items-center overflow-hidden bg-transparent"
+    >
       <div
         ref={scrollerRef}
-        className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        data-tauri-drag-region
+        className="od-drag-region min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="inline-flex min-w-full items-center">
+        <div data-tauri-drag-region className="inline-flex min-w-full items-center">
           {tabs.map((tab) => (
             <EditorTabItem
               key={tab.id}
               tab={tab}
               active={tab.id === activeTabId}
+              status={tabStatuses?.[tab.id] ?? null}
               onSelect={onSelectTab}
               onClose={onCloseTab}
               onRename={onRenameTab}

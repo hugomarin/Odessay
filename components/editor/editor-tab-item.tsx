@@ -1,7 +1,9 @@
 "use client"
 
-import { CircleDashed, Pencil, X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon";
+import type { WritingStatus } from "@/lib/writings/status";
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema";
 import type { PointerEventHandler } from "react";
 
@@ -16,6 +18,8 @@ import type { PointerEventHandler } from "react";
 type EditorTabItemProps = {
   tab: LocalEditorSessionTab;
   active: boolean;
+  /** Editorial state of the document this tab holds, drawn as its glyph. */
+  status?: WritingStatus | null;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onRename: (tabId: string) => void;
@@ -30,6 +34,7 @@ type EditorTabItemProps = {
 export function EditorTabItem({
   tab,
   active,
+  status,
   onSelect,
   onClose,
   onRename,
@@ -72,14 +77,17 @@ export function EditorTabItem({
         aria-label={`Open ${tab.title}`}
       />
 
+      {/* The state glyph steps aside on hover so the close affordance can take
+          its place — on every tab, not just the active one, or the two icons
+          would stack on top of each other. */}
       <span
         aria-hidden="true"
         className={cn(
-          "pointer-events-none relative z-10 flex shrink-0 items-center",
-          active ? "text-ink group-hover:opacity-0" : "text-ink-5",
+          "pointer-events-none relative z-10 flex shrink-0 items-center opacity-100 transition-opacity duration-100 ease-out group-hover:opacity-0",
+          active ? "text-ink" : "text-ink-5",
         )}
       >
-        <CircleDashed className="h-[15px] w-[15px]" strokeWidth={1.5} />
+        <WritingStatusIcon status={status ?? "draft"} className="h-[15px] w-[15px]" />
       </span>
 
       {/* The close affordance replaces the glyph on hover, as in the prototype,

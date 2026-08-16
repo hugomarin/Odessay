@@ -1,12 +1,15 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { AlignLeft, Scan, SpellCheck } from "lucide-react"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { EditorTabs } from "@/components/editor/editor-tabs"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutLabel } from "@/lib/editor/shortcuts"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import { cn } from "@/lib/utils"
 import type { LocalEditorSessionTab } from "@/lib/local-db/schema"
+import type { WritingStatus } from "@/lib/writings/status"
 
 /**
  * Studio titlebar — 46px, edge to edge, a sibling of the whole middle band
@@ -20,6 +23,8 @@ type EditorTopbarProps = {
   activePanel: "notes" | "properties" | "publication" | null
   isPublicationModeEnabled: boolean
   tabs: LocalEditorSessionTab[]
+  /** Editorial state per tab id, drawn as each tab's glyph. */
+  tabStatuses?: Record<string, WritingStatus | null>
   activeTabId: string | null
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
@@ -41,6 +46,7 @@ export function EditorTopbar({
   activePanel,
   isPublicationModeEnabled,
   tabs,
+  tabStatuses,
   activeTabId,
   onSelectTab,
   onCloseTab,
@@ -51,18 +57,43 @@ export function EditorTopbar({
   onTogglePanel,
   isTabBarVisible = true,
 }: EditorTopbarProps) {
+  /**
+   * On desktop the window uses an overlay title bar, so the traffic lights sit
+   * on top of this row instead of in a strip of their own. We reserve their
+   * width on the left and make the bar itself draggable. Resolved in an effect
+   * because the static export prerenders without the Tauri global, and reading
+   * it during render would desync hydration.
+   */
+  const [isDesktopTitlebar, setIsDesktopTitlebar] = useState(false)
+
+  useEffect(() => {
+    setIsDesktopTitlebar(isTauriRuntime())
+  }, [])
+
   return (
     <TooltipProvider delayDuration={120}>
       <div
         id="editor-topbar"
         data-section="editor-topbar"
         data-testid="editor-topbar"
-        className="EditorTopbar flex h-[46px] shrink-0 items-center gap-3.5 bg-transparent pl-4 pr-3.5"
+        data-tauri-drag-region={isDesktopTitlebar ? true : undefined}
+        className="EditorTopbar od-drag-region flex h-[46px] shrink-0 items-center gap-3.5 bg-transparent pl-4 pr-3.5"
+        style={
+          isDesktopTitlebar
+            ? {
+                // The traffic lights and the sidebar toggle share this row and
+                // sit at window coordinates, while this bar starts after the
+                // sidebar. Reserve whatever of that strip overlaps the tabs.
+                paddingLeft: "max(16px, calc(126px - var(--app-shell-left-offset, 0px)))",
+              }
+            : undefined
+        }
       >
-        <div className="flex min-w-0 flex-1 items-center overflow-hidden">
+        <div data-tauri-drag-region className="od-drag-region flex min-w-0 flex-1 items-center overflow-hidden">
           {isTabBarVisible ? (
             <EditorTabs
               tabs={tabs}
+              tabStatuses={tabStatuses}
               activeTabId={activeTabId}
               onSelectTab={onSelectTab}
               onCloseTab={onCloseTab}
