@@ -1,0 +1,94 @@
+{
+  "measurements": {
+    "768": {
+      "chrome": {
+        "width": 864.7,
+        "height": 48
+      },
+      "counter": "1 of 10",
+      "properties": {
+        "width": 308,
+        "height": 784
+      },
+      "title": "500 28px/35px -0.42px Lora",
+      "path": "11px ui-monospace ellipsis",
+      "sharingCard": {
+        "width": 284,
+        "height": 286.5,
+        "borderTopLeftRadius": "10px",
+        "borderTopWidth": "1px"
+      },
+      "sharingRule": {
+        "width": 256,
+        "height": 1
+      }
+    },
+    "1100": {
+      "chrome": {
+        "width": 1028,
+        "height": 48
+      },
+      "counter": "1 of 10",
+      "properties": {
+        "width": 308,
+        "height": 784
+      },
+      "title": "500 28px/35px -0.42px Lora",
+      "path": "11px ui-monospace ellipsis",
+      "sharingCard": {
+        "width": 284,
+        "height": 286.5,
+        "borderTopLeftRadius": "10px",
+        "borderTopWidth": "1px"
+      },
+      "sharingRule": {
+        "width": 256,
+        "height": 1
+      }
+    },
+    "1440": {
+      "chrome": {
+        "width": 1144,
+        "height": 48
+      },
+      "counter": "1 of 10",
+      "properties": {
+        "width": 308,
+        "height": 784
+      },
+      "title": "500 28px/35px -0.42px Lora",
+      "path": "11px ui-monospace ellipsis",
+      "sharingCard": {
+        "width": 284,
+        "height": 286.5,
+        "borderTopLeftRadius": "10px",
+        "borderTopWidth": "1px"
+      },
+      "sharingRule": {
+        "width": 256,
+        "height": 1
+      }
+    }
+  },
+  "keyboard": {
+    "counters": [
+      "1 of 10",
+      "2 of 10",
+      "3 of 10",
+      "4 of 10",
+      "5 of 10",
+      "6 of 10",
+      "7 of 10",
+      "8 of 10",
+      "9 of 10",
+      "10 of 10"
+    ],
+    "afterLeftAtStart": "1 of 10",
+    "afterRightAtEnd": "10 of 10",
+    "disabledAtEnd": {
+      "previous": false,
+      "next": true
+    }
+  },
+  "harPath": "artifacts/design/ode-434/preview-walk.har"
+}
