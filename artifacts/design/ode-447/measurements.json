@@ -1,0 +1,53 @@
+{
+  "geometry": {
+    "expanded": {
+      "railWidth": 244,
+      "railBackground": "rgba(0, 0, 0, 0)",
+      "railBorderRight": "0px",
+      "itemHeight": 40,
+      "itemRadius": "9px",
+      "iconSize": 19,
+      "recentsOverflowY": "auto"
+    },
+    "collapsed": {
+      "railWidth": 52,
+      "railBackground": "rgba(0, 0, 0, 0)",
+      "railBorderRight": "0px",
+      "itemHeight": 40,
+      "itemRadius": "9px",
+      "iconSize": 19,
+      "recentsOverflowY": "auto"
+    }
+  },
+  "iconTravel": {
+    "expanded": 16,
+    "collapsed": 16,
+    "travelPx": 0
+  },
+  "forcedCollapse": {
+    "atWide": 244,
+    "atNarrow": 52,
+    "toggleHiddenWhileForced": true,
+    "restored": 244
+  },
+  "timeToInteractive": {
+    "domInteractive": 73,
+    "domContentLoaded": 73,
+    "firstContentfulPaint": null,
+    "railUsableMs": 76
+  },
+  "prototypeWidths": {
+    "desk": {
+      "width": 244
+    },
+    "studio": {
+      "width": 52
+    },
+    "workspace": {
+      "width": 244
+    },
+    "settings": {
+      "width": 244
+    }
+  }
+}

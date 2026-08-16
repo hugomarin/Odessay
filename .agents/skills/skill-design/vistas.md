@@ -358,7 +358,7 @@ Ver `odessay-editor.md` para la spec completa de TipTap (extensiones, shortcuts,
 ### Layout
 
 ```
-Sidebar (232px/52px) | Editor area (flex-1) | Right panels (248-280px)
+Sidebar (244px/52px) | Editor area (flex-1) | Right panels (248-280px)
 Topbar (46px) — sobre editor area
 Find & Replace bar (0px → 40px / 80px) — bajo topbar, sobre el contenido
 Statusbar (32px) — bajo editor area
@@ -816,7 +816,7 @@ Usar antes de mover un issue a In Review. Complementa el checklist de `skill-cod
 
 ### Sidebar (todas las vistas)
 
-- [ ] Expandido 232px exactos, colapsado 52px solo iconos centrados
+- [ ] Expandido 244px exactos, colapsado 52px solo iconos centrados
 - [ ] Transición width 300ms ease-layout
 - [ ] Logo "Odessay" en Lora 17px
 - [ ] Nav items: hover muted-h, active con muted y font-weight 500

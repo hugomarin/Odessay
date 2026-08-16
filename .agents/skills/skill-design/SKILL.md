@@ -34,7 +34,7 @@ Los cinco deltas entre el paquete de diseño y este skill están **cerrados**. N
 
 ---
 
-**Módulos compartidos — reutilizar, nunca recrear:** Sidebar y Topbar son componentes globales. No se implementan de nuevo por vista. El editor abre con sidebar mini (52px) por defecto. El resto de vistas abren con sidebar expandido (232px).
+**Módulos compartidos — reutilizar, nunca recrear:** Sidebar y Topbar son componentes globales. No se implementan de nuevo por vista. El editor abre con sidebar mini (52px) por defecto. El resto de vistas abren con sidebar expandido (244px).
 
 ---
 
@@ -134,7 +134,7 @@ Utilidades disponibles: `text-ink-5`, `text-ink-6`, `bg-line-soft`, `bg-line-sof
 | Token | Valor | Qué es |
 |---|---|---|
 | `--size-rail-collapsed` | 52px | Rail colapsado |
-| `--size-rail-expanded` | 232px | Rail expandido |
+| `--size-rail-expanded` | 244px | Rail expandido |
 | `--size-settings-nav` | 244px | Nav de sección en Settings |
 | `--size-panel-left` | 236px | Panel izquierdo (TOC, árbol de workspace) |
 | `--size-panel-right` | 276px | Panel derecho (properties, notes) |
@@ -305,7 +305,7 @@ El repo todavía nombra `writing` en archivos y símbolos (`writing-preview-moda
 
 ```
 app (flex, 100vh, overflow hidden)
-├── Sidebar (232px expandido / 52px mini)
+├── Sidebar (244px expandido / 52px mini)
 └── Main (flex-1, flex-col)
     ├── Topbar (46px fijo)
     ├── Content (flex-1, overflow-y auto)
@@ -314,7 +314,7 @@ app (flex, 100vh, overflow hidden)
 
 ### Sidebar
 
-**Expandido (232px):** Logo Lora 17px + toggle. Acciones (New writing, Search). Nav scroll. User bar bottom.
+**Expandido (244px):** Logo Lora 17px + toggle. Acciones (New writing, Search). Nav scroll. User bar bottom.
 
 **Mini (52px):** Solo iconos centrados. Labels con `opacity-0 w-0 overflow-hidden`. Sub-items ocultos. Transición `width 300ms ease-layout`.
 
@@ -328,10 +328,10 @@ Altura invariable: **46px** en todas las vistas. `border-bottom: 0.5px solid hsl
 
 ```ts
 const SIDEBAR = {
-  full: 232,  // px — docs/design/system-app.md §3 [ODE-447]
+  full: 244,  // px — docs/design/system-app.md §3 [ODE-447]
   mini: 52,   // px
   rail: 52,   // icono rail siempre presente
-  content: 180, // área de texto en expandido (232 - 6 padding x2 - 10 padding x2 - 19 icono - 9 gap)
+  content: 192, // área de texto en expandido (244 - 6 padding x2 - 10 padding x2 - 19 icono - 9 gap)
 }
 ```
 

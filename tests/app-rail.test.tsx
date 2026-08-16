@@ -114,9 +114,9 @@ afterEach(() => {
 })
 
 describe("geometry", () => {
-  it("expands to 232px, not the repo's old 292", () => {
+  it("expands to 244px, not the repo's old 292", () => {
     renderRail("expanded")
-    expect(rail().style.width).toBe("232px")
+    expect(rail().style.width).toBe("244px")
   })
 
   it("collapses to 52px", () => {
@@ -207,7 +207,7 @@ describe("inventory and order", () => {
 describe("forced collapse below 900px", () => {
   it("collapses the rail without touching the stored preference", () => {
     renderRail("expanded")
-    expect(rail().style.width).toBe("232px")
+    expect(rail().style.width).toBe("244px")
 
     viewportWidth = 820
     act(() => fireMediaChange())
@@ -216,7 +216,7 @@ describe("forced collapse below 900px", () => {
     // Widening restores what the user chose, not a default.
     viewportWidth = 1440
     act(() => fireMediaChange())
-    expect(rail().style.width).toBe("232px")
+    expect(rail().style.width).toBe("244px")
   })
 
   it("removes the toggle while the width is what decides the state", () => {

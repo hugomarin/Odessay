@@ -114,7 +114,7 @@ const NAV_ITEMS: NavItem[] = [
  * live here too because the width is also written to a JS style and to
  * `--app-shell-left-offset`; they must not drift from the tokens.
  */
-const SIDEBAR_WIDTH_EXPANDED = 232
+const SIDEBAR_WIDTH_EXPANDED = 244
 const SIDEBAR_WIDTH_COLLAPSED = 52
 
 /**
