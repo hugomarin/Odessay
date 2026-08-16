@@ -4,13 +4,22 @@ import { useState } from "react"
 import { ChevronDown, FolderPlus, Trash2 } from "lucide-react"
 import { CollectionAssignmentMenu } from "@/components/collections/collection-assignment-menu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { SelectionBar, type SelectionBarAction } from "@/components/shared/selection-bar"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { getWritingStatusLabel, type WritingStatus, WRITING_STATUS_VALUES } from "@/lib/writings/status"
 import { ARTIFACT_TYPE_VALUES, getArtifactTypeLabel, type ArtifactType } from "@/lib/writings/artifact-type"
 import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { ArtifactTypeIcon } from "@/components/desk/desk-activity-table"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
-import { cn } from "@/lib/utils"
+
+/**
+ * The Desk's configuration of the shared selection bar.
+ *
+ * Everything visual — height, radius, background, shadow, chip treatment — lives
+ * in `components/shared/selection-bar.tsx`. What is left here is the Desk's own
+ * action set (status, artifact type, collections, delete) and the domain menus
+ * behind it.
+ */
 
 type BulkActionBarProps = {
   selectedCount: number
@@ -24,7 +33,12 @@ type BulkActionBarProps = {
   collectionOptions: CollectionOption[]
   onAddToCollection: (collectionId: string) => Promise<void> | void
   onCreateCollection: (name: string) => Promise<void> | void
+  /** The Desk anchors the bar inside its sheet; other surfaces pin it to the viewport. */
+  placement?: "fixed" | "absolute"
 }
+
+const MENU_ITEM_CLASS =
+  "flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-menu-hover"
 
 export function BulkActionBar({
   selectedCount,
@@ -38,142 +52,110 @@ export function BulkActionBar({
   collectionOptions,
   onAddToCollection,
   onCreateCollection,
+  placement = "fixed",
 }: BulkActionBarProps) {
   const [statusOpen, setStatusOpen] = useState(false)
   const [artifactOpen, setArtifactOpen] = useState(false)
   const { settings } = useUserSettingsContext()
   const enabledStatuses = WRITING_STATUS_VALUES.filter((s) => !settings.disabledStatuses.includes(s))
 
+  const actions: SelectionBarAction[] = [
+    {
+      id: "status",
+      label: "Status",
+      icon: <WritingStatusIcon status="draft" className="h-[15px] w-[15px] text-bg/70" />,
+      render: (chip) => (
+        <Popover open={statusOpen} onOpenChange={setStatusOpen}>
+          <PopoverTrigger asChild>{chip}</PopoverTrigger>
+          <PopoverContent align="end" className="w-[180px] p-[5px]">
+            {enabledStatuses.map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => {
+                  void onStatusChange(status)
+                  setStatusOpen(false)
+                }}
+                className={MENU_ITEM_CLASS}
+              >
+                <WritingStatusIcon status={status} />
+                <span>{getWritingStatusLabel(status)}</span>
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+      ),
+    },
+    {
+      id: "artifact-type",
+      label: "Artifacts",
+      icon: <ArtifactTypeIcon artifactType="general" />,
+      render: (chip) => (
+        <Popover open={artifactOpen} onOpenChange={setArtifactOpen}>
+          <PopoverTrigger asChild>{chip}</PopoverTrigger>
+          <PopoverContent align="end" className="w-[180px] p-[5px]">
+            {ARTIFACT_TYPE_VALUES.map((artifactType) => (
+              <button
+                key={artifactType}
+                type="button"
+                onClick={() => {
+                  void onArtifactTypeChange(artifactType)
+                  setArtifactOpen(false)
+                }}
+                className={MENU_ITEM_CLASS}
+              >
+                <ArtifactTypeIcon artifactType={artifactType} />
+                <span>{getArtifactTypeLabel(artifactType)}</span>
+              </button>
+            ))}
+          </PopoverContent>
+        </Popover>
+      ),
+    },
+    {
+      id: "collections",
+      label: "Collections",
+      icon: <FolderPlus className="h-[15px] w-[15px]" strokeWidth={1.5} />,
+      render: (chip) => (
+        <CollectionAssignmentMenu
+          collections={collectionOptions}
+          selectedIds={[]}
+          align="end"
+          title="Add to collection"
+          description="Add selected writings to a collection."
+          onToggleCollection={onAddToCollection}
+          onCreateCollection={onCreateCollection}
+          trigger={chip}
+        />
+      ),
+    },
+    {
+      id: "delete",
+      label: "Delete",
+      icon: <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.5} />,
+      destructive: true,
+      onSelect: onDelete,
+    },
+  ]
+
+  // The prototypes render a 14px chevron on every chip that opens a menu, and
+  // none on the ones that act directly.
+  for (const action of actions) {
+    if (action.render) {
+      action.trailingIcon = <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.5} />
+    }
+  }
+
   return (
-    <div
+    <SelectionBar
       id="desk-bulk-action-bar"
-      data-section="desk-bulk-action-bar"
       data-testid="desk-bulk-action-bar"
-      className="fixed bottom-5 left-1/2 z-40 flex min-w-[720px] -translate-x-1/2 items-center justify-between gap-8 rounded-[10px] border-[0.5px] border-ink bg-ink px-6 py-3 text-bg shadow-float-md"
-    >
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] font-medium text-bg">
-            {selectedCount} selected
-          </span>
-          {!allVisibleSelected && visibleCount > 0 ? (
-            <button
-              type="button"
-              onClick={onSelectAll}
-              className="text-[12px] text-bg/55 underline-offset-2 hover:text-bg hover:underline"
-            >
-              Select all
-            </button>
-          ) : null}
-          {selectedCount > 0 ? (
-            <button
-              type="button"
-              onClick={onDeselectAll}
-              className="text-[12px] text-bg/55 underline-offset-2 hover:text-bg hover:underline"
-            >
-              Deselect
-            </button>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10",
-                  statusOpen && "border-bg/35 bg-bg/10",
-                )}
-              >
-                <WritingStatusIcon status="draft" className="h-[13px] w-[13px] text-bg/70" />
-                Status
-                <ChevronDown
-                  className={cn("h-3 w-3 text-bg/60 transition-transform", statusOpen && "rotate-180")}
-                  strokeWidth={1.5}
-                />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-[180px] p-[5px]">
-              {enabledStatuses.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => {
-                    void onStatusChange(status)
-                    setStatusOpen(false)
-                  }}
-                  className="flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted"
-                >
-                  <WritingStatusIcon status={status} />
-                  <span>{getWritingStatusLabel(status)}</span>
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
-
-          <Popover open={artifactOpen} onOpenChange={setArtifactOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  "inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10",
-                  artifactOpen && "border-bg/35 bg-bg/10",
-                )}
-              >
-                <ArtifactTypeIcon artifactType="general" />
-                Artifacts
-                <ChevronDown
-                  className={cn("h-3 w-3 text-bg/60 transition-transform", artifactOpen && "rotate-180")}
-                  strokeWidth={1.5}
-                />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-[180px] p-[5px]">
-              {ARTIFACT_TYPE_VALUES.map((artifactType) => (
-                <button
-                  key={artifactType}
-                  type="button"
-                  onClick={() => {
-                    void onArtifactTypeChange(artifactType)
-                    setArtifactOpen(false)
-                  }}
-                  className="flex h-[34px] w-full items-center gap-2 rounded-[6px] px-[10px] text-left text-[12px] text-ink-2 transition-colors hover:bg-muted"
-                >
-                  <ArtifactTypeIcon artifactType={artifactType} />
-                  <span>{getArtifactTypeLabel(artifactType)}</span>
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
-
-          <CollectionAssignmentMenu
-            collections={collectionOptions}
-            selectedIds={[]}
-            align="end"
-            title="Add to collection"
-            description="Add selected writings to a collection."
-            onToggleCollection={onAddToCollection}
-            onCreateCollection={onCreateCollection}
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-bg/15 bg-bg/5 px-3 text-[12px] font-medium text-bg transition-colors hover:bg-bg/10"
-              >
-                <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.5} />
-                Collections
-              </button>
-            }
-          />
-
-          <button
-            type="button"
-            onClick={onDelete}
-            className="inline-flex h-8 items-center gap-[6px] rounded-[8px] border-[0.5px] border-[hsl(0,72%,58%)]/40 bg-[hsl(0,72%,45%)]/15 px-3 text-[12px] font-medium text-[hsl(0,80%,78%)] transition-colors hover:bg-[hsl(0,72%,45%)]/25"
-          >
-            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
-            Delete
-          </button>
-        </div>
-      </div>
+      selectedCount={selectedCount}
+      onSelectAll={onSelectAll}
+      canSelectAll={!allVisibleSelected && visibleCount > 0}
+      onDeselectAll={onDeselectAll}
+      actions={actions}
+      placement={placement}
+    />
   )
 }

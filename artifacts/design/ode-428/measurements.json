@@ -1,0 +1,55 @@
+{
+  "implementedDesk": {
+    "height": 56,
+    "borderRadius": "14px",
+    "background": "rgb(30, 25, 21)",
+    "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(35, 24, 15, 0.3) 0px 26px 70px 0px, rgba(35, 24, 15, 0.2) 0px 2px 6px 0px",
+    "bottomOffset": 26,
+    "countFont": "500 14px",
+    "countColor": "rgb(251, 250, 249)",
+    "dangerBackground": "oklab(0.51345 0.0686092 0.0786604 / 0.3)",
+    "dangerColor": "rgb(232, 168, 124)",
+    "chipHeight": 36,
+    "chipRadius": "9px"
+  },
+  "implementedArchive": {
+    "height": 56,
+    "borderRadius": "14px",
+    "background": "rgb(30, 25, 21)",
+    "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(35, 24, 15, 0.3) 0px 26px 70px 0px, rgba(35, 24, 15, 0.2) 0px 2px 6px 0px",
+    "bottomOffset": 26,
+    "countFont": "500 14px",
+    "countColor": "rgb(251, 250, 249)",
+    "dangerBackground": "oklab(0.51345 0.0686092 0.0786604 / 0.3)",
+    "dangerColor": "rgb(232, 168, 124)",
+    "chipHeight": 36,
+    "chipRadius": "9px"
+  },
+  "prototypeDesk": {
+    "height": 56,
+    "borderRadius": "14px",
+    "background": "rgb(30, 25, 21)",
+    "boxShadow": "rgba(35, 24, 15, 0.3) 0px 26px 70px 0px, rgba(35, 24, 15, 0.2) 0px 2px 6px 0px",
+    "bottomOffset": 26,
+    "countFont": "500 14px",
+    "countColor": "rgb(251, 250, 249)",
+    "dangerBackground": "rgba(150, 83, 44, 0.3)",
+    "dangerColor": "rgb(232, 168, 124)",
+    "chipHeight": 36,
+    "chipRadius": "9px"
+  },
+  "prototypeArchive": {
+    "height": 56,
+    "borderRadius": "14px",
+    "background": "rgb(30, 25, 21)",
+    "boxShadow": "rgba(35, 24, 15, 0.3) 0px 26px 70px 0px, rgba(35, 24, 15, 0.2) 0px 2px 6px 0px",
+    "bottomOffset": 26,
+    "countFont": "500 14px",
+    "countColor": "rgb(251, 250, 249)",
+    "dangerBackground": "rgba(150, 83, 44, 0.3)",
+    "dangerColor": "rgb(232, 168, 124)",
+    "chipHeight": 36,
+    "chipRadius": "9px"
+  },
+  "lastRowReachable": true
+}
