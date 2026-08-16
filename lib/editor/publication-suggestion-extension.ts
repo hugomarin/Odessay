@@ -6,6 +6,7 @@ import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view"
 import type { PublicationSuggestion } from "@/lib/local-db/schema"
 import { resolveCorrectionDecorationRanges } from "@/lib/editor/ai-correction-decorations"
 import { isSuggestionAcceptDisabled } from "@/lib/editor/suggestion-engine"
+import { resolveBubblePlacement } from "@/lib/editor/suggestion-bubble-position"
 
 type PublicationSuggestionPluginState = {
   suggestions: PublicationSuggestion[]
@@ -48,6 +49,70 @@ const canLearnWord = (suggestion: PublicationSuggestion) =>
 const CIRCLE_CHECK_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`
 const CIRCLE_X_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>`
 const CIRCLE_PLUS_ICON = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>`
+
+/** The sheet the bubble must stay inside, newest shell class first. */
+const SHEET_SELECTORS = [".odessay-editor-sheet-frame", ".odessay-editor-content"]
+
+const findSheet = (node: HTMLElement): HTMLElement | null => {
+  for (const selector of SHEET_SELECTORS) {
+    const sheet = node.closest<HTMLElement>(selector)
+    if (sheet) return sheet
+  }
+  return null
+}
+
+/**
+ * Measures the bubble against the sheet and flips or nudges it so it never gets
+ * clipped. Only one bubble is alive at a time (the active suggestion), so a
+ * single scroll listener covers the whole document.
+ */
+const attachBubblePositioning = (anchor: HTMLElement, bubble: HTMLElement) => {
+  let frame = 0
+  let disposed = false
+
+  const measure = () => {
+    frame = 0
+    if (disposed || !bubble.isConnected) return
+
+    const sheet = findSheet(anchor)
+    if (!sheet) return
+
+    // Measure from a clean slate so a previous correction does not feed back in.
+    bubble.style.setProperty("--pub-bubble-dx", "0px")
+    bubble.classList.remove("pub-suggestion-bubble-below")
+
+    const placement = resolveBubblePlacement(
+      bubble.getBoundingClientRect(),
+      sheet.getBoundingClientRect(),
+    )
+
+    if (placement.flip) {
+      bubble.classList.add("pub-suggestion-bubble-below")
+    }
+    if (placement.dx !== 0) {
+      bubble.style.setProperty("--pub-bubble-dx", `${Math.round(placement.dx)}px`)
+    }
+  }
+
+  const schedule = () => {
+    if (disposed || frame !== 0) return
+    frame = requestAnimationFrame(measure)
+  }
+
+  schedule()
+  // Capture phase so any scrollable ancestor reaches us, not just the window.
+  window.addEventListener("scroll", schedule, { passive: true, capture: true })
+  window.addEventListener("resize", schedule, { passive: true })
+
+  return () => {
+    disposed = true
+    if (frame !== 0) cancelAnimationFrame(frame)
+    window.removeEventListener("scroll", schedule, { capture: true })
+    window.removeEventListener("resize", schedule)
+  }
+}
+
+const bubbleCleanups = new WeakMap<HTMLElement, () => void>()
 
 const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
   const isStale = isSuggestionAcceptDisabled(suggestion)
@@ -100,8 +165,18 @@ const createSuggestionWidget = (suggestion: PublicationSuggestion) => {
     bubble.append(label, accept, reject)
   }
   anchor.append(bubble)
+  bubbleCleanups.set(anchor, attachBubblePositioning(anchor, bubble))
 
   return anchor
+}
+
+const destroySuggestionWidget = (node: Node) => {
+  if (!(node instanceof HTMLElement)) return
+  const cleanup = bubbleCleanups.get(node)
+  if (cleanup) {
+    cleanup()
+    bubbleCleanups.delete(node)
+  }
 }
 
 const buildPublicationDecorations = (doc: ProseMirrorNode, pluginState: PublicationSuggestionPluginState): DecorationSet => {
@@ -122,6 +197,7 @@ const buildPublicationDecorations = (doc: ProseMirrorNode, pluginState: Publicat
         Decoration.widget(to, () => createSuggestionWidget(suggestion), {
           key: `publication-suggestion-widget-${suggestion.id}`,
           side: 1,
+          destroy: destroySuggestionWidget,
         }),
       )
     }

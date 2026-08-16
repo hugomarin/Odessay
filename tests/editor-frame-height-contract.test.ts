@@ -51,11 +51,12 @@ describe("editor frame height contract", () => {
     const source = read(
       "components/editor/panels/editor-navigation-sidebar.tsx",
     )
-    const aside = source.match(/<aside className="([^"]+)"/)
-    const scroller = source.match(/className="(min-h-0 flex-1 overflow-y-auto[^"]*)"/)
+    // ODE-433 turned the panel into a column of the band; the invariant it has
+    // to keep is the same one: clipped, and its wheel gesture contained.
+    const scroller = source.match(/className="(od-scroll min-h-0 flex-1 overflow-y-auto[^"]*)"/)
 
-    expect(aside?.[1]).toContain("h-full")
-    expect(aside?.[1]).toContain("overflow-hidden")
+    expect(source).toContain("overflow-hidden")
+    expect(source).toContain("w-[var(--size-panel-left)]")
     expect(scroller?.[1]).toContain("overscroll-contain")
   })
 })

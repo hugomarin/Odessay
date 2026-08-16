@@ -777,11 +777,12 @@ export default function DeskPage() {
         id="desk-topbar"
         data-section="desk-topbar"
         data-testid="desk-topbar"
-        className="DeskTopbar flex h-[70px] items-center justify-between gap-4 border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-5 sm:px-9"
+        data-tauri-drag-region
+        className="DeskTopbar od-drag-region flex h-[70px] items-center justify-between gap-4 border-b-[0.5px] border-border bg-[color-mix(in_srgb,hsl(var(--sb))_84%,hsl(var(--bg)))] px-5 sm:px-9"
       >
-        <div className="flex min-w-0 items-baseline gap-3">
-          <p className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Desk</p>
-          <p className="truncate text-[13px] text-ink-4">Writing activity, shared drafts, and collection context.</p>
+        <div data-tauri-drag-region className="flex min-w-0 items-baseline gap-3">
+          <p data-tauri-drag-region className="shrink-0 text-[24px] font-medium tracking-[-0.03em] text-ink">Desk</p>
+          <p data-tauri-drag-region className="truncate text-[13px] text-ink-4">Writing activity, shared drafts, and collection context.</p>
         </div>
         <div className="flex items-center gap-2">
           <button

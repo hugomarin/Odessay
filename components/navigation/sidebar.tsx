@@ -12,6 +12,7 @@ import { ActionTooltip } from "@/components/ui/action-tooltip"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { getEditorShortcutAction, getEditorShortcutLabel } from "@/lib/editor/shortcuts"
 import { getShortcutForPlatform, type ShortcutDisplay } from "@/lib/keyboard-shortcuts"
+import { isTauriRuntime } from "@/lib/runtime/detect"
 import {
   initializeUiShellStore,
   toggleSidebarMode,
@@ -145,6 +146,19 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     toggleSidebarMode()
   }
 
+  /**
+   * On desktop the window has an overlay title bar: the traffic lights float
+   * over the top-left corner, which is the sidebar's own column. The collapsed
+   * rail is 52px and the lights reach ~72px, so the toggle cannot stay inside
+   * it — it moves out to window coordinates, just right of the lights, sharing
+   * their row (see docs/design/views/studio.md §Anatomy).
+   */
+  const [isDesktopTitlebar, setIsDesktopTitlebar] = useState(false)
+
+  useEffect(() => {
+    setIsDesktopTitlebar(isTauriRuntime())
+  }, [])
+
   const updateCheckStartedRef = useRef(false)
 
   useEffect(() => {
@@ -262,9 +276,17 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
             id="sidebar-top"
             data-section="sidebar-top"
             data-testid="sidebar-top"
+            data-tauri-drag-region
             className={cn(
-              "SidebarTop flex h-[70px] items-center",
-              isIconOnly ? "justify-center px-2" : "justify-between gap-2 px-4",
+              "SidebarTop od-drag-region flex items-center",
+              // The toggle leaves this row on desktop, so it shrinks to the
+              // 46px title bar and keeps its content clear of the lights.
+              isDesktopTitlebar ? "h-[46px]" : "h-[70px]",
+              isIconOnly
+                ? "justify-center px-2"
+                : isDesktopTitlebar
+                  ? "justify-between gap-2 pl-[114px] pr-4"
+                  : "justify-between gap-2 px-4",
             )}
           >
             <Link
@@ -280,14 +302,21 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
 
             <ActionTooltip
               label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
-              side="right"
+              side={isDesktopTitlebar ? "bottom" : "right"}
             >
               <button
                 type="button"
                 onClick={handleSidebarToggle}
                 className={cn(
                   "inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-transparent text-ink-3 transition-[background-color,color,opacity] duration-[300ms] ease-layout hover:border-border hover:bg-muted hover:text-ink",
-                  isIconOnly ? "mx-auto" : "",
+                  isDesktopTitlebar
+                    ? // Window coordinates: 20px inset + three 12px lights + two
+                      // 8px gaps ends at ~72px; 82 leaves a gap, and (46-32)/2
+                      // centres the button on the title bar row.
+                      "fixed left-[82px] top-[7px] z-50"
+                    : isIconOnly
+                      ? "mx-auto"
+                      : "",
                 )}
                 aria-label={isIconOnly ? "Expand sidebar" : "Collapse sidebar"}
               >

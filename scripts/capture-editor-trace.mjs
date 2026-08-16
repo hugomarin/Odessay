@@ -68,7 +68,13 @@ function parseArgs(argv) {
     }
 
     if (arg === "--scenario") {
-      if (value !== "editor" && value !== "notes-annotations" && value !== "annotation-bubble") {
+      if (
+        value !== "editor" &&
+        value !== "notes-annotations" &&
+        value !== "annotation-bubble" &&
+        value !== "editor-overlays" &&
+        value !== "studio-shell"
+      ) {
         fail(`Invalid scenario "${value}".`);
       }
       options.scenario = value;
@@ -203,7 +209,8 @@ async function prepareHarness(page, targetUrl, timeoutMs, scenario) {
   await page.keyboard.type("warmup editor", { delay: 10 });
   await page.keyboard.press(process.platform === "darwin" ? "Meta+A" : "Control+A");
   await page.keyboard.press("Backspace");
-  const longFixture = Array.from({ length: 1400 }, (_, index) => {
+  const fixtureWords = scenario === "studio-shell" ? 5000 : 1400;
+  const longFixture = Array.from({ length: fixtureWords }, (_, index) => {
     if (index % 140 === 0) {
       return `alpha beta gamma delta ${index + 1}`;
     }
@@ -211,10 +218,107 @@ async function prepareHarness(page, targetUrl, timeoutMs, scenario) {
     return `paper quiet river ${index + 1}`;
   }).join(" ");
   await page.keyboard.insertText(longFixture);
+
+  if (scenario === "studio-shell") {
+    // The TOC needs real headings to subscribe to; the input rule turns
+    // "## " at the start of a line into one.
+    for (let index = 0; index < 6; index += 1) {
+      await page.keyboard.press("Enter");
+      await page.keyboard.type(`## Section ${index + 1}`, { delay: 4 });
+      await page.keyboard.press("Enter");
+      await page.keyboard.insertText(`Body of section ${index + 1}. ${"paper quiet river ".repeat(40)}`);
+    }
+  }
+
   await page.waitForTimeout(300);
 }
 
 async function runMeasuredScenario(page, targetUrl, scenario) {
+  if (scenario === "studio-shell") {
+    // ODE-433 — typing in a long document with the TOC open, then switching tabs.
+    const editor = page.locator(".odessay-editor-content").first();
+
+    await page.getByRole("button", { name: "Table of contents" }).first().click({ force: true });
+    await page.waitForTimeout(400);
+
+    await editor.click();
+    await page.keyboard.type(" typing while the table of contents is subscribed to the document", { delay: 6 });
+    await page.waitForTimeout(200);
+
+    try {
+      const origin = new URL(targetUrl).origin;
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+      await page.evaluate(async () => {
+        await navigator.clipboard.writeText(" alpha beta");
+      });
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+    } catch {
+      // Ignore clipboard restrictions in perf environments that do not expose it.
+    }
+
+    // A second tab, then three round trips between them.
+    await page.getByRole("button", { name: "New writing" }).click({ force: true });
+    await page.waitForTimeout(700);
+
+    const tabs = page.locator("[data-editor-tab-id]");
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      await tabs.first().click({ force: true });
+      await page.waitForTimeout(350);
+      await tabs.last().click({ force: true });
+      await page.waitForTimeout(350);
+    }
+
+    await tabs.first().click({ force: true });
+    await page.waitForTimeout(300);
+    await editor.click();
+    await page.keyboard.type(" and typing again after the tab round trip", { delay: 6 });
+    await page.waitForTimeout(700);
+    return;
+  }
+
+  if (scenario === "editor-overlays") {
+    // ODE-427 — overlay primitives opened and closed while the editor holds text.
+    // Modal pattern: the shortcuts dialog. Dropdown pattern: the artifact type picker.
+    const editor = page.locator(".odessay-editor-content").first();
+
+    try {
+      const origin = new URL(targetUrl).origin;
+      await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+      await page.evaluate(async () => {
+        await navigator.clipboard.writeText(" alpha beta");
+      });
+      await editor.click();
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+    } catch {
+      // Ignore clipboard restrictions in perf environments that do not expose it.
+    }
+
+    for (let iteration = 0; iteration < 3; iteration += 1) {
+      await page.keyboard.type(" writing while overlays open", { delay: 8 });
+
+      await page.getByRole("button", { name: "Keyboard shortcuts" }).click({ force: true });
+      await page.waitForTimeout(320);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+
+      await editor.click();
+      await page.keyboard.type(" and after they close", { delay: 8 });
+
+      await page.getByRole("button", { name: "Properties panel" }).click({ force: true });
+      await page.waitForTimeout(260);
+      const typeTrigger = page.getByTestId("editor-panel-properties").getByRole("button").first();
+      await typeTrigger.click({ force: true });
+      await page.waitForTimeout(260);
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: "Properties panel" }).click({ force: true });
+      await page.waitForTimeout(200);
+      await editor.click();
+    }
+
+    await page.waitForTimeout(600);
+    return;
+  }
+
   if (scenario === "notes-annotations") {
     const panel = page.getByTestId("editor-panel-notes");
     const aiCard = panel.locator("article").filter({ hasText: "“Annotation anchor 1”" });

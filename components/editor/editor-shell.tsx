@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { getMarkRange, type JSONContent } from "@tiptap/core"
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents"
 import { generateHTML } from "@tiptap/html"
@@ -15,9 +15,11 @@ import {
   mapSyncLifecycleToSaveState,
   type EditorSaveState,
 } from "@/components/editor/save-state"
+import { FolderTree, ListTree } from "lucide-react"
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
 import { EditorFindReplace } from "@/components/editor/editor-find-replace"
+import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
 import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
@@ -220,6 +222,9 @@ import { setSidebarMode, toggleSidebarMode } from "@/lib/stores/ui-shell-store"
 import { useHydrationProgress } from "@/lib/sync/hydration-progress"
 import { CATALOG_TITLE_CHANGE_EVENT, getLatestCatalogTitle } from "@/lib/events/catalog-title-events"
 import type { EditorNavigationMode } from "@/components/editor/panels/editor-navigation-sidebar"
+
+/** Debounce for the table of contents rebuild — see failure mode 3 of ODE-433. */
+const TABLE_OF_CONTENTS_DEBOUNCE_MS = 180
 
 type EditorShellProps = {
   writingId?: string
@@ -479,7 +484,9 @@ export function EditorShell({
   const lifecycleRef = useRef<WritingLifecycle>("local-only")
   const [isBodyHydrating, setIsBodyHydrating] = useState(false)
   const [activePanel, setActivePanel] = useState<EditorPanel>(null)
-  const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>("toc")
+  // Studio opens with both side panels closed: the ghost rail at the sheet's
+  // left edge is the way in (docs/design/views/studio.md).
+  const [navigationMode, setNavigationMode] = useState<EditorNavigationMode>(null)
   const [tableOfContentsItems, setTableOfContentsItems] = useState<TableOfContentDataItem[]>([])
   const [selectedTableOfContentsItemId, setSelectedTableOfContentsItemId] = useState<string | null>(null)
   const [spellcheckScope, setSpellcheckScope] = useState(() => getLocalDBScope())
@@ -501,6 +508,13 @@ export function EditorShell({
   const [localImageBackupUploading, setLocalImageBackupUploading] = useState(false)
   const [localImageBackupError, setLocalImageBackupError] = useState<string | null>(null)
   const [isFocusMode, setIsFocusMode] = useState(false)
+  const [canonicalPath, setCanonicalPath] = useState<string | null>(null)
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
+  const [focusModeCompensation, setFocusModeCompensation] = useState<{
+    top: number
+    left: number
+    right: number
+  } | null>(null)
   const [isTopbarVisible, setIsTopbarVisible] = useState(true)
   const [isTabBarVisible, setIsTabBarVisible] = useState(true)
   const [isFindReplaceOpen, setIsFindReplaceOpen] = useState(false)
@@ -525,6 +539,10 @@ export function EditorShell({
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
   const currentCanonicalPathRef = useRef<string | null>(null)
+  const editorBandRef = useRef<HTMLDivElement | null>(null)
+  // Widths of the chrome that focus mode hides, sampled while it is visible so
+  // the band can hold the sheet in place once it is gone.
+  const chromeWidthsRef = useRef({ top: 0, left: 0, right: 0 })
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
@@ -546,6 +564,7 @@ export function EditorShell({
   const tableOfContentsItemsRef = useRef<TableOfContentDataItem[]>([])
   const activeTableOfContentsItemIdRef = useRef<string | null>(null)
   const tableOfContentsScrollRafRef = useRef<number | null>(null)
+  const tableOfContentsDebounceRef = useRef<number | null>(null)
   const markdownSelectionRafRef = useRef<number | null>(null)
   const pendingMarkdownSelectionRef = useRef<{
     start: number
@@ -652,17 +671,30 @@ export function EditorShell({
     setLocalImageBackup(request)
     setLocalImageBackupError(null)
   }, [])
+  // The TOC subscribes to every document update. Debouncing it keeps a long
+  // document from rebuilding the tree on each keystroke; the timer is cleared
+  // on unmount and on document switch, so it always has a way out.
+  const scheduleTableOfContentsUpdate = useCallback((items: TableOfContentDataItem[]) => {
+    if (tableOfContentsDebounceRef.current !== null) {
+      window.clearTimeout(tableOfContentsDebounceRef.current)
+    }
+
+    const snapshot = [...items]
+    tableOfContentsDebounceRef.current = window.setTimeout(() => {
+      tableOfContentsDebounceRef.current = null
+      setTableOfContentsItems(snapshot)
+    }, TABLE_OF_CONTENTS_DEBOUNCE_MS)
+  }, [])
+
   const editorExtensions = useMemo(
     () =>
       createEditorExtensions({
-        onTableOfContentsUpdate: (items) => {
-          setTableOfContentsItems([...items])
-        },
+        onTableOfContentsUpdate: scheduleTableOfContentsUpdate,
         tableOfContentsScrollParent: getTableOfContentsScrollParent,
         resolveImage: isDesktopRuntime() ? resolveImage : undefined,
         onRequestLocalImageBackup: isDesktopRuntime() ? requestLocalImageBackup : undefined,
       }),
-    [getTableOfContentsScrollParent, requestLocalImageBackup, resolveImage],
+    [getTableOfContentsScrollParent, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
   )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -1711,6 +1743,7 @@ export function EditorShell({
   useEffect(() => {
     if (!isDesktopRuntime() || !currentWritingId) {
       currentCanonicalPathRef.current = null
+      setCanonicalPath(null)
       setExternalFileNotice(null)
       return
     }
@@ -1728,6 +1761,7 @@ export function EditorShell({
 
       if (localWriting.sync_status === "deleted" || localWriting.deleted_at) {
         currentCanonicalPathRef.current = nextCanonicalPath
+        setCanonicalPath(nextCanonicalPath)
         setExternalFileNotice({ kind: "deleted", path: nextCanonicalPath })
         setSyncStatus("saved-local")
         return
@@ -1739,11 +1773,13 @@ export function EditorShell({
         previousCanonicalPath !== nextCanonicalPath
       ) {
         currentCanonicalPathRef.current = nextCanonicalPath
+        setCanonicalPath(nextCanonicalPath)
         setExternalFileNotice({ kind: "moved", path: nextCanonicalPath })
         return
       }
 
       currentCanonicalPathRef.current = nextCanonicalPath
+      setCanonicalPath(nextCanonicalPath)
       setExternalFileNotice(null)
     }
 
@@ -1759,6 +1795,7 @@ export function EditorShell({
       // Otherwise the next writing's first sync sees the previous writing's path
       // as the "previous" value and flashes a false "file moved" notice.
       currentCanonicalPathRef.current = null
+      setCanonicalPath(null)
     }
   }, [currentWritingId])
 
@@ -1774,6 +1811,77 @@ export function EditorShell({
       document.body.classList.remove("od-editor-focus-mode")
     }
   }, [activePanel, isFocusMode])
+
+  useEffect(() => {
+    return () => {
+      if (tableOfContentsDebounceRef.current !== null) {
+        window.clearTimeout(tableOfContentsDebounceRef.current)
+        tableOfContentsDebounceRef.current = null
+      }
+    }
+  }, [])
+
+  // Switching artifact drops the previous document's headings immediately: a
+  // pending debounce must never land on the new document.
+  useEffect(() => {
+    if (tableOfContentsDebounceRef.current !== null) {
+      window.clearTimeout(tableOfContentsDebounceRef.current)
+      tableOfContentsDebounceRef.current = null
+    }
+
+    setTableOfContentsItems([])
+  }, [currentWritingId])
+
+  // Studio opens with the rail collapsed to 52px (docs/design/views/studio.md
+   // anatomy). It is a default, not a lock: expanding it afterwards sticks.
+  useEffect(() => {
+    setSidebarMode("collapsed")
+  }, [])
+
+  // Below 1440 the right panel floats over the sheet instead of taking a column
+  // of the band (docs/design/views/studio.md, failure mode 4).
+  useEffect(() => {
+    const applyViewport = () => {
+      setIsNarrowViewport(window.innerWidth < 1440)
+    }
+
+    applyViewport()
+    window.addEventListener("resize", applyViewport)
+    return () => window.removeEventListener("resize", applyViewport)
+  }, [])
+
+  // Focus mode hides the rail and the panels. The sheet must not move a pixel
+  // when they go, so the band keeps sampling how much room they take while they
+  // are visible and pads itself by exactly that much once they are gone.
+  useLayoutEffect(() => {
+    if (isFocusMode) {
+      return
+    }
+
+    const band = editorBandRef.current
+    const sheet = band?.querySelector<HTMLElement>('[data-testid="editor-sheet"]')
+
+    if (!band || !sheet) {
+      return
+    }
+
+    const bandRect = band.getBoundingClientRect()
+    const sheetRect = sheet.getBoundingClientRect()
+    const railWidth = document.getElementById("sidebar")?.getBoundingClientRect().width ?? 0
+    const sectionTop = band.closest("section")?.getBoundingClientRect().top ?? 0
+
+    chromeWidthsRef.current = {
+      // The titlebar above the band goes with focus mode too, so the band pads
+      // its top by the same amount and the sheet keeps its y.
+      top: Math.max(0, Math.round(bandRect.top - sectionTop)),
+      left: Math.max(0, Math.round(railWidth + (sheetRect.left - bandRect.left))),
+      right: Math.max(0, Math.round(bandRect.right - sheetRect.right)),
+    }
+  })
+
+  useLayoutEffect(() => {
+    setFocusModeCompensation(isFocusMode ? chromeWidthsRef.current : null)
+  }, [isFocusMode])
 
   useEffect(() => {
     if (!editor) {
@@ -1808,6 +1916,7 @@ export function EditorShell({
       writingSlugRef.current = null
       lifecycleRef.current = "local-only"
       currentCanonicalPathRef.current = null
+      setCanonicalPath(null)
       window.requestAnimationFrame(() => {
         editor.commands.focus("start")
       })
@@ -1936,6 +2045,7 @@ export function EditorShell({
         // Local image node views resolve relative sources during setContent, so
         // the document path must be available before ProseMirror creates them.
         currentCanonicalPathRef.current = canonicalPath
+        setCanonicalPath(canonicalPath)
         isApplyingContentRef.current = true
         // Load JSON first to get the markdown serialization, then re-parse as markdown
         // so that footnote references are converted to footnoteReference nodes.
@@ -2152,6 +2262,7 @@ export function EditorShell({
         setExternalFileNotice(null)
         setBodyText("")
         currentCanonicalPathRef.current = null
+        setCanonicalPath(null)
       }
 
       setHydrationWritingId(null)
@@ -5186,9 +5297,15 @@ export function EditorShell({
     [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
   )
 
+  // Renaming reads the loaded editor, so a pencil pressed on a background tab
+  // selects it first and opens the modal once that tab is the active one.
+  const pendingRenameTabIdRef = useRef<string | null>(null)
+
   const handleRenameWorkspaceTab = useCallback(
     (tabId: string) => {
       if (tabId !== editorSession.active_tab_id) {
+        pendingRenameTabIdRef.current = tabId
+        handleSelectWorkspaceTab(tabId)
         return
       }
 
@@ -5198,12 +5315,118 @@ export function EditorShell({
       })
       setRenameModalOpen(true)
     },
-    [editor, editorSession.active_tab_id],
+    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab],
   )
+
+  useEffect(() => {
+    const pendingTabId = pendingRenameTabIdRef.current
+    if (!pendingTabId || pendingTabId !== editorSession.active_tab_id) return
+    // The tab switch landed and the editor holds its content: open the modal.
+    pendingRenameTabIdRef.current = null
+    handleRenameWorkspaceTab(pendingTabId)
+  }, [editorSession.active_tab_id, handleRenameWorkspaceTab])
+
+  // The breadcrumb reads the document's canonical path: on desktop the parent
+  // folder and its parent are the workspace lead the header shows. On web there
+  // is no path and the breadcrumb collapses to the artifact name alone.
+  const documentBreadcrumb = useMemo(() => {
+    if (!canonicalPath) {
+      return { workspace: null, folder: null }
+    }
+
+    const segments = canonicalPath.split("/").filter(Boolean).slice(0, -1)
+
+    return {
+      workspace: segments.at(-2) ?? segments.at(-1) ?? null,
+      folder: segments.length > 1 ? (segments.at(-1) ?? null) : null,
+    }
+  }, [canonicalPath])
+
+  const handleRenameActiveWriting = useCallback(() => {
+    const activeTabId = editorSession.active_tab_id
+    if (!activeTabId) {
+      return
+    }
+
+    handleRenameWorkspaceTab(activeTabId)
+  }, [editorSession.active_tab_id, handleRenameWorkspaceTab])
 
   const handleReorderWorkspaceTab = useCallback((tabId: string, targetTabId: string) => {
     reorderTab(tabId, targetTabId)
   }, [])
+
+  /**
+   * Editorial state per tab, so each tab draws the same glyph the properties
+   * panel shows (`WritingStatusIcon`). The active tab reads live local state so
+   * a change in Properties is reflected without a round trip; the rest come
+   * from the catalog, refreshed when the open set changes.
+   */
+  const [catalogTabStatuses, setCatalogTabStatuses] = useState<Record<string, WritingStatus | null>>({})
+
+  const openWritingIds = useMemo(
+    () => editorSession.tabs.map((tab) => tab.writing_id).filter((id): id is string => Boolean(id)),
+    [editorSession.tabs],
+  )
+  const openWritingIdsKey = openWritingIds.join(",")
+
+  useEffect(() => {
+    if (openWritingIds.length === 0) {
+      setCatalogTabStatuses({})
+      return
+    }
+
+    let cancelled = false
+    let unsubscribe: (() => void) | null = null
+
+    // Imported lazily: pulling the catalog into the shell's module graph drags
+    // the Tauri filesystem watcher with it, which breaks any suite that mounts
+    // the editor without the desktop mocks.
+    void import("@/lib/queries/document-catalog")
+      .then(({ loadCatalogRecords, subscribeToCatalog }) => {
+        if (cancelled) return
+
+        const refresh = () => {
+          void loadCatalogRecords()
+            .then((records) => {
+              if (cancelled) return
+              const wanted = new Set(openWritingIds)
+              const next: Record<string, WritingStatus | null> = {}
+              for (const record of records) {
+                if (wanted.has(record.id)) next[record.id] = record.status ?? null
+              }
+              setCatalogTabStatuses(next)
+            })
+            .catch(() => {
+              // A catalog miss just leaves the glyph on its fallback.
+            })
+        }
+
+        refresh()
+        unsubscribe = subscribeToCatalog(refresh)
+      })
+      .catch(() => {
+        // No catalog in this runtime: the glyphs stay on their fallback.
+      })
+
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openWritingIdsKey])
+
+  const tabStatuses = useMemo(() => {
+    const next: Record<string, WritingStatus | null> = {}
+    for (const tab of editorSession.tabs) {
+      next[tab.id] =
+        tab.id === editorSession.active_tab_id
+          ? writingStatus
+          : tab.writing_id
+            ? catalogTabStatuses[tab.writing_id] ?? null
+            : null
+    }
+    return next
+  }, [catalogTabStatuses, editorSession.active_tab_id, editorSession.tabs, writingStatus])
 
   const handleRenameModalOpenChange = useCallback((open: boolean) => {
     setRenameModalOpen(open)
@@ -5564,6 +5787,7 @@ export function EditorShell({
     setTitle(filenameTitle)
     setHasExplicitTitle(filenameTitle !== DESKTOP_UNTITLED_WRITING_TITLE)
     currentCanonicalPathRef.current = result.path
+    setCanonicalPath(result.path)
     setExternalFileNotice(null)
     return result.path
   }, [])
@@ -5746,12 +5970,11 @@ export function EditorShell({
       <div className="EditorLayout hidden h-full min-h-0 flex-col md:flex">
         {!isFocusMode && isTopbarVisible ? (
           <EditorTopbar
-            editor={editor}
-            mode={mode}
             isFocusMode={isFocusMode}
             activePanel={activePanel}
             isPublicationModeEnabled={activePanel === "publication"}
             tabs={editorSession.tabs}
+            tabStatuses={tabStatuses}
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
@@ -5759,11 +5982,9 @@ export function EditorShell({
             onReorderTab={handleReorderWorkspaceTab}
             onNewTab={handleCreateWorkspaceTab}
             onToggleFocusMode={() => setIsFocusMode((currentState) => !currentState)}
-            onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
             onTogglePanel={(panel) => {
               setActivePanel((current) => (current === panel ? null : panel))
             }}
-            onRunAction={handleRunAction}
             isTabBarVisible={isTabBarVisible}
           />
         ) : null}
@@ -5795,8 +6016,21 @@ export function EditorShell({
           </div>
         ) : null}
 
-        <div className="flex min-h-0 flex-1">
-          <div className="relative flex min-w-0 flex-1 flex-col">
+        <div
+          ref={editorBandRef}
+          data-testid="editor-band"
+          style={
+            focusModeCompensation
+              ? {
+                  paddingTop: `${focusModeCompensation.top}px`,
+                  paddingLeft: `${focusModeCompensation.left}px`,
+                  paddingRight: `${focusModeCompensation.right}px`,
+                }
+              : undefined
+          }
+          className="EditorBand flex min-h-0 flex-1 gap-2.5 pb-2.5 pr-2.5"
+        >
+          <div className="relative flex min-w-0 flex-1 flex-col gap-1.5">
             {isDesktopRuntime() && hydrationProgress.active ? (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-bg/88 backdrop-blur-sm">
                 <div className="w-full max-w-[360px] rounded-[20px] border border-border/70 bg-paper px-6 py-5 text-center shadow-[0_20px_60px_rgba(39,27,22,0.12)]">
@@ -5845,12 +6079,7 @@ export function EditorShell({
                     <div className="h-3 w-2/3 rounded bg-foreground/5" />
                   </div>
                 ) : null}
-                <div
-                  className={cn(
-                    "relative flex min-h-0 flex-1",
-                    !isFocusMode && navigationMode && "pl-64",
-                  )}
-                >
+                <div className="relative flex min-h-0 flex-1 gap-2.5">
                   {!isFocusMode ? (
                     <Suspense fallback={null}>
                       <TableOfContentsPanel
@@ -5865,7 +6094,52 @@ export function EditorShell({
                     </Suspense>
                   ) : null}
 
-                  <WritingEditorContent
+                  <div
+                    data-testid="editor-sheet"
+                    className="EditorSheet relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] bg-sb shadow-float"
+                  >
+                    <EditorSheetHeader
+                      editor={editor}
+                      mode={mode}
+                      onRunAction={handleRunAction}
+                      title={title.trim() || UNTITLED_WRITING_TITLE}
+                      workspaceName={documentBreadcrumb.workspace}
+                      folderName={documentBreadcrumb.folder}
+                      onRename={handleRenameActiveWriting}
+                      leftPanel={navigationMode}
+                      onToggleLeftPanel={(panel) =>
+                        setNavigationMode(navigationMode === panel ? null : panel)
+                      }
+                      showPanelToggles={Boolean(navigationMode) || isNarrowViewport}
+                    />
+
+                    {/* Ghost rail: with both panels closed the two toggles float at
+                        the sheet's left edge — hidden as soon as a panel is open. */}
+                    {!navigationMode && !isNarrowViewport && !isFocusMode ? (
+                      <div
+                        data-testid="editor-ghost-rail"
+                        className="absolute left-3 top-[86px] z-[2] flex flex-col gap-2.5"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setNavigationMode("toc")}
+                          aria-label="Table of contents"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-4 opacity-70 transition-[background-color,color,opacity] duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink hover:opacity-100"
+                        >
+                          <ListTree className="h-[18px] w-[18px]" strokeWidth={1.5} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNavigationMode("workspace")}
+                          aria-label="Workspace"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-4 opacity-70 transition-[background-color,color,opacity] duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink hover:opacity-100"
+                        >
+                          <FolderTree className="h-[18px] w-[18px]" strokeWidth={1.5} />
+                        </button>
+                      </div>
+                    ) : null}
+
+                    <WritingEditorContent
                     editor={editor}
                     mode={mode}
                     markdownValue={markdownValue}
@@ -5898,6 +6172,7 @@ export function EditorShell({
                       ) : null
                     }
                   />
+                  </div>
                 </div>
 
                 {!isFocusMode ? (
@@ -5911,14 +6186,22 @@ export function EditorShell({
                     onToggleNotesPanel={() => {
                       setActivePanel((current) => (current === "notes" ? null : "notes"))
                     }}
+                    onOpenShortcutHelp={() => setIsShortcutHelpOpen(true)}
                   />
                 ) : null}
               </>
             )}
           </div>
-        </div>
 
         {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
+          <aside
+            data-testid="editor-right-panel"
+            // The panel is always a column of the band. It used to float over
+            // the sheet below 1440 — the desktop window opens at 1280, so that
+            // was its normal state and it covered the text (owner decision,
+            // ODE-433 follow-up).
+            className="EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
+          >
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
               <NotesPanel
@@ -6108,6 +6391,7 @@ export function EditorShell({
                 artifactType={artifactType}
                 visibility={writingVisibility}
                 metrics={textMetrics}
+                canonicalPath={canonicalPath}
                 spellcheckPreference={spellcheckPreference}
                 spellcheckLanguage={spellcheckConfig.language}
                 onExportMarkdown={exportMarkdown}
@@ -6196,7 +6480,9 @@ export function EditorShell({
               />
             )}
           </Suspense>
+          </aside>
         ) : null}
+        </div>
       </div>
 
       <EditorShortcutsDialog

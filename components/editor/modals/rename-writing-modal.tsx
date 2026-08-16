@@ -3,14 +3,7 @@
 import { useEffect, useState } from "react"
 import { Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { FormModal } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { hasEnoughTitleSuggestionContent } from "@/lib/ai/title-suggestions"
 import { getAIService } from "@/lib/services/ai-service-factory"
@@ -74,32 +67,47 @@ export function RenameWritingModal({
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[460px]">
-        <DialogHeader>
-          <DialogTitle>Rename writing</DialogTitle>
-          <DialogDescription>Update the title shown in the editor, Desk, and Collections.</DialogDescription>
-        </DialogHeader>
+  const submit = () => {
+    onConfirm(nextTitle.trim() || "Untitled writing")
+    onOpenChange(false)
+  }
 
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            onConfirm(nextTitle.trim() || "Untitled writing")
-            onOpenChange(false)
-          }}
-        >
-          <label className="block space-y-2">
-            <span className="text-[12px] font-medium text-ink-3">Title</span>
-            <Input
-              autoFocus
-              value={nextTitle}
-              onChange={(event) => setNextTitle(event.target.value)}
-              placeholder="Untitled writing"
-              maxLength={160}
-            />
-          </label>
+  return (
+    <FormModal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Rename artifact"
+      overline="Artifact name"
+      width={440}
+      dirty={nextTitle.trim() !== title.trim()}
+      discardMessage="This artifact has a new name that has not been saved. Discard it?"
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={submit}>
+            Save title
+          </Button>
+        </>
+      }
+    >
+      <form
+        className="space-y-4 pb-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          submit()
+        }}
+      >
+        <Input
+          autoFocus
+          aria-label="Artifact name"
+          value={nextTitle}
+          onChange={(event) => setNextTitle(event.target.value)}
+          placeholder="Untitled writing"
+          maxLength={160}
+          className="h-11 text-[15px]"
+        />
 
           <div className="rounded-[10px] border-[0.5px] border-border bg-bg p-3">
             <div className="flex items-start justify-between gap-3">
@@ -152,14 +160,10 @@ export function RenameWritingModal({
             {suggestionError ? <p className="mt-3 text-[11px] text-destructive">{suggestionError}</p> : null}
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit">Save title</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <button type="submit" className="sr-only">
+          Save title
+        </button>
+      </form>
+    </FormModal>
   )
 }

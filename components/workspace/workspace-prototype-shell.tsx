@@ -666,13 +666,13 @@ function DesktopWorkspaceIndex() {
   return (
     <>
       <div className="flex min-h-full flex-col bg-bg">
-        <div className="border-b-[0.5px] border-border px-10 py-7">
-          <div className="flex items-start justify-between gap-6">
-            <div className="max-w-[620px]">
-              <h1 className="text-[24px] font-medium tracking-[-0.03em] text-ink">
+        <div data-tauri-drag-region className="od-drag-region border-b-[0.5px] border-border px-10 py-7">
+          <div data-tauri-drag-region className="flex items-start justify-between gap-6">
+            <div data-tauri-drag-region className="max-w-[620px]">
+              <h1 data-tauri-drag-region className="text-[24px] font-medium tracking-[-0.03em] text-ink">
                 Workspace
               </h1>
-              <p className="mt-1 text-[14px] text-ink-4">
+              <p data-tauri-drag-region className="mt-1 text-[14px] text-ink-4">
                 Local workspaces that keep your files in context.
               </p>
             </div>

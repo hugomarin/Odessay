@@ -5,6 +5,7 @@ import { Mic } from "lucide-react"
 import { VoiceRecorderControls } from "./voice-recorder-controls"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useVoiceRecorder } from "@/hooks/useVoiceRecorder"
+import { cn } from "@/lib/utils"
 import { transcribeVoiceNote } from "@/lib/services/transcription/transcribe-voice-note"
 import { getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { FloatingOverlayAnchor } from "@/lib/reading/floating-overlay-position"
@@ -76,6 +77,13 @@ export function AnnotationBubble({
   } = useVoiceRecorder()
   const supportsVoice = type === "personal" || type === "ai"
   const isVoiceMode = supportsVoice && state !== "idle"
+  /**
+   * The AI composer is the popover the Studio prototype renders
+   * (`Artifact Studio Studio.dc.html`, lines 302-339 / 1093-1122): 322px wide,
+   * padding 14, radius 12. ODE-436 governs that surface only, so the personal
+   * and footnote bubbles keep the geometry they already shipped with.
+   */
+  const isAiComposer = type === "ai"
   const floatingPosition = useFloatingOverlayPosition({
     anchor: position,
     overlayRef: containerRef,
@@ -242,7 +250,10 @@ export function AnnotationBubble({
         void start()
       }}
       disabled={isMicDisabled}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+      className={cn(
+        "inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-border text-ink transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40",
+        isAiComposer ? "w-9" : "w-8",
+      )}
       aria-label="Record a voice note"
     >
       <Mic className="h-4 w-4" strokeWidth={1.5} />
@@ -268,21 +279,24 @@ export function AnnotationBubble({
       data-section="annotation-bubble"
       data-testid="annotation-bubble"
       data-placement={floatingPosition?.placement ?? "below"}
-      className="AnnotationBubble rounded-[12px] border-[0.5px] border-border bg-sb shadow-float-lg"
+      className={cn(
+        "AnnotationBubble rounded-[12px] border-[0.5px] border-border bg-sb",
+        isAiComposer ? "shadow-[var(--shadow-ai-composer)]" : "shadow-float-lg",
+      )}
       style={{
         position: "fixed",
         left: floatingPosition?.left ?? position.x,
         top: floatingPosition?.top ?? position.y,
         visibility: floatingPosition ? "visible" : "hidden",
-        width: "min(260px, calc(100vw - 16px))",
+        width: isAiComposer ? "min(322px, calc(100vw - 16px))" : "min(260px, calc(100vw - 16px))",
         maxHeight: floatingPosition?.maxHeight,
         overflowY: "auto",
         overscrollBehavior: "contain",
         zIndex: 50,
-        padding: "10px 12px",
+        padding: isAiComposer ? 14 : "10px 12px",
         display: "flex",
         flexDirection: "column",
-        gap: 8,
+        gap: isAiComposer ? 12 : 8,
       }}
     >
       {isVoiceMode ? (
@@ -313,18 +327,23 @@ export function AnnotationBubble({
           }}
           placeholder={type === "footnote" ? "Write your footnote…" : type === "ai" ? "Write your AI instruction…" : "Write your highlight note…"}
           rows={3}
-          className="w-full resize-none rounded-[6px] bg-transparent font-sans text-[13px] text-ink-2 placeholder:text-ink-4 focus:outline-none"
+          className={cn(
+            "w-full resize-none rounded-[6px] bg-transparent font-sans focus:outline-none",
+            isAiComposer
+              ? "min-h-[74px] p-0.5 text-[15px] leading-[1.5] text-ink placeholder:text-ink-5"
+              : "text-[13px] text-ink-2 placeholder:text-ink-4",
+          )}
           style={{ border: "none" }}
           aria-label="Annotation text"
         />
       )}
       {type === "ai" ? (
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-[7px]">
           {AI_QUICK_CHIPS.map((chip) => (
             <button
               key={chip}
               onClick={() => setNote((current) => (current ? `${current} ${chip}` : chip))}
-              className="rounded-[6px] border-[0.5px] border-border bg-bg px-2 py-1 font-sans text-[11px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+              className="h-8 rounded-lg border-[0.5px] border-border bg-transparent px-[13px] font-sans text-[13px] leading-none text-ink-2 transition-colors hover:border-ink-5 hover:bg-surface-menu-hover hover:text-ink"
               type="button"
             >
               {chip}
@@ -332,10 +351,13 @@ export function AnnotationBubble({
           ))}
         </div>
       ) : null}
-      <div className="flex items-center justify-end gap-2">
+      <div className={cn("flex items-center justify-end", isAiComposer ? "gap-[9px]" : "gap-2")}>
         <button
           onClick={onCancel}
-          className="rounded-[7px] px-3 py-1 font-sans text-[12px] text-ink-3 transition-colors hover:bg-muted hover:text-ink-2"
+          className={cn(
+            "rounded-[7px] font-sans text-ink-3 transition-colors hover:bg-muted hover:text-ink-2",
+            isAiComposer ? "h-8 px-2.5 text-[14px] leading-none" : "px-3 py-1 text-[12px]",
+          )}
         >
           Cancel
         </button>
@@ -360,7 +382,12 @@ export function AnnotationBubble({
             void handleConfirm()
           }}
           disabled={!canSubmitText || isVoiceMode}
-          className="rounded-[7px] bg-ink px-3 py-1 font-sans text-[12px] font-medium text-bg transition-opacity hover:opacity-90 disabled:opacity-40"
+          className={cn(
+            "font-sans font-medium text-bg transition-opacity hover:opacity-90 disabled:opacity-40",
+            isAiComposer
+              ? "h-8 rounded-lg bg-ink px-[18px] text-[14px] leading-none"
+              : "rounded-[7px] bg-ink px-3 py-1 text-[12px]",
+          )}
         >
           {type === "footnote" ? "Add footnote" : "Save"}
         </button>

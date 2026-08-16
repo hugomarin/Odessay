@@ -1,0 +1,32 @@
+{
+  "tabs": {
+    "count": 8,
+    "heights": [
+      34
+    ],
+    "scrolls": true
+  },
+  "focusModeReflow": {
+    "before": {
+      "x": 385,
+      "y": 236,
+      "width": 670
+    },
+    "during": {
+      "x": 385,
+      "y": 236,
+      "width": 670
+    },
+    "after": {
+      "x": 385,
+      "y": 236,
+      "width": 670
+    }
+  },
+  "timeToInteractive": {
+    "domInteractive": 40,
+    "domContentLoaded": 41,
+    "firstContentfulPaint": 108,
+    "editorEditableMs": 628
+  }
+}

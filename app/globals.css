@@ -27,13 +27,21 @@
   --line-softer: 36 14% 93%;           /* #F0EEEB — hairline between form rows      */
   --surface-selected: 34.3 41.2% 96.7%;/* #FAF7F3 — warm selected / summary rows    */
   --surface-row-hover: 30 25% 98.4%;   /* #FCFBFA — table row hover                 */
+  --surface-menu-hover: 40 9.7% 94.7%; /* #F2F1EF — dropdown item hover             */
   --success: 145.1 46.2% 33.5%;        /* #2E7D4F — done, restored, confirmations   */
   --success-tint: 135 28.6% 91.8%;     /* #E4F0E7 — success tile background         */
   --cursor: 22 55% 38%;
+  /* Single scrim for every modal overlay — docs/design/overlays.md.
+     Read from the render of the Add Workspace and Settings prototypes. */
+  --od-scrim: rgba(35, 24, 15, 0.26);
   --od-annotation-ai: #5B5BD6;
   --od-annotation-highlight: #C07B2A;
   --od-annotation-highlight-badge: #E8A020;
   --od-annotation-muted: #999990;
+  /* The wavy underline colour that .pub-suggestion-pending already shipped,
+     promoted to a token so the panel dots can reuse it instead of repeating
+     the hex. Not a new colour — see docs/design/views/studio.md §Grammar. */
+  --od-suggestion-spelling: #c87341;
 
   /* ShadCN tokens mapped from Odessay */
   --background: var(--bg);
@@ -73,6 +81,8 @@
   --color-line-softer: hsl(var(--line-softer));
   --color-surface-selected: hsl(var(--surface-selected));
   --color-surface-row-hover: hsl(var(--surface-row-hover));
+  --color-surface-menu-hover: hsl(var(--surface-menu-hover));
+  --color-scrim: var(--od-scrim);
   --color-success: hsl(var(--success));
   --color-success-tint: hsl(var(--success-tint));
   --color-border: hsl(var(--border));
@@ -129,6 +139,8 @@
     0 8px 32px 0 hsla(25, 18%, 12%, 0.1),
     0 2px 8px 0 hsla(25, 18%, 12%, 0.06);
   --shadow-selection-bar: 0 18px 44px rgba(35, 24, 15, 0.34);
+  /* AI composer popover — read from the Studio prototype. */
+  --shadow-ai-composer: 0 14px 40px rgba(35, 24, 15, 0.14);
   --shadow-modal:
     0 30px 90px rgba(35, 24, 15, 0.28),
     0 2px 6px rgba(35, 24, 15, 0.1);
@@ -138,6 +150,10 @@
   --shadow-splash-mark: 0 12px 34px rgba(35, 24, 15, 0.22);
   --animate-menu-in: menuIn 150ms ease;
   --animate-fade-in: fadeIn 180ms ease;
+  /* Overlay motion — docs/design/system-app.md §6. The keyframes live below;
+     these are the only durations any overlay primitive may use. */
+  --animate-modal-in: odModalIn 260ms var(--od-ease-layout);
+  --animate-step-in: odStepIn 220ms var(--od-ease-layout);
   --ease-layout: var(--od-ease-layout);
 }
 
@@ -151,6 +167,17 @@
     margin-right: auto;
     max-width: 860px;
     padding: 2.5rem 1.25rem 4rem;
+    width: 100%;
+  }
+
+  /* Studio sheet — the editor's own frame. 720px measure with `48 24 140`
+     padding, the 140 clearing the AI bar (docs/design/layout.md §2).
+     The reading surfaces keep `.odessay-content-frame`. */
+  .odessay-editor-sheet-frame {
+    margin-left: auto;
+    margin-right: auto;
+    max-width: var(--size-sheet-editor);
+    padding: 48px 24px 140px;
     width: 100%;
   }
 
@@ -1084,13 +1111,31 @@
 
 .pub-suggestion-pending {
   text-underline-offset: 3px;
-  -webkit-text-decoration: underline wavy #c87341;
-  text-decoration: underline wavy #c87341;
+  -webkit-text-decoration: underline wavy var(--od-suggestion-spelling);
+  text-decoration: underline wavy var(--od-suggestion-spelling);
   text-decoration-thickness: 1px;
 }
 
 .pub-suggestion-stale {
   opacity: 0.5;
+}
+
+/**
+ * Window drag strips. Pair with `data-tauri-drag-region`: the attribute tells
+ * Tauri the area moves the window, and this stops WebKit from starting a text
+ * selection on the same gesture. Inert on web, where the attribute does nothing.
+ * Children that need to be selectable opt back in with `.od-drag-select`.
+ */
+.od-drag-region {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+.od-drag-select {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
 }
 
 .pub-suggestion-bubble-anchor {
@@ -1105,7 +1150,9 @@
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  transform: translateX(-50%);
+  /* --pub-bubble-dx is written by the extension so the bubble never leaves the
+     sheet horizontally; the flip below handles the vertical edge. */
+  transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px)));
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -1138,14 +1185,39 @@
   border-top-color: hsl(var(--ink));
 }
 
+/* Flipped below the span when the sheet's top edge would clip it. */
+.pub-suggestion-bubble-below {
+  bottom: auto;
+  top: calc(100% + 6px);
+  animation-name: pub-suggestion-bubble-in-below;
+}
+
+.pub-suggestion-bubble-below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: hsl(var(--ink));
+}
+
 @keyframes pub-suggestion-bubble-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(2px);
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(2px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(0);
+  }
+}
+
+@keyframes pub-suggestion-bubble-in-below {
+  from {
+    opacity: 0;
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(calc(-50% + var(--pub-bubble-dx, 0px))) translateY(0);
   }
 }
 
