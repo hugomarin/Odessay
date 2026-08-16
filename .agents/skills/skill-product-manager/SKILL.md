@@ -276,7 +276,7 @@ Tipos de contrato cuya modificación obliga a hacer este análisis:
 - Convención de URLs/rutas (paths, query params, redirect URLs).
 - Props públicas de un componente compartido.
 - Variables de entorno cuyo nombre o significado cambia.
-- Nombres de claves en archivos de config compartidos (`workflow/perf-budgets.json`, `workflow/status.json`, etc.).
+- Nombres de claves en archivos de config compartidos (`workflow/perf-budgets.json`, `workflow/status.json`, los ledgers `workflow/*.jsonl`, etc.).
 
 Un brief que cambia un contrato sin listar consumidores produce regresiones latentes: el feature consumidor sigue funcionando localmente con su asunción vieja hasta que un caso edge lo expone, típicamente lejos del autor del cambio. Cuando dudes si algo es "un contrato", asume que sí lo es y enumera consumidores.
 
@@ -293,10 +293,10 @@ Formato — siempre texto plano, nunca Markdown links:
 2. Paths sin prefijo `./` — usar `app/page.tsx`, no `./app/page.tsx`. El path es relativo a la raíz del repo, el `./` es ruido.
 3. Los docs de spec (`workflow/context/core/`, `workflow/context/features/`) nunca van aquí — son fuente de verdad que la implementación lee, no modifica. Si los pones en Files affected, estás invirtiendo la dirección de la dependencia.
 4. Los skills (`.agents/skills/*/SKILL.md`) nunca van aquí — son referencia, no output. Van en Reference docs.
-5. `workflow/status.json` debe aparecer como `(modifica)` en todo issue que vaya a `In Review`. `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos.
+5. `workflow/built.jsonl` debe aparecer como `(modifica)` en todo issue que vaya a `In Review` (antes era `workflow/status.json`, que ahora solo cambia cuando cambia la fase activa). `workflow/workflow.md` solo aparece cuando cambian reglas operativas, tools o permisos.
 6. **Honestidad de scope code vs docs.** Si el cambio principal es documental (`workflow/context/features/*.md`, `workflow/context/core/*.md`, etc.) pero el doc define o redefine un patrón que requiere código para funcionar, listar también los archivos de código que el patrón obliga a tocar. Aplica en cualquier dirección: un brief de feature, performance budget, modelo de datos, contrato de presentación o protocolo de auth puede empezar como docs y terminar requiriendo route handlers, helpers, migraciones, tests o componentes. Un brief que oculta el código bajo la etiqueta "docs-only" genera scope creep silencioso en BUILD y deja al REVIEW sin baseline. Ejemplos de patrones que típicamente arrastran código: redefinición de un contrato de URL/redirect, cambio de schema de tabla, nuevo budget de perf con harness asociado, nuevo flow visual con componente compartido, nueva política de validación de input.
 
-Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/status.json`.
+Si el issue solo toca código sin conflictos de archivos compartidos, evita `N/A`: lista al menos los archivos núcleo tocados + `workflow/built.jsonl`.
 
 ## Handoff *(solo si el issue requiere acción humana)*
 
@@ -481,7 +481,7 @@ El criterio operativo es simple: BUILD debe poder implementar sin tener que infe
 ### Commits
 El agente hace commits atómicos durante el desarrollo con mensajes en formato convencional.
 Cada mensaje incluye el ID del issue al final: `feat: implement auto-save debounce [ODE-42]`
-> **Excepción:** los commits de workflow en `main` durante REVIEW (`review_rejected`) **no** llevan `[ISSUE-ID]` en el subject, porque el issue aún no está en `built[]` y `check-status-drift` lo reportaría como falso positivo. El id puede ir en el body si se necesita trazabilidad adicional.
+> **Excepción:** los commits de workflow en `main` durante REVIEW (`review_rejected`) **no** llevan `[ISSUE-ID]` en el subject, porque el issue aún no está en el ledger `workflow/built.jsonl` y `check-status-drift` lo reportaría como falso positivo. El id puede ir en el body si se necesita trazabilidad adicional.
 Se hace push al branch remoto al terminar cada subtarea significativa dentro del issue.
 
 ### Trazabilidad Linear ↔ GitHub
@@ -501,11 +501,11 @@ Validaciones: typecheck ✅ | lint ✅ | tests ✅
 Listo para merge.
 ```
 
-### Trazabilidad GitHub ↔ Linear ↔ status.json
+### Trazabilidad GitHub ↔ Linear ↔ ledger de entregas
 
-Las ramas de feature **no tocan** `workflow/status.json` ni `workflow/review-history.jsonl`. Ambos archivos se actualizan únicamente en `main` post-merge durante REVIEW.
+Las ramas de feature **no tocan** `workflow/status.json`, `workflow/built.jsonl` ni `workflow/review-history.jsonl`. Se actualizan únicamente en `main` post-merge durante REVIEW.
 
-Durante BUILD, el agente solo abre el PR con body completo y mueve el issue a `In Review`. La entrada en `built[]` de `workflow/status.json` se agrega después del merge, en la etapa REVIEW, junto con el evento `build_submitted` en `workflow/review-history.jsonl`.
+Durante BUILD, el agente solo abre el PR con body completo y mueve el issue a `In Review`. La línea en `workflow/built.jsonl` se appendea después del merge, en la etapa REVIEW, junto con el evento `build_submitted` en `workflow/review-history.jsonl`.
 
 Luego corre:
 ```bash
@@ -514,7 +514,7 @@ npm run ops:delivery:gate
 
 Si este gate falla, el issue no puede pasar a `In Review`.
 
-> **Nota de validación de workflow:** antes de cualquier commit en `main` que toque `workflow/status.json` o `workflow/review-history.jsonl`, se debe ejecutar `node scripts/validate-workflow-json.mjs` para garantizar que el JSON/JSONL sea parseable. Esto previene regresiones como comas finales inválidas que bloquean CI.
+> **Nota de validación de workflow:** antes de cualquier commit que toque `workflow/status.json`, `workflow/built.jsonl` o `workflow/review-history.jsonl`, se debe ejecutar `node scripts/validate-workflow-json.mjs` (o `npm run ops:workflow:validate`) para garantizar que el JSON/JSONL sea parseable y que ninguna unión automática haya dejado marcadores de conflicto. Esto previene regresiones como comas finales inválidas que bloquean CI.
 
 ### Validation
 [LLM] Antes de mover el issue a In Review, ejecuta las validaciones que apliquen y documenta el resultado. No es suficiente que el código compile — el agente debe proporcionar proof of work: el output real de lo que corrió.

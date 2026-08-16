@@ -43,7 +43,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
 - Sin argumento (`/wf-define`): leer `workflow/status.json` → tomar `active_phase` como fase a planificar. Si la fase activa ya tiene todos sus issues creados en Linear, confirmar al humano antes de continuar.
 
 **Contexto a cargar:**
-1. `workflow/status.json` — fase activa y qué está construido.
+1. `workflow/status.json` — fase activa y plan de fases. Para saber qué está construido, consultar el ledger: `npm run ops:ledger -- built --phase "Fase N" --brief` (no leer `workflow/built.jsonl` entero).
 2. `workflow/define/roadmap.md` — alcance y dependencias de la fase.
 3. El subconjunto estricto de documentos de `workflow/context/` citados en la línea `Referencia` de cada issue del roadmap.
 4. `.agents/skills/skill-product-manager/SKILL.md` — cómo estructurar issues ejecutables, jerarquía en Linear y template de Issue Brief.
@@ -140,7 +140,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
    - `Recommended Context Fixes`: cambios concretos en issue brief/docs/skills para prevenir repetición.
 9. Emitir `BUILD completado` en la conversación. Si algún paso anterior falló y no se pudo resolver, emitir `HANDOFF REQUERIDO — [motivo exacto]`.
 
-**Restricción de workflow en BUILD:** la rama de feature **no toca** `workflow/review-history.jsonl` ni `workflow/status.json`. Ambos archivos se actualizan únicamente en `main` post-merge durante REVIEW. Esto elimina conflictos de merge cuando múltiples worktrees corren en paralelo.
+**Restricción de workflow en BUILD:** la rama de feature **no toca** `workflow/built.jsonl`, `workflow/review-history.jsonl` ni `workflow/status.json`. Se actualizan únicamente en `main` post-merge durante REVIEW. Esto elimina conflictos de merge cuando múltiples worktrees corren en paralelo.
 
 **Gate de salida:** pasos 5 y 6 en verde + PR abierto con body completo (paso 7) + issue en `In Review` (paso 8). Sin eso, el issue no puede estar en `In Review` ni emitirse `BUILD completado`.
 
@@ -188,7 +188,7 @@ Ese rol usa `.agents/skills/skill-product-manager/SKILL.md` como marco principal
    git add workflow/review-history.jsonl
    git commit -m "chore(workflow): append runtime audit"
    ```
-3. Si esta auditoria se ejecuta dentro de `/wf-build`, no tocar `workflow/review-history.jsonl` ni `workflow/status.json`; adjuntar los artefactos en el PR y dejar el append para REVIEW/mantenimiento, respetando la restriccion anti-conflicto de BUILD.
+3. Si esta auditoria se ejecuta dentro de `/wf-build`, no tocar `workflow/review-history.jsonl`, `workflow/built.jsonl` ni `workflow/status.json`; adjuntar los artefactos en el PR y dejar el append para REVIEW/mantenimiento, respetando la restriccion anti-conflicto de BUILD.
 
 **Gate de salida:** `ops:network:gate` ejecutado contra los HAR capturados + reportes guardados. Si corre en mantenimiento, evento `runtime_audit` append-only validado.
 
@@ -255,11 +255,12 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
    git push origin main
    ```
    > El evento `build_submitted` se aplaza a REVIEW para evitar que la rama de feature toque archivos de workflow, eliminando conflictos de merge en worktrees paralelos.
-10. Agregar el issue completado a la lista `built` en `workflow/status.json` especificando la fase terminada. Antes de commitear, validar que el JSON resultante es parseable:
+10. Appendear el issue completado al ledger `workflow/built.jsonl` (una línea JSON: `what`, `phase`, `issue`, `linear_url`, `pr_url`, `commit`, `date`, `notes`), especificando la fase terminada. Si la fase cambió, actualizar además `active_phase` y `last_updated` en `workflow/status.json`. Antes de commitear, validar que los ledgers son parseables:
    ```bash
+   npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","notes":"..."}'
    node scripts/validate-workflow-json.mjs
-   git add workflow/status.json
-   git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]"
+   git add workflow/built.jsonl workflow/status.json
+   git commit -m "chore(workflow): record {ISSUE-ID} in the built ledger [{ISSUE-ID}]"
    git push origin main
    ```
 11. Mover issue a `Done` en Linear.
@@ -292,10 +293,11 @@ Ejecutar `gh pr list --head <rama-del-issue>` y verificar que existe exactamente
 
 **Restricción:** no agregar alcance nuevo en REVIEW. Solo correcciones derivadas del review.
 
-**Regla anti-conflicto para `workflow/review-history.jsonl`:**
-- Es un log append-only; nunca editar ni borrar líneas previas.
-- En conflictos de merge/rebase, conservar ambas entradas y mantener orden temporal por append.
-- Si dos agentes escriben al mismo tiempo, resolver conservando todas las líneas válidas JSON.
+**Regla anti-conflicto para los ledgers (`workflow/built.jsonl`, `workflow/review-history.jsonl`):**
+- Son logs append-only; nunca editar, reordenar ni borrar líneas previas. Editar una línea existente **sí** produce conflicto y es la única forma de reintroducir el problema que este formato resuelve.
+- Los appends concurrentes ya no requieren resolución manual: `.gitattributes` los marca `merge=union`, así que git conserva automáticamente las líneas de ambas ramas.
+- **El orden físico del archivo no es cronológico** después de una unión automática — git une por posición, no por fecha. Ningún consumidor debe asumir que la última línea es la más reciente: leer siempre vía `scripts/lib/workflow-ledger.mjs`, que ordena por `date`/`ts`.
+- Tras cualquier merge o rebase que toque un ledger, correr `npm run ops:workflow:validate`: detecta marcadores de conflicto, JSONL inválido y falta de newline final.
 
 **Política de security findings:** un hallazgo de seguridad — por más leve o no-explotable-trivialmente que parezca — se trata como bloqueante desde el primer review, independientemente del dominio (auth, API pública, ingestión de archivos, queries SQL, secrets, validación de input). No usar frases como "conviene cerrar" o "antes del re-review" en el primer comentario: usar "bloquea aprobación" e incluir el patch sugerido inline.
 
@@ -363,15 +365,18 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
    - **Si no existe PR**: crear PR con body completo (links a todos los issues del branch, qué se hizo, cómo testear, outputs del paso 6).
    Verificar body no vacío: `gh pr view {número} --json body | jq -e '.body | length > 0'`.
 9. Confirmar PR en OPEN: `gh pr view {número} --json state`.
-10. Actualizar `workflow/status.json` y `workflow/review-history.jsonl` en la **rama de feature** (no en main):
-    - Agregar el issue a `built` de la fase activa en `status.json`.
-    - Appendear evento `ship_completed` a `review-history.jsonl`.
+10. Appendear a los ledgers en la **rama de feature** (no en main):
+    - `workflow/built.jsonl` — la entrega del issue en la fase activa.
+    - `workflow/review-history.jsonl` — el evento `ship_completed`.
     ```bash
+    npm run ops:ledger -- append-built '{"what":"...","phase":"...","issue":"{ISSUE-ID}","linear_url":"...","pr_url":"...","commit":"...","date":"YYYY-MM-DD","notes":"..."}'
+    npm run ops:ledger -- append-review '{"ts":"...","type":"ship_completed","issue":"{ISSUE-ID}","branch":"...","pr_url":"...","commit":"...","score":0,"gate_result":"PASS","reviewer":"...","notes":"..."}'
     node scripts/validate-workflow-json.mjs
-    git add workflow/status.json workflow/review-history.jsonl
+    git add workflow/built.jsonl workflow/review-history.jsonl
     git commit -m "chore(workflow): record {ISSUE-ID} ship_completed [{ISSUE-ID}]"
     git push origin {rama}
     ```
+    Ambos son ledgers JSONL append-only con `merge=union` (ver `.gitattributes`): dos ships paralelos que appendean **no conflictúan** — git conserva las dos líneas. Por eso SHIP puede escribirlos en la rama de feature sin reintroducir el problema que resolvió ODE-184. No editar líneas existentes ni reordenar el archivo: eso sí conflictúa.
 11. Dejar comentario en Linear con Context Report completo. **Este paso es obligatorio — no avanzar al paso 12 hasta confirmar que el comentario fue creado** (MCP retorna el ID del comentario; GraphQL retorna `success: true`):
     - `Context Gaps Detected = yes | no`
     - `Missing or Ambiguous Context`: describir qué faltó exactamente (no frases genéricas).
@@ -384,9 +389,9 @@ El razonamiento detrás de la política: cuando se marca un finding como "no blo
 12. Mover issue a `Done` en Linear. Solo ejecutar este paso tras haber recibido confirmación del comentario en el paso 11.
 13. Emitir `SHIP completado — PR #{número} abierto, listo para merge manual.`
 
-**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los archivos `workflow/review-history.jsonl` y `workflow/status.json` se actualizan en la **rama de feature** (no en main), a diferencia del flujo BUILD+REVIEW.
+**Restricción:** NO hacer `gh pr merge`. NO hacer `git switch main`. NO tocar `main`. Los ledgers `workflow/built.jsonl` y `workflow/review-history.jsonl` se appendean en la **rama de feature** (no en main), a diferencia del flujo BUILD+REVIEW. Esto es seguro únicamente porque son JSONL con `merge=union`; `workflow/status.json` sigue sin tocarse en ramas de feature.
 
-**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/status.json` y `review-history.jsonl` actualizados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `Done` (paso 12).
+**Gate de salida:** pasos 6 y 7 en verde + PR abierto con body completo (paso 8) + `workflow/built.jsonl` y `review-history.jsonl` appendeados en la rama de feature (paso 10) + comentario Context Report confirmado en Linear con ID retornado (paso 11) + issue en `Done` (paso 12).
 
 ---
 
@@ -537,7 +542,7 @@ Este comando existe porque la realidad después de un merge rara vez coincide ex
 3. Detectar referencias legacy, rutas rotas y desalineaciones de contrato.
 4. Corregir documentación afectada con cambios mínimos y trazables.
 5. Si se crea/mueve/elimina documentos, actualizar `workflow/docs.json`.
-6. Validar integridad de JSON (`docs.json`, `decisions.json`, `status.json`).
+6. Validar integridad de JSON y de los ledgers JSONL: `npm run ops:workflow:validate` (cubre `status.json`, `built.jsonl`, `review-history.jsonl` y `workflow/archive/*.jsonl`) más `docs.json` y `decisions.json`.
 7. Entregar resumen: archivos cambiados, inconsistencias resueltas y riesgos abiertos.
 
 **Gate de salida:** inconsistencias críticas corregidas + `workflow/docs.json` sincronizado + validación de JSON en verde.
@@ -608,7 +613,7 @@ Algunos issues requieren acciones que el agente no puede completar solo — cred
 - Hacer merge del PR tras REVIEW APROBADO: `gh pr merge {número} --merge`.
 - Tras merge confirmado en REVIEW, volver a `main` y sincronizar (`git switch main` + `git pull --ff-only origin main`) antes de iniciar el siguiente BUILD.
 - Mover estados en Linear según este documento.
-- Actualizar `workflow/status.json` estableciendo la fase en PLAN y agregando los issues completados a `built` al pasar a `Done` en REVIEW.
+- Actualizar `workflow/status.json` estableciendo la fase en PLAN, y appendear los issues completados a `workflow/built.jsonl` al pasar a `Done` en REVIEW.
 - Dejar comentario de trazabilidad en Linear al cerrar cada etapa.
 
 ## Protocolo de handoff (bloqueo externo)

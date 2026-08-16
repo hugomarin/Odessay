@@ -52,9 +52,16 @@ La ausencia de un doc en `features/` no es solo un gap de documentación — es 
 
 ### workflow/ — lo que define la operación del agente
 
-Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`workflow/status.json`), y en qué orden construir (`roadmap.md`).
+Los docs de operaciones son para el agente, no sobre el producto. Responden cómo empezar (`SETUP.md`), qué existe hoy (`workflow/status.json` + el ledger `workflow/built.jsonl`), y en qué orden construir (`roadmap.md`).
 
-`workflow/status.json` es el documento más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe.
+Ese par es lo más crítico para la coordinación entre agentes: evita que un agente construya algo que ya existe o asuma que algo existe cuando no existe. `status.json` responde *en qué fase estamos* y se mantiene chico a propósito, para que entre en contexto sin costo. El historial de entregas vive aparte, en `workflow/built.jsonl`, y se consulta en vez de leerse entero:
+
+```bash
+npm run ops:ledger -- built --issue ODE-447
+npm run ops:ledger -- built --phase "Fase 10" --brief
+```
+
+Los ledgers son JSONL append-only con `merge=union`: dos ramas paralelas que registran entregas distintas no conflictúan. Las fases cerradas se rotan a `workflow/archive/` con `npm run ops:ledger -- rotate --before YYYY-MM-DD`.
 
 ### .agents/skills/ — instrucciones de implementación
 
@@ -106,7 +113,7 @@ Patrones de API, autenticación, base de datos, manejo de errores, servicios ext
 
 **8. ¿Qué existe hoy en el codebase?**
 Estado actual: qué está construido, qué no existe, decisiones tomadas que no están en el código. Sin esto, el agente asume que nada existe o que todo existe.
-*Documento tipo: `workflow/status.json` — se actualiza con cada PR significativo.*
+*Documento tipo: `workflow/status.json` (fase activa) + `workflow/built.jsonl` (ledger de entregas) — se actualiza con cada PR significativo.*
 
 **9. ¿Cómo opera el agente en este proyecto?**
 Variables de entorno, cómo levantar el proyecto, tools requeridos, permisos, Git, protocolo de escalación.
@@ -237,9 +244,9 @@ Tests E2E con Playwright son la excepción: corren contra staging, separados del
 
 Antes de mover un issue a revisión, el agente pega el output de `npm run typecheck && npm run lint && npm test` en la descripción del PR. Sin ese output el PR no se revisa. Elimina la categoría de bugs "funciona en mi máquina" y hace la validación trazable.
 
-### Actualización de status.json con cada PR
+### Actualización del ledger con cada PR
 
-Cada PR significativo agrega una fila a `workflow/status.json`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
+Cada PR significativo appendea una línea a `workflow/built.jsonl`. Un PR significativo es cualquiera que implemente funcionalidad visible o infraestructura de la que otros issues dependen. Sin este hábito, el documento pierde valor en días y los agentes vuelven a improvisar sobre el estado del codebase.
 
 ---
 

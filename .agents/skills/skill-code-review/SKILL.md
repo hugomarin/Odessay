@@ -458,9 +458,9 @@ Si falta el comentario de trazabilidad → **rechazar**. La conexión Linear ↔
 - Si score < 5.0 → **rechazar**.
 - Si score < 7.0 → **solicitar cambios**.
 
-**7. status.json actualizado**
-- ¿Se agregó una entrada en `workflow/status.json → built` con el issue ID, commit SHA y fecha?
-- Si el issue era el último de la fase activa → ¿se actualizó `active_phase`?
+**7. Ledger de entregas actualizado**
+- ¿Se appendeó una línea a `workflow/built.jsonl` con el issue ID, commit SHA y fecha?
+- Si el issue era el último de la fase activa → ¿se actualizó `active_phase` en `workflow/status.json`?
 
 ### 8. Persistencia del score
 
@@ -469,9 +469,8 @@ Al finalizar cualquier review (aprobado, rechazado o con cambios solicitados), a
 ```bash
 BRANCH=$(git branch --show-current)
 COMMIT=$(git rev-parse --short HEAD)
-node -e "
-const fs = require('fs');
-const entry = JSON.stringify({
+npm run ops:ledger -- append-review "$(node -e "
+console.log(JSON.stringify({
   ts: new Date().toISOString(),
   issue: 'ODE-XX',
   branch: process.env.BRANCH,
@@ -480,14 +479,15 @@ const entry = JSON.stringify({
   reviewer: 'kimi',
   commit: process.env.COMMIT,
   verdict: 'approved|changes_requested|rejected'
-}) + '\n';
-fs.appendFileSync('workflow/review-history.jsonl', entry);
-"
+}));
+")"
 ```
 
-Si el archivo no existe, crearlo. Este log es la fuente de verdad para tendencias de calidad.
+Appendear por el helper y no con `fs.appendFileSync` directo: el helper garantiza el newline final. Sin él, un append sobre un archivo que no termina en salto pega dos entradas en una línea, y ahí `merge=union` propaga JSONL corrupto en vez de unir limpio.
 
-**Regla de workflow:** las ramas de feature **no tocan** `workflow/review-history.jsonl` ni `workflow/status.json`. Ambos archivos se actualizan únicamente en `main` post-merge.
+Este log es la fuente de verdad para tendencias de calidad.
+
+**Regla de workflow:** las ramas de feature **no tocan** `workflow/built.jsonl`, `workflow/review-history.jsonl` ni `workflow/status.json`. Se actualizan únicamente en `main` post-merge. (Excepción: `/wf-ship` appendea a los dos ledgers JSONL en la rama de feature; `merge=union` absorbe los appends paralelos.)
 
 Tras aprobar y mergear, appendear **ambos** eventos (`build_submitted` + `review_approved`) y commitear en `main`:
 ```bash
@@ -532,7 +532,7 @@ Issue: [ODE-XX]
 PR: [link]
 Commit: [SHA]
 Validaciones: typecheck ✅ | lint ✅ | tests ✅
-Trazabilidad: comentario en Linear ✅ | status.json actualizado ✅
+Trazabilidad: comentario en Linear ✅ | ledger built.jsonl actualizado ✅
 
 Acción: aprobación técnica completa. Ejecutando merge.
 ```
@@ -546,8 +546,8 @@ Con REVIEW APROBADO, ejecutar en este orden:
 → Sincronizar `main`: `git pull --ff-only origin main`.
 → Appendear `build_submitted` + `review_approved` a `workflow/review-history.jsonl` y commitear:
   `node scripts/validate-workflow-json.mjs && git add workflow/review-history.jsonl && git commit -m "chore(workflow): append build_submitted + review_approved for {ISSUE-ID} [{ISSUE-ID}]" && git push origin main`
-→ Actualizar `workflow/status.json` (`built[]`) y commitear:
-  `node scripts/validate-workflow-json.mjs && git add workflow/status.json && git commit -m "chore(workflow): record {ISSUE-ID} in status.json built [{ISSUE-ID}]" && git push origin main`
+→ Appendear la entrega a `workflow/built.jsonl` (y `active_phase` en `workflow/status.json` si la fase cerró) y commitear:
+  `npm run ops:ledger -- append-built '<json>' && node scripts/validate-workflow-json.mjs && git add workflow/built.jsonl workflow/status.json && git commit -m "chore(workflow): record {ISSUE-ID} in the built ledger [{ISSUE-ID}]" && git push origin main`
 → Mover el issue a Done en Linear (`scripts/linear-cli.mjs move`).
 
 El agente ejecuta el merge directamente sin esperar confirmación del humano, salvo que el humano haya indicado explícitamente que quiere aprobar el merge manualmente.
