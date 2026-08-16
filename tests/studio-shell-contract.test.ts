@@ -86,12 +86,18 @@ describe("studio shell contract", () => {
     expect(shell).toContain("{!navigationMode && !isNarrowViewport && !isFocusMode ? (")
   })
 
-  it("turns the right panel into an overlay below 1440 instead of a column", () => {
+  /**
+   * Amended after review on the DMG: the desktop window opens at 1280, so the
+   * "overlay below 1440" rule was the panel's normal state and it covered the
+   * text. The owner asked for a column at every width.
+   */
+  it("keeps the right panel as a column of the band at every width", () => {
     const shell = read("components/editor/editor-shell.tsx")
 
     expect(shell).toContain("w-[var(--size-panel-right)]")
+    expect(shell).not.toContain('isNarrowViewport &&\n                "absolute inset-y-0 right-0 z-30')
+    // The narrow-viewport probe still drives the header toggles and ghost rail.
     expect(shell).toContain("setIsNarrowViewport(window.innerWidth < 1440)")
-    expect(shell).toContain('isNarrowViewport &&\n                "absolute inset-y-0 right-0 z-30')
   })
 
   it("debounces the table of contents rebuild and always has a way out", () => {

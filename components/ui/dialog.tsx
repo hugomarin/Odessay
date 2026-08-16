@@ -179,7 +179,13 @@ function FormModal({
             )}
           </div>
 
-          <div className="od-scroll min-h-0 flex-1 overflow-y-auto px-[22px] pb-1">{children}</div>
+          {/* The scroller clips horizontally as well as vertically, which used
+              to slice the focus ring off any autofocused field. Padding the
+              scroll box and pulling the content back keeps the halo whole. */}
+          <div className="od-scroll -mx-1.5 min-h-0 flex-1 overflow-y-auto px-1.5 pb-1">
+            {/* 6px of scroller padding + 16px here keeps the original 22px. */}
+            <div className="px-4">{children}</div>
+          </div>
 
           {footer && (
             <div className="flex flex-shrink-0 items-center justify-end gap-2.5 border-t-[0.5px] border-line-soft px-[22px] py-3.5">

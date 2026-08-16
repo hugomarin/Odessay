@@ -5297,9 +5297,15 @@ export function EditorShell({
     [currentWritingId, editorSession.tabs, persistCurrentWorkspaceViewState],
   )
 
+  // Renaming reads the loaded editor, so a pencil pressed on a background tab
+  // selects it first and opens the modal once that tab is the active one.
+  const pendingRenameTabIdRef = useRef<string | null>(null)
+
   const handleRenameWorkspaceTab = useCallback(
     (tabId: string) => {
       if (tabId !== editorSession.active_tab_id) {
+        pendingRenameTabIdRef.current = tabId
+        handleSelectWorkspaceTab(tabId)
         return
       }
 
@@ -5309,8 +5315,16 @@ export function EditorShell({
       })
       setRenameModalOpen(true)
     },
-    [editor, editorSession.active_tab_id],
+    [editor, editorSession.active_tab_id, handleSelectWorkspaceTab],
   )
+
+  useEffect(() => {
+    const pendingTabId = pendingRenameTabIdRef.current
+    if (!pendingTabId || pendingTabId !== editorSession.active_tab_id) return
+    // The tab switch landed and the editor holds its content: open the modal.
+    pendingRenameTabIdRef.current = null
+    handleRenameWorkspaceTab(pendingTabId)
+  }, [editorSession.active_tab_id, handleRenameWorkspaceTab])
 
   // The breadcrumb reads the document's canonical path: on desktop the parent
   // folder and its parent are the workspace lead the header shows. On web there
@@ -5340,6 +5354,79 @@ export function EditorShell({
   const handleReorderWorkspaceTab = useCallback((tabId: string, targetTabId: string) => {
     reorderTab(tabId, targetTabId)
   }, [])
+
+  /**
+   * Editorial state per tab, so each tab draws the same glyph the properties
+   * panel shows (`WritingStatusIcon`). The active tab reads live local state so
+   * a change in Properties is reflected without a round trip; the rest come
+   * from the catalog, refreshed when the open set changes.
+   */
+  const [catalogTabStatuses, setCatalogTabStatuses] = useState<Record<string, WritingStatus | null>>({})
+
+  const openWritingIds = useMemo(
+    () => editorSession.tabs.map((tab) => tab.writing_id).filter((id): id is string => Boolean(id)),
+    [editorSession.tabs],
+  )
+  const openWritingIdsKey = openWritingIds.join(",")
+
+  useEffect(() => {
+    if (openWritingIds.length === 0) {
+      setCatalogTabStatuses({})
+      return
+    }
+
+    let cancelled = false
+    let unsubscribe: (() => void) | null = null
+
+    // Imported lazily: pulling the catalog into the shell's module graph drags
+    // the Tauri filesystem watcher with it, which breaks any suite that mounts
+    // the editor without the desktop mocks.
+    void import("@/lib/queries/document-catalog")
+      .then(({ loadCatalogRecords, subscribeToCatalog }) => {
+        if (cancelled) return
+
+        const refresh = () => {
+          void loadCatalogRecords()
+            .then((records) => {
+              if (cancelled) return
+              const wanted = new Set(openWritingIds)
+              const next: Record<string, WritingStatus | null> = {}
+              for (const record of records) {
+                if (wanted.has(record.id)) next[record.id] = record.status ?? null
+              }
+              setCatalogTabStatuses(next)
+            })
+            .catch(() => {
+              // A catalog miss just leaves the glyph on its fallback.
+            })
+        }
+
+        refresh()
+        unsubscribe = subscribeToCatalog(refresh)
+      })
+      .catch(() => {
+        // No catalog in this runtime: the glyphs stay on their fallback.
+      })
+
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openWritingIdsKey])
+
+  const tabStatuses = useMemo(() => {
+    const next: Record<string, WritingStatus | null> = {}
+    for (const tab of editorSession.tabs) {
+      next[tab.id] =
+        tab.id === editorSession.active_tab_id
+          ? writingStatus
+          : tab.writing_id
+            ? catalogTabStatuses[tab.writing_id] ?? null
+            : null
+    }
+    return next
+  }, [catalogTabStatuses, editorSession.active_tab_id, editorSession.tabs, writingStatus])
 
   const handleRenameModalOpenChange = useCallback((open: boolean) => {
     setRenameModalOpen(open)
@@ -5887,6 +5974,7 @@ export function EditorShell({
             activePanel={activePanel}
             isPublicationModeEnabled={activePanel === "publication"}
             tabs={editorSession.tabs}
+            tabStatuses={tabStatuses}
             activeTabId={editorSession.active_tab_id}
             onSelectTab={handleSelectWorkspaceTab}
             onCloseTab={handleCloseWorkspaceTab}
@@ -6108,13 +6196,11 @@ export function EditorShell({
         {!isFocusMode && activePanel && editorSession.tabs.length > 0 ? (
           <aside
             data-testid="editor-right-panel"
-            className={cn(
-              "EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden font-sans",
-              // Below 1440 the panel floats over the sheet instead of taking a
-              // column, so the sheet never ends up underneath it.
-              isNarrowViewport &&
-                "absolute inset-y-0 right-0 z-30 rounded-[10px] bg-sb px-3 shadow-float-lg",
-            )}
+            // The panel is always a column of the band. It used to float over
+            // the sheet below 1440 — the desktop window opens at 1280, so that
+            // was its normal state and it covered the text (owner decision,
+            // ODE-433 follow-up).
+            className="EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
           >
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
