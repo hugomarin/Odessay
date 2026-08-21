@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { AddWorkspaceFlow } from "@/components/workspace/add-workspace-flow";
+import { NoWorkspaceEmptyState } from "@/components/shared/view-empty-states";
 import {
   WorkspaceFilterBar,
   type WorkspaceFilterBarSort,
@@ -160,6 +161,7 @@ export function WorkspaceIndex() {
   const [action, setAction] = useState<WorkspaceAction>(null);
   const [actionValue, setActionValue] = useState("");
   const [flowOpen, setFlowOpen] = useState(false);
+  const [flowStep, setFlowStep] = useState<"origin" | "existing" | "scratch">("origin");
   const [managedWorkspace, setManagedWorkspace] =
     useState<WorkspaceSummary | null>(null);
 
@@ -212,10 +214,13 @@ export function WorkspaceIndex() {
     );
   };
 
-  const handleAddWorkspace = () => {
+  const openAddWorkspace = (step: "origin" | "existing" | "scratch" = "origin") => {
     setManagedWorkspace(null);
+    setFlowStep(step);
     setFlowOpen(true);
   };
+
+  const handleAddWorkspace = () => openAddWorkspace();
 
   const handleConfirmAction = async () => {
     if (!action) return;
@@ -297,26 +302,19 @@ export function WorkspaceIndex() {
             ))}
           </div>
         ) : visibleWorkspaces.length === 0 ? (
-          <div className="rounded-[24px] border-[0.5px] border-dashed border-border bg-sb px-8 py-14 text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[18px] border-[0.5px] border-border bg-bg text-ink-3">
-              <Folder className="h-8 w-8" strokeWidth={1.5} />
-            </div>
-            <h2 className="mt-6 font-lora text-[28px] leading-tight text-ink">
-              No workspaces yet
-            </h2>
-            <p className="mx-auto mt-3 max-w-[46ch] text-[16px] leading-7 text-ink-3">
-              Add an existing folder to start tracking local markdown files.
-            </p>
-            <Button
-              type="button"
-              onClick={handleAddWorkspace}
-              disabled={isSubmitting}
-              className="mt-8 h-10 gap-2 rounded-[10px] bg-ink px-4 text-bg hover:bg-ink-2"
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.5} />
-              Add workspace
-            </Button>
-          </div>
+          /*
+            State 3 of docs/design/views/empty-states.md. It lives inside the
+            sheet, under the view header that still carries "Add workspace", so
+            it is never a dead end: the rail — and Settings with it — stays.
+
+            The starter-workspace footnote is omitted because no starter
+            documents exist to point at. Naming a workspace that is not there
+            would be worse than staying quiet. Context Gap on ODE-438.
+          */
+          <NoWorkspaceEmptyState
+            onUseExistingFolder={() => openAddWorkspace("existing")}
+            onCreateFromScratch={() => openAddWorkspace("scratch")}
+          />
         ) : layout === "grid" ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
             {visibleWorkspaces.map((workspace) => (
@@ -445,10 +443,11 @@ export function WorkspaceIndex() {
       </div>
 
       <AddWorkspaceFlow
-        key={managedWorkspace?.slug ?? "new"}
+        key={`${managedWorkspace?.slug ?? "new"}-${flowStep}`}
         open={flowOpen}
         onOpenChange={setFlowOpen}
         workspace={managedWorkspace}
+        initialStep={flowStep}
         onComplete={() => {
           void loadWorkspaces();
         }}

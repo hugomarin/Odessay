@@ -3,6 +3,10 @@
 import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { DeskArtifactList } from "@/components/desk/desk-artifact-list"
+import {
+  NoArtifactsEmptyState,
+  STARTER_DOCUMENTS_UNAVAILABLE,
+} from "@/components/shared/view-empty-states"
 import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar"
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog"
 import { DeskHeader } from "@/components/desk/desk-header"
@@ -85,21 +89,21 @@ const EMPTY_SUMMARY: DeskActivitySummary = {
 }
 
 /**
- * "No artifacts at all" — a placeholder inside the sheet.
+ * "No artifacts at all" — state 2 of `docs/design/views/empty-states.md`,
+ * rendered inside the sheet so the header, its primary action and the rail all
+ * stay put (requirement 4).
  *
- * The real first-run state is ODE-438's deliverable (`docs/design/views/
- * empty-states.md`); ODE-430 only owns the fact that it lives inside this sheet
- * rather than replacing the page.
+ * "Restore starter documents" has no mechanism behind it yet: the repo has no
+ * starter-document seeding at all, so the button states that in `title` rather
+ * than pretending. Raised as a Context Gap on ODE-438.
  */
-function DeskEmptyState() {
+function DeskEmptyState({ onCreate }: { onCreate: () => void }) {
   return (
-    <div data-testid="desk-empty" className="px-4 py-20 text-center">
-      <p className="mb-1.5 font-lora text-[20px] font-medium leading-[1.3] text-ink">
-        Nothing here yet
-      </p>
-      <p className="text-[14px] leading-[1.5] text-ink-4">
-        Create your first artifact to see it on the Desk.
-      </p>
+    <div data-testid="desk-empty">
+      <NoArtifactsEmptyState
+        onCreate={onCreate}
+        restoreDisabledReason={STARTER_DOCUMENTS_UNAVAILABLE}
+      />
     </div>
   )
 }
@@ -864,7 +868,11 @@ export default function DeskPage() {
               groups={filteredSummary.groups}
               isLoading={isLoading}
               emptyState={
-                hasActiveFilters ? <DeskFilterEmptyState onClear={clearFilters} /> : <DeskEmptyState />
+                hasActiveFilters ? (
+                  <DeskFilterEmptyState onClear={clearFilters} />
+                ) : (
+                  <DeskEmptyState onCreate={() => router.push("/write?new=1")} />
+                )
               }
               selectedIds={selectedIds}
               onToggleSelection={toggleSelection}
