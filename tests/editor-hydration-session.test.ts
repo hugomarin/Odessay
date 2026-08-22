@@ -3,6 +3,7 @@ import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
+  resolvePersistedSessionRestore,
   resolveExternalWritingLoad,
 } from "../lib/editor/hydration-session"
 
@@ -53,5 +54,26 @@ describe("editor hydration session state", () => {
 
   it("does not turn navigation away from a blank route into hydration", () => {
     expect(resolveExternalWritingLoad(null, null)).toBeNull()
+  })
+
+  it("hands a persisted active UUID to hydration before any fallback", () => {
+    expect(resolvePersistedSessionRestore({
+      activeTabId: "tab-a",
+      tabs: [{ id: "tab-a", writingId: "writing-a" }],
+    })).toEqual({ status: "restorable", writingId: "writing-a" })
+  })
+
+  it("returns an explicit terminal outcome for empty, draft, and stale sessions", () => {
+    expect(resolvePersistedSessionRestore({ activeTabId: null, tabs: [] })).toEqual({
+      status: "no-restorable-tab",
+    })
+    expect(resolvePersistedSessionRestore({
+      activeTabId: "draft",
+      tabs: [{ id: "draft", writingId: null }],
+    })).toEqual({ status: "no-restorable-tab" })
+    expect(resolvePersistedSessionRestore({
+      activeTabId: "missing",
+      tabs: [{ id: "tab-a", writingId: "writing-a" }],
+    })).toEqual({ status: "no-restorable-tab" })
   })
 })
