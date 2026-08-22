@@ -31,6 +31,7 @@ const SAVE_STATE_LABELS: Record<EditorSaveState, string> = {
   saved: "Saved",
   saving: "Saving...",
   "saved-local": "Saved locally",
+  error: "Needs attention",
 }
 
 const SEGMENT_CLASS =
@@ -69,8 +70,18 @@ function StatusBarInner({
         className="EditorStatusbar grid h-[46px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center bg-transparent px-3.5 font-sans"
       >
         <div className="flex min-w-0 items-center gap-2">
-          <CloudUpload className="h-4 w-4 shrink-0 text-ink-4" strokeWidth={1.5} aria-hidden="true" />
-          <p className="min-w-0 truncate text-[13px] text-ink-3" aria-live="polite">
+          <CloudUpload
+            className={cn("h-4 w-4 shrink-0", saveState === "error" ? "text-destructive" : "text-ink-4")}
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+          <p
+            className={cn(
+              "min-w-0 truncate text-[13px]",
+              saveState === "error" ? "text-destructive" : "text-ink-3",
+            )}
+            aria-live="polite"
+          >
             {SAVE_STATE_LABELS[saveState]}
           </p>
         </div>

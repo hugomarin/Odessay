@@ -20,6 +20,7 @@ import {
   tauriCatalogApplyCollectionSnapshot,
   tauriCatalogEnqueueMutation,
   tauriCatalogListPendingMetadataMutations,
+  tauriCatalogPruneSyncedMutations,
   tauriCatalogPurgeDocument,
   tauriCatalogListPendingMutations,
   tauriCatalogUpdateMetadataMutationStatus,
@@ -48,9 +49,18 @@ async function catalog() {
 // SQLite existence probe per queue and performs no cloud queries or events.
 const RETRY_TICK_MS = 60_000
 
+// ODE-461: `synced` mutation rows are terminal (nothing re-reads them once
+// `documents.sync_status` resolved), yet they were never pruned — 12,579
+// stale rows / 353 MB of `payload_json` observed in the field. Not the cause
+// of the autosave stall, but unbounded durable growth is real waste. Prune
+// on its own low-frequency ticker so it never adds a query to the retry
+// tick's documented idle path (no cloud queries/events when the queue is empty).
+const PRUNE_TICK_MS = 30 * 60_000
+
 let started = false
 let scheduled: ReturnType<typeof setTimeout> | null = null
 let retryTicker: ReturnType<typeof setInterval> | null = null
+let pruneTicker: ReturnType<typeof setInterval> | null = null
 let lastSyncedAt: string | null = null
 let flushRunning = false
 let pendingWakeup = false
@@ -417,6 +427,15 @@ async function retryPendingTick() {
   }
 }
 
+async function pruneSyncedMutationsTick() {
+  try {
+    const store = await catalog()
+    await tauriCatalogPruneSyncedMutations(store.dbPath)
+  } catch {
+    // Best-effort cleanup; next tick retries.
+  }
+}
+
 export const desktopCatalogSyncService: SyncService = {
   async enqueueMutation(input: EnqueueSyncMutationInput) {
     if (input.mutation.entityKind !== "writing") {
@@ -592,6 +611,7 @@ export const desktopCatalogSyncService: SyncService = {
   async start() {
     started = true
     retryTicker ??= setInterval(() => { void retryPendingTick() }, RETRY_TICK_MS)
+    pruneTicker ??= setInterval(() => { void pruneSyncedMutationsTick() }, PRUNE_TICK_MS)
     return ok(undefined)
   },
   async stop() {
@@ -602,6 +622,8 @@ export const desktopCatalogSyncService: SyncService = {
     scheduled = null
     if (retryTicker) clearInterval(retryTicker)
     retryTicker = null
+    if (pruneTicker) clearInterval(pruneTicker)
+    pruneTicker = null
     return ok(undefined)
   },
   async getRuntimeState(): Promise<ServiceResponse<SyncRuntimeState>> {

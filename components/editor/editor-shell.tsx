@@ -554,6 +554,16 @@ export function EditorShell({
   const isCreatingWorkspaceTabRef = useRef(false)
   const isDraftMaterializingRef = useRef(false)
   const queuedDraftSnapshotRef = useRef<Editor | null>(null)
+  // ODE-461: sustained typing fires `persistEditorSnapshot` faster than a
+  // single desktop save round-trips. Without this guard, overlapping saves
+  // race the same SQLite connection and can fail with "database is locked".
+  // Single-flight: only the most recent snapshot queued during an in-flight
+  // save runs next; superseded snapshots in between are dropped by design
+  // (the queued one already reflects the current editor content).
+  const isPersistingSnapshotRef = useRef(false)
+  const queuedPersistSnapshotRef = useRef<{ editorInstance: Editor; overrides?: PersistSnapshotOverrides } | null>(
+    null,
+  )
   const ephemeralDraftWritingIdRef = useRef<string | null>(null)
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
@@ -973,7 +983,7 @@ export function EditorShell({
     }
   }, [])
 
-  const persistEditorSnapshot = useCallback(
+  const persistEditorSnapshotOnce = useCallback(
     async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
       const nowIso = new Date().toISOString()
       const activeId = currentWritingIdRef.current
@@ -1063,16 +1073,24 @@ export function EditorShell({
             const queuedSnapshot = queuedDraftSnapshotRef.current
             queuedDraftSnapshotRef.current = null
             if (queuedSnapshot) {
-              await persistEditorSnapshot(queuedSnapshot)
+              // Recurse into the un-guarded implementation directly: this
+              // continuation runs inside the same single-flight window the
+              // outer `persistEditorSnapshot` wrapper already opened, so it
+              // must not re-enter the guard (that would just queue itself).
+              await persistEditorSnapshotOnce(queuedSnapshot)
             }
             return
           } catch (error) {
             isDraftMaterializingRef.current = false
             queuedDraftSnapshotRef.current = editorInstance
-            console.error("[editor] failed to materialize desktop draft", error)
-            setSyncStatus(
-              typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving",
-            )
+            // ODE-461: nothing durable exists yet for this draft — the `.md`
+            // was never written. This is not a slow/pending sync; it's a
+            // failed local save, so it must not read as "saving"/"saved-local".
+            console.error("[editor:save] desktop draft materialization failed", {
+              writingId: ephemeralDraftWritingIdRef.current,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            setSyncStatus("error")
             return
           }
         } else {
@@ -1139,12 +1157,43 @@ export function EditorShell({
           ),
         )
         return true
-      } catch {
-        setSyncStatus(typeof navigator !== "undefined" && !navigator.onLine ? "saved-local" : "saving")
+      } catch (error) {
+        // ODE-461: a save that fails here means `.md`/SQLite were never
+        // written for this snapshot — visually identical to a slow sync
+        // until now, with no trace. Log the cause and surface it distinctly
+        // from "saving" (cloud-pending) so the author can tell a lost edit
+        // from a normal in-flight sync.
+        console.error("[editor:save] local save failed", {
+          writingId: nextId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        setSyncStatus("error")
         return false
       }
     },
     [createDesktopDraftFn, routeWritingId, router],
+  )
+
+  const persistEditorSnapshot = useCallback(
+    async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
+      if (isPersistingSnapshotRef.current) {
+        queuedPersistSnapshotRef.current = { editorInstance, overrides }
+        return true
+      }
+
+      isPersistingSnapshotRef.current = true
+      try {
+        return await persistEditorSnapshotOnce(editorInstance, overrides)
+      } finally {
+        isPersistingSnapshotRef.current = false
+        const queued = queuedPersistSnapshotRef.current
+        queuedPersistSnapshotRef.current = null
+        if (queued) {
+          void persistEditorSnapshot(queued.editorInstance, queued.overrides)
+        }
+      }
+    },
+    [persistEditorSnapshotOnce],
   )
 
   const runRichModeUpdateSideEffects = useCallback(

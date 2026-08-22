@@ -2,7 +2,11 @@ import type { LocalWriting } from "@/lib/local-db/schema"
 import type { WritingLifecycle } from "@/lib/local-db/schema"
 import type { SyncLifecycleStatus } from "@/lib/sync/events"
 
-export type EditorSaveState = "saved" | "saving" | "saved-local"
+// ODE-461: "saving" is ambiguous by design between "cloud sync pending" (fine,
+// content is already local-durable) and "the local save itself failed" (the
+// author's content was never written). "error" names only the second case —
+// a durable local-write failure — never a remote sync retry.
+export type EditorSaveState = "saved" | "saving" | "saved-local" | "error"
 
 export const mapSyncLifecycleToSaveState = (
   status: SyncLifecycleStatus,

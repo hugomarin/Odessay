@@ -665,3 +665,87 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
   })
 
 })
+
+describe("ODE-461 — desktop save reliability", () => {
+  it("collapses saves fired faster than a round-trip into one in-flight and one queued attempt", async () => {
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+
+    // Materialize first (mirrors the field report: "first autosave: correct").
+    await simulateEditorInput("First words")
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+    expect(mocks.saveWriting).not.toHaveBeenCalled()
+
+    // Sustained typing: hang the next save so a second RAF-flushed update
+    // lands while it is still in flight, the way keystrokes outrun a save
+    // round-trip contended on the same SQLite connection.
+    const deferred: { resolve: (() => void) | null } = { resolve: null }
+    mocks.saveWriting.mockImplementationOnce(
+      (input: { writing: TestWriting }) =>
+        new Promise((resolve) => {
+          deferred.resolve = () => resolve({ error: null, data: input.writing })
+        }),
+    )
+
+    await act(async () => {
+      simulateEditorInput("Second words")
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    })
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(1))
+    expect(mocks.saveWriting.mock.calls[0][0].writing.content.plainText).toBe("Second words")
+
+    // Another keystroke's own RAF flush fires while the first save still hangs.
+    await act(async () => {
+      simulateEditorInput("Third words")
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    })
+
+    // Without the single-flight guard this would be a second overlapping
+    // `saveWriting` call racing the same connection. It must be queued instead.
+    expect(mocks.saveWriting).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      deferred.resolve?.()
+    })
+
+    // The queued snapshot — reflecting the latest content, not "Second
+    // words" again — now runs as its own save once the guard clears.
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(2))
+    expect(mocks.saveWriting.mock.calls[1][0].writing.content.plainText).toBe("Third words")
+  })
+
+  it("logs the cause and surfaces a distinct error state instead of a perpetual Saving...", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    await act(async () => root?.render(<EditorShell />))
+    await vi.waitFor(() => expect(editorState.capturedOnUpdate).not.toBeNull())
+
+    await simulateEditorInput("First words")
+    await vi.waitFor(() => expect(mocks.createDesktopDraft).toHaveBeenCalledTimes(1))
+
+    mocks.saveWriting.mockImplementationOnce(async () => {
+      throw new Error("database is locked")
+    })
+
+    await act(async () => {
+      simulateEditorInput("Second words")
+    })
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(1))
+
+    await vi.waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[editor:save] local save failed",
+        expect.objectContaining({ error: "database is locked" }),
+      )
+    })
+
+    // The failure must not wedge the save path: the next keystroke saves normally.
+    await act(async () => {
+      simulateEditorInput("Third words")
+    })
+    await vi.waitFor(() => expect(mocks.saveWriting).toHaveBeenCalledTimes(2))
+    expect(mocks.saveWriting.mock.calls[1][0].writing.content.plainText).toBe("Third words")
+
+    errorSpy.mockRestore()
+  })
+})
