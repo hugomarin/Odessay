@@ -1087,6 +1087,40 @@ mod tests {
         }
     }
 
+    /// The TypeScript side reads this as a discriminated union
+    /// (`DesktopWorkspaceTouchResult`). A serde shape drift would not fail any
+    /// mocked test — it would silently send every save down the full-rescan
+    /// fallback forever. Lock the wire contract here.
+    #[test]
+    fn workspace_touch_file_result_matches_the_typescript_wire_contract() {
+        let updated = WorkspaceFileTouchResult::Updated {
+            root_path: "/docs".to_string(),
+            binding_root_id: "root-1".to_string(),
+            file: WorkspaceFileSnapshot {
+                id: "uuid".to_string(),
+                path: "/docs/Letter.md".to_string(),
+                relative_path: "Letter.md".to_string(),
+                name: "Letter.md".to_string(),
+                modified_at: 3,
+                size: 9,
+                inode: 77,
+                content_hash: "blake3:b".to_string(),
+            },
+        };
+
+        assert_eq!(
+            serde_json::to_string(&updated).expect("serialize updated"),
+            r#"{"status":"updated","rootPath":"/docs","bindingRootId":"root-1","file":{"id":"uuid","path":"/docs/Letter.md","relativePath":"Letter.md","name":"Letter.md","modifiedAt":3,"size":9,"inode":77,"contentHash":"blake3:b"}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&WorkspaceFileTouchResult::NeedsReconcile {
+                reason: "manifest is missing".to_string(),
+            })
+            .expect("serialize needs reconcile"),
+            r#"{"status":"needsReconcile","reason":"manifest is missing"}"#
+        );
+    }
+
     #[test]
     fn workspace_touch_file_never_enumerates_the_binding_root() {
         let root = seed_workspace("touch-no-full-scan", 100);
