@@ -127,6 +127,60 @@ describe("desktopCatalogSyncService", () => {
     )
   })
 
+  it("uses a trailing 1500 ms debounce before flushing", async () => {
+    vi.useFakeTimers()
+    mocks.listPending.mockResolvedValue([mutationRow()])
+    mocks.insert.mockResolvedValue({ error: null, count: 1 })
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+
+    await desktopCatalogSyncService.scheduleFlush()
+    await vi.advanceTimersByTimeAsync(1499)
+    expect(mocks.getSession).not.toHaveBeenCalled()
+
+    await desktopCatalogSyncService.scheduleFlush()
+    await vi.advanceTimersByTimeAsync(1499)
+    expect(mocks.getSession).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(mocks.updateStatus).toHaveBeenCalledTimes(1)
+  })
+
+  it("runs one active flush and one pending wakeup against the current queue", async () => {
+    let releaseFirstWrite: (() => void) | undefined
+    let activeWrites = 0
+    let maxActiveWrites = 0
+    mocks.listPending
+      .mockResolvedValueOnce([mutationRow({ id: "save-a" })])
+      .mockResolvedValueOnce([mutationRow({ id: "save-b" })])
+      .mockResolvedValue([])
+    mocks.insert.mockImplementation(async () => {
+      activeWrites += 1
+      maxActiveWrites = Math.max(maxActiveWrites, activeWrites)
+      if (mocks.insert.mock.calls.length === 1) {
+        await new Promise<void>((resolve) => { releaseFirstWrite = resolve })
+      }
+      activeWrites -= 1
+      return { error: null, count: 1 }
+    })
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+
+    const firstFlush = desktopCatalogSyncService.flushPending()
+    await vi.waitFor(() => expect(mocks.insert).toHaveBeenCalledTimes(1))
+    await Promise.all([
+      desktopCatalogSyncService.flushPending(),
+      desktopCatalogSyncService.flushPending(),
+      desktopCatalogSyncService.flushPending(),
+    ])
+    releaseFirstWrite?.()
+    await firstFlush
+    await vi.waitFor(() => expect(mocks.updateStatus).toHaveBeenCalledTimes(2))
+
+    expect(mocks.listPending).toHaveBeenCalledTimes(2)
+    expect(maxActiveWrites).toBe(1)
+    expect(mocks.updateStatus).toHaveBeenNthCalledWith(
+      2, "/config/desktop-index.sqlite3", "save-b", "synced", 0, null, null,
+    )
+  })
+
   it("updates cloud-only metadata without replacing the existing cloud body", async () => {
     mocks.catalogGet.mockResolvedValue(catalogRecord({
       localPresent: false,

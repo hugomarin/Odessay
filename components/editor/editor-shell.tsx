@@ -125,6 +125,7 @@ import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
+  resolvePersistedSessionRestore,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
@@ -546,6 +547,7 @@ export function EditorShell({
   const navigatedToDraftRef = useRef(false)
   const identityEnsuredRef = useRef(false)
   const desktopWebHandoffAppliedRef = useRef(false)
+  const desktopSessionRestoreTimingRef = useRef<{ writingId: string; startedAt: number } | null>(null)
   const forceNewWritingRequestedRef = useRef(false)
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const isCreatingWorkspaceTabRef = useRef(false)
@@ -1591,21 +1593,40 @@ export function EditorShell({
       return
     }
 
-      if (editorSession.active_tab_id && editorSession.active_tab_id !== EDITOR_DRAFT_TAB_ID) {
-        const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
-        if (activeTab?.writing_id) {
-          const nextHref = buildWritingRouteHref("/write", {
-            id: activeTab.writing_id,
-            slug: activeTab.slug,
-          })
-          if (isPerfHarness()) {
-            replaceEditorHistory(nextHref)
-          } else if (!isDesktopRuntime()) {
-            router.replace(nextHref)
-          }
-          return
+    const restoreDecision = resolvePersistedSessionRestore({
+      activeTabId: editorSession.active_tab_id,
+      tabs: editorSession.tabs.map((tab) => ({ id: tab.id, writingId: tab.writing_id })),
+    })
+
+    if (restoreDecision.status === "restorable") {
+      const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
+      const nextHref = buildWritingRouteHref("/write", {
+        id: restoreDecision.writingId,
+        slug: activeTab?.slug,
+      })
+
+      if (isDesktopRuntime()) {
+        // Explicit desktop handoff: history is only a projection in the static
+        // bundle, so identity must transition before hydration/fallback effects.
+        currentWritingIdRef.current = restoreDecision.writingId
+        desktopSessionRestoreTimingRef.current = {
+          writingId: restoreDecision.writingId,
+          startedAt: performance.now(),
         }
+        setCurrentWritingId(restoreDecision.writingId)
+        setHydrationWritingId(restoreDecision.writingId)
+        console.info(`[editor:session-restore] restorable ${restoreDecision.writingId}`)
+      } else if (isPerfHarness()) {
+        replaceEditorHistory(nextHref)
+      } else {
+        router.replace(nextHref)
       }
+      return
+    }
+
+    if (isDesktopRuntime()) {
+      console.info("[editor:session-restore] no-restorable-tab")
+    }
 
     // In desktop an empty session must converge to EditorEmptyState instead of
     // eagerly spawning a contentless draft tab. Web keeps its current behavior.
@@ -1968,7 +1989,6 @@ export function EditorShell({
           } else {
             currentWritingIdRef.current = null
             setCurrentWritingId(null)
-            openDraftTab()
             replaceEditorHistory("/write")
           }
         }
@@ -2265,6 +2285,13 @@ export function EditorShell({
         setCanonicalPath(null)
       }
 
+      const restoreTiming = desktopSessionRestoreTimingRef.current
+      if (restoreTiming?.writingId === targetWritingId) {
+        console.info(
+          `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
+        )
+        desktopSessionRestoreTimingRef.current = null
+      }
       setHydrationWritingId(null)
     }
 

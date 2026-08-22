@@ -19,6 +19,8 @@ import {
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const runtime = vi.hoisted(() => ({ isDesktop: true }))
+const unifiedOpenState = vi.hoisted(() => ({ enabled: false }))
+const persistedSession = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }))
 
 type TestWriting = {
   id: string
@@ -71,6 +73,7 @@ const mocks = vi.hoisted(() => ({
     data: input.writing,
   })),
   openWriting: vi.fn(async () => ({ error: null, data: desktopDraftRecord })),
+  openDocumentById: vi.fn(async () => ({ status: "opened", documentId: "restored-writing", record: null })),
 }))
 
 const editorState = vi.hoisted(() => ({
@@ -194,8 +197,8 @@ vi.mock("@/lib/services/document-service-factory", () => ({
 }))
 
 vi.mock("@/lib/services/open-document-factory", () => ({
-  isUnifiedOpenEnabled: () => false,
-  openDocumentById: vi.fn(async () => ({ status: "failed" })),
+  isUnifiedOpenEnabled: () => unifiedOpenState.enabled,
+  openDocumentById: mocks.openDocumentById,
   openDocumentByPath: vi.fn(async () => ({ status: "failed" })),
   describeOpenOutcome: vi.fn(),
 }))
@@ -214,7 +217,7 @@ vi.mock("@/lib/local-db", () => ({
       evictOldestWriting: vi.fn(),
     },
     editorSessions: {
-      get: vi.fn(async () => null),
+      get: vi.fn(async () => persistedSession.value),
       save: vi.fn(),
     },
   },
@@ -381,6 +384,8 @@ function simulateEditorInput(text: string) {
 
 beforeEach(async () => {
   runtime.isDesktop = true
+  unifiedOpenState.enabled = false
+  persistedSession.value = null
   resetEditorState()
   resetEditorSessionStoreForTests()
   topbarState.onCloseTab = null
@@ -401,6 +406,7 @@ beforeEach(async () => {
   mocks.cloudWrite.mockClear()
   mocks.saveWriting.mockClear()
   mocks.openWriting.mockClear()
+  mocks.openDocumentById.mockClear()
   window.confirm = vi.fn(() => true)
 
   // Provide a real DOM element for effects that attach listeners to the editor view.
@@ -418,6 +424,43 @@ afterEach(async () => {
 })
 
 describe("ODE-405 — desktop empty-draft persistence", () => {
+  it("restores the persisted desktop UUID through the unified opener before draft fallback", async () => {
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
+    unifiedOpenState.enabled = true
+    persistedSession.value = {
+      id: "workspace",
+      active_tab_id: "restored-writing",
+      tabs: [{
+        id: "restored-writing",
+        writing_id: "restored-writing",
+        slug: null,
+        title: "Restored",
+        save_state: "saved-local",
+        has_pending_sync: false,
+        last_touched_at: 1,
+        view_state: null,
+      }],
+      recent_writings: [],
+      updated_at: 1,
+    }
+
+    await act(async () => root?.render(<EditorShell />))
+
+    await vi.waitFor(() => {
+      expect(mocks.openDocumentById).toHaveBeenCalledWith("restored-writing")
+      expect(mocks.openWriting).toHaveBeenCalledWith("restored-writing")
+    })
+
+    expect(mocks.openDocumentById).toHaveBeenCalledTimes(1)
+    expect(mocks.openWriting).toHaveBeenCalledTimes(1)
+    expect(mocks.createDesktopDraft).not.toHaveBeenCalled()
+    expect(getEditorSessionState().session.active_tab_id).toBe("restored-writing")
+    expect(infoSpy).toHaveBeenCalledWith(expect.stringMatching(
+      /^\[editor:session-restore\] hydrated restored-writing duration_ms=\d+$/,
+    ))
+    infoSpy.mockRestore()
+  })
+
   it("does not materialize a writing when mounting without content", async () => {
     await act(async () => root?.render(<EditorShell />))
 

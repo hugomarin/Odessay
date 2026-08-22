@@ -14,6 +14,7 @@ import { createDesktopClient } from "@/lib/supabase/desktop-client"
 import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-catalog"
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { filenameToTitle } from "@/lib/desktop/document-naming"
+import { emitSyncMetric, metricBase, serializedBytes, type SyncFlushTrigger } from "@/lib/observability/sync-metrics"
 import {
   tauriCatalogApplyCollectionSnapshot,
   tauriCatalogEnqueueMutation,
@@ -50,6 +51,10 @@ let started = false
 let scheduled: ReturnType<typeof setTimeout> | null = null
 let retryTicker: ReturnType<typeof setInterval> | null = null
 let lastSyncedAt: string | null = null
+let flushRunning = false
+let pendingWakeup = false
+let lifecycleGeneration = 0
+let nextFlushTrigger: SyncFlushTrigger = "explicit"
 
 async function sessionUserId() {
   const { data, error } = await createDesktopClient().auth.getSession()
@@ -368,6 +373,7 @@ async function retryPendingTick() {
       (await tauriCatalogListPendingMutations(store.dbPath, now, 1)).length > 0 ||
       (await tauriCatalogListPendingMetadataMutations(store.dbPath, now, 1)).length > 0
     if (!hasPending) return
+    nextFlushTrigger = "retry_tick"
     await desktopCatalogSyncService.flushPending()
   } catch {
     // The queue is durable in SQLite; the next tick retries.
@@ -450,23 +456,45 @@ export const desktopCatalogSyncService: SyncService = {
   },
 
   async flushPending(): Promise<ServiceResponse<FlushSyncResult>> {
+    const startedAt = performance.now()
+    const trigger = nextFlushTrigger
+    nextFlushTrigger = "explicit"
+    const overlapDetected = flushRunning
+    if (overlapDetected) {
+      pendingWakeup = true
+      emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.flush", trigger, examined: 0, sent: 0, superseded: 0, succeeded: 0, failed: 0, cloudBytes: 0, verifiedWrites: 0, durationMs: 0, overlapDetected: true, queueWaitMs: [] })
+      return ok({ processedMutations: 0, failedMutations: [], nextRetryAt: null })
+    }
+    flushRunning = true
+    const generation = lifecycleGeneration
+    let examined = 0
+    let cloudBytes = 0
+    let queueWaitMs: number[] = []
     try {
       const userId = await sessionUserId()
       if (!userId) return fail("UNAUTHORIZED", "Sign in to sync pending documents")
       const store = await catalog()
       const pending = await tauriCatalogListPendingMutations(store.dbPath, Date.now(), 200)
       const metadataPending = await tauriCatalogListPendingMetadataMutations(store.dbPath, Date.now(), 200)
+      examined = pending.length + metadataPending.length
+      cloudBytes = [...pending, ...metadataPending].reduce((sum, mutation) => sum + serializedBytes(JSON.parse(mutation.payloadJson)), 0)
+      const attemptedAt = Date.now()
+      queueWaitMs = [...pending, ...metadataPending].map((mutation) => Math.max(0, attemptedAt - mutation.createdAt))
       const failed: string[] = []
       const ctx: FlushContext = { cloudConfirmed: new Set(), confirmedSnapshots: [] }
       for (const mutation of pending) {
+        const writeStartedAt = performance.now()
+        const bytes = serializedBytes(JSON.parse(mutation.payloadJson))
         try {
           await processMutation(userId, mutation, ctx)
+          emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "update", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "success" })
           await tauriCatalogUpdateMutationStatus(store.dbPath, mutation.id, "synced", mutation.attemptCount, null, null)
           const completedPayload = JSON.parse(mutation.payloadJson) as Record<string, unknown>
           if (completedPayload.mutationKind === "permanent-delete") {
             await tauriCatalogPurgeDocument(store.dbPath, mutation.documentId)
           }
         } catch (error) {
+          emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "update", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "failure" })
           failed.push(mutation.id)
           const attempts = mutation.attemptCount + 1
           const retryAt = Date.now() + Math.min(300_000, 1_000 * 2 ** Math.min(attempts, 8))
@@ -477,10 +505,14 @@ export const desktopCatalogSyncService: SyncService = {
         }
       }
       for (const mutation of metadataPending) {
+        const writeStartedAt = performance.now()
+        const bytes = serializedBytes(JSON.parse(mutation.payloadJson))
         try {
           await processMetadataMutation(userId, mutation)
+          emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "upsert", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "success" })
           await tauriCatalogUpdateMetadataMutationStatus(store.dbPath, mutation.id, "synced", mutation.attemptCount, null, null)
         } catch (error) {
+          emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "upsert", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "failure" })
           failed.push(mutation.id)
           const attempts = mutation.attemptCount + 1
           const retryAt = Date.now() + Math.min(300_000, 1_000 * 2 ** Math.min(attempts, 8))
@@ -496,13 +528,26 @@ export const desktopCatalogSyncService: SyncService = {
       if (ctx.confirmedSnapshots.length > 0) await store.applyCloudSnapshots(ctx.confirmedSnapshots)
       const processed = pending.length + metadataPending.length
       if (processed > 0 && failed.length === 0) lastSyncedAt = new Date().toISOString()
+      const succeeded = processed - failed.length
+      const verifiedWrites = pending.filter((mutation) => !failed.includes(mutation.id)).length
+      emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.flush", trigger, examined, sent: processed, superseded: 0, succeeded, failed: failed.length, cloudBytes, verifiedWrites, durationMs: performance.now() - startedAt, overlapDetected, queueWaitMs })
       return ok({ processedMutations: processed, failedMutations: failed, nextRetryAt: null })
-    } catch (error) { return fail("UNAVAILABLE", error instanceof Error ? error.message : "Flush failed") }
+    } catch (error) {
+      emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.flush", trigger, examined, sent: examined, superseded: 0, succeeded: 0, failed: examined, cloudBytes, verifiedWrites: 0, durationMs: performance.now() - startedAt, overlapDetected, queueWaitMs })
+      return fail("UNAVAILABLE", error instanceof Error ? error.message : "Flush failed")
+    } finally {
+      flushRunning = false
+      if (pendingWakeup && generation === lifecycleGeneration) {
+        pendingWakeup = false
+        nextFlushTrigger = "pending_wakeup"
+        void desktopCatalogSyncService.flushPending()
+      }
+    }
   },
 
   async scheduleFlush() {
     if (scheduled) clearTimeout(scheduled)
-    scheduled = setTimeout(() => { scheduled = null; void desktopCatalogSyncService.flushPending() }, 1500)
+    scheduled = setTimeout(() => { scheduled = null; nextFlushTrigger = "debounce"; void desktopCatalogSyncService.flushPending() }, 1500)
     return ok(undefined)
   },
   async start() {
@@ -512,6 +557,8 @@ export const desktopCatalogSyncService: SyncService = {
   },
   async stop() {
     started = false
+    lifecycleGeneration += 1
+    pendingWakeup = false
     if (scheduled) clearTimeout(scheduled)
     scheduled = null
     if (retryTicker) clearInterval(retryTicker)
