@@ -15,6 +15,7 @@ import { SqliteDocumentCatalog } from "@/lib/services/desktop/sqlite-document-ca
 import { desktopDocumentEngine } from "@/lib/editor/desktop-document-engine"
 import { filenameToTitle } from "@/lib/desktop/document-naming"
 import { emitSyncMetric, metricBase, serializedBytes, type SyncFlushTrigger } from "@/lib/observability/sync-metrics"
+import { emitSyncStatusChange } from "@/lib/sync/events"
 import {
   tauriCatalogApplyCollectionSnapshot,
   tauriCatalogEnqueueMutation,
@@ -525,6 +526,7 @@ export const desktopCatalogSyncService: SyncService = {
           await processMutation(userId, mutation, ctx)
           emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.cloud_write", operation: mutation.operation === "delete" ? "delete" : "update", bytes, affectedRows: null, durationMs: performance.now() - writeStartedAt, outcome: "success" })
           await tauriCatalogUpdateMutationStatus(store.dbPath, mutation.id, "synced", mutation.attemptCount, null, null)
+          emitSyncStatusChange({ writingId: mutation.documentId, status: "synced" })
           const completedPayload = JSON.parse(mutation.payloadJson) as Record<string, unknown>
           if (completedPayload.mutationKind === "permanent-delete") {
             await tauriCatalogPurgeDocument(store.dbPath, mutation.documentId)
@@ -538,6 +540,7 @@ export const desktopCatalogSyncService: SyncService = {
             store.dbPath, mutation.id, "failed", attempts, retryAt,
             error instanceof Error ? error.message : "Sync failed",
           )
+          emitSyncStatusChange({ writingId: mutation.documentId, status: "retrying" })
         }
       }
       for (const mutation of metadataPending) {
