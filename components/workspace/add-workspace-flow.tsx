@@ -21,6 +21,7 @@ import {
   type WorkspaceFolderTreeNode,
 } from "@/lib/workspace/folder-tree";
 import type { WorkspaceSummary } from "@/lib/workspace/types";
+import { EmptyStateOptionRow } from "@/components/shared/view-empty-states";
 
 type Step = "origin" | "existing" | "scratch" | "include" | "done";
 type Props = {
@@ -28,6 +29,12 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   onComplete: () => void;
   workspace?: WorkspaceSummary | null;
+  /**
+   * Step to open on. The no-workspace empty state offers the same two choices
+   * this flow's origin step does, so picking one there must land on that step
+   * instead of asking the same question twice (ODE-438).
+   */
+  initialStep?: "origin" | "existing" | "scratch";
 };
 
 export function AddWorkspaceFlow({
@@ -35,8 +42,9 @@ export function AddWorkspaceFlow({
   onOpenChange,
   onComplete,
   workspace,
+  initialStep = "origin",
 }: Props) {
-  const [step, setStep] = useState<Step>(workspace ? "include" : "origin");
+  const [step, setStep] = useState<Step>(workspace ? "include" : initialStep);
   const [rootPath, setRootPath] = useState(workspace?.rootPath ?? "");
   const [tree, setTree] = useState<WorkspaceFolderTreeNode[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -123,7 +131,7 @@ export function AddWorkspaceFlow({
   function close(value: boolean) {
     onOpenChange(value);
     if (!value) {
-      setStep(workspace ? "include" : "origin");
+      setStep(workspace ? "include" : initialStep);
       setError(null);
     }
   }
@@ -146,39 +154,21 @@ export function AddWorkspaceFlow({
                 Bring a folder of markdown into Artifact Studio.
               </p>
             </FlowModalHeader>
-            <FlowModalBody className="space-y-3">
-              {[
-                [
-                  "existing",
-                  Folder,
-                  "Use an existing folder",
-                  "Watch markdown where it already lives.",
-                ],
-                [
-                  "scratch",
-                  Plus,
-                  "Create from scratch",
-                  "Start with a new empty folder.",
-                ],
-              ].map(([target, Icon, title, copy]) => (
-                <button
-                  key={String(target)}
-                  className="flex w-full items-center gap-4 rounded-[12px] bg-surface-option p-4 text-left"
-                  onClick={() => setStep(target as Step)}
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-[10px] bg-bg">
-                    <Icon strokeWidth={1.5} />
-                  </span>
-                  <span>
-                    <b className="block text-[14px] font-medium">
-                      {String(title)}
-                    </b>
-                    <small className="text-[12px] text-ink-4">
-                      {String(copy)}
-                    </small>
-                  </span>
-                </button>
-              ))}
+            <FlowModalBody className="space-y-2.5">
+              <EmptyStateOptionRow
+                icon={Folder}
+                title="Use an existing folder"
+                description="Connect a folder you already work from."
+                onSelect={() => setStep("existing")}
+                data-testid="add-workspace-use-existing-folder"
+              />
+              <EmptyStateOptionRow
+                icon={Plus}
+                title="Create from scratch"
+                description="Create a new folder and start clean."
+                onSelect={() => setStep("scratch")}
+                data-testid="add-workspace-create-from-scratch"
+              />
             </FlowModalBody>
           </>
         )}

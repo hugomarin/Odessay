@@ -28,6 +28,14 @@
   --surface-selected: 34.3 41.2% 96.7%;/* #FAF7F3 — warm selected / summary rows    */
   --surface-row-hover: 30 25% 98.4%;   /* #FCFBFA — table row hover                 */
   --surface-menu-hover: 40 9.7% 94.7%; /* #F2F1EF — dropdown item hover             */
+  /* Option rows — the add-workspace origin step and the three empty states
+     offer the same two choices, so they share one surface. `bg-surface-option`
+     was already reached for by ODE-435 with no token behind it; this defines it
+     at the value the Empty States prototype renders. */
+  --surface-option: 30 16.7% 97.6%;    /* #FAF9F8 — option / seed row surface       */
+  /* Dashed outline heavier than --ink-6: the 52px `file-plus` tile in the empty
+     state. Read from the render of `Artifact Studio Empty States.dc.html`. */
+  --line-dashed: 35 12.8% 81.6%;       /* #D6D1CA — dashed tile outline             */
   --success: 145.1 46.2% 33.5%;        /* #2E7D4F — done, restored, confirmations   */
   --success-tint: 135 28.6% 91.8%;     /* #E4F0E7 — success tile background         */
   --cursor: 22 55% 38%;
@@ -92,6 +100,8 @@
   --color-surface-selected: hsl(var(--surface-selected));
   --color-surface-row-hover: hsl(var(--surface-row-hover));
   --color-surface-menu-hover: hsl(var(--surface-menu-hover));
+  --color-surface-option: hsl(var(--surface-option));
+  --color-line-dashed: hsl(var(--line-dashed));
   --color-scrim: var(--od-scrim);
   --color-danger-chip-fg: hsl(var(--danger-chip-fg));
   --color-danger-surface: hsl(var(--danger-surface));
