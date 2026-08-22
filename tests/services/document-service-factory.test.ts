@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   upsertBindingRoot: vi.fn(),
   refreshReconcilerRoots: vi.fn(),
   syncFlush: vi.fn(),
+  scheduleSyncFlush: vi.fn(),
 }))
 
 vi.mock("@/lib/services/desktop/runtime-detection", () => ({
@@ -39,7 +40,10 @@ vi.mock("@/lib/services/auth-service-factory", () => ({
   getAuthService: () => ({ getSession: mocks.authGetSession }),
 }))
 vi.mock("@/lib/sync/sync-service-factory", () => ({
-  getSyncService: () => ({ flushPending: mocks.syncFlush }),
+  getSyncService: () => ({
+    flushPending: mocks.syncFlush,
+    scheduleFlush: mocks.scheduleSyncFlush,
+  }),
 }))
 vi.mock("@tauri-apps/api/path", () => ({
   appConfigDir: async () => "/config",
@@ -155,6 +159,7 @@ describe("desktop document service after compatibility retirement", () => {
       data: { processedMutations: 1, failedMutations: [], nextRetryAt: null },
       error: null,
     })
+    mocks.scheduleSyncFlush.mockResolvedValue({ data: undefined, error: null })
     mocks.catalogGet.mockResolvedValue(catalogRecord)
     mocks.openFile.mockResolvedValue({
       data: { ...writing, id: path, content: { ...writing.content, markdown: "Hello", richText: null } },
@@ -670,6 +675,10 @@ describe("desktop document service after compatibility retirement", () => {
         document: expect.objectContaining({ id }),
         mutation: expect.objectContaining({ operation: "upsert" }),
       }),
+    )
+    expect(mocks.scheduleSyncFlush).toHaveBeenCalledTimes(1)
+    expect(mocks.dualWrite.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.scheduleSyncFlush.mock.invocationCallOrder[0],
     )
   })
 

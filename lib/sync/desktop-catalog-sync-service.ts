@@ -52,6 +52,8 @@ let scheduled: ReturnType<typeof setTimeout> | null = null
 let retryTicker: ReturnType<typeof setInterval> | null = null
 let lastSyncedAt: string | null = null
 let flushRunning = false
+let pendingWakeup = false
+let lifecycleGeneration = 0
 let nextFlushTrigger: SyncFlushTrigger = "explicit"
 
 async function sessionUserId() {
@@ -459,10 +461,12 @@ export const desktopCatalogSyncService: SyncService = {
     nextFlushTrigger = "explicit"
     const overlapDetected = flushRunning
     if (overlapDetected) {
+      pendingWakeup = true
       emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.flush", trigger, examined: 0, sent: 0, superseded: 0, succeeded: 0, failed: 0, cloudBytes: 0, verifiedWrites: 0, durationMs: 0, overlapDetected: true, queueWaitMs: [] })
       return ok({ processedMutations: 0, failedMutations: [], nextRetryAt: null })
     }
     flushRunning = true
+    const generation = lifecycleGeneration
     let examined = 0
     let cloudBytes = 0
     let queueWaitMs: number[] = []
@@ -531,7 +535,14 @@ export const desktopCatalogSyncService: SyncService = {
     } catch (error) {
       emitSyncMetric({ ...metricBase("desktop", "sqlite"), type: "sync.flush", trigger, examined, sent: examined, superseded: 0, succeeded: 0, failed: examined, cloudBytes, verifiedWrites: 0, durationMs: performance.now() - startedAt, overlapDetected, queueWaitMs })
       return fail("UNAVAILABLE", error instanceof Error ? error.message : "Flush failed")
-    } finally { flushRunning = false }
+    } finally {
+      flushRunning = false
+      if (pendingWakeup && generation === lifecycleGeneration) {
+        pendingWakeup = false
+        nextFlushTrigger = "pending_wakeup"
+        void desktopCatalogSyncService.flushPending()
+      }
+    }
   },
 
   async scheduleFlush() {
@@ -546,6 +557,8 @@ export const desktopCatalogSyncService: SyncService = {
   },
   async stop() {
     started = false
+    lifecycleGeneration += 1
+    pendingWakeup = false
     if (scheduled) clearTimeout(scheduled)
     scheduled = null
     if (retryTicker) clearInterval(retryTicker)

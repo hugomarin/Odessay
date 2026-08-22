@@ -84,6 +84,14 @@ SaveWriting
   -> 5. sincronizar Supabase en background
 ```
 
+Después de que la transacción SQLite confirma una mutación elegible, el
+coordinador de aplicación solicita un flush trailing de 1500 ms. El adapter
+desktop mantiene un solo flush activo; triggers que llegan durante esa pasada
+se colapsan en un único `pendingWakeup` y vuelven a consultar la cola al
+terminar, respetando `next_retry_at`. El ticker de 60 s es solo recuperación de
+baja frecuencia. `stop()` limpia debounce, wakeup y ticker sin borrar la cola
+durable.
+
 El código vigente todavía actualiza SQLite legacy e IndexedDB después del archivo. Esa es una brecha de migración, no el contrato final.
 
 ### Fallas

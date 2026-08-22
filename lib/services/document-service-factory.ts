@@ -37,12 +37,14 @@ import {
   type DesktopCatalogDualWriteInput,
 } from "@/lib/services/desktop/tauri-commands"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
+import { getSyncService } from "@/lib/sync/sync-service-factory"
 
 type DesktopRuntimeServices = {
   writingsDir: string
   dbPath: string
   filesystem: FilesystemDocumentService
   catalog: SqliteDocumentCatalog
+  scheduleSyncFlush: () => Promise<ServiceResponse<void>>
 }
 
 type DesktopDraftOptions = {
@@ -125,6 +127,7 @@ async function resolveDesktopRuntimeServices(): Promise<DesktopRuntimeServices> 
     dbPath,
     filesystem: new FilesystemDocumentService(writingsDir),
     catalog: new SqliteDocumentCatalog(dbPath),
+    scheduleSyncFlush: () => getSyncService().scheduleFlush(),
   }
 }
 
@@ -214,6 +217,10 @@ class DesktopDocumentService implements DocumentService {
       },
     }
     await this.runtime.catalog.commitDualWrite(input)
+    void this.runtime.scheduleSyncFlush().catch(() => {
+      // The SQLite mutation is durable. The rescue ticker will retry if the
+      // in-memory scheduler is unavailable during shutdown.
+    })
     return { ...record, title: filenameToTitle(file.relativePath) }
   }
 
@@ -335,6 +342,11 @@ class DesktopDocumentService implements DocumentService {
         } satisfies DesktopCatalogDualWriteInput })
       }
       await this.runtime.catalog.commitBulkDualWrite(prepared.map(({ dualWrite }) => dualWrite))
+      if (prepared.length > 0) {
+        void this.runtime.scheduleSyncFlush().catch(() => {
+          // Local metadata remains durable and pending when scheduling fails.
+        })
+      }
       return ok(prepared.map(({ updated }) => toWriting(updated, {}, "")))
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }
@@ -441,6 +453,11 @@ class DesktopDocumentService implements DocumentService {
           lastError: null,
         } : null,
       })
+      if (catalogRecord.cloudPresent) {
+        void this.runtime.scheduleSyncFlush().catch(() => {
+          // The archive mutation stays in SQLite for the rescue ticker.
+        })
+      }
       return ok(deleted)
     } catch (error) { return { data: null, error: unexpected(error, "DB_ERROR") } }
   }

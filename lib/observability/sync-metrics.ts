@@ -1,6 +1,6 @@
 export type SyncRuntime = "desktop" | "web"
 export type SyncQueue = "sqlite" | "indexeddb"
-export type SyncFlushTrigger = "post_commit" | "debounce" | "retry_tick" | "bootstrap" | "auth" | "explicit"
+export type SyncFlushTrigger = "post_commit" | "debounce" | "pending_wakeup" | "retry_tick" | "bootstrap" | "auth" | "explicit"
 type Base = { schemaVersion: 1; timestamp: string; runtime: SyncRuntime; queue: SyncQueue }
 export type SyncFlushMetric = Base & { type: "sync.flush"; trigger: SyncFlushTrigger; examined: number; sent: number; superseded: number; succeeded: number; failed: number; cloudBytes: number; verifiedWrites: number; durationMs: number; overlapDetected: boolean; queueWaitMs: number[] }
 export type SyncCloudWriteMetric = Base & { type: "sync.cloud_write"; operation: "insert" | "update" | "delete" | "upsert" | "replace_relations" | "request"; bytes: number; affectedRows: number | null; durationMs: number; outcome: "success" | "failure" }
