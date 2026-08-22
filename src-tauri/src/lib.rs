@@ -312,6 +312,7 @@ pub fn run() {
             commands::workspace::workspace_repair_manifest_bindings,
             commands::workspace::workspace_unbound_paths,
             commands::workspace::workspace_sync,
+            commands::workspace::workspace_touch_file,
             commands::workspace::workspace_compute_content_hash,
         ])
         .run(tauri::generate_context!())

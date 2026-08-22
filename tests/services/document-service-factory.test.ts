@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   exportFile: vi.fn(),
   webExport: vi.fn(),
   workspaceSync: vi.fn(),
+  workspaceTouch: vi.fn(),
   dualWrite: vi.fn(),
   bulkDualWrite: vi.fn(),
   tauriOpen: vi.fn(),
@@ -84,6 +85,7 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
 }))
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriWorkspaceSync: mocks.workspaceSync,
+  tauriWorkspaceTouchFile: mocks.workspaceTouch,
   tauriCatalogDualWrite: mocks.dualWrite,
   tauriOpenFile: mocks.tauriOpen,
   tauriWriteFile: mocks.tauriWrite,
@@ -200,6 +202,9 @@ describe("desktop document service after compatibility retirement", () => {
       rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
       files: [{ id, path, relativePath: "Letter.md", inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 2 }],
     })
+    // Default to the recoverable outcome so every pre-existing expectation keeps
+    // exercising the full reconciliation path; the ODE-459 tests below opt in.
+    mocks.workspaceTouch.mockResolvedValue({ status: "needsReconcile", reason: "test default" })
   })
 
   describe("createDesktopDraft lifecycle (ODE-406)", () => {
@@ -680,6 +685,101 @@ describe("desktop document service after compatibility retirement", () => {
     expect(mocks.dualWrite.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.scheduleSyncFlush.mock.invocationCallOrder[0],
     )
+  })
+
+  describe("incremental manifest update on save (ODE-459)", () => {
+    const touchedFile = {
+      id,
+      path,
+      relativePath: "Letter.md",
+      inode: 77,
+      contentHash: "blake3:b",
+      size: 9,
+      modifiedAt: 3,
+    }
+
+    beforeEach(() => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated",
+        rootPath: "/docs",
+        bindingRootId: "root-1",
+        file: touchedFile,
+      })
+    })
+
+    it("refreshes only the saved document's manifest entry and never rescans the BindingRoot", async () => {
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toBeNull()
+      expect(mocks.workspaceTouch).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceTouch).toHaveBeenCalledWith("/docs", "Letter.md", id)
+      expect(mocks.workspaceSync).not.toHaveBeenCalled()
+      // One save is still one logical catalog update, not N per file in the root.
+      expect(mocks.dualWrite).toHaveBeenCalledTimes(1)
+      expect(mocks.saveFile.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.workspaceTouch.mock.invocationCallOrder[0],
+      )
+      expect(mocks.workspaceTouch.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.dualWrite.mock.invocationCallOrder[0],
+      )
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        "/config/desktop-index.sqlite3",
+        expect.objectContaining({
+          document: expect.objectContaining({ id }),
+          binding: expect.objectContaining({
+            bindingRootId: "root-1",
+            rootPath: "/docs",
+            relativePath: "Letter.md",
+            canonicalPath: path,
+            inode: 77,
+            contentHash: "blake3:b",
+          }),
+        }),
+      )
+    })
+
+    it("falls back to full reconciliation when the incremental update cannot verify the binding", async () => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "needsReconcile",
+        reason: "manifest is unreadable or corrupt",
+      })
+
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toBeNull()
+      expect(mocks.workspaceTouch).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceSync).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/docs", undefined, { "Letter.md": id })
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        "/config/desktop-index.sqlite3",
+        expect.objectContaining({ binding: expect.objectContaining({ contentHash: "blake3:a" }) }),
+      )
+    })
+
+    it("keeps a manifest write failure recoverable: no SQLite projection, no draft fallback", async () => {
+      mocks.workspaceTouch.mockRejectedValue(new Error("workspace_sync atomic rename index: EIO"))
+
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toMatchObject({ code: "DB_ERROR" })
+      expect(mocks.saveFile).toHaveBeenCalledTimes(1)
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+    })
+
+    it("uses full reconciliation when the document has no durable binding yet", async () => {
+      mocks.catalogGet.mockResolvedValue(null)
+
+      const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+      const result = await createDesktopDraft({ writingId: id, initialBodyText: "First words" })
+
+      expect(result.error).toBeNull()
+      expect(mocks.workspaceTouch).not.toHaveBeenCalled()
+      expect(mocks.workspaceSync).toHaveBeenCalledTimes(1)
+    })
   })
 
   it("updates desktop metadata without rewriting the canonical markdown", async () => {

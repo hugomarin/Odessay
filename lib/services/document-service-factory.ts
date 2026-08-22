@@ -33,8 +33,10 @@ import {
   tauriOpenFile,
   tauriRelocateFile,
   tauriWorkspaceSync,
+  tauriWorkspaceTouchFile,
   tauriWriteFile,
   type DesktopCatalogDualWriteInput,
+  type DesktopWorkspaceFile,
 } from "@/lib/services/desktop/tauri-commands"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { getSyncService } from "@/lib/sync/sync-service-factory"
@@ -167,11 +169,27 @@ class DesktopDocumentService implements DocumentService {
     const relativePath = canonicalPath.startsWith(`${rootPath}/`)
       ? canonicalPath.slice(rootPath.length + 1)
       : basename(canonicalPath)
-    // Omit selectedPaths so the durable manifest keeps its existing whole-root
-    // or exact-file scope; a save must never narrow a BindingRoot implicitly.
-    const snapshot = await tauriWorkspaceSync(rootPath, undefined, { [relativePath]: record.id })
-    const file = snapshot.files.find((entry) => entry.path === canonicalPath || entry.relativePath === relativePath)
-    if (!file) throw new Error(`Manifest did not retain ${relativePath}`)
+    // Steady state (ODE-459): a document that already carries a durable binding
+    // only needs its own manifest entry refreshed, so the save path never walks
+    // the BindingRoot. Anything unverifiable falls back to the full
+    // reconciliation below, which stays the owner of scans, scope changes and
+    // identity minting.
+    let binding: { bindingRootId: string; rootPath: string; file: DesktopWorkspaceFile } | null = null
+    if (priorBinding && priorBinding.relativePath === relativePath) {
+      const touched = await tauriWorkspaceTouchFile(rootPath, relativePath, record.id)
+      if (touched.status === "updated") {
+        binding = { bindingRootId: touched.bindingRootId, rootPath: touched.rootPath, file: touched.file }
+      }
+    }
+    if (!binding) {
+      // Omit selectedPaths so the durable manifest keeps its existing whole-root
+      // or exact-file scope; a save must never narrow a BindingRoot implicitly.
+      const snapshot = await tauriWorkspaceSync(rootPath, undefined, { [relativePath]: record.id })
+      const synced = snapshot.files.find((entry) => entry.path === canonicalPath || entry.relativePath === relativePath)
+      if (!synced) throw new Error(`Manifest did not retain ${relativePath}`)
+      binding = { bindingRootId: snapshot.bindingRootId, rootPath: snapshot.rootPath, file: synced }
+    }
+    const file = binding.file
     const now = Date.now()
     const input: DesktopCatalogDualWriteInput = {
       document: {
@@ -191,8 +209,8 @@ class DesktopDocumentService implements DocumentService {
         modifiedAt: Date.parse(record.updatedAt),
       },
       binding: {
-        bindingRootId: snapshot.bindingRootId,
-        rootPath: snapshot.rootPath,
+        bindingRootId: binding.bindingRootId,
+        rootPath: binding.rootPath,
         manifestVersion: 2,
         visibleAsWorkspace: false,
         relativePath: file.relativePath,
