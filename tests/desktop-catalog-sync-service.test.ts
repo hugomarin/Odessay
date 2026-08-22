@@ -613,4 +613,47 @@ describe("desktopCatalogSyncService", () => {
     expect(writtenRow).toHaveProperty("body_text")
     expect(writtenRow.content_hash).toBe("blake3:new")
   })
+
+  // ODE-460: SQLite marked the mutation `synced` but the editor statusbar never
+  // heard about it — desktop flush confirmed sync without dispatching the
+  // `odessay:sync-status-change` window event the statusbar subscribes to.
+  it("dispatches a synced sync-status-change event for the mutation's writing after a confirmed flush", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({ cloudPresent: true }))
+    mocks.listPending.mockResolvedValue([contentMutationRow()])
+    mocks.update.mockResolvedValue({ error: null, count: 1 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const { SYNC_STATUS_EVENT_NAME } = await import("@/lib/sync/events")
+    const received: unknown[] = []
+    const handler = (event: Event) => received.push((event as CustomEvent).detail)
+    window.addEventListener(SYNC_STATUS_EVENT_NAME, handler)
+
+    try {
+      const result = await desktopCatalogSyncService.flushPending()
+      expect(result.data?.failedMutations).toEqual([])
+      expect(received).toContainEqual({ writingId: "doc-1", status: "synced" })
+    } finally {
+      window.removeEventListener(SYNC_STATUS_EVENT_NAME, handler)
+    }
+  })
+
+  it("dispatches a retrying sync-status-change event when a content mutation write fails", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({ cloudPresent: true }))
+    mocks.listPending.mockResolvedValue([contentMutationRow()])
+    mocks.update.mockResolvedValue({ error: { message: "boom" }, count: null })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const { SYNC_STATUS_EVENT_NAME } = await import("@/lib/sync/events")
+    const received: unknown[] = []
+    const handler = (event: Event) => received.push((event as CustomEvent).detail)
+    window.addEventListener(SYNC_STATUS_EVENT_NAME, handler)
+
+    try {
+      const result = await desktopCatalogSyncService.flushPending()
+      expect(result.data?.failedMutations).toEqual(["m1"])
+      expect(received).toContainEqual({ writingId: "doc-1", status: "retrying" })
+    } finally {
+      window.removeEventListener(SYNC_STATUS_EVENT_NAME, handler)
+    }
+  })
 })
