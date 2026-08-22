@@ -3,6 +3,7 @@ import type { SyncMutation } from "@/lib/local-db/schema";
 import { emitSyncStatusChange } from "@/lib/sync/events";
 import { canRetryMutation, getNextRetryAt } from "@/lib/sync/retry";
 import { mapRemoteWritingToLocal, type RemoteWritingRecord } from "@/lib/sync/remote-bootstrap";
+import { emitSyncMetric, metricBase, serializedBytes, type SyncFlushTrigger } from "@/lib/observability/sync-metrics";
 
 type SyncTransport = {
   upsertWriting: (
@@ -63,9 +64,22 @@ const parseEnvelope = async <T>(response: Response): Promise<T> => {
   return result?.data as T;
 };
 
+const measuredFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const startedAt = performance.now();
+  const bytes = typeof init?.body === "string" ? new TextEncoder().encode(init.body).byteLength : 0;
+  try {
+    const response = await fetch(input, init);
+    emitSyncMetric({ ...metricBase("web", "indexeddb"), type: "sync.cloud_write", operation: "request", bytes, affectedRows: response.ok ? 1 : 0, durationMs: performance.now() - startedAt, outcome: response.ok ? "success" : "failure" });
+    return response;
+  } catch (error) {
+    emitSyncMetric({ ...metricBase("web", "indexeddb"), type: "sync.cloud_write", operation: "request", bytes, affectedRows: null, durationMs: performance.now() - startedAt, outcome: "failure" });
+    throw error;
+  }
+};
+
 const defaultTransport: SyncTransport = {
   upsertWriting: async (writingId, payload) => {
-    const response = await fetch(`/api/writings/${writingId}`, {
+    const response = await measuredFetch(`/api/writings/${writingId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -76,7 +90,7 @@ const defaultTransport: SyncTransport = {
     return parseEnvelope<RemoteWritingRecord | null>(response);
   },
   deleteWriting: async (writingId, payload) => {
-    const response = await fetch(`/api/writings/${writingId}`, {
+    const response = await measuredFetch(`/api/writings/${writingId}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
@@ -91,7 +105,7 @@ const defaultTransport: SyncTransport = {
     await parseEnvelope(response);
   },
   upsertCollection: async (collectionId, payload) => {
-    const response = await fetch(`/api/collections/${collectionId}`, {
+    const response = await measuredFetch(`/api/collections/${collectionId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -102,14 +116,14 @@ const defaultTransport: SyncTransport = {
     await parseEnvelope(response);
   },
   deleteCollection: async (collectionId) => {
-    const response = await fetch(`/api/collections/${collectionId}`, {
+    const response = await measuredFetch(`/api/collections/${collectionId}`, {
       method: "DELETE",
     });
 
     await parseEnvelope(response);
   },
   setWritingCollections: async (writingId, payload) => {
-    const response = await fetch(`/api/writings/${writingId}/collections`, {
+    const response = await measuredFetch(`/api/writings/${writingId}/collections`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -145,6 +159,7 @@ class SyncWorker {
   private timeoutId: number | null = null;
   private isRunning = false;
   private started = false;
+  private nextTrigger: SyncFlushTrigger = "explicit";
 
   constructor(options: SyncWorkerOptions = {}) {
     this.transport = options.transport ?? defaultTransport;
@@ -201,6 +216,7 @@ class SyncWorker {
       this.clearScheduledTimeout(this.timeoutId);
     }
 
+    this.nextTrigger = delay === 0 ? "auth" : "debounce";
     this.timeoutId = this.scheduleTimeout(() => {
       this.timeoutId = null;
       void this.flush();
@@ -208,7 +224,14 @@ class SyncWorker {
   }
 
   async flush() {
-    if (typeof window === "undefined" || this.isRunning) {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const startedAt = performance.now();
+    const trigger = this.nextTrigger;
+    this.nextTrigger = "explicit";
+    if (this.isRunning) {
+      emitSyncMetric({ ...metricBase("web", "indexeddb"), type: "sync.flush", trigger, examined: 0, sent: 0, superseded: 0, succeeded: 0, failed: 0, cloudBytes: 0, verifiedWrites: 0, durationMs: 0, overlapDetected: true, queueWaitMs: [] });
       return;
     }
 
@@ -231,10 +254,17 @@ class SyncWorker {
 
     try {
       const mutations = await this.localDb.syncQueue.getPending();
+      let superseded = 0;
+      let succeeded = 0;
+      let failed = 0;
 
       for (const mutation of mutations) {
-        await this.processMutation(mutation);
+        const outcome = await this.processMutation(mutation);
+        if (outcome === "superseded") superseded += 1;
+        else if (outcome === "success") succeeded += 1;
+        else failed += 1;
       }
+      emitSyncMetric({ ...metricBase("web", "indexeddb"), type: "sync.flush", trigger, examined: mutations.length, sent: succeeded + failed, superseded, succeeded, failed, cloudBytes: mutations.reduce((sum, mutation) => sum + serializedBytes(mutation.payload), 0), verifiedWrites: succeeded, durationMs: performance.now() - startedAt, overlapDetected: false, queueWaitMs: mutations.map((mutation) => Math.max(0, Date.now() - mutation.created_at)) });
     } finally {
       this.isRunning = false;
     }
@@ -244,14 +274,14 @@ class SyncWorker {
     this.schedule(0);
   };
 
-  private async processMutation(mutation: SyncMutation) {
+  private async processMutation(mutation: SyncMutation): Promise<"success" | "failure" | "superseded"> {
     const currentMutation = await this.localDb.syncQueue.getCurrentForEntity(
       mutation.entity_kind,
       mutation.entity_id,
     );
 
     if (!currentMutation || currentMutation.id !== mutation.id) {
-      return;
+      return "superseded";
     }
 
     try {
@@ -304,6 +334,7 @@ class SyncWorker {
           status: "synced",
         });
       }
+      return "success";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown sync error";
       const syncError = error as SyncRemoteError;
@@ -329,7 +360,7 @@ class SyncWorker {
 
       if (!canRetryMutation(mutation.attempts + 1)) {
         await this.localDb.syncQueue.markFailed(mutation.id, message, Number.MAX_SAFE_INTEGER);
-        return;
+        return "failure";
       }
 
       await this.localDb.syncQueue.markFailed(
@@ -338,6 +369,7 @@ class SyncWorker {
         getNextRetryAt(mutation.attempts + 1),
       );
       this.schedule();
+      return "failure";
     }
   }
 }

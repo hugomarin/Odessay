@@ -1,0 +1,16 @@
+{
+  "generatedAt": "2026-08-22T20:36:09.036Z",
+  "series": [
+    {
+      "runtime": "desktop",
+      "queue": "sqlite",
+      "flushes": 1,
+      "syncsPerUserHour": 2330.097087378641,
+      "kbPerSync": 3.21484375,
+      "writesPerSync": 0,
+      "durationP95Ms": 1747,
+      "queueWaitP50Ms": 401657080,
+      "queueWaitP95Ms": 401657093
+    }
+  ]
+}
