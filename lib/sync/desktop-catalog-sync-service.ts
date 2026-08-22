@@ -119,7 +119,7 @@ function cloudSnapshotFromRow(
     id: row.id, localPresent: false, cloudPresent: !row.deleted_at,
     cloudAccountId: row.author_id, syncStatus: row.deleted_at ? "deleted" : "synced",
     deletedAt: (row.deleted_at ?? null) as string | null,
-    contentHash: null,
+    contentHash: row.content_hash,
     title: (row.title ?? null) as string | null,
     slug: (row.slug ?? null) as string | null,
     status: (row.status ?? null) as CloudDocumentSnapshot["status"],
@@ -137,6 +137,7 @@ type WritingRow = {
   title: unknown
   body_json: unknown
   body_text: string
+  content_hash: string | null
   slug: unknown
   status: unknown
   artifact_type: unknown
@@ -247,6 +248,7 @@ async function processMutation(
       title: record?.title ?? null,
       body_json: null,
       body_text: "",
+      content_hash: null,
       slug: record?.slug ?? null,
       status: record?.status ?? "draft",
       artifact_type: record?.artifactType ?? "general",
@@ -280,9 +282,42 @@ async function processMutation(
     return
   }
 
+  let title = payload.title ?? record?.title ?? null
+  const contentHash = (payloadValue(payload, "contentHash", "content_hash") as string | null) ?? null
+  const metadataPatch = {
+    title,
+    slug: payload.slug ?? null,
+    status: payload.status ?? "draft",
+    artifact_type: payloadValue(payload, "artifactType", "artifact_type") ?? "general",
+    visibility: payload.visibility ?? "private",
+    parent_id: payloadValue(payload, "parentId", "parent_id"),
+    correspondence_id: payloadValue(payload, "correspondenceId", "correspondence_id"),
+    version,
+    updated_at: updatedAt,
+    deleted_at: payloadValue(payload, "deletedAt", "deleted_at"),
+  }
+  // ODE-453: this save didn't change the file's bytes (the document was
+  // already cloud-present with this exact hash) — skip the .md re-read/parse
+  // and the content columns; only the metadata that can change on its own
+  // (rename, status, visibility, ...) needs to land in cloud.
+  if (payload.contentUnchanged === true && contentHash !== null
+    && (record?.cloudAccountId != null || ctx.cloudConfirmed.has(mutation.documentId))) {
+    const { error, count } = await supabase
+      .from("writings")
+      .update(metadataPatch, { count: "exact" })
+      .eq("id", mutation.documentId)
+      .eq("author_id", userId)
+    if (error) throw new Error(error.message)
+    if (requireAffectedRows(count) > 0) {
+      ctx.cloudConfirmed.add(mutation.documentId)
+      return
+    }
+    // 0 rows: cloud presence could not be verified, so the known hash cannot
+    // be trusted either — fall through to a verified content write.
+  }
+
   let bodyJson = payloadValue(payload, "bodyJson", "body_json")
   let bodyText = String(payloadValue(payload, "bodyText", "body_text") ?? "")
-  let title = payload.title ?? record?.title ?? null
   if (record?.binding?.canonicalPath) {
     const markdown = await tauriOpenFile(record.binding.canonicalPath)
     const parsed = desktopDocumentEngine.parseSourceDocument(markdown)
@@ -297,6 +332,7 @@ async function processMutation(
     title,
     body_json: bodyJson,
     body_text: bodyText,
+    content_hash: contentHash,
     slug: payload.slug ?? null,
     status: payload.status ?? "draft",
     artifact_type: payloadValue(payload, "artifactType", "artifact_type") ?? "general",

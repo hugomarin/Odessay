@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   listMetadataPending: vi.fn(),
   updateStatus: vi.fn(),
   purgeDocument: vi.fn(),
+  openFile: vi.fn(),
 }))
 
 vi.mock("@tauri-apps/api/path", () => ({
@@ -42,7 +43,7 @@ vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriCatalogUpdateMetadataMutationStatus: vi.fn(),
   tauriCatalogUpdateMutationStatus: mocks.updateStatus,
   tauriCatalogPurgeDocument: mocks.purgeDocument,
-  tauriOpenFile: vi.fn(),
+  tauriOpenFile: mocks.openFile,
 }))
 
 function catalogRecord(overrides: Record<string, unknown> = {}) {
@@ -98,6 +99,7 @@ describe("desktopCatalogSyncService", () => {
     mocks.applyCloudSnapshots.mockResolvedValue(undefined)
     mocks.updateStatus.mockResolvedValue(undefined)
     mocks.purgeDocument.mockResolvedValue(undefined)
+    mocks.openFile.mockResolvedValue("# Doc\n\nBody")
     wireSupabaseTables()
   })
 
@@ -526,5 +528,89 @@ describe("desktopCatalogSyncService", () => {
 
     await vi.advanceTimersByTimeAsync(180_000)
     expect(mocks.listPending).not.toHaveBeenCalled()
+  })
+
+  // ── ODE-453: same-hash writes skip content re-read/re-write ────────────────
+
+  function contentMutationRow(overrides: Record<string, unknown> = {}) {
+    return mutationRow({
+      payloadJson: JSON.stringify({
+        title: "Doc", slug: null, status: "draft", artifactType: "general",
+        visibility: "private", parentId: null, correspondenceId: null,
+        version: 2, updatedAt: "2026-08-22T10:00:00Z", deletedAt: null,
+        contentHash: "blake3:same", contentUnchanged: true,
+        ...overrides,
+      }),
+    })
+  }
+
+  it("writes only metadata and skips the .md re-read when contentUnchanged is true on a cloud-present document", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({ cloudPresent: true }))
+    mocks.listPending.mockResolvedValue([contentMutationRow()])
+    mocks.update.mockResolvedValue({ error: null, count: 1 })
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.openFile).not.toHaveBeenCalled()
+    expect(mocks.insert).not.toHaveBeenCalled()
+    expect(mocks.update).toHaveBeenCalledTimes(1)
+    const writtenPatch = mocks.update.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(writtenPatch).not.toHaveProperty("body_json")
+    expect(writtenPatch).not.toHaveProperty("body_text")
+    expect(writtenPatch).toMatchObject({ title: "Doc", version: 2 })
+  })
+
+  it("falls back to a verified content write when the optimistic same-hash UPDATE matches no cloud row", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({
+      cloudPresent: true,
+      binding: {
+        documentId: "doc-1", bindingRootId: "root-1", relativePath: "Doc.md",
+        canonicalPath: "/docs/Doc.md", inode: 1, contentHash: "blake3:same", size: 5, lastSeenAt: 1,
+      },
+    }))
+    mocks.listPending.mockResolvedValue([contentMutationRow()])
+    mocks.update
+      .mockResolvedValueOnce({ error: null, count: 0 }) // optimistic metadata-only patch: stale
+      .mockResolvedValueOnce({ error: null, count: 1 }) // verified content update after fallback
+    mocks.openFile.mockResolvedValue("# Doc\n\nBody")
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.openFile).toHaveBeenCalledTimes(1)
+    expect(mocks.openFile).toHaveBeenCalledWith("/docs/Doc.md")
+    expect(mocks.update).toHaveBeenCalledTimes(2)
+    const contentPatch = mocks.update.mock.calls[1]?.[0] as Record<string, unknown>
+    expect(contentPatch).toHaveProperty("body_json")
+    expect(contentPatch).toHaveProperty("body_text")
+    expect(mocks.insert).not.toHaveBeenCalled()
+  })
+
+  it("re-reads and parses the `.md` once and writes the content_hash when content actually changed", async () => {
+    mocks.catalogGet.mockResolvedValue(catalogRecord({
+      cloudPresent: true,
+      binding: {
+        documentId: "doc-1", bindingRootId: "root-1", relativePath: "Doc.md",
+        canonicalPath: "/docs/Doc.md", inode: 1, contentHash: "blake3:new", size: 5, lastSeenAt: 1,
+      },
+    }))
+    mocks.listPending.mockResolvedValue([contentMutationRow({ contentHash: "blake3:new", contentUnchanged: false })])
+    mocks.update.mockResolvedValue({ error: null, count: 1 })
+    mocks.openFile.mockResolvedValue("# Doc\n\nBody")
+
+    const { desktopCatalogSyncService } = await import("@/lib/sync/desktop-catalog-sync-service")
+    const result = await desktopCatalogSyncService.flushPending()
+
+    expect(result.data?.failedMutations).toEqual([])
+    expect(mocks.openFile).toHaveBeenCalledTimes(1)
+    expect(mocks.openFile).toHaveBeenCalledWith("/docs/Doc.md")
+    expect(mocks.update).toHaveBeenCalledTimes(1)
+    const writtenRow = mocks.update.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(writtenRow).toHaveProperty("body_json")
+    expect(writtenRow).toHaveProperty("body_text")
+    expect(writtenRow.content_hash).toBe("blake3:new")
   })
 })

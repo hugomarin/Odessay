@@ -191,6 +191,19 @@ class DesktopDocumentService implements DocumentService {
     }
     const file = binding.file
     const now = Date.now()
+    // ODE-453: a bound document's content lives in the canonical `.md` file.
+    // The flush re-reads and re-parses that file whenever it needs to write
+    // cloud content, so shipping bodyJson/bodyText inside the durable SQLite
+    // mutation would be a full copy of the document that's never read back.
+    // `contentUnchanged` lets the flush skip that re-read/re-parse and the
+    // content columns entirely when this save didn't touch the file bytes.
+    const priorContentHash = priorBinding?.contentHash || null
+    const nextContentHash = file.contentHash || null
+    const contentUnchanged = operation === "upsert"
+      && (catalogBefore?.cloudPresent ?? false)
+      && priorContentHash !== null
+      && nextContentHash !== null
+      && priorContentHash === nextContentHash
     const input: DesktopCatalogDualWriteInput = {
       document: {
         id: record.id,
@@ -223,13 +236,16 @@ class DesktopDocumentService implements DocumentService {
       mutation: {
         id: crypto.randomUUID(),
         operation,
+        // No bodyJson/bodyText here (ODE-453): the flush resolves content from
+        // the canonical `.md` via `record.binding.canonicalPath`, keyed by
+        // contentHash/contentUnchanged below — never from this payload.
         payloadJson: JSON.stringify({
-          title: filenameToTitle(file.relativePath), bodyText: record.content.plainText,
-          bodyJson: record.content.richText, slug: record.slug, status: record.status,
+          title: filenameToTitle(file.relativePath), slug: record.slug, status: record.status,
           artifactType: record.artifactType, visibility: record.visibility,
           parentId: record.parentId, correspondenceId: record.correspondenceId,
           version: Math.max(1, record.version), updatedAt: record.updatedAt,
           deletedAt: operation === "delete" ? new Date().toISOString() : record.deletedAt,
+          contentHash: nextContentHash, contentUnchanged,
         }),
         status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: now, lastError: null,
       },

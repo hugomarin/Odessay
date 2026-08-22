@@ -782,6 +782,114 @@ describe("desktop document service after compatibility retirement", () => {
     })
   })
 
+  describe("durable mutation payload weight (ODE-453)", () => {
+    const bigPlainText = "Lorem ipsum dolor sit amet. ".repeat(2000)
+    const bigWriting = {
+      ...writing,
+      content: {
+        richText: {
+          type: "doc",
+          content: Array.from({ length: 200 }, (_, index) => ({
+            type: "paragraph",
+            content: [{ type: "text", text: `Paragraph ${index}: ${bigPlainText}` }],
+          })),
+        },
+        markdown: null,
+        plainText: bigPlainText,
+        canonicalSource: "rich-text" as const,
+      },
+    }
+
+    function touchedFileWithHash(contentHash: string) {
+      return { id, path, relativePath: "Letter.md", inode: 77, contentHash, size: 9, modifiedAt: 3 }
+    }
+
+    function lastMutationPayload() {
+      const call = mocks.dualWrite.mock.calls.at(-1)?.[1] as { mutation: { payloadJson: string } }
+      return JSON.parse(call.mutation.payloadJson) as Record<string, unknown>
+    }
+
+    it("never embeds bodyJson/bodyText in the durable SQLite mutation for a bound document", async () => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:b"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing: bigWriting })
+
+      expect(result.error).toBeNull()
+      const payload = lastMutationPayload()
+      expect(payload).not.toHaveProperty("bodyJson")
+      expect(payload).not.toHaveProperty("bodyText")
+      // Identity + operation + metadata + version + hash, never a body copy —
+      // this stays small regardless of how large the document is.
+      expect(JSON.stringify(payload).length).toBeLessThan(700)
+    })
+
+    it("keeps the mutation payload the same size for a large document as for a small one", async () => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:b"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+
+      await (await getDocumentService()).saveWriting({ writing })
+      const smallBytes = JSON.stringify(lastMutationPayload()).length
+
+      mocks.dualWrite.mockClear()
+      await (await getDocumentService()).saveWriting({ writing: bigWriting })
+      const largeBytes = JSON.stringify(lastMutationPayload()).length
+
+      expect(largeBytes).toBe(smallBytes)
+    })
+
+    it("marks contentUnchanged and carries the content hash when the file bytes did not change on an already cloud-present document", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord, cloudPresent: true, cloudAccountId: "account-1",
+        binding: { ...catalogRecord.binding!, contentHash: "blake3:same" },
+      })
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:same"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toBeNull()
+      const payload = lastMutationPayload()
+      expect(payload.contentUnchanged).toBe(true)
+      expect(payload.contentHash).toBe("blake3:same")
+    })
+
+    it("does not mark contentUnchanged when the file hash changed", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord, cloudPresent: true, cloudAccountId: "account-1",
+        binding: { ...catalogRecord.binding!, contentHash: "blake3:old" },
+      })
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:new"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      await (await getDocumentService()).saveWriting({ writing })
+
+      const payload = lastMutationPayload()
+      expect(payload.contentUnchanged).toBe(false)
+      expect(payload.contentHash).toBe("blake3:new")
+    })
+
+    it("never marks contentUnchanged for a document that is not yet cloud-present, even with a matching hash", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord, cloudPresent: false,
+        binding: { ...catalogRecord.binding!, contentHash: "blake3:same" },
+      })
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:same"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      await (await getDocumentService()).saveWriting({ writing })
+
+      const payload = lastMutationPayload()
+      expect(payload.contentUnchanged).toBe(false)
+    })
+  })
+
   it("updates desktop metadata without rewriting the canonical markdown", async () => {
     const { getDocumentService } = await import("@/lib/services/document-service-factory")
     const result = await (await getDocumentService()).updateWritingMetadata({
