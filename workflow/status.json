@@ -2,7 +2,7 @@
   "_description": "Estado del codebase. Puente entre GitHub (commits), Linear (issues) y el roadmap (fases). Responde: ¿en qué fase estamos? y ¿qué existe en el codebase?",
   "_maintenance": "No actualizar los ledgers durante BUILD — la rama de feature no toca workflow files. Tras merge confirmado en REVIEW: appendear la entrega a workflow/built.jsonl (una línea por issue: what, phase, issue, linear_url, pr_url, commit, date, notes), commitear y pushear a main. Luego mover el issue a Done en Linear y ajustar active_phase si la fase cambia.",
   "_ledger": "Las entregas ya no viven acá. Ledger activo: workflow/built.jsonl. Fases cerradas: workflow/archive/built-*.jsonl. Consultar con `npm run ops:ledger -- built --issue ODE-XXX` en vez de leer los archivos completos.",
-  "last_updated": "2026-08-21",
+  "last_updated": "2026-08-22",
   "traceability_exceptions": {
     "ignored_issue_ids": [
       {
