@@ -1016,6 +1016,77 @@ mod tests {
         root
     }
 
+    /// Wall-clock evidence on the real compiled save path (ODE-459). Ignored by
+    /// default so CI stays fast:
+    ///   cargo test --release -- --ignored --nocapture bench_steady_state_save
+    #[test]
+    #[ignore]
+    fn bench_steady_state_save_manifest_update() {
+        use std::time::Instant;
+
+        fn median(mut samples: Vec<u128>) -> u128 {
+            samples.sort_unstable();
+            samples[samples.len() / 2]
+        }
+
+        for file_count in [100usize, 500] {
+            let root = temp_workspace_root(&format!("bench-{file_count}"));
+            // ~4 KB per document across 10 folders: a realistic BindingRoot.
+            let body = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n".repeat(70);
+            for index in 0..file_count {
+                let folder = root.join(format!("Folder-{}", index % 10));
+                fs::create_dir_all(&folder).expect("create folder");
+                fs::write(folder.join(format!("doc-{index}.md")), &body).expect("write file");
+            }
+            workspace_sync(root.to_string_lossy().to_string(), None, None).expect("initial sync");
+
+            let target_relative = "Folder-3/doc-33.md".to_string();
+            let target_path = root.join(&target_relative);
+            let document_id = read_index(&root)
+                .files
+                .get(&target_relative)
+                .expect("bound target")
+                .id
+                .clone();
+
+            let mut full = Vec::new();
+            let mut incremental = Vec::new();
+            for iteration in 0..20 {
+                fs::write(&target_path, format!("{body}\nEdit {iteration}\n")).expect("save");
+                let started = Instant::now();
+                workspace_sync(root.to_string_lossy().to_string(), None, None).expect("full sync");
+                full.push(started.elapsed().as_micros());
+
+                fs::write(&target_path, format!("{body}\nEdit {iteration} bis\n")).expect("save");
+                let started = Instant::now();
+                let result = workspace_touch_file(
+                    root.to_string_lossy().to_string(),
+                    target_relative.clone(),
+                    document_id.clone(),
+                )
+                .expect("incremental update");
+                incremental.push(started.elapsed().as_micros());
+                assert!(matches!(result, WorkspaceFileTouchResult::Updated { .. }));
+            }
+
+            let full_median = median(full);
+            let incremental_median = median(incremental);
+            println!(
+                "[{file_count} files] full workspace_sync p50 = {full_median} us | incremental workspace_touch_file p50 = {incremental_median} us | {:.1}x faster",
+                full_median as f64 / incremental_median.max(1) as f64
+            );
+
+            // Guard the outcome, not the machine: the incremental path must not
+            // scale with the size of the BindingRoot.
+            assert!(
+                incremental_median * 4 < full_median,
+                "incremental save must be dramatically cheaper than a full rescan"
+            );
+
+            cleanup(&root);
+        }
+    }
+
     #[test]
     fn workspace_touch_file_never_enumerates_the_binding_root() {
         let root = seed_workspace("touch-no-full-scan", 100);
