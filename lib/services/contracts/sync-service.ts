@@ -12,8 +12,14 @@ export type SyncableArtifactType = "general" | "agent" | "skill" | "prompt" | "t
 
 export type SyncableWritingPayload = {
   title: string | null
-  bodyText: string
-  bodyJson: Record<string, unknown> | null
+  // ODE-453: desktop's durable SQLite mutation omits these — content is
+  // resolved from the canonical `.md` at flush time. Web still sends both.
+  bodyText?: string
+  bodyJson?: Record<string, unknown> | null
+  // Desktop-only: the local file hash at enqueue time, and whether it matches
+  // the hash already confirmed in cloud (skips content re-read + write).
+  contentHash?: string | null
+  contentUnchanged?: boolean
   slug: string | null
   status: string
   artifactType: SyncableArtifactType

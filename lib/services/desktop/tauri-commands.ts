@@ -30,6 +30,10 @@ export type DesktopWorkspaceSnapshot = {
   files: DesktopWorkspaceFile[]
 }
 
+export type DesktopWorkspaceTouchResult =
+  | { status: "updated"; rootPath: string; bindingRootId: string; file: DesktopWorkspaceFile }
+  | { status: "needsReconcile"; reason: string }
+
 export type DesktopManifestBindingRepair = {
   documentId: string
   relativePath: string
@@ -183,6 +187,26 @@ export async function tauriWorkspaceSync(
     rootPath,
     selectedPaths,
     documentIds: Object.keys(clientIds).length > 0 ? clientIds : undefined,
+  })
+}
+
+/**
+ * Steady-state save path (ODE-459): update the manifest entry for exactly one
+ * already-bound document instead of rescanning the BindingRoot.
+ *
+ * `needsReconcile` is a recoverable outcome — the caller falls back to the full
+ * `tauriWorkspaceSync` reconciliation for that root. It never means the `.md`
+ * was lost and never authorizes minting identity here.
+ */
+export async function tauriWorkspaceTouchFile(
+  rootPath: string,
+  relativePath: string,
+  documentId: string,
+): Promise<DesktopWorkspaceTouchResult> {
+  return invoke<DesktopWorkspaceTouchResult>("workspace_touch_file", {
+    rootPath,
+    relativePath,
+    documentId,
   })
 }
 

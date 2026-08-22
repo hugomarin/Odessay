@@ -33,8 +33,10 @@ import {
   tauriOpenFile,
   tauriRelocateFile,
   tauriWorkspaceSync,
+  tauriWorkspaceTouchFile,
   tauriWriteFile,
   type DesktopCatalogDualWriteInput,
+  type DesktopWorkspaceFile,
 } from "@/lib/services/desktop/tauri-commands"
 import { DesktopSettingsService } from "@/lib/services/desktop/desktop-settings-service"
 import { getSyncService } from "@/lib/sync/sync-service-factory"
@@ -167,12 +169,41 @@ class DesktopDocumentService implements DocumentService {
     const relativePath = canonicalPath.startsWith(`${rootPath}/`)
       ? canonicalPath.slice(rootPath.length + 1)
       : basename(canonicalPath)
-    // Omit selectedPaths so the durable manifest keeps its existing whole-root
-    // or exact-file scope; a save must never narrow a BindingRoot implicitly.
-    const snapshot = await tauriWorkspaceSync(rootPath, undefined, { [relativePath]: record.id })
-    const file = snapshot.files.find((entry) => entry.path === canonicalPath || entry.relativePath === relativePath)
-    if (!file) throw new Error(`Manifest did not retain ${relativePath}`)
+    // Steady state (ODE-459): a document that already carries a durable binding
+    // only needs its own manifest entry refreshed, so the save path never walks
+    // the BindingRoot. Anything unverifiable falls back to the full
+    // reconciliation below, which stays the owner of scans, scope changes and
+    // identity minting.
+    let binding: { bindingRootId: string; rootPath: string; file: DesktopWorkspaceFile } | null = null
+    if (priorBinding && priorBinding.relativePath === relativePath) {
+      const touched = await tauriWorkspaceTouchFile(rootPath, relativePath, record.id)
+      if (touched.status === "updated") {
+        binding = { bindingRootId: touched.bindingRootId, rootPath: touched.rootPath, file: touched.file }
+      }
+    }
+    if (!binding) {
+      // Omit selectedPaths so the durable manifest keeps its existing whole-root
+      // or exact-file scope; a save must never narrow a BindingRoot implicitly.
+      const snapshot = await tauriWorkspaceSync(rootPath, undefined, { [relativePath]: record.id })
+      const synced = snapshot.files.find((entry) => entry.path === canonicalPath || entry.relativePath === relativePath)
+      if (!synced) throw new Error(`Manifest did not retain ${relativePath}`)
+      binding = { bindingRootId: snapshot.bindingRootId, rootPath: snapshot.rootPath, file: synced }
+    }
+    const file = binding.file
     const now = Date.now()
+    // ODE-453: a bound document's content lives in the canonical `.md` file.
+    // The flush re-reads and re-parses that file whenever it needs to write
+    // cloud content, so shipping bodyJson/bodyText inside the durable SQLite
+    // mutation would be a full copy of the document that's never read back.
+    // `contentUnchanged` lets the flush skip that re-read/re-parse and the
+    // content columns entirely when this save didn't touch the file bytes.
+    const priorContentHash = priorBinding?.contentHash || null
+    const nextContentHash = file.contentHash || null
+    const contentUnchanged = operation === "upsert"
+      && (catalogBefore?.cloudPresent ?? false)
+      && priorContentHash !== null
+      && nextContentHash !== null
+      && priorContentHash === nextContentHash
     const input: DesktopCatalogDualWriteInput = {
       document: {
         id: record.id,
@@ -191,8 +222,8 @@ class DesktopDocumentService implements DocumentService {
         modifiedAt: Date.parse(record.updatedAt),
       },
       binding: {
-        bindingRootId: snapshot.bindingRootId,
-        rootPath: snapshot.rootPath,
+        bindingRootId: binding.bindingRootId,
+        rootPath: binding.rootPath,
         manifestVersion: 2,
         visibleAsWorkspace: false,
         relativePath: file.relativePath,
@@ -205,13 +236,16 @@ class DesktopDocumentService implements DocumentService {
       mutation: {
         id: crypto.randomUUID(),
         operation,
+        // No bodyJson/bodyText here (ODE-453): the flush resolves content from
+        // the canonical `.md` via `record.binding.canonicalPath`, keyed by
+        // contentHash/contentUnchanged below — never from this payload.
         payloadJson: JSON.stringify({
-          title: filenameToTitle(file.relativePath), bodyText: record.content.plainText,
-          bodyJson: record.content.richText, slug: record.slug, status: record.status,
+          title: filenameToTitle(file.relativePath), slug: record.slug, status: record.status,
           artifactType: record.artifactType, visibility: record.visibility,
           parentId: record.parentId, correspondenceId: record.correspondenceId,
           version: Math.max(1, record.version), updatedAt: record.updatedAt,
           deletedAt: operation === "delete" ? new Date().toISOString() : record.deletedAt,
+          contentHash: nextContentHash, contentUnchanged,
         }),
         status: "pending", attemptCount: 0, nextRetryAt: null, createdAt: now, lastError: null,
       },

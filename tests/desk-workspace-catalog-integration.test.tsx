@@ -229,6 +229,11 @@ vi.mock("@/lib/services/desktop/workspace-service", () => ({
 }))
 vi.mock("@/lib/services/open-document-factory", () => ({
   isUnifiedOpenEnabled: () => false,
+  openDocumentById: async () => ({ status: "opened", documentId: "x" }),
+  openDocumentByIdWithRetry: async () => ({
+    result: { status: "opened", documentId: "x" },
+    attempt: 1,
+  }),
   openDocumentByPath: async () => ({ status: "opened", documentId: "x" }),
   describeOpenOutcome: () => "",
 }))

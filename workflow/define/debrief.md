@@ -152,3 +152,10 @@ _(sin entradas aún)_
 
 - IMP-2026-07-07-05 | deuda-tecnica | Consolidate `parseBlockPosition` logic: function exists in 4 places (lib/corrections/engine/lifecycle.ts, lib/corrections/block-invalidation.ts, lib/editor/suggestion-engine.ts, lib/editor/ai-correction-decorations.ts) with no shared test of parity. Maintenance burden and source of subtle bugs if logic needs to change. Pattern identical to ODE-344 (token-boundary consolidation). Fix: lifecycle.ts should import and reuse `parseCorrectionBlockPosition` from block-invalidation.ts (already imported). | backlog | ODE-362
   - **Origin**: wf-review-ships ODE-343-347, code-review finding #2 (non-blocking architectural debt)
+
+---
+
+## Fase 9 — Workspace: Filesystem y Nube
+
+- IMP-2026-08-22-01 | bug | QA manual combinado de ODE-453/ODE-454 confirma ambos contratos técnicos en verde (same-hash y content-change sincronizan sin `bodyJson`/`bodyText`; recuperación de sesión desktop tras permisos `000` en el `.md` restaura el mismo tab/UUID hidratado), pero el statusbar del editor queda congelado en "Saving..." después de que SQLite marca la mutación `synced` y el archivo ya está persistido — liveness desacoplada del sync real, probablemente el listener/selector que deriva el estado visual del statusbar no reacciona al `CatalogChange`/mutation-status más reciente. | next-sprint | ODE-460
+  - **Origin**: QA manual post-ship de ODE-453 (wf-ship), reportado por el humano tras verificar PR #400 en local.

@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   exportFile: vi.fn(),
   webExport: vi.fn(),
   workspaceSync: vi.fn(),
+  workspaceTouch: vi.fn(),
   dualWrite: vi.fn(),
   bulkDualWrite: vi.fn(),
   tauriOpen: vi.fn(),
@@ -84,6 +85,7 @@ vi.mock("@/lib/services/desktop/filesystem-document-service", () => ({
 }))
 vi.mock("@/lib/services/desktop/tauri-commands", () => ({
   tauriWorkspaceSync: mocks.workspaceSync,
+  tauriWorkspaceTouchFile: mocks.workspaceTouch,
   tauriCatalogDualWrite: mocks.dualWrite,
   tauriOpenFile: mocks.tauriOpen,
   tauriWriteFile: mocks.tauriWrite,
@@ -200,6 +202,9 @@ describe("desktop document service after compatibility retirement", () => {
       rootPath: "/docs", bindingRootId: "root-1", selectedPaths: ["Letter.md"],
       files: [{ id, path, relativePath: "Letter.md", inode: 1, contentHash: "blake3:a", size: 5, modifiedAt: 2 }],
     })
+    // Default to the recoverable outcome so every pre-existing expectation keeps
+    // exercising the full reconciliation path; the ODE-459 tests below opt in.
+    mocks.workspaceTouch.mockResolvedValue({ status: "needsReconcile", reason: "test default" })
   })
 
   describe("createDesktopDraft lifecycle (ODE-406)", () => {
@@ -680,6 +685,209 @@ describe("desktop document service after compatibility retirement", () => {
     expect(mocks.dualWrite.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.scheduleSyncFlush.mock.invocationCallOrder[0],
     )
+  })
+
+  describe("incremental manifest update on save (ODE-459)", () => {
+    const touchedFile = {
+      id,
+      path,
+      relativePath: "Letter.md",
+      inode: 77,
+      contentHash: "blake3:b",
+      size: 9,
+      modifiedAt: 3,
+    }
+
+    beforeEach(() => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated",
+        rootPath: "/docs",
+        bindingRootId: "root-1",
+        file: touchedFile,
+      })
+    })
+
+    it("refreshes only the saved document's manifest entry and never rescans the BindingRoot", async () => {
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toBeNull()
+      expect(mocks.workspaceTouch).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceTouch).toHaveBeenCalledWith("/docs", "Letter.md", id)
+      expect(mocks.workspaceSync).not.toHaveBeenCalled()
+      // One save is still one logical catalog update, not N per file in the root.
+      expect(mocks.dualWrite).toHaveBeenCalledTimes(1)
+      expect(mocks.saveFile.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.workspaceTouch.mock.invocationCallOrder[0],
+      )
+      expect(mocks.workspaceTouch.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.dualWrite.mock.invocationCallOrder[0],
+      )
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        "/config/desktop-index.sqlite3",
+        expect.objectContaining({
+          document: expect.objectContaining({ id }),
+          binding: expect.objectContaining({
+            bindingRootId: "root-1",
+            rootPath: "/docs",
+            relativePath: "Letter.md",
+            canonicalPath: path,
+            inode: 77,
+            contentHash: "blake3:b",
+          }),
+        }),
+      )
+    })
+
+    it("falls back to full reconciliation when the incremental update cannot verify the binding", async () => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "needsReconcile",
+        reason: "manifest is unreadable or corrupt",
+      })
+
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toBeNull()
+      expect(mocks.workspaceTouch).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceSync).toHaveBeenCalledTimes(1)
+      expect(mocks.workspaceSync).toHaveBeenCalledWith("/docs", undefined, { "Letter.md": id })
+      expect(mocks.dualWrite).toHaveBeenCalledWith(
+        "/config/desktop-index.sqlite3",
+        expect.objectContaining({ binding: expect.objectContaining({ contentHash: "blake3:a" }) }),
+      )
+    })
+
+    it("keeps a manifest write failure recoverable: no SQLite projection, no draft fallback", async () => {
+      mocks.workspaceTouch.mockRejectedValue(new Error("workspace_sync atomic rename index: EIO"))
+
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toMatchObject({ code: "DB_ERROR" })
+      expect(mocks.saveFile).toHaveBeenCalledTimes(1)
+      expect(mocks.dualWrite).not.toHaveBeenCalled()
+      expect(mocks.createDraft).not.toHaveBeenCalled()
+    })
+
+    it("uses full reconciliation when the document has no durable binding yet", async () => {
+      mocks.catalogGet.mockResolvedValue(null)
+
+      const { createDesktopDraft } = await import("@/lib/services/document-service-factory")
+      const result = await createDesktopDraft({ writingId: id, initialBodyText: "First words" })
+
+      expect(result.error).toBeNull()
+      expect(mocks.workspaceTouch).not.toHaveBeenCalled()
+      expect(mocks.workspaceSync).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe("durable mutation payload weight (ODE-453)", () => {
+    const bigPlainText = "Lorem ipsum dolor sit amet. ".repeat(2000)
+    const bigWriting = {
+      ...writing,
+      content: {
+        richText: {
+          type: "doc",
+          content: Array.from({ length: 200 }, (_, index) => ({
+            type: "paragraph",
+            content: [{ type: "text", text: `Paragraph ${index}: ${bigPlainText}` }],
+          })),
+        },
+        markdown: null,
+        plainText: bigPlainText,
+        canonicalSource: "rich-text" as const,
+      },
+    }
+
+    function touchedFileWithHash(contentHash: string) {
+      return { id, path, relativePath: "Letter.md", inode: 77, contentHash, size: 9, modifiedAt: 3 }
+    }
+
+    function lastMutationPayload() {
+      const call = mocks.dualWrite.mock.calls.at(-1)?.[1] as { mutation: { payloadJson: string } }
+      return JSON.parse(call.mutation.payloadJson) as Record<string, unknown>
+    }
+
+    it("never embeds bodyJson/bodyText in the durable SQLite mutation for a bound document", async () => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:b"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing: bigWriting })
+
+      expect(result.error).toBeNull()
+      const payload = lastMutationPayload()
+      expect(payload).not.toHaveProperty("bodyJson")
+      expect(payload).not.toHaveProperty("bodyText")
+      // Identity + operation + metadata + version + hash, never a body copy —
+      // this stays small regardless of how large the document is.
+      expect(JSON.stringify(payload).length).toBeLessThan(700)
+    })
+
+    it("keeps the mutation payload the same size for a large document as for a small one", async () => {
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:b"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+
+      await (await getDocumentService()).saveWriting({ writing })
+      const smallBytes = JSON.stringify(lastMutationPayload()).length
+
+      mocks.dualWrite.mockClear()
+      await (await getDocumentService()).saveWriting({ writing: bigWriting })
+      const largeBytes = JSON.stringify(lastMutationPayload()).length
+
+      expect(largeBytes).toBe(smallBytes)
+    })
+
+    it("marks contentUnchanged and carries the content hash when the file bytes did not change on an already cloud-present document", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord, cloudPresent: true, cloudAccountId: "account-1",
+        binding: { ...catalogRecord.binding!, contentHash: "blake3:same" },
+      })
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:same"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      const result = await (await getDocumentService()).saveWriting({ writing })
+
+      expect(result.error).toBeNull()
+      const payload = lastMutationPayload()
+      expect(payload.contentUnchanged).toBe(true)
+      expect(payload.contentHash).toBe("blake3:same")
+    })
+
+    it("does not mark contentUnchanged when the file hash changed", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord, cloudPresent: true, cloudAccountId: "account-1",
+        binding: { ...catalogRecord.binding!, contentHash: "blake3:old" },
+      })
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:new"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      await (await getDocumentService()).saveWriting({ writing })
+
+      const payload = lastMutationPayload()
+      expect(payload.contentUnchanged).toBe(false)
+      expect(payload.contentHash).toBe("blake3:new")
+    })
+
+    it("never marks contentUnchanged for a document that is not yet cloud-present, even with a matching hash", async () => {
+      mocks.catalogGet.mockResolvedValue({
+        ...catalogRecord, cloudPresent: false,
+        binding: { ...catalogRecord.binding!, contentHash: "blake3:same" },
+      })
+      mocks.workspaceTouch.mockResolvedValue({
+        status: "updated", rootPath: "/docs", bindingRootId: "root-1", file: touchedFileWithHash("blake3:same"),
+      })
+      const { getDocumentService } = await import("@/lib/services/document-service-factory")
+      await (await getDocumentService()).saveWriting({ writing })
+
+      const payload = lastMutationPayload()
+      expect(payload.contentUnchanged).toBe(false)
+    })
   })
 
   it("updates desktop metadata without rewriting the canonical markdown", async () => {

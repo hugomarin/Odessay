@@ -328,7 +328,7 @@ describe("openDocument — failures never mint or draft", () => {
     })
     const open = createOpenDocumentUseCase(ports)
     const result = await open({ kind: "path", path: "/root/locked.md" })
-    expect(result).toEqual({ status: "failed", reason: "EACCES" })
+    expect(result).toEqual({ status: "failed", reason: "EACCES", reasonCode: "unknown", retryable: false })
     expect(catalog.registerBinding).not.toHaveBeenCalled()
   })
 

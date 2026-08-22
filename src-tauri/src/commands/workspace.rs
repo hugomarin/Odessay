@@ -54,6 +54,31 @@ pub struct WorkspaceManifestBindingRepair {
     pub size: Option<u64>,
 }
 
+/// Result of an incremental, single-file manifest update (ODE-459).
+///
+/// `NeedsReconcile` is a recoverable outcome, never an error: the `.md` on disk
+/// stays authoritative, no UUID is minted, no binding is dropped, and the caller
+/// hands the root back to the full reconciliation path. Only a genuine manifest
+/// write failure surfaces as `Err`.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum WorkspaceFileTouchResult {
+    #[serde(rename_all = "camelCase")]
+    Updated {
+        root_path: String,
+        binding_root_id: String,
+        file: WorkspaceFileSnapshot,
+    },
+    #[serde(rename_all = "camelCase")]
+    NeedsReconcile { reason: String },
+}
+
+fn needs_reconcile(reason: impl Into<String>) -> Result<WorkspaceFileTouchResult, String> {
+    Ok(WorkspaceFileTouchResult::NeedsReconcile {
+        reason: reason.into(),
+    })
+}
+
 const WORKSPACE_INDEX_VERSION: u8 = 2;
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -448,6 +473,130 @@ pub fn workspace_unbound_paths(
     Ok(paths)
 }
 
+/// Steady-state save path (ODE-459): update exactly one manifest entry from the
+/// evidence of the file that was just written, without enumerating the
+/// BindingRoot. Full scans stay with `workspace_sync` / the reconciler, which
+/// remain the owners of bootstrap, recovery, rebuild and scope changes.
+///
+/// The caller must already know the binding (`relative_path` + `document_id`).
+/// Anything this command cannot verify against the durable manifest returns
+/// `NeedsReconcile` instead of guessing: it never mints identity, never removes
+/// a binding, never widens `selectedPaths` and never reports a missing `.md`.
+#[tauri::command]
+pub fn workspace_touch_file(
+    root_path: String,
+    relative_path: String,
+    document_id: String,
+) -> Result<WorkspaceFileTouchResult, String> {
+    let document_id = document_id.trim().to_string();
+    if document_id.is_empty() {
+        return Err("workspace_touch_file: documentId is required".to_string());
+    }
+
+    let normalized_relative_path = normalize_selected_paths(vec![relative_path.clone()])?
+        .into_iter()
+        .next()
+        .ok_or_else(|| "workspace_touch_file: relativePath is required".to_string())?;
+
+    let root = Path::new(&root_path);
+    if !root.is_dir() {
+        // Unmounted or unreadable BindingRoot: recoverable, never a deletion.
+        return needs_reconcile("binding root is not available");
+    }
+    let Ok(canonical_root) = root.canonicalize() else {
+        return needs_reconcile("binding root could not be canonicalized");
+    };
+
+    let index_path = canonical_root
+        .join(WORKSPACE_DIR_NAME)
+        .join(WORKSPACE_INDEX_FILE_NAME);
+    if !index_path.exists() {
+        return needs_reconcile("manifest is missing");
+    }
+    let Ok(mut index) = read_workspace_index(&index_path) else {
+        return needs_reconcile("manifest is unreadable or corrupt");
+    };
+
+    // A v1 manifest has no durable BindingRoot identity yet. Minting it is a
+    // migration concern owned by the full sync path.
+    let Some(binding_root_id) = index.binding_root_id.clone() else {
+        return needs_reconcile("manifest predates BindingRoot identity");
+    };
+
+    let Some(existing_entry) = index.files.get(&normalized_relative_path).cloned() else {
+        return needs_reconcile("path is not bound in the manifest");
+    };
+    if existing_entry.id != document_id {
+        return needs_reconcile("document identity conflict at path");
+    }
+
+    let selected_paths = normalize_selected_paths(index.selected_paths.clone())?;
+    if !matches_selected_paths(&normalized_relative_path, &selected_paths) {
+        // Never widen the scope implicitly; the full path decides.
+        return needs_reconcile("path is outside the selected scope");
+    }
+
+    let file_path = canonical_root.join(&normalized_relative_path);
+    if !is_markdown_file(&file_path) {
+        return needs_reconcile("path is not a markdown document");
+    }
+    let Ok(metadata) = fs::metadata(&file_path) else {
+        return needs_reconcile("saved file is not readable from the binding root");
+    };
+    if !metadata.is_file() {
+        return needs_reconcile("path is not a regular file");
+    }
+    let Ok(content_hash) = content_hash_for_markdown_file(&file_path) else {
+        return needs_reconcile("saved file could not be hashed");
+    };
+
+    let modified_at = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0);
+    // An atomic save replaces the inode. The manifest entry is keyed by relative
+    // path, so this is one document that moved inodes — never delete + create.
+    let inode = inode_for_path(&file_path);
+
+    index.version = WORKSPACE_INDEX_VERSION;
+    index.files.insert(
+        normalized_relative_path.clone(),
+        WorkspaceIndexEntry {
+            id: existing_entry.id.clone(),
+            inode,
+            content_hash: Some(content_hash.clone()),
+            last_seen: modified_at,
+            size: metadata.len(),
+        },
+    );
+
+    // A manifest write failure is a hard error: the `.md` remains authoritative
+    // and the caller must not confirm a SQLite projection for it.
+    let workspace_dir = canonical_root.join(WORKSPACE_DIR_NAME);
+    write_workspace_index_atomic(&workspace_dir, &index)?;
+
+    Ok(WorkspaceFileTouchResult::Updated {
+        root_path,
+        binding_root_id,
+        file: WorkspaceFileSnapshot {
+            id: existing_entry.id,
+            path: file_path.to_string_lossy().to_string(),
+            relative_path: normalized_relative_path,
+            name: file_path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_string(),
+            modified_at,
+            size: metadata.len(),
+            inode,
+            content_hash,
+        },
+    })
+}
+
 #[tauri::command]
 pub fn workspace_sync(
     root_path: String,
@@ -725,12 +874,23 @@ fn read_workspace_index(index_path: &Path) -> Result<WorkspaceIndexDocument, Str
     serde_json::from_str(&contents).map_err(|e| format!("workspace_sync parse index: {e}"))
 }
 
+// Test-only evidence that the steady-state save path never enumerates the
+// BindingRoot (ODE-459). Counts every recursive directory visit. Thread-local
+// so parallel cargo tests cannot cross-contaminate the count.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static VISIT_WORKSPACE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn visit_workspace(
     root: &Path,
     current: &Path,
     files: &mut Vec<WorkspaceFileSnapshot>,
     folder_count: &mut usize,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    VISIT_WORKSPACE_CALLS.with(|calls| calls.set(calls.get() + 1));
+
     let entries = fs::read_dir(current).map_err(|e| format!("workspace_sync read_dir: {e}"))?;
 
     for entry in entries {
@@ -831,6 +991,431 @@ mod tests {
 
     fn cleanup(path: &Path) {
         let _ = fs::remove_dir_all(path);
+    }
+
+    fn read_index(root: &Path) -> WorkspaceIndexDocument {
+        let contents = fs::read_to_string(
+            root.join(WORKSPACE_DIR_NAME)
+                .join(WORKSPACE_INDEX_FILE_NAME),
+        )
+        .expect("read index");
+        serde_json::from_str(&contents).expect("parse index")
+    }
+
+    fn seed_workspace(test_name: &str, file_count: usize) -> PathBuf {
+        let root = temp_workspace_root(test_name);
+        fs::create_dir_all(root.join("Cartas")).expect("create nested folder");
+        for index in 0..file_count {
+            fs::write(
+                root.join("Cartas").join(format!("letter-{index}.md")),
+                format!("Letter {index}\n"),
+            )
+            .expect("write markdown file");
+        }
+        workspace_sync(root.to_string_lossy().to_string(), None, None).expect("initial sync");
+        root
+    }
+
+    /// Wall-clock evidence on the real compiled save path (ODE-459). Ignored by
+    /// default so CI stays fast:
+    ///   cargo test --release -- --ignored --nocapture bench_steady_state_save
+    #[test]
+    #[ignore]
+    fn bench_steady_state_save_manifest_update() {
+        use std::time::Instant;
+
+        fn median(mut samples: Vec<u128>) -> u128 {
+            samples.sort_unstable();
+            samples[samples.len() / 2]
+        }
+
+        for file_count in [100usize, 500] {
+            let root = temp_workspace_root(&format!("bench-{file_count}"));
+            // ~4 KB per document across 10 folders: a realistic BindingRoot.
+            let body = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n".repeat(70);
+            for index in 0..file_count {
+                let folder = root.join(format!("Folder-{}", index % 10));
+                fs::create_dir_all(&folder).expect("create folder");
+                fs::write(folder.join(format!("doc-{index}.md")), &body).expect("write file");
+            }
+            workspace_sync(root.to_string_lossy().to_string(), None, None).expect("initial sync");
+
+            let target_relative = "Folder-3/doc-33.md".to_string();
+            let target_path = root.join(&target_relative);
+            let document_id = read_index(&root)
+                .files
+                .get(&target_relative)
+                .expect("bound target")
+                .id
+                .clone();
+
+            let mut full = Vec::new();
+            let mut incremental = Vec::new();
+            for iteration in 0..20 {
+                fs::write(&target_path, format!("{body}\nEdit {iteration}\n")).expect("save");
+                let started = Instant::now();
+                workspace_sync(root.to_string_lossy().to_string(), None, None).expect("full sync");
+                full.push(started.elapsed().as_micros());
+
+                fs::write(&target_path, format!("{body}\nEdit {iteration} bis\n")).expect("save");
+                let started = Instant::now();
+                let result = workspace_touch_file(
+                    root.to_string_lossy().to_string(),
+                    target_relative.clone(),
+                    document_id.clone(),
+                )
+                .expect("incremental update");
+                incremental.push(started.elapsed().as_micros());
+                assert!(matches!(result, WorkspaceFileTouchResult::Updated { .. }));
+            }
+
+            let full_median = median(full);
+            let incremental_median = median(incremental);
+            println!(
+                "[{file_count} files] full workspace_sync p50 = {full_median} us | incremental workspace_touch_file p50 = {incremental_median} us | {:.1}x faster",
+                full_median as f64 / incremental_median.max(1) as f64
+            );
+
+            // Guard the outcome, not the machine: the incremental path must not
+            // scale with the size of the BindingRoot.
+            assert!(
+                incremental_median * 4 < full_median,
+                "incremental save must be dramatically cheaper than a full rescan"
+            );
+
+            cleanup(&root);
+        }
+    }
+
+    /// The TypeScript side reads this as a discriminated union
+    /// (`DesktopWorkspaceTouchResult`). A serde shape drift would not fail any
+    /// mocked test — it would silently send every save down the full-rescan
+    /// fallback forever. Lock the wire contract here.
+    #[test]
+    fn workspace_touch_file_result_matches_the_typescript_wire_contract() {
+        let updated = WorkspaceFileTouchResult::Updated {
+            root_path: "/docs".to_string(),
+            binding_root_id: "root-1".to_string(),
+            file: WorkspaceFileSnapshot {
+                id: "uuid".to_string(),
+                path: "/docs/Letter.md".to_string(),
+                relative_path: "Letter.md".to_string(),
+                name: "Letter.md".to_string(),
+                modified_at: 3,
+                size: 9,
+                inode: 77,
+                content_hash: "blake3:b".to_string(),
+            },
+        };
+
+        assert_eq!(
+            serde_json::to_string(&updated).expect("serialize updated"),
+            r#"{"status":"updated","rootPath":"/docs","bindingRootId":"root-1","file":{"id":"uuid","path":"/docs/Letter.md","relativePath":"Letter.md","name":"Letter.md","modifiedAt":3,"size":9,"inode":77,"contentHash":"blake3:b"}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&WorkspaceFileTouchResult::NeedsReconcile {
+                reason: "manifest is missing".to_string(),
+            })
+            .expect("serialize needs reconcile"),
+            r#"{"status":"needsReconcile","reason":"manifest is missing"}"#
+        );
+    }
+
+    #[test]
+    fn workspace_touch_file_never_enumerates_the_binding_root() {
+        let root = seed_workspace("touch-no-full-scan", 100);
+        let index = read_index(&root);
+        let document_id = index
+            .files
+            .get("Cartas/letter-7.md")
+            .expect("bound letter")
+            .id
+            .clone();
+
+        fs::write(root.join("Cartas").join("letter-7.md"), "Edited body\n")
+            .expect("rewrite markdown file");
+        VISIT_WORKSPACE_CALLS.with(|calls| calls.set(0));
+
+        let result = workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "Cartas/letter-7.md".to_string(),
+            document_id.clone(),
+        )
+        .expect("incremental manifest update");
+
+        assert_eq!(
+            VISIT_WORKSPACE_CALLS.with(|calls| calls.get()),
+            0,
+            "steady-state save must not walk the BindingRoot"
+        );
+        let WorkspaceFileTouchResult::Updated {
+            binding_root_id,
+            file,
+            ..
+        } = result
+        else {
+            panic!("expected an incremental update");
+        };
+        assert_eq!(file.id, document_id);
+        assert_eq!(file.relative_path, "Cartas/letter-7.md");
+        assert_eq!(
+            binding_root_id,
+            read_index(&root).binding_root_id.expect("binding root id")
+        );
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_preserves_other_bindings_and_scope() {
+        let root = seed_workspace("touch-preserves-manifest", 5);
+        let before = read_index(&root);
+        let document_id = before
+            .files
+            .get("Cartas/letter-2.md")
+            .expect("bound letter")
+            .id
+            .clone();
+
+        fs::write(
+            root.join("Cartas").join("letter-2.md"),
+            "Edited\r\nbody\r\n",
+        )
+        .expect("rewrite markdown file");
+        workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "Cartas/letter-2.md".to_string(),
+            document_id.clone(),
+        )
+        .expect("incremental manifest update");
+
+        let after = read_index(&root);
+        assert_eq!(after.version, WORKSPACE_INDEX_VERSION);
+        assert_eq!(after.binding_root_id, before.binding_root_id);
+        assert_eq!(after.selected_paths, before.selected_paths);
+        assert_eq!(after.files.len(), before.files.len());
+        for (relative_path, entry) in &before.files {
+            let next = after.files.get(relative_path).expect("entry preserved");
+            assert_eq!(next.id, entry.id, "UUID preserved for {relative_path}");
+            if relative_path != "Cartas/letter-2.md" {
+                assert_eq!(next.content_hash, entry.content_hash);
+                assert_eq!(next.inode, entry.inode);
+                assert_eq!(next.size, entry.size);
+            }
+        }
+        let touched = after.files.get("Cartas/letter-2.md").expect("touched entry");
+        assert_eq!(
+            touched.content_hash,
+            Some(format!(
+                "{CONTENT_HASH_PREFIX}:{}",
+                blake3::hash(b"Edited\nbody\n").to_hex()
+            ))
+        );
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_keeps_identity_after_atomic_rename_save() {
+        let root = seed_workspace("touch-atomic-rename", 3);
+        let document_id = read_index(&root)
+            .files
+            .get("Cartas/letter-1.md")
+            .expect("bound letter")
+            .id
+            .clone();
+        let previous_inode = read_index(&root)
+            .files
+            .get("Cartas/letter-1.md")
+            .expect("bound letter")
+            .inode;
+
+        // Atomic save: write a sibling temp file and rename it over the target.
+        let tmp_path = root.join("Cartas").join("letter-1.md.saving");
+        fs::write(&tmp_path, "Rewritten\n").expect("write temp file");
+        fs::rename(&tmp_path, root.join("Cartas").join("letter-1.md")).expect("atomic rename");
+
+        let result = workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "Cartas/letter-1.md".to_string(),
+            document_id.clone(),
+        )
+        .expect("incremental manifest update");
+
+        let WorkspaceFileTouchResult::Updated { file, .. } = result else {
+            panic!("expected an incremental update");
+        };
+        assert_eq!(file.id, document_id, "atomic save is not delete + create");
+        let entry = read_index(&root)
+            .files
+            .get("Cartas/letter-1.md")
+            .cloned()
+            .expect("entry still bound");
+        assert_eq!(entry.id, document_id);
+        if cfg!(unix) {
+            assert_ne!(entry.inode, previous_inode, "inode evidence refreshed");
+        }
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_requests_reconcile_instead_of_minting_identity() {
+        let root = seed_workspace("touch-unbound-path", 2);
+        fs::write(root.join("Cartas").join("fresh.md"), "Fresh\n").expect("write new markdown");
+        let before = read_index(&root);
+
+        let result = workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "Cartas/fresh.md".to_string(),
+            Uuid::new_v4().to_string(),
+        )
+        .expect("recoverable outcome, not an error");
+
+        assert!(matches!(
+            result,
+            WorkspaceFileTouchResult::NeedsReconcile { .. }
+        ));
+        let after = read_index(&root);
+        assert_eq!(after.files.len(), before.files.len());
+        assert!(!after.files.contains_key("Cartas/fresh.md"));
+        assert!(
+            root.join("Cartas").join("fresh.md").exists(),
+            "the .md stays authoritative"
+        );
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_requests_reconcile_on_identity_conflict() {
+        let root = seed_workspace("touch-identity-conflict", 2);
+        let before = read_index(&root);
+
+        let result = workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "Cartas/letter-0.md".to_string(),
+            Uuid::new_v4().to_string(),
+        )
+        .expect("recoverable outcome, not an error");
+
+        assert!(matches!(
+            result,
+            WorkspaceFileTouchResult::NeedsReconcile { .. }
+        ));
+        let after = read_index(&root);
+        for (relative_path, entry) in &before.files {
+            assert_eq!(
+                after.files.get(relative_path).map(|next| next.id.clone()),
+                Some(entry.id.clone()),
+                "binding untouched for {relative_path}"
+            );
+        }
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_requests_reconcile_when_manifest_is_missing() {
+        let root = temp_workspace_root("touch-missing-manifest");
+        fs::write(root.join("letter.md"), "Body\n").expect("write markdown file");
+
+        let result = workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "letter.md".to_string(),
+            Uuid::new_v4().to_string(),
+        )
+        .expect("recoverable outcome, not an error");
+
+        assert!(matches!(
+            result,
+            WorkspaceFileTouchResult::NeedsReconcile { .. }
+        ));
+        assert!(!root
+            .join(WORKSPACE_DIR_NAME)
+            .join(WORKSPACE_INDEX_FILE_NAME)
+            .exists());
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_requests_reconcile_outside_selected_scope() {
+        let root = temp_workspace_root("touch-outside-scope");
+        fs::create_dir_all(root.join("Cartas")).expect("create folder");
+        fs::write(root.join("Cartas").join("letter.md"), "Body\n").expect("write markdown file");
+        fs::create_dir_all(root.join("Notas")).expect("create second folder");
+        fs::write(root.join("Notas").join("note.md"), "Note\n").expect("write markdown file");
+        workspace_sync(
+            root.to_string_lossy().to_string(),
+            Some(vec!["Cartas".to_string()]),
+            None,
+        )
+        .expect("initial sync with explicit scope");
+        let binding_root_id = read_index(&root)
+            .binding_root_id
+            .expect("binding root id");
+
+        // A binding can outlive the active projection (repair is additive and
+        // scope-blind). Touching it must not widen `selectedPaths`.
+        let out_of_scope_id = Uuid::new_v4().to_string();
+        workspace_repair_manifest_bindings(
+            root.to_string_lossy().to_string(),
+            binding_root_id,
+            vec![WorkspaceManifestBindingRepair {
+                document_id: out_of_scope_id.clone(),
+                relative_path: "Notas/note.md".to_string(),
+                inode: None,
+                content_hash: None,
+                last_seen: None,
+                size: None,
+            }],
+        )
+        .expect("repair out-of-scope binding");
+
+        let result = workspace_touch_file(
+            root.to_string_lossy().to_string(),
+            "Notas/note.md".to_string(),
+            out_of_scope_id.clone(),
+        )
+        .expect("recoverable outcome, not an error");
+
+        assert!(matches!(
+            result,
+            WorkspaceFileTouchResult::NeedsReconcile { .. }
+        ));
+        let after = read_index(&root);
+        assert_eq!(after.selected_paths, vec!["Cartas".to_string()]);
+        assert_eq!(
+            after
+                .files
+                .get("Notas/note.md")
+                .map(|entry| entry.id.clone()),
+            Some(out_of_scope_id),
+            "the out-of-scope binding survives untouched"
+        );
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn workspace_touch_file_requests_reconcile_when_binding_root_is_unavailable() {
+        let root = temp_workspace_root("touch-unmounted-root");
+        let missing_root = root.join("gone");
+
+        let result = workspace_touch_file(
+            missing_root.to_string_lossy().to_string(),
+            "letter.md".to_string(),
+            Uuid::new_v4().to_string(),
+        )
+        .expect("recoverable outcome, not an error");
+
+        assert!(matches!(
+            result,
+            WorkspaceFileTouchResult::NeedsReconcile { .. }
+        ));
+
+        cleanup(&root);
     }
 
     #[test]

@@ -44,7 +44,7 @@ const mapWritingPayload = (
   author_id: null,
   title: payload.title,
   body_json: payload.bodyJson ?? EMPTY_BODY_JSON,
-  body_text: payload.bodyText,
+  body_text: payload.bodyText ?? "",
   slug: payload.slug,
   status: payload.status as WritingStatus,
   artifact_type: payload.artifactType,

@@ -199,6 +199,10 @@ vi.mock("@/lib/services/document-service-factory", () => ({
 vi.mock("@/lib/services/open-document-factory", () => ({
   isUnifiedOpenEnabled: () => unifiedOpenState.enabled,
   openDocumentById: mocks.openDocumentById,
+  openDocumentByIdWithRetry: vi.fn(async (id: string) => ({
+    result: await mocks.openDocumentById(id),
+    attempt: 1,
+  })),
   openDocumentByPath: vi.fn(async () => ({ status: "failed" })),
   describeOpenOutcome: vi.fn(),
 }))
