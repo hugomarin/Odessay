@@ -38,13 +38,53 @@ export type OpenDocumentInput =
 /** How a path open resolved its identity; `existing` = already bound in catalog. */
 export type OpenStrategy = ResolutionStrategy | "existing"
 
+/**
+ * Stable classification for a `failed` outcome (ODE-454, requirement 1). Ports
+ * throw `RetryableOpenError`/`TerminalOpenError` with one of these codes at the
+ * exact call site that knows whether the failure is transient — retryability is
+ * never inferred by parsing `reason` strings downstream.
+ */
+export type OpenFailureReasonCode =
+  | "catalog-unavailable"
+  | "file-unreadable"
+  | "root-registration-failed"
+  | "cloud-materialization-unavailable"
+  | "cloud-materialization-failed"
+  | "unknown"
+
 export type OpenDocumentResult =
   | { status: "opened"; documentId: string; record: DocumentCatalogRecord; strategy: OpenStrategy }
   | { status: "needs-binding-root-confirmation"; path: string; parentDir: string }
   | { status: "ambiguous"; path: string; candidates: string[] }
   | { status: "conflict"; documentId: string; record: DocumentCatalogRecord }
   | { status: "orphaned"; id?: string; path?: string }
-  | { status: "failed"; reason: string }
+  | {
+      status: "failed"
+      reason: string
+      reasonCode: OpenFailureReasonCode
+      /** True when the same input is expected to succeed after a bounded retry. */
+      retryable: boolean
+    }
+
+/** Thrown by a port to signal a transient failure the caller may retry. */
+export class RetryableOpenError extends Error {
+  readonly reasonCode: OpenFailureReasonCode
+  constructor(reasonCode: OpenFailureReasonCode, message: string) {
+    super(message)
+    this.name = "RetryableOpenError"
+    this.reasonCode = reasonCode
+  }
+}
+
+/** Thrown by a port to signal a failure retrying will not resolve. */
+export class TerminalOpenError extends Error {
+  readonly reasonCode: OpenFailureReasonCode
+  constructor(reasonCode: OpenFailureReasonCode, message: string) {
+    super(message)
+    this.name = "TerminalOpenError"
+    this.reasonCode = reasonCode
+  }
+}
 
 /** Identity evidence read from one file on disk (adapter concern). */
 export type FileOpenEvidence = {
@@ -124,6 +164,8 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
         return {
           status: "failed",
           reason: `document ${record.id} is cloud-only; materialization is owned by ODE-371 and is not wired in this build`,
+          reasonCode: "cloud-materialization-unavailable",
+          retryable: false,
         }
       }
       const materialized = await ports.materializeCloudOnly({
@@ -254,11 +296,21 @@ export function createOpenDocumentUseCase(ports: OpenDocumentPorts) {
       }
       return await openByPath(input.path, input.confirmRegisterRoot ?? false)
     } catch (error) {
-      // Any failure is recoverable and terminal for this attempt: no UUID is
-      // minted and no draft is created as a fallback (invariant #10).
+      // Any failure is recoverable: no UUID is minted and no draft is created as
+      // a fallback (invariant #10). Retryability comes only from the typed error
+      // a port throws (ODE-454) — an unclassified error defaults to non-retryable
+      // so an unknown failure mode never loops silently.
+      if (error instanceof RetryableOpenError) {
+        return { status: "failed", reason: error.message, reasonCode: error.reasonCode, retryable: true }
+      }
+      if (error instanceof TerminalOpenError) {
+        return { status: "failed", reason: error.message, reasonCode: error.reasonCode, retryable: false }
+      }
       return {
         status: "failed",
         reason: error instanceof Error ? error.message : "Failed to open document",
+        reasonCode: "unknown",
+        retryable: false,
       }
     }
   }

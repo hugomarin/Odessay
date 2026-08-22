@@ -194,6 +194,7 @@ import {
   describeOpenOutcome,
   isUnifiedOpenEnabled,
   openDocumentById,
+  openDocumentByIdWithRetry,
   openDocumentByPath,
 } from "@/lib/services/open-document-factory"
 import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
@@ -1998,13 +1999,25 @@ export function EditorShell({
         // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
         // Recent and the sidebar all navigate to /write?id= and funnel through
         // this hydration — resolves identity through the DocumentCatalog first
-        // and consumes the opener's explicit outcomes. `orphaned`/`failed`
-        // recover the tab without a draft; `conflict` opens the local copy
-        // (visible conflict UX is owned by ODE-373); `opened` continues to
+        // and consumes the opener's explicit outcomes. A `failed` outcome the
+        // opener classified as retryable (ODE-454) rearms itself with a bounded
+        // backoff + jitter — no click, navigation or web event involved — before
+        // falling back. `orphaned`, an exhausted retry loop, or a terminal
+        // `failed` recover the tab without a draft; `conflict` opens the local
+        // copy (visible conflict UX is owned by ODE-373); `opened` continues to
         // content hydration below.
         if (isDesktopRuntime() && isUnifiedOpenEnabled()) {
-          const outcome = await openDocumentById(targetWritingId)
+          const { result: outcome, attempt } = await openDocumentByIdWithRetry(targetWritingId, {
+            isCancelled: () => cancelled,
+          })
+          if (cancelled) {
+            return
+          }
           if (outcome.status === "orphaned" || outcome.status === "failed") {
+            const reasonCode = outcome.status === "failed" ? outcome.reasonCode : "orphaned"
+            console.info(
+              `[editor] unified-open unavailable documentId=${targetWritingId} status=${outcome.status} reasonCode=${reasonCode} attempt=${attempt} next=unavailable`,
+            )
             clearTimeout(skeletonTimer)
             if (!cancelled) setIsBodyHydrating(false)
             recoverUnavailableTab()

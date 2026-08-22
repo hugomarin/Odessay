@@ -370,4 +370,73 @@ describe("open-document-desktop", () => {
     )
     expect(mocks.ensureManagedRoot).not.toHaveBeenCalled()
   })
+
+  // ── ODE-454: reasonCode/retryable classification ──────────────────────────
+
+  it("classifies a catalog/SQLite IPC failure as retryable", async () => {
+    mocks.catalogGetById.mockRejectedValue(new Error("database is locked"))
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "doc-1" })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      reasonCode: "catalog-unavailable",
+      retryable: true,
+    })
+  })
+
+  it("classifies a transiently unreadable file as retryable", async () => {
+    const path = "/Users/me/Writings/flaky.md"
+    mocks.catalogResolvePath.mockResolvedValue({ kind: "unbound", path })
+    mocks.getBindingRoots.mockResolvedValue([{
+      id: "root-writings", rootPath: "/Users/me/Writings", kind: "external",
+      visibleAsWorkspace: true, selectedPaths: [], consentedAt: "now", createdAt: "now",
+    }])
+    // workspace_sync succeeds but the freshly-synced snapshot does not (yet)
+    // contain the file — a slow write or unmount race, not a real deletion.
+    mocks.workspaceSync.mockResolvedValue({
+      rootPath: "/Users/me/Writings", bindingRootId: "root-writings", name: "Writings",
+      selectedPaths: [], fileCount: 0, folderCount: 0, updatedAt: 1, files: [],
+    })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "path", path })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      reasonCode: "file-unreadable",
+      retryable: true,
+    })
+  })
+
+  it("classifies a missing cloud auth session as terminal, not retryable", async () => {
+    const cloud = catalogRecord({ id: "cloud-3", localPresent: false, cloudPresent: true, syncStatus: "synced" })
+    mocks.catalogGetById.mockResolvedValue(cloud)
+    mocks.getSession.mockResolvedValue({ data: { session: null }, error: null })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "cloud-3" })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      reasonCode: "cloud-materialization-unavailable",
+      retryable: false,
+    })
+  })
+
+  it("classifies a cloud query failure during materialization as retryable", async () => {
+    const cloud = catalogRecord({ id: "cloud-4", localPresent: false, cloudPresent: true, syncStatus: "synced" })
+    mocks.catalogGetById.mockResolvedValue(cloud)
+    mocks.fetchCloudWriting.mockResolvedValue({ data: null, error: { message: "network error" } })
+
+    const { openDesktopDocument } = await import("@/lib/services/desktop/open-document-desktop")
+    const result = await openDesktopDocument({ kind: "id", id: "cloud-4" })
+
+    expect(result).toMatchObject({
+      status: "failed",
+      reasonCode: "cloud-materialization-failed",
+      retryable: true,
+    })
+  })
 })

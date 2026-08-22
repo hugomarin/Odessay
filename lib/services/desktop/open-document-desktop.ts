@@ -20,12 +20,36 @@ import {
 import type { KnownBinding } from "@/lib/services/desktop/workspace-reconciler"
 import {
   createOpenDocumentUseCase,
+  RetryableOpenError,
+  TerminalOpenError,
   type BindingRootLocation,
   type BindingRootMatch,
   type FileOpenEvidence,
   type OpenDocumentInput,
   type OpenDocumentResult,
 } from "@/lib/services/open-document"
+
+/**
+ * Wraps a desktop port call so an IPC/OS-level throw (SQLite busy, filesystem
+ * hiccup, Tauri command failure) surfaces as retryable — those are the transient
+ * failure modes ODE-454 rearms automatically. A caller that already knows a
+ * failure is permanent throws `TerminalOpenError` directly instead of calling
+ * this helper.
+ */
+async function asRetryable<T>(
+  reasonCode: "catalog-unavailable" | "file-unreadable" | "cloud-materialization-failed",
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (error instanceof RetryableOpenError || error instanceof TerminalOpenError) throw error
+    throw new RetryableOpenError(
+      reasonCode,
+      error instanceof Error ? error.message : "Desktop open failed",
+    )
+  }
+}
 
 const MANAGED_ROOT_DIRNAME = "artifact-studio-managed"
 
@@ -162,40 +186,49 @@ async function buildDesktopOpenDocumentUseCase() {
   async function readFileEvidence(
     input: BindingRootMatch & { path: string },
   ): Promise<FileOpenEvidence> {
-    // Opening one file is an additive scope operation. Passing a singleton array
-    // here used to replace a full Workspace scope and atomically discard every
-    // sibling binding from `.odessay/index.json`.
-    const selectedPaths = scopeForExplicitOpen(input.relativePath, input.selectedPaths)
-    const snapshot = await tauriWorkspaceSync(input.rootPath, selectedPaths)
-    if (
-      input.selectedPaths &&
-      (snapshot.selectedPaths.length !== input.selectedPaths.length ||
-        snapshot.selectedPaths.some((path, index) => path !== input.selectedPaths![index]))
-    ) {
-      const current = (await settings.getBindingRoots()).find(
-        (root) => root.id === input.bindingRootId,
-      )
-      if (current) {
-        await settings.upsertBindingRoot({ ...current, selectedPaths: snapshot.selectedPaths })
+    return asRetryable("file-unreadable", async () => {
+      // Opening one file is an additive scope operation. Passing a singleton
+      // array here used to replace a full Workspace scope and atomically discard
+      // every sibling binding from `.odessay/index.json`.
+      const selectedPaths = scopeForExplicitOpen(input.relativePath, input.selectedPaths)
+      const snapshot = await tauriWorkspaceSync(input.rootPath, selectedPaths)
+      if (
+        input.selectedPaths &&
+        (snapshot.selectedPaths.length !== input.selectedPaths.length ||
+          snapshot.selectedPaths.some((path, index) => path !== input.selectedPaths![index]))
+      ) {
+        const current = (await settings.getBindingRoots()).find(
+          (root) => root.id === input.bindingRootId,
+        )
+        if (current) {
+          await settings.upsertBindingRoot({ ...current, selectedPaths: snapshot.selectedPaths })
+        }
       }
-    }
-    const file =
-      snapshot.files.find((entry) => entry.relativePath === input.relativePath) ??
-      snapshot.files.find((entry) => entry.path === input.path)
+      const file =
+        snapshot.files.find((entry) => entry.relativePath === input.relativePath) ??
+        snapshot.files.find((entry) => entry.path === input.path)
 
-    if (!file) {
-      throw new Error(`File is not present in its BindingRoot: ${input.path}`)
-    }
+      if (!file) {
+        // The workspace_sync round-trip succeeded but the file is absent from the
+        // fresh snapshot: this can be a slow write, an unmount race, or a real
+        // deletion, and this layer cannot tell those apart. Treat it as transient
+        // so a bounded rearm gets one more chance before giving up.
+        throw new RetryableOpenError(
+          "file-unreadable",
+          `File is not present in its BindingRoot: ${input.path}`,
+        )
+      }
 
-    return {
-      canonicalPath: file.path,
-      inode: file.inode || null,
-      contentHash: file.contentHash || null,
-      size: file.size,
-      modifiedAt: file.modifiedAt,
-      title: filenameToTitle(file.path),
-      manifestId: file.id || null,
-    }
+      return {
+        canonicalPath: file.path,
+        inode: file.inode || null,
+        contentHash: file.contentHash || null,
+        size: file.size,
+        modifiedAt: file.modifiedAt,
+        title: filenameToTitle(file.path),
+        manifestId: file.id || null,
+      }
+    })
   }
 
   async function listKnownBindings(bindingRootId: string): Promise<KnownBinding[]> {
@@ -218,21 +251,39 @@ async function buildDesktopOpenDocumentUseCase() {
     const supabase = createDesktopClient()
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
     const userId = sessionData.session?.user.id
-    if (sessionError || !userId) throw new Error("Cloud materialization requires authentication")
+    // No session is a permanent state for this attempt — retrying without the
+    // user re-authenticating changes nothing.
+    if (sessionError || !userId) {
+      throw new TerminalOpenError(
+        "cloud-materialization-unavailable",
+        "Cloud materialization requires authentication",
+      )
+    }
     const { data: materializedWriting, error: writingError } = await supabase
       .from("writings")
       .select("id,author_id,title,body_json,slug,status,artifact_type,visibility,version,created_at,updated_at")
       .eq("id", input.documentId)
       .eq("author_id", userId)
       .maybeSingle()
-    if (writingError) throw new Error(writingError.message)
-    if (!materializedWriting) throw new Error(`Cloud document ${input.documentId} was not found`)
+    // A query error (network blip, transient PostgREST failure) is retryable;
+    // the row genuinely not existing is not.
+    if (writingError) throw new RetryableOpenError("cloud-materialization-failed", writingError.message)
+    if (!materializedWriting) {
+      throw new TerminalOpenError(
+        "cloud-materialization-unavailable",
+        `Cloud document ${input.documentId} was not found`,
+      )
+    }
 
     let markdown: string
     try {
       markdown = serializeDocumentToMarkdown(materializedWriting.body_json)
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : "JSON→Markdown serialization failed")
+      // A malformed body will fail the same way on every retry.
+      throw new TerminalOpenError(
+        "cloud-materialization-failed",
+        error instanceof Error ? error.message : "JSON→Markdown serialization failed",
+      )
     }
 
     const registeredRoots = await settings.getBindingRoots()
@@ -250,7 +301,12 @@ async function buildDesktopOpenDocumentUseCase() {
       file: Awaited<ReturnType<typeof tauriWorkspaceSync>>["files"][number],
     ): Promise<DocumentCatalogRecord> {
       const existing = await catalog.getById(input.documentId)
-      if (!existing) throw new Error(`Cloud catalog record ${input.documentId} disappeared`)
+      if (!existing) {
+        throw new TerminalOpenError(
+          "cloud-materialization-failed",
+          `Cloud catalog record ${input.documentId} disappeared`,
+        )
+      }
       const record = await catalog.registerBinding({
         document: { ...existing, localPresent: true, syncStatus: "synced" },
         binding: {
@@ -268,43 +324,55 @@ async function buildDesktopOpenDocumentUseCase() {
       return record
     }
 
-    const existingFiles = await tauriListRecentFiles(root.rootPath, 5000)
-    const filename = resolveUniqueFilename(
-      titleToFilename(materializedWriting.title?.trim() || "Untitled"),
-      existingFiles.map((file) => file.name),
-    )
-    const canonicalPath = await join(root.rootPath, filename)
+    // Writing the `.md` and its manifest/catalog binding is filesystem/IPC I/O:
+    // a transient failure here (disk momentarily busy, IPC hiccup) is worth one
+    // more attempt rather than surfacing an unrecoverable materialization.
+    return asRetryable("cloud-materialization-failed", async () => {
+      const existingFiles = await tauriListRecentFiles(root.rootPath, 5000)
+      const filename = resolveUniqueFilename(
+        titleToFilename(materializedWriting.title?.trim() || "Untitled"),
+        existingFiles.map((file) => file.name),
+      )
+      const canonicalPath = await join(root.rootPath, filename)
 
-    // Content commit first. The following workspace_sync persists the binding
-    // manifest atomically with the cloud UUID override; only then may SQLite be
-    // updated (spec §Guardado).
-    await tauriWriteFile(canonicalPath, markdown)
-    const snapshot = await tauriWorkspaceSync(
-      root.rootPath,
-      root.kind === "external"
-        ? Array.from(new Set([...root.selectedPaths, filename]))
-        : undefined,
-      { [filename]: input.documentId },
-    )
-    if (root.kind === "external") {
-      await settings.upsertBindingRoot({
-        ...root,
-        selectedPaths: snapshot.selectedPaths,
-      })
-    }
-    const file = snapshot.files.find((entry) => entry.relativePath === filename)
-    if (!file || file.id !== input.documentId) {
-      throw new Error(`Materialized file ${filename} was not bound to ${input.documentId}`)
-    }
+      // Content commit first. The following workspace_sync persists the binding
+      // manifest atomically with the cloud UUID override; only then may SQLite be
+      // updated (spec §Guardado).
+      await tauriWriteFile(canonicalPath, markdown)
+      const snapshot = await tauriWorkspaceSync(
+        root.rootPath,
+        root.kind === "external"
+          ? Array.from(new Set([...root.selectedPaths, filename]))
+          : undefined,
+        { [filename]: input.documentId },
+      )
+      if (root.kind === "external") {
+        await settings.upsertBindingRoot({
+          ...root,
+          selectedPaths: snapshot.selectedPaths,
+        })
+      }
+      const file = snapshot.files.find((entry) => entry.relativePath === filename)
+      if (!file || file.id !== input.documentId) {
+        throw new RetryableOpenError(
+          "cloud-materialization-failed",
+          `Materialized file ${filename} was not bound to ${input.documentId}`,
+        )
+      }
 
-    return registerMaterializedFile(snapshot, file)
+      return registerMaterializedFile(snapshot, file)
+    })
   }
 
   const openDocument = createOpenDocumentUseCase({
     catalog: {
-      getById: (id) => catalog.getById(id),
-      resolvePath: (path) => catalog.resolvePath(path),
-      registerBinding: (registerInput) => catalog.registerBinding(registerInput),
+      // SQLite access is out-of-process IPC (Tauri command) — a lock/busy DB or
+      // a dropped IPC round-trip is transient, not a reason to give up on this
+      // open attempt.
+      getById: (id) => asRetryable("catalog-unavailable", () => catalog.getById(id)),
+      resolvePath: (path) => asRetryable("catalog-unavailable", () => catalog.resolvePath(path)),
+      registerBinding: (registerInput) =>
+        asRetryable("catalog-unavailable", () => catalog.registerBinding(registerInput)),
     },
     readFileEvidence,
     locateBindingRoot,
