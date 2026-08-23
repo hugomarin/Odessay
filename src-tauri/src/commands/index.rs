@@ -11,8 +11,13 @@ fn open_db(db_path: &str) -> Result<Connection, String> {
         }
     }
     let conn = Connection::open(db_path).map_err(|e| format!("open_db: {e}"))?;
-    conn.execute_batch("PRAGMA foreign_keys = ON;")
-        .map_err(|e| format!("open_db foreign_keys: {e}"))?;
+    // ODE-461: without WAL + a busy_timeout, a foreground save racing the
+    // background sync flush fails instantly with "database is locked" instead
+    // of waiting — sustained typing overlaps writes on the same connection
+    // path, and the silent-catch in editor-shell turned that failure into an
+    // indefinite "Saving..." with no diagnosable trace.
+    conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;")
+        .map_err(|e| format!("open_db pragmas: {e}"))?;
     ensure_catalog_v2(&conn)?;
     Ok(conn)
 }
@@ -1271,6 +1276,26 @@ pub fn catalog_purge_document(db_path: String, id: String) -> Result<(), String>
         .map_err(|e| format!("catalog purge document: {e}"))?;
     tx.commit()
         .map_err(|e| format!("catalog purge commit: {e}"))
+}
+
+/// ODE-461: `synced` rows in the mutation queues are terminal — nothing reads
+/// them again once `catalog_update_mutation_status`/`catalog_update_metadata_mutation_status`
+/// has resolved `documents.sync_status` from them — so they only ever grow.
+/// Prune opportunistically on the existing retry tick; not the cause of the
+/// autosave stall, but unbounded `payload_json` growth is real durable waste.
+#[tauri::command]
+pub fn catalog_prune_synced_mutations(db_path: String) -> Result<u64, String> {
+    let conn = open_db(&db_path)?;
+    let content = conn
+        .execute("DELETE FROM sync_mutations WHERE status='synced'", [])
+        .map_err(|e| format!("catalog_prune_synced_mutations: {e}"))?;
+    let metadata = conn
+        .execute(
+            "DELETE FROM metadata_sync_mutations WHERE status='synced'",
+            [],
+        )
+        .map_err(|e| format!("catalog_prune_synced_metadata_mutations: {e}"))?;
+    Ok((content + metadata) as u64)
 }
 
 #[tauri::command]
@@ -2905,5 +2930,136 @@ mod catalog_tests {
         assert!(active.iter().any(|row| row.id == "local-doc"));
 
         let _ = fs::remove_file(path);
+    }
+
+    fn remove_sqlite_files(path: &str) {
+        let _ = fs::remove_file(path);
+        let _ = fs::remove_file(format!("{path}-wal"));
+        let _ = fs::remove_file(format!("{path}-shm"));
+    }
+
+    #[test]
+    fn open_db_enables_wal_mode_and_busy_timeout() {
+        let path = temp_db();
+        let conn = open_db(&path).unwrap();
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        let busy_timeout: i64 = conn
+            .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode.to_lowercase(), "wal");
+        assert_eq!(busy_timeout, 5000);
+        drop(conn);
+        remove_sqlite_files(&path);
+    }
+
+    // ODE-461: without WAL + busy_timeout, a foreground save racing a
+    // background flush on the same SQLite file used to fail *instantly* with
+    // "database is locked" instead of waiting — a real failure that the
+    // silent `catch` in editor-shell then made indistinguishable from a slow
+    // sync, stalling the statusbar at "Saving..." on sustained typing. This
+    // exercises the exact pragmas `open_db` now applies (isolated from
+    // `ensure_catalog_v2`'s own unconditional migration write on every open,
+    // which is a separate, pre-existing characteristic of that function).
+    #[test]
+    fn busy_timeout_lets_a_second_writer_wait_instead_of_failing_instantly() {
+        let path = temp_db();
+        drop(open_db(&path).unwrap()); // prime schema once, outside the race
+
+        let apply_pragmas = |conn: &Connection| {
+            conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;")
+                .unwrap();
+        };
+
+        let hold_path = path.clone();
+        let holder = std::thread::spawn(move || {
+            let mut conn = Connection::open(&hold_path).unwrap();
+            apply_pragmas(&conn);
+            let tx = conn
+                .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+                .unwrap();
+            tx.execute(
+                "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace,last_scanned_at) VALUES('root-a','/tmp/root-a',1,0,NULL)",
+                [],
+            )
+            .unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            tx.commit().unwrap();
+        });
+
+        std::thread::sleep(std::time::Duration::from_millis(50)); // let the holder take the write lock first
+        let started = std::time::Instant::now();
+        let conn = Connection::open(&path).unwrap();
+        apply_pragmas(&conn);
+        conn.execute(
+            "INSERT INTO binding_roots(id,root_path,manifest_version,visible_as_workspace,last_scanned_at) VALUES('root-b','/tmp/root-b',1,0,NULL)",
+            [],
+        )
+        .expect("busy_timeout should wait out the concurrent writer instead of failing instantly");
+        let waited_ms = started.elapsed().as_millis();
+        holder.join().unwrap();
+
+        assert!(
+            waited_ms >= 150,
+            "expected the writer to wait for the lock (waited {waited_ms}ms), not fail instantly"
+        );
+
+        remove_sqlite_files(&path);
+    }
+
+    #[test]
+    fn catalog_prune_synced_mutations_removes_only_terminal_rows() {
+        let path = temp_db();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-prune-1", "/tmp/root/prune1.md", "mutation-prune-1"),
+        )
+        .unwrap();
+        catalog_dual_write(
+            path.clone(),
+            input("doc-prune-2", "/tmp/root/prune2.md", "mutation-prune-2"),
+        )
+        .unwrap();
+        catalog_update_mutation_status(
+            path.clone(),
+            "mutation-prune-1".into(),
+            "synced".into(),
+            1,
+            None,
+            None,
+        )
+        .unwrap();
+        // mutation-prune-2 stays pending.
+
+        let conn = open_db(&path).unwrap();
+        conn.execute(
+            "INSERT INTO metadata_sync_mutations(id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+             VALUES('meta-synced','collection','col-1','upsert','{}','synced',1,NULL,1,NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO metadata_sync_mutations(id,entity_kind,entity_id,operation,payload_json,status,attempt_count,next_retry_at,created_at,last_error)
+             VALUES('meta-pending','collection','col-2','upsert','{}','pending',0,NULL,1,NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+
+        let pruned = catalog_prune_synced_mutations(path.clone()).unwrap();
+        assert_eq!(pruned, 2, "one synced content mutation + one synced metadata mutation");
+
+        let conn = open_db(&path).unwrap();
+        let remaining_content_id: String = conn
+            .query_row("SELECT id FROM sync_mutations", [], |row| row.get(0))
+            .unwrap();
+        let remaining_metadata_id: String = conn
+            .query_row("SELECT id FROM metadata_sync_mutations", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(remaining_content_id, "mutation-prune-2");
+        assert_eq!(remaining_metadata_id, "meta-pending");
+
+        remove_sqlite_files(&path);
     }
 }

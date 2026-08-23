@@ -340,6 +340,10 @@ export async function tauriCatalogPurgeDocument(dbPath: string, id: string): Pro
   return invoke<void>("catalog_purge_document", { dbPath, id })
 }
 
+export async function tauriCatalogPruneSyncedMutations(dbPath: string): Promise<number> {
+  return invoke<number>("catalog_prune_synced_mutations", { dbPath })
+}
+
 export type DesktopCatalogMutationRow = {
   id: string
   documentId: string
