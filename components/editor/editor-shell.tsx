@@ -2066,6 +2066,20 @@ export function EditorShell({
         setIsBodyHydrating(false)
       }
 
+      // Single cancellation gate for every outcome, checked BEFORE acting on
+      // any of them. The coordinator only checks `isCancelled()` once itself
+      // (right after the unified-open retry call) — it never re-checks it
+      // during `openWriting` or the local-metadata read. A document switch
+      // (A -> B) can land at any point during that window, and a stale
+      // outcome for A (e.g. a late `NOT_FOUND`) must never act on session
+      // state that may already belong to B: `recoverUnavailableTab()` mutates
+      // the active tab/route, and correction-block hydration does remote
+      // work keyed by the stale `targetWritingId`. Neither may run once this
+      // effect's own target is no longer current.
+      if (cancelled) {
+        return
+      }
+
       if (outcome.status === "cancelled") {
         return
       }
@@ -2086,16 +2100,6 @@ export function EditorShell({
       }
 
       hydratedWriting = outcome.record
-
-      // The coordinator only checks cancellation once, right after the
-      // unified-open retry call — it does not re-check it during openWriting
-      // or the local-metadata read (matching the original inline code
-      // exactly). This is the equivalent of that code's post-try check: catch
-      // a document switch (A -> B) that happened anywhere during resolution
-      // before starting correction-block work for the now-stale target.
-      if (cancelled) {
-        return
-      }
 
       if (localCorrectionBlocks.length === 0) {
         try {

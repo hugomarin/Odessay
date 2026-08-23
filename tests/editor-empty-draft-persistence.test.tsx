@@ -749,3 +749,71 @@ describe("ODE-461 — desktop save reliability", () => {
     errorSpy.mockRestore()
   })
 })
+
+describe("ODE-462 — hydration coordinator P1 review finding: deferred cancellation", () => {
+  it("a stale NOT_FOUND for A resolving after the switch to B must not run tab recovery or touch B's session state", async () => {
+    unifiedOpenState.enabled = true
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
+
+    // The coordinator itself already re-checks `isCancelled()` once, right
+    // after the unified-open retry call — so A's unified-open resolves
+    // normally ("opened") here, uncancelled. The gap this test targets is
+    // *after* that point: the subsequent `openWriting` call, which the
+    // coordinator never re-checks cancellation against. A's `openWriting`
+    // is what hangs and resolves late, well after the switch to B.
+    const releaseA: { release: (() => void) | null } = { release: null }
+    mocks.openDocumentById.mockImplementation(((id?: string) =>
+      Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
+    mocks.openWriting.mockImplementation(((id?: string) => {
+      if (id === "doc-a") {
+        // A resolves as gone — the exact shape that used to trigger
+        // recoverUnavailableTab() unconditionally, even for a stale target.
+        return new Promise((resolve) => {
+          releaseA.release = () => resolve({ error: { code: "NOT_FOUND", message: "gone" }, data: null })
+        })
+      }
+      return Promise.resolve({
+        error: null,
+        data: { ...desktopDraftRecord, id: "doc-b", title: "Doc B", content: { ...desktopDraftRecord.content, plainText: "Doc B body" } },
+      })
+    }) as never)
+
+    await act(async () => root?.render(<EditorShell writingId="doc-a" />))
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-a"))
+
+    // Switch to B before A's hung open call ever resolves — A is now stale.
+    await act(async () => root?.render(<EditorShell writingId="doc-b" />))
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-b"))
+    await vi.waitFor(() => {
+      expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
+    })
+
+    const sessionAfterB = getEditorSessionState().session
+    const activeTabIdAfterB = sessionAfterB.active_tab_id
+    const tabCountAfterB = sessionAfterB.tabs.length
+
+    // Now A's stale open call finally resolves as NOT_FOUND, well after B
+    // became the active target.
+    await act(async () => {
+      releaseA.release?.()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // Recovery for A must not have fired at all: `recoverUnavailableTab`
+    // unconditionally logs this line as its first statement, so its absence
+    // is direct proof the stale outcome was discarded before doing anything —
+    // independent of whether "doc-a" ever became a tracked session tab.
+    expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining("[editor] unavailable writing doc-a"))
+
+    // B's tab is still there, still active, and the session wasn't reset to
+    // a fallback/blank state by A's stale resolution.
+    const sessionAfterRelease = getEditorSessionState().session
+    expect(sessionAfterRelease.active_tab_id).toBe(activeTabIdAfterB)
+    expect(sessionAfterRelease.tabs.length).toBe(tabCountAfterB)
+    expect(sessionAfterRelease.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
+
+    infoSpy.mockRestore()
+  })
+})

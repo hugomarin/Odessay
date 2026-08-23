@@ -1,4 +1,4 @@
-import type { LocalSyncStatus, LocalWriting, WritingLifecycle } from "@/lib/local-db/schema"
+import type { LocalSyncStatus, WritingLifecycle } from "@/lib/local-db/schema"
 import { parseMarkdownToSnapshot } from "@/lib/editor/document-serialization"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
@@ -11,12 +11,19 @@ export type EditorHydrationRecord = {
 }
 
 /**
- * The only fields this module reads off a local-storage metadata row. Callers
- * (e.g. the hydration coordinator) can satisfy this with any adapter's
- * record — a full `LocalWriting` from `localDB` structurally satisfies it —
- * without the caller's boundary itself depending on the IndexedDB schema.
+ * The only fields this module reads off a local-storage metadata row,
+ * defined as its own standalone shape rather than derived from `LocalWriting`
+ * (e.g. via `Pick`). A derived type still couples this boundary to the
+ * IndexedDB/SQLite schema's field set — any unrelated change to `LocalWriting`
+ * would silently change this contract too. A full `LocalWriting` from
+ * `localDB` still structurally satisfies this (extra fields are fine); the
+ * point is that callers are never *required* to conform to that schema.
  */
-export type HydrationLocalMetadata = Pick<LocalWriting, "canonical_path" | "lifecycle" | "sync_status">
+export type HydrationLocalMetadata = {
+  canonical_path?: string | null
+  lifecycle: WritingLifecycle
+  sync_status: LocalSyncStatus
+}
 
 const catalogSyncStatus = (record: DocumentCatalogRecord): LocalSyncStatus => {
   switch (record.syncStatus) {
