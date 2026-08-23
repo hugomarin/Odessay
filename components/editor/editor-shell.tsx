@@ -2087,6 +2087,16 @@ export function EditorShell({
 
       hydratedWriting = outcome.record
 
+      // The coordinator only checks cancellation once, right after the
+      // unified-open retry call — it does not re-check it during openWriting
+      // or the local-metadata read (matching the original inline code
+      // exactly). This is the equivalent of that code's post-try check: catch
+      // a document switch (A -> B) that happened anywhere during resolution
+      // before starting correction-block work for the now-stale target.
+      if (cancelled) {
+        return
+      }
+
       if (localCorrectionBlocks.length === 0) {
         try {
           localCorrectionBlocks = await hydrateCorrectionBlocksFromRemote(targetWritingId)

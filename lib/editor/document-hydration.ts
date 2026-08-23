@@ -10,6 +10,14 @@ export type EditorHydrationRecord = {
   syncStatus: LocalSyncStatus
 }
 
+/**
+ * The only fields this module reads off a local-storage metadata row. Callers
+ * (e.g. the hydration coordinator) can satisfy this with any adapter's
+ * record — a full `LocalWriting` from `localDB` structurally satisfies it —
+ * without the caller's boundary itself depending on the IndexedDB schema.
+ */
+export type HydrationLocalMetadata = Pick<LocalWriting, "canonical_path" | "lifecycle" | "sync_status">
+
 const catalogSyncStatus = (record: DocumentCatalogRecord): LocalSyncStatus => {
   switch (record.syncStatus) {
     case "pending":
@@ -37,7 +45,7 @@ export const createEditorHydrationRecord = (
   writing: WritingRecord,
   options: {
     catalogRecord?: DocumentCatalogRecord | null
-    localMetadata?: LocalWriting | null
+    localMetadata?: HydrationLocalMetadata | null
   } = {},
 ): EditorHydrationRecord => {
   const { catalogRecord, localMetadata } = options

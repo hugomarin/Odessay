@@ -207,24 +207,65 @@ describe("resolveHydrationOutcome — ODE-455 table tests", () => {
     expect(openWriting).not.toHaveBeenCalled()
   })
 
-  it("A→B: switching documents mid-flight never resolves onto the stale target", async () => {
-    // Simulates opening "A", then the shell switching hydrationWritingId to "B"
-    // before A's resolution settles — the coordinator call for A must report
-    // cancelled once isCancelled() flips, regardless of what A's open call returns.
+  it("A→B: a genuinely concurrent switch cancels A and resolves B with B's own identity", async () => {
+    // Real editor-shell interleaving: the user switches documents while A's
+    // unified-open call is still in flight. A's own async work does not
+    // finish and unblock until *after* B has already started resolving —
+    // both calls are live at once, not sequential await-then-await.
     let cancelledForA = false
+    const releaseBox: { release: (() => void) | null } = { release: null }
+
     const depsForA = baseDeps({
       isCancelled: () => cancelledForA,
-      openDocumentByIdWithRetry: vi.fn(async () => {
-        cancelledForA = true
-        return { result: { status: "opened", documentId: "doc-a", record: catalogRecord({ id: "doc-a" }), strategy: "existing" } as OpenDocumentResult, attempt: 1 }
-      }),
+      openDocumentByIdWithRetry: vi.fn(
+        () =>
+          new Promise<{ result: OpenDocumentResult; attempt: number }>((resolve) => {
+            releaseBox.release = () =>
+              resolve({
+                result: {
+                  status: "opened",
+                  documentId: "doc-a",
+                  record: catalogRecord({ id: "doc-a" }),
+                  strategy: "existing",
+                },
+                attempt: 1,
+              })
+          }),
+      ),
     })
 
-    const outcomeForA = await resolveHydrationOutcome("doc-a", depsForA)
-    expect(outcomeForA).toEqual({ status: "cancelled" })
+    const depsForB = baseDeps({
+      openWriting: vi.fn(async () => ({ error: null, data: writing({ id: "doc-b", title: "Doc B" }) })),
+      openDocumentByIdWithRetry: vi.fn(async () => ({
+        result: {
+          status: "opened",
+          documentId: "doc-b",
+          record: catalogRecord({ id: "doc-b" }),
+          strategy: "existing",
+        } as OpenDocumentResult,
+        attempt: 1,
+      })),
+    })
 
-    const outcomeForB = await resolveHydrationOutcome("doc-b", baseDeps())
+    const outcomeForAPromise = resolveHydrationOutcome("doc-a", depsForA)
+
+    // The switch: editor-shell's effect cleanup flips `cancelled` for the
+    // stale target as soon as `hydrationWritingId` changes to "doc-b", then
+    // a new effect run starts resolving B — both are now in flight together.
+    cancelledForA = true
+    const outcomeForBPromise = resolveHydrationOutcome("doc-b", depsForB)
+
+    // Only now does A's hung open call resolve — A finishes *after* B started.
+    releaseBox.release?.()
+
+    const [outcomeForA, outcomeForB] = await Promise.all([outcomeForAPromise, outcomeForBPromise])
+
+    expect(outcomeForA).toEqual({ status: "cancelled" })
     expect(outcomeForB.status).toBe("hydrated")
+    if (outcomeForB.status === "hydrated") {
+      expect(outcomeForB.record.writing.id).toBe("doc-b")
+      expect(outcomeForB.record.writing.title).toBe("Doc B")
+    }
   })
 
   it("NOT_FOUND from the document service resolves as unavailable without going through the unified-open log path", async () => {

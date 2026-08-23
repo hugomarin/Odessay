@@ -73,7 +73,7 @@ const mocks = vi.hoisted(() => ({
     data: input.writing,
   })),
   openWriting: vi.fn(async () => ({ error: null, data: desktopDraftRecord })),
-  openDocumentById: vi.fn(async () => ({ status: "opened", documentId: "restored-writing", record: null })),
+  openDocumentById: vi.fn(async (_id?: string) => ({ status: "opened", documentId: "restored-writing", record: null })),
 }))
 
 const editorState = vi.hoisted(() => ({

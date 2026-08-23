@@ -2,8 +2,11 @@ import type { OpenDocumentByIdRetryOptions, OpenDocumentByIdRetryOutcome } from 
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { ServiceResponse } from "@/lib/services/contracts/service-types"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
-import type { LocalWriting } from "@/lib/local-db/schema"
-import { createEditorHydrationRecord, type EditorHydrationRecord } from "@/lib/editor/document-hydration"
+import {
+  createEditorHydrationRecord,
+  type EditorHydrationRecord,
+  type HydrationLocalMetadata,
+} from "@/lib/editor/document-hydration"
 
 /**
  * ODE-455 — pure decision core of the desktop hydration path (ODE-452/454
@@ -29,7 +32,14 @@ export type HydrationCoordinatorDeps = {
     options: OpenDocumentByIdRetryOptions,
   ) => Promise<OpenDocumentByIdRetryOutcome>
   openWriting: (id: string) => Promise<ServiceResponse<WritingRecord>>
-  getLocalWriting: (id: string) => Promise<LocalWriting | null>
+  /**
+   * Local metadata fallback used only when no catalog record resolved the
+   * document (web, or desktop without the unified opener). Structurally
+   * typed to the three fields actually read — not the full `localDB` schema
+   * — so this boundary does not depend on IndexedDB/SQLite as a storage
+   * concept, only on a shape any adapter can satisfy.
+   */
+  getLocalWriting: (id: string) => Promise<HydrationLocalMetadata | null>
 }
 
 export type HydrationOutcome =
