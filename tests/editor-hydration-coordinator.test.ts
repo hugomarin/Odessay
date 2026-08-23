@@ -323,11 +323,10 @@ describe("resolveHydrationOutcome — ODE-455 table tests", () => {
     const deps = baseDeps({
       isDesktopRuntime: () => false,
       getLocalWriting: vi.fn(async () => ({
-        id: "doc-1",
-        canonical_path: "/local/doc-1.md",
-        lifecycle: "server-confirmed",
-        sync_status: "synced",
-      } as never)),
+        canonicalPath: "/local/doc-1.md",
+        lifecycle: "server-confirmed" as const,
+        syncStatus: "synced" as const,
+      })),
     })
 
     const outcome = await resolveHydrationOutcome("doc-1", deps)

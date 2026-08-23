@@ -2058,7 +2058,19 @@ export function EditorShell({
         isCancelled: () => cancelled,
         openDocumentByIdWithRetry,
         openWriting: async (id) => (await getDocumentService()).openWriting(id),
-        getLocalWriting: (id) => localDB.writings.get(id),
+        getLocalWriting: async (id) => {
+          // Explicit translation, not structural reuse: the coordinator's
+          // boundary is domain-shaped (HydrationLocalMetadata), not
+          // storage-shaped — this adapter is where the IndexedDB/SQLite
+          // column names (`canonical_path`, `sync_status`) stop.
+          const localWriting = await localDB.writings.get(id)
+          if (!localWriting) return null
+          return {
+            canonicalPath: localWriting.canonical_path,
+            lifecycle: localWriting.lifecycle,
+            syncStatus: localWriting.sync_status,
+          }
+        },
       })
 
       clearTimeout(skeletonTimer)

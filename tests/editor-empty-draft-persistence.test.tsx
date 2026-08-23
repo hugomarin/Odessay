@@ -15,6 +15,8 @@ import {
   getEditorSessionState,
   resetEditorSessionStoreForTests,
 } from "@/lib/stores/editor-session-store"
+import { localDB } from "@/lib/local-db"
+import { hydrateCorrectionBlocksFromRemote } from "@/lib/corrections/persistence"
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -793,13 +795,17 @@ describe("ODE-462 — hydration coordinator P1 review finding: deferred cancella
     const tabCountAfterB = sessionAfterB.tabs.length
 
     // Now A's stale open call finally resolves as NOT_FOUND, well after B
-    // became the active target.
+    // became the active target. Drain microtasks deterministically instead
+    // of a wall-clock sleep — the path from openWriting's resolution to the
+    // effect's cancellation check/return is entirely microtask-based (no
+    // timers/RAF), so a fixed number of `await Promise.resolve()` hops
+    // reliably settles it without depending on machine speed.
     await act(async () => {
       releaseA.release?.()
-      await Promise.resolve()
-      await Promise.resolve()
+      for (let i = 0; i < 10; i += 1) {
+        await Promise.resolve()
+      }
     })
-    await new Promise((resolve) => setTimeout(resolve, 50))
 
     // Recovery for A must not have fired at all: `recoverUnavailableTab`
     // unconditionally logs this line as its first statement, so its absence
@@ -815,5 +821,59 @@ describe("ODE-462 — hydration coordinator P1 review finding: deferred cancella
     expect(sessionAfterRelease.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
 
     infoSpy.mockRestore()
+  })
+
+  it("a stale HYDRATED outcome for A (cancelled during the local-metadata read) must not start correction-block work", async () => {
+    unifiedOpenState.enabled = true
+
+    // This time A's unified-open AND openWriting both succeed — the outcome
+    // will resolve as "hydrated", not "unavailable". The gap targeted here
+    // is the *other* uncancellable window the coordinator has: the local-
+    // metadata read (`getLocalWriting`), called unconditionally after a
+    // successful openWriting, with no cancellation check around it either.
+    const releaseAMetadata: { release: (() => void) | null } = { release: null }
+    mocks.openDocumentById.mockImplementation(((id?: string) =>
+      Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
+    mocks.openWriting.mockImplementation(((id?: string) =>
+      Promise.resolve({
+        error: null,
+        data: {
+          ...desktopDraftRecord,
+          id: id ?? "unknown",
+          title: id === "doc-a" ? "Doc A" : "Doc B",
+          content: { ...desktopDraftRecord.content, plainText: id === "doc-a" ? "Doc A body" : "Doc B body" },
+        },
+      })) as never)
+    vi.mocked(localDB.writings.get).mockImplementation((id: string) => {
+      if (id === "doc-a") {
+        return new Promise((resolve) => {
+          releaseAMetadata.release = () => resolve(null)
+        })
+      }
+      return Promise.resolve(null)
+    })
+
+    await act(async () => root?.render(<EditorShell writingId="doc-a" />))
+    await vi.waitFor(() => expect(localDB.writings.get).toHaveBeenCalledWith("doc-a"))
+
+    // Switch to B before A's hung metadata read ever resolves — A is stale.
+    await act(async () => root?.render(<EditorShell writingId="doc-b" />))
+    await vi.waitFor(() =>
+      expect(hydrateCorrectionBlocksFromRemote).toHaveBeenCalledWith("doc-b"),
+    )
+
+    // Now release A's metadata read — the coordinator resolves A as
+    // "hydrated" well after B has already fully hydrated and started its
+    // own correction-block work.
+    await act(async () => {
+      releaseAMetadata.release?.()
+      for (let i = 0; i < 10; i += 1) {
+        await Promise.resolve()
+      }
+    })
+
+    // Correction-block hydration must never have started for the stale "doc-a"
+    // target, even though its outcome ultimately resolved as "hydrated".
+    expect(hydrateCorrectionBlocksFromRemote).not.toHaveBeenCalledWith("doc-a")
   })
 })

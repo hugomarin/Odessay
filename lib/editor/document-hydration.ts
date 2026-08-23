@@ -11,18 +11,20 @@ export type EditorHydrationRecord = {
 }
 
 /**
- * The only fields this module reads off a local-storage metadata row,
- * defined as its own standalone shape rather than derived from `LocalWriting`
- * (e.g. via `Pick`). A derived type still couples this boundary to the
- * IndexedDB/SQLite schema's field set — any unrelated change to `LocalWriting`
- * would silently change this contract too. A full `LocalWriting` from
- * `localDB` still structurally satisfies this (extra fields are fine); the
- * point is that callers are never *required* to conform to that schema.
+ * The only fields this module reads off a local-metadata fallback, defined
+ * as its own standalone shape — not derived from `LocalWriting` (e.g. via
+ * `Pick`), not importing `WritingLifecycle`/`LocalSyncStatus` from the
+ * storage schema module, and not using the storage column names
+ * (`canonical_path`/`sync_status`). A caller backed by IndexedDB/SQLite must
+ * translate its row into this shape explicitly (camelCase, domain-neutral
+ * field names) rather than a `LocalWriting` merely happening to satisfy it
+ * structurally — that structural-only decoupling was the gap the previous
+ * round of review flagged.
  */
 export type HydrationLocalMetadata = {
-  canonical_path?: string | null
-  lifecycle: WritingLifecycle
-  sync_status: LocalSyncStatus
+  canonicalPath?: string | null
+  lifecycle: "local-only" | "syncing" | "server-confirmed"
+  syncStatus: "synced" | "pending" | "failed" | "deleted"
 }
 
 const catalogSyncStatus = (record: DocumentCatalogRecord): LocalSyncStatus => {
@@ -81,8 +83,8 @@ export const createEditorHydrationRecord = (
 
   return {
     writing: hydratedWriting,
-    canonicalPath: localMetadata?.canonical_path ?? null,
+    canonicalPath: localMetadata?.canonicalPath ?? null,
     lifecycle: localMetadata?.lifecycle ?? "local-only",
-    syncStatus: localMetadata?.sync_status ?? "synced",
+    syncStatus: localMetadata?.syncStatus ?? "synced",
   }
 }
