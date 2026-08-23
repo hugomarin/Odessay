@@ -8,6 +8,8 @@ import {
 
 export type WritingVisibility = "private" | "shared" | "public"
 export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed"
+/** Runtime-neutral local sync state — canonical source; local-db/schema re-exports this. */
+export type WritingSyncStatus = "synced" | "pending" | "failed" | "deleted"
 export type CollectionVisibility = "private" | "public"
 export type ArtifactType = "general" | "agent" | "skill" | "prompt" | "template" | "status"
 export type DocumentCanonicalSource = "pending-document-contract" | "markdown" | "rich-text"

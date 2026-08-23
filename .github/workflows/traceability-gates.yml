@@ -22,6 +22,19 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # Checking out a raw SHA (detached HEAD) does not create a local
+      # origin/<base> ref even with fetch-depth: 0 — `git merge-base HEAD
+      # origin/main` then fails with no common ancestor found, since
+      # origin/main was never fetched. Fetch both PR refs explicitly and
+      # fail fast here (a more diagnosable failure point than deep inside
+      # ops:process:sync) rather than downstream.
+      - name: Fetch PR refs
+        run: |
+          git fetch --no-tags origin \
+            "+refs/heads/${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}" \
+            "+refs/heads/${GITHUB_HEAD_REF}:refs/remotes/origin/${GITHUB_HEAD_REF}"
+          git merge-base HEAD "origin/${GITHUB_BASE_REF}"
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
