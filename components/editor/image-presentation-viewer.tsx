@@ -1,7 +1,7 @@
 "use client"
 
 import type { Editor } from "@tiptap/react"
-import { ArrowLeft, ArrowRight, LoaderCircle, X } from "lucide-react"
+import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { FullOverlay } from "@/components/ui/full-overlay"
 import type { ResolvedLocalImage } from "@/lib/editor/local-image-extension"
@@ -120,9 +120,6 @@ export function ImagePresentationViewer({
   const hasNavigation = images.length > 1
   const panel = useMemo(() => (
     <div className="image-presentation-panel" data-testid="image-presentation-panel">
-      <button type="button" aria-label="Close viewer" onClick={() => onOpenChange(false)} className="image-presentation-close">
-        <X strokeWidth={1.5} />
-      </button>
       {hasNavigation ? (
         <button type="button" aria-label="Previous image" disabled={activeIndex === 0} onClick={() => setActiveIndex((current) => Math.max(0, current - 1))} className="image-presentation-nav image-presentation-prev">
           <ArrowLeft strokeWidth={1.5} />
@@ -148,9 +145,9 @@ export function ImagePresentationViewer({
       onOpenChange={onOpenChange}
       title="Image viewer"
       hideTitle
-      hideClose
       closeLabel="Close viewer"
       className="image-presentation-overlay"
+      chromeClassName="image-presentation-chrome"
       overlayClassName="image-presentation-scrim"
       contentClassName="image-presentation-overlay-content"
     >

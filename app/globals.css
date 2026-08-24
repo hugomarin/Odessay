@@ -866,8 +866,18 @@
 
   .image-presentation-overlay { background: transparent; }
 
-  .image-presentation-overlay > [data-testid="full-overlay-chrome"] {
-    display: none;
+  .image-presentation-chrome {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    align-items: flex-start;
+    justify-content: flex-end;
+    padding: 16px;
+  }
+
+  .image-presentation-chrome > * {
+    pointer-events: auto;
   }
 
   .image-presentation-panel {
@@ -913,7 +923,8 @@
   }
 
   .image-presentation-nav,
-  .image-presentation-close {
+  .image-presentation-close,
+  .image-presentation-chrome > button {
     position: absolute;
     z-index: 1;
     display: inline-flex;
@@ -935,9 +946,16 @@
 
   .image-presentation-prev { left: 20px; }
   .image-presentation-next { right: 20px; }
-  .image-presentation-close {
+  .image-presentation-chrome > button {
+    position: absolute;
     top: 16px;
     right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+  }
+
+  .image-presentation-close {
     width: 36px;
     height: 36px;
     border-radius: 50%;

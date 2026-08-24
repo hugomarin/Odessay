@@ -31,6 +31,7 @@ export interface FullOverlayProps {
   hideClose?: boolean
   closeLabel?: string
   overlayClassName?: string
+  chromeClassName?: string
   className?: string
   contentClassName?: string
   children: React.ReactNode
@@ -48,6 +49,7 @@ export function FullOverlay({
   hideClose,
   closeLabel = "Close",
   overlayClassName,
+  chromeClassName,
   className,
   contentClassName,
   children
@@ -70,7 +72,7 @@ export function FullOverlay({
         >
           <div
             data-testid="full-overlay-chrome"
-            className="flex h-12 flex-shrink-0 items-center gap-2.5 px-2"
+             className={cn("flex h-12 flex-shrink-0 items-center gap-2.5 px-2", chromeClassName)}
           >
             {chromeStart}
             {hideTitle ? (
