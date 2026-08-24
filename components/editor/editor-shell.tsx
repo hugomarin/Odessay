@@ -511,6 +511,7 @@ export function EditorShell({
   const [localImageBackupUploading, setLocalImageBackupUploading] = useState(false)
   const [localImageBackupError, setLocalImageBackupError] = useState<string | null>(null)
   const [imageViewerSource, setImageViewerSource] = useState<string | null>(null)
+  const imageViewerScrollRef = useRef<{ top: number; left: number } | null>(null)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [canonicalPath, setCanonicalPath] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -688,6 +689,10 @@ export function EditorShell({
   }, [])
   const openImagePresentation = useCallback((request: ImagePresentationRequest) => {
     if (modeRef.current !== "rich") return
+    const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+    imageViewerScrollRef.current = editorViewport
+      ? { top: editorViewport.scrollTop, left: editorViewport.scrollLeft }
+      : null
     setImageViewerSource(request.source)
   }, [])
   // The TOC subscribes to every document update. Debouncing it keeps a long
@@ -6659,7 +6664,16 @@ export function EditorShell({
         initialSource={imageViewerSource}
         resolveImage={resolveImage}
         onOpenChange={(open) => {
-          if (!open) setImageViewerSource(null)
+          if (!open) {
+            setImageViewerSource(null)
+            const scroll = imageViewerScrollRef.current
+            if (scroll) {
+              window.requestAnimationFrame(() => {
+                const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+                editorViewport?.scrollTo(scroll.left, scroll.top)
+              })
+            }
+          }
         }}
       />
 
