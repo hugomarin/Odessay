@@ -170,6 +170,7 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
       presentation.addEventListener("click", () => {
         this.options.onOpenPresentation?.({ source: currentSource, alt: currentNode.attrs.alt ?? "", element: wrapper })
       })
+      image.addEventListener("mousedown", (event) => event.preventDefault())
       image.addEventListener("click", () => {
         this.options.onOpenPresentation?.({ source: currentSource, alt: currentNode.attrs.alt ?? "", element: wrapper })
       })

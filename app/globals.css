@@ -822,6 +822,8 @@
   .odessay-editor-content .odessay-local-image > img {
     margin-block: 0;
     cursor: zoom-in;
+    user-select: none;
+    -webkit-user-drag: none;
   }
 
   .odessay-local-image-presentation {
@@ -864,7 +866,11 @@
     background: transparent;
   }
 
-  .image-presentation-overlay { background: transparent; }
+  .image-presentation-overlay {
+    box-sizing: border-box;
+    background: transparent;
+    padding-top: 44px;
+  }
 
   .image-presentation-chrome {
     position: absolute;
@@ -884,7 +890,7 @@
     position: relative;
     display: flex;
     width: 96vw;
-    height: 94vh;
+    height: calc(94vh - 44px);
     min-height: 0;
     margin: 0 auto 24px;
     align-items: center;
@@ -948,7 +954,7 @@
   .image-presentation-next { right: 20px; }
   .image-presentation-chrome > button {
     position: absolute;
-    top: 16px;
+    top: 60px;
     right: 16px;
     width: 36px;
     height: 36px;
@@ -979,7 +985,7 @@
   }
 
   @media (max-width: 640px) {
-    .image-presentation-panel { width: 100vw; height: 100vh; margin: 0; border-radius: 0; }
+    .image-presentation-panel { width: 100vw; height: calc(100vh - 44px); margin: 0; border-radius: 0; }
     .image-presentation-stage { padding: 8vh 56px; }
     .image-presentation-prev { left: 8px; }
     .image-presentation-next { right: 8px; }
