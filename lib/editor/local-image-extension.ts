@@ -12,9 +12,16 @@ export type LocalImageBackupRequest = {
   replaceSource: (onlineUrl: string) => (() => boolean) | null
 }
 
+export type ImagePresentationRequest = {
+  source: string
+  alt: string
+  element: HTMLElement
+}
+
 export type LocalImageExtensionOptions = ImageOptions & {
   resolveImage?: (source: string) => Promise<ResolvedLocalImage>
   onRequestBackup?: (request: LocalImageBackupRequest) => void
+  onOpenPresentation?: (request: ImagePresentationRequest) => void
 }
 
 const NON_LOCAL_SCHEMES = /^(?:https?:|data:|blob:|asset:)/i
@@ -64,6 +71,7 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
       inline: false,
       resolveImage: undefined,
       onRequestBackup: undefined,
+      onOpenPresentation: undefined,
     }
   },
 
@@ -76,6 +84,7 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
 
       const image = document.createElement("img")
       image.alt = node.attrs.alt ?? ""
+      image.tabIndex = 0
       image.draggable = true
       wrapper.append(image)
 
@@ -86,6 +95,14 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
       backup.title = "Back up online"
       backup.append(cloudUploadIcon())
       wrapper.append(backup)
+
+      const presentation = document.createElement("button")
+      presentation.type = "button"
+      presentation.className = "odessay-local-image-presentation"
+      presentation.setAttribute("aria-label", "Open image viewer")
+      presentation.title = "Open image viewer"
+      presentation.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 0-2v-3"/></svg>`
+      wrapper.append(presentation)
 
       let currentNode = node
       let currentSource = ""
@@ -148,6 +165,13 @@ export const LocalImageExtension = Image.extend<LocalImageExtensionOptions>({
           alt: currentNode.attrs.alt ?? "",
           replaceSource: (onlineUrl) => replaceSource(source, onlineUrl),
         })
+      })
+      presentation.addEventListener("mousedown", (event) => event.preventDefault())
+      presentation.addEventListener("click", () => {
+        this.options.onOpenPresentation?.({ source: currentSource, alt: currentNode.attrs.alt ?? "", element: wrapper })
+      })
+      image.addEventListener("click", () => {
+        this.options.onOpenPresentation?.({ source: currentSource, alt: currentNode.attrs.alt ?? "", element: wrapper })
       })
 
       void render()

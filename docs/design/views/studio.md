@@ -70,6 +70,8 @@ Three-column grid `minmax(0,1fr) auto minmax(0,1fr)`: left save state (`cloud-up
 
 Rename (small, 440px) and Keyboard shortcuts (large, Lora 34 title, three-column grid of `kbd` rows) — both specified in `docs/design/overlays.md`.
 
+Embedded images in Rich mode expose a quiet expansion affordance on hover. Clicking the image opens the presentation viewer in the existing `FullOverlay`: the Studio shell remains visible through a light frosted scrim, while the image is centered and contained. The viewer is presentation-only, with previous/next controls, keyboard navigation, and no document mutation.
+
 ## Focus mode
 
 `scan` in the titlebar. Rail and panels fade to `opacity 0 / width 0` over 350ms (the repo already has `body.od-editor-focus-mode` rules). The sheet stays put — the text must not reflow when entering focus mode.

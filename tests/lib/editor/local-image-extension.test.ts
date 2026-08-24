@@ -4,7 +4,7 @@
 import { Editor } from "@tiptap/core"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
-import { isLocalImageSource, type LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
+import { isLocalImageSource, type ImagePresentationRequest, type LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
 
 describe("local image extension", () => {
   beforeEach(() => {
@@ -62,6 +62,24 @@ describe("local image extension", () => {
     expect(request!.replaceSource("https://cdn.example.com/photo.png")).toBeTypeOf("function")
     expect(getEditorMarkdown(editor)).toContain("https://cdn.example.com/photo.png")
     expect(getEditorMarkdown(editor)).not.toContain("images/photo.png")
+    editor.destroy()
+  })
+
+  it("opens presentation without changing the image source", () => {
+    const element = document.createElement("div")
+    document.body.append(element)
+    let request: ImagePresentationRequest | null = null
+    const editor = new Editor({
+      element,
+      extensions: createEditorExtensions({ onOpenImagePresentation: (next) => { request = next } }),
+      content: "![Photo](https://example.com/photo.webp)",
+    })
+
+    const image = element.querySelector<HTMLImageElement>("img")
+    image?.click()
+    expect((request as ImagePresentationRequest | null)?.source).toBe("https://example.com/photo.webp")
+    expect(getEditorMarkdown(editor)).toContain("https://example.com/photo.webp")
+    expect(element.querySelector("[aria-label='Open image viewer']")).not.toBeNull()
     editor.destroy()
   })
 })

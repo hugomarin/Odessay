@@ -17,6 +17,7 @@ import {
 } from "@/components/editor/save-state"
 import { FolderTree, ListTree } from "lucide-react"
 import { WritingEditorContent } from "@/components/editor/editor-content"
+import { ImagePresentationViewer } from "@/components/editor/image-presentation-viewer"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
 import { EditorFindReplace } from "@/components/editor/editor-find-replace"
 import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
@@ -138,7 +139,7 @@ import {
   type EditorSpellcheckPreference,
 } from "@/lib/editor/spellcheck"
 import { EMPTY_EDITOR_JSON, createEditorExtensions, getEditorMarkdown } from "@/lib/editor/extensions"
-import { isLocalImageSource, type LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
+import { isLocalImageSource, type ImagePresentationRequest, type LocalImageBackupRequest } from "@/lib/editor/local-image-extension"
 import { backUpLocalImage } from "@/lib/editor/local-image-backup"
 import { type EditorShortcutAction, getEditorShortcutAction } from "@/lib/editor/shortcuts"
 import type { RichSelectionRange } from "@/lib/editor/topbar-compact"
@@ -509,6 +510,7 @@ export function EditorShell({
   const [localImageBackup, setLocalImageBackup] = useState<LocalImageBackupRequest | null>(null)
   const [localImageBackupUploading, setLocalImageBackupUploading] = useState(false)
   const [localImageBackupError, setLocalImageBackupError] = useState<string | null>(null)
+  const [imageViewerSource, setImageViewerSource] = useState<string | null>(null)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [canonicalPath, setCanonicalPath] = useState<string | null>(null)
   const [isNarrowViewport, setIsNarrowViewport] = useState(false)
@@ -684,6 +686,10 @@ export function EditorShell({
     setLocalImageBackup(request)
     setLocalImageBackupError(null)
   }, [])
+  const openImagePresentation = useCallback((request: ImagePresentationRequest) => {
+    if (modeRef.current !== "rich") return
+    setImageViewerSource(request.source)
+  }, [])
   // The TOC subscribes to every document update. Debouncing it keeps a long
   // document from rebuilding the tree on each keystroke; the timer is cleared
   // on unmount and on document switch, so it always has a way out.
@@ -706,8 +712,9 @@ export function EditorShell({
         tableOfContentsScrollParent: getTableOfContentsScrollParent,
         resolveImage: isDesktopRuntime() ? resolveImage : undefined,
         onRequestLocalImageBackup: isDesktopRuntime() ? requestLocalImageBackup : undefined,
+        onOpenImagePresentation: openImagePresentation,
       }),
-    [getTableOfContentsScrollParent, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
+    [getTableOfContentsScrollParent, openImagePresentation, requestLocalImageBackup, resolveImage, scheduleTableOfContentsUpdate],
   )
   const spellcheckConfig = useMemo(
     () => buildEditorSpellcheckConfig(spellcheckPreference),
@@ -1628,6 +1635,10 @@ export function EditorShell({
 
   useEffect(() => {
     currentWritingIdRef.current = currentWritingId
+  }, [currentWritingId])
+
+  useEffect(() => {
+    setImageViewerSource(null)
   }, [currentWritingId])
 
   useEffect(() => {
@@ -6640,6 +6651,16 @@ export function EditorShell({
           }
         }}
         onConfirm={() => void handleBackupLocalImage()}
+      />
+
+      <ImagePresentationViewer
+        open={imageViewerSource !== null}
+        editor={editor}
+        initialSource={imageViewerSource}
+        resolveImage={resolveImage}
+        onOpenChange={(open) => {
+          if (!open) setImageViewerSource(null)
+        }}
       />
 
       <SelectionPopup

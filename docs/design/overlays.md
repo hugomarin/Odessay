@@ -9,7 +9,7 @@ One document so nobody invents a sixth overlay pattern. Repo reference: `compone
 | **Flow modal** | 640px, radius 18, `max-height: calc(100vh - 48px)`, flex column with fixed header/footer | `rgba(35,24,15,.26)` | add workspace, import |
 | **Form modal** | 440–520px, radius 18, padding 22–36 | same | type/status editor, rename, delete confirmations, auth card (no scrim) |
 | **Display modal** | 720–860px, radius 18, Lora 34/500 title | same | keyboard shortcuts |
-| **Full overlay** | viewport-filling, own 48px chrome row | same | artifact preview, search |
+| **Full overlay** | viewport-filling, own 48px chrome row | same | artifact preview, search, embedded image presentation viewer |
 | **Dropdown / popover** | min 200px, radius 10, `shadow-float-md`, 6px padding, items 34px | none | filters, type/status pickers, row menus |
 
 Shared behavior: `odModalIn` 260ms on enter · `Esc` closes · focus trapped and returned to the trigger · click on the scrim closes (except when a field is dirty — then confirm) · body scroll locked.

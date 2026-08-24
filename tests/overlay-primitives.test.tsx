@@ -293,6 +293,17 @@ describe("overlay primitives — the closed inventory", () => {
     expect(surface("full-overlay-chrome")?.className).toContain("h-12")
   })
 
+  it("allows the full overlay consumer to style its scrim and close label", () => {
+    render(
+      <FullOverlay open onOpenChange={() => {}} title="Image viewer" overlayClassName="frosted-scrim" closeLabel="Close viewer">
+        <p>image</p>
+      </FullOverlay>,
+    )
+
+    expect(document.querySelector(".frosted-scrim")).not.toBeNull()
+    expect(document.querySelector("[aria-label='Close viewer']")).not.toBeNull()
+  })
+
   it("aligns dropdown labels on a 24px glyph column and never fills destructive items", () => {
     render(
       <DropdownMenu open>
