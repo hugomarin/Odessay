@@ -201,11 +201,8 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
-import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
-import {
-  createEditorHydrationRecord,
-  type EditorHydrationRecord,
-} from "@/lib/editor/document-hydration"
+import type { EditorHydrationRecord } from "@/lib/editor/document-hydration"
+import { resolveHydrationOutcome } from "@/lib/editor/hydration-coordinator"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
@@ -2020,7 +2017,6 @@ export function EditorShell({
 
     const hydrateEditor = async () => {
       let hydratedWriting: EditorHydrationRecord | null = null
-      let openedCatalogRecord: DocumentCatalogRecord | null = null
       let localCorrectionBlocks = await localDB.correctionBlocks.getByWriting(targetWritingId)
 
       // openWriting handles local read + optional remote hydration in one call.
@@ -2059,67 +2055,78 @@ export function EditorShell({
         }
       }
 
-      try {
-        // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
-        // Recent and the sidebar all navigate to /write?id= and funnel through
-        // this hydration — resolves identity through the DocumentCatalog first
-        // and consumes the opener's explicit outcomes. A `failed` outcome the
-        // opener classified as retryable (ODE-454) rearms itself with a bounded
-        // backoff + jitter — no click, navigation or web event involved — before
-        // falling back. `orphaned`, an exhausted retry loop, or a terminal
-        // `failed` recover the tab without a draft; `conflict` opens the local
-        // copy (visible conflict UX is owned by ODE-373); `opened` continues to
-        // content hydration below.
-        if (isDesktopRuntime() && isUnifiedOpenEnabled()) {
-          const { result: outcome, attempt } = await openDocumentByIdWithRetry(targetWritingId, {
-            isCancelled: () => cancelled,
-          })
-          if (cancelled) {
-            return
+      // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
+      // Recent and the sidebar all navigate to /write?id= and funnel through
+      // this hydration — resolves identity through the DocumentCatalog first
+      // and consumes the opener's explicit outcomes. A `failed` outcome the
+      // opener classified as retryable (ODE-454) rearms itself with a bounded
+      // backoff + jitter — no click, navigation or web event involved — before
+      // falling back. `orphaned`, an exhausted retry loop, or a terminal
+      // `failed` recover the tab without a draft; `conflict` opens the local
+      // copy (visible conflict UX is owned by ODE-373); `opened` continues to
+      // content hydration below. The decision logic itself is the pure,
+      // dependency-injected coordinator extracted in ODE-455 — this effect
+      // only supplies the runtime adapters and reacts to its outcome.
+      const outcome = await resolveHydrationOutcome(targetWritingId, {
+        isDesktopRuntime,
+        isUnifiedOpenEnabled,
+        isCancelled: () => cancelled,
+        openDocumentByIdWithRetry,
+        openWriting: async (id) => (await getDocumentService()).openWriting(id),
+        getLocalWriting: async (id) => {
+          // Explicit translation, not structural reuse: the coordinator's
+          // boundary is domain-shaped (HydrationLocalMetadata), not
+          // storage-shaped — this adapter is where the IndexedDB/SQLite
+          // column names (`canonical_path`, `sync_status`) stop.
+          const localWriting = await localDB.writings.get(id)
+          if (!localWriting) return null
+          return {
+            canonicalPath: localWriting.canonical_path,
+            lifecycle: localWriting.lifecycle,
+            syncStatus: localWriting.sync_status,
           }
-          if (outcome.status === "orphaned" || outcome.status === "failed") {
-            const reasonCode = outcome.status === "failed" ? outcome.reasonCode : "orphaned"
-            console.info(
-              `[editor] unified-open unavailable documentId=${targetWritingId} status=${outcome.status} reasonCode=${reasonCode} attempt=${attempt} next=unavailable`,
-            )
-            clearTimeout(skeletonTimer)
-            if (!cancelled) setIsBodyHydrating(false)
-            recoverUnavailableTab()
-            return
-          }
-          if (outcome.status === "opened" || outcome.status === "conflict") {
-            openedCatalogRecord = outcome.record
-          }
-        }
+        },
+      })
 
-        const openResult = await (await getDocumentService()).openWriting(targetWritingId)
-        if (openResult.error) {
-          if (openResult.error.code === "NOT_FOUND") {
-            recoverUnavailableTab()
-            return
-          }
-
-          console.error(`[editor] openWriting failed for ${targetWritingId}`, openResult.error)
-          return
-        }
-        const localMetadata = await localDB.writings.get(targetWritingId)
-        hydratedWriting = createEditorHydrationRecord(openResult.data, {
-          catalogRecord: openedCatalogRecord,
-          localMetadata,
-        })
-      } catch (error) {
-        console.error(`[editor] openWriting failed for ${targetWritingId}`, error)
-        return
-      } finally {
-        clearTimeout(skeletonTimer)
-        if (!cancelled) {
-          setIsBodyHydrating(false)
-        }
+      clearTimeout(skeletonTimer)
+      if (!cancelled) {
+        setIsBodyHydrating(false)
       }
 
+      // Single cancellation gate for every outcome, checked BEFORE acting on
+      // any of them. The coordinator only checks `isCancelled()` once itself
+      // (right after the unified-open retry call) — it never re-checks it
+      // during `openWriting` or the local-metadata read. A document switch
+      // (A -> B) can land at any point during that window, and a stale
+      // outcome for A (e.g. a late `NOT_FOUND`) must never act on session
+      // state that may already belong to B: `recoverUnavailableTab()` mutates
+      // the active tab/route, and correction-block hydration does remote
+      // work keyed by the stale `targetWritingId`. Neither may run once this
+      // effect's own target is no longer current.
       if (cancelled) {
         return
       }
+
+      if (outcome.status === "cancelled") {
+        return
+      }
+
+      if (outcome.status === "unavailable") {
+        if (outcome.source === "unified-open") {
+          console.info(
+            `[editor] unified-open unavailable documentId=${targetWritingId} status=${outcome.openStatus} reasonCode=${outcome.reasonCode} attempt=${outcome.attempt} next=unavailable`,
+          )
+        }
+        recoverUnavailableTab()
+        return
+      }
+
+      if (outcome.status === "open-error") {
+        console.error(`[editor] openWriting failed for ${targetWritingId}`, outcome.error)
+        return
+      }
+
+      hydratedWriting = outcome.record
 
       if (localCorrectionBlocks.length === 0) {
         try {

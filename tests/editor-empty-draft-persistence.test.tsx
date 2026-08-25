@@ -15,6 +15,8 @@ import {
   getEditorSessionState,
   resetEditorSessionStoreForTests,
 } from "@/lib/stores/editor-session-store"
+import { localDB } from "@/lib/local-db"
+import { hydrateCorrectionBlocksFromRemote, persistCorrectionBlockRemotely } from "@/lib/corrections/persistence"
 
 ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -747,5 +749,219 @@ describe("ODE-461 — desktop save reliability", () => {
     expect(mocks.saveWriting.mock.calls[1][0].writing.content.plainText).toBe("Third words")
 
     errorSpy.mockRestore()
+  })
+})
+
+/**
+ * `clearTimeout(skeletonTimer)` runs unconditionally, immediately after
+ * `resolveHydrationOutcome` settles and *before* the cancellation gate
+ * (editor-shell.tsx's hydration effect) — one call per `hydrateEditor`
+ * invocation. Waiting for a *new* call after releasing a stale target's hung
+ * promise is a positive observable signal that its continuation actually
+ * reached the gate, unlike a fixed number of microtask/timer ticks, which
+ * proves nothing about whether execution got there.
+ */
+function spyOnClearTimeout() {
+  return vi.spyOn(globalThis, "clearTimeout")
+}
+
+async function waitForContinuationToReachGate(clearTimeoutSpy: ReturnType<typeof spyOnClearTimeout>) {
+  const callsBefore = clearTimeoutSpy.mock.calls.length
+  await vi.waitFor(() => {
+    expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(callsBefore)
+  })
+}
+
+describe("ODE-462 — hydration coordinator P1 review finding: deferred cancellation", () => {
+  it("a stale NOT_FOUND for A resolving after the switch to B must not run tab recovery or touch B's session state", async () => {
+    unifiedOpenState.enabled = true
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
+    const clearTimeoutSpy = spyOnClearTimeout()
+
+    // The coordinator itself already re-checks `isCancelled()` once, right
+    // after the unified-open retry call — so A's unified-open resolves
+    // normally ("opened") here, uncancelled. The gap this test targets is
+    // *after* that point: the subsequent `openWriting` call, which the
+    // coordinator never re-checks cancellation against. A's `openWriting`
+    // is what hangs and resolves late, well after the switch to B.
+    const releaseA: { release: (() => void) | null } = { release: null }
+    mocks.openDocumentById.mockImplementation(((id?: string) =>
+      Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
+    mocks.openWriting.mockImplementation(((id?: string) => {
+      if (id === "doc-a") {
+        // A resolves as gone — the exact shape that used to trigger
+        // recoverUnavailableTab() unconditionally, even for a stale target.
+        return new Promise((resolve) => {
+          releaseA.release = () => resolve({ error: { code: "NOT_FOUND", message: "gone" }, data: null })
+        })
+      }
+      return Promise.resolve({
+        error: null,
+        data: { ...desktopDraftRecord, id: "doc-b", title: "Doc B", content: { ...desktopDraftRecord.content, plainText: "Doc B body" } },
+      })
+    }) as never)
+
+    await act(async () => root?.render(<EditorShell writingId="doc-a" />))
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-a"))
+
+    // Switch to B before A's hung open call ever resolves — A is now stale.
+    await act(async () => root?.render(<EditorShell writingId="doc-b" />))
+    await vi.waitFor(() => expect(mocks.openWriting).toHaveBeenCalledWith("doc-b"))
+    await vi.waitFor(() => {
+      expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
+    })
+
+    const sessionAfterB = getEditorSessionState().session
+    const activeTabIdAfterB = sessionAfterB.active_tab_id
+    const tabCountAfterB = sessionAfterB.tabs.length
+
+    // Now A's stale open call finally resolves as NOT_FOUND, well after B
+    // became the active target. Wait for the positive signal that A's
+    // continuation reached the gate, instead of a fixed sleep or microtask count.
+    await act(async () => {
+      releaseA.release?.()
+      await waitForContinuationToReachGate(clearTimeoutSpy)
+    })
+
+    // Recovery for A must not have fired at all: `recoverUnavailableTab`
+    // unconditionally logs this line as its first statement, so its absence
+    // is direct proof the stale outcome was discarded before doing anything —
+    // independent of whether "doc-a" ever became a tracked session tab.
+    expect(infoSpy).not.toHaveBeenCalledWith(expect.stringContaining("[editor] unavailable writing doc-a"))
+
+    // B's tab is still there, still active, and the session wasn't reset to
+    // a fallback/blank state by A's stale resolution.
+    const sessionAfterRelease = getEditorSessionState().session
+    expect(sessionAfterRelease.active_tab_id).toBe(activeTabIdAfterB)
+    expect(sessionAfterRelease.tabs.length).toBe(tabCountAfterB)
+    expect(sessionAfterRelease.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
+
+    infoSpy.mockRestore()
+    clearTimeoutSpy.mockRestore()
+  })
+
+  it("a stale HYDRATED outcome for A (cancelled during the local-metadata read, empty cache) must not start remote correction hydration", async () => {
+    unifiedOpenState.enabled = true
+    const clearTimeoutSpy = spyOnClearTimeout()
+
+    // This time A's unified-open AND openWriting both succeed — the outcome
+    // will resolve as "hydrated", not "unavailable". The gap targeted here
+    // is the *other* uncancellable window the coordinator has: the local-
+    // metadata read (`getLocalWriting`), called unconditionally after a
+    // successful openWriting, with no cancellation check around it either.
+    const releaseAMetadata: { release: (() => void) | null } = { release: null }
+    mocks.openDocumentById.mockImplementation(((id?: string) =>
+      Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
+    mocks.openWriting.mockImplementation(((id?: string) =>
+      Promise.resolve({
+        error: null,
+        data: {
+          ...desktopDraftRecord,
+          id: id ?? "unknown",
+          title: id === "doc-a" ? "Doc A" : "Doc B",
+          content: { ...desktopDraftRecord.content, plainText: id === "doc-a" ? "Doc A body" : "Doc B body" },
+        },
+      })) as never)
+    vi.mocked(localDB.writings.get).mockImplementation((id: string) => {
+      if (id === "doc-a") {
+        return new Promise((resolve) => {
+          releaseAMetadata.release = () => resolve(null)
+        })
+      }
+      return Promise.resolve(null)
+    })
+
+    await act(async () => root?.render(<EditorShell writingId="doc-a" />))
+    await vi.waitFor(() => expect(localDB.writings.get).toHaveBeenCalledWith("doc-a"))
+
+    // Switch to B before A's hung metadata read ever resolves — A is stale.
+    await act(async () => root?.render(<EditorShell writingId="doc-b" />))
+    await vi.waitFor(() =>
+      expect(hydrateCorrectionBlocksFromRemote).toHaveBeenCalledWith("doc-b"),
+    )
+
+    // Now release A's metadata read — the coordinator resolves A as
+    // "hydrated" well after B has already fully hydrated and started its
+    // own correction-block work.
+    await act(async () => {
+      releaseAMetadata.release?.()
+      await waitForContinuationToReachGate(clearTimeoutSpy)
+    })
+
+    // Correction-block hydration must never have started for the stale "doc-a"
+    // target, even though its outcome ultimately resolved as "hydrated".
+    expect(hydrateCorrectionBlocksFromRemote).not.toHaveBeenCalledWith("doc-a")
+
+    clearTimeoutSpy.mockRestore()
+  })
+
+  it("a stale HYDRATED outcome for A with a pending CACHED correction block must not flush/persist it remotely", async () => {
+    unifiedOpenState.enabled = true
+    const clearTimeoutSpy = spyOnClearTimeout()
+
+    // Same shape as the previous case, but A's local cache is non-empty with
+    // an unsynced block — this routes through flushPendingCorrectionBlocks()
+    // + persistCorrectionBlockRemotely() instead of hydrateCorrectionBlocksFromRemote(),
+    // a code path the empty-cache test above cannot exercise.
+    const pendingBlockForA = {
+      id: "block-a-1",
+      writingId: "doc-a",
+      blockId: "b1",
+      blockHash: "hash-a-1",
+      suggestions: [],
+      model: "test-model",
+      engineRevision: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      latencyMs: null,
+      promptTokens: null,
+      completionTokens: null,
+      syncedAt: null,
+    }
+
+    const releaseAMetadata: { release: (() => void) | null } = { release: null }
+    mocks.openDocumentById.mockImplementation(((id?: string) =>
+      Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
+    mocks.openWriting.mockImplementation(((id?: string) =>
+      Promise.resolve({
+        error: null,
+        data: {
+          ...desktopDraftRecord,
+          id: id ?? "unknown",
+          title: id === "doc-a" ? "Doc A" : "Doc B",
+          content: { ...desktopDraftRecord.content, plainText: id === "doc-a" ? "Doc A body" : "Doc B body" },
+        },
+      })) as never)
+    vi.mocked(localDB.writings.get).mockImplementation((id: string) => {
+      if (id === "doc-a") {
+        return new Promise((resolve) => {
+          releaseAMetadata.release = () => resolve(null)
+        })
+      }
+      return Promise.resolve(null)
+    })
+    vi.mocked(localDB.correctionBlocks.getByWriting).mockImplementation((writingId: string) =>
+      Promise.resolve(writingId === "doc-a" ? [pendingBlockForA] : []),
+    )
+
+    await act(async () => root?.render(<EditorShell writingId="doc-a" />))
+    await vi.waitFor(() => expect(localDB.writings.get).toHaveBeenCalledWith("doc-a"))
+
+    // Switch to B before A's hung metadata read ever resolves — A is stale.
+    await act(async () => root?.render(<EditorShell writingId="doc-b" />))
+    await vi.waitFor(() =>
+      expect(hydrateCorrectionBlocksFromRemote).toHaveBeenCalledWith("doc-b"),
+    )
+
+    await act(async () => {
+      releaseAMetadata.release?.()
+      await waitForContinuationToReachGate(clearTimeoutSpy)
+    })
+
+    // A's pending cached block must never be flushed/persisted for the stale target.
+    expect(persistCorrectionBlockRemotely).not.toHaveBeenCalledWith(
+      expect.objectContaining({ writingId: "doc-a" }),
+    )
+
+    clearTimeoutSpy.mockRestore()
   })
 })

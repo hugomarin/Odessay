@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it } from "vitest"
-import { createEditorHydrationRecord } from "@/lib/editor/document-hydration"
+import { createEditorHydrationRecord, type HydrationLocalMetadata } from "@/lib/editor/document-hydration"
 import type { LocalWriting } from "@/lib/local-db/schema"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
@@ -54,6 +54,15 @@ const staleIndexedDbWriting: LocalWriting = {
   local_updated_at: 1,
 }
 
+// The domain-shaped translation of `staleIndexedDbWriting` a caller would
+// actually pass to `createEditorHydrationRecord` — HydrationLocalMetadata is
+// camelCase and storage-agnostic; it is never the raw LocalWriting row.
+const staleLocalMetadata: HydrationLocalMetadata = {
+  canonicalPath: staleIndexedDbWriting.canonical_path,
+  lifecycle: staleIndexedDbWriting.lifecycle,
+  syncStatus: staleIndexedDbWriting.sync_status,
+}
+
 const catalogRecord: DocumentCatalogRecord = {
   id,
   localPresent: true,
@@ -85,7 +94,7 @@ describe("editor document hydration", () => {
   it("keeps DocumentService content when legacy IndexedDB contains an empty body", () => {
     const hydrated = createEditorHydrationRecord(openedWriting, {
       catalogRecord,
-      localMetadata: staleIndexedDbWriting,
+      localMetadata: staleLocalMetadata,
     })
 
     expect(hydrated.writing.content.richText).toEqual(richText)
@@ -97,7 +106,7 @@ describe("editor document hydration", () => {
 
   it("uses IndexedDB only as a metadata fallback when no catalog record is available", () => {
     const hydrated = createEditorHydrationRecord(openedWriting, {
-      localMetadata: staleIndexedDbWriting,
+      localMetadata: staleLocalMetadata,
     })
 
     expect(hydrated.writing).toBe(openedWriting)
