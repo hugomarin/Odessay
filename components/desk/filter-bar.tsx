@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input"
 import { ArtifactTypeIcon } from "@/components/desk/artifact-type-icon"
 import { DeskStatusDot } from "@/components/desk/desk-status-dot"
+import { WritingStatusIcon } from "@/components/ui/writing-status-icon"
 import { useUserSettingsContext } from "@/components/settings/user-settings-provider"
 import type { CollectionOption } from "@/lib/collections/collections"
 import { UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections"
@@ -146,7 +147,7 @@ export function DeskFilterBar(props: DeskFilterBarProps) {
                     key={status}
                     selected={props.selectedStatuses.includes(status)}
                     onClick={() => props.onToggleStatus(status)}
-                    mark={<DeskStatusDot status={status} />}
+                    mark={<WritingStatusIcon status={status} className="h-[14px] w-[14px]" />}
                   >
                     {getWritingStatusLabel(status)}
                   </FacetOption>

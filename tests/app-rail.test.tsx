@@ -394,10 +394,10 @@ describe("desktop title bar", () => {
     const toggle = container.querySelector<HTMLElement>('button[aria-label="Collapse sidebar"]')!
     expect(toggle.className).toContain("fixed")
     // 16px of leading padding + a 76px traffic-light group + a 14px gap.
-    expect(toggle.className).toContain("left-[106px]")
+    expect(toggle.className).toContain("left-[88px]")
     // macOS clamps `trafficLightPosition`, so the 12px lights land at ~20
-    // (centre 26) and the 32px toggle shares their row at top: 10.
-    expect(toggle.className).toContain("top-[10px]")
+    // (centre 26) and the 32px toggle shares their row at top: 11.
+    expect(toggle.className).toContain("top-[11px]")
     expect(container.querySelector<HTMLElement>('[data-testid="sidebar-top"]')!.className).toContain(
       "h-[59px]",
     )

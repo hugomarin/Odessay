@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, FileText, Folder } from "lucide-react";
+import { ChevronDown, FileText, Folder, Home } from "lucide-react";
 import { buildWorkspaceFolderTree } from "@/lib/workspace/folder-tree";
 import type { WorkspaceFolderTreeNode } from "@/lib/workspace/folder-tree";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,12 @@ export type WorkspaceTreeProps = {
   totalCount?: number;
   /** Label for the workspace root row in detail mode. */
   rootLabel?: string | null;
+  /** Icon for the root row: "folder" (default) or "home". */
+  rootIcon?: "folder" | "home";
+  /** Count of root-level documents shown on the root row. */
+  rootCount?: number;
+  /** When true, only folders are shown in the tree (no files inside folders). */
+  foldersOnly?: boolean;
   onOpenFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
   onCountChange?: (count?: number) => void;
@@ -48,6 +54,7 @@ function TreeRow({
   selectedFolderPath,
   collapsedPaths,
   idByRelativePath,
+  foldersOnly,
   onToggleFolder,
   onOpenFile,
   onSelectFolder,
@@ -59,11 +66,13 @@ function TreeRow({
   selectedFolderPath: string | null;
   collapsedPaths: ReadonlySet<string>;
   idByRelativePath: ReadonlyMap<string, string>;
+  foldersOnly?: boolean;
   onToggleFolder: (path: string) => void;
   onOpenFile?: (id: string) => void;
   onSelectFolder?: (path: string) => void;
 }) {
   if (node.kind === "file") {
+    if (foldersOnly) return null;
     const fileId = idByRelativePath.get(node.path) ?? node.path;
     const active = fileId === activeId;
     const disabled = !onOpenFile || !fileId;
@@ -101,6 +110,9 @@ function TreeRow({
   const expanded = !collapsedPaths.has(node.path);
   const isSelected = mode === "detail" && selectedFolderPath === node.path;
   const folderDisabled = mode === "studio" ? false : !onSelectFolder;
+  const hasChildren = foldersOnly
+    ? node.children.some((child) => child.kind === "folder")
+    : node.children.length > 0;
 
   return (
     <li>
@@ -108,14 +120,14 @@ function TreeRow({
         type="button"
         role="treeitem"
         data-folder-path={node.path}
-        aria-expanded={expanded}
+        aria-expanded={hasChildren ? expanded : undefined}
         aria-selected={isSelected}
         disabled={folderDisabled}
         onClick={() => {
           if (mode === "detail") {
             onSelectFolder?.(node.path);
           }
-          onToggleFolder(node.path);
+          if (hasChildren) onToggleFolder(node.path);
         }}
         style={{ paddingLeft: `${8 + depth * 18}px` }}
         className={cn(
@@ -124,13 +136,17 @@ function TreeRow({
           isSelected && "bg-muted text-ink",
         )}
       >
-        <ChevronDown
-          className={cn(
-            "h-[13px] w-[13px] shrink-0 text-ink-4 transition-transform duration-[180ms] ease-layout",
-            expanded ? "rotate-0" : "-rotate-90",
-          )}
-          strokeWidth={1.5}
-        />
+        {hasChildren ? (
+          <ChevronDown
+            className={cn(
+              "h-[13px] w-[13px] shrink-0 text-ink-4 transition-transform duration-[180ms] ease-layout",
+              expanded ? "rotate-0" : "-rotate-90",
+            )}
+            strokeWidth={1.5}
+          />
+        ) : (
+          <span className="h-[13px] w-[13px] shrink-0" aria-hidden="true" />
+        )}
         <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
         <span className="flex-1 truncate">{node.name}</span>
         {typeof node.fileCount === "number" ? (
@@ -139,7 +155,7 @@ function TreeRow({
           </span>
         ) : null}
       </button>
-      {expanded ? (
+      {expanded && hasChildren ? (
         <ul>
           {node.children.map((child) => (
             <TreeRow
@@ -151,6 +167,7 @@ function TreeRow({
               selectedFolderPath={selectedFolderPath}
               collapsedPaths={collapsedPaths}
               idByRelativePath={idByRelativePath}
+              foldersOnly={foldersOnly}
               onToggleFolder={onToggleFolder}
               onOpenFile={onOpenFile}
               onSelectFolder={onSelectFolder}
@@ -169,6 +186,9 @@ export function WorkspaceTree({
   selectedFolderPath: selectedFolderPathProp,
   totalCount,
   rootLabel,
+  rootIcon = "folder",
+  rootCount,
+  foldersOnly,
   onOpenFile,
   onSelectFolder,
   onCountChange,
@@ -279,7 +299,7 @@ export function WorkspaceTree({
         }
       }}
     >
-      {mode === "detail" && rootLabel ? (
+      {rootLabel ? (
         <ul>
           <li>
             <button
@@ -299,9 +319,17 @@ export function WorkspaceTree({
               >
                 <ChevronDown className="h-[13px] w-[13px]" strokeWidth={1.5} />
               </span>
-              <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+              {rootIcon === "home" ? (
+                <Home className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+              ) : (
+                <Folder className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+              )}
               <span className="flex-1 truncate">{rootLabel}</span>
-              {typeof totalCount === "number" ? (
+              {typeof rootCount === "number" ? (
+                <span className="font-mono text-[11px] text-ink-4">
+                  {rootCount}
+                </span>
+              ) : typeof totalCount === "number" ? (
                 <span className="font-mono text-[11px] text-ink-4">
                   {totalCount}
                 </span>
@@ -321,6 +349,7 @@ export function WorkspaceTree({
             selectedFolderPath={effectiveSelectedFolder}
             collapsedPaths={collapsedPaths}
             idByRelativePath={idByRelativePath}
+            foldersOnly={foldersOnly}
             onToggleFolder={handleToggleFolder}
             onOpenFile={onOpenFile}
             onSelectFolder={onSelectFolder}
