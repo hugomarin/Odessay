@@ -136,11 +136,6 @@ function workspaceMissingMessage(workspace: WorkspaceDetailType) {
   );
 }
 
-function fileFolderPath(relativePath: string, fileName: string) {
-  if (relativePath === fileName) return "";
-  return relativePath.replace(`/${fileName}`, "");
-}
-
 function isInsideFolder(relativePath: string, folderPath: string) {
   if (folderPath === "") {
     // Root: only files directly in the root, not inside subfolders.
@@ -1073,14 +1068,6 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
       })),
     [workspace],
   );
-
-  const rootDocumentCount = useMemo(() => {
-    if (!workspace) return 0;
-    return workspace.files.filter((file) => {
-      const parts = file.relativePath.split(/[\\/]/).filter(Boolean);
-      return parts.length <= 1;
-    }).length;
-  }, [workspace]);
 
   const handleOpenFileFromTree = (fileId: string) => {
     const file = workspace?.files.find((candidate) => candidate.id === fileId);

@@ -9,7 +9,6 @@ import { useEditor } from "@tiptap/react"
 import { TextSelection } from "@tiptap/pm/state"
 import { useRouter } from "next/navigation"
 import { useManualCorrections } from "@/hooks/useManualCorrections"
-import { cn } from "@/lib/utils"
 import {
   mapLocalSyncStatusToSaveState,
   mapSyncLifecycleToSaveState,
