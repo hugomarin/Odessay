@@ -52,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { getDesktopWorkspaceService } from "@/lib/services/desktop/workspace-service";
 import { openWorkspaceFileInEditor } from "@/lib/workspace/open-workspace-file";
 import { subscribeToCatalog } from "@/lib/queries/document-catalog";
@@ -141,7 +142,10 @@ function fileFolderPath(relativePath: string, fileName: string) {
 }
 
 function isInsideFolder(relativePath: string, folderPath: string) {
-  if (folderPath === "") return true;
+  if (folderPath === "") {
+    // Root: only files directly in the root, not inside subfolders.
+    return !relativePath.includes("/");
+  }
   return (
     relativePath === folderPath || relativePath.startsWith(`${folderPath}/`)
   );
@@ -1265,7 +1269,14 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 All workspaces
               </Link>
             </div>
-            <div className="flex h-10 items-center justify-between px-3">
+            <button
+              type="button"
+              onClick={() => setSelectedFolderPath("")}
+              className={cn(
+                "flex h-10 w-full items-center justify-between px-3 text-left transition-colors",
+                selectedFolderPath === "" ? "bg-muted" : "hover:bg-muted",
+              )}
+            >
               <div className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-ink">
                 <Home
                   className="h-4 w-4 shrink-0 text-ink-3"
@@ -1273,15 +1284,18 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 />
                 <span className="truncate">{workspace.name}</span>
               </div>
-              <button
-                type="button"
+              <span
+                role="button"
                 aria-label="New Artifact"
-                onClick={() => setIsCreateDialogOpen(true)}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsCreateDialogOpen(true);
+                }}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-surface-menu-hover hover:text-ink"
               >
                 <FolderPlus className="h-4 w-4" strokeWidth={1.5} />
-              </button>
-            </div>
+              </span>
+            </button>
             <div className="od-scroll flex-1 overflow-y-auto px-2 py-1">
               <WorkspaceTree
                 mode="detail"
