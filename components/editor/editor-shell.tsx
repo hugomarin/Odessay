@@ -6215,7 +6215,7 @@ export function EditorShell({
                       onToggleLeftPanel={(panel) =>
                         setNavigationMode(navigationMode === panel ? null : panel)
                       }
-                      showPanelToggles={Boolean(navigationMode) || isNarrowViewport}
+                      showPanelToggles={!navigationMode || isNarrowViewport}
                     />
 
                     {/* Ghost rail: with both panels closed the two toggles float at

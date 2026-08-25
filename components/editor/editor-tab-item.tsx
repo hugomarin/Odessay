@@ -87,7 +87,7 @@ export function EditorTabItem({
           active ? "text-ink" : "text-ink-5",
         )}
       >
-        <WritingStatusIcon status={status ?? "draft"} className="h-[15px] w-[15px]" />
+        <WritingStatusIcon status={status ?? "draft"} className="h-[16px] w-[16px]" />
       </span>
 
       {/* The close affordance replaces the glyph on hover, as in the prototype,
@@ -114,7 +114,7 @@ export function EditorTabItem({
 
       <span
         className={cn(
-          "pointer-events-none relative z-10 min-w-0 flex-1 truncate text-[13px] leading-none",
+          "pointer-events-none relative z-10 min-w-0 flex-1 truncate text-[13px] leading-[1.2]",
           active ? "font-medium text-ink" : "font-normal text-ink-4",
         )}
       >

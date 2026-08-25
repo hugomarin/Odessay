@@ -8,7 +8,7 @@ import {
   ExternalLink,
   Folder,
   FolderPlus,
-  FolderTree,
+  Home,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
-import { WorkspaceFilterBar } from "@/components/workspace/workspace-filter-bar";
+import { DeskFilterBar, DeskFilterEmptyState } from "@/components/desk/filter-bar";
 import { BulkActionBar } from "@/components/desk/bulk-action-bar";
 import { DeleteWritingDialog } from "@/components/desk/delete-writing-dialog";
 import { RenameWritingModal } from "@/components/editor/modals/rename-writing-modal";
@@ -57,7 +57,7 @@ import { openWorkspaceFileInEditor } from "@/lib/workspace/open-workspace-file";
 import { subscribeToCatalog } from "@/lib/queries/document-catalog";
 import { loadWorkspaceDocumentJoin } from "@/lib/queries/workspace-catalog-source";
 import type { CollectionOption } from "@/lib/collections/collections";
-import { buildCollectionOptions } from "@/lib/collections/collections";
+import { buildCollectionOptions, UNCATEGORIZED_COLLECTION_ID } from "@/lib/collections/collections";
 import {
   getLocalDBScope,
   getWritingForEdit,
@@ -77,7 +77,10 @@ import {
   toggleWritingCollection as toggleWritingCollectionMutation,
 } from "@/lib/queries/writing-mutations";
 import type { WorkspaceDocumentInfo } from "@/lib/queries/workspace-catalog-source";
-import type { DeskActivityRow } from "@/lib/queries/desk-activity";
+import type {
+  DeskActivityRow,
+  DeskCreatedDateFilter,
+} from "@/lib/queries/desk-activity";
 import type { LocalWritingCollection } from "@/lib/local-db/schema";
 import { buildWritingRouteHref } from "@/lib/writings/writing-route";
 import {
@@ -94,7 +97,7 @@ import {
 import { ViewTitlebarSpacer } from "@/components/navigation/view-titlebar-spacer";
 import { ViewHeader, VIEW_HEADER_ACTION_CLASS } from "@/components/navigation/view-header";
 import { useWritingSelection } from "@/hooks/useWritingSelection";
-import { useWorkspaceTableFilters } from "@/hooks/useWorkspaceTableFilters";
+import { useDeskFilters } from "@/hooks/useDeskFilters";
 import {
   deriveDocumentStateFromSignals,
   type DocumentState,
@@ -153,6 +156,54 @@ function matchesFileQuery(file: WorkspaceFile, query: string) {
   );
 }
 
+function matchesWorkspaceDateFilter(
+  timestamp: number,
+  filter: DeskCreatedDateFilter | null,
+  from: string,
+  to: string,
+): boolean {
+  if (!filter) return true;
+  const now = new Date();
+  const date = new Date(timestamp);
+  switch (filter) {
+    case "today":
+      return date.toDateString() === now.toDateString();
+    case "last-7": {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - 7);
+      return timestamp >= start.getTime();
+    }
+    case "last-30": {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      start.setDate(start.getDate() - 30);
+      return timestamp >= start.getTime();
+    }
+    case "this-year":
+      return date.getFullYear() === now.getFullYear();
+    case "custom": {
+      const fromDate = from ? new Date(from) : null;
+      const toDate = to ? new Date(to) : null;
+      if (fromDate && Number.isNaN(fromDate.getTime())) return true;
+      if (toDate && Number.isNaN(toDate.getTime())) return true;
+      if (fromDate) {
+        const start = new Date(fromDate);
+        start.setHours(0, 0, 0, 0);
+        if (timestamp < start.getTime()) return false;
+      }
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        if (timestamp > end.getTime()) return false;
+      }
+      return true;
+    }
+    default:
+      return true;
+  }
+}
+
 type WorkspaceHeaderAction =
   | { type: "rename"; workspace: WorkspaceDetailType }
   | { type: "remove"; workspace: WorkspaceDetailType }
@@ -161,7 +212,6 @@ type WorkspaceHeaderAction =
 export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   const router = useRouter();
   const [workspace, setWorkspace] = useState<WorkspaceDetailType | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
   const [selectedFolderPath, setSelectedFolderPath] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -197,7 +247,31 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
   } | null>(null);
   const [previewWritingId, setPreviewWritingId] = useState<string | null>(null);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
-  const { dateFilter, groupBy, sortBy, setSortBy } = useWorkspaceTableFilters();
+  const {
+    searchQuery,
+    selectedCollectionIds,
+    selectedStatuses,
+    selectedArtifactTypes,
+    selectedWorkspaceSlugs,
+    createdDateFilter,
+    createdDateFrom,
+    createdDateTo,
+    groupBy,
+    sortBy,
+    setSearchQuery,
+    toggleCollection,
+    toggleStatus,
+    toggleArtifactType,
+    toggleWorkspace,
+    setCreatedDateFilter,
+    setCreatedDateFrom,
+    setCreatedDateTo,
+    setGroupBy,
+    setSortBy,
+    clearFilters,
+    hasActiveFilters,
+    activeFilterCount,
+  } = useDeskFilters();
 
   const loadWorkspace = useCallback(async () => {
     const isInitialLoad = !hasLoadedWorkspaceRef.current;
@@ -266,37 +340,181 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     };
   }, [loadWorkspace]);
 
+  const folderFilesCount = useMemo(() => {
+    if (!workspace) return 0;
+    return workspace.files.filter((file) =>
+      isInsideFolder(file.relativePath, selectedFolderPath),
+    ).length;
+  }, [workspace, selectedFolderPath]);
+
   const visibleFiles = useMemo(() => {
     const files =
       workspace?.files.filter((file) => {
         if (!isInsideFolder(file.relativePath, selectedFolderPath))
           return false;
         if (!matchesFileQuery(file, searchQuery)) return false;
-        if (dateFilter === "last-7")
-          return file.modifiedAt >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+        if (selectedStatuses.length > 0) {
+          const document = documentJoin.get(file.path);
+          const status = normalizeWritingStatus(document?.status ?? "draft");
+          if (!selectedStatuses.includes(status)) return false;
+        }
+
+        if (selectedArtifactTypes.length > 0) {
+          const document = documentJoin.get(file.path);
+          const artifactType = document?.artifactType ?? "general";
+          if (!selectedArtifactTypes.includes(artifactType)) return false;
+        }
+
+        if (selectedCollectionIds.length > 0) {
+          const document = documentJoin.get(file.path);
+          const writingId = document?.id;
+          const fileCollectionIds = writingId
+            ? (collectionIdsByWritingId[writingId] ?? [])
+            : [];
+          const hasUncategorized = selectedCollectionIds.includes(
+            UNCATEGORIZED_COLLECTION_ID,
+          );
+          const selectedReal = selectedCollectionIds.filter(
+            (id) => id !== UNCATEGORIZED_COLLECTION_ID,
+          );
+          const hasRealCollection =
+            selectedReal.length > 0 &&
+            fileCollectionIds.some((id) => selectedReal.includes(id));
+          const isUncategorized =
+            hasUncategorized && fileCollectionIds.length === 0;
+          if (!hasRealCollection && !isUncategorized) return false;
+        }
+
+        if (createdDateFilter) {
+          if (
+            !matchesWorkspaceDateFilter(
+              file.modifiedAt,
+              createdDateFilter,
+              createdDateFrom,
+              createdDateTo,
+            )
+          )
+            return false;
+        }
+
         return true;
       }) ?? [];
     return files.sort((left, right) => {
-      if (sortBy === "name") return left.name.localeCompare(right.name);
-      return sortBy === "oldest"
-        ? left.modifiedAt - right.modifiedAt
-        : right.modifiedAt - left.modifiedAt;
+      if (sortBy === "created-at-asc")
+        return left.modifiedAt - right.modifiedAt;
+      return right.modifiedAt - left.modifiedAt;
     });
-  }, [workspace, selectedFolderPath, searchQuery, dateFilter, sortBy]);
+  }, [
+    workspace,
+    selectedFolderPath,
+    searchQuery,
+    selectedStatuses,
+    selectedArtifactTypes,
+    selectedCollectionIds,
+    createdDateFilter,
+    createdDateFrom,
+    createdDateTo,
+    sortBy,
+    documentJoin,
+    collectionIdsByWritingId,
+  ]);
 
   const fileGroups = useMemo(() => {
     if (groupBy === "none") return [{ items: visibleFiles }];
-    const groups = new Map<string, WorkspaceFile[]>();
-    for (const file of visibleFiles) {
-      const label =
-        fileFolderPath(file.relativePath, file.name) || "Root folder";
-      groups.set(label, [...(groups.get(label) ?? []), file]);
+
+    if (groupBy === "status") {
+      const groups = new Map<string, WorkspaceFile[]>();
+      for (const file of visibleFiles) {
+        const document = documentJoin.get(file.path);
+        const status = normalizeWritingStatus(document?.status ?? "draft");
+        const rows = groups.get(status) ?? [];
+        rows.push(file);
+        groups.set(status, rows);
+      }
+      return WRITING_STATUS_VALUES.filter((status) => groups.has(status)).map(
+        (status) => ({
+          label: getWritingStatusLabel(status),
+          items: groups.get(status) ?? [],
+        }),
+      );
     }
-    return Array.from(groups.entries()).map(([label, items]) => ({
-      label,
-      items,
-    }));
-  }, [groupBy, visibleFiles]);
+
+    if (groupBy === "artifact") {
+      const groups = new Map<string, WorkspaceFile[]>();
+      for (const file of visibleFiles) {
+        const document = documentJoin.get(file.path);
+        const artifactType = document?.artifactType ?? "general";
+        const rows = groups.get(artifactType) ?? [];
+        rows.push(file);
+        groups.set(artifactType, rows);
+      }
+      return ARTIFACT_TYPE_VALUES.filter((type) => groups.has(type)).map(
+        (type) => ({
+          label: getArtifactTypeLabel(type),
+          items: groups.get(type) ?? [],
+        }),
+      );
+    }
+
+    if (groupBy === "collection") {
+      const optionById = new Map(
+        collectionOptions.map((option) => [option.id, option]),
+      );
+      const groups = new Map<string, WorkspaceFile[]>();
+      for (const file of visibleFiles) {
+        const document = documentJoin.get(file.path);
+        const writingId = document?.id;
+        const collectionIds = writingId
+          ? (collectionIdsByWritingId[writingId] ?? [])
+          : [];
+        const primaryId = collectionIds[0] ?? UNCATEGORIZED_COLLECTION_ID;
+        const rows = groups.get(primaryId) ?? [];
+        rows.push(file);
+        groups.set(primaryId, rows);
+      }
+      const entries = Array.from(groups.entries()).map(([id, items]) => ({
+        label:
+          id === UNCATEGORIZED_COLLECTION_ID
+            ? "No collection"
+            : (optionById.get(id)?.name ?? id),
+        items,
+      }));
+      entries.sort((left, right) => {
+        if (left.label === "No collection" && right.label !== "No collection")
+          return 1;
+        if (right.label === "No collection" && left.label !== "No collection")
+          return -1;
+        return left.label.localeCompare(right.label);
+      });
+      return entries;
+    }
+
+    const now = new Date();
+    const weekInMs = 7 * 24 * 60 * 60 * 1000;
+    const groups: { label: string; items: WorkspaceFile[] }[] = [
+      { label: "Today", items: [] },
+      { label: "This week", items: [] },
+      { label: "Earlier", items: [] },
+    ];
+    for (const file of visibleFiles) {
+      const date = new Date(file.modifiedAt);
+      if (date.toDateString() === now.toDateString()) {
+        groups[0].items.push(file);
+      } else if (now.getTime() - file.modifiedAt < weekInMs) {
+        groups[1].items.push(file);
+      } else {
+        groups[2].items.push(file);
+      }
+    }
+    return groups.filter((group) => group.items.length > 0);
+  }, [
+    groupBy,
+    visibleFiles,
+    documentJoin,
+    collectionIdsByWritingId,
+    collectionOptions,
+  ]);
 
   const getRowKey = useCallback(
     (file: WorkspaceFile) => documentJoin.get(file.path)?.id ?? file.id,
@@ -852,6 +1070,14 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
     [workspace],
   );
 
+  const rootDocumentCount = useMemo(() => {
+    if (!workspace) return 0;
+    return workspace.files.filter((file) => {
+      const parts = file.relativePath.split(/[\\/]/).filter(Boolean);
+      return parts.length <= 1;
+    }).length;
+  }, [workspace]);
+
   const handleOpenFileFromTree = (fileId: string) => {
     const file = workspace?.files.find((candidate) => candidate.id === fileId);
     if (file) void openInEditor(file);
@@ -1041,7 +1267,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             </div>
             <div className="flex h-10 items-center justify-between px-3">
               <div className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-ink">
-                <FolderTree
+                <Home
                   className="h-4 w-4 shrink-0 text-ink-3"
                   strokeWidth={1.5}
                 />
@@ -1049,7 +1275,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
               <button
                 type="button"
-                aria-label="New file"
+                aria-label="New Artifact"
                 onClick={() => setIsCreateDialogOpen(true)}
                 className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-ink-4 transition-colors hover:bg-muted hover:text-ink"
               >
@@ -1063,8 +1289,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                 selectedFolderPath={selectedFolderPath}
                 onSelectFolder={setSelectedFolderPath}
                 onOpenFile={handleOpenFileFromTree}
-                rootLabel={workspace.name}
-                totalCount={workspace.fileCount}
+                foldersOnly={true}
               />
             </div>
           </div>
@@ -1130,17 +1355,39 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
                   className={VIEW_HEADER_ACTION_CLASS}
                 >
                   <Plus className="h-[17px] w-[17px]" strokeWidth={1.5} />
-                  New file
+                  New Artifact
                 </button>
               }
             />
 
-            <WorkspaceFilterBar
-              className="px-4 pb-3"
+            <DeskFilterBar
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
+              selectedCollectionIds={selectedCollectionIds}
+              onToggleCollection={toggleCollection}
+              selectedStatuses={selectedStatuses}
+              onToggleStatus={toggleStatus}
+              selectedArtifactTypes={selectedArtifactTypes}
+              onToggleArtifactType={toggleArtifactType}
+              selectedWorkspaceSlugs={selectedWorkspaceSlugs}
+              onToggleWorkspace={toggleWorkspace}
+              createdDateFilter={createdDateFilter}
+              onCreatedDateFilterChange={setCreatedDateFilter}
+              createdDateFrom={createdDateFrom}
+              onCreatedDateFromChange={setCreatedDateFrom}
+              createdDateTo={createdDateTo}
+              onCreatedDateToChange={setCreatedDateTo}
+              groupBy={groupBy}
+              onGroupByChange={setGroupBy}
               sortBy={sortBy}
-              onSortChange={setSortBy}
+              onSortByChange={setSortBy}
+              collectionOptions={collectionOptions}
+              workspaceOptions={[]}
+              activeFilterCount={activeFilterCount}
+              hasActiveFilters={hasActiveFilters}
+              filteredCount={visibleFiles.length}
+              totalCount={folderFilesCount}
+              onClearFilters={clearFilters}
             />
 
             <div className="flex-1 overflow-y-auto px-4 pb-4">
@@ -1161,11 +1408,15 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
               </div>
 
               {visibleFiles.length === 0 ? (
-                <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
-                  {workspace.fileCount === 0
-                    ? "This workspace does not have any .md or .mdx files yet. Create one to start working from this local folder."
-                    : "No files match your search or selected folder."}
-                </div>
+                hasActiveFilters ? (
+                  <DeskFilterEmptyState onClear={clearFilters} />
+                ) : (
+                  <div className="rounded-[18px] border-[0.5px] border-dashed border-border bg-sb px-6 py-10 text-center text-sm text-ink-3">
+                    {workspace.fileCount === 0
+                      ? "This workspace does not have any .md or .mdx files yet. Create one to start working from this local folder."
+                      : "No files in this folder."}
+                  </div>
+                )
               ) : (
                 <div className="overflow-hidden rounded-[10px] bg-sb shadow-float">
                   <ArtifactTable
@@ -1316,7 +1567,7 @@ export function WorkspaceDetail({ workspaceSlug }: { workspaceSlug: string }) {
             <div className="p-10">
               <DialogHeader className="space-y-3 text-left">
                 <DialogTitle className="text-[36px] leading-[1.08] tracking-[-0.03em]">
-                  New file
+                  New Artifact
                 </DialogTitle>
                 <DialogDescription className="text-[16px] leading-7 text-ink-3">
                   Create a markdown file directly inside this workspace.
