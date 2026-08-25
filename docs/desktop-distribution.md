@@ -27,6 +27,20 @@ dist/releases/Odessay-{version}-aarch64.dmg
 
 Each build writes a new file with the version in its name; previous releases are not overwritten.
 
+### Production release command
+
+For a distributable macOS build, use the production wrapper rather than
+`npm run tauri:build` directly:
+
+```bash
+npm run desktop:release:prod:signed
+```
+
+The wrapper supplies the hosted runtime URL, runs the desktop lifecycle gates,
+builds the app, signs the updater archive, and writes the four files needed by a
+GitHub release: the DMG, updater archive, updater signature, and `latest.json`.
+Never validate or upload an older file left in `dist/releases`.
+
 ### Version drift
 
 If `package.json` and `src-tauri/tauri.conf.json` have different `version` values, the script exits immediately:
@@ -116,6 +130,43 @@ Code signing and notarization with an Apple Developer ID ($99/year) are **intent
 - The app cannot be distributed via the Mac App Store.
 - Enterprise MDM policies that block unsigned apps will prevent installation.
 
+The current `signingIdentity: "-"` setting is ad-hoc signing only. It makes the
+bundle internally verifiable, but it does not satisfy Gatekeeper and it does not
+notarize the app. Users must use **Open** from the Finder context menu or remove
+the quarantine attribute once:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Artifact Studio.app"
+```
+
+Do not combine ad-hoc signing with the repository's App Sandbox entitlements.
+The sandbox moves Tauri's config directory to:
+
+```
+~/Library/Containers/com.z9ne.odessay/Data/Library/Application Support/com.z9ne.odessay
+```
+
+That creates a second settings store and makes existing Workspaces appear to be
+missing. It can also block moves from the managed document root to a selected
+user folder. For the current direct-filesystem desktop architecture, the
+entitlements file must not be referenced by `tauri.conf.json` until a proper
+sandbox migration with security-scoped bookmarks is implemented.
+
+#### 0.7.0 release incident
+
+Release `0.7.0` exposed two separate packaging failures:
+
+1. The first DMG had an inconsistent linker-only signature and macOS reported
+   the app as damaged.
+2. Re-signing it with `signingIdentity: "-"` while still referencing
+   `entitlements.plist` activated App Sandbox. The app then used a new container
+   store, so previous Workspaces and settings were not visible and document
+   relocation failed.
+
+Release `0.7.1` removed the entitlements reference, kept ad-hoc signing, and
+   restored the historical data path. This is the required combination until
+   Apple Developer ID signing and notarization are available.
+
 When signing is added (future issue), the changes will be:
 - Add `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` environment variables to the build environment.
 - Set `bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json`.
@@ -148,6 +199,11 @@ Run the automated bundle validator after every `desktop:release`:
 ```bash
 npm run validate:desktop
 ```
+
+Run it against the freshly generated bundle. If it discovers a historical DMG
+with an older version, remove that artifact from the local release directory or
+inspect the generated `dist/releases/ArtifactStudio-{version}-aarch64.dmg`
+directly before treating the result as release evidence.
 
 This validates:
 - DMG exists and mounts correctly
