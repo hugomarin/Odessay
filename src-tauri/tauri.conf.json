@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Artifact Studio",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "identifier": "com.z9ne.odessay",
   "build": {
     "frontendDist": "../dist",
@@ -59,7 +59,6 @@
       "frameworks": [],
       "minimumSystemVersion": "10.15",
       "signingIdentity": "-",
-      "entitlements": "./entitlements.plist",
       "infoPlist": "./Info.plist"
     }
   }

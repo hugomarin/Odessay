@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 - 2026-08-25
+
+### Fixed
+
+- Disabled the macOS App Sandbox for the ad-hoc desktop bundle so existing local settings, Workspaces, and document paths remain available after installation.
+- Restored direct filesystem moves for documents saved to user-selected Workspace folders.
+
 ## 0.7.0 - 2026-08-25
 
 ### Added
