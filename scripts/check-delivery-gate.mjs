@@ -37,7 +37,11 @@ function extractIssueIds(branchName) {
   return Array.from(new Set(numbers.map((num) => `ODE-${num}`)));
 }
 
-const issueIds = extractIssueIds(branch);
+const pinnedIssueIds = (process.env.TRACEABILITY_ISSUE_IDS ?? "")
+  .split(",")
+  .map((issue) => issue.trim().toUpperCase())
+  .filter((issue) => /^ODE-\d+$/.test(issue));
+const issueIds = Array.from(new Set([...extractIssueIds(branch), ...pinnedIssueIds]));
 if (issueIds.length === 0) {
   fail(
     `Branch "${branch}" does not include an issue ID (expected ODE-XX in branch name).`,

@@ -28,10 +28,12 @@ jobs:
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
 
           MERGE_SHA="$(git rev-parse HEAD)"
+          ISSUE_IDS="$(printf '%s' "${PR_TITLE}" | grep -oE 'ODE-[0-9]+' | sort -u | paste -sd, -)"
           git cat-file -e "${PR_BASE_SHA}^{commit}"
           git cat-file -e "${PR_HEAD_SHA}^{commit}"
           git cat-file -e "${MERGE_SHA}^{commit}"
@@ -42,6 +44,7 @@ jobs:
             echo "TRACEABILITY_PR_HEAD_SHA=${PR_HEAD_SHA}"
             echo "TRACEABILITY_HEAD_SHA=${MERGE_SHA}"
             echo "TRACEABILITY_MERGE_SHA=${MERGE_SHA}"
+            echo "TRACEABILITY_ISSUE_IDS=${ISSUE_IDS}"
           } >> "${GITHUB_ENV}"
 
       - name: Diagnose traceability refs before build

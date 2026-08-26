@@ -58,11 +58,14 @@ function createRepository(options: { processDrift?: boolean } = {}) {
 function traceabilityEnv(fixture: ReturnType<typeof createRepository>) {
   return {
     ...process.env,
-    GITHUB_HEAD_REF: "codex/wf-ship-ODE-466",
+    // A shared PR keeps its historical head branch name when another issue is
+    // added later. CI pins the new issue IDs from the PR title.
+    GITHUB_HEAD_REF: "codex/wf-ship-ODE-465",
     TRACEABILITY_BASE_SHA: fixture.base,
     TRACEABILITY_PR_HEAD_SHA: fixture.prHead,
     TRACEABILITY_HEAD_SHA: fixture.merge,
     TRACEABILITY_MERGE_SHA: fixture.merge,
+    TRACEABILITY_ISSUE_IDS: "ODE-465,ODE-466",
   }
 }
 
