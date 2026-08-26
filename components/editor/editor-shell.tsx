@@ -125,7 +125,8 @@ import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
-  resolvePersistedSessionRestore,
+  resolvePersistedSessionRestoreTransition,
+  resolveUnavailableWritingRecovery,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
@@ -1636,34 +1637,46 @@ export function EditorShell({
   }, [routeWritingId, sessionLoaded])
 
   useEffect(() => {
-    if (forceNewWriting || !sessionLoaded || routeWritingId || currentWritingIdRef.current) {
+    if (
+      forceNewWriting ||
+      !sessionLoaded ||
+      routeWritingId ||
+      currentWritingIdRef.current ||
+      navigatedToDraftRef.current
+    ) {
       return
     }
 
-    const restoreDecision = resolvePersistedSessionRestore({
+    const restoreTransition = resolvePersistedSessionRestoreTransition({
       activeTabId: editorSession.active_tab_id,
-      tabs: editorSession.tabs.map((tab) => ({ id: tab.id, writingId: tab.writing_id })),
+      tabs: editorSession.tabs.map((tab) => ({
+        id: tab.id,
+        writingId: tab.writing_id,
+        slug: tab.slug,
+      })),
+    }, {
+      isDesktopRuntime: isDesktopRuntime(),
+      useHistoryProjection: isPerfHarness(),
     })
 
-    if (restoreDecision.status === "restorable") {
-      const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
+    if (restoreTransition.status === "restore-writing") {
       const nextHref = buildWritingRouteHref("/write", {
-        id: restoreDecision.writingId,
-        slug: activeTab?.slug,
+        id: restoreTransition.writingId,
+        slug: restoreTransition.slug,
       })
 
-      if (isDesktopRuntime()) {
+      if (restoreTransition.target === "desktop-hydration") {
         // Explicit desktop handoff: history is only a projection in the static
         // bundle, so identity must transition before hydration/fallback effects.
-        currentWritingIdRef.current = restoreDecision.writingId
+        currentWritingIdRef.current = restoreTransition.writingId
         desktopSessionRestoreTimingRef.current = {
-          writingId: restoreDecision.writingId,
+          writingId: restoreTransition.writingId,
           startedAt: performance.now(),
         }
-        setCurrentWritingId(restoreDecision.writingId)
-        setHydrationWritingId(restoreDecision.writingId)
-        console.info(`[editor:session-restore] restorable ${restoreDecision.writingId}`)
-      } else if (isPerfHarness()) {
+        setCurrentWritingId(restoreTransition.writingId)
+        setHydrationWritingId(restoreTransition.writingId)
+        console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
+      } else if (restoreTransition.target === "history") {
         replaceEditorHistory(nextHref)
       } else {
         router.replace(nextHref)
@@ -1675,12 +1688,11 @@ export function EditorShell({
       console.info("[editor:session-restore] no-restorable-tab")
     }
 
-    // In desktop an empty session must converge to EditorEmptyState instead of
-    // eagerly spawning a contentless draft tab. Web keeps its current behavior.
-    if (isDesktopRuntime() && editorSession.tabs.length === 0) {
+    if (restoreTransition.status === "remain-empty") {
       return
     }
 
+    navigatedToDraftRef.current = true
     openDraftTab()
   }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
@@ -2017,26 +2029,26 @@ export function EditorShell({
       // fall back to a sibling tab or an in-memory blank draft tab.
       const recoverUnavailableTab = () => {
         console.info(`[editor] unavailable writing ${targetWritingId}; reconciling session`)
-        const { removedActive, fallbackTabId } = reconcileUnavailableWritingTab(targetWritingId)
+        const reconciliation = reconcileUnavailableWritingTab(targetWritingId)
+        const sessionTabs = getEditorSessionState().session.tabs
+        const recovery = resolveUnavailableWritingRecovery(reconciliation, sessionTabs.map((tab) => ({
+          id: tab.id,
+          writingId: tab.writing_id,
+          slug: tab.slug,
+        })))
         setHydrationWritingId(null)
 
-        if (removedActive) {
-          const fallbackTab = fallbackTabId
-            ? getEditorSessionState().session.tabs.find((tab) => tab.id === fallbackTabId)
-            : null
-
-          if (fallbackTab?.writing_id) {
-            currentWritingIdRef.current = fallbackTab.writing_id
-            setCurrentWritingId(fallbackTab.writing_id)
-            setHydrationWritingId(fallbackTab.writing_id)
-            replaceEditorHistory(
-              buildWritingRouteHref("/write", { id: fallbackTab.writing_id, slug: fallbackTab.slug }),
-            )
-          } else {
-            currentWritingIdRef.current = null
-            setCurrentWritingId(null)
-            replaceEditorHistory("/write")
-          }
+        if (recovery.status === "activate-writing") {
+          currentWritingIdRef.current = recovery.writingId
+          setCurrentWritingId(recovery.writingId)
+          setHydrationWritingId(recovery.writingId)
+          replaceEditorHistory(
+            buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
+          )
+        } else if (recovery.status === "show-empty-editor") {
+          currentWritingIdRef.current = null
+          setCurrentWritingId(null)
+          replaceEditorHistory("/write")
         }
       }
 

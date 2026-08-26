@@ -467,6 +467,40 @@ describe("ODE-405 — desktop empty-draft persistence", () => {
     infoSpy.mockRestore()
   })
 
+  it("keeps a persisted draft tab ephemeral when restore has no writing UUID", async () => {
+    persistedSession.value = {
+      id: "workspace",
+      active_tab_id: "draft",
+      tabs: [{
+        id: "draft",
+        writing_id: null,
+        slug: null,
+        title: "Untitled",
+        save_state: "saved-local",
+        has_pending_sync: false,
+        last_touched_at: 1,
+        view_state: null,
+      }],
+      recent_writings: [],
+      updated_at: 1,
+    }
+
+    await act(async () => root?.render(<EditorShell />))
+
+    await vi.waitFor(() => {
+      expect(getEditorSessionState().session.active_tab_id).toBe(EDITOR_DRAFT_TAB_ID)
+    })
+
+    expect(getEditorSessionState().session.tabs).toHaveLength(1)
+    expect(getEditorSessionState().session.tabs[0]?.writing_id).toBeNull()
+    expect(mocks.createDesktopDraft).not.toHaveBeenCalled()
+    expect(mocks.saveWriting).not.toHaveBeenCalled()
+    expect(mocks.filesystemWrite).not.toHaveBeenCalled()
+    expect(mocks.manifestWrite).not.toHaveBeenCalled()
+    expect(mocks.catalogWrite).not.toHaveBeenCalled()
+    expect(mocks.syncEnqueue).not.toHaveBeenCalled()
+  })
+
   it("does not materialize a writing when mounting without content", async () => {
     await act(async () => root?.render(<EditorShell />))
 

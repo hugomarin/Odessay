@@ -9,7 +9,22 @@ export type PersistedSessionRestoreDecision =
 
 type PersistedSessionSnapshot = {
   activeTabId: string | null
-  tabs: Array<{ id: string; writingId: string | null }>
+  tabs: Array<{ id: string; writingId: string | null; slug?: string | null }>
+}
+
+export type PersistedSessionRestoreTransition =
+  | {
+      status: "restore-writing"
+      writingId: string
+      slug: string | null
+      target: "desktop-hydration" | "history" | "router"
+    }
+  | { status: "remain-empty" }
+  | { status: "open-draft-tab" }
+
+type PersistedSessionRestoreContext = {
+  isDesktopRuntime: boolean
+  useHistoryProjection: boolean
 }
 
 /**
@@ -31,6 +46,83 @@ export const resolvePersistedSessionRestore = (
   }
 
   return { status: "restorable", writingId: activeTab.writingId }
+}
+
+/**
+ * Converts persisted session state into one explicit shell command. The shell
+ * owns React/router/store effects; this application decision owns their order
+ * and guarantees that desktop reaches UUID hydration before any fallback.
+ */
+export const resolvePersistedSessionRestoreTransition = (
+  session: PersistedSessionSnapshot,
+  context: PersistedSessionRestoreContext,
+): PersistedSessionRestoreTransition => {
+  const restoreDecision = resolvePersistedSessionRestore(session)
+
+  if (restoreDecision.status === "restorable") {
+    const activeTab = session.tabs.find((tab) => tab.id === session.activeTabId)
+    return {
+      status: "restore-writing",
+      writingId: restoreDecision.writingId,
+      slug: activeTab?.slug ?? null,
+      target: context.isDesktopRuntime
+        ? "desktop-hydration"
+        : context.useHistoryProjection
+          ? "history"
+          : "router",
+    }
+  }
+
+  if (context.isDesktopRuntime && session.tabs.length === 0) {
+    return { status: "remain-empty" }
+  }
+
+  return { status: "open-draft-tab" }
+}
+
+export type UnavailableTabReconciliation = {
+  removed: boolean
+  removedActive: boolean
+  fallbackTabId: string | null
+}
+
+type ReconciledSessionTab = {
+  id: string
+  writingId: string | null
+  slug?: string | null
+}
+
+export type UnavailableWritingRecoveryTransition =
+  | { status: "clear-hydration" }
+  | { status: "activate-writing"; writingId: string; slug: string | null }
+  | { status: "show-empty-editor" }
+
+/**
+ * Plans the presentation response after the session-store adapter has removed
+ * an unavailable tab. It deliberately consumes neutral data rather than the
+ * concrete session store so recovery stays portable and independently tested.
+ */
+export const resolveUnavailableWritingRecovery = (
+  reconciliation: UnavailableTabReconciliation,
+  tabs: ReconciledSessionTab[],
+): UnavailableWritingRecoveryTransition => {
+  if (!reconciliation.removedActive) {
+    return { status: "clear-hydration" }
+  }
+
+  const fallbackTab = reconciliation.fallbackTabId
+    ? tabs.find((tab) => tab.id === reconciliation.fallbackTabId)
+    : null
+
+  if (fallbackTab?.writingId) {
+    return {
+      status: "activate-writing",
+      writingId: fallbackTab.writingId,
+      slug: fallbackTab.slug ?? null,
+    }
+  }
+
+  return { status: "show-empty-editor" }
 }
 
 export const createRouteHydrationSessionState = (
