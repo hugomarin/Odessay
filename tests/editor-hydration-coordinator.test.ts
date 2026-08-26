@@ -8,6 +8,7 @@
  */
 import { describe, expect, it, vi } from "vitest"
 import { resolveHydrationOutcome, type HydrationCoordinatorDeps } from "@/lib/editor/hydration-coordinator"
+import { createHydrationGenerationOwner } from "@/lib/editor/hydration-generation"
 import type { OpenDocumentResult } from "@/lib/services/open-document"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
@@ -189,34 +190,39 @@ describe("resolveHydrationOutcome — ODE-455 table tests", () => {
     expect(outcome.status).toBe("hydrated")
   })
 
-  it("cancelled immediately after the unified-open call short-circuits before classifying the outcome", async () => {
-    let cancelled = false
-    const openWriting = vi.fn()
+  it("forwards cancellation only to the retry adapter without owning a second cancellation outcome", async () => {
+    const isCancelled = vi.fn(() => true)
+    const openWriting = vi.fn(async () => ({ error: null, data: writing() }))
     const deps = baseDeps({
-      isCancelled: () => cancelled,
+      isCancelled,
       openWriting,
-      openDocumentByIdWithRetry: vi.fn(async () => {
-        cancelled = true // e.g. the user switched documents mid-open
-        return { result: { status: "orphaned", id: "doc-1" } as OpenDocumentResult, attempt: 1 }
+      openDocumentByIdWithRetry: vi.fn(async (_id, options) => {
+        expect(options.isCancelled).toBe(isCancelled)
+        return {
+          result: {
+            status: "opened",
+            documentId: "doc-1",
+            record: catalogRecord(),
+            strategy: "existing",
+          } as OpenDocumentResult,
+          attempt: 1,
+        }
       }),
     })
 
     const outcome = await resolveHydrationOutcome("doc-1", deps)
 
-    expect(outcome).toEqual({ status: "cancelled" })
-    expect(openWriting).not.toHaveBeenCalled()
+    expect(outcome.status).toBe("hydrated")
+    expect(openWriting).toHaveBeenCalledTimes(1)
   })
 
-  it("A→B: a genuinely concurrent switch cancels A and resolves B with B's own identity", async () => {
-    // Real editor-shell interleaving: the user switches documents while A's
-    // unified-open call is still in flight. A's own async work does not
-    // finish and unblock until *after* B has already started resolving —
-    // both calls are live at once, not sequential await-then-await.
-    let cancelledForA = false
+  it("A→B: generation ownership discards A while the coordinator resolves B independently", async () => {
+    const owner = createHydrationGenerationOwner()
+    const generationA = owner.start("doc-a")
     const releaseBox: { release: (() => void) | null } = { release: null }
 
     const depsForA = baseDeps({
-      isCancelled: () => cancelledForA,
+      isCancelled: () => !generationA.isCurrent(),
       openDocumentByIdWithRetry: vi.fn(
         () =>
           new Promise<{ result: OpenDocumentResult; attempt: number }>((resolve) => {
@@ -247,24 +253,24 @@ describe("resolveHydrationOutcome — ODE-455 table tests", () => {
       })),
     })
 
-    const outcomeForAPromise = resolveHydrationOutcome("doc-a", depsForA)
+    const outcomeForAPromise = generationA.runAsync(() => resolveHydrationOutcome("doc-a", depsForA))
 
-    // The switch: editor-shell's effect cleanup flips `cancelled` for the
-    // stale target as soon as `hydrationWritingId` changes to "doc-b", then
-    // a new effect run starts resolving B — both are now in flight together.
-    cancelledForA = true
-    const outcomeForBPromise = resolveHydrationOutcome("doc-b", depsForB)
+    const generationB = owner.start("doc-b")
+    const outcomeForBPromise = generationB.runAsync(() => resolveHydrationOutcome("doc-b", depsForB))
 
     // Only now does A's hung open call resolve — A finishes *after* B started.
     releaseBox.release?.()
 
     const [outcomeForA, outcomeForB] = await Promise.all([outcomeForAPromise, outcomeForBPromise])
 
-    expect(outcomeForA).toEqual({ status: "cancelled" })
-    expect(outcomeForB.status).toBe("hydrated")
-    if (outcomeForB.status === "hydrated") {
-      expect(outcomeForB.record.writing.id).toBe("doc-b")
-      expect(outcomeForB.record.writing.title).toBe("Doc B")
+    expect(outcomeForA).toEqual({ status: "stale" })
+    expect(outcomeForB.status).toBe("current")
+    if (outcomeForB.status === "current") {
+      expect(outcomeForB.value.status).toBe("hydrated")
+      if (outcomeForB.value.status === "hydrated") {
+        expect(outcomeForB.value.record.writing.id).toBe("doc-b")
+        expect(outcomeForB.value.record.writing.title).toBe("Doc B")
+      }
     }
   })
 

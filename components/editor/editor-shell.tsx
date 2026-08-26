@@ -2120,10 +2120,6 @@ export function EditorShell({
       if (outcomeResult.status === "stale") return
       const outcome = outcomeResult.value
 
-      if (outcome.status === "cancelled") {
-        return
-      }
-
       if (outcome.status === "unavailable") {
         if (outcome.source === "unified-open") {
           console.info(
