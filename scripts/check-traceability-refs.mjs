@@ -22,12 +22,14 @@ try {
 const currentHead = git(["rev-parse", "HEAD"]);
 const prHead = process.env.TRACEABILITY_PR_HEAD_SHA?.trim() ?? "";
 const mergeSha = process.env.TRACEABILITY_MERGE_SHA?.trim() ?? "";
+const pinnedMergeBase = process.env.TRACEABILITY_MERGE_BASE_SHA?.trim() ?? "";
 
 for (const [label, commit] of [
   ["base", range.base],
   ["head", range.head],
   ["pr-head", prHead],
   ["merge", mergeSha],
+  ["merge-base", pinnedMergeBase],
 ]) {
   if (commit && !commitExists(commit)) fail(`${label} commit is missing: ${commit}`);
 }
@@ -39,11 +41,12 @@ if (range.source === "pinned-environment" && currentHead !== range.head) {
   fail(`Pinned head differs from checkout: ${range.head} != ${currentHead}.`);
 }
 
-const mergeBase = git(["merge-base", range.base, prHead || range.head]);
+const prBranchPoint = git(["merge-base", range.eventBase || range.base, prHead || range.head]);
 console.log(`[ops:traceability:refs] source=${range.source}`);
 console.log(`[ops:traceability:refs] HEAD=${currentHead}`);
 console.log(`[ops:traceability:refs] base=${range.base}`);
 console.log(`[ops:traceability:refs] pr_head=${prHead || "n/a"}`);
 console.log(`[ops:traceability:refs] merge=${mergeSha || range.head}`);
-console.log(`[ops:traceability:refs] merge_base=${mergeBase}`);
+console.log(`[ops:traceability:refs] merge_base=${range.base}`);
+console.log(`[ops:traceability:refs] pr_branch_point=${prBranchPoint}`);
 console.log("[ops:traceability:refs] OK - immutable traceability range is available.");

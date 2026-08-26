@@ -33,14 +33,16 @@ jobs:
           set -euo pipefail
 
           MERGE_SHA="$(git rev-parse HEAD)"
+          MERGE_BASE_SHA="$(git merge-base "${MERGE_SHA}" "${PR_BASE_SHA}")"
           ISSUE_IDS="$(printf '%s' "${PR_TITLE}" | grep -oE 'ODE-[0-9]+' | sort -u | paste -sd, -)"
           git cat-file -e "${PR_BASE_SHA}^{commit}"
           git cat-file -e "${PR_HEAD_SHA}^{commit}"
           git cat-file -e "${MERGE_SHA}^{commit}"
-          git merge-base "${PR_BASE_SHA}" "${PR_HEAD_SHA}"
+          test "${MERGE_BASE_SHA}" = "${PR_BASE_SHA}"
 
           {
             echo "TRACEABILITY_BASE_SHA=${PR_BASE_SHA}"
+            echo "TRACEABILITY_MERGE_BASE_SHA=${MERGE_BASE_SHA}"
             echo "TRACEABILITY_PR_HEAD_SHA=${PR_HEAD_SHA}"
             echo "TRACEABILITY_HEAD_SHA=${MERGE_SHA}"
             echo "TRACEABILITY_MERGE_SHA=${MERGE_SHA}"

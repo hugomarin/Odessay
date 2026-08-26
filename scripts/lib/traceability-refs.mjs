@@ -44,17 +44,27 @@ export function pullRequestShas(eventPath = process.env.GITHUB_EVENT_PATH) {
  */
 export function resolveTraceabilityRange(env = process.env) {
   const pinnedBase = env.TRACEABILITY_BASE_SHA?.trim();
+  const pinnedMergeBase = env.TRACEABILITY_MERGE_BASE_SHA?.trim();
   const pinnedHead = env.TRACEABILITY_HEAD_SHA?.trim();
-  if (pinnedBase || pinnedHead) {
-    if (!pinnedBase || !pinnedHead) {
+  if (pinnedBase || pinnedMergeBase || pinnedHead) {
+    if (!pinnedBase || !pinnedMergeBase || !pinnedHead) {
       throw new Error(
-        "TRACEABILITY_BASE_SHA and TRACEABILITY_HEAD_SHA must be set together.",
+        "TRACEABILITY_BASE_SHA, TRACEABILITY_MERGE_BASE_SHA and TRACEABILITY_HEAD_SHA must be set together.",
       );
     }
-    if (!commitExists(pinnedBase) || !commitExists(pinnedHead)) {
+    if (
+      !commitExists(pinnedBase) ||
+      !commitExists(pinnedMergeBase) ||
+      !commitExists(pinnedHead)
+    ) {
       throw new Error("Pinned traceability SHAs are not available as commits.");
     }
-    return { base: pinnedBase, head: pinnedHead, source: "pinned-environment" };
+    return {
+      base: pinnedMergeBase,
+      eventBase: pinnedBase,
+      head: pinnedHead,
+      source: "pinned-environment",
+    };
   }
 
   const eventRange = pullRequestShas(env.GITHUB_EVENT_PATH);
