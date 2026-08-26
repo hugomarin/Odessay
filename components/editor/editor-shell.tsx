@@ -204,6 +204,7 @@ import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import type { EditorHydrationRecord } from "@/lib/editor/document-hydration"
 import { resolveHydrationOutcome } from "@/lib/editor/hydration-coordinator"
+import { createHydrationGenerationOwner, type HydrationGeneration } from "@/lib/editor/hydration-generation"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
@@ -538,6 +539,10 @@ export function EditorShell({
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
+  const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
+  if (hydrationGenerationOwnerRef.current === null) {
+    hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
+  }
   const currentCanonicalPathRef = useRef<string | null>(null)
   const editorBandRef = useRef<HTMLDivElement | null>(null)
   // Widths of the chrome that focus mode hides, sampled while it is visible so
@@ -957,26 +962,37 @@ export function EditorShell({
     [],
   )
 
-  const flushPendingCorrectionBlocks = useCallback(async (writingId: string) => {
-    const pendingBlocks = (await localDB.correctionBlocks.getByWriting(writingId)).filter(
-      (block) => block.syncedAt === null,
-    )
+  const flushPendingCorrectionBlocks = useCallback(async (
+    writingId: string,
+    generation?: HydrationGeneration,
+  ) => {
+    const pendingResult = generation
+      ? await generation.runAsync(() => localDB.correctionBlocks.getByWriting(writingId))
+      : { status: "current" as const, value: await localDB.correctionBlocks.getByWriting(writingId) }
+    if (pendingResult.status === "stale") return
+    const pendingBlocks = pendingResult.value.filter((block) => block.syncedAt === null)
 
     for (const block of pendingBlocks) {
+      if (generation && !generation.isCurrent()) return
       void persistCorrectionBlockRemotely({
         writingId,
         block,
       })
         .then(() => {
-          persistedCorrectionBlocksRef.current.set(block.blockHash, {
-            ...block,
-            syncedAt: new Date().toISOString(),
-          })
+          const markPersisted = () =>
+            persistedCorrectionBlocksRef.current.set(block.blockHash, {
+              ...block,
+              syncedAt: new Date().toISOString(),
+            })
+          if (generation) generation.run(markPersisted)
+          else markPersisted()
         })
         .catch((error) => {
-          console.info(
+          const logFailure = () => console.info(
             `[corrections] retry skipped message=${error instanceof Error ? error.message : String(error)}`,
           )
+          if (generation) generation.run(logFailure)
+          else logFailure()
         })
     }
   }, [])
@@ -2009,19 +2025,24 @@ export function EditorShell({
       return
     }
 
-    let cancelled = false
     const targetWritingId = hydrationWritingId
+    const generationOwner = hydrationGenerationOwnerRef.current!
+    const generation = generationOwner.start(targetWritingId)
 
     const hydrateEditor = async () => {
       let hydratedWriting: EditorHydrationRecord | null = null
-      let localCorrectionBlocks = await localDB.correctionBlocks.getByWriting(targetWritingId)
+      const localCorrectionBlocksResult = await generation.runAsync(
+        () => localDB.correctionBlocks.getByWriting(targetWritingId),
+      )
+      if (localCorrectionBlocksResult.status === "stale") return
+      let localCorrectionBlocks = localCorrectionBlocksResult.value
 
       // openWriting handles local read + optional remote hydration in one call.
       // Skeleton surfaces only when the call takes longer than 200 ms.
       const skeletonTimer = setTimeout(() => {
-        if (!cancelled) {
+        generation.run(() => {
           setIsBodyHydrating(true)
-        }
+        })
       }, 200)
 
       // Recovers the tab for an unavailable/unopenable writing WITHOUT persisting
@@ -2064,45 +2085,40 @@ export function EditorShell({
       // content hydration below. The decision logic itself is the pure,
       // dependency-injected coordinator extracted in ODE-455 — this effect
       // only supplies the runtime adapters and reacts to its outcome.
-      const outcome = await resolveHydrationOutcome(targetWritingId, {
-        isDesktopRuntime,
-        isUnifiedOpenEnabled,
-        isCancelled: () => cancelled,
-        openDocumentByIdWithRetry,
-        openWriting: async (id) => (await getDocumentService()).openWriting(id),
-        getLocalWriting: async (id) => {
-          // Explicit translation, not structural reuse: the coordinator's
-          // boundary is domain-shaped (HydrationLocalMetadata), not
-          // storage-shaped — this adapter is where the IndexedDB/SQLite
-          // column names (`canonical_path`, `sync_status`) stop.
-          const localWriting = await localDB.writings.get(id)
-          if (!localWriting) return null
-          return {
-            canonicalPath: localWriting.canonical_path,
-            lifecycle: localWriting.lifecycle,
-            syncStatus: localWriting.sync_status,
-          }
-        },
-      })
+      const outcomeResult = await generation.runAsync(() =>
+        resolveHydrationOutcome(targetWritingId, {
+          isDesktopRuntime,
+          isUnifiedOpenEnabled,
+          isCancelled: () => !generation.isCurrent(),
+          openDocumentByIdWithRetry,
+          openWriting: async (id) => (await getDocumentService()).openWriting(id),
+          getLocalWriting: async (id) => {
+            // Explicit translation, not structural reuse: the coordinator's
+            // boundary is domain-shaped (HydrationLocalMetadata), not
+            // storage-shaped — this adapter is where the IndexedDB/SQLite
+            // column names (`canonical_path`, `sync_status`) stop.
+            const localWriting = await localDB.writings.get(id)
+            if (!localWriting) return null
+            return {
+              canonicalPath: localWriting.canonical_path,
+              lifecycle: localWriting.lifecycle,
+              syncStatus: localWriting.sync_status,
+            }
+          },
+        }),
+      )
 
       clearTimeout(skeletonTimer)
-      if (!cancelled) {
+      generation.run(() => {
         setIsBodyHydrating(false)
-      }
+      })
 
-      // Single cancellation gate for every outcome, checked BEFORE acting on
-      // any of them. The coordinator only checks `isCancelled()` once itself
-      // (right after the unified-open retry call) — it never re-checks it
-      // during `openWriting` or the local-metadata read. A document switch
-      // (A -> B) can land at any point during that window, and a stale
-      // outcome for A (e.g. a late `NOT_FOUND`) must never act on session
-      // state that may already belong to B: `recoverUnavailableTab()` mutates
-      // the active tab/route, and correction-block hydration does remote
-      // work keyed by the stale `targetWritingId`. Neither may run once this
-      // effect's own target is no longer current.
-      if (cancelled) {
-        return
-      }
+      // The generation owner checks the result again after every awaited
+      // boundary. A document switch (A -> B) can land during unified open,
+      // openWriting or local metadata; a late A result must never act on B's
+      // session, editor, correction cache or route.
+      if (outcomeResult.status === "stale") return
+      const outcome = outcomeResult.value
 
       if (outcome.status === "cancelled") {
         return
@@ -2127,18 +2143,21 @@ export function EditorShell({
 
       if (localCorrectionBlocks.length === 0) {
         try {
-          localCorrectionBlocks = await hydrateCorrectionBlocksFromRemote(targetWritingId)
+          const correctionBlocksResult = await generation.runAsync(
+            () => hydrateCorrectionBlocksFromRemote(targetWritingId),
+          )
+          if (correctionBlocksResult.status === "stale") return
+          localCorrectionBlocks = correctionBlocksResult.value
         } catch (error) {
+          if (!generation.isCurrent()) return
           console.error(`[editor] correction hydration failed for ${targetWritingId}`, error)
           localCorrectionBlocks = []
         }
       } else {
-        void flushPendingCorrectionBlocks(targetWritingId)
+        void flushPendingCorrectionBlocks(targetWritingId, generation)
       }
 
-      if (cancelled) {
-        return
-      }
+      if (!generation.isCurrent()) return
 
       if (hydratedWriting) {
         const { writing, canonicalPath, lifecycle: hydratedLifecycle, syncStatus: hydratedSyncStatus } =
@@ -2175,14 +2194,17 @@ export function EditorShell({
         if (hydratedReconciliation.stale.length > 0) {
           const staleIds = hydratedReconciliation.stale.map((block) => block.id)
 
-          await localDB.correctionBlocks.deleteMany(staleIds)
+          const deleteResult = await generation.runAsync(() => localDB.correctionBlocks.deleteMany(staleIds))
+          if (deleteResult.status === "stale") return
           void persistCorrectionBlockRemotely({
             writingId: targetWritingId,
             deletedBlockIds: staleIds,
           }).catch((error) => {
-            console.info(
-              `[corrections] hydrate cleanup skipped message=${error instanceof Error ? error.message : String(error)}`,
-            )
+            generation.run(() => {
+              console.info(
+                `[corrections] hydrate cleanup skipped message=${error instanceof Error ? error.message : String(error)}`,
+              )
+            })
           })
         }
 
@@ -2214,19 +2236,17 @@ export function EditorShell({
           }
 
           const timer = window.setTimeout(() => {
-            correctionTimersRef.current.delete(block.id)
+            generation.run(() => {
+              correctionTimersRef.current.delete(block.id)
 
-            if (!correctionsEnabledRef.current) {
-              return
-            }
+              if (!correctionsEnabledRef.current) return
 
-            const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+              const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
-            if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-              return
-            }
+              if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) return
 
-            enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
+              enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
+            })
           }, 2000)
 
           correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
@@ -2281,74 +2301,80 @@ export function EditorShell({
           setMarkdownValue(nextMarkdown)
 
           window.requestAnimationFrame(() => {
-            queueMarkdownSelectionRestore(
-              viewState.markdownSelectionStart ?? 0,
-              viewState.markdownSelectionEnd ?? viewState.markdownSelectionStart ?? 0,
-              {
-                scrollTop: viewState.scrollTop,
-                scrollLeft: viewState.scrollLeft,
-                editorScrollTop: viewState.scrollTop,
-                editorScrollLeft: viewState.scrollLeft,
-                shellScrollTop: viewState.shellScrollTop,
-                shellScrollLeft: viewState.shellScrollLeft,
-                windowScrollX: viewState.windowScrollX,
-                windowScrollY: viewState.windowScrollY,
-              },
-            )
+            generation.run(() => {
+              queueMarkdownSelectionRestore(
+                viewState.markdownSelectionStart ?? 0,
+                viewState.markdownSelectionEnd ?? viewState.markdownSelectionStart ?? 0,
+                {
+                  scrollTop: viewState.scrollTop,
+                  scrollLeft: viewState.scrollLeft,
+                  editorScrollTop: viewState.scrollTop,
+                  editorScrollLeft: viewState.scrollLeft,
+                  shellScrollTop: viewState.shellScrollTop,
+                  shellScrollLeft: viewState.shellScrollLeft,
+                  windowScrollX: viewState.windowScrollX,
+                  windowScrollY: viewState.windowScrollY,
+                },
+              )
+            })
           })
         } else if (viewState) {
           modeRef.current = "rich"
           setMode("rich")
-          window.requestAnimationFrame(() => {
-            const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-            const shellViewport = document.querySelector<HTMLElement>("main")
+          window.requestAnimationFrame(() =>
+            generation.run(() => {
+              const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+              const shellViewport = document.querySelector<HTMLElement>("main")
 
-            const applyEditorScroll = () => {
-              if (editorViewport) {
-                editorViewport.scrollTop = viewState.scrollTop
-                editorViewport.scrollLeft = viewState.scrollLeft
+              const applyEditorScroll = () => {
+                if (editorViewport) {
+                  editorViewport.scrollTop = viewState.scrollTop
+                  editorViewport.scrollLeft = viewState.scrollLeft
+                }
               }
-            }
 
-            const applyShellScroll = () => {
-              if (shellViewport) {
-                shellViewport.scrollTop = viewState.shellScrollTop ?? 0
-                shellViewport.scrollLeft = viewState.shellScrollLeft ?? 0
+              const applyShellScroll = () => {
+                if (shellViewport) {
+                  shellViewport.scrollTop = viewState.shellScrollTop ?? 0
+                  shellViewport.scrollLeft = viewState.shellScrollLeft ?? 0
+                }
               }
-            }
 
-            const applyWindowScroll = () => {
-              window.scrollTo(
-                typeof viewState.windowScrollX === "number" ? viewState.windowScrollX : window.scrollX,
-                typeof viewState.windowScrollY === "number" ? viewState.windowScrollY : window.scrollY,
-              )
-            }
+              const applyWindowScroll = () => {
+                window.scrollTo(
+                  typeof viewState.windowScrollX === "number" ? viewState.windowScrollX : window.scrollX,
+                  typeof viewState.windowScrollY === "number" ? viewState.windowScrollY : window.scrollY,
+                )
+              }
 
-            if (
-              typeof viewState.selectionFrom === "number" &&
-              typeof viewState.selectionTo === "number" &&
-              viewState.selectionFrom >= 1 &&
-              viewState.selectionTo >= viewState.selectionFrom
-            ) {
-              editor
-                .chain()
-                .focus(undefined, { scrollIntoView: false })
-                .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
-                .run()
-            } else {
-              editor.commands.focus("start")
-            }
+              if (
+                typeof viewState.selectionFrom === "number" &&
+                typeof viewState.selectionTo === "number" &&
+                viewState.selectionFrom >= 1 &&
+                viewState.selectionTo >= viewState.selectionFrom
+              ) {
+                editor
+                  .chain()
+                  .focus(undefined, { scrollIntoView: false })
+                  .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
+                  .run()
+              } else {
+                editor.commands.focus("start")
+              }
 
-            applyWindowScroll()
-            applyShellScroll()
-            applyEditorScroll()
-
-            window.requestAnimationFrame(() => {
               applyWindowScroll()
               applyShellScroll()
               applyEditorScroll()
-            })
-          })
+
+              window.requestAnimationFrame(() => {
+                generation.run(() => {
+                  applyWindowScroll()
+                  applyShellScroll()
+                  applyEditorScroll()
+                })
+              })
+            }),
+          )
         }
       } else {
         setTitle(UNTITLED_WRITING_TITLE)
@@ -2366,20 +2392,22 @@ export function EditorShell({
         setCanonicalPath(null)
       }
 
-      const restoreTiming = desktopSessionRestoreTimingRef.current
-      if (restoreTiming?.writingId === targetWritingId) {
-        console.info(
-          `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
-        )
-        desktopSessionRestoreTimingRef.current = null
-      }
-      setHydrationWritingId(null)
+      generation.run(() => {
+        const restoreTiming = desktopSessionRestoreTimingRef.current
+        if (restoreTiming?.writingId === targetWritingId) {
+          console.info(
+            `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
+          )
+          desktopSessionRestoreTimingRef.current = null
+        }
+        setHydrationWritingId(null)
+      })
     }
 
     void hydrateEditor()
 
     return () => {
-      cancelled = true
+      generationOwner.cancel(generation)
     }
   }, [
     applyCorrectionSuggestionUpdate,
