@@ -70,6 +70,8 @@ export type DeskCatalogData = {
   userId: string | null
 }
 
+export type SearchWriting = Pick<LocalWriting, "id" | "title" | "body_text" | "slug">
+
 const CATALOG_TO_LOCAL_SYNC: Record<DocumentCatalogRecord["syncStatus"], LocalWriting["sync_status"]> = {
   "local-only": "synced",
   pending: "pending",
@@ -181,6 +183,26 @@ export async function loadDeskCatalogData(): Promise<DeskCatalogData> {
   })
 
   return { writings, documentStateById, collections, writingCollections, userId }
+}
+
+/**
+ * Load the searchable document projection through the DocumentCatalog.
+ *
+ * Search needs local body text on the web adapter, but that enrichment must stay
+ * behind the application port. Desktop deliberately receives the catalog's
+ * cached excerpt instead: the materialized `.md` remains the content authority
+ * and opening the document is the operation that hydrates it from disk.
+ */
+export async function loadSearchWritings(): Promise<SearchWriting[]> {
+  const records = (await loadCatalogRecords({ limit: CATALOG_LIST_LIMIT })).filter(isActiveCatalogRecord)
+
+  if (isDesktopRuntime()) {
+    return records.map(synthesizeWritingFromRecord)
+  }
+
+  const localWritings = await localDB.writings.getAll()
+  const localById = new Map(localWritings.map((writing) => [writing.id, writing]))
+  return records.map((record) => mergeRecordWithLocal(record, localById.get(record.id)))
 }
 
 /** Single-writing read for edit flows (rename, status, export), routed through the port. */

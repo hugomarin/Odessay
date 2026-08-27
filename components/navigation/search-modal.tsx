@@ -10,13 +10,12 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useRecentWritings, type RecentWritingItem } from "@/hooks/useRecentWritings"
-import { localDB } from "@/lib/local-db"
-import type { LocalWriting } from "@/lib/local-db/schema"
+import { loadSearchWritings, type SearchWriting } from "@/lib/queries/desk-catalog-source"
 import { cn } from "@/lib/utils"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 
 type SearchResult = {
-  writing: LocalWriting
+  writing: SearchWriting
   snippet: string
 }
 
@@ -43,7 +42,7 @@ function getSnippet(bodyText: string, query: string): string {
   return snippet
 }
 
-function filterWritings(writings: LocalWriting[], query: string): SearchResult[] {
+function filterWritings(writings: SearchWriting[], query: string): SearchResult[] {
   const lowerQuery = query.toLowerCase()
   const results: SearchResult[] = []
 
@@ -183,7 +182,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const router = useRouter()
   const [query, setQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
-  const [allWritings, setAllWritings] = useState<LocalWriting[] | null>(null)
+  const [allWritings, setAllWritings] = useState<SearchWriting[] | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -192,7 +191,7 @@ export function SearchModal({ open, onOpenChange }: SearchModalProps) {
   const loadWritings = useCallback(async () => {
     setIsLoading(true)
     try {
-      const writings = await localDB.writings.getAll()
+      const writings = await loadSearchWritings()
       setAllWritings(writings)
     } finally {
       setIsLoading(false)
