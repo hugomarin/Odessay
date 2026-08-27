@@ -17,7 +17,7 @@ automated source/unit evidence from proof that requires the exact packaged DMG:
 | Branch | `codex/ode-372-document-catalog-dod` |
 | Build version | `0.7.1` (`package.json` / `tauri.conf.json`); exact release DMG validated |
 | Commits | `2e956bb8`, `dcd97712`, `9fdde409` (ODE-372 runtime/evidence commits) |
-| Pull request | Pending until technical gates and evidence packaging complete |
+| Pull request | [#412](https://github.com/hugomarin/Odessay/pull/412) — OPEN |
 | Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:32:07 -0600 from the runtime commits above; SHA-256 `d7a642a1d324b254baaca64ae8f4b1de1c4a3ec728963b4143adfe9380435cdd` |
 | Product owner | Acceptance pending; no acceptance comment has been emitted |
 
@@ -27,6 +27,8 @@ Every row includes the issue, PR state, build version and artifact required for
 the final review. `PASS` means the repository evidence is automatable and
 covered by the named test/source asset. `PENDING` means the evidence is a
 blocking DMG/manual or owner action and is not inferred from source coverage.
+The row-level `PR pending` trace text records the pre-publication capture; the
+current review object is PR #412 above.
 
 | ID | DoD criterion | Evidence / proof method | Trace (issue · PR · build · artifact) | Status |
 | --- | --- | --- | --- | --- |
