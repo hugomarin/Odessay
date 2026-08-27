@@ -16,9 +16,9 @@ automated source/unit evidence from proof that requires the exact packaged DMG:
 | Issue | ODE-372 |
 | Branch | `codex/ode-372-document-catalog-dod` |
 | Build version | `0.7.1` (`package.json` / `tauri.conf.json`); exact release build pending |
-| Commit | `82e2d571` at build start; update to final PR HEAD before review |
+| Commits | `2e956bb8`, `dcd97712` (ODE-372 implementation/evidence commits) |
 | Pull request | Pending until technical gates and evidence packaging complete |
-| Artifact | `dist/releases/ArtifactStudio-0.7.1-aarch64.dmg` exists locally but predates this branch’s final HEAD; not claimed as exact-current evidence |
+| Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:25:12 -0600 from these commits; SHA-256 `583a2742d1d517f9d5ca3cc6874c87a7f91400653164bd870b1544963f116865` |
 | Product owner | Acceptance pending; no acceptance comment has been emitted |
 
 ## Traceability matrix
@@ -80,19 +80,26 @@ blocking DMG/manual or owner action and is not inferred from source coverage.
 The final PR must replace this section’s pending markers with the exact
 sanitized outputs and artifact paths from this branch:
 
-```text
-npm run env:check --if-present
-npm run ops:status:drift --if-present
-npm run typecheck
-npm run lint
-npm test
-cargo test
-npm run ops:workflow:validate
-npm run ops:network:gate -- ...
-npm run ops:perf:gate -- ...
-npm run ops:delivery:gate
-npm run validate:desktop -- --dmg <exact-current-dmg>
-```
+| Command | Result / evidence |
+| --- | --- |
+| `npm run env:check --if-present` | PASS — `.env.local` check |
+| `npm run ops:status:drift --if-present` | WARN mode — pre-existing missing `ODE-455`, `ODE-468` and stale `last_updated`; no workflow ledger changed on this branch |
+| `npm run typecheck` | PASS |
+| `npm run lint` | PASS with existing warnings in `editor-shell.tsx`, `image-presentation-viewer.tsx` and `sidebar.tsx` |
+| `npm test -- --no-file-parallelism` | PASS — 217 files, 1,678 tests |
+| `npm test` | FAIL in parallel — 9 existing isolation/race failures; the same suite passes serially. See Manual handoff / gate note below. |
+| `cargo test --manifest-path src-tauri/Cargo.toml` | PASS — 65 passed, 2 ignored (keychain/benchmark requiring live app context) |
+| `npm run test:desktop:draft-lifecycle` | PASS — 81 Vitest tests + 2 Playwright tests |
+| `npx playwright test tests/playwright/document-catalog.e2e.ts` | PASS — 3/3 |
+| `npm run ops:workflow:validate` | PASS — all workflow JSON/JSONL files valid |
+| `npm run ops:network:gate` | PASS on historical `artifacts/perf/ode-373-network.har` (10/10, `required_failures: 0`); exact ODE-372 DMG HAR pending |
+| `npm run ops:perf:gate` | PASS on historical editor production trace (14 pass, 1 optional skip); exact catalog/DMG trace pending |
+| `npm run validate:desktop -- --dmg dist/releases/ArtifactStudio-0.7.1-aarch64.dmg` | PASS — exact-current DMG structure, CSP, version, embedded host and ad-hoc signature |
+| `npm run ops:delivery:gate` | Pending final branch push/PR range; must run after this report commit |
+
+The release script also created an unsigned updater archive because no
+`TAURI_SIGNING_PRIVATE_KEY` was configured. The DMG itself was built and passed
+the automated bundle validator; updater signing remains a distribution action.
 
 No `workflow/status.json`, `workflow/built.jsonl` or
 `workflow/review-history.jsonl` mutation belongs on this BUILD branch.
@@ -111,3 +118,11 @@ can attach evidence to the PR:
    network/performance artifacts.
 6. Review of structured remote telemetry fields (B7.4).
 7. Product-owner acceptance after every blocking row is `PASS`.
+
+### Parallel test gate note
+
+The prescribed `npm test` invocation currently runs files in parallel. Existing
+tests that create temporary Git branches and happy-dom integration fixtures race
+under that mode, producing 9 failures; the same 217-file suite is green with
+`--no-file-parallelism`. This is reported as a delivery risk rather than hidden
+by changing the global Vitest configuration in ODE-372.
