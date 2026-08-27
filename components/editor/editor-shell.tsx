@@ -205,6 +205,11 @@ import type { WritingRecord } from "@/lib/services/contracts/document-service"
 import type { EditorHydrationRecord } from "@/lib/editor/document-hydration"
 import { resolveHydrationOutcome } from "@/lib/editor/hydration-coordinator"
 import { createHydrationGenerationOwner, type HydrationGeneration } from "@/lib/editor/hydration-generation"
+import {
+  createPersistenceCoordinator,
+  type PersistenceSnapshotOverrides,
+  type PersistenceStateEvent,
+} from "@/lib/editor/persistence-coordinator"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
@@ -278,13 +283,6 @@ type EditorCursorSnapshot =
     }
 
 type EditorPanel = "notes" | "properties" | "publication" | null
-
-type PersistSnapshotOverrides = {
-  title?: string
-  status?: WritingStatus
-  artifactType?: ArtifactType
-  visibility?: WritingVisibility
-}
 
 type RenameWritingSnapshot = {
   title: string
@@ -461,6 +459,10 @@ export function EditorShell({
   const createDesktopDraftFn = createDesktopDraftOverride ?? createProductionDesktopDraft
   const { loaded: sessionLoaded, session: editorSession } = useEditorSessionStore()
   const routeWritingId = writingId ?? null
+  const routerRef = useRef(router)
+  routerRef.current = router
+  const routeWritingIdRef = useRef(routeWritingId)
+  routeWritingIdRef.current = routeWritingId
   const initialHydrationSession = createRouteHydrationSessionState(routeWritingId)
   const hydrationProgress = useHydrationProgress()
 
@@ -557,18 +559,6 @@ export function EditorShell({
   const forceNewWritingRequestedRef = useRef(false)
   const createWorkspaceTabRef = useRef<((options?: { skipConfirm?: boolean }) => Promise<void>) | null>(null)
   const isCreatingWorkspaceTabRef = useRef(false)
-  const isDraftMaterializingRef = useRef(false)
-  const queuedDraftSnapshotRef = useRef<Editor | null>(null)
-  // ODE-461: sustained typing fires `persistEditorSnapshot` faster than a
-  // single desktop save round-trips. Without this guard, overlapping saves
-  // race the same SQLite connection and can fail with "database is locked".
-  // Single-flight: only the most recent snapshot queued during an in-flight
-  // save runs next; superseded snapshots in between are dropped by design
-  // (the queued one already reflects the current editor content).
-  const isPersistingSnapshotRef = useRef(false)
-  const queuedPersistSnapshotRef = useRef<{ editorInstance: Editor; overrides?: PersistSnapshotOverrides } | null>(
-    null,
-  )
   const ephemeralDraftWritingIdRef = useRef<string | null>(null)
   const selectAdjacentTabRef = useRef<((direction: number) => void) | null>(null)
   const selectionRef = useRef<SelectionSnapshot | null>(null)
@@ -624,6 +614,121 @@ export function EditorShell({
   })
   const suppressedCorrectionFlushTimerRef = useRef<number | null>(null)
   const editorInstanceRef = useRef<Editor | null>(null)
+
+  const persistenceCoordinator = useMemo(
+    () => createPersistenceCoordinator(
+      {
+        runtime: isDesktopRuntime() ? "desktop" : "web",
+        documentService: {
+          saveWriting: async (input) => (await getDocumentService()).saveWriting(input),
+        },
+        createDesktopDraft: (options) => createDesktopDraftFn(options),
+        createWritingId,
+        now: () => new Date().toISOString(),
+      },
+      {
+        onStateChange: (event: PersistenceStateEvent) => {
+          if (event.state === "persisting_local" || event.state === "dirty") {
+            setSyncStatus("saving")
+            return
+          }
+
+          if (event.state === "failed") {
+            setSyncStatus("error")
+            return
+          }
+
+          if (event.state === "queued_remote") {
+            setSyncStatus(
+              event.created
+                ? "saved-local"
+                : mapLocalSyncStatusToSaveState(
+                    "pending",
+                    event.snapshot.lifecycle,
+                    typeof navigator === "undefined" ? true : navigator.onLine,
+                  ),
+            )
+          }
+        },
+        onMaterialized: ({ record }) => {
+          const materializedTitle = record.title?.trim() || DESKTOP_UNTITLED_WRITING_TITLE
+
+          currentWritingIdRef.current = record.id
+          ephemeralDraftWritingIdRef.current = null
+          setCurrentWritingId(record.id)
+          setHydrationWritingId(record.id)
+          createdAtRef.current = record.createdAt
+          setCreatedAt(record.createdAt)
+          setTitle(materializedTitle)
+          titleRef.current = materializedTitle
+          setHasExplicitTitle(false)
+          hasExplicitTitleRef.current = false
+          versionRef.current = record.version
+          setVersion(record.version)
+          setWritingSlug(null)
+          writingSlugRef.current = null
+          setWritingStatus("draft")
+          statusRef.current = "draft"
+          setArtifactType("general")
+          artifactTypeRef.current = "general"
+          setWritingVisibility("private")
+          visibilityRef.current = "private"
+          setLifecycle("local-only")
+          lifecycleRef.current = "local-only"
+          navigatedToDraftRef.current = true
+
+          openWritingTab({
+            writingId: record.id,
+            title: materializedTitle,
+            saveState: "saved-local",
+            hasPendingSync: false,
+            replaceDraft: true,
+          })
+        },
+        onIdentityCreated: (writingId) => {
+          const nextWritingSession = createNewWritingSessionState(writingId)
+          currentWritingIdRef.current = nextWritingSession.activeWritingId
+          setCurrentWritingId(nextWritingSession.activeWritingId)
+          setHydrationWritingId(nextWritingSession.hydrationWritingId)
+
+          if (!routeWritingIdRef.current && !navigatedToDraftRef.current) {
+            navigatedToDraftRef.current = true
+            if (isPerfHarness()) {
+              replaceEditorHistory(`/write/${writingId}`)
+            } else {
+              routerRef.current.replace(`/write/${writingId}`)
+            }
+          }
+        },
+        onCommitted: ({ record }) => {
+          versionRef.current = record.version
+          setVersion(record.version)
+          createdAtRef.current = record.createdAt
+          setCreatedAt(record.createdAt)
+        },
+        onError: (event) => {
+          console.error(
+            event.operation === "draft-materialization"
+              ? "[editor:save] desktop draft materialization failed"
+              : event.operation === "schedule"
+                ? "[editor:sync] schedule failed after local commit"
+                : "[editor:save] local save failed",
+            {
+              writingId: event.writingId,
+              error: event.error?.message ?? "Unknown persistence error",
+            },
+          )
+        },
+      },
+    ),
+    [createDesktopDraftFn],
+  )
+
+  useEffect(() => {
+    persistenceCoordinator.activateDocument(currentWritingId)
+  }, [currentWritingId, persistenceCoordinator])
+
+  useEffect(() => () => persistenceCoordinator.dispose(), [persistenceCoordinator])
 
   const resetCorrectionQueueState = useCallback(() => {
     for (const { timer } of correctionTimersRef.current.values()) {
@@ -1008,12 +1113,10 @@ export function EditorShell({
     }
   }, [])
 
-  const persistEditorSnapshotOnce = useCallback(
-    async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
-      const nowIso = new Date().toISOString()
+  const persistEditorSnapshot = useCallback(
+    async (editorInstance: Editor, overrides?: PersistenceSnapshotOverrides) => {
       const activeId = currentWritingIdRef.current
-      const baseCreatedAt = createdAtRef.current ?? nowIso
-      const nextVersion = versionRef.current + 1
+      const baseCreatedAt = createdAtRef.current
       const nextBodyText = editorInstance.getText()
       const nextDerivedTitle = deriveAutoTitle(nextBodyText, baseCreatedAt)
       const overrideTitle = overrides?.title?.trim()
@@ -1026,199 +1129,28 @@ export function EditorShell({
             ? titleRef.current.trim() || UNTITLED_WRITING_TITLE
             : nextDerivedTitle
 
-      const isEmptyContent = nextBodyText.trim() === ""
-
-      if (!activeId) {
-        if (isDesktopRuntime()) {
-          // Desktop: never materialize a contentless writing. The first real
-          // input/paste triggers one atomic draft creation with the initial body.
-          if (isEmptyContent) {
-            return
-          }
-          if (isDraftMaterializingRef.current) {
-            queuedDraftSnapshotRef.current = editorInstance
-            return
-          }
-          isDraftMaterializingRef.current = true
-          try {
-            const result = await createDesktopDraftFn({
-              writingId:
-                ephemeralDraftWritingIdRef.current ??
-                (ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId),
-              title: nextTitle,
-              initialBodyJson: editorInstance.getJSON() as Record<string, unknown>,
-              initialBodyText: nextBodyText,
-            })
-            if (result.error || !result.data) {
-              throw new Error(result.error?.message ?? "Failed to create desktop draft")
-            }
-            const materializedId = result.data.id
-            const materializedCreatedAt = result.data.createdAt
-            const materializedTitle = result.data.title?.trim() || DESKTOP_UNTITLED_WRITING_TITLE
-
-            currentWritingIdRef.current = materializedId
-            ephemeralDraftWritingIdRef.current = null
-            setCurrentWritingId(materializedId)
-            setHydrationWritingId(materializedId)
-            createdAtRef.current = materializedCreatedAt
-            setCreatedAt(materializedCreatedAt)
-            setTitle(materializedTitle)
-            titleRef.current = materializedTitle
-            setHasExplicitTitle(false)
-            hasExplicitTitleRef.current = false
-            versionRef.current = 1
-            setVersion(1)
-            setWritingSlug(null)
-            writingSlugRef.current = null
-            setWritingStatus("draft")
-            statusRef.current = "draft"
-            setArtifactType("general")
-            artifactTypeRef.current = "general"
-            setWritingVisibility("private")
-            visibilityRef.current = "private"
-            setLifecycle("local-only")
-            lifecycleRef.current = "local-only"
-            navigatedToDraftRef.current = true
-
-            openWritingTab({
-              writingId: materializedId,
-              title: materializedTitle,
-              saveState: "saved-local",
-              hasPendingSync: false,
-              replaceDraft: true,
-            })
-
-            // createDesktopDraft already committed the initial content through
-            // the normative desktop write path. Do not immediately save the
-            // same snapshot again. If another update arrived while allocation
-            // was in flight, flush the latest editor state once against the
-            // materialized UUID.
-            isDraftMaterializingRef.current = false
-            setSyncStatus("saved-local")
-            const queuedSnapshot = queuedDraftSnapshotRef.current
-            queuedDraftSnapshotRef.current = null
-            if (queuedSnapshot) {
-              // Recurse into the un-guarded implementation directly: this
-              // continuation runs inside the same single-flight window the
-              // outer `persistEditorSnapshot` wrapper already opened, so it
-              // must not re-enter the guard (that would just queue itself).
-              await persistEditorSnapshotOnce(queuedSnapshot)
-            }
-            return
-          } catch (error) {
-            isDraftMaterializingRef.current = false
-            queuedDraftSnapshotRef.current = editorInstance
-            // ODE-461: nothing durable exists yet for this draft — the `.md`
-            // was never written. This is not a slow/pending sync; it's a
-            // failed local save, so it must not read as "saving"/"saved-local".
-            console.error("[editor:save] desktop draft materialization failed", {
-              writingId: ephemeralDraftWritingIdRef.current,
-              error: error instanceof Error ? error.message : String(error),
-            })
-            setSyncStatus("error")
-            return
-          }
-        } else {
-          const nextId = activeId ?? createWritingId()
-          const nextWritingSession = createNewWritingSessionState(nextId)
-          currentWritingIdRef.current = nextWritingSession.activeWritingId
-          setCurrentWritingId(nextWritingSession.activeWritingId)
-          setHydrationWritingId(nextWritingSession.hydrationWritingId)
-
-          if (!routeWritingId && !navigatedToDraftRef.current) {
-            navigatedToDraftRef.current = true
-            if (isPerfHarness()) {
-              replaceEditorHistory(`/write/${nextId}`)
-            } else if (!isDesktopRuntime()) {
-              router.replace(`/write/${nextId}`)
-            }
-          }
-        }
+      if (!activeId && isDesktopRuntime() && !ephemeralDraftWritingIdRef.current) {
+        ephemeralDraftWritingIdRef.current = createBlankDraftIdentity().writingId
       }
 
-      setSyncStatus("saving")
-
-      const nextId = currentWritingIdRef.current ?? createWritingId()
-      const nextLifecycle = !activeId ? "local-only" : lifecycleRef.current
-
-      const nextRecord: WritingRecord = {
-        id: nextId,
-        authorId: null,
-        title: nextTitle,
-        content: {
-          richText: editorInstance.getJSON() as Record<string, unknown>,
-          markdown: null,
-          plainText: editorInstance.getText(),
-          canonicalSource: "rich-text",
+      return persistenceCoordinator.persist(
+        {
+          writingId: activeId,
+          createdAt: baseCreatedAt,
+          version: versionRef.current,
+          title: nextTitle,
+          bodyJson: editorInstance.getJSON() as Record<string, unknown>,
+          bodyText: nextBodyText,
+          status: statusRef.current,
+          artifactType: artifactTypeRef.current,
+          visibility: visibilityRef.current,
+          lifecycle: activeId ? lifecycleRef.current : "local-only",
+          draftWritingId: ephemeralDraftWritingIdRef.current,
         },
-        slug: null,
-        status: overrides?.status ?? statusRef.current,
-        artifactType: overrides?.artifactType ?? artifactTypeRef.current,
-        visibility: overrides?.visibility ?? visibilityRef.current,
-        parentId: null,
-        correspondenceId: null,
-        version: nextVersion,
-        deletedAt: null,
-        createdAt: baseCreatedAt,
-        updatedAt: nowIso,
-        contentUpdatedAt: nowIso,
-        metadataUpdatedAt: nowIso,
-      }
-
-      try {
-        const result = await (await getDocumentService()).saveWriting({ writing: nextRecord })
-        if (result.error) {
-          throw new Error(result.error.message)
-        }
-        versionRef.current = nextVersion
-        setVersion(nextVersion)
-        createdAtRef.current = baseCreatedAt
-        setCreatedAt(baseCreatedAt)
-        setSyncStatus(
-          mapLocalSyncStatusToSaveState(
-            "pending",
-            nextLifecycle,
-            typeof navigator === "undefined" ? true : navigator.onLine,
-          ),
-        )
-        return true
-      } catch (error) {
-        // ODE-461: a save that fails here means `.md`/SQLite were never
-        // written for this snapshot — visually identical to a slow sync
-        // until now, with no trace. Log the cause and surface it distinctly
-        // from "saving" (cloud-pending) so the author can tell a lost edit
-        // from a normal in-flight sync.
-        console.error("[editor:save] local save failed", {
-          writingId: nextId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-        setSyncStatus("error")
-        return false
-      }
+        overrides,
+      )
     },
-    [createDesktopDraftFn, routeWritingId, router],
-  )
-
-  const persistEditorSnapshot = useCallback(
-    async (editorInstance: Editor, overrides?: PersistSnapshotOverrides) => {
-      if (isPersistingSnapshotRef.current) {
-        queuedPersistSnapshotRef.current = { editorInstance, overrides }
-        return true
-      }
-
-      isPersistingSnapshotRef.current = true
-      try {
-        return await persistEditorSnapshotOnce(editorInstance, overrides)
-      } finally {
-        isPersistingSnapshotRef.current = false
-        const queued = queuedPersistSnapshotRef.current
-        queuedPersistSnapshotRef.current = null
-        if (queued) {
-          void persistEditorSnapshot(queued.editorInstance, queued.overrides)
-        }
-      }
-    },
-    [persistEditorSnapshotOnce],
+    [persistenceCoordinator],
   )
 
   const runRichModeUpdateSideEffects = useCallback(
@@ -5627,6 +5559,8 @@ export function EditorShell({
       // Merely changing the active session tab leaves TipTap and the save path
       // bound to the previous UUID until React effects run, so the first input
       // can otherwise append to (and persist over) the previous document.
+      persistenceCoordinator.cancel()
+      persistenceCoordinator.activateDocument(null)
       currentWritingIdRef.current = null
       setCurrentWritingId(null)
       setHydrationWritingId(null)
@@ -5760,7 +5694,7 @@ export function EditorShell({
         editorEl?.focus()
       })
     })
-  }, [currentWritingId, editor, editorSession.tabs, persistCurrentWorkspaceViewState, updateDerivedEditorState])
+  }, [currentWritingId, editor, editorSession.tabs, persistenceCoordinator, persistCurrentWorkspaceViewState, updateDerivedEditorState])
   createWorkspaceTabRef.current = handleCreateWorkspaceTab
 
   const handleOpenWorkspaceDocument = useCallback(async (documentId: string) => {
