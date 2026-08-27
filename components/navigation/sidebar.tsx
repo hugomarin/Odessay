@@ -11,10 +11,9 @@ import {
   PanelLeft,
   Plus,
   Search,
-  Download,
-  X,
 } from "lucide-react"
 import { SearchModal } from "@/components/navigation/search-modal"
+import { UpdateNotice } from "@/components/navigation/update-notice"
 import { UserBar } from "@/components/navigation/user-bar"
 import { useRailWorkspaces } from "@/hooks/useRailWorkspaces"
 import { ActionTooltip } from "@/components/ui/action-tooltip"
@@ -170,6 +169,34 @@ const isEditableTarget = (target: EventTarget | null) => {
   return Boolean(target.closest('input, textarea, [role="textbox"], [contenteditable="true"]'))
 }
 
+/**
+ * Dismissing an update is remembered against its version, so turning down 0.8.0
+ * neither nags again on the next launch nor hides 0.9.0 when it lands.
+ */
+const updateDismissKey = (version: string) => `od:update-dismissed:${version}`
+
+function readUpdateDismissed(version: string): boolean {
+  try {
+    return window.localStorage.getItem(updateDismissKey(version)) === "1"
+  } catch {
+    // Storage blocked: show the notice rather than swallow a real release.
+    return false
+  }
+}
+
+/**
+ * Dev-only escape hatch: the notice needs a genuinely newer release on GitHub to
+ * appear, which makes it unreviewable on demand. Set `od:preview-update` to "1"
+ * in localStorage and reload to render it against a stub.
+ */
+function readUpdatePreviewFlag(): boolean {
+  try {
+    return window.localStorage.getItem("od:preview-update") === "1"
+  } catch {
+    return false
+  }
+}
+
 export function Sidebar({ children, initialSidebarMode = "collapsed", user }: SidebarProps) {
   const pathname = usePathname()
   const shellState = useUiShellStore()
@@ -210,6 +237,8 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
   const [searchOpen, setSearchOpen] = useState(false)
   const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null)
   const [installing, setInstalling] = useState(false)
+  const [updateError, setUpdateError] = useState<string | null>(null)
+  const [previewUpdate, setPreviewUpdate] = useState(false)
 
   // Workspace is a first-class DocumentCatalog view as of ODE-373 and belongs
   // in the normal navigation alongside Desk and Studio.
@@ -239,29 +268,68 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
     if (updateCheckStartedRef.current) return
     updateCheckStartedRef.current = true
 
+    // Dev-only preview. The notice cannot be reached on demand — it needs a real
+    // newer release on GitHub — so this renders it against a stub to review the
+    // design. Stripped from any production build by the NODE_ENV guard.
+    if (process.env.NODE_ENV !== "production" && readUpdatePreviewFlag()) {
+      setPreviewUpdate(true)
+      return
+    }
+
     checkForUpdate().then((result) => {
       if (result.kind === "error") {
+        // A failed check is not the author's problem to solve, and a machine
+        // that is simply offline must not grow an error card in the rail.
         console.error("[update] check failed:", result.message)
         return
       }
-      if (result.kind === "available") {
-        setUpdateState(result)
-      }
+      if (result.kind !== "available") return
+      // Already turned down for this exact version on an earlier launch.
+      if (readUpdateDismissed(result.update.version)) return
+      setUpdateState(result)
     })
   }, [])
 
+  const updateLabel =
+    updateState?.kind === "available"
+      ? formatUpdateLabel(updateState.update)
+      : previewUpdate
+        ? "Artifact Studio 0.0.0-preview is available"
+        : null
+
   const handleInstallUpdate = async () => {
-    if (updateState?.kind !== "available") return
+    if (updateState?.kind !== "available") {
+      if (previewUpdate) setUpdateError("Preview only — there is no update to install.")
+      return
+    }
     setInstalling(true)
+    setUpdateError(null)
     try {
       await installUpdate(updateState.update)
+      // No success path to write: `installUpdate` relaunches the app.
     } catch (err) {
       console.error("[update] install failed:", err)
+      // The author pressed a button and the app must answer in the UI, not only
+      // in a console they are not reading.
+      setUpdateError(
+        err instanceof Error ? err.message : "The update could not be installed.",
+      )
       setInstalling(false)
     }
   }
 
   const handleDismissUpdate = () => {
+    setPreviewUpdate(false)
+    setUpdateError(null)
+    // Remembered per version: dismissing 0.8.0 must not hide 0.9.0 later, and
+    // must not bring 0.8.0 back on the next launch.
+    if (updateState?.kind === "available") {
+      try {
+        window.localStorage.setItem(updateDismissKey(updateState.update.version), "1")
+      } catch {
+        // A blocked storage is not a reason to keep the notice on screen.
+      }
+    }
     setUpdateState(null)
   }
 
@@ -550,6 +618,17 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
               )
             })}
           </div>
+
+          {updateLabel ? (
+            <UpdateNotice
+              label={updateLabel}
+              collapsed={isIconOnly}
+              installing={installing}
+              error={updateError}
+              onInstall={() => void handleInstallUpdate()}
+              onDismiss={handleDismissUpdate}
+            />
+          ) : null}
 
           <UserBar collapsed={isIconOnly} displayName={userDisplayName} username={userUsername} />
           </nav>
