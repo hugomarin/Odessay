@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { resolveTraceabilityRange } from "./lib/traceability-refs.mjs";
 
 const PROCESS_FILES = [
   "workflow/workflow.md",
@@ -8,33 +9,12 @@ const PROCESS_FILES = [
   ".agents/skills/skill-code-review/SKILL.md",
 ];
 
-function hasRef(ref) {
-  try {
-    execSync(`git rev-parse --verify ${ref}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function findBaseRef() {
-  const baseFromCi = process.env.GITHUB_BASE_REF?.trim();
-  if (baseFromCi) {
-    const ciRemote = `origin/${baseFromCi}`;
-    if (hasRef(ciRemote)) return ciRemote;
-    if (hasRef(baseFromCi)) return baseFromCi;
-  }
-  if (hasRef("origin/main")) return "origin/main";
-  if (hasRef("main")) return "main";
-  return "HEAD";
-}
-
-const baseRef = findBaseRef();
-const mergeBase = execSync(`git merge-base HEAD ${baseRef}`, {
+const range = resolveTraceabilityRange();
+const mergeBase = execFileSync("git", ["merge-base", range.head, range.base], {
   encoding: "utf8",
 }).trim();
 
-const changedFiles = execSync(`git diff --name-only ${mergeBase}..HEAD`, {
+const changedFiles = execFileSync("git", ["diff", "--name-only", `${mergeBase}..${range.head}`], {
   encoding: "utf8",
 })
   .split("\n")
@@ -46,7 +26,9 @@ const touchedProcessFiles = PROCESS_FILES.filter((file) =>
 );
 
 if (touchedProcessFiles.length === 0) {
-  console.log("[ops:process:sync] OK - no process files changed in this PR.");
+  console.log(
+    `[ops:process:sync] OK - no process files changed in this PR (${range.source}: ${mergeBase}..${range.head}).`,
+  );
   process.exit(0);
 }
 

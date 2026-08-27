@@ -788,7 +788,7 @@ describe("ODE-461 — desktop save reliability", () => {
 
 /**
  * `clearTimeout(skeletonTimer)` runs unconditionally, immediately after
- * `resolveHydrationOutcome` settles and *before* the cancellation gate
+ * `resolveHydrationOutcome` settles and *before* the generation-owner gate
  * (editor-shell.tsx's hydration effect) — one call per `hydrateEditor`
  * invocation. Waiting for a *new* call after releasing a stale target's hung
  * promise is a positive observable signal that its continuation actually
@@ -806,18 +806,15 @@ async function waitForContinuationToReachGate(clearTimeoutSpy: ReturnType<typeof
   })
 }
 
-describe("ODE-462 — hydration coordinator P1 review finding: deferred cancellation", () => {
+describe("ODE-464 — hydration generation owner: deferred stale work", () => {
   it("a stale NOT_FOUND for A resolving after the switch to B must not run tab recovery or touch B's session state", async () => {
     unifiedOpenState.enabled = true
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
     const clearTimeoutSpy = spyOnClearTimeout()
 
-    // The coordinator itself already re-checks `isCancelled()` once, right
-    // after the unified-open retry call — so A's unified-open resolves
-    // normally ("opened") here, uncancelled. The gap this test targets is
-    // *after* that point: the subsequent `openWriting` call, which the
-    // coordinator never re-checks cancellation against. A's `openWriting`
-    // is what hangs and resolves late, well after the switch to B.
+    // A's unified-open resolves normally. The subsequent `openWriting` call
+    // hangs and resolves late, well after the switch to B; only the generation
+    // owner is allowed to decide whether that continuation may still act.
     const releaseA: { release: (() => void) | null } = { release: null }
     mocks.openDocumentById.mockImplementation(((id?: string) =>
       Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
@@ -878,11 +875,9 @@ describe("ODE-462 — hydration coordinator P1 review finding: deferred cancella
     unifiedOpenState.enabled = true
     const clearTimeoutSpy = spyOnClearTimeout()
 
-    // This time A's unified-open AND openWriting both succeed — the outcome
-    // will resolve as "hydrated", not "unavailable". The gap targeted here
-    // is the *other* uncancellable window the coordinator has: the local-
-    // metadata read (`getLocalWriting`), called unconditionally after a
-    // successful openWriting, with no cancellation check around it either.
+    // This time A's unified-open AND openWriting both succeed. The local-
+    // metadata read (`getLocalWriting`) remains in flight while B becomes
+    // current; the generation owner must discard A after that await.
     const releaseAMetadata: { release: (() => void) | null } = { release: null }
     mocks.openDocumentById.mockImplementation(((id?: string) =>
       Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
@@ -997,5 +992,59 @@ describe("ODE-462 — hydration coordinator P1 review finding: deferred cancella
     )
 
     clearTimeoutSpy.mockRestore()
+  })
+
+  it("discards A when its remote correction response arrives after B has hydrated", async () => {
+    unifiedOpenState.enabled = true
+    const releaseA: { release: (() => void) | null } = { release: null }
+    vi.mocked(hydrateCorrectionBlocksFromRemote).mockClear()
+    vi.mocked(persistCorrectionBlockRemotely).mockClear()
+    vi.mocked(localDB.writings.get).mockResolvedValue(null)
+    vi.mocked(localDB.correctionBlocks.getByWriting).mockResolvedValue([])
+    mocks.openDocumentById.mockImplementation(((id?: string) =>
+      Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
+    mocks.openWriting.mockImplementation(((id?: string) =>
+      Promise.resolve({
+        error: null,
+        data: {
+          ...desktopDraftRecord,
+          id: id ?? "unknown",
+          title: id === "doc-a" ? "Doc A" : "Doc B",
+          content: { ...desktopDraftRecord.content, plainText: id === "doc-a" ? "Doc A body" : "Doc B body" },
+        },
+      })) as never)
+    vi.mocked(hydrateCorrectionBlocksFromRemote).mockImplementation((writingId: string) => {
+      if (writingId === "doc-a") {
+        return new Promise((resolve) => {
+          releaseA.release = () => resolve([])
+        })
+      }
+      return Promise.resolve([])
+    })
+
+    await act(async () => root?.render(<EditorShell writingId="doc-a" />))
+    await vi.waitFor(() => expect(hydrateCorrectionBlocksFromRemote).toHaveBeenCalledWith("doc-a"))
+
+    await act(async () => root?.render(<EditorShell writingId="doc-b" />))
+    await vi.waitFor(() => expect(hydrateCorrectionBlocksFromRemote).toHaveBeenCalledWith("doc-b"))
+    await vi.waitFor(() => expect(setContentCommand).toHaveBeenCalled())
+    const contentApplicationsAfterB = setContentCommand.mock.calls.length
+    expect(
+      vi.mocked(hydrateCorrectionBlocksFromRemote).mock.calls.filter(([writingId]) => writingId === "doc-a"),
+    ).toHaveLength(1)
+    expect(
+      vi.mocked(hydrateCorrectionBlocksFromRemote).mock.calls.filter(([writingId]) => writingId === "doc-b"),
+    ).toHaveLength(1)
+
+    await act(async () => {
+      releaseA.release?.()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(setContentCommand).toHaveBeenCalledTimes(contentApplicationsAfterB)
+    expect(persistCorrectionBlockRemotely).not.toHaveBeenCalledWith(
+      expect.objectContaining({ writingId: "doc-a" }),
+    )
+    expect(getEditorSessionState().session.tabs.some((tab) => tab.writing_id === "doc-b")).toBe(true)
   })
 })
