@@ -788,7 +788,7 @@ describe("ODE-461 — desktop save reliability", () => {
 
 /**
  * `clearTimeout(skeletonTimer)` runs unconditionally, immediately after
- * `resolveHydrationOutcome` settles and *before* the cancellation gate
+ * `resolveHydrationOutcome` settles and *before* the generation-owner gate
  * (editor-shell.tsx's hydration effect) — one call per `hydrateEditor`
  * invocation. Waiting for a *new* call after releasing a stale target's hung
  * promise is a positive observable signal that its continuation actually
@@ -806,18 +806,15 @@ async function waitForContinuationToReachGate(clearTimeoutSpy: ReturnType<typeof
   })
 }
 
-describe("ODE-462 — hydration coordinator P1 review finding: deferred cancellation", () => {
+describe("ODE-464 — hydration generation owner: deferred stale work", () => {
   it("a stale NOT_FOUND for A resolving after the switch to B must not run tab recovery or touch B's session state", async () => {
     unifiedOpenState.enabled = true
     const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {})
     const clearTimeoutSpy = spyOnClearTimeout()
 
-    // The coordinator itself already re-checks `isCancelled()` once, right
-    // after the unified-open retry call — so A's unified-open resolves
-    // normally ("opened") here, uncancelled. The gap this test targets is
-    // *after* that point: the subsequent `openWriting` call, which the
-    // coordinator never re-checks cancellation against. A's `openWriting`
-    // is what hangs and resolves late, well after the switch to B.
+    // A's unified-open resolves normally. The subsequent `openWriting` call
+    // hangs and resolves late, well after the switch to B; only the generation
+    // owner is allowed to decide whether that continuation may still act.
     const releaseA: { release: (() => void) | null } = { release: null }
     mocks.openDocumentById.mockImplementation(((id?: string) =>
       Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)
@@ -878,11 +875,9 @@ describe("ODE-462 — hydration coordinator P1 review finding: deferred cancella
     unifiedOpenState.enabled = true
     const clearTimeoutSpy = spyOnClearTimeout()
 
-    // This time A's unified-open AND openWriting both succeed — the outcome
-    // will resolve as "hydrated", not "unavailable". The gap targeted here
-    // is the *other* uncancellable window the coordinator has: the local-
-    // metadata read (`getLocalWriting`), called unconditionally after a
-    // successful openWriting, with no cancellation check around it either.
+    // This time A's unified-open AND openWriting both succeed. The local-
+    // metadata read (`getLocalWriting`) remains in flight while B becomes
+    // current; the generation owner must discard A after that await.
     const releaseAMetadata: { release: (() => void) | null } = { release: null }
     mocks.openDocumentById.mockImplementation(((id?: string) =>
       Promise.resolve({ status: "opened", documentId: id ?? "unknown", record: null })) as never)

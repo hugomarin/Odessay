@@ -26,6 +26,7 @@ import {
 export type HydrationCoordinatorDeps = {
   isDesktopRuntime: () => boolean
   isUnifiedOpenEnabled: () => boolean
+  /** Forwarded only so the retry adapter can stop waiting; temporal ownership stays with HydrationGenerationOwner. */
   isCancelled: () => boolean
   openDocumentByIdWithRetry: (
     id: string,
@@ -43,8 +44,6 @@ export type HydrationCoordinatorDeps = {
 }
 
 export type HydrationOutcome =
-  /** Cancelled before or during resolution (unmount/document switch) — abort silently, no state change. */
-  | { status: "cancelled" }
   /**
    * The unified opener classified the document as unrecoverable on this
    * machine (orphaned, or a terminal/retry-exhausted `failed`), or the
@@ -75,9 +74,6 @@ export async function resolveHydrationOutcome(
       const { result: outcome, attempt } = await deps.openDocumentByIdWithRetry(targetWritingId, {
         isCancelled: deps.isCancelled,
       })
-      if (deps.isCancelled()) {
-        return { status: "cancelled" }
-      }
       if (outcome.status === "orphaned" || outcome.status === "failed") {
         const reasonCode = outcome.status === "failed" ? outcome.reasonCode : "orphaned"
         return { status: "unavailable", source: "unified-open", openStatus: outcome.status, reasonCode, attempt }
