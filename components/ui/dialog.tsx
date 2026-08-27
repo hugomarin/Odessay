@@ -179,10 +179,12 @@ function FormModal({
             )}
           </div>
 
-          {/* The scroller clips horizontally as well as vertically, which used
-              to slice the focus ring off any autofocused field. Padding the
-              scroll box and pulling the content back keeps the halo whole. */}
-          <div className="od-scroll -mx-1.5 min-h-0 flex-1 overflow-y-auto px-1.5 pb-1">
+          {/* The scroller clips horizontally as well as vertically — `overflow-y:
+              auto` stops the other axis being `visible` too — which slices the
+              focus ring off any autofocused field. The sides were already padded
+              and pulled back; the top was not, so the first field's halo was cut
+              along its upper edge (owner review). Same trick, both axes. */}
+          <div className="od-scroll -mx-1.5 -mt-1.5 min-h-0 flex-1 overflow-y-auto px-1.5 pb-1 pt-1.5">
             {/* 6px of scroller padding + 16px here keeps the original 22px. */}
             <div className="px-4">{children}</div>
           </div>

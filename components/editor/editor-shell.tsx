@@ -14,7 +14,6 @@ import {
   mapSyncLifecycleToSaveState,
   type EditorSaveState,
 } from "@/components/editor/save-state"
-import { FolderTree, ListTree } from "lucide-react"
 import { WritingEditorContent } from "@/components/editor/editor-content"
 import { ImagePresentationViewer } from "@/components/editor/image-presentation-viewer"
 import { EditorEmptyState } from "@/components/editor/editor-empty-state"
@@ -23,6 +22,7 @@ import { EditorSheetHeader } from "@/components/editor/editor-sheet-header"
 import { EditorShortcutsDialog } from "@/components/editor/editor-shortcuts-dialog"
 import { EditorStatusBar } from "@/components/editor/status-bar"
 import { EditorTopbar } from "@/components/editor/editor-topbar"
+import { EditorRightPanelTabs } from "@/components/editor/panels/editor-right-panel-tabs"
 import { MobileWriteNotice } from "@/components/editor/mobile-write-notice"
 import {
   AnnotationBubble,
@@ -88,6 +88,7 @@ import {
 import {
   applyPublicationSuggestionGroup,
   deriveSuggestionContexts,
+  getVisibleCorrectionSuggestions,
   hashPublicationSource,
   invalidateBlockSuggestions,
   isSuggestionAcceptDisabled,
@@ -134,7 +135,6 @@ import { getExportFileBaseName } from "@/lib/export/writing-export"
 import {
   buildEditorSpellcheckConfig,
   DEFAULT_EDITOR_SPELLCHECK_LANGUAGE,
-  persistEditorSpellcheckPreference,
   readEditorSpellcheckPreference,
   type EditorSpellcheckPreference,
 } from "@/lib/editor/spellcheck"
@@ -282,7 +282,7 @@ type EditorCursorSnapshot =
       windowScrollY?: number
     }
 
-type EditorPanel = "notes" | "properties" | "publication" | null
+type EditorPanel = "notes" | "properties" | "grammar" | "share" | null
 
 type RenameWritingSnapshot = {
   title: string
@@ -514,7 +514,6 @@ export function EditorShell({
   const imageViewerScrollRef = useRef<{ top: number; left: number } | null>(null)
   const [isFocusMode, setIsFocusMode] = useState(false)
   const [canonicalPath, setCanonicalPath] = useState<string | null>(null)
-  const [isNarrowViewport, setIsNarrowViewport] = useState(false)
   const [focusModeCompensation, setFocusModeCompensation] = useState<{
     top: number
     left: number
@@ -1881,18 +1880,6 @@ export function EditorShell({
     setSidebarMode("collapsed")
   }, [])
 
-  // Below 1440 the right panel floats over the sheet instead of taking a column
-  // of the band (docs/design/views/studio.md, failure mode 4).
-  useEffect(() => {
-    const applyViewport = () => {
-      setIsNarrowViewport(window.innerWidth < 1440)
-    }
-
-    applyViewport()
-    window.addEventListener("resize", applyViewport)
-    return () => window.removeEventListener("resize", applyViewport)
-  }, [])
-
   // Focus mode hides the rail and the panels. The sheet must not move a pixel
   // when they go, so the band keeps sampling how much room they take while they
   // are visible and pads itself by exactly that much once they are gone.
@@ -2958,7 +2945,7 @@ export function EditorShell({
             setActivePanel((current) => (current === "properties" ? null : "properties"))
             return true
           case "corrections":
-            setActivePanel((current) => (current === "publication" ? null : "publication"))
+            setActivePanel((current) => (current === "grammar" ? null : "grammar"))
             return true
           case "addNote":
           case "voiceNote":
@@ -4025,6 +4012,16 @@ export function EditorShell({
       getMarkdownWithFootnoteDefinitions(getEditorMarkdown(editor), getEditorFootnotes(editor)),
     )
   }, [editor, markdownValue, mode, version])
+
+  // The Grammar tab's badge counts exactly what its panel would list, so it
+  // filters through the same helper rather than the raw suggestion array.
+  const visibleCorrectionCount = useMemo(
+    () =>
+      getVisibleCorrectionSuggestions(automaticCorrectionSuggestions, currentDocumentMarkdown)
+        .length,
+    [automaticCorrectionSuggestions, currentDocumentMarkdown],
+  )
+
 
   useEffect(() => {
     currentDocumentMarkdownRef.current = currentDocumentMarkdown
@@ -6053,7 +6050,6 @@ export function EditorShell({
           <EditorTopbar
             isFocusMode={isFocusMode}
             activePanel={activePanel}
-            isPublicationModeEnabled={activePanel === "publication"}
             tabs={editorSession.tabs}
             tabStatuses={tabStatuses}
             activeTabId={editorSession.active_tab_id}
@@ -6109,7 +6105,7 @@ export function EditorShell({
                 }
               : undefined
           }
-          className="EditorBand flex min-h-0 flex-1 gap-2.5 pb-2.5 pr-2.5"
+          className="EditorBand flex min-h-0 flex-1 gap-2.5 pb-2.5 pr-2.5 pt-1.5"
         >
           <div className="relative flex min-w-0 flex-1 flex-col gap-1.5">
             {isDesktopRuntime() && hydrationProgress.active ? (
@@ -6191,34 +6187,8 @@ export function EditorShell({
                       onToggleLeftPanel={(panel) =>
                         setNavigationMode(navigationMode === panel ? null : panel)
                       }
-                      showPanelToggles={!navigationMode || isNarrowViewport}
+                      showPanelToggles={!navigationMode}
                     />
-
-                    {/* Ghost rail: with both panels closed the two toggles float at
-                        the sheet's left edge — hidden as soon as a panel is open. */}
-                    {!navigationMode && !isNarrowViewport && !isFocusMode ? (
-                      <div
-                        data-testid="editor-ghost-rail"
-                        className="absolute left-3 top-[86px] z-[2] flex flex-col gap-2.5"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setNavigationMode("toc")}
-                          aria-label="Table of contents"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-4 opacity-70 transition-[background-color,color,opacity] duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink hover:opacity-100"
-                        >
-                          <ListTree className="h-[18px] w-[18px]" strokeWidth={1.5} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setNavigationMode("workspace")}
-                          aria-label="Workspace"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-4 opacity-70 transition-[background-color,color,opacity] duration-150 ease-out hover:bg-surface-menu-hover hover:text-ink hover:opacity-100"
-                        >
-                          <FolderTree className="h-[18px] w-[18px]" strokeWidth={1.5} />
-                        </button>
-                      </div>
-                    ) : null}
 
                     <WritingEditorContent
                     editor={editor}
@@ -6283,12 +6253,21 @@ export function EditorShell({
             // ODE-433 follow-up).
             className="EditorRightPanel flex w-[var(--size-panel-right)] shrink-0 flex-col overflow-hidden border-l-[0.5px] border-border font-sans"
           >
+          {/* One header for the four surfaces. Each of them used to carry a
+              header and a close button of its own, and Share was a section
+              buried inside Properties (owner review). */}
+          <EditorRightPanelTabs
+            active={activePanel}
+            onSelect={setActivePanel}
+            onClose={closeActivePanel}
+            badges={{ grammar: visibleCorrectionCount }}
+          />
+          <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={null}>
             {activePanel === "notes" ? (
               <NotesPanel
                 annotations={footnotes}
                 currentMarkdown={currentDocumentMarkdown}
-                onClose={closeActivePanel}
                 onNavigate={(annotation: AnnotationPanelEntry) => {
                   if (modeRef.current === "markdown") {
                     const textarea = markdownTextareaRef.current
@@ -6464,8 +6443,9 @@ export function EditorShell({
                   return true
                 }}
               />
-            ) : activePanel === "properties" ? (
+            ) : activePanel === "properties" || activePanel === "share" ? (
               <PropertiesPanel
+                tab={activePanel}
                 writingId={currentWritingId}
                 lifecycle={lifecycle}
                 status={writingStatus}
@@ -6473,12 +6453,9 @@ export function EditorShell({
                 visibility={writingVisibility}
                 metrics={textMetrics}
                 canonicalPath={canonicalPath}
-                spellcheckPreference={spellcheckPreference}
-                spellcheckLanguage={spellcheckConfig.language}
                 onExportMarkdown={exportMarkdown}
                 onExportPdf={() => exportBinary("pdf")}
                 onExportDocx={() => exportBinary("docx")}
-                onClose={closeActivePanel}
                 onStatusChange={(nextStatus) => {
                   if (nextStatus === writingStatus) {
                     return
@@ -6527,14 +6504,6 @@ export function EditorShell({
                     },
                   })
                 }}
-                onSpellcheckPreferenceChange={(nextPreference) => {
-                  if (nextPreference === spellcheckPreference) {
-                    return
-                  }
-
-                  setSpellcheckPreference(nextPreference)
-                  persistEditorSpellcheckPreference(spellcheckScope, nextPreference)
-                }}
               />
             ) : (
               <CorrectionsPanel
@@ -6557,10 +6526,10 @@ export function EditorShell({
                 onRetryFailed={retryFailedCorrectionPackages}
                 onCancel={cancelCorrectionAnalysis}
                 onShowCorrectionsChange={setShowCorrections}
-                onClose={closeActivePanel}
               />
             )}
           </Suspense>
+          </div>
           </aside>
         ) : null}
         </div>

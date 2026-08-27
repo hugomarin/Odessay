@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import type { TableOfContentDataItem } from "@tiptap/extension-table-of-contents";
 import { FolderTree, ListTree } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,11 +34,6 @@ export function TableOfContentsPanel({
   mode,
   onModeChange,
 }: Props) {
-  const [workspaceCount, setWorkspaceCount] = useState<number | undefined>();
-  const onCountChange = useCallback(
-    (count?: number) => setWorkspaceCount(count),
-    [],
-  );
   const visibleActiveId =
     activeItemId ?? items.find((item) => item.isActive)?.id ?? null;
   const controls = (
@@ -65,7 +59,6 @@ export function TableOfContentsPanel({
     <EditorNavigationSidebar
       mode={mode}
       title={mode === "workspace" ? "Workspace" : "Contents"}
-      count={mode === "workspace" ? workspaceCount : items.length || undefined}
       controls={controls}
       onClose={() => onModeChange(null)}
     >
@@ -111,7 +104,6 @@ export function TableOfContentsPanel({
         <WorkspaceTreePanel
           activeWritingId={activeWritingId}
           onOpenDocument={onOpenDocument}
-          onCountChange={onCountChange}
         />
       ) : null}
     </EditorNavigationSidebar>

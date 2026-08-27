@@ -50,7 +50,7 @@ describe("studio shell contract", () => {
     const tabItem = read("components/editor/editor-tab-item.tsx")
     const tabs = read("components/editor/editor-tabs.tsx")
 
-    expect(tabItem).toContain("h-[34px]")
+    expect(tabItem).toContain("h-[36px]")
     expect(tabItem).toContain("w-[200px]")
     expect(tabItem).toContain("min-w-[96px]")
     expect(tabs).toContain("overflow-x-auto")
@@ -77,13 +77,17 @@ describe("studio shell contract", () => {
     expect(shell).toContain("paddingTop: `${focusModeCompensation.top}px`")
   })
 
-  it("opens with both side panels closed and the ghost rail as the way in", () => {
+  it("opens with both side panels closed and one way back in", () => {
     const shell = read("components/editor/editor-shell.tsx")
+    const header = read("components/editor/editor-sheet-header.tsx")
 
     expect(shell).toContain('useState<EditorNavigationMode>(null)')
-    expect(shell).toContain("editor-ghost-rail")
-    // The ghost rail is only for the state where nothing else offers the toggles.
-    expect(shell).toContain("{!navigationMode && !isNarrowViewport && !isFocusMode ? (")
+    // The sheet header's toggles are the only entry point. A second pair used
+    // to float over the sheet on the same condition, so with a panel closed the
+    // author saw the two icons twice (owner review).
+    expect(shell).not.toContain("editor-ghost-rail")
+    expect(shell).toContain("showPanelToggles={!navigationMode}")
+    expect(header).toContain("showPanelToggles ? (")
   })
 
   /**
@@ -96,8 +100,10 @@ describe("studio shell contract", () => {
 
     expect(shell).toContain("w-[var(--size-panel-right)]")
     expect(shell).not.toContain('isNarrowViewport &&\n                "absolute inset-y-0 right-0 z-30')
-    // The narrow-viewport probe still drives the header toggles and ghost rail.
-    expect(shell).toContain("setIsNarrowViewport(window.innerWidth < 1440)")
+    // The panel is a column at every width, so nothing reads a narrow-viewport
+    // probe any more — it only kept the breadcrumb toggles on screen next to an
+    // open panel, which is the duplication this pass removed.
+    expect(shell).not.toContain("isNarrowViewport")
   })
 
   it("debounces the table of contents rebuild and always has a way out", () => {

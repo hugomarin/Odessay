@@ -105,7 +105,7 @@ test("manual analysis stays idle while writing and starts accessibly on explicit
   expect(reviewBodies).toHaveLength(0)
 
   await page.getByRole("button", { name: "Corrections" }).click()
-  const analyzeButton = page.getByRole("button", { name: "Analyze writing and spelling" })
+  const analyzeButton = page.getByRole("button", { name: "Analyze now" })
   await captureOutcome(page, "manual-analysis-idle")
   await analyzeButton.focus()
   await page.keyboard.press("Enter")
@@ -147,7 +147,7 @@ test("manual analysis exposes a recoverable provider failure", async ({ page }) 
   await page.reload()
   await expect(page.getByTestId("editor-writing-area")).toBeVisible({ timeout: 15_000 })
   await page.getByRole("button", { name: "Corrections" }).click()
-  await page.getByRole("button", { name: "Analyze writing and spelling" }).click()
+  await page.getByRole("button", { name: "Analyze now" }).click()
 
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible()
   await expect(page.locator("#corrections-analysis-status")).toContainText(
