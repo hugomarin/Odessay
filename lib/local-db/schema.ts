@@ -1,5 +1,6 @@
 import type { ArtifactType } from "@/lib/writings/artifact-type";
 import type { WritingStatus } from "@/lib/writings/status";
+import type { WritingLifecycle, WritingSyncStatus } from "@/lib/services/contracts/document-service";
 
 export const LOCAL_DB_NAME = "odessay-local-first";
 export const LOCAL_DB_VERSION = 16;
@@ -13,12 +14,12 @@ export const LOCAL_DB_STORES = {
   correctionBlocks: "correction-blocks",
 } as const;
 
-export type LocalSyncStatus = "synced" | "pending" | "failed" | "deleted";
+export type LocalSyncStatus = WritingSyncStatus;
 export type { WritingStatus } from "@/lib/writings/status";
 export type { ArtifactType } from "@/lib/writings/artifact-type";
+export type { WritingLifecycle };
 export type WritingVisibility = "private" | "shared" | "public";
 export type CollectionVisibility = "private" | "public";
-export type WritingLifecycle = "local-only" | "syncing" | "server-confirmed";
 export type SyncOperation = "upsert" | "delete" | "set";
 export type SyncEntityKind = "writing" | "collection" | "writing-collections";
 
