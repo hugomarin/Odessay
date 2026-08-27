@@ -1,30 +1,13 @@
 #!/usr/bin/env node
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readBuilt, readStatus } from "./lib/workflow-ledger.mjs";
+import { commitExists, resolveTraceabilityBase } from "./lib/traceability-refs.mjs";
 
 function compareIssueId(a, b) {
   const aNum = Number.parseInt(a.replace("ODE-", ""), 10);
   const bNum = Number.parseInt(b.replace("ODE-", ""), 10);
   return aNum - bNum;
-}
-
-function hasRef(ref) {
-  try {
-    execSync(`git rev-parse --verify ${ref}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function commitExists(commit) {
-  try {
-    execSync(`git cat-file -e ${commit}^{commit}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 const strict = process.argv.includes("--strict");
@@ -52,13 +35,11 @@ const duplicates = builtIssues.filter(
   (issue, index) => builtIssues.indexOf(issue) !== index,
 );
 
-const ref = hasRef("origin/main")
-  ? "origin/main"
-  : hasRef("main")
-    ? "main"
-    : "HEAD";
+// Drift describes the accepted baseline, not the mutable branch currently
+// named main and not the unmerged PR changes. CI pins this SHA at preflight.
+const ref = resolveTraceabilityBase();
 
-const subjects = execSync(`git log --pretty=%s ${ref}`, {
+const subjects = execFileSync("git", ["log", "--pretty=%s", ref], {
   encoding: "utf8",
 });
 

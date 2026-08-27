@@ -125,7 +125,8 @@ import {
   createBlankDraftIdentity,
   createNewWritingSessionState,
   createRouteHydrationSessionState,
-  resolvePersistedSessionRestore,
+  resolvePersistedSessionRestoreTransition,
+  resolveUnavailableWritingRecovery,
   resolveExternalWritingLoad,
 } from "@/lib/editor/hydration-session"
 import { EDITOR_DRAFT_TAB_ID } from "@/lib/local-db/editor-sessions"
@@ -201,11 +202,9 @@ import { isDesktopRuntime } from "@/lib/services/desktop/runtime-detection"
 import { useTauriMenuEvents } from "@/hooks/useTauriMenuEvents"
 import { useTauriEditorMenuEvents } from "@/hooks/useTauriEditorMenuEvents"
 import type { WritingRecord } from "@/lib/services/contracts/document-service"
-import type { DocumentCatalogRecord } from "@/lib/services/contracts/document-catalog"
-import {
-  createEditorHydrationRecord,
-  type EditorHydrationRecord,
-} from "@/lib/editor/document-hydration"
+import type { EditorHydrationRecord } from "@/lib/editor/document-hydration"
+import { resolveHydrationOutcome } from "@/lib/editor/hydration-coordinator"
+import { createHydrationGenerationOwner, type HydrationGeneration } from "@/lib/editor/hydration-generation"
 import { buildWritingRouteHref } from "@/lib/writings/writing-route"
 import {
   closeTab,
@@ -542,6 +541,10 @@ export function EditorShell({
   const markdownSaveTimeoutRef = useRef<number | null>(null)
   const isApplyingContentRef = useRef(false)
   const currentWritingIdRef = useRef<string | null>(initialHydrationSession.activeWritingId)
+  const hydrationGenerationOwnerRef = useRef<ReturnType<typeof createHydrationGenerationOwner> | null>(null)
+  if (hydrationGenerationOwnerRef.current === null) {
+    hydrationGenerationOwnerRef.current = createHydrationGenerationOwner()
+  }
   const currentCanonicalPathRef = useRef<string | null>(null)
   const editorBandRef = useRef<HTMLDivElement | null>(null)
   // Widths of the chrome that focus mode hides, sampled while it is visible so
@@ -970,26 +973,37 @@ export function EditorShell({
     [],
   )
 
-  const flushPendingCorrectionBlocks = useCallback(async (writingId: string) => {
-    const pendingBlocks = (await localDB.correctionBlocks.getByWriting(writingId)).filter(
-      (block) => block.syncedAt === null,
-    )
+  const flushPendingCorrectionBlocks = useCallback(async (
+    writingId: string,
+    generation?: HydrationGeneration,
+  ) => {
+    const pendingResult = generation
+      ? await generation.runAsync(() => localDB.correctionBlocks.getByWriting(writingId))
+      : { status: "current" as const, value: await localDB.correctionBlocks.getByWriting(writingId) }
+    if (pendingResult.status === "stale") return
+    const pendingBlocks = pendingResult.value.filter((block) => block.syncedAt === null)
 
     for (const block of pendingBlocks) {
+      if (generation && !generation.isCurrent()) return
       void persistCorrectionBlockRemotely({
         writingId,
         block,
       })
         .then(() => {
-          persistedCorrectionBlocksRef.current.set(block.blockHash, {
-            ...block,
-            syncedAt: new Date().toISOString(),
-          })
+          const markPersisted = () =>
+            persistedCorrectionBlocksRef.current.set(block.blockHash, {
+              ...block,
+              syncedAt: new Date().toISOString(),
+            })
+          if (generation) generation.run(markPersisted)
+          else markPersisted()
         })
         .catch((error) => {
-          console.info(
+          const logFailure = () => console.info(
             `[corrections] retry skipped message=${error instanceof Error ? error.message : String(error)}`,
           )
+          if (generation) generation.run(logFailure)
+          else logFailure()
         })
     }
   }, [])
@@ -1654,34 +1668,46 @@ export function EditorShell({
   }, [routeWritingId, sessionLoaded])
 
   useEffect(() => {
-    if (forceNewWriting || !sessionLoaded || routeWritingId || currentWritingIdRef.current) {
+    if (
+      forceNewWriting ||
+      !sessionLoaded ||
+      routeWritingId ||
+      currentWritingIdRef.current ||
+      navigatedToDraftRef.current
+    ) {
       return
     }
 
-    const restoreDecision = resolvePersistedSessionRestore({
+    const restoreTransition = resolvePersistedSessionRestoreTransition({
       activeTabId: editorSession.active_tab_id,
-      tabs: editorSession.tabs.map((tab) => ({ id: tab.id, writingId: tab.writing_id })),
+      tabs: editorSession.tabs.map((tab) => ({
+        id: tab.id,
+        writingId: tab.writing_id,
+        slug: tab.slug,
+      })),
+    }, {
+      isDesktopRuntime: isDesktopRuntime(),
+      useHistoryProjection: isPerfHarness(),
     })
 
-    if (restoreDecision.status === "restorable") {
-      const activeTab = editorSession.tabs.find((tab) => tab.id === editorSession.active_tab_id)
+    if (restoreTransition.status === "restore-writing") {
       const nextHref = buildWritingRouteHref("/write", {
-        id: restoreDecision.writingId,
-        slug: activeTab?.slug,
+        id: restoreTransition.writingId,
+        slug: restoreTransition.slug,
       })
 
-      if (isDesktopRuntime()) {
+      if (restoreTransition.target === "desktop-hydration") {
         // Explicit desktop handoff: history is only a projection in the static
         // bundle, so identity must transition before hydration/fallback effects.
-        currentWritingIdRef.current = restoreDecision.writingId
+        currentWritingIdRef.current = restoreTransition.writingId
         desktopSessionRestoreTimingRef.current = {
-          writingId: restoreDecision.writingId,
+          writingId: restoreTransition.writingId,
           startedAt: performance.now(),
         }
-        setCurrentWritingId(restoreDecision.writingId)
-        setHydrationWritingId(restoreDecision.writingId)
-        console.info(`[editor:session-restore] restorable ${restoreDecision.writingId}`)
-      } else if (isPerfHarness()) {
+        setCurrentWritingId(restoreTransition.writingId)
+        setHydrationWritingId(restoreTransition.writingId)
+        console.info(`[editor:session-restore] restorable ${restoreTransition.writingId}`)
+      } else if (restoreTransition.target === "history") {
         replaceEditorHistory(nextHref)
       } else {
         router.replace(nextHref)
@@ -1693,12 +1719,11 @@ export function EditorShell({
       console.info("[editor:session-restore] no-restorable-tab")
     }
 
-    // In desktop an empty session must converge to EditorEmptyState instead of
-    // eagerly spawning a contentless draft tab. Web keeps its current behavior.
-    if (isDesktopRuntime() && editorSession.tabs.length === 0) {
+    if (restoreTransition.status === "remain-empty") {
       return
     }
 
+    navigatedToDraftRef.current = true
     openDraftTab()
   }, [createDesktopDraftFn, editorSession.active_tab_id, editorSession.tabs, forceNewWriting, routeWritingId, router, sessionLoaded])
 
@@ -2015,20 +2040,24 @@ export function EditorShell({
       return
     }
 
-    let cancelled = false
     const targetWritingId = hydrationWritingId
+    const generationOwner = hydrationGenerationOwnerRef.current!
+    const generation = generationOwner.start(targetWritingId)
 
     const hydrateEditor = async () => {
       let hydratedWriting: EditorHydrationRecord | null = null
-      let openedCatalogRecord: DocumentCatalogRecord | null = null
-      let localCorrectionBlocks = await localDB.correctionBlocks.getByWriting(targetWritingId)
+      const localCorrectionBlocksResult = await generation.runAsync(
+        () => localDB.correctionBlocks.getByWriting(targetWritingId),
+      )
+      if (localCorrectionBlocksResult.status === "stale") return
+      let localCorrectionBlocks = localCorrectionBlocksResult.value
 
       // openWriting handles local read + optional remote hydration in one call.
       // Skeleton surfaces only when the call takes longer than 200 ms.
       const skeletonTimer = setTimeout(() => {
-        if (!cancelled) {
+        generation.run(() => {
           setIsBodyHydrating(true)
-        }
+        })
       }, 200)
 
       // Recovers the tab for an unavailable/unopenable writing WITHOUT persisting
@@ -2036,105 +2065,110 @@ export function EditorShell({
       // fall back to a sibling tab or an in-memory blank draft tab.
       const recoverUnavailableTab = () => {
         console.info(`[editor] unavailable writing ${targetWritingId}; reconciling session`)
-        const { removedActive, fallbackTabId } = reconcileUnavailableWritingTab(targetWritingId)
+        const reconciliation = reconcileUnavailableWritingTab(targetWritingId)
+        const sessionTabs = getEditorSessionState().session.tabs
+        const recovery = resolveUnavailableWritingRecovery(reconciliation, sessionTabs.map((tab) => ({
+          id: tab.id,
+          writingId: tab.writing_id,
+          slug: tab.slug,
+        })))
         setHydrationWritingId(null)
 
-        if (removedActive) {
-          const fallbackTab = fallbackTabId
-            ? getEditorSessionState().session.tabs.find((tab) => tab.id === fallbackTabId)
-            : null
-
-          if (fallbackTab?.writing_id) {
-            currentWritingIdRef.current = fallbackTab.writing_id
-            setCurrentWritingId(fallbackTab.writing_id)
-            setHydrationWritingId(fallbackTab.writing_id)
-            replaceEditorHistory(
-              buildWritingRouteHref("/write", { id: fallbackTab.writing_id, slug: fallbackTab.slug }),
-            )
-          } else {
-            currentWritingIdRef.current = null
-            setCurrentWritingId(null)
-            replaceEditorHistory("/write")
-          }
+        if (recovery.status === "activate-writing") {
+          currentWritingIdRef.current = recovery.writingId
+          setCurrentWritingId(recovery.writingId)
+          setHydrationWritingId(recovery.writingId)
+          replaceEditorHistory(
+            buildWritingRouteHref("/write", { id: recovery.writingId, slug: recovery.slug }),
+          )
+        } else if (recovery.status === "show-empty-editor") {
+          currentWritingIdRef.current = null
+          setCurrentWritingId(null)
+          replaceEditorHistory("/write")
         }
       }
 
-      try {
-        // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
-        // Recent and the sidebar all navigate to /write?id= and funnel through
-        // this hydration — resolves identity through the DocumentCatalog first
-        // and consumes the opener's explicit outcomes. A `failed` outcome the
-        // opener classified as retryable (ODE-454) rearms itself with a bounded
-        // backoff + jitter — no click, navigation or web event involved — before
-        // falling back. `orphaned`, an exhausted retry loop, or a terminal
-        // `failed` recover the tab without a draft; `conflict` opens the local
-        // copy (visible conflict UX is owned by ODE-373); `opened` continues to
-        // content hydration below.
-        if (isDesktopRuntime() && isUnifiedOpenEnabled()) {
-          const { result: outcome, attempt } = await openDocumentByIdWithRetry(targetWritingId, {
-            isCancelled: () => cancelled,
-          })
-          if (cancelled) {
-            return
-          }
-          if (outcome.status === "orphaned" || outcome.status === "failed") {
-            const reasonCode = outcome.status === "failed" ? outcome.reasonCode : "orphaned"
-            console.info(
-              `[editor] unified-open unavailable documentId=${targetWritingId} status=${outcome.status} reasonCode=${reasonCode} attempt=${attempt} next=unavailable`,
-            )
-            clearTimeout(skeletonTimer)
-            if (!cancelled) setIsBodyHydrating(false)
-            recoverUnavailableTab()
-            return
-          }
-          if (outcome.status === "opened" || outcome.status === "conflict") {
-            openedCatalogRecord = outcome.record
-          }
-        }
+      // Unified opener (ODE-375 M3): every id entry point — Desk, Search,
+      // Recent and the sidebar all navigate to /write?id= and funnel through
+      // this hydration — resolves identity through the DocumentCatalog first
+      // and consumes the opener's explicit outcomes. A `failed` outcome the
+      // opener classified as retryable (ODE-454) rearms itself with a bounded
+      // backoff + jitter — no click, navigation or web event involved — before
+      // falling back. `orphaned`, an exhausted retry loop, or a terminal
+      // `failed` recover the tab without a draft; `conflict` opens the local
+      // copy (visible conflict UX is owned by ODE-373); `opened` continues to
+      // content hydration below. The decision logic itself is the pure,
+      // dependency-injected coordinator extracted in ODE-455 — this effect
+      // only supplies the runtime adapters and reacts to its outcome.
+      const outcomeResult = await generation.runAsync(() =>
+        resolveHydrationOutcome(targetWritingId, {
+          isDesktopRuntime,
+          isUnifiedOpenEnabled,
+          isCancelled: () => !generation.isCurrent(),
+          openDocumentByIdWithRetry,
+          openWriting: async (id) => (await getDocumentService()).openWriting(id),
+          getLocalWriting: async (id) => {
+            // Explicit translation, not structural reuse: the coordinator's
+            // boundary is domain-shaped (HydrationLocalMetadata), not
+            // storage-shaped — this adapter is where the IndexedDB/SQLite
+            // column names (`canonical_path`, `sync_status`) stop.
+            const localWriting = await localDB.writings.get(id)
+            if (!localWriting) return null
+            return {
+              canonicalPath: localWriting.canonical_path,
+              lifecycle: localWriting.lifecycle,
+              syncStatus: localWriting.sync_status,
+            }
+          },
+        }),
+      )
 
-        const openResult = await (await getDocumentService()).openWriting(targetWritingId)
-        if (openResult.error) {
-          if (openResult.error.code === "NOT_FOUND") {
-            recoverUnavailableTab()
-            return
-          }
+      clearTimeout(skeletonTimer)
+      generation.run(() => {
+        setIsBodyHydrating(false)
+      })
 
-          console.error(`[editor] openWriting failed for ${targetWritingId}`, openResult.error)
-          return
-        }
-        const localMetadata = await localDB.writings.get(targetWritingId)
-        hydratedWriting = createEditorHydrationRecord(openResult.data, {
-          catalogRecord: openedCatalogRecord,
-          localMetadata,
-        })
-      } catch (error) {
-        console.error(`[editor] openWriting failed for ${targetWritingId}`, error)
-        return
-      } finally {
-        clearTimeout(skeletonTimer)
-        if (!cancelled) {
-          setIsBodyHydrating(false)
-        }
-      }
+      // The generation owner checks the result again after every awaited
+      // boundary. A document switch (A -> B) can land during unified open,
+      // openWriting or local metadata; a late A result must never act on B's
+      // session, editor, correction cache or route.
+      if (outcomeResult.status === "stale") return
+      const outcome = outcomeResult.value
 
-      if (cancelled) {
+      if (outcome.status === "unavailable") {
+        if (outcome.source === "unified-open") {
+          console.info(
+            `[editor] unified-open unavailable documentId=${targetWritingId} status=${outcome.openStatus} reasonCode=${outcome.reasonCode} attempt=${outcome.attempt} next=unavailable`,
+          )
+        }
+        recoverUnavailableTab()
         return
       }
+
+      if (outcome.status === "open-error") {
+        console.error(`[editor] openWriting failed for ${targetWritingId}`, outcome.error)
+        return
+      }
+
+      hydratedWriting = outcome.record
 
       if (localCorrectionBlocks.length === 0) {
         try {
-          localCorrectionBlocks = await hydrateCorrectionBlocksFromRemote(targetWritingId)
+          const correctionBlocksResult = await generation.runAsync(
+            () => hydrateCorrectionBlocksFromRemote(targetWritingId),
+          )
+          if (correctionBlocksResult.status === "stale") return
+          localCorrectionBlocks = correctionBlocksResult.value
         } catch (error) {
+          if (!generation.isCurrent()) return
           console.error(`[editor] correction hydration failed for ${targetWritingId}`, error)
           localCorrectionBlocks = []
         }
       } else {
-        void flushPendingCorrectionBlocks(targetWritingId)
+        void flushPendingCorrectionBlocks(targetWritingId, generation)
       }
 
-      if (cancelled) {
-        return
-      }
+      if (!generation.isCurrent()) return
 
       if (hydratedWriting) {
         const { writing, canonicalPath, lifecycle: hydratedLifecycle, syncStatus: hydratedSyncStatus } =
@@ -2171,14 +2205,17 @@ export function EditorShell({
         if (hydratedReconciliation.stale.length > 0) {
           const staleIds = hydratedReconciliation.stale.map((block) => block.id)
 
-          await localDB.correctionBlocks.deleteMany(staleIds)
+          const deleteResult = await generation.runAsync(() => localDB.correctionBlocks.deleteMany(staleIds))
+          if (deleteResult.status === "stale") return
           void persistCorrectionBlockRemotely({
             writingId: targetWritingId,
             deletedBlockIds: staleIds,
           }).catch((error) => {
-            console.info(
-              `[corrections] hydrate cleanup skipped message=${error instanceof Error ? error.message : String(error)}`,
-            )
+            generation.run(() => {
+              console.info(
+                `[corrections] hydrate cleanup skipped message=${error instanceof Error ? error.message : String(error)}`,
+              )
+            })
           })
         }
 
@@ -2210,19 +2247,17 @@ export function EditorShell({
           }
 
           const timer = window.setTimeout(() => {
-            correctionTimersRef.current.delete(block.id)
+            generation.run(() => {
+              correctionTimersRef.current.delete(block.id)
 
-            if (!correctionsEnabledRef.current) {
-              return
-            }
+              if (!correctionsEnabledRef.current) return
 
-            const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
+              const currentBlock = getCurrentCorrectionBlock(editor.state.doc, block.id)
 
-            if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) {
-              return
-            }
+              if (!currentBlock || currentBlock.hash !== block.hash || currentBlock.text !== block.text) return
 
-            enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
+              enqueueCorrectionBlockRef.current?.(currentBlock, "hydrate-miss")
+            })
           }, 2000)
 
           correctionTimersRef.current.set(block.id, { timer, pos: block.pos })
@@ -2277,74 +2312,80 @@ export function EditorShell({
           setMarkdownValue(nextMarkdown)
 
           window.requestAnimationFrame(() => {
-            queueMarkdownSelectionRestore(
-              viewState.markdownSelectionStart ?? 0,
-              viewState.markdownSelectionEnd ?? viewState.markdownSelectionStart ?? 0,
-              {
-                scrollTop: viewState.scrollTop,
-                scrollLeft: viewState.scrollLeft,
-                editorScrollTop: viewState.scrollTop,
-                editorScrollLeft: viewState.scrollLeft,
-                shellScrollTop: viewState.shellScrollTop,
-                shellScrollLeft: viewState.shellScrollLeft,
-                windowScrollX: viewState.windowScrollX,
-                windowScrollY: viewState.windowScrollY,
-              },
-            )
+            generation.run(() => {
+              queueMarkdownSelectionRestore(
+                viewState.markdownSelectionStart ?? 0,
+                viewState.markdownSelectionEnd ?? viewState.markdownSelectionStart ?? 0,
+                {
+                  scrollTop: viewState.scrollTop,
+                  scrollLeft: viewState.scrollLeft,
+                  editorScrollTop: viewState.scrollTop,
+                  editorScrollLeft: viewState.scrollLeft,
+                  shellScrollTop: viewState.shellScrollTop,
+                  shellScrollLeft: viewState.shellScrollLeft,
+                  windowScrollX: viewState.windowScrollX,
+                  windowScrollY: viewState.windowScrollY,
+                },
+              )
+            })
           })
         } else if (viewState) {
           modeRef.current = "rich"
           setMode("rich")
-          window.requestAnimationFrame(() => {
-            const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
-            const shellViewport = document.querySelector<HTMLElement>("main")
+          window.requestAnimationFrame(() =>
+            generation.run(() => {
+              const editorViewport = document.querySelector<HTMLElement>('[data-testid="editor-writing-area"]')
+              const shellViewport = document.querySelector<HTMLElement>("main")
 
-            const applyEditorScroll = () => {
-              if (editorViewport) {
-                editorViewport.scrollTop = viewState.scrollTop
-                editorViewport.scrollLeft = viewState.scrollLeft
+              const applyEditorScroll = () => {
+                if (editorViewport) {
+                  editorViewport.scrollTop = viewState.scrollTop
+                  editorViewport.scrollLeft = viewState.scrollLeft
+                }
               }
-            }
 
-            const applyShellScroll = () => {
-              if (shellViewport) {
-                shellViewport.scrollTop = viewState.shellScrollTop ?? 0
-                shellViewport.scrollLeft = viewState.shellScrollLeft ?? 0
+              const applyShellScroll = () => {
+                if (shellViewport) {
+                  shellViewport.scrollTop = viewState.shellScrollTop ?? 0
+                  shellViewport.scrollLeft = viewState.shellScrollLeft ?? 0
+                }
               }
-            }
 
-            const applyWindowScroll = () => {
-              window.scrollTo(
-                typeof viewState.windowScrollX === "number" ? viewState.windowScrollX : window.scrollX,
-                typeof viewState.windowScrollY === "number" ? viewState.windowScrollY : window.scrollY,
-              )
-            }
+              const applyWindowScroll = () => {
+                window.scrollTo(
+                  typeof viewState.windowScrollX === "number" ? viewState.windowScrollX : window.scrollX,
+                  typeof viewState.windowScrollY === "number" ? viewState.windowScrollY : window.scrollY,
+                )
+              }
 
-            if (
-              typeof viewState.selectionFrom === "number" &&
-              typeof viewState.selectionTo === "number" &&
-              viewState.selectionFrom >= 1 &&
-              viewState.selectionTo >= viewState.selectionFrom
-            ) {
-              editor
-                .chain()
-                .focus(undefined, { scrollIntoView: false })
-                .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
-                .run()
-            } else {
-              editor.commands.focus("start")
-            }
+              if (
+                typeof viewState.selectionFrom === "number" &&
+                typeof viewState.selectionTo === "number" &&
+                viewState.selectionFrom >= 1 &&
+                viewState.selectionTo >= viewState.selectionFrom
+              ) {
+                editor
+                  .chain()
+                  .focus(undefined, { scrollIntoView: false })
+                  .setTextSelection({ from: viewState.selectionFrom, to: viewState.selectionTo })
+                  .run()
+              } else {
+                editor.commands.focus("start")
+              }
 
-            applyWindowScroll()
-            applyShellScroll()
-            applyEditorScroll()
-
-            window.requestAnimationFrame(() => {
               applyWindowScroll()
               applyShellScroll()
               applyEditorScroll()
-            })
-          })
+
+              window.requestAnimationFrame(() => {
+                generation.run(() => {
+                  applyWindowScroll()
+                  applyShellScroll()
+                  applyEditorScroll()
+                })
+              })
+            }),
+          )
         }
       } else {
         setTitle(UNTITLED_WRITING_TITLE)
@@ -2362,20 +2403,22 @@ export function EditorShell({
         setCanonicalPath(null)
       }
 
-      const restoreTiming = desktopSessionRestoreTimingRef.current
-      if (restoreTiming?.writingId === targetWritingId) {
-        console.info(
-          `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
-        )
-        desktopSessionRestoreTimingRef.current = null
-      }
-      setHydrationWritingId(null)
+      generation.run(() => {
+        const restoreTiming = desktopSessionRestoreTimingRef.current
+        if (restoreTiming?.writingId === targetWritingId) {
+          console.info(
+            `[editor:session-restore] hydrated ${targetWritingId} duration_ms=${Math.round(performance.now() - restoreTiming.startedAt)}`,
+          )
+          desktopSessionRestoreTimingRef.current = null
+        }
+        setHydrationWritingId(null)
+      })
     }
 
     void hydrateEditor()
 
     return () => {
-      cancelled = true
+      generationOwner.cancel(generation)
     }
   }, [
     applyCorrectionSuggestionUpdate,

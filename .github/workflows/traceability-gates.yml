@@ -20,7 +20,37 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
+          # ODE-392/ODE-466: validate the synthetic merge result, not an
+          # isolated PR head. The next step pins every SHA consumed later.
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+
+      - name: Pin immutable traceability refs
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          MERGE_SHA="$(git rev-parse HEAD)"
+          MERGE_BASE_SHA="$(git merge-base "${MERGE_SHA}" "${PR_BASE_SHA}")"
+          ISSUE_IDS="$(printf '%s' "${PR_TITLE}" | grep -oE 'ODE-[0-9]+' | sort -u | paste -sd, -)"
+          git cat-file -e "${PR_BASE_SHA}^{commit}"
+          git cat-file -e "${PR_HEAD_SHA}^{commit}"
+          git cat-file -e "${MERGE_SHA}^{commit}"
+          test "${MERGE_BASE_SHA}" = "${PR_BASE_SHA}"
+
+          {
+            echo "TRACEABILITY_BASE_SHA=${PR_BASE_SHA}"
+            echo "TRACEABILITY_MERGE_BASE_SHA=${MERGE_BASE_SHA}"
+            echo "TRACEABILITY_PR_HEAD_SHA=${PR_HEAD_SHA}"
+            echo "TRACEABILITY_HEAD_SHA=${MERGE_SHA}"
+            echo "TRACEABILITY_MERGE_SHA=${MERGE_SHA}"
+            echo "TRACEABILITY_ISSUE_IDS=${ISSUE_IDS}"
+          } >> "${GITHUB_ENV}"
+
+      - name: Diagnose traceability refs before build
+        run: npm run ops:traceability:refs
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -39,6 +69,9 @@ jobs:
 
       - name: Build app for perf capture
         run: npm run build
+
+      - name: Diagnose traceability refs after build
+        run: npm run ops:traceability:refs
 
       - name: Check process docs sync
         run: npm run ops:process:sync
