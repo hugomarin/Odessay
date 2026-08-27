@@ -29,6 +29,9 @@ export interface FullOverlayProps {
   dirty?: boolean
   discardMessage?: string
   hideClose?: boolean
+  closeLabel?: string
+  overlayClassName?: string
+  chromeClassName?: string
   className?: string
   contentClassName?: string
   children: React.ReactNode
@@ -44,6 +47,9 @@ export function FullOverlay({
   dirty = false,
   discardMessage,
   hideClose,
+  closeLabel = "Close",
+  overlayClassName,
+  chromeClassName,
   className,
   contentClassName,
   children
@@ -54,7 +60,7 @@ export function FullOverlay({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPortal>
-        <DialogOverlay />
+        <DialogOverlay className={overlayClassName} />
         <DialogPrimitive.Content
           aria-modal="true"
           data-testid="full-overlay"
@@ -66,7 +72,7 @@ export function FullOverlay({
         >
           <div
             data-testid="full-overlay-chrome"
-            className="flex h-12 flex-shrink-0 items-center gap-2.5 px-2"
+             className={cn("flex h-12 flex-shrink-0 items-center gap-2.5 px-2", chromeClassName)}
           >
             {chromeStart}
             {hideTitle ? (
@@ -80,7 +86,7 @@ export function FullOverlay({
             {chromeEnd}
             {!hideClose && (
               <DialogPrimitive.Close
-                aria-label="Close"
+                aria-label={closeLabel}
                 className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[7px] text-ink-3 transition-colors hover:bg-surface-menu-hover hover:text-ink"
               >
                 <X className="h-[18px] w-[18px]" strokeWidth={1.5} />

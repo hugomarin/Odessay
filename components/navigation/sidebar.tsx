@@ -405,7 +405,7 @@ export function Sidebar({ children, initialSidebarMode = "collapsed", user }: Si
                        * 26). The 32px button therefore sits at 26 - 16 = 10 to
                        * share their row. Re-measure before changing it.
                        */
-                      "fixed left-[106px] top-[10px] z-50"
+                       "fixed left-[88px] top-[11px] z-50"
                     : isIconOnly
                       ? "mx-auto"
                       : "",

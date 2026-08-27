@@ -38,6 +38,7 @@ import {
   LocalImageExtension,
   type LocalImageBackupRequest,
   type ResolvedLocalImage,
+  type ImagePresentationRequest,
 } from "@/lib/editor/local-image-extension"
 
 export const EMPTY_EDITOR_JSON: JSONContent = {
@@ -50,6 +51,7 @@ type CreateEditorExtensionsOptions = {
   tableOfContentsScrollParent?: () => HTMLElement | Window
   resolveImage?: (source: string) => Promise<ResolvedLocalImage>
   onRequestLocalImageBackup?: (request: LocalImageBackupRequest) => void
+  onOpenImagePresentation?: (request: ImagePresentationRequest) => void
 }
 
 export const createEditorExtensions = (options: CreateEditorExtensionsOptions = {}): Extensions => {
@@ -86,6 +88,7 @@ export const createEditorExtensions = (options: CreateEditorExtensionsOptions = 
       inline: false,
       resolveImage: options.resolveImage,
       onRequestBackup: options.onRequestLocalImageBackup,
+      onOpenPresentation: options.onOpenImagePresentation,
     }),
     Link.configure({
       openOnClick: false,

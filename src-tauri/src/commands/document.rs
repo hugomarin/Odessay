@@ -313,6 +313,7 @@ fn image_mime_type(path: &Path) -> Option<&'static str> {
         Some("jpg") | Some("jpeg") => Some("image/jpeg"),
         Some("webp") => Some("image/webp"),
         Some("gif") => Some("image/gif"),
+        Some("svg") => Some("image/svg+xml"),
         _ => None,
     }
 }
@@ -405,9 +406,11 @@ mod tests {
         let document_path = root.join("essay.md");
         let image_dir = root.join("images");
         let image_path = image_dir.join("photo.png");
+        let svg_path = image_dir.join("diagram.svg");
         fs::create_dir_all(&image_dir).expect("create image dir");
         fs::write(&document_path, "![Photo](images/photo.png)\n").expect("write markdown");
         fs::write(&image_path, [0x89, b'P', b'N', b'G']).expect("write image");
+        fs::write(&svg_path, b"<svg xmlns=\"http://www.w3.org/2000/svg\" />").expect("write svg");
 
         let relative = read_local_image_asset(
             document_path.to_string_lossy().to_string(),
@@ -430,6 +433,12 @@ mod tests {
         assert_eq!(relative.mime_type, "image/png");
         assert_eq!(relative.file_name, "photo.png");
         assert_eq!(relative.bytes, vec![0x89, b'P', b'N', b'G']);
+        let svg = read_local_image_asset(
+            document_path.to_string_lossy().to_string(),
+            "images/diagram.svg".into(),
+        )
+        .expect("read svg image");
+        assert_eq!(svg.mime_type, "image/svg+xml");
         let _ = fs::remove_dir_all(root);
     }
 

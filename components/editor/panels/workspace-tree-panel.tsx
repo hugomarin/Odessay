@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ChevronLeft, RefreshCw } from "lucide-react";
 import { WorkspaceTree } from "@/components/workspace/workspace-tree";
 import {
   loadContextualWorkspace,
@@ -195,6 +195,14 @@ export function WorkspaceTreePanel({
     [workspace],
   );
 
+  const rootDocumentCount = useMemo(() => {
+    if (!workspace) return 0;
+    return workspace.documents.filter((doc) => {
+      const parts = doc.relativePath.split(/[\\/]/).filter(Boolean);
+      return parts.length <= 1;
+    }).length;
+  }, [workspace]);
+
   const handleOpen = async (id: string) => {
     setOpenError(null);
     try {
@@ -259,11 +267,22 @@ export function WorkspaceTreePanel({
           {openError}
         </p>
       ) : null}
+      <button
+        type="button"
+        className="flex h-8 w-full items-center gap-1.5 rounded-[6px] px-2 text-left text-[12px] text-ink-3 transition-colors hover:bg-muted hover:text-ink"
+        aria-label="Todos los workspaces"
+      >
+        <ChevronLeft className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
+        <span>Todos los workspaces</span>
+      </button>
       <WorkspaceTree
         aria-label={`${workspace.name} documents`}
         mode="studio"
         items={treeItems}
         activeId={activeWritingId}
+        rootLabel={workspace.name}
+        rootIcon="home"
+        rootCount={rootDocumentCount}
         onOpenFile={(id) => void handleOpen(id)}
       />
     </div>

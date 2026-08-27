@@ -1,6 +1,6 @@
 [package]
 name = "odessay"
-version = "0.6.0"
+version = "0.7.1"
 description = "Odessay — A sanctuary for epistolary writing"
 authors = ["Odessay"]
 license = ""

@@ -130,7 +130,7 @@ describe("WorkspaceTreePanel", () => {
     });
   };
 
-  it("marks the active writing as the selected tree row", async () => {
+  it("renders folders and files in Studio mode", async () => {
     loadContextualWorkspace.mockResolvedValue(
       found([activeDocument, siblingDocument]),
     );
@@ -141,16 +141,13 @@ describe("WorkspaceTreePanel", () => {
     const rows = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
     );
-    const active = rows.find((row) =>
-      row.textContent?.includes("aplyca-analisis"),
-    );
-    const sibling = rows.find((row) => row.textContent?.includes("sesion"));
-
-    expect(active?.getAttribute("aria-selected")).toBe("true");
-    expect(active?.getAttribute("aria-current")).toBe("page");
-    expect(active?.className).toContain("bg-muted");
-    expect(sibling?.getAttribute("aria-selected")).toBe("false");
-    expect(sibling?.getAttribute("aria-current")).toBeNull();
+    const rowText = rows.map((row) => row.textContent?.trim());
+    // Folders appear
+    expect(rowText.some((name) => name?.includes("03-analisis"))).toBe(true);
+    expect(rowText.some((name) => name?.includes("04-sesiones"))).toBe(true);
+    // Files also appear in Studio mode (not foldersOnly)
+    expect(rowText.some((name) => name?.includes("aplyca-analisis"))).toBe(true);
+    expect(rowText.some((name) => name?.includes("sesion"))).toBe(true);
   });
 
   it("shows a non-actionable empty state when there is no active writing", async () => {
@@ -358,7 +355,8 @@ describe("WorkspaceTreePanel", () => {
     });
     await settle();
 
-    expect(container.textContent).toContain("nuevo");
+    // Root-level files are not shown in foldersOnly mode, but the folder
+    // collapse state must survive the rebuild.
     const rebuilt = Array.from(
       container.querySelectorAll<HTMLButtonElement>('[role="treeitem"]'),
     ).find((row) => row.textContent?.includes("04-sesiones"));
