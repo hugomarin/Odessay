@@ -2,10 +2,10 @@
 
 ## Gate result
 
-**FAIL — technical evidence is being assembled, but the phase cannot be marked
-closed from this branch yet.** The blocking evidence that is not available in a
-headless source/test run is kept as `PENDING`; no product-owner acceptance is
-claimed before those rows pass.
+**FAIL — the automated source/test and bundle evidence is assembled, but the
+phase cannot be marked closed from this branch yet.** The blocking evidence
+that is not available in a headless source/test run is kept as `PENDING`; no
+product-owner acceptance is claimed before those rows pass.
 
 This report is the closure artifact for ODE-372. It deliberately distinguishes
 automated source/unit evidence from proof that requires the exact packaged DMG:
@@ -15,10 +15,10 @@ automated source/unit evidence from proof that requires the exact packaged DMG:
 | --- | --- |
 | Issue | ODE-372 |
 | Branch | `codex/ode-372-document-catalog-dod` |
-| Build version | `0.7.1` (`package.json` / `tauri.conf.json`); exact release build pending |
-| Commits | `2e956bb8`, `dcd97712` (ODE-372 implementation/evidence commits) |
+| Build version | `0.7.1` (`package.json` / `tauri.conf.json`); exact release DMG validated |
+| Commits | `2e956bb8`, `dcd97712`, `9fdde409` (ODE-372 runtime/evidence commits) |
 | Pull request | Pending until technical gates and evidence packaging complete |
-| Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:25:12 -0600 from these commits; SHA-256 `583a2742d1d517f9d5ca3cc6874c87a7f91400653164bd870b1544963f116865` |
+| Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:32:07 -0600 from the runtime commits above; SHA-256 `d7a642a1d324b254baaca64ae8f4b1de1c4a3ec728963b4143adfe9380435cdd` |
 | Product owner | Acceptance pending; no acceptance comment has been emitted |
 
 ## Traceability matrix
@@ -95,7 +95,7 @@ sanitized outputs and artifact paths from this branch:
 | `npm run ops:network:gate` | PASS on historical `artifacts/perf/ode-373-network.har` (10/10, `required_failures: 0`); exact ODE-372 DMG HAR pending |
 | `npm run ops:perf:gate` | PASS on historical editor production trace (14 pass, 1 optional skip); exact catalog/DMG trace pending |
 | `npm run validate:desktop -- --dmg dist/releases/ArtifactStudio-0.7.1-aarch64.dmg` | PASS — exact-current DMG structure, CSP, version, embedded host and ad-hoc signature |
-| `npm run ops:delivery:gate` | Pending final branch push/PR range; must run after this report commit |
+| `npm run ops:delivery:gate` | PASS — `origin/main..HEAD`; branch/commit traceability OK. The performance-enforced run used the historical editor production trace; exact ODE-372 catalog/DMG perf evidence remains pending. |
 
 The release script also created an unsigned updater archive because no
 `TAURI_SIGNING_PRIVATE_KEY` was configured. The DMG itself was built and passed
