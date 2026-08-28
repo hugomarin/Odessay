@@ -2,10 +2,11 @@
 
 ## Gate result
 
-**FAIL — the automated source/test and bundle evidence is assembled, but the
-phase cannot be marked closed from this branch yet.** The blocking evidence
-that is not available in a headless source/test run is kept as `PENDING`; no
-product-owner acceptance is claimed before those rows pass.
+**FAIL — the automated source/test and bundle evidence plus a sanitized
+exact-DMG runtime capture are assembled, but the phase cannot be marked closed
+from this branch yet.** The remaining formal trace/HAR and owner/manual rows
+are kept as `PENDING`; no product-owner acceptance is claimed before those rows
+pass.
 
 This report is the closure artifact for ODE-372. It deliberately distinguishes
 automated source/unit evidence from proof that requires the exact packaged DMG:
@@ -19,6 +20,7 @@ automated source/unit evidence from proof that requires the exact packaged DMG:
 | Commits | `2e956bb8`, `dcd97712`, `9fdde409` (ODE-372 runtime/evidence commits) |
 | Pull request | [#412](https://github.com/hugomarin/Odessay/pull/412) — OPEN |
 | Artifact | [`dist/releases/ArtifactStudio-0.7.1-aarch64.dmg`](/Users/hugomarin/Documents/App/Odessay/dist/releases/ArtifactStudio-0.7.1-aarch64.dmg), generated 2026-08-27 10:32:07 -0600 from the runtime commits above; SHA-256 `d7a642a1d324b254baaca64ae8f4b1de1c4a3ec728963b4143adfe9380435cdd` |
+| Runtime evidence | [`artifacts/perf/ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) — sanitized exact-DMG navigation, network and telemetry observations; raw HAR/Timeline export unavailable in WebKit Inspector |
 | Product owner | Acceptance pending; no acceptance comment has been emitted |
 
 ## Traceability matrix
@@ -67,8 +69,8 @@ current review object is PR #412 above.
 | B7.1 | SQLite rebuild preserves local-only UUIDs without network | recovery, migration and reconciler tests; DMG restart proof still required for full acceptance | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output; DMG pending | PASS |
 | B7.2 | Corrupt/unobservable watcher inputs become stale/retryable, not mass minting | reconciler/recovery tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
 | B7.3 | Bulk scan/migration/hydration/watcher emit one logical update | integration, reconciler and migration tests | ODE-372 · PR pending · 0.7.1 exact HEAD pending · unit output | PASS |
-| B7.4 | Structured events exclude content/tokens/full paths from remote telemetry | No automated structured-telemetry artifact exists in this branch; source/release observability review is required | ODE-372 · PR pending · 0.7.1 exact HEAD pending · telemetry evidence pending | PENDING |
-| B7.5 | Startup, fan-out and catalog-query budgets pass on packaged release | Exact-current DMG trace, sanitized HAR/report/metrics and release validation | ODE-372 · PR pending · 0.7.1 exact HEAD pending · exact DMG/perf artifacts pending | PENDING |
+| B7.4 | Structured events exclude content/tokens/full paths from remote telemetry | `tests/sync-metrics.test.ts` plus [`ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json); filtered exact-DMG console output exposed only schema/runtime/queue/type and aggregate counters | ODE-372 · PR #412 OPEN · 0.7.1 · exact DMG SHA-256 above · telemetry metrics | PASS |
+| B7.5 | Startup, fan-out and catalog-query budgets pass on packaged release | [`ode-372-dmg-runtime-metrics.json`](../../artifacts/perf/ode-372-dmg-runtime-metrics.json) records exact-DMG observations: navigation 252/252/253 ms; network sessions 1.09 s and 12.04 s. Formal HAR and non-empty Timeline trace were not exportable from WebKit Inspector, so budget acceptance remains pending | ODE-372 · PR #412 OPEN · 0.7.1 · exact DMG SHA-256 above · sanitized runtime metrics; formal trace/HAR pending | PENDING |
 | B8.1 | Every DoD bullet maps to automated/manual/owner evidence | This report plus executable `FASE9_CLOSURE_MATRIX` | ODE-372 · PR pending · 0.7.1 exact HEAD pending · closure report/Vitest output | PASS |
 | B8.2 | DMG Finder rename/move preserves UUID without duplicates | Reproducible recording on exact DMG with Desk open | ODE-372 · PR pending · 0.7.1 exact HEAD pending · DMG recording pending | PENDING |
 | B8.3 | DMG outside-root open confirmation yields same UUID/state in Desk/Workspace | Reproducible recording/screenshots on exact DMG | ODE-372 · PR pending · 0.7.1 exact HEAD pending · DMG screenshots/recording pending | PENDING |
@@ -89,13 +91,13 @@ sanitized outputs and artifact paths from this branch:
 | `npm run typecheck` | PASS |
 | `npm run lint` | PASS with existing warnings in `editor-shell.tsx`, `image-presentation-viewer.tsx` and `sidebar.tsx` |
 | `npm test -- --no-file-parallelism` | PASS — 217 files, 1,678 tests |
-| `npm test` | FAIL in parallel — 9 existing isolation/race failures; the same suite passes serially. See Manual handoff / gate note below. |
+| `npm test` | PASS — latest prescribed parallel rerun: 217 files, 1,679 tests |
 | `cargo test --manifest-path src-tauri/Cargo.toml` | PASS — 65 passed, 2 ignored (keychain/benchmark requiring live app context) |
 | `npm run test:desktop:draft-lifecycle` | PASS — 81 Vitest tests + 2 Playwright tests |
 | `npx playwright test tests/playwright/document-catalog.e2e.ts` | PASS — 3/3 |
 | `npm run ops:workflow:validate` | PASS — all workflow JSON/JSONL files valid |
-| `npm run ops:network:gate` | PASS on historical `artifacts/perf/ode-373-network.har` (10/10, `required_failures: 0`); exact ODE-372 DMG HAR pending |
-| `npm run ops:perf:gate` | PASS on historical editor production trace (14 pass, 1 optional skip); exact catalog/DMG trace pending |
+| `npm run ops:network:gate` | PASS on historical `artifacts/perf/ode-373-network.har` (10/10, `required_failures: 0`); exact-DMG WebKit HAR export unavailable, sanitized runtime metrics attached |
+| `npm run ops:perf:gate` | PASS on historical editor production trace (14 pass, 1 optional skip); exact-DMG WebKit Timeline export unavailable, sanitized navigation metrics attached |
 | `npm run validate:desktop -- --dmg dist/releases/ArtifactStudio-0.7.1-aarch64.dmg` | PASS — exact-current DMG structure, CSP, version, embedded host and ad-hoc signature |
 | `npm run ops:delivery:gate` | PASS — `origin/main..HEAD`; branch/commit traceability OK. The performance-enforced run used the historical editor production trace; exact ODE-372 catalog/DMG perf evidence remains pending. |
 
@@ -116,15 +118,14 @@ can attach evidence to the PR:
 2. Outside-root Open Document confirmation, followed by Desk/Workspace parity.
 3. Offline open/save/restart, then online convergence.
 4. cloud-only materialization and conflict/ambiguous handling.
-5. Exact-current DMG startup/TTI, interaction latency, waterfall and sanitized
-   network/performance artifacts.
-6. Review of structured remote telemetry fields (B7.4).
+5. Formal exact-current DMG startup/TTI, interaction latency, waterfall and
+   sanitized HAR/Timeline artifacts. The available exact-DMG observations are
+   recorded in `artifacts/perf/ode-372-dmg-runtime-metrics.json`.
 7. Product-owner acceptance after every blocking row is `PASS`.
 
 ### Parallel test gate note
 
-The prescribed `npm test` invocation currently runs files in parallel. Existing
-tests that create temporary Git branches and happy-dom integration fixtures race
-under that mode, producing 9 failures; the same 217-file suite is green with
-`--no-file-parallelism`. This is reported as a delivery risk rather than hidden
-by changing the global Vitest configuration in ODE-372.
+An earlier parallel run produced transient isolation/race failures in catalog
+integration fixtures. The prescribed parallel command was rerun after the
+working tree stabilized and passed: 217 files, 1,679 tests. No global Vitest
+configuration was changed in ODE-372.
